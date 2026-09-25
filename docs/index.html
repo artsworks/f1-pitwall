@@ -71,7 +71,7 @@ article img{max-width:100%}
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
-  <span class="status">planning docs · no code yet</span>
+  <span class="status">M1 built · live-tested on F1 26</span>
   <a class="gh" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
 </header>
 <div class="layout">
@@ -85,9 +85,18 @@ article img{max-width:100%}
 <script>
 const GROUPS = [
   ["Start here", [
-    ["14-adversarial-review", "Adversarial review", "Errors found before the first commit, what was kept, and assumptions to verify in the first session."],
-    ["11-open-questions", "Decisions and open questions", "What is settled (public repo, GPLv3, 30 Hz, F1 26 only, no LLM) and what is still open."],
+    ["status", "Status", "Milestone progress, what works today, what is next and known gaps."],
+    ["getting-started", "Getting started", "Install, game telemetry settings, doctor, start, recording profiles and replay."],
     ["05-roadmap", "Roadmap", "M0 capture and replay through M4 calibration, with exit criteria for each milestone."]
+  ]],
+  ["Decisions (ADRs)", [
+    ["adr/README", "Decision records", "Lessons from live sessions, recorded so they are not relearnt."],
+    ["adr/0001-format-2026-is-the-only-header-gate", "ADR 0001 · Format gate", "Packet format 2026 is the only header gate; the game reports year 25."],
+    ["adr/0002-two-clock-domains", "ADR 0002 · Clock domains", "Session time vs receive clock; never subtract across them."],
+    ["adr/0003-doctor-counts-raw-datagrams", "ADR 0003 · Doctor counts raw", "Count raw datagrams, not only accepted ones."],
+    ["adr/0004-udp-bind-any-and-explicit-ws-dep", "ADR 0004 · Bind and WS dep", "Bind UDP on 0.0.0.0; ship websockets explicitly."],
+    ["adr/0005-recordings-never-committed", "ADR 0005 · Recordings stay local", "Recordings never enter git; learnings do."],
+    ["adr/0006-recording-profiles", "ADR 0006 · Recording profiles", "Lite by default, full on demand; measured sizes."]
   ]],
   ["Core design", [
     ["01-architecture", "Architecture", "Layers, cross-cutting decisions, stack and repository layout."],
@@ -103,12 +112,13 @@ const GROUPS = [
     ["07-replay-and-debug", "Replay, review and debugging", "The .f1bin format, replay options, review mode and A/B diffs."],
     ["08-configuration", "Configuration and mindset", "Layered settings and the balanced and aggressive bias vectors."],
     ["09-performance", "Performance on the game PC", "CPU, GPU and disk budgets, and the frame-time A/B test."],
-    ["10-angles-not-yet-considered", "Angles not yet considered", "Twenty further angles, from energy management to LAN security."]
+    ["10-angles-not-yet-considered", "Angles not yet considered", "Twenty further angles, from energy management to LAN security."],
+    ["11-open-questions", "Decisions and open questions", "What is settled (public repo, GPLv3, 30 Hz, F1 26 only, no LLM) and what is still open."],
+    ["14-adversarial-review", "Adversarial review", "Errors found before the first commit, what was kept, and assumptions to verify in the first session."]
   ]],
   ["Reference and provenance", [
     ["reference/f1-26-udp-notes", "F1 26 UDP notes", "Verified facts about packet format 2026."],
-    ["00-review-of-v1", "Review of plan v1", "Where the original plan disagreed with the F1 26 spec."],
-    ["original-plan-v1", "Original plan (v1)", "The plan as first written, kept unchanged."]
+    ["00-review-of-v1", "Review of plan v1", "Where the first plan disagreed with the F1 26 spec, and what changed."]
   ]]
 ];
 const DOCS = GROUPS.flatMap(g => g[1]);
@@ -135,11 +145,12 @@ function markActive() {
 }
 
 function overview() {
-  document.title = "f1-pitwall · planning docs";
+  document.title = "f1-pitwall · docs and status";
   $("#content").innerHTML = `
     <div class="hero">
       <h1>A race engineer for F1 26</h1>
-      <p>f1-pitwall reads the game's UDP telemetry, keeps a model of the session, decides what is worth saying, says it over your headset and shows it on a second monitor. This site holds the design; there is no code yet.</p>
+      <p>f1-pitwall reads the game's UDP telemetry, keeps a model of the session, decides what is worth saying, says it over your headset and shows it on a second monitor. This site holds the docs, the design and the build status.</p>
+      <p><a href="#/status"><b>Status: M0 done, M1 built</b></a> · <a href="#/getting-started">Getting started</a> · <a href="mockups/dashboard-1080p.html">Dashboard mockup</a></p>
     </div>
     <div class="pillars">
       <div><b>Record and replay</b>Every session is captured raw, and strategy is tuned offline against recordings.</div>
@@ -147,7 +158,7 @@ function overview() {
       <div><b>A mindset you set</b>Balanced or aggressive: one control that biases pit windows, energy, tyres and rival focus.</div>
     </div>` +
     GROUPS.map(([g, docs]) => `<h2>${g}</h2><div class="cards">` +
-      docs.map(d => `<a href="#/${d[0]}"><b>${d[1]}</b><span>${d[2]}</span></a>`).join("") + `</div>`).join("") +
+      docs.filter(d => !/^adr\/\d/.test(d[0])).map(d => `<a href="#/${d[0]}"><b>${d[1]}</b><span>${d[2]}</span></a>`).join("") + `</div>`).join("") +
     `<p class="path">Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>`;
 }
 
@@ -163,12 +174,12 @@ function linkify(root, baseDir) {
       return;
     }
     let id = (baseDir + p).replace(/\.md$/, "").replace(/^(\.\/)+/, "");
-    id = id.replace(/^reference\/\.\.\//, "").replace(/^docs\//, "");
+    id = id.replace(/^(?:reference|adr)\/\.\.\//, "").replace(/^docs\//, "");
     a.href = byId[id] ? "#/" + id + (frag ? "#" + frag : "") : "https://github.com/artsworks/f1-pitwall/blob/main/docs/" + p;
   });
   root.querySelectorAll("code").forEach(c => {
     if (c.closest("pre") || c.closest("a")) return;
-    const m = c.textContent.match(/^(?:docs\/)?((?:reference\/)?[\w-]+)\.md$/);
+    const m = c.textContent.match(/^(?:docs\/)?((?:reference\/|adr\/)?[\w-]+)\.md$/);
     if (m && byId[m[1]]) {
       const a = document.createElement("a");
       a.href = "#/" + m[1];

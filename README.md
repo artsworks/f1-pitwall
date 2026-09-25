@@ -3,7 +3,7 @@
 A race engineer for F1 26. It reads the game's UDP telemetry, keeps a model of the
 session, decides what is worth saying, says it over your headset, and shows it on a second monitor.
 
-Read the plan online: https://artsworks.github.io/f1-pitwall/
+Docs and build status: https://artsworks.github.io/f1-pitwall/ ([status](docs/status.md), [getting started](docs/getting-started.md))
 
 ## Quick start (game PC)
 
@@ -58,6 +58,8 @@ make that achievable:
 
 | Document | Contents |
 |---|---|
+| [`docs/status.md`](docs/status.md) | Milestone progress, what works today, what is next |
+| [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, doctor, start, recording profiles, replay |
 | [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md) | Review of the first plan: spec errors, gaps, architectural changes |
 | [`docs/01-architecture.md`](docs/01-architecture.md) | Layers, stack, cross-cutting decisions, repo layout |
 | [`docs/02-ingestion.md`](docs/02-ingestion.md) | Game settings, packets consumed, parser design, pause/flashback, recording format |
@@ -73,10 +75,9 @@ make that achievable:
 | [`docs/12-driver-input.md`](docs/12-driver-input.md) | Wheel button and spacebar: acknowledge / negative, and adaptivity without an LLM |
 | [`docs/13-league-multiplayer.md`](docs/13-league-multiplayer.md) | Friends-league target: restricted telemetry, league preset, test-and-feedback loop |
 | [`docs/14-adversarial-review.md`](docs/14-adversarial-review.md) | Adversarial review before the first commit: errors found, what was kept, assumptions to verify |
-| [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard redesign proposal, with HTML mockups in `docs/mockups/` |
+| [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard design (implemented in `web/`), with HTML mockups in `docs/mockups/` |
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts the design relies on |
 | [`docs/adr/`](docs/adr/README.md) | Architecture decision records: what live sessions taught us, so it is not relearnt |
-| [`docs/original-plan-v1.md`](docs/original-plan-v1.md) | The original plan, kept for provenance |
 
 ## Shape of the system
 
@@ -91,7 +92,7 @@ F1 26 (Windows PC) ──UDP 20777──▶ ingest ──▶ session state ─�
 
 ## Next step
 
-Answer the open questions, then M0: capture and replay.
+See [`docs/status.md`](docs/status.md).
 
 ## Licence
 
