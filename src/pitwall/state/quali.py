@@ -156,6 +156,8 @@ def abort_advice(
     the cut-off. Fresh sets to save and ERS in the bank adjust the margin."""
     if player_best_ms > 0 and cutoff_ms > 0 and player_best_ms < cutoff_ms - safe_margin_ms:
         return AbortAdvice(deficit_ms=0, advised=False, reason="through")
+    if cutoff_ms <= 0 or projected_ms <= 0:
+        return AbortAdvice(deficit_ms=0, advised=False, reason="no_cutoff")
     deficit = projected_ms - cutoff_ms
     margin = float(deficit_ms)
     reason = "deficit"
@@ -164,5 +166,5 @@ def abort_advice(
         reason = "no_fresh_sets"
     if ers_store_pct >= ers_keep_pct:
         margin *= 0.7
-    advised = cutoff_ms > 0 and projected_ms > 0 and sector >= 1 and deficit > margin
+    advised = sector >= 1 and deficit > margin
     return AbortAdvice(deficit, advised, "deficit" if advised else reason)

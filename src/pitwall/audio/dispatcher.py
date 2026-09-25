@@ -102,7 +102,9 @@ class Dispatcher:
         self._recent_texts: list[tuple[str, float]] = []
         self._last_call_t: float | None = None
         self._calls_this_lap = 0
-        self._calls_lap = 0
+        self._calls_lap: tuple[int, int] = (0, 0)
+        self._run = 0
+        self._run_phase = ""
         self._current: Call | None = None
         self.latest_snapshot: Snapshot | None = None
         # Driver input: presses and their effects (docs/12).
@@ -179,8 +181,14 @@ class Dispatcher:
         if any(t == cand.text for t, _ in self._recent_texts):
             return "dedupe"
         if cand.priority != 1:
-            if self._calls_lap != snapshot.lap_num:
-                self._calls_lap = snapshot.lap_num
+            # Qualifying runs sit on one lap number across garage stays; each
+            # garage visit and out-lap starts a fresh budget.
+            if snapshot.phase != self._run_phase:
+                if snapshot.phase in ("garage", "out_lap"):
+                    self._run += 1
+                self._run_phase = snapshot.phase
+            if self._calls_lap != (snapshot.lap_num, self._run):
+                self._calls_lap = (snapshot.lap_num, self._run)
                 self._calls_this_lap = 0
             budget = (
                 self.budget_override
@@ -262,7 +270,9 @@ class Dispatcher:
         self._queue.clear()
         self._fires_this_stint.clear()
         self._calls_this_lap = 0
-        self._calls_lap = 0
+        self._calls_lap = (0, 0)
+        self._run = 0
+        self._run_phase = ""
         self._current = None
         self.quiet_until = None
         self._spoken_calls.clear()

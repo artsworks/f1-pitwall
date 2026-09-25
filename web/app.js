@@ -180,7 +180,8 @@
     if (q.release) {
       var r = q.release;
       if (r.clean) {
-        main.textContent = "RELEASE NOW · clear " + fmt(r.gap_ahead_s, 0) + " s ahead";
+        main.textContent = "RELEASE NOW" +
+          (r.gap_ahead_s !== null ? " · clear " + fmt(r.gap_ahead_s, 0) + " s ahead" : "");
         main.className = "qmain ok";
       } else if (r.wait_s !== null) {
         main.textContent = "release in " + fmt(r.wait_s, 0) + " s";

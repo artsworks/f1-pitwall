@@ -937,6 +937,8 @@ class SessionState:
     def _phase(self) -> str:
         if self.red_flag:
             return "red_flag"
+        if self.driver_status == DriverStatus.IN_GARAGE:
+            return "garage"
         if self.pit_status in (PitStatus.PITTING, PitStatus.IN_PIT_AREA):
             return "pitting"
         try:

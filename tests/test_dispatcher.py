@@ -253,3 +253,12 @@ def test_screen_only_not_spoken() -> None:
     calls = d.drain(0.0)
     assert calls and calls[0].screen_only
     assert not sink.spoken  # audio sink skipped
+
+
+def test_budget_resets_per_quali_run_on_same_lap() -> None:
+    d, _, buf = _dispatcher(calls_per_lap=1, min_gap_s=0.0)
+    for i, phase in enumerate(["flying", "flying", "garage", "out_lap"]):
+        d.submit([_cand(f"r{i}")], Snapshot(now=float(i), lap_num=4, phase=phase))
+        d.drain(float(i))
+    fired = [r["rule_id"] for r in _log(buf) if r["outcome"] == "fired"]
+    assert fired == ["r0", "r2", "r3"]

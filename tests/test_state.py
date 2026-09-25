@@ -35,6 +35,13 @@ def test_phase_mapping() -> None:
         1.0,
     )
     assert state.snapshot(1.0).phase == "pitting"
+    # F1 26 reports pit_status=1 while parked in the garage
+    _send(
+        ingest,
+        pack_packet(PacketId.LAP_DATA, {"cars": {0: {"driver_status": 0, "pit_status": 1}}}),
+        2.0,
+    )
+    assert state.snapshot(2.0).phase == "garage"
 
 
 def test_ema_converges_and_uses_session_time() -> None:

@@ -11,7 +11,7 @@ rules:
     requires: [lap_data, session]
     say:
       - "Track's clear at pit exit. Good to go now"
-      - "Clean air if you go now, {release_gap_ahead_s:.0f} seconds to the car ahead"
+      - "Pit exit is clear. Go when you're ready"
   - id: release_hold
     sessions: [qualifying]
     priority: 2

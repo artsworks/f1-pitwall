@@ -114,6 +114,9 @@ def test_abort_advice() -> None:
     # ERS banked: margin x0.7 (280 ms) -> advised at 400 ms over
     a = abort_advice(91_400, 91_000, 0, 2, fresh_sets_current=2, ers_store_pct=70.0)
     assert a.advised
+    # No cut-off yet: no deficit reported
+    a = abort_advice(88_979, 0, 88_981, 0, fresh_sets_current=2, ers_store_pct=30.0)
+    assert not a.advised and a.deficit_ms == 0 and a.reason == "no_cutoff"
     # Sector 0 never advises
     a = abort_advice(95_000, 91_000, 0, 0, fresh_sets_current=2, ers_store_pct=30.0)
     assert not a.advised
