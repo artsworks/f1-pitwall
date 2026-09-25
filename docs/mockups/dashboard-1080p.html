@@ -16,7 +16,7 @@ html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-f
   font-variant-numeric: tabular-nums; }
 body { display:grid; height:100vh; overflow:hidden;
   grid-template-columns: 5fr 7fr;
-  grid-template-rows: 3rem 9rem 1fr auto auto 2rem;
+  grid-template-rows: 3rem 11rem 1fr auto auto 2rem;
   grid-template-areas:
     "status status"
     "banner banner"
@@ -39,15 +39,29 @@ body > * { background:var(--bg); }
 .pill.aggr { border-color:var(--aggr); background:var(--aggr); color:#000; }
 
 /* B banner */
-.banner { grid-area:banner; display:flex; align-items:center; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
+.banner { grid-area:banner; display:flex; align-items:stretch; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
 .banner .bar { width:1rem; align-self:stretch; background:var(--warn); }
 .banner.p1 .bar { background:var(--crit); }
 .banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
-.banner .text { font-size:3.6rem; line-height:1.1; font-weight:bold; flex:1; }
+.banner .body { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.5rem; }
+.banner .current { display:flex; align-items:center; gap:1rem; min-width:0; }
+.banner .text { font-size:3.4rem; line-height:1.1; font-weight:bold; flex:1; min-width:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden;
+  animation:call-arrive .2s ease-out both; }
 .banner .meta { text-align:right; color:var(--dim); font-size:1.3rem; white-space:nowrap; }
-.banner .meta b { color:var(--ok); font-weight:normal; }
+.banner .meta b { color:var(--fg); font-weight:normal; }
 .banner .meta .pri { color:var(--warn); }
 .banner.p1 .meta .pri { color:var(--crit); }
+.banner .evidence { color:var(--dim); font-size:1.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.banner .previous { border-top:1px solid var(--line); padding-top:.45rem; color:var(--dim); font-size:1.1rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:previous-settle .22s ease-out both; }
+.banner .previous b { color:var(--faint); font-size:.85em; letter-spacing:.1em; }
+@keyframes call-arrive { from { opacity:.6; transform:translateY(.35rem); } to { opacity:1; transform:translateY(0); } }
+@keyframes previous-settle { from { opacity:.5; transform:translateY(-.5rem) scale(1.02); }
+  to { opacity:1; transform:translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .banner .text,.banner .previous { animation:none; }
+}
 
 /* C tyres */
 .tyres { grid-area:tyres; display:flex; flex-direction:column; }
@@ -96,7 +110,6 @@ body > * { background:var(--bg); }
 .log .st { color:var(--ok); } .log .st.x { color:var(--crit); }
 .log li.drop .txt { color:var(--dim); text-decoration:line-through; }
 .log .chip { font-size:.9rem; border:1px solid var(--dim); color:var(--dim); padding:0 .4rem; border-radius:.3rem; }
-.log li:first-child .txt { color:var(--fg); font-weight:bold; }
 
 /* G footer */
 .footer { grid-area:footer; background:var(--panel); color:var(--dim); font-size:.9rem; display:flex; gap:2rem; align-items:center; padding:0 .9rem; }
@@ -107,7 +120,7 @@ body > * { background:var(--bg); }
 <header class="status">
   <span class="live">LIVE</span>
   <span class="dim">age 42 ms</span>
-  <span class="dim">10 Hz</span>
+  <span class="dim">10 WS/s</span>
   <span class="dim">·</span>
   <span>ON TRACK</span>
   <span class="spacer"></span>
@@ -120,14 +133,20 @@ body > * { background:var(--bg); }
 
 <section class="banner p2">
   <div class="bar"></div>
-  <div class="text">Box this lap, box box. Undercut on Norris.</div>
-  <div class="meta"><span class="pri">P2</span> · L24<br><b>✓</b> 8 s ago</div>
+  <div class="body">
+    <div class="current">
+      <div class="text">Front left is hot. Ease the trail braking.</div>
+      <div class="meta"><span class="pri">P2</span> · L24<br><b>▶ started</b> · 8 s ago</div>
+    </div>
+    <div class="evidence">WHY · FL inner 112° · HOT · wear 38%</div>
+    <div class="previous"><b>PREVIOUS · L23</b> · Fuel is good. Stay on target.</div>
+  </div>
 </section>
 
 <section class="zone tyres">
   <div class="chip"><span class="comp">MED</span><span>age 14 laps</span><span class="sub">FL leading wear</span></div>
   <div class="car">
-    <div class="corner hot"><div class="lbl"><span>FL</span><span class="brk warn">brk 412</span></div><div class="temp">106°</div><div class="word">HOT</div><div class="det">surf 104 · wear <span class="wear-warn">38%</span></div></div>
+    <div class="corner hot"><div class="lbl"><span>FL</span><span class="brk">brk 412</span></div><div class="temp">112°</div><div class="word">HOT</div><div class="det">surf 110 · wear 38%</div></div>
     <div class="corner ok"><div class="lbl"><span>FR</span><span class="brk">brk 405</span></div><div class="temp">98°</div><div class="word">OK</div><div class="det">surf 101 · wear 35%</div></div>
     <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">brk 388</span></div><div class="temp">94°</div><div class="word">OK</div><div class="det">surf 92 · wear 22%</div></div>
     <div class="corner ok"><div class="lbl"><span>RR</span><span class="brk">brk 390</span></div><div class="temp">95°</div><div class="word">OK</div><div class="det">surf 93 · wear 21%</div></div>
@@ -138,7 +157,7 @@ body > * { background:var(--bg); }
   <div>
     <h2>FUEL</h2>
     <div class="big ok">+0.4 laps</div>
-    <div class="sub">14.2 laps remaining · 33 to go</div>
+    <div class="sub">34.4 laps remaining · 34 incl this lap</div>
   </div>
   <div>
     <h2>DAMAGE</h2>
@@ -157,14 +176,12 @@ body > * { background:var(--bg); }
 
 <section class="log">
   <ol>
-    <li><span class="lap">L24</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Box this lap, box box. Undercut on Norris.</span><span></span></li>
-    <li><span class="lap">L23</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Front left one-oh-six. Ease the trail braking.</span><span class="chip">ACK</span></li>
-    <li><span class="lap">L22</span><span class="mk"></span><span class="st">✓</span><span class="txt">Norris one point four ahead, losing two tenths a lap.</span><span></span></li>
-    <li class="drop"><span class="lap">L21</span><span class="mk"></span><span class="st x">✗</span><span class="txt">Gap behind two point one.</span><span class="chip">dropped</span></li>
-    <li><span class="lap">L20</span><span class="mk"></span><span class="st">✓</span><span class="txt">Fuel is good. Push.</span><span></span></li>
-    <li><span class="lap">L18</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Fronts are getting warm, manage the entry to turn ten.</span><span></span></li>
-    <li><span class="lap">L15</span><span class="mk"></span><span class="st">✓</span><span class="txt">Leclerc pitted. Hard tyre.</span><span></span></li>
-    <li><span class="lap">L12</span><span class="mk p1"></span><span class="st">✓</span><span class="txt">Safety car, safety car. Stay out.</span><span class="chip">ACK</span></li>
+    <li><span class="lap">L22</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Fronts are getting warm, manage the entry to turn ten.</span><span></span></li>
+    <li class="drop"><span class="lap">L21</span><span class="mk"></span><span class="st x">✗</span><span class="txt">ERS at ninety.</span><span class="chip">dropped</span></li>
+    <li><span class="lap">L20</span><span class="mk"></span><span class="st">▶</span><span class="txt">Fuel is good. Push.</span><span></span></li>
+    <li><span class="lap">L18</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Fronts are getting warm, manage the entry to turn ten.</span><span></span></li>
+    <li><span class="lap">L15</span><span class="mk"></span><span class="st">▶</span><span class="txt">Pit exit clear.</span><span></span></li>
+    <li><span class="lap">L12</span><span class="mk p1"></span><span class="st">▶</span><span class="txt">Safety car, safety car. Stay out.</span><span class="chip">ACK</span></li>
   </ol>
 </section>
 

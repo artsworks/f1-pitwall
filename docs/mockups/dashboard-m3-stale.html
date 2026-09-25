@@ -16,7 +16,7 @@ html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-f
   font-variant-numeric: tabular-nums; }
 body { display:grid; height:100vh; overflow:hidden;
   grid-template-columns: 5fr 7fr;
-  grid-template-rows: 3rem 9rem 1fr auto auto 2rem;
+  grid-template-rows: 3rem 11rem 1fr auto auto 2rem;
   grid-template-areas:
     "status status"
     "banner banner"
@@ -39,15 +39,21 @@ body > * { background:var(--bg); }
 .pill.aggr { border-color:var(--aggr); background:var(--aggr); color:#000; }
 
 /* B banner */
-.banner { grid-area:banner; display:flex; align-items:center; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
+.banner { grid-area:banner; display:flex; align-items:stretch; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
 .banner .bar { width:1rem; align-self:stretch; background:var(--warn); }
 .banner.p1 .bar { background:var(--crit); }
 .banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
-.banner .text { font-size:3.6rem; line-height:1.1; font-weight:bold; flex:1; }
+.banner .body { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.8rem; }
+.banner .current { display:flex; align-items:center; gap:1rem; min-width:0; }
+.banner .text { font-size:3.4rem; line-height:1.1; font-weight:bold; flex:1; min-width:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 .banner .meta { text-align:right; color:var(--dim); font-size:1.3rem; white-space:nowrap; }
 .banner .meta b { color:var(--ok); font-weight:normal; }
 .banner .meta .pri { color:var(--warn); }
 .banner.p1 .meta .pri { color:var(--crit); }
+.banner .previous { border-top:1px solid var(--line); padding-top:.55rem; color:var(--dim); font-size:1.1rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.banner .previous b { color:var(--fg); font-size:.85em; letter-spacing:.1em; }
 
 /* C tyres */
 .tyres { grid-area:tyres; display:flex; flex-direction:column; }
@@ -96,16 +102,19 @@ body > * { background:var(--bg); }
 .log .st { color:var(--ok); } .log .st.x { color:var(--crit); }
 .log li.drop .txt { color:var(--dim); text-decoration:line-through; }
 .log .chip { font-size:.9rem; border:1px solid var(--dim); color:var(--dim); padding:0 .4rem; border-radius:.3rem; }
-.log li:first-child .txt { color:var(--fg); font-weight:bold; }
 
 /* G footer */
 .footer { grid-area:footer; background:var(--panel); color:var(--dim); font-size:.9rem; display:flex; gap:2rem; align-items:center; padding:0 .9rem; }
 
-/* stale state: everything greys except the status bar, which goes red */
-body.stale > :not(.status) { filter: grayscale(1) brightness(.55); }
+/* stale state: old telemetry greys while the warning stays readable */
+body.stale > :not(.status):not(.banner) { filter: grayscale(1) brightness(.72); }
 body.stale .status { background: color-mix(in srgb, var(--crit) 25%, var(--panel)); }
 body.stale .status .live { color: var(--crit); }
 body.stale .status .live::before { content:"○ "; }
+body.stale .status .pill.aggr { background:transparent; border-color:var(--dim); color:var(--dim); }
+body.stale .banner { background:color-mix(in srgb, var(--crit) 12%, var(--bg)); }
+body.stale .banner .bar { background:var(--crit); }
+body.stale .banner .text { color:var(--fg); }
 /* M3 strategy zone */
 .strat table { border-collapse:collapse; width:100%; font-size:1.3rem; }
 .strat td { padding:.1rem .6rem .1rem 0; white-space:nowrap; }
@@ -118,7 +127,7 @@ body.stale .status .live::before { content:"○ "; }
 <header class="status">
   <span class="live">STALE</span>
   <span>last packet 4.2 s ago</span>
-  <span class="dim">0 Hz</span>
+  <span class="dim">0 WS/s</span>
   <span class="dim">·</span>
   <span>ON TRACK</span>
   <span class="spacer"></span>
@@ -129,10 +138,15 @@ body.stale .status .live::before { content:"○ "; }
   <span class="dim">normal</span>
 </header>
 
-<section class="banner p1">
+<section class="banner">
   <div class="bar"></div>
-  <div class="text">Safety car, safety car. Box now, cheap stop.</div>
-  <div class="meta"><span class="pri">P1</span> · L31<br><b>✓</b> 3 s ago</div>
+  <div class="body">
+    <div class="current">
+      <div class="text">TELEMETRY STALE · ENGINEER ADVICE PAUSED</div>
+      <div class="meta">last packet<br>4.2 s ago</div>
+    </div>
+    <div class="previous"><b>LAST RADIO · STARTED · L31 · 5 s ago</b> · Safety car, safety car. Box now, cheap stop.</div>
+  </div>
 </section>
 
 <section class="zone tyres">
@@ -149,7 +163,7 @@ body.stale .status .live::before { content:"○ "; }
   <div>
     <h2>FUEL</h2>
     <div class="big warn">−0.3 laps</div>
-    <div class="sub">21.4 laps remaining · 21 to go</div>
+    <div class="sub">21.7 laps remaining · 22 incl this lap</div>
   </div>
   <div>
     <h2>DAMAGE</h2>
@@ -167,22 +181,21 @@ body.stale .status .live::before { content:"○ "; }
     <tr><td class="k">PIT WINDOW</td><td><b class="ok">OPEN · SC cheap stop −9 s</b></td></tr>
     <tr><td class="k">AHEAD</td><td>P3 NORRIS <b>+1.4</b> HARD 18</td><td class="ok">UC +1.2</td></tr>
     <tr><td class="k">BEHIND</td><td>P5 LECLERC <b>−2.1</b> MED 6</td><td class="warn">UC threat 0.8</td></tr>
-    <tr><td class="k">PLAN</td><td>H 1–31 → <b>M 32–52</b></td><td class="dim">alt: S 40–52</td></tr>
+    <tr><td class="k">PLAN</td><td>H 10–31 → <b>M 32–52</b></td><td class="dim">alt: S 40–52</td></tr>
   </table>
 </section>
 
 <section class="log">
   <ol>
-    <li><span class="lap">L31</span><span class="mk p1"></span><span class="st">✓</span><span class="txt">Safety car, safety car. Box now, cheap stop.</span><span></span></li>
-    <li><span class="lap">L30</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Leclerc is in the undercut window. Two laps to cover.</span><span></span></li>
-    <li><span class="lap">L29</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Fuel minus point three. Lift and coast into Stowe.</span><span class="chip">ACK</span></li>
-    <li><span class="lap">L27</span><span class="mk p1"></span><span class="st">✓</span><span class="txt">Front right wing damage. Thirty percent. Box when the window opens.</span><span></span></li>
-    <li><span class="lap">L26</span><span class="mk"></span><span class="st">✓</span><span class="txt">Norris is on the hard, eighteen laps old.</span><span></span></li>
+    <li><span class="lap">L30</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Leclerc is in the undercut window. Two laps to cover.</span><span></span></li>
+    <li><span class="lap">L29</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Fuel minus point three. Lift and coast into Stowe.</span><span class="chip">ACK</span></li>
+    <li><span class="lap">L27</span><span class="mk p1"></span><span class="st">▶</span><span class="txt">Front right wing damage. Thirty percent. Box when the window opens.</span><span></span></li>
+    <li><span class="lap">L26</span><span class="mk"></span><span class="st">▶</span><span class="txt">Norris is on the hard, eighteen laps old.</span><span></span></li>
     <li class="drop"><span class="lap">L25</span><span class="mk"></span><span class="st x">✗</span><span class="txt">Gap ahead one point six.</span><span class="chip">dropped</span></li>
     <li class="drop"><span class="lap">L24</span><span class="mk p2"></span><span class="st x">✗</span><span class="txt">Push now, Norris in traffic.</span><span class="chip">NEG</span></li>
-    <li><span class="lap">L22</span><span class="mk"></span><span class="st">✓</span><span class="txt">Mindset aggressive.</span><span></span></li>
-    <li><span class="lap">L20</span><span class="mk"></span><span class="st">✓</span><span class="txt">Rears are cold behind the safety car, weave.</span><span></span></li>
-    <li><span class="lap">L19</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Hards are past half life. Four laps of pace left.</span><span></span></li>
+    <li><span class="lap">L22</span><span class="mk"></span><span class="st">▶</span><span class="txt">Mindset aggressive.</span><span></span></li>
+    <li><span class="lap">L20</span><span class="mk"></span><span class="st">▶</span><span class="txt">Rears are cold behind the safety car, weave.</span><span></span></li>
+    <li><span class="lap">L19</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Hards are past half life. Four laps of pace left.</span><span></span></li>
   </ol>
 </section>
 

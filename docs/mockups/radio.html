@@ -39,15 +39,28 @@ body > * { background:var(--bg); }
 .pill.aggr { border-color:var(--aggr); background:var(--aggr); color:#000; }
 
 /* B banner */
-.banner { grid-area:banner; display:flex; align-items:center; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
+.banner { grid-area:banner; display:flex; align-items:stretch; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
 .banner .bar { width:1rem; align-self:stretch; background:var(--warn); }
 .banner.p1 .bar { background:var(--crit); }
 .banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
-.banner .text { font-size:3.6rem; line-height:1.1; font-weight:bold; flex:1; }
+.banner .body { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.5rem; }
+.banner .current { display:flex; align-items:center; gap:1rem; min-width:0; }
+.banner .text { font-size:3.4rem; line-height:1.1; font-weight:bold; flex:1; min-width:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden;
+  animation:call-arrive .2s ease-out both; }
 .banner .meta { text-align:right; color:var(--dim); font-size:1.3rem; white-space:nowrap; }
 .banner .meta b { color:var(--ok); font-weight:normal; }
 .banner .meta .pri { color:var(--warn); }
 .banner.p1 .meta .pri { color:var(--crit); }
+.banner .previous { border-top:1px solid var(--line); padding-top:.45rem; color:var(--dim); font-size:1.1rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:previous-settle .22s ease-out both; }
+.banner .previous b { color:var(--faint); font-size:.85em; letter-spacing:.1em; }
+@keyframes call-arrive { from { opacity:.6; transform:translateY(.35rem); } to { opacity:1; transform:translateY(0); } }
+@keyframes previous-settle { from { opacity:.5; transform:translateY(-.5rem) scale(1.02); }
+  to { opacity:1; transform:translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .banner .text,.banner .previous { animation:none; }
+}
 
 /* C tyres */
 .tyres { grid-area:tyres; display:flex; flex-direction:column; }
@@ -96,7 +109,6 @@ body > * { background:var(--bg); }
 .log .st { color:var(--ok); } .log .st.x { color:var(--crit); }
 .log li.drop .txt { color:var(--dim); text-decoration:line-through; }
 .log .chip { font-size:.9rem; border:1px solid var(--dim); color:var(--dim); padding:0 .4rem; border-radius:.3rem; }
-.log li:first-child .txt { color:var(--fg); font-weight:bold; }
 
 /* G footer */
 .footer { grid-area:footer; background:var(--panel); color:var(--dim); font-size:.9rem; display:flex; gap:2rem; align-items:center; padding:0 .9rem; }
@@ -104,7 +116,7 @@ body > * { background:var(--bg); }
 /* /radio: log only */
 body.radio { grid-template-columns:1fr; grid-template-rows:3rem auto 1fr 2rem;
   grid-template-areas:"status" "banner" "log" "footer"; }
-body.radio .banner { min-height:9rem; padding:1rem 1.2rem 1rem 0; }
+body.radio .banner { min-height:10rem; padding:1rem 1.2rem 1rem 0; }
 body.radio .banner .text { font-size:2.6rem; }
 body.radio .log ol { font-size:1.7rem; }
 body.radio .log li { padding:.6rem 0; }
@@ -123,17 +135,22 @@ body.radio .log li { padding:.6rem 0; }
 
 <section class="banner p2">
   <div class="bar"></div>
-  <div class="text">Front left is cold. Drag the brakes through sector three.</div>
-  <div class="meta"><span class="pri">P2</span> · L3<br>speaking…</div>
+  <div class="body">
+    <div class="current">
+      <div class="text">Front left is cold. Drag the brakes through sector three.</div>
+      <div class="meta"><span class="pri">P2</span> · L3<br>awaiting audio · 1 s</div>
+    </div>
+    <div class="previous"><b>PREVIOUS · L3</b> · Release in twelve seconds. Clean air behind Sainz.</div>
+  </div>
 </section>
 
 <section class="log">
   <ol>
-    <li><span class="lap">L3</span><span class="mk p2"></span><span class="st"></span><span class="txt">Front left is cold. Drag the brakes through sector three.</span><span></span></li>
-    <li><span class="lap">L3</span><span class="mk"></span><span class="st">✓</span><span class="txt">Release in twelve seconds. Clean air behind Sainz.</span><span></span></li>
-    <li><span class="lap">L2</span><span class="mk"></span><span class="st">✓</span><span class="txt">Cut-off is one twenty-seven four. You are two tenths clear.</span><span></span></li>
-    <li><span class="lap">L1</span><span class="mk p2"></span><span class="st">✓</span><span class="txt">Push lap now. Traffic clear to the line.</span><span class="chip">ACK</span></li>
+    <li><span class="lap">L2</span><span class="mk"></span><span class="st">▶</span><span class="txt">Cut-off is one twenty-seven four. You are two tenths clear.</span><span></span></li>
+    <li><span class="lap">L1</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Push lap now. Traffic clear to the line.</span><span class="chip">ACK</span></li>
     <li class="drop"><span class="lap">L1</span><span class="mk"></span><span class="st x">✗</span><span class="txt">ERS at ninety.</span><span class="chip">dropped</span></li>
+    <li><span class="lap">L1</span><span class="mk"></span><span class="st">▶</span><span class="txt">Session is live. Check the car balance on this out lap.</span><span></span></li>
+    <li><span class="lap">L1</span><span class="mk"></span><span class="st">▶</span><span class="txt">Tyres are in range. Build the fronts on the exit.</span><span></span></li>
   </ol>
 </section>
 
