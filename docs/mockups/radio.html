@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall mockup — /radio compact log view</title>
+<style>
+:root {
+  --bg:#0a0a0c; --panel:#121216; --line:#2a2a30;
+  --fg:#ececec; --dim:#8a8a92; --faint:#4a4a52;
+  --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff; --aggr:#ff8a3d;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
+  font-size: clamp(16px, 1.6vw, 34px);
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:var(--font);
+  font-variant-numeric: tabular-nums; }
+body { display:grid; height:100vh; overflow:hidden;
+  grid-template-columns: 5fr 7fr;
+  grid-template-rows: 3rem 9rem 1fr auto auto 2rem;
+  grid-template-areas:
+    "status status"
+    "banner banner"
+    "tyres  log"
+    "fuel   log"
+    "strat  log"
+    "footer footer";
+  gap: 1px; background: var(--line); }
+body > * { background:var(--bg); }
+.zone { padding:.6rem .9rem; }
+.zone h2 { margin:0 0 .4rem; font-size:.85rem; letter-spacing:.2em; color:var(--dim); font-weight:normal; }
+
+/* A status */
+.status { grid-area:status; display:flex; align-items:center; gap:1.5rem; padding:0 .9rem; font-size:1.5rem; background:var(--panel); }
+.status .live { color:var(--ok); font-weight:bold; }
+.status .live::before { content:"● "; }
+.status .dim { color:var(--dim); font-size:1.25rem; }
+.status .spacer { flex:1; }
+.pill { border:2px solid var(--dim); color:var(--dim); border-radius:.3rem; padding:.05rem .6rem; font-size:1.1rem; letter-spacing:.1em; }
+.pill.aggr { border-color:var(--aggr); background:var(--aggr); color:#000; }
+
+/* B banner */
+.banner { grid-area:banner; display:flex; align-items:stretch; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
+.banner .bar { width:1rem; align-self:stretch; background:var(--warn); }
+.banner.p1 .bar { background:var(--crit); }
+.banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
+.banner .body { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.5rem; }
+.banner .current { display:flex; align-items:center; gap:1rem; min-width:0; }
+.banner .text { font-size:3.4rem; line-height:1.1; font-weight:bold; flex:1; min-width:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden;
+  animation:call-arrive .2s ease-out both; }
+.banner .meta { text-align:right; color:var(--dim); font-size:1.3rem; white-space:nowrap; }
+.banner .meta b { color:var(--ok); font-weight:normal; }
+.banner .meta .pri { color:var(--warn); }
+.banner.p1 .meta .pri { color:var(--crit); }
+.banner .previous { border-top:1px solid var(--line); padding-top:.45rem; color:var(--dim); font-size:1.3rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:previous-settle .22s ease-out both; }
+.banner .previous b { color:var(--faint); font-size:.85em; letter-spacing:.1em; }
+@keyframes call-arrive { from { opacity:.6; transform:translateY(.35rem); } to { opacity:1; transform:translateY(0); } }
+@keyframes previous-settle { from { opacity:.5; transform:translateY(-.5rem) scale(1.02); }
+  to { opacity:1; transform:translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .banner .text,.banner .previous { animation:none; }
+}
+
+/* C tyres */
+.tyres { grid-area:tyres; display:flex; flex-direction:column; }
+.tyres .car { flex:1; }
+.corner { display:flex; flex-direction:column; justify-content:center; }
+.tyres .chip { display:flex; gap:1rem; align-items:baseline; margin-bottom:.5rem; font-size:1.3rem; }
+.tyres .chip .comp { border:2px solid var(--warn); color:var(--warn); padding:0 .5rem; border-radius:.3rem; font-weight:bold; }
+.car { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:.4rem; position:relative; }
+.car::before { content:""; position:absolute; left:50%; top:-.3rem; bottom:-.3rem; width:2px; background:var(--faint); transform:translateX(-50%); }
+.car::after { content:""; position:absolute; top:50%; left:-.3rem; right:-.3rem; height:2px; background:var(--faint); transform:translateY(-50%); }
+.corner { border:1px solid var(--line); background:var(--panel); padding:.5rem .7rem; }
+.corner .lbl { color:var(--dim); font-size:1rem; display:flex; justify-content:space-between; }
+.corner .temp { font-size:2.4rem; font-weight:bold; line-height:1.1; }
+.corner .word { font-size:1rem; letter-spacing:.15em; }
+.corner .det { color:var(--dim); font-size:1rem; margin-top:.2rem; }
+.hot .temp,.hot .word { color:var(--crit); }
+.ok .temp,.ok .word { color:var(--ok); }
+.cold .temp,.cold .word { color:var(--cold); }
+.corner.hot { border-color:var(--crit); background:color-mix(in srgb, var(--crit) 12%, var(--panel)); }
+.corner.cold { border-color:var(--cold); background:color-mix(in srgb, var(--cold) 12%, var(--panel)); }
+.corner.ok { border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.corner .lbl .brk { color:var(--faint); }
+.corner .lbl .brk.warn { color:var(--warn); }
+.wear-warn { color:var(--warn); }
+
+/* D fuel + damage */
+.fuel { grid-area:fuel; display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.big { font-size:2.4rem; font-weight:bold; line-height:1.1; }
+.big.ok { color:var(--ok); } .big.warn { color:var(--warn); } .big.crit { color:var(--crit); }
+.sub { color:var(--dim); font-size:1.1rem; }
+.dmg { font-size:1.1rem; line-height:1.5; }
+.dmg .warn { color:var(--warn); } .dmg .crit { color:var(--crit); }
+.dmg .none { color:var(--faint); }
+
+/* F strategy */
+.strat { grid-area:strat; font-size:1.3rem; line-height:1.5; border-top:1px solid var(--line); }
+.strat .ph { color:var(--faint); }
+
+/* E log */
+.log { grid-area:log; padding:.6rem .9rem; overflow:hidden; }
+.log ol { list-style:none; margin:0; padding:0; font-size:1.4rem; }
+.log li { display:grid; grid-template-columns:3.2rem .6rem 2rem 1fr auto; gap:.6rem; align-items:baseline; padding:.45rem 0; border-bottom:1px solid var(--line); }
+.log .lap { color:var(--dim); }
+.log .mk { width:.4rem; height:1.1em; align-self:center; background:var(--info); }
+.log .mk.p1 { background:var(--crit); } .log .mk.p2 { background:var(--warn); }
+.log .st { color:var(--ok); } .log .st.x { color:var(--crit); }
+.log li.drop .txt { color:var(--dim); text-decoration:line-through; }
+.log .chip { font-size:.9rem; border:1px solid var(--dim); color:var(--dim); padding:0 .4rem; border-radius:.3rem; }
+
+/* G footer */
+.footer { grid-area:footer; background:var(--panel); color:var(--dim); font-size:.9rem; display:flex; gap:2rem; align-items:center; padding:0 .9rem; }
+
+/* /radio: log only */
+body.radio { grid-template-columns:1fr; grid-template-rows:3rem auto 1fr 2rem;
+  grid-template-areas:"status" "banner" "log" "footer"; }
+body.radio .banner { min-height:10rem; padding:1rem 1.2rem 1rem 0; }
+body.radio .banner .text { font-size:2.6rem; }
+body.radio .log ol { font-size:1.7rem; }
+body.radio .log li { padding:.6rem 0; }
+</style>
+</head>
+<body class="radio">
+
+<header class="status">
+  <span class="live">LIVE</span>
+  <span class="dim">age 38 ms</span>
+  <span class="spacer"></span>
+  <span>QUALI · Q2</span>
+  <span>OUT LAP</span>
+  <span class="pill">BALANCED</span>
+</header>
+
+<section class="banner p2">
+  <div class="bar"></div>
+  <div class="body">
+    <div class="current">
+      <div class="text">Front left cold. Drag brakes through S3.</div>
+      <div class="meta"><span class="pri">P2</span> · L3<br>awaiting audio · 1s</div>
+    </div>
+    <div class="previous"><b>PREV · L3</b> · Release in twelve. Clear air behind Sainz.</div>
+  </div>
+</section>
+
+<section class="log">
+  <ol>
+    <li><span class="lap">L2</span><span class="mk"></span><span class="st">▶</span><span class="txt">Cut-off one twenty-seven four. Two tenths clear.</span><span></span></li>
+    <li><span class="lap">L1</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Push now. Clear track.</span><span class="chip">ACK</span></li>
+    <li class="drop"><span class="lap">L1</span><span class="mk"></span><span class="st x">✗</span><span class="txt">ERS at ninety.</span><span class="chip">dropped</span></li>
+    <li><span class="lap">L1</span><span class="mk"></span><span class="st">▶</span><span class="txt">Session live. Check balance on the out lap.</span><span></span></li>
+    <li><span class="lap">L1</span><span class="mk"></span><span class="st">▶</span><span class="txt">Tyres in range. Build the fronts.</span><span></span></li>
+  </ol>
+</section>
+
+<footer class="footer">
+  <span>ERS 90%</span><span>SC 0</span><span>call p99 205 ms</span>
+</footer>
+</body>
+</html>
