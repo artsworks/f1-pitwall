@@ -40,13 +40,14 @@ The built-in Windows voices sound robotic. Download a Piper neural voice once
 and falls back to SAPI if it cannot load:
 
 ```powershell
-uv run pitwall voices get                     # default: en_GB-alan-medium
+uv run pitwall voices get                     # default: en_GB-northern_english_male-medium
 uv run pitwall voices get en_US-ryan-high     # try others; samples: https://rhasspy.github.io/piper-samples/
 uv run pitwall speak --engine piper --voice en_US-ryan-high "Box this lap."
 uv run pitwall speak --engine sapi            # compare with the old voice
 ```
 
-Pick the default in `speech.piper_voice` (settings). `speech.rate` and `speech.volume`
+Pick the default in `speech.piper_voice` and the pace in `speech.piper_speed`
+(1.2 default; try `speak --speed 1.3`). `speech.rate` and `speech.volume`
 apply to both engines.
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).

@@ -34,7 +34,8 @@ speech:
   enabled: true
   engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
   voice: null             # SAPI voice name filter
-  piper_voice: "en_GB-alan-medium"
+  piper_voice: "en_GB-northern_english_male-medium"
+  piper_speed: 1.2        # >1 faster; 1.0 = voice natural pace
   voices_dir: "voices"
   rate: 0
   volume: 100

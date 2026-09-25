@@ -400,6 +400,8 @@ def cmd_speak(args: argparse.Namespace) -> int:
     update: dict[str, object] = {"engine": args.engine}
     if args.voice:
         update["piper_voice"] = args.voice
+    if args.speed:
+        update["piper_speed"] = args.speed
     speech = store.current().speech.model_copy(update=update)
     if args.save:
         t0 = time.monotonic()
@@ -551,6 +553,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
     sp.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
     sp.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
+    sp.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
     sp.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
     sp.set_defaults(func=cmd_speak)
 

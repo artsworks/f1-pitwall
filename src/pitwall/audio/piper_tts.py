@@ -29,8 +29,8 @@ from pitwall.audio.dispatcher import Call
 from pitwall.config.models import SpeechSettings
 
 SUGGESTED_VOICES = (
-    "en_GB-alan-medium",
     "en_GB-northern_english_male-medium",
+    "en_GB-alan-medium",
     "en_US-ryan-high",
     "en_US-lessac-medium",
 )
@@ -127,7 +127,7 @@ def make_piper_synth(settings: SpeechSettings) -> Synth:
     voice = PiperVoice.load(path)
     rate = max(-10, min(10, settings.rate))
     cfg = SynthesisConfig(
-        length_scale=1.0 - 0.04 * rate,
+        length_scale=(1.0 - 0.04 * rate) / max(0.5, min(2.0, settings.piper_speed)),
         volume=max(0, min(100, settings.volume)) / 100.0,
     )
     sample_rate = voice.config.sample_rate
