@@ -19,6 +19,7 @@ from typing import Any
 from pitwall.clock import PausableClock, ReplayClock, VirtualClock
 from pitwall.engine import Engine, run_replay
 from pitwall.net.recording import RecordingReader, read_index
+from pitwall.server.hub import Hub
 from pitwall.store.db import Database
 
 # Decision-log outcomes surfaced as ticks on the transport strip.
@@ -61,7 +62,7 @@ class ReviewController:
         self,
         path: Path | str,
         engine_factory: Callable[[Any], Engine],
-        hub: Any,
+        hub: Hub,
         speed: float,
         db: Database | None = None,
         timeline_log: io.StringIO | None = None,
@@ -125,6 +126,7 @@ class ReviewController:
         grades/calls still land somewhere consistent."""
         engine = self._engine_factory(VirtualClock())
         engine.dispatcher.log._fp = fp  # noqa: SLF001 - in-memory timeline log
+        engine.dispatcher.sinks = []  # the pre-pass must not reach the dashboard
         return engine
 
     # -- transport -------------------------------------------------------------
@@ -141,6 +143,7 @@ class ReviewController:
         if self._task is not None and not self._task.done():
             self._task.cancel()
         self._from_us = from_us
+        self.hub.recent_calls.clear()
         self.clock = PausableClock(ReplayClock(self.speed, start=from_us / 1e6))
         self.engine = self._engine_factory(self.clock)
         self._task = asyncio.ensure_future(

@@ -81,7 +81,7 @@
   function refresh() {
     api("status").then(function (st) {
       status = st;
-      if (playBtn) playBtn.textContent = st.playing ? "⏸" : "▶";
+      if (playBtn) playBtn.textContent = st.playing ? "PAUSE" : "PLAY";
       if (posEl) posEl.textContent = fmt(st.position_us) + " / " + fmt(st.duration_us);
       if (scrub) scrub.value = String(Math.round(1000 * st.position_us / (st.duration_us || 1)));
       var laps = timeline ? timeline.laps : [];

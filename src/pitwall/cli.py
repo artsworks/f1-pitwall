@@ -8,7 +8,7 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -338,12 +338,20 @@ def _lan_ip() -> str:
         return "127.0.0.1"
 
 
-async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None:
+def _quiet_left_s(engine: Engine, now: float) -> float | None:
+    until = engine.dispatcher.quiet_until
+    return until - now if until is not None and now < until else None
+
+
+async def _state_broadcast(
+    base: Engine, hub: Hub, store: ConfigStore, active: Callable[[], Engine]
+) -> None:
     from pitwall.server.app import state_payload
 
     period = 1.0 / store.current().ui.state_hz
-    last_status = engine.clock.now()
+    last_status = base.clock.now()
     while True:
+        engine = active()
         now = engine.clock.now()
         if now - last_status >= 10.0:
             last_status = now
@@ -363,11 +371,12 @@ async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None
             settings=store.current(),
             metrics=engine.metrics,
             quiet=store.current().policy.quiet,
+            quiet_left_s=_quiet_left_s(engine, now),
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
             engine.metrics.note_packet_to_ws(snap.last_packet_t, engine.clock.now())
-        await engine.clock.sleep(period)
+        await base.clock.sleep(period)
 
 
 async def _serve(
@@ -382,22 +391,33 @@ async def _serve(
     from pitwall.server.app import create_app
 
     settings = store.current()
+
+    def active() -> Engine:
+        """Review mode rebuilds the engine on play/seek; follow the current one."""
+        if review is not None and review.engine is not None:
+            current: Engine = review.engine
+            return current
+        return engine
+
+    def _latest() -> Any:
+        e = active()
+        return e.dispatcher.latest_snapshot or e.state.snapshot(e.clock.now())
+
     app = create_app(
         hub,
         store,
         engine.metrics,
         speaker_name=getattr(engine, "speaker_name", "null"),
-        latest_snapshot=lambda: (
-            engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
-        ),
-        on_client_press=engine.client_press,
+        latest_snapshot=_latest,
+        on_client_press=lambda down: active().client_press(down),
         review=review,
     )
 
     def _health() -> dict[str, Any]:
         from pitwall.server.app import packet_age_ms
 
-        snap = engine.state.snapshot(engine.clock.now())
+        e = active()
+        snap = e.state.snapshot(e.clock.now())
         age = packet_age_ms(snap)
         return {"packet_age_ms": age, "live": age is not None and age < 1000.0}
 
@@ -414,7 +434,7 @@ async def _serve(
     print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
-    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store), coro)
+    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
 
 
 def cmd_start(args: argparse.Namespace) -> int:

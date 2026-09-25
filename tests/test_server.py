@@ -374,3 +374,59 @@ def test_hub_recent_calls_track_audio_outcome() -> None:
     assert by_id["b"]["audio"] == "started"
     assert by_id["c"]["audio"] == "dropped"
     assert all(isinstance(c["t"], float) for c in hub.recent_calls)
+
+
+def test_state_payload_quali_zone() -> None:
+    import math
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    race = state_payload(
+        Snapshot(now=1.0, session_kind="race"), settings=settings, metrics=Metrics(), quiet=False
+    )
+    assert race["quali"] is None
+    garage = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="garage",
+            release_clean=False,
+            release_wait_s=7.0,
+            release_gap_ahead_s=math.inf,
+            cars_on_track=3,
+            red_flag=True,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+        quiet_left_s=120.0,
+    )
+    assert garage["red_flag"] is True
+    assert garage["quiet"] is True and garage["quiet_left_s"] == 120.0
+    rel = garage["quali"]["release"]
+    assert rel == {
+        "clean": False,
+        "wait_s": 7.0,
+        "gap_ahead_s": None,
+        "gap_behind_s": None,
+        "cars_on_track": 3,
+    }
+    flying = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="flying",
+            projected_lap_ms=90_700,
+            quali_cutoff_ms=90_000,
+            abort_advised=True,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert flying["quali"]["lap"] == {"projected_ms": 90_700, "delta_ms": 700, "abort": True}
+    assert "release" not in flying["quali"]

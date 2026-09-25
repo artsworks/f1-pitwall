@@ -165,8 +165,28 @@ body.radio .log ol { font-size: 1.6rem; }
 body.radio .log li { grid-template-columns: 3.2rem .6rem 1.4rem 1fr; }
 body.radio .log .tag { display: none; }
 
-/* review-mode transport bar (docs/07) */
-.transport { padding: 6px 10px; border-top: 1px solid #2a2f36; }
+/* M2: flag badge, press chip, qualifying zone F */
+.flag { border: 2px solid var(--warn); color: var(--warn); border-radius: .3rem;
+  padding: .05rem .6rem; font-size: 1.2rem; letter-spacing: .1em; font-weight: bold; }
+.flag.red { border-color: #fff; background: var(--crit); color: #fff; }
+body.redflag .status { background: color-mix(in srgb, var(--crit) 55%, var(--panel)); }
+.press { font-size: 1.2rem; border: 1px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: .1rem .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 30rem; }
+.press.ack { border-color: var(--ok); color: var(--ok); }
+.press.neg { border-color: var(--crit); color: var(--crit); }
+.press.bookmark { border-color: var(--info); color: var(--info); }
+.quali .qmain { font-size: 1.9rem; font-weight: bold; line-height: 1.2; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.quali .qmain.ok { color: var(--ok); }
+.quali .qmain.warn { color: var(--warn); }
+.quali .qmain.crit { color: var(--crit); }
+
+/* review-mode transport bar (docs/07): its own full-width row */
+body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
+  grid-template-areas: "status status" "banner banner" "tyres log" "fuel log" "strat log"
+    "transport transport" "footer footer"; }
+.transport { grid-area: transport; padding: 6px 10px; border-top: 1px solid #2a2f36; }
 .transport .row { display: flex; gap: 8px; align-items: center; }
 .transport button { background: #1c2128; color: #e6edf3; border: 1px solid #30363d;
   border-radius: 4px; padding: 2px 8px; cursor: pointer; }

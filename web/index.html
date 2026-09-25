@@ -13,6 +13,7 @@
     <span id="rate" class="dim">--</span>
     <span class="dim">·</span>
     <span id="phase">--</span>
+    <span id="flag" class="flag" hidden></span>
     <span class="spacer"></span>
     <span id="session">--</span>
     <span id="lap">LAP --</span>
@@ -36,9 +37,9 @@
 
   <section id="transport" class="transport" hidden>
     <div class="row">
-      <button id="t-prev" title="previous lap">⏮</button>
-      <button id="t-play" title="play/pause">▶</button>
-      <button id="t-next" title="next lap">⏭</button>
+      <button id="t-prev" title="previous lap">&lt; LAP</button>
+      <button id="t-play" title="play/pause">PLAY</button>
+      <button id="t-next" title="next lap">LAP &gt;</button>
       <span id="t-lap" class="dim">LAP -- / --</span>
       <input id="t-scrub" type="range" min="0" max="1000" value="0">
       <span id="t-pos" class="dim">--:--</span>
@@ -70,8 +71,12 @@
   </section>
 
   <section class="zone strat">
-    <h2>STRATEGY</h2>
-    <div class="ph">pit window · gaps · undercut (M3)</div>
+    <h2 id="strat-title">STRATEGY</h2>
+    <div id="strat-ph" class="ph">pit window · gaps · undercut (M3)</div>
+    <div id="quali" class="quali" hidden>
+      <div id="q-main" class="qmain">--</div>
+      <div id="q-sub" class="sub">--</div>
+    </div>
   </section>
 
   <section class="log"><ol id="log"></ol></section>

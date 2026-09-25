@@ -11,6 +11,7 @@
   var clockOffset = 0; // server epoch seconds - local epoch seconds
   var startedAt = performance.now(), lastFrameAt = null, lastState = null, lastStateAt = null;
   var stateTimes = [], shownCurrentId = null, shownPreviousId = null;
+  var pressTimer = null;
 
   function el(id) { return document.getElementById(id); }
   function setText(id, txt) { var n = el(id); if (n) n.textContent = txt; }
@@ -88,10 +89,20 @@
       v.appendChild(document.createTextNode(p.verbosity || ""));
       if (p.quiet) {
         var q = document.createElement("span");
-        q.className = "quiet"; q.textContent = " QUIET";
+        q.className = "quiet";
+        q.textContent = " QUIET" + (p.quiet_left_s ? " " + clock(p.quiet_left_s) : "");
         v.appendChild(q);
       }
     }
+    var flag = el("flag");
+    if (flag) {
+      var word = p.red_flag ? "RED FLAG" : p.paused ? "PAUSED" : "";
+      flag.hidden = !word;
+      flag.textContent = word;
+      flag.className = "flag" + (p.red_flag ? " red" : "");
+    }
+    document.body.classList.toggle("redflag", !!p.red_flag);
+    renderQuali(p.quali);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -136,6 +147,61 @@
       setText("latency", "call p99 " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
         " ms · ws p99 " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
     }
+  }
+
+  function clock(s) {
+    if (s === null || s === undefined || isNaN(s)) return "--:--";
+    s = Math.max(0, Math.floor(s));
+    return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+  }
+  function lapTime(ms) {
+    if (!ms) return "--";
+    var s = ms / 1000, m = Math.floor(s / 60);
+    return m + ":" + ("0" + (s - m * 60).toFixed(3)).slice(-6);
+  }
+  function signed(ms) {
+    if (ms === null || ms === undefined) return "--";
+    return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(3);
+  }
+
+  // Zone F in qualifying (docs/15 §8): release window in the garage, lap vs cut-off
+  // while flying. Race/practice keep the M3 placeholder.
+  function renderQuali(q) {
+    var box = el("quali"), ph = el("strat-ph");
+    if (!box) return;
+    box.hidden = !q;
+    if (ph) ph.hidden = !!q;
+    setText("strat-title", q ? "QUALIFYING" : "STRATEGY");
+    if (!q) return;
+    var main = el("q-main");
+    var sub = [clock(q.session_time_left) + " left", q.fresh_sets + " fresh set" +
+      (q.fresh_sets === 1 ? "" : "s"), "best " + lapTime(q.best_lap_ms),
+      "cut " + lapTime(q.cutoff_ms)];
+    if (q.release) {
+      var r = q.release;
+      if (r.clean) {
+        main.textContent = "RELEASE NOW · clear " + fmt(r.gap_ahead_s, 0) + " s ahead";
+        main.className = "qmain ok";
+      } else if (r.wait_s !== null) {
+        main.textContent = "release in " + fmt(r.wait_s, 0) + " s";
+        main.className = "qmain warn";
+      } else {
+        main.textContent = "TRAFFIC · no gap in 60 s";
+        main.className = "qmain crit";
+      }
+      sub.unshift(r.cars_on_track + " on track");
+    } else if (q.lap) {
+      var d = q.lap.delta_ms;
+      main.textContent = "proj " + lapTime(q.lap.projected_ms) + " · " +
+        (d === null ? "no cut-off" : signed(d) + " to cut") +
+        (q.lap.abort ? " · ABORT" : "");
+      main.className = "qmain " + (q.lap.abort ? "crit" : d !== null && d <= 0 ? "ok" : "warn");
+    } else {
+      main.textContent = q.through ? "THROUGH" : "--";
+      main.className = "qmain" + (q.through ? " ok" : "");
+    }
+    if (q.through) sub.push("THROUGH");
+    setText("q-sub", sub.join(" · "));
   }
 
   function renderDamage(d) {
@@ -344,6 +410,9 @@
       if (pe) {
         var label = p.kind === "ack" ? "ACK" : p.kind === "neg" ? "NEG" : "BOOKMARK";
         pe.hidden = false;
+        pe.className = "press " + p.kind;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(function () { pe.hidden = true; }, 8000);
         pe.textContent = label + " L" + (p.lap || "--") +
           (p.text ? " ▸ " + p.text : "");
       }

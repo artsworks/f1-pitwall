@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -35,12 +36,50 @@ def packet_age_ms(snapshot: Snapshot) -> float | None:
     return max(0.0, (snapshot.now - snapshot.last_packet_t) * 1000.0)
 
 
+def _finite(x: float) -> float | None:
+    return x if math.isfinite(x) else None
+
+
+def quali_payload(snapshot: Snapshot) -> dict[str, Any] | None:
+    """Zone F in qualifying (docs/15 §8): release window in the garage, lap vs
+    cut-off while flying."""
+    if snapshot.session_kind != "qualifying":
+        return None
+    out: dict[str, Any] = {
+        "session_time_left": snapshot.session_time_left,
+        "fresh_sets": snapshot.fresh_sets_current,
+        "best_lap_ms": snapshot.player_best_lap_ms or None,
+        "cutoff_ms": snapshot.quali_cutoff_ms or None,
+        "through": snapshot.quali_through,
+    }
+    if snapshot.phase in ("garage", "pitting"):
+        out["release"] = {
+            "clean": snapshot.release_clean,
+            "wait_s": _finite(snapshot.release_wait_s),
+            "gap_ahead_s": _finite(snapshot.release_gap_ahead_s),
+            "gap_behind_s": _finite(snapshot.release_gap_behind_s),
+            "cars_on_track": snapshot.cars_on_track,
+        }
+    if snapshot.phase == "flying" and snapshot.projected_lap_ms:
+        out["lap"] = {
+            "projected_ms": snapshot.projected_lap_ms,
+            "delta_ms": (
+                snapshot.projected_lap_ms - snapshot.quali_cutoff_ms
+                if snapshot.quali_cutoff_ms
+                else None
+            ),
+            "abort": snapshot.abort_advised,
+        }
+    return out
+
+
 def state_payload(
     snapshot: Snapshot,
     *,
     settings: Any,
     metrics: Metrics,
     quiet: bool,
+    quiet_left_s: float | None = None,
 ) -> dict[str, Any]:
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
@@ -98,7 +137,11 @@ def state_payload(
         "safety_car": snapshot.safety_car_status,
         "mindset": settings.mindset.active,
         "verbosity": settings.policy.verbosity,
-        "quiet": quiet,
+        "quiet": quiet or quiet_left_s is not None,
+        "quiet_left_s": quiet_left_s,
+        "red_flag": snapshot.red_flag,
+        "paused": snapshot.paused,
+        "quali": quali_payload(snapshot),
         "latency": {
             "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],
