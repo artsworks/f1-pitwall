@@ -172,15 +172,14 @@ def create_app(
             if first.get("type") != "hello" or first.get("v") != PROTOCOL_VERSION:
                 await websocket.close(code=4001, reason="protocol version mismatch")
                 return
-            if first.get("last_seq") is not None:
-                payload = state_payload(
-                    snapshot_now(),
-                    settings=settings_store.current(),
-                    metrics=metrics,
-                    quiet=settings_store.current().policy.quiet,
-                )
-                payload["calls"] = list(hub.recent_calls)
-                await websocket.send_text(json.dumps(hub.frame("snapshot", payload)))
+            payload = state_payload(
+                snapshot_now(),
+                settings=settings_store.current(),
+                metrics=metrics,
+                quiet=settings_store.current().policy.quiet,
+            )
+            payload["calls"] = list(hub.recent_calls)
+            await websocket.send_text(json.dumps(hub.frame("snapshot", payload)))
             while True:
                 await websocket.receive_text()  # pings/disconnects; no client commands yet
         except (WebSocketDisconnect, RuntimeError):
