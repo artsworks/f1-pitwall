@@ -21,8 +21,8 @@ current runtime is unchanged; future call-history additions are identified below
    above 1 s of staleness the whole page greys out so a frozen screen never looks alive.
 4. The few numbers that *justify* a call are visible without reading: tyres per corner,
    fuel laps and delta, pit window / gaps (M3), damage, lap / position / phase, mindset.
-5. Readable at 2 m on a 1080p or 1440p landscape monitor. Dark, high contrast, big type,
-   colour always paired with a word.
+5. Readable on a 27-inch overhead monitor at roughly 1 m, at either 1080p or 1440p.
+   Dark, high contrast, big type; colour always paired with a word.
 6. Offline. Vanilla HTML/CSS/JS served by the backend; no CDN, no framework, no build.
 
 **Non-goals**
@@ -45,13 +45,13 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 | Rank | Element | Why it earns the space | Min size @1080p |
 |---|---|---|---|
 | 1 | **Call banner** — current call, priority, age, lap, one evidence line | The spoken word is the product; the screen confirms and explains it | ~60 px text, 160–190 px tall |
-| 2 | **Freshness** — LIVE/STALE, packet age, WS rate | A stale screen must be recognisable instantly | 28 px, top-left corner, always the same place |
-| 3 | **Previous radio** — one line below the current call | Preserves the last call as the next one arrives, without competing for attention | 18–24 px, dim |
+| 2 | **Freshness** — LIVE/STALE, packet age, WS rate | A stale screen must be recognisable instantly | 26 px, top-left corner, always the same place |
+| 3 | **Previous radio** — one line below the current call | Preserves the last call as the next one arrives, without competing for attention | 22 px, dim |
 | 4 | **Radio log** — older calls, lap, priority, audio state / ACK / NEG | "What did it say two laps ago?" | 26 px |
-| 5 | **Tyres** — 2×2 car plan view; inner EMA temp, surface, wear %, status word | Justifies thermal / wear calls; the most common M1–M2 call family | 40 px temp |
+| 5 | **Tyres** — 2×2 car plan view; inner EMA temp, surface, wear %, status word | Justifies thermal / wear calls; the most common M1–M2 call family | 52 px temp, 22–23 px labels and detail, 20 px brake |
 | 6 | **Fuel** — laps remaining, then delta to a real target when available | Justifies lift-and-coast / fuel calls | 40 px |
 | 7 | **Lap / position / session phase** | Context for every call | 32 px |
-| 8 | **Damage** — front wing L/R, rear wing, floor, diffuser, sidepod, gearbox, engine | Justifies "box for a wing"; hidden when all zero | 24 px, list |
+| 8 | **Damage** — front wing L/R, rear wing, floor, diffuser, sidepod, gearbox, engine | Justifies "box for a wing"; hidden when all zero | 22 px, list |
 | 9 | **Mindset** BALANCED / AGGRESSIVE + verbosity + quiet | One-press control; must be visible to trust the calls | 24 px pill |
 | 10 (M3) | **Pit window**, undercut/overcut threats, gaps ahead/behind, stint plan | Race strategy; the tactical block | 32 px |
 | — | ERS, SC status, latency p99 | Footer, small, dim. Diagnostics, not driving information | 18 px |
@@ -60,31 +60,33 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 
 Landscape, 16:9. Fixed 12-column grid with `rem` sizing driven by a root font size set
 from viewport width (`font-size: clamp(14px, 0.9vw, 24px)`), so 1080p and 1440p render
-the same composition with proportionally larger type. Zones never reflow between
+the same composition at nearly the same physical scale on a 27-inch panel. Make the
+tyre temperature 3 rem and secondary tyre values at least 1.15 rem; scaling only the
+root font would crowd the status bar. Zones never reflow between
 sessions; empty zones keep their box so nothing jumps when a value appears.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ A  STATUS BAR   ● LIVE  age 42 ms  10 WS/s │ RACE · Bahrain  LAP 24/57  P5 │ 48 px
-│                 phase: ON TRACK            │ MED  age 14 laps   [BALANCED] │
+│                 phase: ON TRACK            │ MED  14L old       [BALANCED] │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ B  CURRENT  ▮ P2  "Front left is hot. Ease the trail braking." L24 · 8 s   │
+│ B  CURRENT  ▮ P2  "Front left hot. Ease trail braking." L24 · 8s            │
 │    WHY  FL inner 112° HOT · wear 38%                                       │ 190 px
-│    PREVIOUS  L23 "Fuel is good. Stay on target."                            │
+│    PREV  L23 "Fuel on target."                                              │
 ├─────────────────────────────────┬──────────────────────────────────────────┤
 │ C  TYRES (2×2 plan view)        │ E  RADIO LOG                             │
-│    FL 112 HOT   │  FR  98 OK    │   L22 ▶ Fronts are getting warm…        │
-│    surf 110 · 38% surf 101 · 35%│   L21 ✗ ERS at ninety (dropped)          │
-│    ─────────────┼─────────────  │   L20 ▶ Fuel is good, push.             │
+│    FL 112 HOT   │  FR  98 OK    │   L22 ▶ Fronts warming…                  │
+│    surf 110° 38%│ surf 101° 35% │   L21 ✗ ERS at ninety (dropped)          │
+│    ─────────────┼─────────────  │   L20 ▶ Fuel good. Push.                │
 │    RL  94 OK    │  RR  95 OK    │   …                                      │
-│    surf 92 · 22%  surf 93 · 21% │                                          │  fills
+│    surf 92° 22% │ surf 93° 21%  │                                          │  fills
 ├─────────────────────────────────┤   …                                      │
 │ D  FUEL  +0.4 laps   34.4 laps  │                                          │
 │    DAMAGE FW L 12% · Floor 4%   │                                          │
 ├─────────────────────────────────┤                                          │
 │ F  STRATEGY (M3; placeholder    │                                          │
 │    until then)                  │                                          │
-│    pit window · gaps · undercut │                                          │
+│    pit window · gaps · UC       │                                          │
 ├─────────────────────────────────┴──────────────────────────────────────────┤
 │ G  FOOTER  ERS 62% · SC 0 · call p99 210 ms · ws 12 ms                       │ 32 px
 └────────────────────────────────────────────────────────────────────────────┘
@@ -96,10 +98,10 @@ Zone rules:
 - **A status bar**: freshness lives at the far left, first thing the eye lands on in
   Western reading order. Session/lap/position right-aligned. Mindset pill far right.
 - **B banner**: full width, fixed height, never collapses. A large current line, a
-  single evidence line and a dim, one-line **previous radio** subtitle share this
+  single evidence line and a dim, one-line **PREV** radio subtitle share this
   fixed space. The subtitle shows the immediately preceding call whose audio started;
   the next call replaces it. The log shows older calls, omitting those already in the
-  banner, but retains all calls in its underlying history. Long calls use at most two
+  banner, but retains recent calls in its underlying history. Long calls use at most two
   banner lines with the complete text retained in call history for review. When there
   is no call, the banner says "— radio quiet —".
 - **C tyres**: a 2×2 grid drawn as the car from above — **FL top-left, FR top-right, RL
@@ -108,12 +110,13 @@ Zone rules:
   status colour (border + faint background tint, not just the number) so a corner
   heating up is visible in peripheral vision. Brake temp sits small in each tile's
   corner: it can help explain heat or lock-ups, but it never competes with the tyre
-  temp for size. Brake colours remain neutral until a calibrated threshold exists.
+  temp for size. The corner label, temperature and status word share the colour;
+  brakes stay neutral until a calibrated threshold exists.
 - **D fuel + damage**: fuel laps remaining is the large number until the backend
   supplies a target delta; only then does the signed delta take prominence. Damage
   renders as a list of non-zero components only; the zone header stays.
 - **E radio log**: newest older call at the top; the current and previous calls are
-  already visible in B. 8 older rows at 1080p, 10 at 1440p.
+  already visible in B. Show as many older rows as fit without shrinking the type.
 - **F strategy**: reserved for M3. Until then it shows the pit-window placeholder line
   from the roadmap ("pit window: M3") in the dim colour, so the grid does not change
   when strategy lands.
@@ -121,7 +124,8 @@ Zone rules:
 
 ### 1440p
 
-Same grid; root font scales ~1.33×. The radio log gains two rows. No other change.
+Same grid; root font scales ~1.33×, preserving the physical size of text on a
+27-inch panel. Additional radio rows fit when calls are short.
 
 ### `/radio` compact view
 
@@ -148,14 +152,31 @@ CSS custom properties in `web/style.css`; every colour is paired with a word in 
 }
 ```
 
-Type scale (rem): banner 3.4, previous call 1.1, evidence 1.2, tyre temp 2.4,
-fuel 2.4, status bar 1.5, log 1.4,
-tile labels 1.0, footer 0.9. Tabular figures (`font-variant-numeric: tabular-nums`) so
+Type scale (rem): banner 3.4, previous call 1.3, evidence 1.3, tyre temp 3.0,
+tyre corner + status 1.35, surface/wear 1.25, brake 1.15; fuel 2.4,
+status bar 1.5, log 1.5, section headings 1.15, footer 0.9.
+At 1080p, the tyre temperature is ~52 px and its detail ~22 px. On the same
+27-inch screen at 1440p, they are ~72 px and ~30 px, so their physical sizes
+stay close. Tabular figures (`font-variant-numeric: tabular-nums`) so
 numbers do not jitter. Monospace throughout: values line up and the driver learns
 positions, not shapes.
 
 Priority colour is used on the **banner left bar and the log row marker**, never on the
-whole text — red text on black at 2 m is less legible than white text next to a red bar.
+whole text; white text beside a red bar stays readable from the overhead monitor.
+
+### Screen copy
+
+Use short, action-first calls: `Front left hot. Ease trail braking.` rather than a
+long preamble. The banner and log show the **exact dispatched call text**; shortening
+a spoken call belongs in its rule template, not a client-side rewrite of history.
+The mockup phrases show the proposed concise style, not a change to current audio.
+Keep `HOT`, `COLD`, `LIVE`, `STALE` and instructions such as `Box` as words.
+In supporting labels, `FL/FR/RL/RR` identify corners; `BRK` is brake temperature,
+`surf` is surface temperature, `L` after a number is laps, `FW/RW` are wings and
+`UC` is undercut; `S3` is sector three. `age 14 laps` becomes `14L old`;
+`34.4 laps remaining · 34 including this lap` becomes `34.4 left · 34 to finish`.
+Do not abbreviate away
+why an urgent call matters or the condition for acting on it.
 
 ## 5. State → component mapping
 
@@ -172,10 +193,10 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Lap | `lap_num`, `total_laps` | `LAP 24/57`; `total_laps==0` → `LAP 24` |
 | Position | `position` | `P5`; `0` → `P--` |
 | Phase | `phase` | `garage / out_lap / flying / in_lap / on_track` → upper-case words; `out_lap` amber (thermal calls likely) |
-| Compound + age | `tyre_visual`, `tyre_compound`, `tyre_age_laps` | Chip `MED · 14 laps`; visual compound preferred, actual as tooltip |
+| Compound + age | `tyre_visual`, `tyre_compound`, `tyre_age_laps` | Chip `MED · 14L old`; visual compound preferred, actual as tooltip |
 | Tyre tile temp | `tyres.{fl,fr,rl,rr}.inner` | Integer °C, coloured by `status` |
 | Tyre tile status | `tyres.*.status` | `COLD` blue / `OK` green / `HOT` red word under the temp |
-| Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `surf 110 · wear 38%`; wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
+| Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `surf 110° · wear 38%`; wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` | `34.4 laps`, one decimal, prominent when delta is unavailable |
 | Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}` (**being added**; percentages 0–100) | Rows for non-zero values only: `FW L 12%`; rear wing shows `RW` when supplied as one value, or `RW L` / `RW R` if split values become available. Amber ≥ 10, red ≥ 30. Header reads `DAMAGE none` when all zero |
@@ -185,7 +206,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Banner age | envelope `t` of the `call` frame relative to a server timestamp + local monotonic elapsed time | `8 s ago`, updated once per second; resumed calls need their original timestamp from the server without assuming clocks are synchronized |
 | Call evidence | **planned** optional evidence captured with the call (e.g. `FL inner 112° · HOT`) | One line beneath current call; hidden if no call-specific evidence. Do not present changed live telemetry as if it justified an older call |
 | Log rows | `calls[]` from the current hello `snapshot`, then `call`/`spoken`/`cancel` frames | Earlier calls only; restored rows with unknown audio status stay unmarked. ▶ for confirmed audio start, ✗ for cancellation before start, ✓ only after a future audio-finished event. ACK/NEG chips when `12-driver-input.md` lands |
-| Brakes | `brakes.{fl,fr,rl,rr}` | Small `brk 412` in each tyre tile's top-right; neutral until a calibrated brake threshold exists |
+| Brakes | `brakes.{fl,fr,rl,rr}` | Secondary `BRK 412°` in each tyre tile's top-right; neutral until a calibrated brake threshold exists |
 | ERS | `ers_pct` | Footer `ERS 62%` |
 | SC | `safety_car` | Footer `SC 0`; non-zero also paints the status bar background amber with the word `SAFETY CAR` / `VSC` |
 | Latency | `latency.trigger_to_speak_p99_ms`, `latency.packet_to_ws_p99_ms` | Footer, dim |
@@ -214,8 +235,8 @@ Two independent staleness sources, either one greys the page:
 
 Greyed state: `body.stale` desaturates and dims telemetry, strategy and log, while the
 status bar turns **red** with `STALE · last packet 4.2 s ago` counting up. The main
-banner immediately reads `TELEMETRY STALE · ENGINEER ADVICE PAUSED`. The latest
-audio-started call moves to the dim subtitle labelled `LAST RADIO · STARTED · L31 · 5 s ago`;
+banner immediately reads `TELEMETRY STALE · ADVICE PAUSED`. The latest
+audio-started call moves to the dim subtitle labelled `LAST RADIO (STARTED) · L31 · 5s`;
 it never remains a large imperative like "Box now". There is no transition into
 stale/error states. Numbers stay visible as historical data. Refresh the status bar's
 age using locally elapsed monotonic time when no new packet or frame arrives.
@@ -250,7 +271,7 @@ add a separate audio-finished/interrupted event in a subsequent protocol change.
 2. **AUDIO STARTED**: on `spoken`, change the label to `▶ started · 8 s ago`. This can
    remain visible after the sound finishes; no check mark is implied. A later call
    replaces the current one, moving the prior started call into the one-line
-   `PREVIOUS · L23` slot; the next call replaces that subtitle again. The underlying
+   `PREV · L23` slot; the next call replaces that subtitle again. The underlying
    history retains recent calls, but the visible log starts after the two banner calls.
 3. **IDLE/FADED**: after 20 s (P2/P3) or 30 s (P1) without a newer call, dim the
    current text but keep the last call readable. Fade is only visual, not proof that
@@ -260,7 +281,7 @@ add a separate audio-finished/interrupted event in a subsequent protocol change.
    `interrupted` in history; never treat the entire instruction as heard. A P1
    preempts the visual banner immediately, without waiting for an animation.
 5. **STALE**: replace current advice with the stale warning as in §6. The previous
-   line becomes `LAST RADIO · STARTED` and shows age. Resume only on a fresh live state.
+   line becomes `LAST RADIO (STARTED)` and shows age. Resume only on a fresh live state.
 
 For normal call-to-call handoff, keep the banner and subtitle rows fixed: animate a
 *brief ghost* of the old current text up to 220 ms toward the smaller, lighter previous
