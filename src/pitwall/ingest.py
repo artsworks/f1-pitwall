@@ -38,11 +38,13 @@ class Ingest:
         self._dropped_malformed = 0
         self._arrivals: dict[int, deque[float]] = defaultdict(deque)
         self.last_session_uid: int = 0
+        self.raw_datagrams: int = 0
 
     def register(self, packet_id: int, handler: PacketHandler) -> None:
         self._handlers[packet_id].append(handler)
 
     def on_datagram(self, payload: bytes, recv_time: float) -> None:
+        self.raw_datagrams += 1
         if self._recorder is not None:
             self._recorder.write_datagram(recv_time, payload)
         if len(payload) < HEADER_SIZE:
@@ -90,6 +92,7 @@ class Ingest:
                 entry["rate_hz"] = round(self.rate_hz(pid, now), 2)
             packets[str(pid)] = entry
         return {
+            "raw_datagrams": self.raw_datagrams,
             "packets": packets,
             "dropped_unsupported": self._dropped_unsupported,
             "dropped_malformed": self._dropped_malformed,

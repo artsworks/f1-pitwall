@@ -31,6 +31,7 @@ from pitwall.net.recording import (
     write_index,
 )
 from pitwall.net.udp import listen
+from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
 
@@ -203,7 +204,21 @@ async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None
     from pitwall.server.app import state_payload
 
     period = 1.0 / store.current().ui.state_hz
+    last_status = engine.clock.now()
     while True:
+        now = engine.clock.now()
+        if now - last_status >= 10.0:
+            last_status = now
+            c = engine.ingest.census(now=now)
+            accepted = sum(p["accepted"] for p in c["packets"].values())
+            rate = c["packets"].get(str(int(PacketId.CAR_TELEMETRY)), {}).get("rate_hz", 0.0)
+            print(
+                f"udp: {c['raw_datagrams']} datagrams, {accepted} accepted, "
+                f"unsupported={c['dropped_unsupported']} malformed={c['dropped_malformed']} "
+                f"size_mismatch={sum(p['dropped_size_mismatch'] for p in c['packets'].values())} "
+                f"telemetry {rate:.0f} Hz",
+                flush=True,
+            )
         snap = engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
         payload = state_payload(
             snap,

@@ -13,7 +13,7 @@ from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
 from pitwall.net.udp import listen
-from pitwall.protocol.header import PacketId
+from pitwall.protocol.header import PACKET_SIZES, PacketId
 
 BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
 
@@ -24,12 +24,17 @@ class _FormatSnoop(Ingest):
     def __init__(self) -> None:
         super().__init__()
         self.formats: dict[int, int] = {}
+        self.sizes: dict[int, set[int]] = {}
+        self.raw = 0
         self.butn_seen = False
 
     def on_datagram(self, payload: bytes, recv_time: float) -> None:
+        self.raw += 1
         if len(payload) >= 2:
             fmt = int.from_bytes(payload[:2], "little")
             self.formats[fmt] = self.formats.get(fmt, 0) + 1
+        if len(payload) >= 7:
+            self.sizes.setdefault(payload[6], set()).add(len(payload))
         try:
             if len(payload) >= 33 and payload[6] == PacketId.EVENT:
                 code = payload[29:33].decode("ascii", errors="replace")
@@ -105,14 +110,29 @@ def run_doctor(
     asyncio.run(collect())
     census = ingest.census(now=clock.now())
     total = sum(p["accepted"] for p in census["packets"].values())
-    if total == 0:
+    if ingest.raw == 0:
         _line(
             out,
             "WARN",
             f"no datagrams in {seconds:.0f}s — is the game running with UDP Telemetry On?",
         )
     else:
-        _line(out, "PASS", f"{total} packets in {seconds:.0f}s")
+        status = "PASS" if total else "FAIL"
+        fails += _line(out, status, f"{ingest.raw} datagrams in {seconds:.0f}s, {total} accepted")
+        if total < ingest.raw:
+            size_drops = sum(p["dropped_size_mismatch"] for p in census["packets"].values())
+            _line(
+                out,
+                "INFO",
+                f"dropped: unsupported={census['dropped_unsupported']} "
+                f"malformed={census['dropped_malformed']} "
+                f"size_mismatch={size_drops}",
+            )
+            for pid in sorted(ingest.sizes):
+                expected = PACKET_SIZES.get(pid)
+                seen = sorted(ingest.sizes[pid])
+                if expected is None or seen != [expected]:
+                    _line(out, "INFO", f"  packet id {pid}: seen sizes {seen}, expected {expected}")
         non_2026 = {f: n for f, n in ingest.formats.items() if f != 2026}
         if non_2026:
             _line(
