@@ -184,7 +184,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |
 | Banner age | envelope `t` of the `call` frame relative to a server timestamp + local monotonic elapsed time | `8 s ago`, updated once per second; resumed calls need their original timestamp from the server without assuming clocks are synchronized |
 | Call evidence | **planned** optional evidence captured with the call (e.g. `FL inner 112° · HOT`) | One line beneath current call; hidden if no call-specific evidence. Do not present changed live telemetry as if it justified an older call |
-| Log rows | `calls[]` from a **planned** complete snapshot, then `call`/`spoken`/`cancel` frames | Earlier calls only; ▶ for audio started, ✗ for cancellation before start, ✓ only after a future audio-finished event. ACK/NEG chips when `12-driver-input.md` lands |
+| Log rows | `calls[]` from the current hello `snapshot`, then `call`/`spoken`/`cancel` frames | Earlier calls only; restored rows with unknown audio status stay unmarked. ▶ for confirmed audio start, ✗ for cancellation before start, ✓ only after a future audio-finished event. ACK/NEG chips when `12-driver-input.md` lands |
 | Brakes | `brakes.{fl,fr,rl,rr}` | Small `brk 412` in each tyre tile's top-right; neutral until a calibrated brake threshold exists |
 | ERS | `ers_pct` | Footer `ERS 62%` |
 | SC | `safety_car` | Footer `SC 0`; non-zero also paints the status bar background amber with the word `SAFETY CAR` / `VSC` |
@@ -196,8 +196,9 @@ Fields **not** rendered on purpose: `session_type` (raw enum), `latency` beyond 
 **Requested payload additions** (for the owner; none are required for phase 1):
 `damage` object as above (optional `rear_left_wing` / `rear_right_wing` if available);
 `fuel_delta_laps` (server owns the target); optional
-call-specific evidence; a call-history snapshot containing event timestamps and
-audio status; an audio-finished event if "heard in full" is needed; `rate_hz` populated;
+call-specific evidence; original dispatch timestamps and audio outcomes in the
+existing snapshot's `calls[]`; an audio-finished event if "heard in full" is needed;
+`rate_hz` populated;
 M3: `strategy: {pit_window: [26, 28], ahead: {pos, name, gap_s, compound}, behind: {...},
 undercut_s, overcut_s, stint_plan: [...]}`.
 
@@ -220,10 +221,12 @@ stale/error states. Numbers stay visible as historical data. Refresh the status 
 age using locally elapsed monotonic time when no new packet or frame arrives.
 
 Reconnect: exponential back-off 0.5 → 5 s (as today). On `open` send `hello` with
-`last_seq`; the **planned** always-on `snapshot` supplies recent calls with their
-original times and statuses, including to a first-time client (currently the server
-only sends a snapshot if `last_seq` is non-null, and its call buffer stores no
-`spoken`/`cancel` outcomes). Reconcile by call ID/sequence without duplicating rows.
+`last_seq`; the server already sends a `snapshot` with recent calls after **every**
+client hello, including a first-time load. `calls[]` currently contains dispatched
+call payloads and sequence numbers, but not the original frame timestamps or
+`spoken`/`cancel` outcomes. Reconcile by call ID/sequence without duplicating rows;
+on a fresh load, mark restored audio status and age as unknown rather than treating
+the reconnect time as dispatch time or claiming the call was heard.
 Only return to the active banner after a fresh state frame reports `live` and
 `packet_age_ms ≤ 1000`; a socket reconnection alone does not prove live telemetry.
 If `config_hash` changes on `hello`, show one dim "config reloaded" log row.
@@ -303,13 +306,14 @@ the call-history contract.
    formatters can live in `web/format.js`.
 3. **Current + previous radio + log** — state machine from §7, age counter,
    ≤220 ms handoff, reduced motion, next older call at the top of the log,
-   and protocol-mismatch state. Test rapid consecutive calls, P1 preemption,
-   cancellation, stale during transition and long-text clipping.
-4. **Call history contract** — in a separate server/protocol PR, send a complete
-   recent-call snapshot on initial connection and reconnect with original
-   timestamps, status and stable IDs; add confirmed finish/interruption events
-   only if the product needs them. Keep current clients compatible or version
-   the protocol. Verify replay and reconnect recovery.
+   and protocol-mismatch state. Restored calls without outcome/timestamp display
+   unknown status/age. Test rapid consecutive calls, P1 preemption, cancellation,
+   stale during transition and long-text clipping.
+4. **Call history status contract** — in a separate server/protocol PR, enrich the
+   existing `snapshot.calls[]` entries with original dispatch timestamps and
+   `spoken`/`cancel` outcomes, retaining stable call IDs. Add confirmed
+   finish/interruption events only if the product needs them. Keep current clients
+   compatible or version the protocol. Verify replay and reconnect recovery.
 5. **Damage + server-computed fuel delta** — render `damage` once the owner's
    server change lands in zone D; add `fuel_delta_laps` after its target has a
    defined session-aware source. Do not compute a race-only guess for quali/practice;
