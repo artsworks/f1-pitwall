@@ -59,7 +59,7 @@ class SpeechSettings(BaseModel):
     engine: Literal["auto", "piper", "sapi", "null"] = "auto"
     voice: str | None = None
     piper_voice: str = "en_GB-northern_english_male-medium"
-    piper_speed: float = 1.2
+    piper_speed: float = 1.3
     voices_dir: str = "voices"
     rate: int = 0
     volume: int = 100

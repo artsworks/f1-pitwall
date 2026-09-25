@@ -47,7 +47,7 @@ uv run pitwall speak --engine sapi            # compare with the old voice
 ```
 
 Pick the default in `speech.piper_voice` and the pace in `speech.piper_speed`
-(1.2 default; try `speak --speed 1.3`). `speech.rate` and `speech.volume`
+(1.3 default; try `speak --speed 1.4`). `speech.rate` and `speech.volume`
 apply to both engines.
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
