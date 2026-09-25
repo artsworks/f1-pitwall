@@ -113,9 +113,11 @@ def create_app(
     *,
     speaker_name: str = "null",
     latest_snapshot: Any = None,
+    on_client_press: Any = None,
 ) -> FastAPI:
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
-    frames (defaults to the hub's no-state placeholder)."""
+    frames (defaults to the hub's no-state placeholder). on_client_press:
+    callable(down: bool) fed by {"type":"press"} client messages."""
     app = FastAPI(title="pitwall")
 
     def snapshot_now() -> Snapshot:
@@ -181,7 +183,17 @@ def create_app(
             payload["calls"] = list(hub.recent_calls)
             await websocket.send_text(json.dumps(hub.frame("snapshot", payload)))
             while True:
-                await websocket.receive_text()  # pings/disconnects; no client commands yet
+                raw = await websocket.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    continue
+                if (
+                    isinstance(msg, dict)
+                    and msg.get("type") == "press"
+                    and on_client_press is not None
+                ):
+                    on_client_press(bool(msg.get("down")))
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:

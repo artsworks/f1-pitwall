@@ -8,3 +8,11 @@ thresholds:
   boost_max_s: 12          # or on this long regardless
   yellow_warn_ahead_m: 800
   yellow_info_behind_m: 1500
+  release_clean_gap_s: 4.0   # gap needed both ways at pit exit for "clean air"
+  release_out_lap_s: 0       # 0 = derive: 1.3 x player's best, else fallback
+  release_fallback_lap_s: 95.0
+  pit_exit_m: 0.0            # lap distance of pit exit (per-track overlay later)
+  quali_eliminated: {5: 5, 6: 5, 7: 0}
+  abort_safe_margin_ms: 300  # inside this margin of the cut-off = "through"
+  abort_deficit_ms: 400      # projected deficit that justifies an abort call
+  abort_ers_keep_pct: 60     # ERS above this -> abort earlier (banked for next run)

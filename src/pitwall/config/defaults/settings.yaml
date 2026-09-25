@@ -13,6 +13,7 @@ engine:
   tick_hz: 10
   ema_fast_s: 3.0
   ema_slow_s: 30.0
+  straight_hold_s: 1.0
   staleness_s:
     session: 2.0
     lap_data: 0.5
@@ -50,3 +51,11 @@ mindset:
   active: balanced
 ui:
   state_hz: 5
+input:
+  double_press_ms: 350
+  long_press_ms: 800
+  bounce_ms: 60
+  response_window_s: 8.0
+  quiet_minutes: 5
+  udp_action_bit: 0x00100000
+  negative_mute_laps: 3

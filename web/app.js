@@ -334,6 +334,14 @@
       });
     } else if (m.type === "spoken") {
       calls.forEach(function (c) { if (c.id === p.id && c.audio === "dispatched") c.audio = "started"; });
+    } else if (m.type === "press") {
+      var pe = el("press");
+      if (pe) {
+        var label = p.kind === "ack" ? "ACK" : p.kind === "neg" ? "NEG" : "BOOKMARK";
+        pe.hidden = false;
+        pe.textContent = label + " L" + (p.lap || "--") +
+          (p.text ? " ▸ " + p.text : "");
+      }
     }
     render();
   }
@@ -354,6 +362,26 @@
       if (!mismatched) setTimeout(connect, backoff = Math.min(backoff * 2, 5000));
     };
   }
+
+  // Spacebar = driver ack/neg/bookmark input (docs/12). Only while the
+  // dashboard has focus; auto-repeat keydowns are ignored.
+  function sendPress(down) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "press", down: down }));
+    }
+  }
+  document.addEventListener("keydown", function (ev) {
+    if (ev.code === "Space" && !ev.repeat && document.hasFocus()) {
+      ev.preventDefault();
+      sendPress(true);
+    }
+  });
+  document.addEventListener("keyup", function (ev) {
+    if (ev.code === "Space" && document.hasFocus()) {
+      ev.preventDefault();
+      sendPress(false);
+    }
+  });
 
   setInterval(render, 250);
   render();

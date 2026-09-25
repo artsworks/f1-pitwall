@@ -15,6 +15,7 @@ from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
+from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
@@ -40,6 +41,14 @@ class Engine:
         self.speaker_name = "null"
         self.recording_desc = "off"
         self._paused = False
+        inp = store.current().input
+        self.detector = PressDetector(
+            double_ms=inp.double_press_ms,
+            long_ms=inp.long_press_ms,
+            bounce_ms=inp.bounce_ms,
+        )
+        self._press_queue: list[Press] = []
+        state.press_listeners.append(self._on_press_edge)
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
@@ -51,9 +60,24 @@ class Engine:
     def tick_period(self) -> float:
         return 1.0 / self.store.current().engine.tick_hz
 
+    def _on_press_edge(self, t: float, down: bool) -> None:
+        press = self.detector.edge(t, down)
+        if press is not None:
+            self._press_queue.append(press)
+
+    def client_press(self, down: bool) -> None:
+        """WebSocket/spacebar press path (docs/12): feed the same detector."""
+        self._on_press_edge(self.clock.now(), down)
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         snapshot = self.state.snapshot(now)
+        press = self.detector.tick(now)
+        if press is not None:
+            self._press_queue.append(press)
+        for p in self._press_queue:
+            self.dispatcher.on_press(p, snapshot)
+        self._press_queue.clear()
         if self.state.last_recv_wall is not None:
             self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)
         if snapshot.paused != self._paused:
@@ -139,6 +163,9 @@ def build_engine(
     state = SessionState(
         ema_fast_s=settings.engine.ema_fast_s,
         ema_slow_s=settings.engine.ema_slow_s,
+        straight_hold_s=settings.engine.straight_hold_s,
+        press_bit=settings.input.udp_action_bit,
+        thresholds=settings.thresholds,
     )
     state.register(ingest)
     mode = store.current().resolved_mindset()
@@ -160,6 +187,7 @@ def build_engine(
         sinks=sinks or [LogSink()],
         metrics=Metrics(),
         budget_override=mode.get("call_budget_per_lap"),
+        input=settings.input,
     )
     return Engine(store, clock, ingest, state, rule_engine, dispatcher)
 

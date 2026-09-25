@@ -54,6 +54,7 @@ def _cand(rule_id: str, priority: int = 2, text: str | None = None, **defn: obje
         still_true=None,
         inputs={},
         trigger_t=0.0,
+        screen_only=rd.screen_only,
     )
 
 
@@ -137,3 +138,116 @@ def test_log_records_outcomes() -> None:
     assert ("a", "queued", None) in outcomes
     assert ("a", "fired", None) in outcomes
     assert ("b", "fired", None) in outcomes
+
+
+def _screen_sink() -> CollectSink:
+    s = CollectSink()
+    s.screen_only = False
+    return s
+
+
+def test_verbosity_budget_presets() -> None:
+    d, sink, _ = _dispatcher(verbosity="normal", min_gap_s=0.0)
+    cands = [_cand(f"r{i}") for i in range(6)]
+    d.submit(cands, _snap(0.0))
+    calls = d.drain(0.0)
+    assert len(calls) == 4  # normal preset budget
+
+    d, sink, _ = _dispatcher(verbosity="coach", min_gap_s=0.0)
+    d.submit([_cand(f"r{i}") for i in range(10)], _snap(0.0))
+    assert len(d.drain(0.0)) == 8
+
+    # explicit calls_per_lap overrides the preset
+    d, sink, _ = _dispatcher(verbosity="coach", calls_per_lap=2, min_gap_s=0.0)
+    d.submit([_cand(f"r{i}") for i in range(6)], _snap(0.0))
+    assert len(d.drain(0.0)) == 2
+
+
+def test_p3_held_until_on_straight() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.drain(0.0)  # snapshot default on_straight=False
+    assert not sink.spoken
+    # flip on_straight via a new snapshot on the next submit tick
+    d.submit([], Snapshot(now=1.0, lap_num=1, on_straight=True))
+    assert d.drain(1.0) and sink.spoken == ["info"]
+
+
+def test_p3_dropped_at_deadline_off_straight() -> None:
+    d, sink, _ = _dispatcher(deadlines_s={3: 1.0})
+    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.drain(0.0)
+    d.drain(2.0)  # past the 1 s P3 deadline while never on a straight
+    assert not sink.spoken
+
+
+def test_p3_straight_only_disabled() -> None:
+    d, sink, _ = _dispatcher(p3_straight_only=False)
+    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.drain(0.0)
+    assert sink.spoken == ["info"]
+
+
+def test_ack_then_say_again() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("a", text="box box")], _snap(0.0))
+    d.drain(0.0)
+    from pitwall.input.press import Press
+
+    # ack with target -> logged, same-lap resubmission suppressed
+    d.on_press(Press("ack", 0.5), _snap(0.5))
+    d.submit([_cand("a", text="box box2")], _snap(1.0))
+    assert d.drain(1.0) == []
+    # ack with no live target -> say again re-speaks the last call
+    d.on_press(Press("ack", 100.0), _snap(100.0))
+    calls = d.drain(100.0)
+    assert len(calls) == 1 and "say_again" in calls[0].tags
+
+
+def test_negative_backoff_mutes_not_p1() -> None:
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("a", text="call")], _snap(0.0, lap=1))
+    d.drain(0.0)
+    from pitwall.input.press import Press
+
+    d.on_press(Press("neg", 1.0), _snap(1.0, lap=1))
+    # muted for 3 laps
+    for lap in (2, 3):
+        d.submit([_cand("a", text="again")], _snap(10.0 + lap, lap=lap))
+        assert d.drain(10.0 + lap) == []
+    d.submit([_cand("a", text="again")], _snap(20.0, lap=4))
+    assert len(d.drain(20.0)) == 1
+    # P1 is never muted
+    d2, _, _ = _dispatcher(min_gap_s=0.0)
+    d2.submit([_cand("crit", priority=1, text="danger")], _snap(0.0, lap=1))
+    d2.drain(0.0)
+    d2.on_press(Press("neg", 1.0), _snap(1.0, lap=1))
+    d2.submit([_cand("crit", priority=1, text="danger2")], _snap(2.0, lap=2))
+    assert len(d2.drain(2.0)) == 1
+
+
+def test_neg_no_target_sets_quiet_until_p1_speaks() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    from pitwall.input.press import Press
+
+    d.on_press(Press("neg", 10.0), _snap(10.0))
+    assert d.quiet_until is not None
+    d.submit([_cand("a", text="info")], _snap(11.0))
+    assert d.drain(11.0) == []
+    d.submit([_cand("crit", priority=1, text="danger")], _snap(11.0))
+    assert len(d.drain(11.0)) == 1  # P1 still speaks
+
+
+def test_screen_only_not_spoken() -> None:
+    sink = _screen_sink()  # acts like an audio sink
+    buf = io.StringIO()
+    d = Dispatcher(
+        PolicySettings(),
+        VirtualClock(),
+        decision_log=DecisionLog(fp=buf),
+        sinks=[sink],
+    )
+    d.submit([_cand("a", text="screen only", screen_only=True)], _snap(0.0))
+    calls = d.drain(0.0)
+    assert calls and calls[0].screen_only
+    assert not sink.spoken  # audio sink skipped

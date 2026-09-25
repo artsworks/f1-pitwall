@@ -175,6 +175,7 @@ def make_piper_synth(settings: SpeechSettings) -> Synth:
 
 class PiperSpeaker:
     name = "piper"
+    screen_only = False
 
     def __init__(self, synth: Synth, player: Player, label: str = "piper") -> None:
         self.name = label

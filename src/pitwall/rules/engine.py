@@ -39,6 +39,7 @@ class Candidate:
     still_true: Callable[[Snapshot], bool] | None
     inputs: dict[str, Any]
     trigger_t: float
+    screen_only: bool = False
 
 
 @dataclass(slots=True)
@@ -162,6 +163,7 @@ class RuleEngine:
                     still_true=still_true,
                     inputs=inputs,
                     trigger_t=snapshot.now,
+                    screen_only=d.screen_only,
                 )
             )
         return result

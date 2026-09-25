@@ -1,0 +1,46 @@
+rules:
+  # Clean-air release at pit exit: speak once when the gap is good, once when a
+  # worthwhile wait exists. Shared cooldown group so at most one talks per 30 s.
+  - id: release_go
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'garage' and release_clean and session_time_left > 60"
+    clear_when: "not release_clean or phase != 'garage'"
+    cooldown_s: 30
+    cooldown_group: release
+    requires: [lap_data, session]
+    say:
+      - "Track's clear at pit exit. Good to go now"
+      - "Clean air if you go now, {release_gap_ahead_s:.0f} seconds to the car ahead"
+  - id: release_hold
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'garage' and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and session_time_left > 60"
+    clear_when: "release_clean or phase != 'garage'"
+    cooldown_s: 30
+    cooldown_group: release
+    requires: [lap_data, session]
+    say:
+      - "Traffic at pit exit. Hold about {release_wait_s:.0f} seconds"
+      - "Hold {release_wait_s:.0f} seconds for a gap"
+  # Abort advisory: projection is over the cut-off and the lap won't make it.
+  - id: abort_lap
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and abort_advised"
+    still_true: "abort_advised"
+    clear_when: "phase != 'flying'"
+    cooldown_s: 90
+    requires: [lap_data, session_history]
+    say:
+      - "Abort the lap, we're {abort_deficit_s:.1f} off the cut. Save the set"
+      - "Box this lap, it's not going to be enough"
+  - id: quali_through
+    sessions: [qualifying]
+    priority: 3
+    when: "phase == 'flying' and quali_through and sector >= 2"
+    clear_when: "not quali_through"
+    cooldown_s: 120
+    requires: [lap_data, session_history]
+    say:
+      - "You're safe, that time's through. No need to push"

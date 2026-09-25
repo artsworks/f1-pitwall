@@ -33,8 +33,12 @@ def _load_yaml_dir(path: Path) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     if not path.is_dir():
         return merged
-    for f in sorted(path.rglob("*.yaml")):
+    for f in sorted(path.rglob("*.yaml"), key=lambda p: (p.stem != "shared", str(p))):
         data = yaml.safe_load(f.read_text()) or {}
+        rules = data.get("rules")
+        if rules and merged.get("rules"):
+            merged["rules"] = merged["rules"] + rules
+            data = {k: v for k, v in data.items() if k != "rules"}
         merged = _deep_merge(merged, data)
     return merged
 

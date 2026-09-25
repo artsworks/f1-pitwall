@@ -106,3 +106,8 @@ text, newest on top, each with lap, priority colour plus word, and its outcome (
 NEG / —). That makes a missed or misheard call recoverable at a glance, and it is the
 visual counterpart of "say again". A dedicated `/radio` page shows only the log, in large
 type, for a narrow second screen.
+
+> **Status note (M2):** the spacebar route currently reaches the backend via the
+> dashboard WebSocket (`{"type":"press","down":…}` sent on keydown/keyup while
+> the page has focus); the Windows global keyboard hook described above is not
+> yet implemented. The wheel path via `BUTN` UDP actions is implemented.

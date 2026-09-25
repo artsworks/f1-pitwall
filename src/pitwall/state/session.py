@@ -4,7 +4,7 @@ frozen view rules read. Player car only for M1 (24-slot arrays kept)."""
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,6 +35,13 @@ from pitwall.state.driving import (
 )
 from pitwall.state.ema import CornersEma
 from pitwall.state.lap import LapAccumulator, LapSummary
+from pitwall.state.quali import (
+    ReleaseWindow,
+    abort_advice,
+    projected_lap_ms,
+    quali_cutoff_ms,
+    release_window,
+)
 
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
@@ -237,6 +244,20 @@ class Snapshot:
     overtake_active: int = 0
     overtake_activation_distance_m: int = 0
     driving_wrong_way: bool = False
+    # M2 stage 2: qualifying + driver input support
+    on_straight: bool = False
+    release_gap_ahead_s: float = math.inf
+    release_gap_behind_s: float = math.inf
+    release_clean: bool = False
+    release_wait_s: float = 0.0
+    cars_on_track: int = 0
+    quali_cutoff_ms: int = 0
+    projected_lap_ms: int = 0
+    quali_through: bool = False
+    abort_deficit_ms: int = 0
+    abort_deficit_s: float = 0.0
+    abort_advised: bool = False
+    abort_reason: str = ""
     _ages: dict[str, float] = field(default_factory=dict)
 
     def age(self, packet_name: str) -> float:
@@ -247,7 +268,15 @@ class Snapshot:
 class SessionState:
     """Mutable session model. Handlers are registered on Ingest per packet id."""
 
-    def __init__(self, ema_fast_s: float = 3.0, ema_slow_s: float = 30.0) -> None:
+    def __init__(
+        self,
+        ema_fast_s: float = 3.0,
+        ema_slow_s: float = 30.0,
+        *,
+        straight_hold_s: float = 1.0,
+        press_bit: int | None = None,
+        thresholds: Mapping[str, Any] | None = None,
+    ) -> None:
         self.last_packet_t: float | None = None
         self.last_recv_wall: float | None = None
         self._player_idx = 0
@@ -256,8 +285,13 @@ class SessionState:
         self.rewind_listeners: list[Callable[[float], None]] = []
         # Called with the new session_uid on each session change.
         self.session_listeners: list[Callable[[int], None]] = []
+        # Called with (recv_time, down) on each UDP-action button edge.
+        self.press_listeners: list[Callable[[float, bool], None]] = []
         self._ema_fast_s = ema_fast_s
         self._ema_slow_s = ema_slow_s
+        self._straight_hold_s = straight_hold_s
+        self._press_bit = press_bit
+        self._thresholds = dict(thresholds or {})
         self._reset_session()
 
     def _reset_session(self) -> None:
@@ -340,6 +374,11 @@ class SessionState:
         # M2 packet state
         self.participants: tuple[Participant, ...] = ()
         self._histories: dict[int, Any] = {}  # car_idx -> SessionHistoryPacket
+        self._best_laps: dict[int, int] = {}  # car_idx -> best valid lap_time_ms
+        self._player_sectors: tuple[int, int, int] = (0, 0, 0)
+        self._player_laps_completed = 0
+        self._press_down = False
+        self._straight_since: float | None = None
         self._tyre_sets: tuple[Any, ...] = ()  # raw TyreSetData objects
         self._tyre_fitted_idx = 0
         self.setup_fuel_load = 0.0
@@ -390,7 +429,7 @@ class SessionState:
         elif isinstance(pkt, LapDataPacket):
             self._on_lap_data(pkt)
         elif isinstance(pkt, EventPacket):
-            self._on_event(pkt)
+            self._on_event(pkt, recv_time)
         elif isinstance(pkt, CarTelemetryPacket):
             self._on_car_telemetry(pkt, st)
         elif isinstance(pkt, CarStatusPacket):
@@ -402,7 +441,7 @@ class SessionState:
         elif isinstance(pkt, CarSetupsPacket):
             self._on_car_setups(pkt)
         elif isinstance(pkt, SessionHistoryPacket):
-            self._histories[pkt.car_idx] = pkt
+            self._on_session_history(pkt)
         elif isinstance(pkt, TyreSetsPacket):
             if pkt.car_idx == self._player_idx:
                 self._tyre_sets = pkt.sets
@@ -437,6 +476,7 @@ class SessionState:
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
+        self._straight_since = None
         for cb in self.rewind_listeners:
             cb(t)
 
@@ -505,7 +545,7 @@ class SessionState:
         if summary is not None:
             self.laps.append(summary)
 
-    def _on_event(self, pkt: EventPacket) -> None:
+    def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
         if pkt.code == "FLBK":
             self._handle_rewind(pkt.header.session_time)
         elif pkt.code == "RDFL":
@@ -514,6 +554,53 @@ class SessionState:
             self.red_flag = False
         elif pkt.code == "SEND":
             self.session_ended = True
+        elif pkt.code == "BUTN" and self._press_bit is not None:
+            status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
+            down = bool(status & self._press_bit)
+            if down != self._press_down:
+                self._press_down = down
+                for cb in self.press_listeners:
+                    cb(recv_time, down)
+
+    def _on_session_history(self, pkt: SessionHistoryPacket) -> None:
+        self._histories[pkt.car_idx] = pkt
+        laps = pkt.laps[: pkt.num_laps]
+        self._best_laps[pkt.car_idx] = min(
+            (
+                lap.lap_time_ms
+                for lap in laps
+                if lap.lap_valid_bit_flags & LAP_VALID and lap.lap_time_ms
+            ),
+            default=0,
+        )
+        if pkt.car_idx == self._player_idx:
+            self._player_laps_completed = max(0, pkt.num_laps - 1)
+            self._player_sectors = (
+                min(
+                    (
+                        lap.sector1_ms
+                        for lap in laps
+                        if lap.lap_valid_bit_flags & SECTOR1_VALID and lap.sector1_ms
+                    ),
+                    default=0,
+                ),
+                min(
+                    (
+                        lap.sector2_ms
+                        for lap in laps
+                        if lap.lap_valid_bit_flags & SECTOR2_VALID and lap.sector2_ms
+                    ),
+                    default=0,
+                ),
+                min(
+                    (
+                        lap.sector3_ms
+                        for lap in laps
+                        if lap.lap_valid_bit_flags & SECTOR3_VALID and lap.sector3_ms
+                    ),
+                    default=0,
+                ),
+            )
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
         self.num_active_cars = pkt.num_active_cars
@@ -552,6 +639,11 @@ class SessionState:
         self.speed_kmh = float(car.speed)
         self.throttle = car.throttle
         self.brake = car.brake
+        if car.throttle >= 0.95 and car.brake == 0:
+            if self._straight_since is None:
+                self._straight_since = st
+        else:
+            self._straight_since = None
         self.tyre_surface_fast.update(st, car.tyres_surface_temperature)
         self.tyre_surface_slow.update(st, car.tyres_surface_temperature)
         self.tyre_inner_fast.update(st, car.tyres_inner_temperature)
@@ -623,36 +715,10 @@ class SessionState:
             if self.cars_lap is not None
             else ()
         )
-        field_best = [0] * CAR_SLOTS
-        for idx, hist in self._histories.items():
-            if 0 <= idx < CAR_SLOTS:
-                field_best[idx] = min(
-                    (
-                        lap.lap_time_ms
-                        for lap in hist.laps[: hist.num_laps]
-                        if lap.lap_valid_bit_flags & LAP_VALID and lap.lap_time_ms
-                    ),
-                    default=0,
-                )
-        player_best_lap = player_best_s1 = player_best_s2 = player_best_s3 = 0
-        player_laps_completed = 0
-        player_hist = self._histories.get(self._player_idx)
-        if player_hist is not None:
-            laps = player_hist.laps[: player_hist.num_laps]
-            player_best_lap = field_best[self._player_idx]
-            player_laps_completed = max(0, player_hist.num_laps - 1)
-            player_best_s1 = min(
-                (lap.sector1_ms for lap in laps if lap.lap_valid_bit_flags & SECTOR1_VALID),
-                default=0,
-            )
-            player_best_s2 = min(
-                (lap.sector2_ms for lap in laps if lap.lap_valid_bit_flags & SECTOR2_VALID),
-                default=0,
-            )
-            player_best_s3 = min(
-                (lap.sector3_ms for lap in laps if lap.lap_valid_bit_flags & SECTOR3_VALID),
-                default=0,
-            )
+        field_best = tuple(self._best_laps.get(i, 0) for i in range(CAR_SLOTS))
+        player_best_lap = field_best[self._player_idx] if 0 <= self._player_idx < CAR_SLOTS else 0
+        player_best_s1, player_best_s2, player_best_s3 = self._player_sectors
+        player_laps_completed = self._player_laps_completed
         tyre_sets = tuple(
             TyreSet(
                 actual=s.actual_tyre_compound,
@@ -681,6 +747,65 @@ class SessionState:
         fresh_current = sum(
             1 for s in tyre_sets if s.available and s.wear == 0 and s.visual == fitted.visual
         )
+        on_straight = (
+            self._straight_since is not None and st - self._straight_since >= self._straight_hold_s
+        )
+        release = ReleaseWindow(math.inf, math.inf, False, 0.0, 0)
+        cutoff_ms = proj_ms = deficit_ms = 0
+        quali_through = abort_advised = False
+        abort_reason = ""
+        if kind == "qualifying":
+            clean_gap = self._th("release_clean_gap_s", 4.0)
+            fallback_s = self._th("release_fallback_lap_s", 95.0)
+            if phase in ("garage", "pitting") and self.cars_lap is not None:
+                player_lap_s = player_best_lap / 1000.0 if player_best_lap > 0 else fallback_s
+                out_lap = self._th("release_out_lap_s", 0.0) or 1.3 * player_lap_s
+                release = release_window(
+                    self.cars_lap,
+                    self._player_idx,
+                    self.track_length_m,
+                    self._th("pit_exit_m", 0.0),
+                    out_lap,
+                    field_best,
+                    fallback_s,
+                    clean_gap,
+                )
+            if phase == "flying":
+                cutoff_ms = quali_cutoff_ms(
+                    field_best,
+                    self.num_active_cars,
+                    self.session_type,
+                    self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+                )
+                safe_margin = int(self._th("abort_safe_margin_ms", 300.0))
+                quali_through = bool(
+                    player_best_lap > 0
+                    and cutoff_ms > 0
+                    and player_best_lap < cutoff_ms - safe_margin
+                )
+                proj_ms = projected_lap_ms(
+                    self.sector,
+                    self.current_lap_time_ms,
+                    self.sector1_time_ms,
+                    self.sector2_time_ms,
+                    player_best_s1,
+                    player_best_s2,
+                    player_best_s3,
+                )
+                advice = abort_advice(
+                    proj_ms,
+                    cutoff_ms,
+                    player_best_lap,
+                    self.sector,
+                    fresh_current,
+                    self.ers_store_pct,
+                    safe_margin_ms=safe_margin,
+                    deficit_ms=int(self._th("abort_deficit_ms", 400.0)),
+                    ers_keep_pct=self._th("abort_ers_keep_pct", 60.0),
+                )
+                deficit_ms = advice.deficit_ms
+                abort_advised = advice.advised
+                abort_reason = advice.reason
         return Snapshot(
             now=now,
             session_time=st,
@@ -740,6 +865,19 @@ class SessionState:
             overtake_active=self.overtake_active,
             overtake_activation_distance_m=self.overtake_activation_distance_m,
             driving_wrong_way=self.driving_wrong_way,
+            on_straight=on_straight,
+            release_gap_ahead_s=release.gap_ahead_s,
+            release_gap_behind_s=release.gap_behind_s,
+            release_clean=release.clean,
+            release_wait_s=0.0 if math.isinf(release.wait_s) else release.wait_s,
+            cars_on_track=release.cars_on_track,
+            quali_cutoff_ms=cutoff_ms,
+            projected_lap_ms=proj_ms,
+            quali_through=quali_through,
+            abort_deficit_ms=deficit_ms,
+            abort_deficit_s=deficit_ms / 1000.0,
+            abort_advised=abort_advised,
+            abort_reason=abort_reason,
             tyre_surface=self.tyre_surface,
             tyre_inner=self.tyre_inner,
             brake_temp=self.brake_temp,
@@ -783,6 +921,18 @@ class SessionState:
             laps=tuple(self.laps),
             _ages={name: st - t for name, t in self._last_update.items()},
         )
+
+    def _th(self, name: str, default: float) -> float:
+        try:
+            return float(self._thresholds.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    def _th_map(self, name: str, default: Mapping[int, int]) -> Mapping[int, int]:
+        v = self._thresholds.get(name)
+        if isinstance(v, Mapping):
+            return v
+        return default
 
     def _phase(self) -> str:
         if self.red_flag:

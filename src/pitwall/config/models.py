@@ -29,6 +29,7 @@ class EngineSettings(BaseModel):
     tick_hz: int = 10
     ema_fast_s: float = 3.0
     ema_slow_s: float = 30.0
+    straight_hold_s: float = 1.0  # full-throttle hold that counts as "on a straight"
     staleness_s: dict[str, float] = Field(
         default_factory=lambda: {
             "session": 2.0,
@@ -49,15 +50,26 @@ class EngineSettings(BaseModel):
 class PolicySettings(BaseModel):
     verbosity: Literal["silent", "critical", "normal", "coach"] = "normal"
     deadlines_s: dict[int, float] = Field(default_factory=lambda: {1: 5.0, 2: 3.0, 3: 1.5})
-    calls_per_lap: int = 4
+    calls_per_lap: int | None = None  # None -> verbosity preset table
     min_gap_s: float = 3.0
     dedupe_window_s: float = 20.0
     quiet: bool = False
     mute_until_lap: int = 0
+    p3_straight_only: bool = True
 
 
 class UiSettings(BaseModel):
     state_hz: int = 5
+
+
+class InputSettings(BaseModel):
+    double_press_ms: int = 350
+    long_press_ms: int = 800
+    bounce_ms: int = 60
+    response_window_s: float = 8.0
+    quiet_minutes: float = 5.0
+    udp_action_bit: int = 0x00100000
+    negative_mute_laps: int = 3
 
 
 class SpeechSettings(BaseModel):
@@ -116,8 +128,9 @@ class Settings(BaseModel):
     policy: PolicySettings = Field(default_factory=PolicySettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     ui: UiSettings = Field(default_factory=UiSettings)
+    input: InputSettings = Field(default_factory=InputSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
-    thresholds: dict[str, float] = Field(default_factory=dict)
+    thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
     rules: list[RuleDefModel] = Field(default_factory=list)
 

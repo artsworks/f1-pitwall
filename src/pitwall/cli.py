@@ -272,6 +272,7 @@ async def _serve(
         latest_snapshot=lambda: (
             engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
         ),
+        on_client_press=engine.client_press,
     )
 
     def _health() -> dict[str, Any]:
@@ -322,7 +323,11 @@ def cmd_start(args: argparse.Namespace) -> int:
         )
     ingest = Ingest(recorder=recorder)
     state = SessionState(
-        ema_fast_s=settings.engine.ema_fast_s, ema_slow_s=settings.engine.ema_slow_s
+        ema_fast_s=settings.engine.ema_fast_s,
+        ema_slow_s=settings.engine.ema_slow_s,
+        straight_hold_s=settings.engine.straight_hold_s,
+        press_bit=settings.input.udp_action_bit,
+        thresholds=settings.thresholds,
     )
     state.register(ingest)
     speaker = make_speaker(settings.speech)
@@ -340,7 +345,14 @@ def cmd_start(args: argparse.Namespace) -> int:
         config_hash=store.hash,
         mindset=settings.mindset.active,
     )
-    dispatcher = Dispatcher(settings.policy, clock, decision_log=dlog, sinks=[hub, speaker])
+    dispatcher = Dispatcher(
+        settings.policy,
+        clock,
+        decision_log=dlog,
+        sinks=[hub, speaker],
+        input=settings.input,
+    )
+    dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
 
