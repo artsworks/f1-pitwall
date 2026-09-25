@@ -17,7 +17,7 @@ same ingest path, with review mode and config A/B diffing. See `07-replay-and-de
 a vector of numeric biases the rules read, driver-switched only, never applied to
 priority-1 calls. Defend and survive after M3. See `08-configuration.md`.
 
-**Game build.** F1 26 only. Parser accepts `m_packetFormat == 2026` and `m_gameYear == 26`
+**Game build.** F1 26 only. Parser accepts `m_packetFormat == 2026` (not gated on `m_gameYear`, which the live build does not report as 26)
 and drops everything else.
 
 **UDP send rate.** 30 Hz (options below 60 to be confirmed in the F1 26 menu; historically

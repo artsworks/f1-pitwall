@@ -24,7 +24,7 @@ same subnet with AP isolation off.
 ## Supported game: F1 26 only
 
 The parser is locked to **F1 26, packet format 2026**. The header check accepts a packet
-only when `m_packetFormat == 2026` and `m_gameYear == 26`; anything else is counted and
+only when `m_packetFormat == 2026` (`m_gameYear` is logged, not gated — the live F1 26 build does not report 26); anything else is counted and
 dropped, and the dashboard shows "unsupported telemetry format — set UDP Format to 2026".
 This keeps one set of layout tables, no per-version branches, and fixed struct sizes that
 can be asserted at import time. `m_packetVersion` per packet id is also checked against

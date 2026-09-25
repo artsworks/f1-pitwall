@@ -26,6 +26,7 @@ class _FormatSnoop(Ingest):
         self.formats: dict[int, int] = {}
         self.sizes: dict[int, set[int]] = {}
         self.raw = 0
+        self.versions: set[tuple[int, int, int]] = set()
         self.butn_seen = False
 
     def on_datagram(self, payload: bytes, recv_time: float) -> None:
@@ -35,6 +36,7 @@ class _FormatSnoop(Ingest):
             self.formats[fmt] = self.formats.get(fmt, 0) + 1
         if len(payload) >= 7:
             self.sizes.setdefault(payload[6], set()).add(len(payload))
+            self.versions.add((payload[2], payload[3], payload[4]))
         try:
             if len(payload) >= 33 and payload[6] == PacketId.EVENT:
                 code = payload[29:33].decode("ascii", errors="replace")
@@ -142,6 +144,8 @@ def run_doctor(
             )
         else:
             _line(out, "PASS", "format 2026 only")
+        vers = ", ".join(f"year {y} v{a}.{b:02d}" for y, a, b in sorted(ingest.versions))
+        _line(out, "INFO", f"game reports: {vers}")
         menu_ids = [PacketId.LAP_DATA, PacketId.CAR_TELEMETRY, PacketId.CAR_STATUS]
         rates = [ingest.rate_hz(pid, clock.now()) for pid in menu_ids]
         observed = max(rates) if rates else 0.0

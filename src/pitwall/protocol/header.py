@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 PACKET_FORMAT = 2026
-GAME_YEAR = 26
 
 # uint16 m_packetFormat
 # uint8  m_gameYear, m_gameMajorVersion, m_gameMinorVersion, m_packetVersion, m_packetId
@@ -101,4 +100,6 @@ def parse_header(buf: bytes) -> PacketHeader:
 
 
 def is_supported(header: PacketHeader) -> bool:
-    return header.packet_format == PACKET_FORMAT and header.game_year == GAME_YEAR
+    # Format is the wire discriminator; m_gameYear varies (the F1 26 build reports
+    # values other than 26) so it is only surfaced diagnostically.
+    return header.packet_format == PACKET_FORMAT

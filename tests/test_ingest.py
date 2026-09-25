@@ -20,7 +20,7 @@ def test_accepted_and_handlers() -> None:
 def test_drops_unsupported_format() -> None:
     ingest = Ingest()
     ingest.on_datagram(make_packet(PacketId.SESSION, packet_format=2025), recv_time=0.0)
-    ingest.on_datagram(make_packet(PacketId.SESSION, game_year=25), recv_time=0.0)
+    ingest.on_datagram(make_packet(PacketId.SESSION, packet_format=2024), recv_time=0.0)
     census = ingest.census()
     assert census["dropped_unsupported"] == 2
     assert census["packets"] == {}

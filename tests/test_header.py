@@ -36,10 +36,12 @@ def test_header_roundtrip() -> None:
     assert is_supported(h)
 
 
-def test_unsupported_format_and_year() -> None:
-    for kwargs in ({"packet_format": 2025}, {"game_year": 25}):
-        pkt = make_packet(PacketId.SESSION, **kwargs)  # type: ignore[arg-type]
-        assert not is_supported(parse_header(pkt))
+def test_unsupported_format() -> None:
+    assert not is_supported(parse_header(make_packet(PacketId.SESSION, packet_format=2025)))
+
+
+def test_game_year_not_a_gate() -> None:
+    assert is_supported(parse_header(make_packet(PacketId.SESSION, game_year=25)))
 
 
 def test_all_packet_ids_have_sizes() -> None:
