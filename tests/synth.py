@@ -82,6 +82,8 @@ def _field_values(item: Field, value: object) -> list[object]:
     if item.count == 1:
         if value is None:
             return [b"\0" * struct.calcsize("<" + item.fmt) if item.fmt.endswith("s") else 0]
+        if isinstance(value, str):
+            value = value.encode("utf-8")
         if item.fmt.endswith("s") and not isinstance(value, bytes):
             return [bytes(value)]  # type: ignore[arg-type]
         return [value]

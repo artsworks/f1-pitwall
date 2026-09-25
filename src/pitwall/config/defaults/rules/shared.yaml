@@ -159,3 +159,11 @@ rules:
           - "Lost it again. Same deal, gentle on the throttle."
           - "That's {repeat} moments now. Rejoin slowly, and a bit less throttle on the exits."
           - "Number {repeat}. Easy on the power, let the rears cool."
+  # Red flag: all sessions; repeats on cooldown while the flag stays out.
+  - id: red_flag
+    priority: 1
+    when: "red_flag"
+    clear_when: "not red_flag"
+    cooldown_s: 60
+    say:
+      - "Red flag. Red flag. Slow down and return to the pits"

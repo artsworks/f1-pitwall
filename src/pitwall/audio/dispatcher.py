@@ -188,6 +188,37 @@ class Dispatcher:
             emitted.append(call)
         return emitted
 
+    def purge(self, reason: str, now: float | None = None) -> int:
+        """Drop every queued (not yet spoken) call, logging each as suppressed."""
+        purged = 0
+        while self._queue:
+            call = heapq.heappop(self._queue).call
+            self._log_call(call, "suppressed", reason)
+            purged += 1
+        return purged
+
+    def reset_session(self) -> None:
+        """New session: clear the queue and per-stint/per-lap budgets."""
+        self._queue.clear()
+        self._fires_this_stint.clear()
+        self._calls_this_lap = 0
+        self._calls_lap = 0
+        self._current = None
+        snap = self.latest_snapshot
+        self.log.write(
+            {
+                "t": snap.now if snap else self.clock.now(),
+                "session_time": snap.session_time if snap else None,
+                "lap": snap.lap_num if snap else None,
+                "lap_distance": snap.lap_distance if snap else None,
+                "rule_id": None,
+                "outcome": "session_reset",
+                "suppressed_by": None,
+                "inputs": {},
+                "text": "",
+            }
+        )
+
     async def run(self) -> None:
         """Live loop: drain the queue periodically."""
         while True:

@@ -39,6 +39,13 @@ class Engine:
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
+        self._paused = False
+
+        def _on_rewind(t: float) -> None:
+            dispatcher.purge(reason="flashback", now=t)
+
+        state.rewind_listeners.append(_on_rewind)
+        state.session_listeners.append(lambda _uid: dispatcher.reset_session())
 
     @property
     def tick_period(self) -> float:
@@ -49,6 +56,15 @@ class Engine:
         snapshot = self.state.snapshot(now)
         if self.state.last_recv_wall is not None:
             self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)
+        if snapshot.paused != self._paused:
+            self.dispatcher.log.write(
+                {"t": now, "outcome": "paused" if snapshot.paused else "resumed"}
+            )
+            if snapshot.paused:
+                self.dispatcher.purge(reason="paused", now=now)
+            self._paused = snapshot.paused
+        if snapshot.paused:
+            return []
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
             self.dispatcher.submit(result.candidates, snapshot)

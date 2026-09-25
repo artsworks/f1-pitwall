@@ -37,6 +37,11 @@ class EngineSettings(BaseModel):
             "car_status": 0.5,
             "car_damage": 0.5,
             "motion_ex": 0.5,
+            "participants": 15.0,
+            "car_setups": 5.0,
+            "session_history": 5.0,
+            "tyre_sets": 5.0,
+            "car_telemetry_2": 1.0,
         }
     )
 
