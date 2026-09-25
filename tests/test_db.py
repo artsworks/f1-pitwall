@@ -94,3 +94,11 @@ def test_uint64_session_uid_round_trip() -> None:
     assert db.calls_for_session(uid)[0]["session_uid"] == uid
     assert db.grades_for_session(uid)[0]["session_uid"] == uid
     assert db.bookmarks_for_session(uid)[0]["session_uid"] == uid
+
+
+def test_call_inputs_with_dataclass_values_are_stored() -> None:
+    from pitwall.state.session import Damage
+
+    db = Database(":memory:")
+    db.insert_call(1, {"outcome": "fired", "call_id": "c-1", "inputs": {"damage": Damage(7)}})
+    assert "front_left_wing" in db.calls_for_session(1)[0]["inputs"]

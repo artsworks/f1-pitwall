@@ -251,7 +251,7 @@ class Database:
                     outcome,
                     record.get("suppressed_by"),
                     record.get("text"),
-                    json.dumps(inputs) if inputs is not None else None,
+                    json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("config_hash"),
                     record.get("mindset"),
                 ),

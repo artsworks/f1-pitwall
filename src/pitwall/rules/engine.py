@@ -6,6 +6,7 @@ Per-rule hysteresis: fires on the `when` rising edge, re-arms on `clear_when`
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,19 @@ from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
 
 STALENESS_DEFAULT_S = 1.0
+
+
+def _jsonable(value: Any) -> Any:
+    """Decision-log inputs must survive json.dumps (JSONL and SQLite mirrors)."""
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _jsonable(dataclasses.asdict(value))
+    if isinstance(value, Mapping):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
 
 
 class _WithRepeat(dict[str, Any]):
@@ -145,7 +159,9 @@ class RuleEngine:
                 text = template
             snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
             inputs = {
-                name: ns.get(name) for name in dict.fromkeys(ns.accessed) if name in snap_attrs
+                name: _jsonable(ns.get(name))
+                for name in dict.fromkeys(ns.accessed)
+                if name in snap_attrs
             }
             still_true = None
             if rule._still_true is not None:
