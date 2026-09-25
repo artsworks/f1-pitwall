@@ -28,6 +28,13 @@ def tyre_status(inner: float, cold_c: float, hot_c: float) -> str:
     return "OK"
 
 
+def packet_age_ms(snapshot: Snapshot) -> float | None:
+    """Age of the newest packet in `snapshot.now`'s clock domain (ms)."""
+    if snapshot.last_packet_t is None:
+        return None
+    return max(0.0, (snapshot.now - snapshot.last_packet_t) * 1000.0)
+
+
 def state_payload(
     snapshot: Snapshot,
     *,
@@ -37,12 +44,8 @@ def state_payload(
 ) -> dict[str, Any]:
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
-    packet_age_ms = (
-        None
-        if snapshot.last_packet_t is None
-        else max(0.0, (snapshot.now - snapshot.last_packet_t) * 1000.0)
-    )
-    live = packet_age_ms is not None and packet_age_ms < STALE_MS
+    age_ms = packet_age_ms(snapshot)
+    live = age_ms is not None and age_ms < STALE_MS
 
     def corner(name: str) -> dict[str, Any]:
         inner = getattr(snapshot.tyre_inner_ema_fast, name)
@@ -65,7 +68,7 @@ def state_payload(
     lat = metrics.summary()
     return {
         "live": live,
-        "packet_age_ms": packet_age_ms,
+        "packet_age_ms": age_ms,
         "rate_hz": None,
         "session_kind": snapshot.session_kind,
         "session_type": snapshot.session_type,

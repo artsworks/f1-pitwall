@@ -259,3 +259,76 @@ def test_packet_age_uses_receive_clock_not_session_time() -> None:
         state.snapshot(recv + 5), settings=settings, metrics=Metrics(), quiet=False
     )
     assert later["live"] is False
+
+
+def test_health_includes_packet_age_and_live() -> None:
+    from pitwall.server.app import packet_age_ms
+
+    hub = Hub()
+    metrics = Metrics()
+    state = SessionState()
+    snap = state.snapshot(0.0)
+    hub.health_source = lambda: {
+        "packet_age_ms": packet_age_ms(snap),
+        "live": False,
+    }
+    client = TestClient(create_app(hub, ConfigStore(), metrics))
+    h = client.get("/api/health").json()
+    assert "packet_age_ms" in h
+    assert "live" in h
+    assert h["live"] is False
+
+
+def test_packet_age_ms_helper() -> None:
+    from pitwall.server.app import packet_age_ms
+
+    snap = SessionState().snapshot(2.0)
+    snap.last_packet_t = 1.5
+    assert packet_age_ms(snap) == 500.0
+    snap.last_packet_t = None
+    assert packet_age_ms(snap) is None
+
+
+def test_replay_hub_sink_emits_call(tmp_path) -> None:
+    """build_engine with a Hub sink: a firing rule produces a call frame."""
+    import asyncio
+
+    from pitwall.audio.dispatcher import LogSink
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine, run_replay
+    from pitwall.net.recording import RecordingWriter
+    from pitwall.protocol.header import PacketId
+
+    # recording: race session + lap data on_track + car damage FL wing 30
+    from .synth import pack_packet
+
+    packets = (
+        [pack_packet(PacketId.SESSION, {"session_type": 15}, session_time=t) for t in (0.0, 1.0)]
+        + [
+            pack_packet(
+                PacketId.LAP_DATA,
+                {"cars": {0: {"driver_status": 4, "current_lap_num": 5}}},
+                session_time=t,
+            )
+            for t in (0.0, 1.0)
+        ]
+        + [
+            pack_packet(
+                PacketId.CAR_DAMAGE,
+                {"cars": {0: {"front_left_wing_damage": 30}}},
+                session_time=t,
+            )
+            for t in (0.5, 1.5)
+        ]
+    )
+    path = tmp_path / "d.f1bin"
+    with RecordingWriter(path, packet_format=2026) as w:
+        for i, pkt in enumerate(packets):
+            w.write_datagram(i * 0.5, pkt)
+
+    hub = Hub()
+    engine = build_engine(clock=VirtualClock(), sinks=[hub, LogSink()])
+    asyncio.run(run_replay(path, engine, None))
+    call_frames = [f for f in hub.outbox if f["type"] == "call"]
+    assert call_frames
+    assert any("wing" in f["payload"]["text"].lower() for f in call_frames)

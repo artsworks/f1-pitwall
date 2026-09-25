@@ -88,18 +88,31 @@ def cmd_replay(args: argparse.Namespace) -> int:
             print(f"replay: lap {args.from_lap} not found in index of {args.file}")
             return 1
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
-    if args.no_rules:
-        engine = build_census_engine(clock)
-    else:
-        engine = build_engine(clock=clock)
-    replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     if args.serve:
+        from pitwall.audio.dispatcher import LogSink
         from pitwall.server.hub import Hub
 
         hub = Hub()
+
+        class _ReplaySpokenSink:
+            """No speaker in replay: mark calls spoken in the hub immediately."""
+
+            def speak(self, call: Call) -> None:
+                hub.spoken(call.id, call.t)
+
+            def cancel(self, call_id: str) -> None:
+                pass
+
+        if args.no_rules:
+            engine = build_census_engine(clock)
+        else:
+            engine = build_engine(clock=clock, sinks=[hub, LogSink(), _ReplaySpokenSink()])
+        replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
         store = ConfigStore()
         asyncio.run(_serve(engine, hub, store, replay_coro))
         return 0
+    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock)
+    replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
     if args.stats:
@@ -252,6 +265,15 @@ async def _serve(
             engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
         ),
     )
+
+    def _health() -> dict[str, Any]:
+        from pitwall.server.app import packet_age_ms
+
+        snap = engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
+        age = packet_age_ms(snap)
+        return {"packet_age_ms": age, "live": age is not None and age < 1000.0}
+
+    hub.health_source = _health
     hub.attach_loop(asyncio.get_running_loop())
     config = uvicorn.Config(
         app,

@@ -32,6 +32,7 @@
     setText("mindset", p.mindset + " · " + p.verbosity + (p.quiet ? " · quiet" : ""));
     ["fl", "fr", "rl", "rr"].forEach(function (k) {
       var t = p.tyres[k], c = el("tyre-" + k);
+      if (!c) return;
       c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
       var st = c.querySelector(".status");
       st.textContent = t.status;
@@ -57,6 +58,7 @@
       if (d.drs_fault) { items.push("DRS fault"); warn = true; }
       if (d.ers_fault) { items.push("ERS fault"); warn = true; }
       var dmg = el("damage");
+      if (!dmg) return;
       dmg.textContent = items.length ? "damage " + items.join(" · ") : "damage none";
       dmg.className = warn ? "warn" : "dim";
     }
