@@ -393,14 +393,30 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_speak(args: argparse.Namespace) -> int:
     """Diagnose the audio path: speak TEXT and report when it was spoken."""
+    from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth
     from pitwall.audio.speaker import make_speaker
 
     store = ConfigStore()
-    speech = store.current().speech.model_copy(update={"engine": args.engine})
+    update: dict[str, object] = {"engine": args.engine}
+    if args.voice:
+        update["piper_voice"] = args.voice
+    speech = store.current().speech.model_copy(update=update)
+    if args.save:
+        t0 = time.monotonic()
+        try:
+            wav, seconds = make_piper_synth(speech)(args.text)
+        except FileNotFoundError as exc:
+            print(exc)
+            return 1
+        Path(args.save).write_bytes(wav)
+        print(
+            f"saved {args.save}: {seconds:.1f} s of audio, "
+            f"rendered in {(time.monotonic() - t0) * 1000:.0f} ms (incl. voice load)"
+        )
+        return 0
     speaker = make_speaker(speech)
     print(
-        f"speaker: {speaker.name} (engine={args.engine} voice={speech.voice or 'default'} "
-        f"rate={speech.rate} volume={speech.volume})"
+        f"speaker: {speaker.name} (engine={args.engine} rate={speech.rate} volume={speech.volume})"
     )
     done = threading.Event()
     spoken_at: list[float] = []
@@ -426,9 +442,31 @@ def cmd_speak(args: argparse.Namespace) -> int:
     )
     if done.wait(timeout=10.0):
         print(f"spoken after {(spoken_at[0] - t0) * 1000:.0f} ms")
+        if isinstance(speaker, PiperSpeaker):
+            time.sleep(max(0.0, speaker.busy_until - time.monotonic()))
     else:
         print("TIMEOUT: nothing spoken in 10 s")
     speaker.close()
+    return 0
+
+
+def cmd_voices(args: argparse.Namespace) -> int:
+    from pitwall.audio.piper_tts import SUGGESTED_VOICES, download_voice, installed_voices
+
+    speech = ConfigStore().current().speech
+    if args.action == "get":
+        for name in args.names or [speech.piper_voice]:
+            path = download_voice(speech, name)
+            print(f"downloaded {name} -> {path}")
+        return 0
+    have = installed_voices(speech)
+    print(f"voices in {speech.voices_dir}/ (configured: {speech.piper_voice}):")
+    for name in have:
+        print(f"  {'*' if name == speech.piper_voice else ' '} {name}")
+    if not have:
+        print("  (none) - run: pitwall voices get")
+    print("suggested: " + ", ".join(SUGGESTED_VOICES))
+    print("all voices: https://rhasspy.github.io/piper-samples/")
     return 0
 
 
@@ -511,8 +549,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")
     sp.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
-    sp.add_argument("--engine", choices=["auto", "sapi", "null"], default="auto")
+    sp.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
+    sp.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
+    sp.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
     sp.set_defaults(func=cmd_speak)
+
+    vo = sub.add_parser("voices", help="list or download Piper voices")
+    vo.add_argument("action", nargs="?", choices=["list", "get"], default="list")
+    vo.add_argument("names", nargs="*", help="voice names for get (default: configured)")
+    vo.set_defaults(func=cmd_voices)
 
     return p
 

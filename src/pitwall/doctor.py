@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import IO
 
+from pitwall.audio.piper_tts import voice_path
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
@@ -162,6 +163,16 @@ def run_doctor(
             _line(out, "INFO", "BUTN event seen — UDP Action binding works")
 
     # Speech.
+    speech = settings.speech
+    if voice_path(speech).exists():
+        _line(out, "PASS", f"Piper voice {speech.piper_voice} installed")
+    else:
+        _line(
+            out,
+            "INFO",
+            f"Piper voice {speech.piper_voice} not installed (natural voice): "
+            f"uv run pitwall voices get",
+        )
     if sys.platform == "win32":
         try:
             import pythoncom

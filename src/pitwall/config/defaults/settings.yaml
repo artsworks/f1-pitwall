@@ -32,8 +32,10 @@ policy:
   mute_until_lap: 0
 speech:
   enabled: true
-  engine: "auto"
-  voice: null
+  engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
+  voice: null             # SAPI voice name filter
+  piper_voice: "en_GB-alan-medium"
+  voices_dir: "voices"
   rate: 0
   volume: 100
   radio_click: true

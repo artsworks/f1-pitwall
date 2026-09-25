@@ -12,4 +12,6 @@ __pycache__/
 dist/
 *.egg-info/
 decisions/
+voices/
+*.onnx
 *.decisions.jsonl

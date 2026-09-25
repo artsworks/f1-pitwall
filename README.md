@@ -9,6 +9,7 @@ Docs and build status: https://artsworks.github.io/f1-pitwall/ ([status](docs/st
 
 ```bash
 uv sync
+uv run pitwall voices get   # natural Piper voice (optional; SAPI otherwise)
 uv run pitwall doctor
 uv run pitwall start
 ```

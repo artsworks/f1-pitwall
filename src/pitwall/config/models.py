@@ -56,8 +56,10 @@ class UiSettings(BaseModel):
 
 class SpeechSettings(BaseModel):
     enabled: bool = True
-    engine: Literal["auto", "sapi", "null"] = "auto"
+    engine: Literal["auto", "piper", "sapi", "null"] = "auto"
     voice: str | None = None
+    piper_voice: str = "en_GB-alan-medium"
+    voices_dir: str = "voices"
     rate: int = 0
     volume: int = 100
     radio_click: bool = True

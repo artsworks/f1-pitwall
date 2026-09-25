@@ -3,7 +3,8 @@ implementation is non-blocking and reports `on_spoken(call_id, t)` — fired at
 speech start (the latency we measure).
 
 `SapiSpeaker` imports pywin32 lazily so this module loads on Linux.
-`speech.engine`: "auto" = sapi on Windows else null; "sapi"/"null" explicit.
+`speech.engine`: "auto" = piper if its voice is downloaded, else sapi on
+Windows, else null; "piper"/"sapi"/"null" explicit. Piper falls back to SAPI.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from pitwall.audio.dispatcher import Call
+from pitwall.audio.piper_tts import make_piper_speaker, voice_path
 from pitwall.config.models import SpeechSettings
 
 log = logging.getLogger(__name__)
@@ -166,7 +168,17 @@ class SapiSpeaker:
 def make_speaker(settings: SpeechSettings) -> Speaker:
     engine = settings.engine
     if engine == "auto":
-        engine = "sapi" if sys.platform == "win32" else "null"
+        if voice_path(settings).exists() and sys.platform == "win32":
+            engine = "piper"
+        else:
+            engine = "sapi" if sys.platform == "win32" else "null"
+    if engine == "piper":
+        try:
+            return make_piper_speaker(settings)
+        except Exception as exc:
+            log.warning("Piper unavailable (%s); falling back", exc)
+            print(f"speech: Piper unavailable ({exc}); falling back to SAPI", file=sys.stderr)
+            engine = "sapi"
     if engine == "sapi":
         try:
             return SapiSpeaker(settings)
