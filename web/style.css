@@ -164,3 +164,21 @@ body.radio .banner .text { font-size: 2.6rem; }
 body.radio .log ol { font-size: 1.6rem; }
 body.radio .log li { grid-template-columns: 3.2rem .6rem 1.4rem 1fr; }
 body.radio .log .tag { display: none; }
+
+/* review-mode transport bar (docs/07) */
+.transport { padding: 6px 10px; border-top: 1px solid #2a2f36; }
+.transport .row { display: flex; gap: 8px; align-items: center; }
+.transport button { background: #1c2128; color: #e6edf3; border: 1px solid #30363d;
+  border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.transport button.on { border-color: #46a758; }
+.transport input[type=range] { flex: 1; }
+.transport .strip { position: relative; height: 14px; margin-top: 6px;
+  background: #161b22; border-radius: 3px; }
+.transport .tick { position: absolute; top: 2px; width: 3px; height: 10px;
+  border-radius: 1px; cursor: pointer; }
+.transport .tick.graded { outline: 1px solid #46a758; }
+.transport .detail { margin-top: 6px; font-size: 12px; background: #161b22;
+  padding: 8px; border-radius: 4px; max-height: 180px; overflow: auto; }
+.transport .detail table { margin: 4px 0; border-collapse: collapse; }
+.transport .detail td { border: 1px solid #30363d; padding: 1px 6px; }
+.transport .grades { margin-top: 4px; }

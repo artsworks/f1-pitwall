@@ -314,7 +314,12 @@
     lastFrameAt = performance.now();
     if (typeof m.t === "number") clockOffset = m.t - Date.now() / 1000;
     var p = m.payload;
-    if (m.type === "state" || m.type === "snapshot") {
+    if (m.type === "hello") {
+      if (p && p.review) {
+        document.body.classList.add("review");
+        if (window.pitwallReviewInit) window.pitwallReviewInit();
+      }
+    } else if (m.type === "state" || m.type === "snapshot") {
       lastState = p; lastStateAt = performance.now();
       stateTimes.push(lastStateAt);
       renderState(p);

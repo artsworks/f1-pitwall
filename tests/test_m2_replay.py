@@ -9,7 +9,7 @@ from pitwall.engine import build_engine, run_replay
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import Candidate
 
-from .synth import make_event_packet, pack_packet, write_packet_stream
+from .synth import make_event_packet, out_lap_scenario, pack_packet, write_packet_stream
 
 
 def _read_log(path: Path) -> list[dict]:
@@ -320,3 +320,17 @@ def test_butn_ack_and_neg(tmp_path: Path) -> None:
         r for r in rows if r["outcome"] == "suppressed" and r["suppressed_by"] == "negative_backoff"
     ]
     assert backoff and backoff[0]["rule_id"] == "release_hold"
+
+
+def test_replay_writes_calls_and_laps_to_db(tmp_path: Path) -> None:
+    from pitwall.store.db import Database
+
+    rec = write_packet_stream(tmp_path / "db.f1bin", out_lap_scenario())
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(rec, engine, None))
+    uid = engine.state.session_uid
+    assert uid is not None
+    calls = db.calls_for_session(uid)
+    assert any(r["outcome"] == "fired" for r in calls)
+    assert db._rows("SELECT * FROM sessions WHERE uid=?", (uid,))  # noqa: SLF001

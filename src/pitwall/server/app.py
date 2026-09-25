@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -114,10 +114,13 @@ def create_app(
     speaker_name: str = "null",
     latest_snapshot: Any = None,
     on_client_press: Any = None,
+    review: Any = None,
 ) -> FastAPI:
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
     frames (defaults to the hub's no-state placeholder). on_client_press:
-    callable(down: bool) fed by {"type":"press"} client messages."""
+    callable(down: bool) fed by {"type":"press"} client messages. review:
+    optional ReviewController; when present the /api/review/* routes are
+    mounted and the hello frame carries review=True."""
     app = FastAPI(title="pitwall")
 
     def snapshot_now() -> Snapshot:
@@ -164,6 +167,7 @@ def create_app(
                         "config_hash": settings_store.hash,
                         "mindset": settings.mindset.active,
                         "verbosity": settings.policy.verbosity,
+                        "review": review is not None,
                     },
                 )
             )
@@ -198,6 +202,51 @@ def create_app(
             pass
         finally:
             hub.clients.discard(websocket)
+
+    if review is not None:
+
+        @app.get("/api/review/status")
+        async def review_status() -> JSONResponse:
+            return JSONResponse(review.status())
+
+        @app.get("/api/review/timeline")
+        async def review_timeline() -> JSONResponse:
+            return JSONResponse(review.timeline)
+
+        @app.get("/api/review/grades")
+        async def review_grades() -> JSONResponse:
+            return JSONResponse(review.grades())
+
+        @app.post("/api/review/play")
+        async def review_play() -> JSONResponse:
+            return JSONResponse(await review.play())
+
+        @app.post("/api/review/pause")
+        async def review_pause() -> JSONResponse:
+            return JSONResponse(await review.pause())
+
+        @app.post("/api/review/seek")
+        async def review_seek(request: Request) -> JSONResponse:
+            body = await request.json()
+            return JSONResponse(
+                await review.seek(lap=body.get("lap"), offset_us=body.get("offset_us"))
+            )
+
+        @app.post("/api/review/grade")
+        async def review_grade(request: Request) -> JSONResponse:
+            body = await request.json()
+            uid = 0
+            if review.engine is not None and review.engine.state.session_uid:
+                uid = review.engine.state.session_uid
+            return JSONResponse(
+                review.grade(
+                    str(body["call_id"]),
+                    str(body.get("rule_id", "")),
+                    str(body["grade"]),
+                    str(body.get("note", "")),
+                    session_uid=uid,
+                )
+            )
 
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
     return app

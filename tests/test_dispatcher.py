@@ -12,6 +12,8 @@ from pitwall.state.session import Snapshot
 
 
 class CollectSink:
+    speaks_audio = False
+
     def __init__(self) -> None:
         self.spoken: list[str] = []
         self.cancelled: list[str] = []
@@ -142,7 +144,7 @@ def test_log_records_outcomes() -> None:
 
 def _screen_sink() -> CollectSink:
     s = CollectSink()
-    s.screen_only = False
+    s.speaks_audio = True
     return s
 
 

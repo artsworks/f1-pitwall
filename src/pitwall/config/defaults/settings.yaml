@@ -11,6 +11,10 @@ recording:
   compress_on_close: true
 engine:
   tick_hz: 10
+persistence:
+  enabled: true
+  path: ~/.pitwall/pitwall.sqlite
+
   ema_fast_s: 3.0
   ema_slow_s: 30.0
   straight_hold_s: 1.0

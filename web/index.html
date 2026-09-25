@@ -34,6 +34,19 @@
     </div>
   </section>
 
+  <section id="transport" class="transport" hidden>
+    <div class="row">
+      <button id="t-prev" title="previous lap">⏮</button>
+      <button id="t-play" title="play/pause">▶</button>
+      <button id="t-next" title="next lap">⏭</button>
+      <span id="t-lap" class="dim">LAP -- / --</span>
+      <input id="t-scrub" type="range" min="0" max="1000" value="0">
+      <span id="t-pos" class="dim">--:--</span>
+    </div>
+    <div id="t-strip" class="strip"></div>
+    <div id="t-detail" class="detail" hidden></div>
+  </section>
+
   <section class="zone tyres">
     <div class="chip"><span id="compound" class="comp">--</span><span id="tyre-age" class="dim">--</span></div>
     <div class="car">
@@ -67,5 +80,6 @@
     <span id="ers">ERS --</span><span id="sc">SC --</span><span id="latency"></span>
   </footer>
   <script src="/static/app.js"></script>
+  <script src="/static/review.js"></script>
 </body>
 </html>

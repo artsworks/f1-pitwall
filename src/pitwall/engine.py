@@ -49,12 +49,15 @@ class Engine:
         )
         self._press_queue: list[Press] = []
         state.press_listeners.append(self._on_press_edge)
+        self.db: Any = dispatcher.log.db
+        self._laps_written = 0
+        self._session_upserted: int | None = None
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
 
         state.rewind_listeners.append(_on_rewind)
-        state.session_listeners.append(lambda _uid: dispatcher.reset_session())
+        state.session_listeners.append(self._on_new_session)
 
     @property
     def tick_period(self) -> float:
@@ -69,9 +72,37 @@ class Engine:
         """WebSocket/spacebar press path (docs/12): feed the same detector."""
         self._on_press_edge(self.clock.now(), down)
 
+    def _on_new_session(self, uid: int) -> None:
+        self.dispatcher.reset_session()
+        self._laps_written = len(self.state.laps)
+        self._upsert_session(uid)
+
+    def _upsert_session(self, uid: int) -> None:
+        if self.db is None:
+            return
+        self._session_upserted = uid
+        snap = self.state.snapshot(self.clock.now())
+        self.db.upsert_session(
+            uid,
+            track_id=getattr(snap, "track_id", 0),
+            session_type=getattr(snap, "session_type", 0),
+            started_at=self.clock.now(),
+            game_version=getattr(snap, "game_version", ""),
+            config_hash=self.store.hash,
+            weather=getattr(snap, "weather", 0),
+        )
+
+    def _write_laps(self) -> None:
+        if self.db is None or self.state.session_uid is None:
+            return
+        for lap in self.state.laps[self._laps_written :]:
+            self.db.insert_lap(self.state.session_uid, 0, lap)
+        self._laps_written = len(self.state.laps)
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         snapshot = self.state.snapshot(now)
+        self._write_laps()
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
@@ -89,6 +120,12 @@ class Engine:
             self._paused = snapshot.paused
         if snapshot.paused:
             return []
+        if (
+            self.db is not None
+            and self.state.session_uid is not None
+            and self._session_upserted != self.state.session_uid
+        ):
+            self._upsert_session(self.state.session_uid)
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
             self.dispatcher.submit(result.candidates, snapshot)
@@ -146,12 +183,16 @@ def build_engine(
     *,
     clock: Clock | None = None,
     overrides: dict[str, Any] | None = None,
+    rules_dir: Path | None = None,
     decision_log_path: Path | None = None,
+    decision_log_fp: Any = None,
     sinks: list[CallSink] | None = None,
     record_to: Path | None = None,
+    db: Any = None,
 ) -> Engine:
-    """Assemble a full engine from the layered config."""
-    store = ConfigStore(overrides=overrides)
+    """Assemble a full engine from the layered config. db=None disables
+    SQLite mirroring (replays opt in via the CLI)."""
+    store = ConfigStore(overrides=overrides, rules_dir=rules_dir)
     settings = store.current()
     clock = clock or WallClock()
     recorder = None
@@ -176,10 +217,18 @@ def build_engine(
         staleness_s=settings.engine.staleness_s,
     )
     log_path = decision_log_path
-    if log_path is None:
+    if log_path is None and decision_log_fp is None:
         log_path = Path(settings.recording.directory) / "decisions.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    dlog = DecisionLog(log_path, config_hash=store.hash, mindset=settings.mindset.active)
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    dlog = DecisionLog(
+        log_path,
+        fp=decision_log_fp,
+        config_hash=store.hash,
+        mindset=settings.mindset.active,
+        db=db,
+        session_uid_source=lambda: state.session_uid,
+    )
     dispatcher = Dispatcher(
         settings.policy,
         clock,

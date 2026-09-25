@@ -36,6 +36,8 @@ _CHARS_PER_SECOND = 15.0
 
 
 class CallSink(Protocol):
+    speaks_audio: bool  # True: sink plays audio -> skip screen-only calls
+
     def speak(self, call: Call) -> None: ...
 
     def cancel(self, call_id: str) -> None: ...
@@ -65,7 +67,7 @@ class _Queued:
 class LogSink:
     """Prints calls to stdout."""
 
-    screen_only = True
+    speaks_audio = False
 
     def speak(self, call: Call) -> None:
         print(f"[radio] {call.text}")
@@ -231,7 +233,7 @@ class Dispatcher:
                 self._current = None
             spoken_t = self.clock.now()
             for sink in self.sinks:
-                if call.screen_only and not getattr(sink, "screen_only", True):
+                if call.screen_only and sink.speaks_audio:
                     continue
                 sink.speak(call)
             self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
@@ -374,10 +376,7 @@ class Dispatcher:
 
     def _broadcast_press(self, payload: dict[str, Any]) -> None:
         if self.on_press_event is not None:
-            try:
-                self.on_press_event(payload)
-            except Exception:
-                pass
+            self.on_press_event(payload)
 
     def _log(
         self, cand: Candidate, snap: Snapshot, now: float, outcome: str, by: str | None

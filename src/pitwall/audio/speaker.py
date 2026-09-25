@@ -29,7 +29,7 @@ SVSF_PURGE_BEFORE_SPEAK = 4
 
 class Speaker(Protocol):
     name: str
-    screen_only: bool  # False: audio sinks skip screen-only calls
+    speaks_audio: bool  # audio sinks skip screen-only calls
     on_spoken: Callable[[str, float], None] | None
 
     def speak(self, call: Call) -> None: ...
@@ -41,7 +41,7 @@ class Speaker(Protocol):
 
 class NullSpeaker:
     name = "null"
-    screen_only = False
+    speaks_audio = True
     on_spoken: Callable[[str, float], None] | None = None
 
     def speak(self, call: Call) -> None:
@@ -97,7 +97,7 @@ class SapiSpeaker:
     """Windows SAPI.SpVoice on one worker thread (its own COM apartment)."""
 
     name = "sapi"
-    screen_only = False
+    speaks_audio = True
 
     def __init__(self, settings: SpeechSettings) -> None:
         if sys.platform != "win32":

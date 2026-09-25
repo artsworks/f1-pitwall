@@ -72,6 +72,11 @@ class InputSettings(BaseModel):
     negative_mute_laps: int = 3
 
 
+class PersistenceSettings(BaseModel):
+    enabled: bool = True
+    path: str = "~/.pitwall/pitwall.sqlite"
+
+
 class SpeechSettings(BaseModel):
     enabled: bool = True
     engine: Literal["auto", "piper", "sapi", "null"] = "auto"
@@ -129,6 +134,7 @@ class Settings(BaseModel):
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     ui: UiSettings = Field(default_factory=UiSettings)
     input: InputSettings = Field(default_factory=InputSettings)
+    persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)

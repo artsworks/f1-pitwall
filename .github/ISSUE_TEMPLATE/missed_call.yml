@@ -1,0 +1,25 @@
+name: Missed call
+description: The engineer should have said something and didn't
+title: "[missed-call] "
+labels: [triage, rules]
+body:
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id (if known)
+      placeholder: e.g. yellow_ahead
+  - type: input
+    id: lap
+    attributes:
+      label: Lap / session time
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have been said and why
+      description: Include the situation (traffic, flags, tyre state...).
+    validations: { required: true }
+  - type: textarea
+    id: bundle
+    attributes:
+      label: pitwall report bundle
+      description: Run `pitwall report` and attach the zip.

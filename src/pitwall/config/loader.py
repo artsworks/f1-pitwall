@@ -60,8 +60,13 @@ class ConfigStore:
     """current() -> (Settings, hash); reload() re-reads sources; invalid input
     keeps the last good config and records last_error."""
 
-    def __init__(self, overrides: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        overrides: dict[str, Any] | None = None,
+        rules_dir: Path | None = None,
+    ) -> None:
         self._overrides = overrides or {}
+        self._rules_dir = rules_dir
         self._profile = profile_path()
         self._mtimes: dict[Path, float] = {}
         self._last_poll = 0.0
@@ -71,12 +76,22 @@ class ConfigStore:
 
     def _sources(self) -> list[Path]:
         srcs = sorted(DEFAULTS_DIR.rglob("*.yaml"))
+        if self._rules_dir is not None and self._rules_dir.is_dir():
+            srcs += sorted(self._rules_dir.rglob("*.yaml"))
         if self._profile is not None:
             srcs.append(self._profile)
         return srcs
 
     def _build(self) -> Settings:
         merged = _load_yaml_dir(DEFAULTS_DIR)
+        if self._rules_dir is not None:
+            # A rules directory REPLACES the packaged rules; any other keys in
+            # it (thresholds, engine, ...) deep-merge on top.
+            custom = _load_yaml_dir(self._rules_dir)
+            custom_rules = custom.pop("rules", None)
+            merged = _deep_merge(merged, custom)
+            if custom_rules is not None:
+                merged["rules"] = custom_rules
         if self._profile is not None and self._profile.exists():
             merged = _deep_merge(merged, yaml.safe_load(self._profile.read_text()) or {})
         merged = _deep_merge(merged, self._overrides)
