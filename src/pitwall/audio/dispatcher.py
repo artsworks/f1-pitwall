@@ -125,7 +125,7 @@ class Dispatcher:
             return "verbosity"
         if snapshot.lap_num < self.policy.mute_until_lap:
             return "mute_until_lap"
-        last = self._last_fired.get(cand.rule.id)
+        last = self._last_fired.get(d.cooldown_group or cand.rule.id)
         if d.cooldown_s and last is not None and now - last < d.cooldown_s:
             return "cooldown"
         if d.max_per_stint is not None:
@@ -148,7 +148,7 @@ class Dispatcher:
         return None
 
     def _book_call(self, call: Call, cand: Candidate, now: float) -> None:
-        self._last_fired[cand.rule.id] = now
+        self._last_fired[cand.rule.defn.cooldown_group or cand.rule.id] = now
         self._fires_this_stint[cand.rule.id] = self._fires_this_stint.get(cand.rule.id, 0) + 1
         self._recent_texts.append((cand.text, now))
         self._last_call_t = now

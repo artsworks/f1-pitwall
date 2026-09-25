@@ -81,12 +81,31 @@ rules:
       - "Yellow behind you in sector {yellow_behind_sector}. You're clear, ignore it."
       - "Yellow's behind you, sector {yellow_behind_sector}. Not your problem, keep going."
       - "Someone's off behind, sector {yellow_behind_sector}. You're clear."
+  # Same braking zone as on earlier laps: coach the corner, not the event.
+  - id: lockup_front_same_spot
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "lockup == 'front' and lockup_spot_laps >= 1"
+    clear_when: "lockup == ''"
+    cooldown_s: 60
+    cooldown_group: lockup_front
+    requires: [motion_ex]
+    say:
+      - "Locking up in the same braking zone as last lap. Brake a few metres earlier there."
+      - "Same corner, same lock-up, {lockup_wheel}. Move your braking point back."
+      - "That's the one you locked last time too. Earlier and softer on the pedal there."
+    escalate:
+      - after: 3
+        say:
+          - "That braking zone again, {lockup_spot_laps} laps running now. It's not moving, brake earlier."
+          - "Same place, {lockup_spot_laps} laps in a row. Pick a new braking marker."
   - id: lockup_front
     sessions: [practice, qualifying, race]
     priority: 3
-    when: "lockup == 'front'"
+    when: "lockup == 'front' and lockup_spot_laps == 0"
     clear_when: "lockup == ''"
     cooldown_s: 60
+    cooldown_group: lockup_front
     requires: [motion_ex]
     say:
       - "Lock-up, {lockup_wheel}. Ease the brake pressure into the corner, that costs tyre."
@@ -129,13 +148,14 @@ rules:
     clear_when: "not spun"
     still_true: "spun"
     requires: [motion_ex]
+    cooldown_s: 8
     say:
-      - "Easy on the throttle as you rejoin, the rears are cooked."
+      - "Easy on the throttle as you get going, the rears are cooked."
       - "Gentle on the power getting going, rear tyres have no grip left."
       - "Take your time rejoining. Short-shift, feather the throttle, the rears are hot."
     escalate:
       - after: 2
         say:
-          - "Round again. Same deal, gentle on the throttle."
-          - "That's {repeat} spins. Rejoin slowly, and maybe a bit less throttle on the exits."
-          - "Pirouette number {repeat}. Easy on the power, let the rears cool."
+          - "Lost it again. Same deal, gentle on the throttle."
+          - "That's {repeat} moments now. Rejoin slowly, and a bit less throttle on the exits."
+          - "Number {repeat}. Easy on the power, let the rears cool."

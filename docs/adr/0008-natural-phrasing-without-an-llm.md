@@ -27,8 +27,26 @@ Phrasing stays deterministic and in config; no LLM (reaffirms doc 10, angle 20).
   count reflects the mistakes made, not the calls spoken.
 - The shuffle is seeded by rule id: a replay says exactly what the live session said.
 - Lock-up cooldowns went from 30 s to 60 s (front) and 45 s (rear).
-- New `spun_rejoin` (P1): sideslip ≥ 100° above 30 km/h for 0.15 s. Spoken at
-  once, while the car is turning round, so it lands before the rejoin.
+- New `spun_rejoin` (P1, 8 s cooldown): a slide (sideslip ≥ 40° above 30 km/h
+  for 0.2 s) that ends with the car pointing straight again below 80 km/h, i.e.
+  the moment the driver is about to rejoin. A slide caught at speed is not called.
+
+## Second recording (Interlagos, `--record full`, 4 laps, old static build)
+
+- **Lock-ups repeat by corner, not at random.** 10 front lock-ups, and 6 of
+  them were two braking zones (~2770 m and ~3255 m) on three different laps.
+  So the lock-up detector remembers where each one started; a lock-up within
+  75 m of one on an earlier lap is `lockup_spot_laps ≥ 1` and gets
+  `lockup_front_same_spot` ("Same corner, same lock-up… move your braking point
+  back"). Both front lock-up rules share `cooldown_group: lockup_front`, so the
+  more specific call never doubles the chatter.
+- **The costly incident was not a full spin.** Lap 3, sector 2: a 65° slide,
+  then 51°, then a 99° spin, each rejoined at full throttle with rear slip
+  1.1–3.2 (the rears spinning up). Lap 4, S3 before the pit: a 50° slide and
+  wheelspin on the rejoin. A 100° spin threshold caught none of them, which is
+  why detection moved to "slide, then slow recovery".
+- Replay of that session: 11 calls in 7 minutes (4 of them the lap-3 and lap-4 rejoins),
+  with no two consecutive lock-up calls worded the same.
 
 ## Why not an LLM
 

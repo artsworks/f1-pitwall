@@ -70,7 +70,8 @@ More in [docs/getting-started.md](docs/getting-started.md).
 | Boost left on | ERS boost on for 3 s and you lift or brake, or 12 s regardless |
 | Yellow flag | Ahead within 800 m: careful, no overtaking. Appeared behind you: you're clear |
 | Lock-up | After the wheel releases; front → ease brake pressure, rear → move brake bias forward |
-| Spun | Car turned round: easy on the throttle as you rejoin, the rears are cooked |
+| Lost it | After a big slide or spin, as you get going again: easy on the throttle, the rears are cooked |
+| Same corner | Locking up in the same braking zone as an earlier lap: move the braking point |
 
 Calls rotate through several phrasings, and repeat the same mistake often
 enough and the engineer gets drier about it (ADR 0008).

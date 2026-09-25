@@ -282,18 +282,40 @@ def _spin_run(det: SpinDetector, slip_deg: float, speed_kmh: float, t: float, s:
     return t
 
 
-def test_spin_detected_and_rearms_when_driving_forward() -> None:
+def test_spin_reported_on_slow_recovery_not_on_caught_slide() -> None:
     det = SpinDetector()
     t = _spin_run(det, 10.0, 150.0, 0.0, 2.0)
-    assert not det.recent(t)
+    t = _spin_run(det, 50.0, 140.0, t, 0.5)
+    t = _spin_run(det, 5.0, 130.0, t, 1.0)  # caught at speed
+    assert not det.recent(t) and det.count == 0
     t = _spin_run(det, 120.0, 80.0, t, 0.5)
+    t = _spin_run(det, 180.0, 40.0, t, 1.0)
+    assert not det.recent(t)  # still going round
+    t = _spin_run(det, 5.0, 30.0, t, 1.0)
     assert det.recent(t) and det.count == 1
-    t = _spin_run(det, 180.0, 60.0, t, 1.0)  # still sliding backwards: same spin
-    assert det.count == 1
-    t = _spin_run(det, 5.0, 40.0, t, 7.0)
-    assert not det.recent(t)
-    _spin_run(det, 130.0, 90.0, t, 0.5)
-    assert det.count == 2
+    t = _spin_run(det, 5.0, 60.0, t, 5.0)
+    assert not det.recent(t) and det.count == 1
+
+
+def test_lockup_same_braking_zone_on_later_lap() -> None:
+    det = LockupDetector()
+    for lap, dist in ((1, 2770.0), (1, 3255.0), (2, 2790.0), (3, 2760.0), (3, 500.0)):
+        t = lap * 100.0 + dist / 100
+        while t < lap * 100.0 + dist / 100 + 0.5:
+            det.update(t, _slip(fl=-1.0), 150.0, 0.8, lap, dist)
+            t += 1 / 30
+        for _ in range(6):
+            det.update(t, FREE, 120.0, 0.8, lap, dist)
+            t += 1 / 30
+        got = det.spot_laps
+        expected = {(1, 2770.0): 0, (1, 3255.0): 0, (2, 2790.0): 1, (3, 2760.0): 2, (3, 500.0): 0}
+        assert got == expected[(lap, dist)]
+
+
+def test_same_spot_rule_replaces_generic_lockup_call() -> None:
+    t = _texts(_engine(), lockup="front", lockup_wheel="front left", lockup_spot_laps=1)
+    assert list(t) == ["lockup_front_same_spot"]
+    assert t["lockup_front_same_spot"].startswith("Locking up in the same braking zone")
 
 
 def test_spin_rule_speaks_and_escalates() -> None:
@@ -303,5 +325,5 @@ def test_spin_rule_speaks_and_escalates() -> None:
     _texts(e, now=10.0)
     second = _texts(e, now=20.0, spun=True, spins=2)["spun_rejoin"]
     assert (
-        second != first and "gentle" in second.lower() or "spins" in second or "Pirouette" in second
+        second != first and "gentle" in second.lower() or "moments" in second or "Number" in second
     )

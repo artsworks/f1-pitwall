@@ -29,8 +29,12 @@ class LockupDetector:
         min_s: float = 0.25,
         release_s: float = 0.1,
         hold_s: float = 3.0,
+        spot_m: float = 75.0,
     ) -> None:
         self.slip = slip
+        self.spot_m = spot_m
+        self._spots: list[tuple[int, float]] = []  # (lap, lap distance) of every lock-up
+        self.spot_laps = 0
         self.min_speed_kmh = min_speed_kmh
         self.min_brake = min_brake
         self.min_s = min_s
@@ -46,9 +50,18 @@ class LockupDetector:
         self._worst = 0.0
         self._worst_wheel = 0
         self._ended_at: float | None = None
+        self._start_dist: float | None = None
         self.wheel = -1
 
-    def update(self, t: float, slip: Corners, speed_kmh: float, brake: float, lap: int) -> None:
+    def update(
+        self,
+        t: float,
+        slip: Corners,
+        speed_kmh: float,
+        brake: float,
+        lap: int,
+        dist_m: float | None = None,
+    ) -> None:
         if lap != self._lap:
             self._lap = lap
             self.count_lap = 0
@@ -60,6 +73,7 @@ class LockupDetector:
         if locked:
             if self._start is None:
                 self._start = t
+                self._start_dist = dist_m
                 self._worst = values[idx]
                 self._worst_wheel = idx
             elif values[idx] < self._worst:
@@ -72,7 +86,18 @@ class LockupDetector:
                 self._ended_at = self._last_locked
                 self.wheel = self._worst_wheel
                 self.count_lap += 1
+                self._note_spot(lap, self._start_dist)
             self._start = None
+
+    def _note_spot(self, lap: int, dist_m: float | None) -> None:
+        """spot_laps: earlier laps that locked up in the same braking zone."""
+        if dist_m is None:
+            self.spot_laps = 0
+            return
+        self.spot_laps = len(
+            {lp for lp, d in self._spots if lp != lap and abs(d - dist_m) <= self.spot_m}
+        )
+        self._spots.append((lap, dist_m))
 
     def recent(self, t: float) -> tuple[str, str]:
         """('front' | 'rear' | '', wheel name) for a lock-up that ended within hold_s."""
@@ -82,49 +107,53 @@ class LockupDetector:
 
 
 class SpinDetector:
-    """A spin is sideslip (angle between where the car points and where it is
-    travelling, from Motion Ex local velocity) of at least `spin_deg` above
-    `min_speed_kmh`, held for `min_s`. Reported for `hold_s` from detection so
-    the call lands while the car is being turned round, before it rejoins.
-    Re-arms once the car is travelling forward again."""
+    """Loss of control followed by a slow recovery: the moment the driver is
+    about to rejoin on overheated rears. A slide is sideslip (angle between
+    where the car points and where it travels, from Motion Ex local velocity)
+    of at least `slide_deg` above `min_speed_kmh` for `min_s`. It is reported
+    when the car is travelling straight again below `rejoin_kmh`, and stays
+    reported for `hold_s`. A slide caught at speed is not reported."""
 
     def __init__(
         self,
         *,
-        spin_deg: float = 100.0,
+        slide_deg: float = 40.0,
         min_speed_kmh: float = 30.0,
-        min_s: float = 0.15,
-        hold_s: float = 6.0,
-        straight_deg: float = 30.0,
+        min_s: float = 0.2,
+        straight_deg: float = 20.0,
+        rejoin_kmh: float = 80.0,
+        hold_s: float = 4.0,
     ) -> None:
-        self.spin_deg = spin_deg
+        self.slide_deg = slide_deg
         self.min_speed_kmh = min_speed_kmh
         self.min_s = min_s
-        self.hold_s = hold_s
         self.straight_deg = straight_deg
+        self.rejoin_kmh = rejoin_kmh
+        self.hold_s = hold_s
         self.count = 0
         self.reset()
 
     def reset(self) -> None:
         self._start: float | None = None
-        self._spinning = False
+        self._lost = False
         self._at: float | None = None
 
     def update(self, t: float, local_velocity: tuple[float, float, float]) -> None:
         vx, _, vz = local_velocity
         speed_kmh = math.hypot(vx, vz) * 3.6
         slip_deg = math.degrees(math.atan2(abs(vx), vz)) if speed_kmh > 5 else 0.0
-        if speed_kmh >= self.min_speed_kmh and slip_deg >= self.spin_deg:
+        if speed_kmh >= self.min_speed_kmh and slip_deg >= self.slide_deg:
             if self._start is None:
                 self._start = t
-            if not self._spinning and t - self._start >= self.min_s:
-                self._spinning = True
-                self._at = t
-                self.count += 1
+            if t - self._start >= self.min_s:
+                self._lost = True
             return
         self._start = None
-        if self._spinning and speed_kmh > 5 and slip_deg < self.straight_deg:
-            self._spinning = False
+        if self._lost and speed_kmh > 5 and slip_deg < self.straight_deg:
+            self._lost = False
+            if speed_kmh < self.rejoin_kmh:
+                self._at = t
+                self.count += 1
 
     def recent(self, t: float) -> bool:
         return self._at is not None and 0 <= t - self._at <= self.hold_s

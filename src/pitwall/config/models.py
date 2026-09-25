@@ -88,6 +88,7 @@ class RuleDefModel(BaseModel):
     clear_when: str | None = None
     still_true: str | None = None
     cooldown_s: float = 0.0
+    cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     max_per_stint: int | None = None
     min_lap: int = 0
     requires: list[str] = Field(default_factory=list)

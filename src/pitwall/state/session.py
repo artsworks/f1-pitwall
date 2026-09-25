@@ -129,6 +129,7 @@ class Snapshot:
     lockup: str = ""  # "front" | "rear" for a few seconds after a lock-up
     lockup_wheel: str = ""
     lockups_this_lap: int = 0
+    lockup_spot_laps: int = 0  # earlier laps that locked up in this same braking zone
     spun: bool = False  # for a few seconds after the car spins
     spins: int = 0  # this session
     yellow_here: bool = False
@@ -246,7 +247,12 @@ class SessionState:
         elif isinstance(pkt, CarDamagePacket):
             self._on_car_damage(pkt)
         elif isinstance(pkt, MotionExPacket):
-            self.lockups.update(st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num)
+            dist = self.lap_distance
+            if dist < 0 and self.yellows.track_m:
+                dist += self.yellows.track_m
+            self.lockups.update(
+                st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num, dist
+            )
             self.spins.update(st, pkt.local_velocity)
 
     def _handle_rewind(self) -> None:
@@ -421,6 +427,7 @@ class SessionState:
             lockup=lockup,
             lockup_wheel=lockup_wheel,
             lockups_this_lap=self.lockups.count_lap,
+            lockup_spot_laps=self.lockups.spot_laps,
             spun=self.spins.recent(st),
             spins=self.spins.count,
             yellow_here=yellow.here,
