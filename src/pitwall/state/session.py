@@ -50,6 +50,7 @@ class Snapshot:
 
     now: float
     session_time: float = 0.0
+    last_packet_t: float | None = None
     session_kind: str = "unknown"
     session_type: int = 0
     track_id: int = -1
@@ -94,6 +95,7 @@ class SessionState:
     def __init__(self, ema_fast_s: float = 3.0, ema_slow_s: float = 30.0) -> None:
         self._last_update: dict[str, float] = {}  # packet name -> session_time
         self._last_session_time: float | None = None
+        self.last_packet_t: float | None = None
         self._player_idx = 0
 
         # session context
@@ -148,6 +150,7 @@ class SessionState:
     def on_packet(self, header: PacketHeader, payload: bytes) -> None:
         pid = header.packet_id
         self._player_idx = header.player_car_index
+        self.last_packet_t = header.session_time
         st = header.session_time
         if (
             self._last_session_time is not None
@@ -266,6 +269,7 @@ class SessionState:
         return Snapshot(
             now=now,
             session_time=st,
+            last_packet_t=self.last_packet_t,
             session_kind=kind,
             session_type=self.session_type,
             track_id=self.track_id,

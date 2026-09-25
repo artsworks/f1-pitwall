@@ -31,10 +31,12 @@ policy:
   mute_until_lap: 0
 speech:
   enabled: true
-  engine: "null"
+  engine: "auto"
   voice: null
   rate: 0
   volume: 100
   radio_click: true
 mindset:
   active: balanced
+ui:
+  state_hz: 5

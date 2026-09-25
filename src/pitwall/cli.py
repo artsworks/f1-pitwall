@@ -6,11 +6,19 @@ import argparse
 import asyncio
 import json
 import sys
+import threading
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from pitwall.server.hub import Hub
+
+from pitwall.audio.decision_log import DecisionLog
+from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.engine import build_census_engine, build_engine, run_replay
+from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
 from pitwall.net.recording import (
     RecordingReader,
@@ -83,9 +91,15 @@ def cmd_replay(args: argparse.Namespace) -> int:
         engine = build_census_engine(clock)
     else:
         engine = build_engine(clock=clock)
-    delivered, calls = asyncio.run(
-        run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
-    )
+    replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
+    if args.serve:
+        from pitwall.server.hub import Hub
+
+        hub = Hub()
+        store = ConfigStore()
+        asyncio.run(_serve(engine, hub, store, replay_coro))
+        return 0
+    delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
@@ -172,41 +186,145 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_doctor(args: argparse.Namespace) -> int:
-    """M0 doctor: bind-test the UDP port and report observed format/rate."""
-    ingest = Ingest()
+def _lan_ip() -> str:
+    import socket as _socket
+
+    try:
+        s_ = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        s_.connect(("8.8.8.8", 80))
+        ip = str(s_.getsockname()[0])
+        s_.close()
+        return ip
+    except OSError:
+        return "127.0.0.1"
+
+
+async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None:
+    from pitwall.server.app import state_payload
+
+    period = 1.0 / store.current().ui.state_hz
+    while True:
+        snap = engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
+        payload = state_payload(
+            snap,
+            settings=store.current(),
+            metrics=engine.metrics,
+            quiet=store.current().policy.quiet,
+        )
+        hub.broadcast("state", payload)
+        if snap.last_packet_t is not None:
+            engine.metrics.note_packet_to_ws(snap.last_packet_t, engine.clock.now())
+        await engine.clock.sleep(period)
+
+
+async def _serve(
+    engine: Engine,
+    hub: Hub,
+    store: ConfigStore,
+    coro: Coroutine[Any, Any, Any],
+) -> None:
+    import uvicorn
+
+    from pitwall.server.app import create_app
+
+    settings = store.current()
+    app = create_app(
+        hub,
+        store,
+        engine.metrics,
+        speaker_name=getattr(engine, "speaker_name", "null"),
+        latest_snapshot=lambda: (
+            engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
+        ),
+    )
+    hub.attach_loop(asyncio.get_running_loop())
+    config = uvicorn.Config(
+        app,
+        host=settings.connection.http_host,
+        port=settings.connection.http_port,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    host, port = settings.connection.http_host, settings.connection.http_port
+    print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
+    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store), coro)
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    from pitwall.audio.speaker import make_speaker
+    from pitwall.doctor import set_below_normal_priority
+    from pitwall.net.recording import RecordingRotator
+    from pitwall.net.udp import listen as udp_listen
+    from pitwall.server.hub import Hub
+
+    set_below_normal_priority()
+    hub = Hub()
+    store = ConfigStore()
+    settings = store.current()
     clock = WallClock()
 
-    async def run() -> Ingest:
-        try:
-            transport = await listen(args.host, args.port, ingest, clock)
-        except OSError as e:
-            print(f"doctor: cannot bind UDP {args.host}:{args.port}: {e}")
-            return ingest
-        print(f"listening on {args.host}:{args.port} for {args.seconds:.0f}s ...")
-        await asyncio.sleep(args.seconds)
-        transport.close()
-        return ingest
-
-    asyncio.run(run())
-    census = ingest.census(now=clock.now())
-    total = sum(p["accepted"] for p in census["packets"].values())
-    if total == 0 and census["dropped_unsupported"] == 0:
-        print(
-            "no datagrams seen. Check: UDP Telemetry On, correct IP/port, "
-            "firewall inbound rule for UDP 20777."
+    recorder = None
+    if settings.recording.enabled:
+        recorder = RecordingRotator(
+            Path(settings.recording.directory),
+            config_hash=int(store.hash, 16) % (2**32),
+            metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
         )
-    else:
-        for pid, entry in census["packets"].items():
-            print(f"packet id {pid}: {entry['accepted']} ok, {entry['rate_hz']:.1f} Hz")
-        if census["dropped_unsupported"]:
-            print(
-                f"{census['dropped_unsupported']} datagrams dropped: unsupported "
-                "format — set UDP Format to 2026 in the game."
-            )
-        if census["dropped_malformed"]:
-            print(f"{census['dropped_malformed']} malformed datagrams")
+    ingest = Ingest(recorder=recorder)
+    state = SessionState(
+        ema_fast_s=settings.engine.ema_fast_s, ema_slow_s=settings.engine.ema_slow_s
+    )
+    state.register(ingest)
+    speaker = make_speaker(settings.speech)
+    mode = store.current().resolved_mindset()
+    rule_engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=mode,
+        staleness_s=settings.engine.staleness_s,
+    )
+    rec_dir = Path(settings.recording.directory)
+    rec_dir.mkdir(parents=True, exist_ok=True)
+    dlog = DecisionLog(
+        rec_dir / f"{settings.mindset.active}.decisions.jsonl",
+        config_hash=store.hash,
+        mindset=settings.mindset.active,
+    )
+    dispatcher = Dispatcher(settings.policy, clock, decision_log=dlog, sinks=[hub, speaker])
+    speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
+    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+
+    async def live() -> None:
+        transport = await udp_listen(
+            settings.connection.udp_host, settings.connection.udp_port, ingest, clock
+        )
+        try:
+            await engine.run_live()
+        finally:
+            transport.close()
+
+    async def shutdown() -> None:
+        pass
+
+    try:
+        asyncio.run(_serve(engine, hub, store, live()))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        speaker.close()
+        if recorder is not None:
+            path = recorder.current_path
+            recorder.close()
+            if path is not None and settings.recording.compress_on_close:
+                threading.Thread(target=lambda: compress_recording(path), daemon=True).start()
+        dlog.close()
     return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from pitwall.doctor import run_doctor
+
+    return run_doctor(seconds=args.seconds)
 
 
 def cmd_compress(args: argparse.Namespace) -> int:
@@ -233,6 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--from-lap", type=int, default=None, help="seek via .f1idx")
     rep.add_argument("--from-us", type=int, default=None)
     rep.add_argument("--to-us", type=int, default=None)
+    rep.add_argument("--serve", action="store_true", help="run dashboard while replaying")
     rep.set_defaults(func=cmd_replay)
 
     rc = sub.add_parser("rules", help="rule tooling")
@@ -264,6 +383,9 @@ def build_parser() -> argparse.ArgumentParser:
     cz = sub.add_parser("compress", help="zstd-compress a recording")
     cz.add_argument("file")
     cz.set_defaults(func=cmd_compress)
+
+    st2 = sub.add_parser("start", help="live: UDP ingest + rules + dashboard + speech")
+    st2.set_defaults(func=cmd_start)
 
     return p
 

@@ -1,0 +1,47 @@
+/* pitwall dashboard — monospace, high contrast, dark, no animation */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #0a0a0a; color: #e8e8e8;
+  font-family: "Consolas", "Cascadia Mono", "Courier New", monospace; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
+
+.topbar { display: flex; gap: 2em; align-items: baseline; padding: 0.5em 1em;
+  background: #111; border-bottom: 1px solid #333; font-size: 1.1rem; }
+.live { color: #3f6; font-weight: bold; }
+body.stale .live { color: #888; }
+.topbar .dim { color: #888; }
+
+main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1em;
+  padding: 1em; }
+.tyres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5em; }
+.corner { border: 1px solid #333; padding: 0.75em; text-align: center; }
+.corner .temp { font-size: 2rem; }
+.corner .status { font-size: 0.9rem; letter-spacing: 0.15em; }
+.status-cold { color: #6cf; }
+.status-ok { color: #3f6; }
+.status-hot { color: #f66; }
+.wear { color: #888; font-size: 0.85rem; }
+
+.rightblock { border: 1px solid #333; padding: 0.75em; }
+.rightblock dt { color: #888; display: inline; }
+.rightblock dd { display: inline; margin: 0 0 0.5em 0; font-size: 1.3rem; }
+.rightblock div { padding: 0.2em 0; }
+
+.banner { grid-column: 1 / -1; min-height: 72px; border: 2px solid #3f6;
+  padding: 0.5em 1em; font-size: 2.2rem; display: flex; align-items: center; }
+.banner.p1 { border-color: #f66; color: #f66; }
+.banner.p2 { border-color: #fc3; }
+.banner.mismatch { border-color: #f66; background: #400; color: #f66; }
+body.stale .banner { color: #888; border-color: #333; }
+
+.log { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; }
+.log li { padding: 0.3em 0.5em; border-bottom: 1px solid #222; }
+.log .lap { color: #888; margin-right: 1em; }
+.log .spoken { color: #3f6; }
+.log .p1 { color: #f66; }
+
+footer { padding: 0.4em 1em; border-top: 1px solid #333; color: #888; }
+body.stale main { opacity: 0.35; }
+
+/* radio page: log only, large type */
+body.radio main { display: block; font-size: 1.6rem; }
+body.radio .log li { padding: 0.5em 0.75em; }

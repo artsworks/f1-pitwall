@@ -1,2 +1,3 @@
 thresholds:
   tyre_inner_cold_c: 80
+  tyre_inner_hot_c: 110

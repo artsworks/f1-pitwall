@@ -3,8 +3,42 @@
 A race engineer for F1 26. It reads the game's UDP telemetry, keeps a model of the
 session, decides what is worth saying, says it over your headset, and shows it on a second monitor.
 
-Status: **planning**. No code yet — this repository currently holds the design.
 Read the plan online: https://artsworks.github.io/f1-pitwall/
+
+## Quick start (game PC)
+
+```bash
+uv sync
+uv run pitwall doctor
+uv run pitwall start
+```
+
+In the game, set **Settings → Telemetry**:
+
+| Setting | Value |
+|---|---|
+| UDP Telemetry | On |
+| UDP IP | `127.0.0.1` (or the pitwall PC's IP) |
+| UDP Port | `20777` |
+| UDP Send Rate | `30 Hz` |
+| UDP Format | `2026` |
+
+`pitwall doctor` checks the port, the wire format, the observed rate, and speech.
+Then `pitwall start` runs ingest + rules + speech and serves the dashboard —
+open `http://localhost:8000` on the second monitor (`/radio` is a log-only
+large-type view). M1 acceptance: on an out-lap with a cold front-left you hear
+the call within 300 ms.
+
+## Recording and replay
+
+Recording is automatic: every session lands under `recordings/` as
+`.f1bin` (+ `.f1idx` index and a `.decisions.jsonl` decision log). Replay it
+through the same engine offline:
+
+```bash
+uv run pitwall replay recordings/<file>.f1bin --speed 10 --stats
+uv run pitwall replay recordings/<file>.f1bin --serve   # watch it on the dashboard
+```
 
 ## Why it is not just another dashboard
 

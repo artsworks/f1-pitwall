@@ -32,9 +32,9 @@ async def listen(host: str, port: int, sink: PacketSink, clock: Clock) -> asynci
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, RCVBUF_BYTES)
     except OSError:
         pass  # large buffer is best-effort
+    sock.bind((host, port))
     transport, _ = await loop.create_datagram_endpoint(
         lambda: UDPListener(sink, clock),
-        local_addr=(host, port),
         sock=sock,
     )
     assert isinstance(transport, asyncio.DatagramTransport)

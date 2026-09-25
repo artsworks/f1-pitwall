@@ -47,9 +47,13 @@ class PolicySettings(BaseModel):
     mute_until_lap: int = 0
 
 
+class UiSettings(BaseModel):
+    state_hz: int = 5
+
+
 class SpeechSettings(BaseModel):
     enabled: bool = True
-    engine: Literal["sapi", "null"] = "null"
+    engine: Literal["auto", "sapi", "null"] = "auto"
     voice: str | None = None
     rate: int = 0
     volume: int = 100
@@ -84,6 +88,7 @@ class Settings(BaseModel):
     engine: EngineSettings = Field(default_factory=EngineSettings)
     policy: PolicySettings = Field(default_factory=PolicySettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
+    ui: UiSettings = Field(default_factory=UiSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float] = Field(default_factory=dict)
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)

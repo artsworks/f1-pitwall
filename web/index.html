@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>pitwall</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <span id="live" class="live">STALE</span>
+    <span id="rate">--</span>
+    <span id="age">--</span>
+    <span id="session" class="dim">--</span>
+    <span id="lap">--</span>
+    <span id="fuel">--</span>
+    <span id="latency" class="dim"></span>
+  </div>
+  <main>
+    <div class="tyres">
+      <div class="corner" id="tyre-fl"><div>FL</div><div class="temp">--</div>
+        <div class="status">--</div><div class="wear"></div></div>
+      <div class="corner" id="tyre-fr"><div>FR</div><div class="temp">--</div>
+        <div class="status">--</div><div class="wear"></div></div>
+      <div class="corner" id="tyre-rl"><div>RL</div><div class="temp">--</div>
+        <div class="status">--</div><div class="wear"></div></div>
+      <div class="corner" id="tyre-rr"><div>RR</div><div class="temp">--</div>
+        <div class="status">--</div><div class="wear"></div></div>
+    </div>
+    <div class="rightblock">
+      <div><dt>pos</dt> <dd id="position">--</dd></div>
+      <div><dt>phase</dt> <dd id="phase">--</dd></div>
+      <div id="compound"><dt>compound</dt> <dd>--</dd></div>
+      <div><dt>ERS</dt> <dd id="ers">--</dd></div>
+      <div><dt>SC</dt> <dd id="sc">--</dd></div>
+      <div id="brakes" class="dim">--</div>
+    </div>
+    <div class="banner" id="banner"></div>
+    <ul class="log" id="log"></ul>
+  </main>
+  <footer><span id="mindset">--</span></footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

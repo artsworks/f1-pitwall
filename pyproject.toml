@@ -9,8 +9,11 @@ description = "A race engineer for F1 26: UDP telemetry ingest, record, replay, 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi",
     "pydantic>=2",
+    "pywin32; sys_platform == 'win32'",
     "pyyaml",
+    "uvicorn",
     "zstandard",
 ]
 
@@ -19,6 +22,7 @@ pitwall = "pitwall.cli:main"
 
 [dependency-groups]
 dev = [
+    "httpx",
     "pytest",
     "ruff",
     "mypy",

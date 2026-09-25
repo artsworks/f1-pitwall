@@ -28,12 +28,16 @@ class Metrics:
     def __init__(self, window: int = 512) -> None:
         self.trigger_to_speak_ms = _Window(window)
         self.packet_to_snapshot_ms = _Window(window)
+        self.packet_to_ws_ms = _Window(window)
 
     def note_trigger_to_speak(self, trigger_t: float, spoken_t: float) -> None:
         self.trigger_to_speak_ms.add((spoken_t - trigger_t) * 1000.0)
 
     def note_packet_to_snapshot(self, packet_t: float, snapshot_t: float) -> None:
         self.packet_to_snapshot_ms.add((snapshot_t - packet_t) * 1000.0)
+
+    def note_packet_to_ws(self, packet_t: float, sent_t: float) -> None:
+        self.packet_to_ws_ms.add((sent_t - packet_t) * 1000.0)
 
     def summary(self) -> dict[str, dict[str, float]]:
         return {
@@ -46,5 +50,10 @@ class Metrics:
                 "p50": self.packet_to_snapshot_ms.percentile(50),
                 "p99": self.packet_to_snapshot_ms.percentile(99),
                 "mean": self.packet_to_snapshot_ms.mean(),
+            },
+            "packet_to_ws_ms": {
+                "p50": self.packet_to_ws_ms.percentile(50),
+                "p99": self.packet_to_ws_ms.percentile(99),
+                "mean": self.packet_to_ws_ms.mean(),
             },
         }
