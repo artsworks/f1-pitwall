@@ -50,7 +50,7 @@ class Snapshot:
 
     now: float
     session_time: float = 0.0
-    last_packet_t: float | None = None
+    last_packet_t: float | None = None  # clock time of newest packet, same base as `now`
     session_kind: str = "unknown"
     session_type: int = 0
     track_id: int = -1
@@ -271,7 +271,7 @@ class SessionState:
         return Snapshot(
             now=now,
             session_time=st,
-            last_packet_t=self.last_packet_t,
+            last_packet_t=self.last_recv_wall,
             session_kind=kind,
             session_type=self.session_type,
             track_id=self.track_id,

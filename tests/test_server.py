@@ -233,3 +233,29 @@ def test_speak_one_wait_breaks_on_urgent() -> None:
     urgent.set()
     done = _speak_one(voice, _call("p2", priority=2), urgent, None, beep=False)
     assert done is False
+
+
+def test_packet_age_uses_receive_clock_not_session_time() -> None:
+    """Session time (seconds since session start) must never be mixed with the
+    tick clock; a packet received 0.1 s ago is LIVE whatever its session_time."""
+    from pitwall.protocol.header import PacketId, parse_header
+    from pitwall.server.app import state_payload
+
+    from .synth import make_packet
+
+    store = ConfigStore()
+    store.poll(0.0)
+    settings = store.current()
+    state = SessionState()
+    payload = make_packet(PacketId.CAR_TELEMETRY, session_time=4879.5)
+    recv = 1_000_000.0
+    state.on_packet(parse_header(payload), payload, recv)
+    snap = state.snapshot(recv + 0.1)
+    assert snap.last_packet_t == recv
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+    assert body["live"] is True
+    assert 90.0 <= body["packet_age_ms"] <= 110.0
+    later = state_payload(
+        state.snapshot(recv + 5), settings=settings, metrics=Metrics(), quiet=False
+    )
+    assert later["live"] is False

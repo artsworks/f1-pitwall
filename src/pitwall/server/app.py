@@ -37,7 +37,9 @@ def state_payload(
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
     packet_age_ms = (
-        None if snapshot.last_packet_t is None else (snapshot.now - snapshot.last_packet_t) * 1000.0
+        None
+        if snapshot.last_packet_t is None
+        else max(0.0, (snapshot.now - snapshot.last_packet_t) * 1000.0)
     )
     live = packet_age_ms is not None and packet_age_ms < STALE_MS
 

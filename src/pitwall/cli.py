@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pitwall.server.hub import Hub
 
 from pitwall.audio.decision_log import DecisionLog
-from pitwall.audio.dispatcher import Dispatcher
+from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.clock import VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
@@ -323,6 +323,21 @@ def cmd_start(args: argparse.Namespace) -> int:
         pass
 
     engine.speaker_name = speaker.name
+    if settings.speech.enabled:
+        t0 = clock.now()
+        speaker.speak(
+            Call(
+                id="startup",
+                rule_id="startup",
+                priority=3,
+                text="Pit wall online.",
+                tags=[],
+                deadline_ms=5000,
+                lap=0,
+                t=t0,
+                trigger_t=t0,
+            )
+        )
     try:
         asyncio.run(_serve(engine, hub, store, live()))
     except KeyboardInterrupt:
