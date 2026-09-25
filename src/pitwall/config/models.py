@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class ConnectionSettings(BaseModel):
-    udp_host: str = "127.0.0.1"
+    udp_host: str = "0.0.0.0"
     udp_port: int = 20777
     send_rate_hz: int = 30
     http_host: str = "0.0.0.0"
