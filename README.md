@@ -74,6 +74,7 @@ make that achievable:
 | [`docs/13-league-multiplayer.md`](docs/13-league-multiplayer.md) | Friends-league target: restricted telemetry, league preset, test-and-feedback loop |
 | [`docs/14-adversarial-review.md`](docs/14-adversarial-review.md) | Adversarial review before the first commit: errors found, what was kept, assumptions to verify |
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts the design relies on |
+| [`docs/adr/`](docs/adr/README.md) | Architecture decision records: what live sessions taught us, so it is not relearnt |
 | [`docs/original-plan-v1.md`](docs/original-plan-v1.md) | The original plan, kept for provenance |
 
 ## Shape of the system
