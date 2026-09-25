@@ -1,0 +1,161 @@
+rules:
+  # Out-lap tyre check lands in sector 3 (sector index 2): by then the tyres have
+  # had two sectors to come in, and every tyre is cold straight out of the pits.
+  # Both read the temperature latched at sector-3 entry, so exactly one speaks.
+  - id: out_lap_s3_tyres_cold
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap'"
+    requires: [car_telemetry, lap_data]
+    say:
+      - "Tyres still coming in. {coldest_tyre} coldest at {coldest_tyre_c:.0f}, fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Work them to the line."
+      - "Not there yet. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}, {coldest_tyre} the cold one. Keep working them."
+      - "Still cool. {coldest_tyre} at {coldest_tyre_c:.0f}. Lean on it through the last sector."
+  - id: out_lap_s3_tyres_ready
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap'"
+    requires: [car_telemetry, lap_data]
+    say:
+      - "Tyres are in. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Good to push."
+      - "Temps look good, fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. You can go."
+      - "That's them in the window. Push when ready."
+  - id: front_wing_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
+    clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_damage_warn_pct"
+    still_true: "max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say:
+      - "Front wing damage, front left {damage.front_left_wing} percent, front right {damage.front_right_wing} percent. Expect understeer."
+      - "We've got wing damage. Left {damage.front_left_wing}, right {damage.front_right_wing} percent. It'll push in the slow corners."
+    escalate:
+      - after: 2
+        say:
+          - "More wing damage. Left {damage.front_left_wing}, right {damage.front_right_wing} percent. We'll talk about a new nose."
+          - "Wing's getting worse, {damage.front_left_wing} and {damage.front_right_wing} percent. Keep it off the kerbs."
+  # Boost still on when the driver lifts or brakes for a corner means full power on the exit.
+  - id: boost_left_on
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "boost_on_s >= th.boost_warn_s and (brake >= th.boost_warn_brake or throttle <= th.boost_warn_lift or boost_on_s >= th.boost_max_s)"
+    clear_when: "boost_on_s == 0"
+    still_true: "boost_on_s > 0"
+    requires: [car_status, car_telemetry]
+    say:
+      - "Boost still on. Turn it off for the exit."
+      - "Boost is on. Switch it off before you get on the power."
+      - "You've left the boost on. Off for the exit."
+    escalate:
+      - after: 3
+        say:
+          - "Boost. Again. Off, please."
+          - "Boost is still on, that's {repeat} times now. Habit before exits."
+          - "Boost. You know the drill."
+  - id: yellow_ahead
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "yellow_ahead_m <= th.yellow_warn_ahead_m"
+    clear_when: "yellow_ahead_m > th.yellow_warn_ahead_m + 300"
+    still_true: "yellow_ahead_m <= th.yellow_warn_ahead_m or yellow_here"
+    requires: [session, lap_data]
+    say:
+      - "Yellow ahead, sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. Careful, no overtaking."
+      - "Yellow flag coming up in sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. Lift and hold position."
+      - "Yellow, {yellow_ahead_m:.0f} metres ahead. No passing, be ready for a car on track."
+  - id: yellow_behind
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "yellow_behind_m <= th.yellow_info_behind_m"
+    clear_when: "yellow_behind_m > th.yellow_info_behind_m"
+    still_true: "yellow_behind_m <= th.yellow_info_behind_m"
+    cooldown_s: 30
+    requires: [session, lap_data]
+    say:
+      - "Yellow behind you in sector {yellow_behind_sector}. You're clear, ignore it."
+      - "Yellow's behind you, sector {yellow_behind_sector}. Not your problem, keep going."
+      - "Someone's off behind, sector {yellow_behind_sector}. You're clear."
+  # Same braking zone as on earlier laps: coach the corner, not the event.
+  - id: lockup_front_same_spot
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "lockup == 'front' and lockup_spot_laps >= 1"
+    clear_when: "lockup == ''"
+    cooldown_s: 60
+    cooldown_group: lockup_front
+    requires: [motion_ex]
+    say:
+      - "Locking up in the same braking zone as last lap. Brake a few metres earlier there."
+      - "Same corner, same lock-up, {lockup_wheel}. Move your braking point back."
+      - "That's the one you locked last time too. Earlier and softer on the pedal there."
+    escalate:
+      - after: 3
+        say:
+          - "That braking zone again, {lockup_spot_laps} laps running now. It's not moving, brake earlier."
+          - "Same place, {lockup_spot_laps} laps in a row. Pick a new braking marker."
+  - id: lockup_front
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "lockup == 'front' and lockup_spot_laps == 0"
+    clear_when: "lockup == ''"
+    cooldown_s: 60
+    cooldown_group: lockup_front
+    requires: [motion_ex]
+    say:
+      - "Lock-up, {lockup_wheel}. Ease the brake pressure into the corner, that costs tyre."
+      - "Locked the {lockup_wheel} there. Bit less pedal on the way in."
+      - "That's a flat spot waiting to happen, {lockup_wheel}. Brake a touch earlier."
+      - "{lockup_wheel} locking on entry. Ease off the initial hit."
+    escalate:
+      - after: 3
+        say:
+          - "Another lock-up. That's {repeat} in the last ten minutes."
+          - "Front's locking again. The tyres are keeping count, even if you aren't."
+          - "Lock-up. We brought these tyres to race on, not to sand down."
+      - after: 6
+        say:
+          - "Lock-up number {repeat}. I'll just leave that there."
+          - "Again. Brake earlier, it's cheaper than a new set."
+          - "You know what I'm going to say."
+  - id: lockup_rear
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "lockup == 'rear'"
+    clear_when: "lockup == ''"
+    cooldown_s: 45
+    requires: [motion_ex]
+    say:
+      - "Rears locking, {lockup_wheel}. Move the brake bias forward, you're on {front_brake_bias}."
+      - "Rear's locking on entry. Bias forward a click or two from {front_brake_bias}."
+      - "{lockup_wheel} locked. Try more front bias, currently {front_brake_bias}."
+    escalate:
+      - after: 3
+        say:
+          - "Rears again. Bias forward, you're still on {front_brake_bias}."
+          - "That's {repeat} rear lock-ups. The bias won't move itself, {front_brake_bias} now."
+  # Spun: the rears are overheated and have no traction, so a big throttle
+  # input on the rejoin spins it again.
+  - id: spun_rejoin
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "spun"
+    clear_when: "not spun"
+    still_true: "spun"
+    requires: [motion_ex]
+    cooldown_s: 8
+    say:
+      - "Easy on the throttle as you get going, the rears are cooked."
+      - "Gentle on the power getting going, rear tyres have no grip left."
+      - "Take your time rejoining. Short-shift, feather the throttle, the rears are hot."
+    escalate:
+      - after: 2
+        say:
+          - "Lost it again. Same deal, gentle on the throttle."
+          - "That's {repeat} moments now. Rejoin slowly, and a bit less throttle on the exits."
+          - "Number {repeat}. Easy on the power, let the rears cool."

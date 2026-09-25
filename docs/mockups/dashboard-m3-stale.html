@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall mockup — race, M3 strategy zone, STALE state (1440p)</title>
+<style>
+:root {
+  --bg:#0a0a0c; --panel:#121216; --line:#2a2a30;
+  --fg:#ececec; --dim:#8a8a92; --faint:#4a4a52;
+  --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff; --aggr:#ff8a3d;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
+  font-size: clamp(14px, 0.9vw, 24px);
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:var(--font);
+  font-variant-numeric: tabular-nums; }
+body { display:grid; height:100vh; overflow:hidden;
+  grid-template-columns: 5fr 7fr;
+  grid-template-rows: 3rem 11rem 1fr auto auto 2rem;
+  grid-template-areas:
+    "status status"
+    "banner banner"
+    "tyres  log"
+    "fuel   log"
+    "strat  log"
+    "footer footer";
+  gap: 1px; background: var(--line); }
+body > * { background:var(--bg); }
+.zone { padding:.6rem .9rem; }
+.zone h2 { margin:0 0 .4rem; font-size:1.15rem; letter-spacing:.12em; color:var(--dim); font-weight:normal; }
+
+/* A status */
+.status { grid-area:status; display:flex; align-items:center; gap:1.5rem; padding:0 .9rem; font-size:1.5rem; background:var(--panel); }
+.status .live { color:var(--ok); font-weight:bold; }
+.status .live::before { content:"● "; }
+.status .dim { color:var(--dim); font-size:1.25rem; }
+.status .spacer { flex:1; }
+.pill { border:2px solid var(--dim); color:var(--dim); border-radius:.3rem; padding:.05rem .6rem; font-size:1.1rem; letter-spacing:.1em; }
+.pill.aggr { border-color:var(--aggr); background:var(--aggr); color:#000; }
+
+/* B banner */
+.banner { grid-area:banner; display:flex; align-items:stretch; gap:1.2rem; padding:0 1.2rem 0 0; position:relative; }
+.banner .bar { width:1rem; align-self:stretch; background:var(--warn); }
+.banner.p1 .bar { background:var(--crit); }
+.banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
+.banner .body { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:.8rem; }
+.banner .current { display:flex; align-items:center; gap:1rem; min-width:0; }
+.banner .text { font-size:3.4rem; line-height:1.1; font-weight:bold; flex:1; min-width:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.banner .meta { text-align:right; color:var(--dim); font-size:1.3rem; white-space:nowrap; }
+.banner .meta b { color:var(--ok); font-weight:normal; }
+.banner .meta .pri { color:var(--warn); }
+.banner.p1 .meta .pri { color:var(--crit); }
+.banner .previous { border-top:1px solid var(--line); padding-top:.55rem; color:var(--dim); font-size:1.3rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.banner .previous b { color:var(--fg); font-size:.85em; letter-spacing:.1em; }
+
+/* C tyres */
+.tyres { grid-area:tyres; display:flex; flex-direction:column; }
+.tyres .car { flex:1; }
+.corner { display:flex; flex-direction:column; justify-content:center; }
+.tyres .chip { display:flex; gap:1rem; align-items:baseline; margin-bottom:.5rem; font-size:1.45rem; }
+.tyres .chip .comp { border:2px solid var(--warn); color:var(--warn); padding:0 .5rem; border-radius:.3rem; font-weight:bold; }
+.car { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:.4rem; position:relative; }
+.car::before { content:""; position:absolute; left:50%; top:-.3rem; bottom:-.3rem; width:2px; background:var(--faint); transform:translateX(-50%); }
+.car::after { content:""; position:absolute; top:50%; left:-.3rem; right:-.3rem; height:2px; background:var(--faint); transform:translateY(-50%); }
+.corner { border:1px solid var(--line); background:var(--panel); padding:.5rem .7rem; }
+.corner .lbl { color:var(--dim); font-size:1.35rem; display:flex; justify-content:space-between; }
+.corner .temp { font-size:3rem; font-weight:bold; line-height:1.1; }
+.corner .word { font-size:1.35rem; letter-spacing:.12em; }
+.corner .det { color:var(--dim); font-size:1.25rem; margin-top:.2rem; white-space:nowrap; }
+.hot .temp,.hot .word { color:var(--crit); }
+.ok .temp,.ok .word { color:var(--ok); }
+.cold .temp,.cold .word { color:var(--cold); }
+.hot .lbl span:first-child { color:var(--crit); }
+.ok .lbl span:first-child { color:var(--ok); }
+.cold .lbl span:first-child { color:var(--cold); }
+.corner.hot { border-color:var(--crit); background:color-mix(in srgb, var(--crit) 12%, var(--panel)); }
+.corner.cold { border-color:var(--cold); background:color-mix(in srgb, var(--cold) 12%, var(--panel)); }
+.corner.ok { border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.corner .lbl .brk { color:var(--dim); font-size:1.15rem; }
+.corner .lbl .brk.warn { color:var(--warn); }
+.wear-warn { color:var(--warn); }
+
+/* D fuel + damage */
+.fuel { grid-area:fuel; display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.big { font-size:2.4rem; font-weight:bold; line-height:1.1; }
+.big.ok { color:var(--ok); } .big.warn { color:var(--warn); } .big.crit { color:var(--crit); }
+.sub { color:var(--dim); font-size:1.25rem; }
+.dmg { font-size:1.3rem; line-height:1.35; }
+.dmg .warn { color:var(--warn); } .dmg .crit { color:var(--crit); }
+.dmg .none { color:var(--faint); }
+
+/* F strategy */
+.strat { grid-area:strat; font-size:1.3rem; line-height:1.5; border-top:1px solid var(--line); }
+.strat .ph { color:var(--faint); }
+
+/* E log */
+.log { grid-area:log; padding:.6rem .9rem; overflow:hidden; }
+.log ol { list-style:none; margin:0; padding:0; font-size:1.5rem; }
+.log li { display:grid; grid-template-columns:3.2rem .6rem 2rem 1fr auto; gap:.6rem; align-items:baseline; padding:.45rem 0; border-bottom:1px solid var(--line); }
+.log .lap { color:var(--dim); }
+.log .mk { width:.4rem; height:1.1em; align-self:center; background:var(--info); }
+.log .mk.p1 { background:var(--crit); } .log .mk.p2 { background:var(--warn); }
+.log .st { color:var(--ok); } .log .st.x { color:var(--crit); }
+.log li.drop .txt { color:var(--dim); text-decoration:line-through; }
+.log .chip { font-size:.9rem; border:1px solid var(--dim); color:var(--dim); padding:0 .4rem; border-radius:.3rem; }
+
+/* G footer */
+.footer { grid-area:footer; background:var(--panel); color:var(--dim); font-size:.9rem; display:flex; gap:2rem; align-items:center; padding:0 .9rem; }
+
+/* stale state: old telemetry greys while the warning stays readable */
+body.stale > :not(.status):not(.banner) { filter: grayscale(1) brightness(.72); }
+body.stale .status { background: color-mix(in srgb, var(--crit) 25%, var(--panel)); }
+body.stale .status .live { color: var(--crit); }
+body.stale .status .live::before { content:"○ "; }
+body.stale .status .pill.aggr { background:transparent; border-color:var(--dim); color:var(--dim); }
+body.stale .banner { background:color-mix(in srgb, var(--crit) 12%, var(--bg)); }
+body.stale .banner .bar { background:var(--crit); }
+body.stale .banner .text { color:var(--fg); }
+/* M3 strategy zone */
+.strat table { border-collapse:collapse; width:100%; font-size:1.3rem; }
+.strat td { padding:.1rem .6rem .1rem 0; white-space:nowrap; }
+.strat td.k { color:var(--dim); width:7rem; }
+.strat .ok { color:var(--ok); } .strat .warn { color:var(--warn); } .strat .crit { color:var(--crit); }
+</style>
+</head>
+<body class="stale">
+
+<header class="status">
+  <span class="live">STALE</span>
+  <span>last packet 4.2 s ago</span>
+  <span class="dim">0 WS/s</span>
+  <span class="dim">·</span>
+  <span>ON TRACK</span>
+  <span class="spacer"></span>
+  <span>RACE · SILVERSTONE</span>
+  <span>LAP <b>31</b>/52</span>
+  <span><b>P4</b></span>
+  <span class="pill aggr">AGGRESSIVE</span>
+  <span class="dim">normal</span>
+</header>
+
+<section class="banner">
+  <div class="bar"></div>
+  <div class="body">
+    <div class="current">
+      <div class="text">TELEMETRY STALE · ADVICE PAUSED</div>
+    </div>
+    <div class="previous"><b>LAST RADIO (STARTED) · L31 · 5s</b> · Safety car. Box now, cheap stop.</div>
+  </div>
+</section>
+
+<section class="zone tyres">
+  <div class="chip"><span class="comp" style="border-color:#ececec;color:#ececec">HARD</span><span>22L old</span><span class="sub">~4L life</span></div>
+  <div class="car">
+    <div class="corner ok"><div class="lbl"><span>FL</span><span class="brk">BRK 398°</span></div><div class="temp">101°</div><div class="word">OK</div><div class="det">surf 99° · wear <span class="wear-warn">61%</span></div></div>
+    <div class="corner ok"><div class="lbl"><span>FR</span><span class="brk">BRK 401°</span></div><div class="temp">99°</div><div class="word">OK</div><div class="det">surf 97° · wear <span class="wear-warn">58%</span></div></div>
+    <div class="corner cold"><div class="lbl"><span>RL</span><span class="brk">BRK 340°</span></div><div class="temp">76°</div><div class="word">COLD</div><div class="det">surf 71° · wear 40%</div></div>
+    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 344°</span></div><div class="temp">78°</div><div class="word">COLD</div><div class="det">surf 74° · wear 41%</div></div>
+  </div>
+</section>
+
+<section class="zone fuel">
+  <div>
+    <h2>FUEL</h2>
+    <div class="big warn">−0.3 laps</div>
+    <div class="sub">21.7 left · 22 to finish</div>
+  </div>
+  <div>
+    <h2>DAMAGE</h2>
+    <div class="dmg">
+      <div>FW R <span class="crit">34%</span> <span class="sub">box at window</span></div>
+      <div>Floor <span class="warn">15%</span></div>
+      <div>Sidepod 6%</div>
+    </div>
+  </div>
+</section>
+
+<section class="zone strat">
+  <h2>STRATEGY</h2>
+  <table>
+    <tr><td class="k">PIT</td><td><b class="ok">OPEN · SC saves 9s</b></td></tr>
+    <tr><td class="k">AHEAD</td><td>P3 NORRIS <b>+1.4</b> HARD 18</td><td class="ok">UC +1.2</td></tr>
+    <tr><td class="k">BEHIND</td><td>P5 LECLERC <b>−2.1</b> MED 6</td><td class="warn">UC threat 0.8</td></tr>
+    <tr><td class="k">PLAN</td><td>H 10–31 → <b>M 32–52</b></td><td class="dim">alt: S 40–52</td></tr>
+  </table>
+</section>
+
+<section class="log">
+  <ol>
+    <li><span class="lap">L30</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Leclerc can undercut. Cover in two laps.</span><span></span></li>
+    <li><span class="lap">L29</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Fuel down three tenths. Lift into Stowe.</span><span class="chip">ACK</span></li>
+    <li><span class="lap">L27</span><span class="mk p1"></span><span class="st">▶</span><span class="txt">Front-right wing at thirty percent. Box at the window.</span><span></span></li>
+    <li><span class="lap">L26</span><span class="mk"></span><span class="st">▶</span><span class="txt">Norris: hard tyres, eighteen laps old.</span><span></span></li>
+    <li class="drop"><span class="lap">L25</span><span class="mk"></span><span class="st x">✗</span><span class="txt">Gap ahead one point six.</span><span class="chip">dropped</span></li>
+    <li class="drop"><span class="lap">L24</span><span class="mk p2"></span><span class="st x">✗</span><span class="txt">Push now, Norris in traffic.</span><span class="chip">NEG</span></li>
+    <li><span class="lap">L22</span><span class="mk"></span><span class="st">▶</span><span class="txt">Aggressive mode.</span><span></span></li>
+    <li><span class="lap">L20</span><span class="mk"></span><span class="st">▶</span><span class="txt">Rears cold under safety car. Weave.</span><span></span></li>
+    <li><span class="lap">L19</span><span class="mk p2"></span><span class="st">▶</span><span class="txt">Hards fading. Four laps of pace left.</span><span></span></li>
+  </ol>
+</section>
+
+<footer class="footer">
+  <span>ERS 84%</span><span>SC 1 · SAFETY CAR</span><span>call p99 190 ms</span><span>ws p99 9 ms</span><span>reconnecting… 2 s</span>
+</footer>
+</body>
+</html>

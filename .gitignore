@@ -7,3 +7,11 @@
 recordings/
 __pycache__/
 .venv/
+.mypy_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+decisions/
+voices/
+*.onnx
+*.decisions.jsonl

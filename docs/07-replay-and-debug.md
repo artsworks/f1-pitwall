@@ -16,12 +16,16 @@ wrong and you will want to re-run old sessions through a fixed one.
 header:  magic "F1BIN\0" | uint16 file_version | uint16 packet_format
          uint64 session_uid | uint64 wall_clock_start_us | uint32 config_hash
          uint16 game_version | uint16 reserved | utf8 json blob (host, settings, notes)
-record:  uint32 offset_us (from wall_clock_start) | uint16 length | bytes payload
+record:  uint32 delta_us (since previous record) | uint16 length | bytes payload
 ```
 
 Sidecar `.f1idx`, written on close (and rebuildable): byte offsets for every lap start,
 session-type change, pit entry/exit, and every Event packet. This is what makes "jump to
 lap 24" and "jump to the safety car" instant on a ~1 GB file rather than a linear scan.
+
+**Profiles** (ADR 0006): `lite` by default (no motion packets, rule inputs capped at
+10 Hz, ~35 MB zstd per 3 h), `full` for debugging (`pitwall start --record full`),
+`minimal`, or `off`. Finished files are zstd-compressed and the raw file removed.
 
 A **new file per session UID**, rotated on `SEND`/Final Classification. A retention
 policy in config (default: keep everything under N GB, delete oldest, never delete a file

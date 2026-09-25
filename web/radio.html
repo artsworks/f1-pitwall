@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pitwall — radio</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="radio connecting">
+  <header class="status">
+    <span id="live" class="live">CONNECTING…</span>
+    <span id="age" class="dim">--</span>
+    <span class="spacer"></span>
+    <span id="lap">LAP --</span>
+  </header>
+
+  <section id="banner" class="banner idle">
+    <div class="bar"></div>
+    <div class="body">
+      <div class="current">
+        <div id="call-text" class="text">— radio quiet —</div>
+        <div id="call-meta" class="meta"></div>
+      </div>
+      <div id="previous" class="previous" hidden></div>
+    </div>
+  </section>
+
+  <section class="log"><ol id="log"></ol></section>
+  <script src="/static/app.js"></script>
+</body>
+</html>

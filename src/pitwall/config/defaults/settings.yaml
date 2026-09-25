@@ -1,0 +1,47 @@
+connection:
+  udp_host: "0.0.0.0"
+  udp_port: 20777
+  send_rate_hz: 30
+  http_host: "0.0.0.0"
+  http_port: 8000
+recording:
+  enabled: true
+  directory: recordings
+  profile: lite  # full | lite | minimal (docs/adr/0006); `pitwall start --record full` overrides
+  compress_on_close: true
+engine:
+  tick_hz: 10
+  ema_fast_s: 3.0
+  ema_slow_s: 30.0
+  staleness_s:
+    session: 2.0
+    lap_data: 0.5
+    car_telemetry: 0.5
+    car_status: 0.5
+    car_damage: 0.5
+    motion_ex: 0.5
+policy:
+  verbosity: normal
+  deadlines_s:
+    1: 5.0
+    2: 3.0
+    3: 1.5
+  calls_per_lap: 4
+  min_gap_s: 3.0
+  dedupe_window_s: 20.0
+  quiet: false
+  mute_until_lap: 0
+speech:
+  enabled: true
+  engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
+  voice: null             # SAPI voice name filter
+  piper_voice: "en_GB-northern_english_male-medium"
+  piper_speed: 1.3        # >1 faster; 1.0 = voice natural pace
+  voices_dir: "voices"
+  rate: 0
+  volume: 100
+  radio_click: true
+mindset:
+  active: balanced
+ui:
+  state_hz: 5

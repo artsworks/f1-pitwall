@@ -1,0 +1,40 @@
+mindsets:
+  balanced:
+    pit_gain_min_s: 1.0
+    pit_confidence_min: 0.70
+    position_loss_risk_max: 0.30
+    undercut_speak_threshold_s: 1.0
+    sc_stop_min_wear_pct: 35
+    tyre_life_buffer_laps: 2.0
+    push_laps_per_stint: 2
+    thermal_warn_offset_c: 0
+    fuel_margin_laps: 0.30
+    lift_coast_trigger_laps: 0.20
+    ers_policy: even
+    ers_soc_floor_pct: 20
+    attack_window_s: 1.0
+    overtake_call_gap_s: 0.8
+    rival_focus_ahead: 0.5
+    rival_info_every_n_laps: 3
+    call_budget_per_lap: 4
+    phrasing: advisory
+  aggressive:
+    inherits: balanced
+    pit_gain_min_s: 0.4
+    pit_confidence_min: 0.55
+    position_loss_risk_max: 0.55
+    undercut_speak_threshold_s: 0.4
+    sc_stop_min_wear_pct: 25
+    tyre_life_buffer_laps: 1.0
+    push_laps_per_stint: 4
+    thermal_warn_offset_c: 3
+    fuel_margin_laps: 0.10
+    lift_coast_trigger_laps: 0.35
+    ers_policy: attack_rival
+    ers_soc_floor_pct: 10
+    attack_window_s: 1.5
+    overtake_call_gap_s: 1.0
+    rival_focus_ahead: 0.8
+    rival_info_every_n_laps: 1
+    call_budget_per_lap: 5
+    phrasing: directive

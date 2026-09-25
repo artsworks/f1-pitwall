@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pitwall</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="dash connecting">
+  <header class="status">
+    <span id="live" class="live">CONNECTING…</span>
+    <span id="age" class="dim">--</span>
+    <span id="rate" class="dim">--</span>
+    <span class="dim">·</span>
+    <span id="phase">--</span>
+    <span class="spacer"></span>
+    <span id="session">--</span>
+    <span id="lap">LAP --</span>
+    <span id="position">P--</span>
+    <span id="mindset" class="pill">--</span>
+    <span id="verbosity" class="dim"></span>
+  </header>
+
+  <section id="banner" class="banner idle">
+    <div class="bar"></div>
+    <div class="body">
+      <div class="current">
+        <div id="call-text" class="text">— radio quiet —</div>
+        <div id="call-meta" class="meta"></div>
+      </div>
+      <div id="call-evidence" class="evidence" hidden></div>
+      <div id="previous" class="previous" hidden></div>
+    </div>
+  </section>
+
+  <section class="zone tyres">
+    <div class="chip"><span id="compound" class="comp">--</span><span id="tyre-age" class="dim">--</span></div>
+    <div class="car">
+      <div class="corner" id="tyre-fl"><div class="lbl"><span>FL</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
+      <div class="corner" id="tyre-fr"><div class="lbl"><span>FR</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
+      <div class="corner" id="tyre-rl"><div class="lbl"><span>RL</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
+      <div class="corner" id="tyre-rr"><div class="lbl"><span>RR</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
+    </div>
+  </section>
+
+  <section class="zone fuel">
+    <div>
+      <h2>FUEL</h2>
+      <div id="fuel" class="big">--</div>
+      <div id="fuel-sub" class="sub">laps left</div>
+    </div>
+    <div>
+      <h2>DAMAGE</h2>
+      <div id="damage" class="dmg"><span class="none">none</span></div>
+    </div>
+  </section>
+
+  <section class="zone strat">
+    <h2>STRATEGY</h2>
+    <div class="ph">pit window · gaps · undercut (M3)</div>
+  </section>
+
+  <section class="log"><ol id="log"></ol></section>
+
+  <footer class="footer">
+    <span id="ers">ERS --</span><span id="sc">SC --</span><span id="latency"></span>
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
