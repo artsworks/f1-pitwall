@@ -235,6 +235,8 @@ def create_app(
         @app.post("/api/review/grade")
         async def review_grade(request: Request) -> JSONResponse:
             body = await request.json()
+            if not body.get("call_id"):
+                return JSONResponse({"error": "call_id is required"}, status_code=400)
             uid = 0
             if review.engine is not None and review.engine.state.session_uid:
                 uid = review.engine.state.session_uid

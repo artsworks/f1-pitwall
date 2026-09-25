@@ -56,6 +56,7 @@ class Call:
     trigger_t: float
     still_true: Any = None
     screen_only: bool = False
+    inputs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(order=True)
@@ -138,10 +139,11 @@ class Dispatcher:
                 t=now,
                 trigger_t=cand.trigger_t,
                 still_true=cand.still_true,
+                inputs=cand.inputs,
             )
             self._book_call(call, cand, now)
             heapq.heappush(self._queue, _Queued((cand.priority, now), call))
-            self._log(cand, snapshot, now, "queued", None)
+            self._log(cand, snapshot, now, "queued", None, call_id=call.id)
 
     def _suppression_reason(
         self, cand: Candidate, snapshot: Snapshot, now: float, allowed_p: set[int]
@@ -379,7 +381,13 @@ class Dispatcher:
             self.on_press_event(payload)
 
     def _log(
-        self, cand: Candidate, snap: Snapshot, now: float, outcome: str, by: str | None
+        self,
+        cand: Candidate,
+        snap: Snapshot,
+        now: float,
+        outcome: str,
+        by: str | None,
+        call_id: str | None = None,
     ) -> None:
         self.log.write(
             {
@@ -387,7 +395,9 @@ class Dispatcher:
                 "session_time": snap.session_time,
                 "lap": snap.lap_num,
                 "lap_distance": snap.lap_distance,
+                "call_id": call_id,
                 "rule_id": cand.rule.id,
+                "priority": cand.priority,
                 "outcome": outcome,
                 "suppressed_by": by,
                 "inputs": cand.inputs,
@@ -403,10 +413,12 @@ class Dispatcher:
                 "session_time": snap.session_time if snap else None,
                 "lap": call.lap,
                 "lap_distance": snap.lap_distance if snap else None,
+                "call_id": call.id,
                 "rule_id": call.rule_id,
+                "priority": call.priority,
                 "outcome": outcome,
                 "suppressed_by": by,
-                "inputs": {},
+                "inputs": call.inputs,
                 "text": call.text,
             }
         )

@@ -84,9 +84,17 @@
       if (playBtn) playBtn.textContent = st.playing ? "⏸" : "▶";
       if (posEl) posEl.textContent = fmt(st.position_us) + " / " + fmt(st.duration_us);
       if (scrub) scrub.value = String(Math.round(1000 * st.position_us / (st.duration_us || 1)));
-      var lastLap = timeline && timeline.laps.length
-        ? timeline.laps[timeline.laps.length - 1].lap : 0;
-      if (lapEl) lapEl.textContent = "LAP " + st.lap + " / " + lastLap;
+      var laps = timeline ? timeline.laps : [];
+      var hasIndex = laps.length > 0;
+      // No lap boundaries in the index: fall back to the max lap seen in
+      // decision records so "LAP n / N" stays meaningful.
+      var maxLap = hasIndex ? laps[laps.length - 1].lap
+        : decisions.reduce(function (m, d) { return Math.max(m, d.lap || 0); }, 0);
+      var curLap = st.lap || maxLap;
+      if (lapEl) lapEl.textContent = "LAP " + curLap + " / " + maxLap;
+      var prev = el("t-prev"), next = el("t-next");
+      if (prev) prev.disabled = !hasIndex;
+      if (next) next.disabled = !hasIndex;
     });
   }
 
@@ -105,10 +113,12 @@
       api(status && status.playing ? "pause" : "play", "POST").then(function (st) { status = st; refresh(); });
     });
     el("t-prev").addEventListener("click", function () {
+      if (!timeline || !timeline.laps.length) return;
       var cur = status ? status.lap : 0;
       api("seek", "POST", { lap: Math.max(1, cur - 1) }).then(refresh);
     });
     el("t-next").addEventListener("click", function () {
+      if (!timeline || !timeline.laps.length) return;
       var cur = status ? status.lap : 0;
       api("seek", "POST", { lap: cur + 1 }).then(refresh);
     });

@@ -334,3 +334,61 @@ def test_replay_writes_calls_and_laps_to_db(tmp_path: Path) -> None:
     calls = db.calls_for_session(uid)
     assert any(r["outcome"] == "fired" for r in calls)
     assert db._rows("SELECT * FROM sessions WHERE uid=?", (uid,))  # noqa: SLF001
+
+
+def test_fired_record_has_call_id_and_inputs(tmp_path: Path) -> None:
+    rec = write_packet_stream(tmp_path / "ci.f1bin", out_lap_scenario())
+    log_path = tmp_path / "ci.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    asyncio.run(run_replay(rec, engine, None))
+    engine.dispatcher.log.flush()
+    rows = _read_log(log_path)
+    fired = [r for r in rows if r["outcome"] == "fired"]
+    assert fired
+    assert all(r.get("call_id") for r in fired)
+    assert all(r.get("inputs") and "phase" in r["inputs"] for r in fired)
+    queued = [r for r in rows if r["outcome"] == "queued"]
+    assert queued and all(r.get("call_id") for r in queued)
+
+
+def test_review_grade_end_to_end(tmp_path: Path) -> None:
+    import io as _io
+
+    from fastapi.testclient import TestClient
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import create_app
+    from pitwall.server.hub import Hub
+    from pitwall.server.review import ReviewController
+    from pitwall.store.db import Database
+
+    rec = write_packet_stream(tmp_path / "gr.f1bin", out_lap_scenario())
+
+    def factory(clk):  # type: ignore[no-untyped-def]
+        return build_engine(
+            clock=clk, decision_log_fp=_io.StringIO(), sinks=[], db=Database(":memory:")
+        )
+
+    ctl = ReviewController(rec, factory, Hub(), speed=10.0)
+    app = create_app(Hub(), ConfigStore(), Metrics(), latest_snapshot=lambda: None, review=ctl)
+    client = TestClient(app)
+    tl = client.get("/api/review/timeline").json()
+    fired = next(d for d in tl["decisions"] if d["outcome"] == "fired")
+    assert fired["call_id"]
+    # missing call_id -> 400, not 500
+    assert client.post("/api/review/grade", content="{}").status_code == 400
+    r = client.post(
+        "/api/review/grade",
+        content=json.dumps(
+            {
+                "call_id": fired["call_id"],
+                "rule_id": fired["rule_id"],
+                "grade": "good",
+            }
+        ),
+    )
+    assert r.status_code == 200
+    grades = client.get("/api/review/grades").json()
+    assert any(g["call_id"] == fired["call_id"] for g in grades)
+    assert ctl.grades_path.exists()
