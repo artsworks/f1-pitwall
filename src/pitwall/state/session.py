@@ -35,11 +35,13 @@ from pitwall.state.driving import (
 )
 from pitwall.state.ema import CornersEma
 from pitwall.state.lap import LapAccumulator, LapSummary
+from pitwall.state.pressure import PressureCall, RunTemps, pressure_advice, pressure_text
 from pitwall.state.quali import (
     ReleaseWindow,
     abort_advice,
     projected_lap_ms,
     quali_cutoff_ms,
+    quali_margin_ms,
     release_window,
 )
 
@@ -258,6 +260,15 @@ class Snapshot:
     abort_deficit_s: float = 0.0
     abort_advised: bool = False
     abort_reason: str = ""
+    # Positive = the field must find this much to take the player's place.
+    quali_margin_ms: int = 0
+    quali_margin_s: float = 0.0
+    quali_margin_kind: str = ""  # "cut" (Q1/Q2) | "pole" (Q3) | "" unknown
+    setup_tyre_pressure: Corners = _ZERO_CORNERS
+    run_tyre_inner_avg: Corners = _ZERO_CORNERS
+    run_flying_s: float = 0.0
+    pressure_advice: tuple[PressureCall, ...] = ()
+    pressure_advice_text: str = ""
     _ages: dict[str, float] = field(default_factory=dict)
 
     def age(self, packet_name: str) -> float:
@@ -335,6 +346,8 @@ class SessionState:
         self.tyre_surface = _ZERO_CORNERS
         self.tyre_inner = _ZERO_CORNERS
         self.brake_temp = _ZERO_CORNERS
+        self.run_temps = RunTemps()
+        self.setup_tyre_pressure = _ZERO_CORNERS
         self.tyre_compound = 0
         self.tyre_visual = 0
         self.tyre_age_laps = 0
@@ -511,6 +524,8 @@ class SessionState:
             self.s3_entry_coldest_c = min(self._ema_or_zero(self.tyre_inner_fast).as_tuple())
         self.sector = car.sector
         self.position = car.car_position
+        if car.driver_status == DriverStatus.OUT_LAP and self.driver_status != DriverStatus.OUT_LAP:
+            self.run_temps.reset()
         self.driver_status = car.driver_status
         self.pit_status = car.pit_status
         self.current_lap_time_ms = car.current_lap_time_ms
@@ -620,6 +635,12 @@ class SessionState:
         self.setup_front_wing = car.front_wing
         self.setup_rear_wing = car.rear_wing
         self.setup_brake_bias = car.brake_bias
+        self.setup_tyre_pressure = Corners(
+            car.rear_left_tyre_pressure,
+            car.rear_right_tyre_pressure,
+            car.front_left_tyre_pressure,
+            car.front_right_tyre_pressure,
+        )
 
     def _on_car_telemetry_2(self, pkt: CarTelemetry2Packet) -> None:
         car = pkt.cars[self._player_idx]
@@ -648,6 +669,9 @@ class SessionState:
         self.tyre_surface_slow.update(st, car.tyres_surface_temperature)
         self.tyre_inner_fast.update(st, car.tyres_inner_temperature)
         self.tyre_inner_slow.update(st, car.tyres_inner_temperature)
+        self.run_temps.update(
+            st, car.tyres_inner_temperature, self._phase() == "flying" and not self.game_paused
+        )
         self.brake_fast.update(st, car.brakes_temperature)
         self.brake_slow.update(st, car.brakes_temperature)
 
@@ -754,7 +778,15 @@ class SessionState:
         cutoff_ms = proj_ms = deficit_ms = 0
         quali_through = abort_advised = False
         abort_reason = ""
+        margin_ms, margin_kind = 0, ""
         if kind == "qualifying":
+            margin_ms, margin_kind = quali_margin_ms(
+                field_best,
+                self._player_idx,
+                self.num_active_cars,
+                self.session_type,
+                self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+            )
             clean_gap = self._th("release_clean_gap_s", 4.0)
             fallback_s = self._th("release_fallback_lap_s", 95.0)
             if phase in ("garage", "pitting") and self.cars_lap is not None:
@@ -806,6 +838,21 @@ class SessionState:
                 deficit_ms = advice.deficit_ms
                 abort_advised = advice.advised
                 abort_reason = advice.reason
+        run_avg = self.run_temps.mean()
+        pressures = pressure_advice(
+            run_avg,
+            self.setup_tyre_pressure,
+            self._th("pressure_window_low_c", 88.0),
+            self._th("pressure_window_high_c", 102.0),
+            hot_sign=self._th("pressure_hot_sign", -1.0),
+            medium_c=self._th("pressure_size_medium_c", 5.0),
+            large_c=self._th("pressure_size_large_c", 10.0),
+            steps_psi=(
+                self._th("pressure_step_small_psi", 0.2),
+                self._th("pressure_step_medium_psi", 0.4),
+                self._th("pressure_step_large_psi", 0.8),
+            ),
+        )
         return Snapshot(
             now=now,
             session_time=st,
@@ -919,6 +966,14 @@ class SessionState:
             yellow_behind_m=_round50(yellow.behind_m),
             yellow_behind_sector=yellow.behind_sector,
             laps=tuple(self.laps),
+            quali_margin_ms=margin_ms,
+            quali_margin_s=round(margin_ms / 1000.0, 1),
+            quali_margin_kind=margin_kind,
+            setup_tyre_pressure=self.setup_tyre_pressure,
+            run_tyre_inner_avg=run_avg,
+            run_flying_s=self.run_temps.seconds,
+            pressure_advice=pressures,
+            pressure_advice_text=pressure_text(pressures),
             _ages={name: st - t for name, t in self._last_update.items()},
         )
 

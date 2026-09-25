@@ -133,6 +133,33 @@ def quali_cutoff_ms(
     return times[cutoff_pos - 1]
 
 
+def quali_margin_ms(
+    field_best_laps: Sequence[int],
+    player_idx: int,
+    num_active_cars: int,
+    session_type: int,
+    eliminated: Mapping[int, int],
+) -> tuple[int, str]:
+    """How much the rest of the field must find to take the player's spot.
+
+    Eliminating sessions ("cut"): gap to the car that would push the player
+    out if it went quicker. Q3 ("pole"): gap to P2, negative when not on pole.
+    (0, "") until enough of the field has set a time."""
+    player = field_best_laps[player_idx] if 0 <= player_idx < len(field_best_laps) else 0
+    if player <= 0:
+        return 0, ""
+    others = sorted(t for i, t in enumerate(field_best_laps) if i != player_idx and t > 0)
+    elim = eliminated.get(_SHOOTOUT_TO_QUALI.get(session_type, session_type), 0)
+    if elim > 0:
+        safe_pos = num_active_cars - elim
+        if safe_pos <= 0 or len(others) < safe_pos:
+            return 0, ""
+        return others[safe_pos - 1] - player, "cut"
+    if not others:
+        return 0, ""
+    return others[0] - player, "pole"
+
+
 @dataclass(frozen=True, slots=True)
 class AbortAdvice:
     deficit_ms: int

@@ -44,3 +44,41 @@ rules:
     requires: [lap_data, session_history]
     say:
       - "You're safe, that time's through. No need to push"
+  # Comfortable margin after a lap: no need to risk the car or a fresh set.
+  - id: quali_safe_cut
+    sessions: [qualifying]
+    priority: 2
+    when: "quali_margin_kind == 'cut' and quali_margin_ms >= th.quali_safe_margin_ms and (phase == 'in_lap' or phase == 'pitting' or phase == 'garage')"
+    clear_when: "phase == 'out_lap' or quali_margin_ms < th.quali_safe_margin_ms"
+    cooldown_s: 120
+    requires: [lap_data, session_history]
+    say:
+      - "You're {quali_margin_s:.1f} clear of the cut. No need to go again, save the set"
+      - "That's {quali_margin_s:.1f} inside the cut. Play it safe and keep the tyres"
+  - id: quali_safe_pole
+    sessions: [qualifying]
+    priority: 2
+    when: "quali_margin_kind == 'pole' and quali_margin_ms >= th.quali_safe_margin_ms and (phase == 'in_lap' or phase == 'pitting' or phase == 'garage')"
+    clear_when: "phase == 'out_lap' or quali_margin_ms < th.quali_safe_margin_ms"
+    cooldown_s: 120
+    requires: [lap_data, session_history]
+    say:
+      - "Provisional pole by {quali_margin_s:.1f}. Play it safe, no risks from here"
+      - "You're {quali_margin_s:.1f} up on P2. If you go again, a tidy lap is enough"
+  # Pressure advice for the next run from the carcass temps on this run's flying laps.
+  - id: tyre_pressure_advice
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "(phase == 'in_lap' or phase == 'pitting' or phase == 'garage') and run_flying_s >= th.pressure_min_flying_s and pressure_advice_text != ''"
+    clear_when: "phase == 'out_lap'"
+    requires: [car_telemetry]
+    say:
+      - "Pressures for the next run: {pressure_advice_text}"
+  - id: tyre_pressure_ok
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "(phase == 'in_lap' or phase == 'pitting' or phase == 'garage') and run_flying_s >= th.pressure_min_flying_s and pressure_advice_text == ''"
+    clear_when: "phase == 'out_lap'"
+    requires: [car_telemetry]
+    say:
+      - "Tyre temps were in the window on all four. Leave the pressures"

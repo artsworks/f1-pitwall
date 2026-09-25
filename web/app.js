@@ -202,7 +202,21 @@
       main.className = "qmain" + (q.through ? " ok" : "");
     }
     if (q.through) sub.push("THROUGH");
+    if (q.margin_ms !== null && q.margin_ms !== undefined) {
+      sub.push((q.margin_kind === "pole" ? "vs P2 " : "vs cut ") + signed(-q.margin_ms));
+    }
     setText("q-sub", sub.join(" · "));
+    var press = el("q-press");
+    if (press) {
+      press.hidden = !q.pressure;
+      if (q.pressure) {
+        press.textContent = "PRESSURES " + (q.pressure.length ? q.pressure.map(function (p) {
+          return p.corner.toUpperCase() + " " + (p.delta_psi > 0 ? "+" : "") +
+            p.delta_psi.toFixed(1) + (p.target_psi ? " → " + p.target_psi.toFixed(1) : "") +
+            " (" + p.size + ", " + Math.round(p.avg_c) + "°)";
+        }).join(" · ") : "in window");
+      }
+    }
   }
 
   function renderDamage(d) {

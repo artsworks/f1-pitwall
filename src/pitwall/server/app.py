@@ -51,7 +51,20 @@ def quali_payload(snapshot: Snapshot) -> dict[str, Any] | None:
         "best_lap_ms": snapshot.player_best_lap_ms or None,
         "cutoff_ms": snapshot.quali_cutoff_ms or None,
         "through": snapshot.quali_through,
+        "margin_ms": snapshot.quali_margin_ms if snapshot.quali_margin_kind else None,
+        "margin_kind": snapshot.quali_margin_kind or None,
     }
+    if snapshot.run_flying_s > 0 and snapshot.phase in ("in_lap", "pitting", "garage"):
+        out["pressure"] = [
+            {
+                "corner": c.corner,
+                "size": c.size,
+                "delta_psi": c.delta_psi,
+                "target_psi": c.target_psi or None,
+                "avg_c": c.avg_c,
+            }
+            for c in snapshot.pressure_advice
+        ]
     if snapshot.phase in ("garage", "pitting"):
         out["release"] = {
             "clean": snapshot.release_clean,

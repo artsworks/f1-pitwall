@@ -16,3 +16,13 @@ thresholds:
   abort_safe_margin_ms: 300  # inside this margin of the cut-off = "through"
   abort_deficit_ms: 400      # projected deficit that justifies an abort call
   abort_ers_keep_pct: 60     # ERS above this -> abort earlier (banked for next run)
+  quali_safe_margin_ms: 1000 # clear of the cut / P2 by this much = "play it safe"
+  pressure_window_low_c: 88  # target carcass (inner) temp window over a flying run
+  pressure_window_high_c: 102
+  pressure_hot_sign: -1      # -1: hot tyre -> lower pressure; +1: hot -> raise
+  pressure_size_medium_c: 5  # degrees outside the window for a medium step
+  pressure_size_large_c: 10  # ...and for a large step
+  pressure_step_small_psi: 0.2
+  pressure_step_medium_psi: 0.4
+  pressure_step_large_psi: 0.8
+  pressure_min_flying_s: 30  # flying time a run needs before advising
