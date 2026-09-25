@@ -4,6 +4,7 @@ A race engineer for F1 26. It reads the game's UDP telemetry, keeps a model of t
 session, decides what is worth saying, says it over your headset, and shows it on a second monitor.
 
 Status: **planning**. No code yet — this repository currently holds the design.
+Read the plan online: https://artsworks.github.io/f1-pitwall/
 
 ## Why it is not just another dashboard
 

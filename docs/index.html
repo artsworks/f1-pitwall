@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f1-pitwall · planning docs</title>
+<meta name="description" content="Design documents for f1-pitwall, a race engineer for F1 26.">
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--link)}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--bg)}
+header .brand{font-weight:700;text-decoration:none;color:var(--fg);white-space:nowrap}
+header .brand span{color:var(--accent)}
+header .status{font-size:13px;color:var(--muted)}
+header .gh{margin-left:auto;font-size:14px}
+#menu{display:none;background:none;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer}
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr);max-width:1280px;margin:0 auto}
+nav{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);overflow:auto;padding:16px 12px 40px 20px;border-right:1px solid var(--line)}
+nav input{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg);font:inherit;font-size:14px;margin-bottom:12px}
+nav h4{margin:16px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+nav a{display:block;padding:4px 8px;border-radius:5px;font-size:14px;color:var(--fg);text-decoration:none}
+nav a:hover{background:var(--panel)}
+nav a.active{background:var(--panel);color:var(--accent);font-weight:600}
+nav a .n{display:inline-block;width:24px;color:var(--muted);font-variant-numeric:tabular-nums}
+main{padding:28px 40px 80px;min-width:0}
+article{max-width:820px}
+article h1{font-size:30px;line-height:1.25;margin:0 0 12px}
+article h2{margin-top:36px;padding-top:8px;border-top:1px solid var(--line);font-size:22px}
+article h3{margin-top:26px;font-size:18px}
+article code{background:var(--code);padding:1px 5px;border-radius:4px;font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+article pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow:auto;line-height:1.35}
+article pre code{padding:0;background:none;font-size:13px}
+article table{border-collapse:collapse;display:block;overflow:auto;font-size:14px;margin:14px 0}
+article th,article td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+article th{background:var(--panel)}
+article blockquote{margin:14px 0;padding:4px 16px;border-left:3px solid var(--accent);color:var(--muted)}
+article img{max-width:100%}
+.toc{font-size:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin:0 0 24px}
+.toc b{display:block;margin-bottom:4px}
+.toc a{display:block;text-decoration:none;padding:1px 0}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:48px;padding-top:16px;border-top:1px solid var(--line)}
+.pager a{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:14px}
+.pager a small{display:block;color:var(--muted)}
+.pager .next{text-align:right}
+.hero p{font-size:18px;color:var(--muted);max-width:700px}
+.pillars{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:20px 0}
+.pillars div{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel);font-size:14px}
+.pillars b{display:block;margin-bottom:4px;color:var(--fg)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin:10px 0 26px}
+.cards a{display:block;border:1px solid var(--line);border-radius:8px;padding:12px 14px;text-decoration:none;color:var(--fg)}
+.cards a:hover{border-color:var(--accent)}
+.cards a b{display:block;margin-bottom:4px}
+.cards a span{font-size:14px;color:var(--muted)}
+.path{font-size:13px;color:var(--muted);margin-bottom:6px}
+.err{color:var(--accent)}
+@media (max-width:860px){
+  #menu{display:inline-block}
+  header .status{display:none}
+  .layout{grid-template-columns:1fr}
+  nav{display:none;position:fixed;top:53px;left:0;right:0;bottom:0;height:auto;background:var(--bg);z-index:4;border:0}
+  body.nav-open nav{display:block}
+  main{padding:20px 18px 60px}
+}
+@media print{header,nav,.pager,.toc{display:none}.layout{display:block}main{padding:0}}
+</style>
+</head>
+<body>
+<header>
+  <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
+  <a class="brand" href="#/">f1<span>-</span>pitwall</a>
+  <span class="status">planning docs · no code yet</span>
+  <a class="gh" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
+</header>
+<div class="layout">
+  <nav id="nav" aria-label="Documents">
+    <input id="filter" type="search" placeholder="Filter documents…" aria-label="Filter documents">
+    <div id="navlist"></div>
+  </nav>
+  <main><article id="content" aria-live="polite"></article></main>
+</div>
+<script src="assets/marked.min.js"></script>
+<script>
+const GROUPS = [
+  ["Start here", [
+    ["14-adversarial-review", "Adversarial review", "Errors found before the first commit, what was kept, and assumptions to verify in the first session."],
+    ["11-open-questions", "Decisions and open questions", "What is settled (public repo, GPLv3, 30 Hz, F1 26 only, no LLM) and what is still open."],
+    ["05-roadmap", "Roadmap", "M0 capture and replay through M4 calibration, with exit criteria for each milestone."]
+  ]],
+  ["Core design", [
+    ["01-architecture", "Architecture", "Layers, cross-cutting decisions, stack and repository layout."],
+    ["02-ingestion", "Ingestion", "Game settings, the F1 26-only parser, send-rate independence and recording."],
+    ["03-strategy", "Strategy engine", "Rules as data, the pace and degradation model, pit windows and rivals."],
+    ["04-audio-ui", "Audio, UI and transport", "Call priorities, budgets, backend speech and the second-monitor dashboard."],
+    ["12-driver-input", "Driver input", "Wheel button 2 and spacebar: acknowledge, negative and bookmark."],
+    ["13-league-multiplayer", "Friends league", "Three humans plus an AI grid, Restricted telemetry and the feedback loop."]
+  ]],
+  ["In depth", [
+    ["06-direction-changes", "Five changes of direction", "Each change with its cost, build plan, acceptance and rollback."],
+    ["07-replay-and-debug", "Replay, review and debugging", "The .f1bin format, replay options, review mode and A/B diffs."],
+    ["08-configuration", "Configuration and mindset", "Layered settings and the balanced and aggressive bias vectors."],
+    ["09-performance", "Performance on the game PC", "CPU, GPU and disk budgets, and the frame-time A/B test."],
+    ["10-angles-not-yet-considered", "Angles not yet considered", "Twenty further angles, from energy management to LAN security."]
+  ]],
+  ["Reference and provenance", [
+    ["reference/f1-26-udp-notes", "F1 26 UDP notes", "Verified facts about packet format 2026."],
+    ["00-review-of-v1", "Review of plan v1", "Where the original plan disagreed with the F1 26 spec."],
+    ["original-plan-v1", "Original plan (v1)", "The plan as first written, kept unchanged."]
+  ]]
+];
+const DOCS = GROUPS.flatMap(g => g[1]);
+const byId = Object.fromEntries(DOCS.map(d => [d[0], d]));
+const $ = s => document.querySelector(s);
+const cache = {};
+
+function renderNav(filter = "") {
+  const f = filter.trim().toLowerCase();
+  $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + GROUPS.map(([g, docs]) => {
+    const items = docs.filter(d => !f || (d[1] + " " + d[2] + " " + d[0]).toLowerCase().includes(f));
+    if (!items.length) return "";
+    return `<h4>${g}</h4>` + items.map(d => {
+      const m = d[0].match(/^(\d\d)-/);
+      return `<a href="#/${d[0]}" data-id="${d[0]}"><span class="n">${m ? m[1] : "·"}</span>${d[1]}</a>`;
+    }).join("");
+  }).join("");
+  markActive();
+}
+function current() { return decodeURIComponent(location.hash.replace(/^#\/?/, "").split("#")[0]); }
+function markActive() {
+  const id = current();
+  document.querySelectorAll("#navlist a").forEach(a => a.classList.toggle("active", a.dataset.id === id));
+}
+
+function overview() {
+  document.title = "f1-pitwall · planning docs";
+  $("#content").innerHTML = `
+    <div class="hero">
+      <h1>A race engineer for F1 26</h1>
+      <p>f1-pitwall reads the game's UDP telemetry, keeps a model of the session, decides what is worth saying, says it over your headset and shows it on a second monitor. This site holds the design; there is no code yet.</p>
+    </div>
+    <div class="pillars">
+      <div><b>Record and replay</b>Every session is captured raw, and strategy is tuned offline against recordings.</div>
+      <div><b>Rules as data</b>Every call is a declarative rule with its own hysteresis, cooldown, phrasing and replay test.</div>
+      <div><b>A mindset you set</b>Balanced or aggressive: one control that biases pit windows, energy, tyres and rival focus.</div>
+    </div>` +
+    GROUPS.map(([g, docs]) => `<h2>${g}</h2><div class="cards">` +
+      docs.map(d => `<a href="#/${d[0]}"><b>${d[1]}</b><span>${d[2]}</span></a>`).join("") + `</div>`).join("") +
+    `<p class="path">Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>`;
+}
+
+function slug(t) { return t.toLowerCase().replace(/<[^>]+>/g, "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-"); }
+
+function linkify(root, baseDir) {
+  root.querySelectorAll("a[href]").forEach(a => {
+    const h = a.getAttribute("href");
+    if (/^[a-z]+:/i.test(h) || h.startsWith("#")) return;
+    const [p, frag] = h.split("#");
+    if (!p.endsWith(".md")) {
+      a.href = "https://github.com/artsworks/f1-pitwall/blob/main/" + (p.startsWith("../") ? p.slice(3) : "docs/" + baseDir + p);
+      return;
+    }
+    let id = (baseDir + p).replace(/\.md$/, "").replace(/^(\.\/)+/, "");
+    id = id.replace(/^reference\/\.\.\//, "").replace(/^docs\//, "");
+    a.href = byId[id] ? "#/" + id + (frag ? "#" + frag : "") : "https://github.com/artsworks/f1-pitwall/blob/main/docs/" + p;
+  });
+  root.querySelectorAll("code").forEach(c => {
+    if (c.closest("pre") || c.closest("a")) return;
+    const m = c.textContent.match(/^(?:docs\/)?((?:reference\/)?[\w-]+)\.md$/);
+    if (m && byId[m[1]]) {
+      const a = document.createElement("a");
+      a.href = "#/" + m[1];
+      c.replaceWith(a); a.appendChild(c);
+    }
+  });
+}
+
+async function showDoc(id, frag) {
+  const d = byId[id];
+  if (!d) { $("#content").innerHTML = `<h1>Not found</h1><p>No document called <code>${id}</code>. <a href="#/">Back to the overview</a>.</p>`; return; }
+  document.title = d[1] + " · f1-pitwall";
+  const el = $("#content");
+  try {
+    if (!cache[id]) {
+      const r = await fetch(id + ".md");
+      if (!r.ok) throw new Error(r.status + " " + r.statusText);
+      cache[id] = await r.text();
+    }
+  } catch (e) {
+    el.innerHTML = `<p class="err">Could not load ${id}.md (${e.message}).</p>`; return;
+  }
+  if (current() !== id) return;
+  el.innerHTML = `<div class="path">docs/${id}.md · <a href="https://github.com/artsworks/f1-pitwall/blob/main/docs/${id}.md">view on GitHub</a></div>` + marked.parse(cache[id]);
+  const heads = [...el.querySelectorAll("h2")];
+  el.querySelectorAll("h1,h2,h3").forEach(h => { h.id = slug(h.innerHTML); });
+  if (heads.length > 2) {
+    const toc = document.createElement("div");
+    toc.className = "toc";
+    toc.innerHTML = "<b>On this page</b>" + heads.map(h => `<a href="#/${id}#${h.id}">${h.textContent}</a>`).join("");
+    const h1 = el.querySelector("h1");
+    h1 ? h1.after(toc) : el.prepend(toc);
+  }
+  linkify(el, id.includes("/") ? id.slice(0, id.lastIndexOf("/") + 1) : "");
+  const i = DOCS.findIndex(x => x[0] === id), prev = DOCS[i - 1], next = DOCS[i + 1];
+  el.insertAdjacentHTML("beforeend", `<div class="pager">${prev ? `<a href="#/${prev[0]}"><small>Previous</small>${prev[1]}</a>` : "<span></span>"}${next ? `<a class="next" href="#/${next[0]}"><small>Next</small>${next[1]}</a>` : "<span></span>"}</div>`);
+  const target = frag && document.getElementById(frag);
+  target ? target.scrollIntoView() : window.scrollTo(0, 0);
+}
+
+function route() {
+  document.body.classList.remove("nav-open");
+  $("#menu").setAttribute("aria-expanded", "false");
+  const [id, frag] = location.hash.replace(/^#\/?/, "").split("#").map(decodeURIComponent);
+  markActive();
+  if (!id) { overview(); window.scrollTo(0, 0); return; }
+  const loaded = $(".path") && document.title.startsWith(byId[id]?.[1] || "\0");
+  if (loaded && frag) { document.getElementById(frag)?.scrollIntoView(); return; }
+  showDoc(id, frag);
+}
+
+$("#filter").addEventListener("input", e => renderNav(e.target.value));
+$("#menu").addEventListener("click", () => {
+  const open = document.body.classList.toggle("nav-open");
+  $("#menu").setAttribute("aria-expanded", String(open));
+});
+window.addEventListener("hashchange", route);
+renderNav();
+route();
+</script>
+</body>
+</html>
