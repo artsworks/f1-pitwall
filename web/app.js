@@ -103,6 +103,7 @@
     }
     document.body.classList.toggle("redflag", !!p.red_flag);
     renderQuali(p.quali);
+    renderCool(p.quali ? p.quali.cool : null, p.quali);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -217,6 +218,64 @@
         }).join(" · ") : "in window");
       }
     }
+  }
+
+  // Cool-down lap (docs/17): shown only while the payload carries `cool`; the
+  // server drops it at the hot-lap-mode point so the normal layout returns.
+  var PLAN_WORDS = { battery: "battery low", tyres: "tyres hot" };
+  function renderCool(c, q) {
+    var box = el("cool");
+    if (!box) return;
+    box.hidden = !c;
+    document.body.classList.toggle("cool", !!c);
+    if (!c) return;
+    var minPct = c.ers_min_pct;
+    setText("c-hot", c.dist_to_hot_m === null ? "hot-lap mode at 600 m to go" :
+      "hot-lap mode in " + (c.dist_to_hot_m >= 1000 ? fmt(c.dist_to_hot_m / 1000, 1) + " km" :
+        fmt(c.dist_to_hot_m, 0) + " m"));
+    setText("c-ers", fmt(c.ers_pct, 0) + "%");
+    var bar = el("c-ers-bar");
+    if (bar) bar.style.width = Math.max(0, Math.min(100, c.ers_pct)) + "%";
+    var mark = el("c-ers-min");
+    if (mark) mark.style.left = minPct + "%";
+    setText("c-mode", "deploy mode " + c.ers_mode + (c.plan_reason ?
+      " · cooling: " + (PLAN_WORDS[c.plan_reason] || c.plan_reason) : ""));
+    var low = c.window_c[0], high = c.window_c[1];
+    ["fl", "fr", "rl", "rr"].forEach(function (k) {
+      var node = el("c-" + k), v = c.tyres[k];
+      if (!node) return;
+      node.textContent = k.toUpperCase() + " " + fmt(v, 0) + "°";
+      node.className = v > high ? "hot" : v < low ? "cold" : "ok";
+    });
+    setText("c-hint", c.tyre_hint || "--");
+    var pole = el("c-pole");
+    if (pole) {
+      pole.innerHTML = "";
+      if (c.pole) {
+        var g = c.pole.sector_gaps_ms, worst = g.indexOf(Math.max.apply(null, g));
+        pole.appendChild(document.createTextNode("POLE " + (c.pole.driver || "") + " " +
+          signed(-c.pole.gap_ms).replace("−", "-") + " · "));
+        g.forEach(function (ms, i) {
+          var s = document.createElement("span");
+          s.textContent = "S" + (i + 1) + " " + (ms ? signed(ms) : "--") + " ";
+          if (i === worst && ms > 0) s.className = "worst";
+          pole.appendChild(s);
+        });
+      } else {
+        pole.textContent = "POLE --";
+      }
+    }
+    setText("c-mis", "LAST LAP " + (c.last_hot_ms ? lapTime(c.last_hot_ms) : "--") + " · " +
+      (c.mistakes || "clean"));
+    var behind = el("c-behind");
+    if (behind) {
+      behind.hidden = c.car_behind_s === null;
+      if (c.car_behind_s !== null) {
+        behind.textContent = "HOT LAP BEHIND · " + fmt(c.car_behind_s, 0) + " s · off the line";
+      }
+    }
+    setText("c-sub", (q ? clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh · " : "") +
+      "fuel " + fmt(c.fuel_laps, 1) + " laps");
   }
 
   function renderDamage(d) {

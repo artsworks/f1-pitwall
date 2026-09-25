@@ -82,3 +82,125 @@ rules:
     requires: [car_telemetry]
     say:
       - "Tyre temps were in the window on all four. Leave the pressures"
+  # Run plan on crossing the line after a hot lap (docs/17). One per line crossing.
+  - id: plan_push
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and run_plan == 'push' and sector == 0"
+    clear_when: "sector != 0"
+    cooldown_s: 30
+    cooldown_group: run_plan
+    requires: [lap_data, car_status]
+    say:
+      - "Go again. Battery {ers_store_pct:.0f}, tyres are fine"
+      - "Keep pushing, you've got {ers_store_pct:.0f} percent battery"
+  - id: plan_cool
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and run_plan == 'cool' and sector == 0"
+    clear_when: "sector != 0"
+    cooldown_s: 30
+    cooldown_group: run_plan
+    requires: [lap_data, car_status]
+    say:
+      - "{run_plan_why}. Cool this one, recharge mode, then we go again"
+      - "{run_plan_why}. Back off for a lap, recharge and cool the tyres"
+  - id: plan_push_now
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and run_plan == 'push_now' and sector == 0"
+    clear_when: "sector != 0"
+    cooldown_s: 30
+    cooldown_group: run_plan
+    requires: [lap_data, car_status]
+    say:
+      - "{run_plan_why}, no time to cool. Keep pushing, battery {ers_store_pct:.0f}. Use it on the straights"
+      - "{run_plan_why}. We can't afford a cool lap, go again now"
+  - id: plan_box
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and run_plan == 'box' and run_plan_reason != 'safe' and sector == 0"
+    clear_when: "sector != 0"
+    cooldown_s: 30
+    cooldown_group: run_plan
+    requires: [lap_data, car_status]
+    say:
+      - "{run_plan_why}. Box this lap"
+  - id: plan_box_safe
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'flying' and run_plan == 'box' and run_plan_reason == 'safe' and sector == 0"
+    clear_when: "sector != 0"
+    cooldown_s: 30
+    cooldown_group: run_plan
+    requires: [lap_data, session_history]
+    say:
+      - "You're {quali_margin_s:.1f} clear. Bring it in, save the set"
+  # Cool-down lap coaching.
+  - id: cool_recharge
+    sessions: [qualifying]
+    priority: 2
+    when: "cool_lap and run_plan != 'cool' and not cool_prep and sector <= 1"
+    clear_when: "not cool_lap"
+    still_true: "cool_lap"
+    requires: [lap_data, car_status]
+    say:
+      - "Recharge mode. Harvest everything, easy on the tyres"
+      - "Flick it to recharge. Gentle on the throttle, let the tyres breathe"
+  - id: cool_recharge_check
+    sessions: [qualifying]
+    priority: 2
+    when: "cool_lap and not cool_prep and th.ers_recharge_mode >= 0 and ers_deploy_mode != th.ers_recharge_mode and cool_elapsed_s >= 15"
+    clear_when: "not cool_lap or ers_deploy_mode == th.ers_recharge_mode"
+    still_true: "cool_lap and ers_deploy_mode != th.ers_recharge_mode"
+    requires: [car_status]
+    say:
+      - "Still not in recharge mode. Switch it over"
+  - id: cool_status
+    sessions: [qualifying]
+    priority: 3
+    when: "cool_lap and not cool_prep and sector == 1"
+    clear_when: "not cool_lap"
+    still_true: "cool_lap and not cool_prep"
+    requires: [car_status, car_telemetry]
+    say:
+      - "Battery {ers_store_pct:.0f}. {cool_tyre_hint}"
+  - id: cool_vs_pole
+    sessions: [qualifying]
+    priority: 3
+    when: "cool_lap and not cool_prep and sector == 1 and pole_gap_ms > 0 and pole_worst_sector > 0"
+    clear_when: "not cool_lap"
+    still_true: "cool_lap and not cool_prep"
+    requires: [session_history]
+    say:
+      - "Pole is {pole_gap_s:.1f} up. Most of it is sector {pole_worst_sector}, {pole_worst_sector_s:.1f}"
+      - "{pole_gap_s:.1f} to pole, {pole_worst_sector_s:.1f} of that in sector {pole_worst_sector}"
+  - id: cool_mistakes
+    sessions: [qualifying]
+    priority: 3
+    when: "cool_lap and not cool_prep and sector >= 1 and last_hot_mistakes != ''"
+    clear_when: "not cool_lap"
+    still_true: "cool_lap and not cool_prep"
+    requires: [lap_data]
+    say:
+      - "Last lap: {last_hot_mistakes}"
+  - id: cool_car_behind
+    sessions: [qualifying]
+    priority: 1
+    when: "(cool_lap or phase == 'out_lap') and hot_car_behind_s <= th.cool_car_behind_s"
+    clear_when: "hot_car_behind_s > th.cool_car_behind_s + 2"
+    still_true: "hot_car_behind_s <= th.cool_car_behind_s + 1"
+    cooldown_s: 20
+    requires: [lap_data]
+    say:
+      - "Car behind on a hot lap, {hot_car_behind_s:.0f} seconds. Off the racing line"
+      - "Hot lap behind you. Move over, don't impede"
+  - id: cool_hot_mode
+    sessions: [qualifying]
+    priority: 1
+    when: "cool_prep"
+    clear_when: "not cool_lap"
+    requires: [lap_data, car_status]
+    say:
+      - "Hot lap mode now. Battery {ers_store_pct:.0f}, fronts {tyre_inner_front_c:.0f}. Push from the line"
+      - "Switch back to hot lap mode. Battery {ers_store_pct:.0f}. Go on the line"

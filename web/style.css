@@ -202,3 +202,25 @@ body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
 .transport .detail table { margin: 4px 0; border-collapse: collapse; }
 .transport .detail td { border: 1px solid #30363d; padding: 1px 6px; }
 .transport .grades { margin-top: 4px; }
+
+/* cool-down lap (docs/17): takes over the tyre/fuel/strategy zones until the
+   hot-lap-mode point, then the normal layout comes back */
+.cool { grid-area: cool; display: flex; flex-direction: column; gap: .6rem; font-size: 1.3rem; }
+.cool-head { display: flex; justify-content: space-between; align-items: baseline; }
+.cool-title { font-size: 1.9rem; font-weight: bold; color: var(--info); letter-spacing: .08em; }
+.cool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.cool .bar { position: relative; height: .8rem; background: var(--line); border-radius: 3px; }
+.cool .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
+.cool .bar .mark { position: absolute; top: -3px; width: 2px; height: calc(100% + 6px);
+  background: var(--warn); }
+.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 1.9rem;
+  font-weight: bold; }
+.c-tyres .hot { color: var(--crit); }
+.c-tyres .cold { color: var(--info); }
+.c-tyres .ok { color: var(--ok); }
+.c-row .worst { color: var(--warn); font-weight: bold; }
+body.dash.cool { grid-template-areas:
+    "status status" "banner banner" "cool log" "cool log" "cool log" "footer footer"; }
+body.dash.cool .tyres, body.dash.cool .fuel, body.dash.cool .strat { display: none; }
+body.dash.review.cool { grid-template-areas: "status status" "banner banner" "cool log"
+    "cool log" "cool log" "transport transport" "footer footer"; }

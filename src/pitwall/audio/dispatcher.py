@@ -102,7 +102,7 @@ class Dispatcher:
         self._recent_texts: list[tuple[str, float]] = []
         self._last_call_t: float | None = None
         self._calls_this_lap = 0
-        self._calls_lap: tuple[int, int] = (0, 0)
+        self._calls_lap: tuple[int, int, int] = (0, 0, 0)
         self._run = 0
         self._run_phase = ""
         self._current: Call | None = None
@@ -187,8 +187,9 @@ class Dispatcher:
                 if snapshot.phase in ("garage", "out_lap"):
                     self._run += 1
                 self._run_phase = snapshot.phase
-            if self._calls_lap != (snapshot.lap_num, self._run):
-                self._calls_lap = (snapshot.lap_num, self._run)
+            lap_key = (snapshot.lap_num, self._run, snapshot.line_crossings)
+            if self._calls_lap != lap_key:
+                self._calls_lap = lap_key
                 self._calls_this_lap = 0
             budget = (
                 self.budget_override
@@ -270,7 +271,7 @@ class Dispatcher:
         self._queue.clear()
         self._fires_this_stint.clear()
         self._calls_this_lap = 0
-        self._calls_lap = (0, 0)
+        self._calls_lap = (0, 0, 0)
         self._run = 0
         self._run_phase = ""
         self._current = None

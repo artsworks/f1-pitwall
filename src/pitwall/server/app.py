@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +41,9 @@ def _finite(x: float) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def quali_payload(snapshot: Snapshot) -> dict[str, Any] | None:
+def quali_payload(
+    snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
+) -> dict[str, Any] | None:
     """Zone F in qualifying (docs/15 §8): release window in the garage, lap vs
     cut-off while flying."""
     if snapshot.session_kind != "qualifying":
@@ -82,6 +85,37 @@ def quali_payload(snapshot: Snapshot) -> dict[str, Any] | None:
                 else None
             ),
             "abort": snapshot.abort_advised,
+        }
+    if snapshot.run_plan:
+        out["plan"] = {"plan": snapshot.run_plan, "reason": snapshot.run_plan_reason}
+    if snapshot.cool_lap and not snapshot.cool_prep:
+        inner = snapshot.tyre_inner_ema_fast
+        th = thresholds or {}
+        out["cool"] = {
+            "ers_min_pct": th.get("cool_ers_min_pct", 20.0),
+            "window_c": [
+                th.get("pressure_window_low_c", 88.0),
+                th.get("pressure_window_high_c", 102.0),
+            ],
+            "ers_pct": snapshot.ers_store_pct,
+            "ers_mode": snapshot.ers_deploy_mode,
+            "plan_reason": snapshot.run_plan_reason or None,
+            "dist_to_hot_m": snapshot.dist_to_hot_mode_m if snapshot.track_length_m else None,
+            "tyres": {"fl": inner.fl, "fr": inner.fr, "rl": inner.rl, "rr": inner.rr},
+            "tyre_hint": snapshot.cool_tyre_hint,
+            "fuel_laps": snapshot.fuel_remaining_laps,
+            "last_hot_ms": snapshot.last_hot.lap_time_ms if snapshot.last_hot else None,
+            "mistakes": snapshot.last_hot_mistakes or None,
+            "pole": (
+                {
+                    "driver": snapshot.pole_driver or None,
+                    "gap_ms": snapshot.pole_gap_ms,
+                    "sector_gaps_ms": list(snapshot.pole_sector_gaps_ms),
+                }
+                if snapshot.pole_gap_ms > 0
+                else None
+            ),
+            "car_behind_s": _finite(snapshot.hot_car_behind_s),
         }
     return out
 
@@ -154,7 +188,7 @@ def state_payload(
         "quiet_left_s": quiet_left_s,
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
-        "quali": quali_payload(snapshot),
+        "quali": quali_payload(snapshot, settings.thresholds),
         "latency": {
             "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],

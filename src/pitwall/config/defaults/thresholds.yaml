@@ -26,3 +26,11 @@ thresholds:
   pressure_step_medium_psi: 0.4
   pressure_step_large_psi: 0.8
   pressure_min_flying_s: 30  # flying time a run needs before advising
+  # Run plan / cool-down lap (docs/17)
+  cool_ers_min_pct: 20       # battery at the line below this -> cool before the next push
+  cool_tyre_hot_c: 104       # hottest carcass at the line at or above this -> cool
+  cool_lap_factor: 1.3       # cool lap length as a multiple of the best lap
+  cool_pace_pct: 10          # sector 1 this much slower than best = driver is cooling
+  cool_hot_mode_m: 600       # metres before the line to switch back to hot-lap mode
+  cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
+  ers_recharge_mode: -1      # ers_deploy_mode value for recharge; -1 = unknown, don't check

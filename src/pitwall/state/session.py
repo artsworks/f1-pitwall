@@ -44,6 +44,7 @@ from pitwall.state.quali import (
     quali_margin_ms,
     release_window,
 )
+from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
@@ -269,6 +270,28 @@ class Snapshot:
     run_flying_s: float = 0.0
     pressure_advice: tuple[PressureCall, ...] = ()
     pressure_advice_text: str = ""
+    # Run plan / cool-down lap (docs/17)
+    run_lap_kind: str = ""  # "out" | "hot" | "cool" | ""
+    line_crossings: int = 0
+    run_plan: str = ""  # "push" | "cool" | "box" | "push_now" | ""
+    run_plan_reason: str = ""
+    run_plan_why: str = ""
+    cool_lap: bool = False
+    cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    cool_elapsed_s: float = 0.0
+    dist_to_hot_mode_m: float = 0.0
+    last_hot: HotLap | None = None
+    last_hot_mistakes: str = ""
+    hottest_tyre: str = ""
+    hottest_tyre_c: float = 0.0
+    cool_tyre_hint: str = ""
+    pole_driver: str = ""
+    pole_gap_ms: int = 0  # player best - pole best; 0 when unknown or on pole
+    pole_gap_s: float = 0.0
+    pole_sector_gaps_ms: tuple[int, int, int] = (0, 0, 0)
+    pole_worst_sector: int = 0
+    pole_worst_sector_s: float = 0.0
+    hot_car_behind_s: float = math.inf
     _ages: dict[str, float] = field(default_factory=dict)
 
     def age(self, packet_name: str) -> float:
@@ -377,6 +400,7 @@ class SessionState:
         self.brake_slow = CornersEma(self._ema_slow_s)
 
         self.lap_acc = LapAccumulator()
+        self.run = RunTracker()
         self.laps: list[LapSummary] = []
 
         self.cars_lap: tuple[Any, ...] | None = None
@@ -388,6 +412,7 @@ class SessionState:
         self.participants: tuple[Participant, ...] = ()
         self._histories: dict[int, Any] = {}  # car_idx -> SessionHistoryPacket
         self._best_laps: dict[int, int] = {}  # car_idx -> best valid lap_time_ms
+        self._best_lap_sectors: dict[int, tuple[int, int, int]] = {}  # sectors of that lap
         self._player_sectors: tuple[int, int, int] = (0, 0, 0)
         self._player_laps_completed = 0
         self._press_down = False
@@ -486,6 +511,7 @@ class SessionState:
         self.spins.reset()
         self.boost.reset()
         self.lap_acc.note_flashback()
+        self.run.note_rewind()
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
@@ -559,6 +585,53 @@ class SessionState:
         )
         if summary is not None:
             self.laps.append(summary)
+        if self._kind() == "qualifying":
+            self.run.update(
+                t=self._last_session_time or 0.0,
+                phase=self._phase(),
+                lap_time_ms=car.current_lap_time_ms,
+                lap_distance=car.lap_distance,
+                sector=car.sector,
+                sector1_ms=car.sector1_ms,
+                sector2_ms=car.sector2_ms,
+                invalid=bool(car.current_lap_invalid),
+                ers_pct=self.ers_store_pct,
+                lockups=self.lockups.count,
+                spins=self.spins.count,
+                best_s1_ms=self._player_sectors[0],
+                cool_pace_pct=self._th("cool_pace_pct", 10.0),
+                decide=self._decide_plan,
+            )
+
+    def _kind(self) -> str:
+        try:
+            return SessionType(self.session_type).kind()
+        except ValueError:
+            return "unknown"
+
+    def _decide_plan(self) -> Plan:
+        field_best = tuple(self._best_laps.get(i, 0) for i in range(CAR_SLOTS))
+        margin_ms, margin_kind = quali_margin_ms(
+            field_best,
+            self._player_idx,
+            self.num_active_cars,
+            self.session_type,
+            self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+        )
+        best = self._best_laps.get(self._player_idx, 0)
+        lap_s = best / 1000.0 if best > 0 else self._th("release_fallback_lap_s", 95.0)
+        return run_plan(
+            margin_ms=margin_ms,
+            margin_kind=margin_kind,
+            safe_margin_ms=int(self._th("quali_safe_margin_ms", 1000.0)),
+            ers_pct=self.ers_store_pct,
+            ers_min_pct=self._th("cool_ers_min_pct", 20.0),
+            hottest_c=max(self._ema_or_zero(self.tyre_inner_fast).as_tuple()),
+            tyre_hot_c=self._th("cool_tyre_hot_c", 104.0),
+            time_left_s=self.session_time_left,
+            cool_lap_s=self._th("cool_lap_factor", 1.3) * lap_s,
+            fuel_laps=self.fuel_remaining_laps,
+        )
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
         if pkt.code == "FLBK":
@@ -580,13 +653,16 @@ class SessionState:
     def _on_session_history(self, pkt: SessionHistoryPacket) -> None:
         self._histories[pkt.car_idx] = pkt
         laps = pkt.laps[: pkt.num_laps]
-        self._best_laps[pkt.car_idx] = min(
-            (
-                lap.lap_time_ms
-                for lap in laps
-                if lap.lap_valid_bit_flags & LAP_VALID and lap.lap_time_ms
-            ),
-            default=0,
+        best_lap = min(
+            (lap for lap in laps if lap.lap_valid_bit_flags & LAP_VALID and lap.lap_time_ms),
+            key=lambda lap: lap.lap_time_ms,
+            default=None,
+        )
+        self._best_laps[pkt.car_idx] = best_lap.lap_time_ms if best_lap is not None else 0
+        self._best_lap_sectors[pkt.car_idx] = (
+            (best_lap.sector1_ms, best_lap.sector2_ms, best_lap.sector3_ms)
+            if best_lap is not None
+            else (0, 0, 0)
         )
         if pkt.car_idx == self._player_idx:
             self._player_laps_completed = max(0, pkt.num_laps - 1)
@@ -853,6 +929,7 @@ class SessionState:
                 self._th("pressure_step_large_psi", 0.8),
             ),
         )
+        cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         return Snapshot(
             now=now,
             session_time=st,
@@ -974,8 +1051,123 @@ class SessionState:
             run_flying_s=self.run_temps.seconds,
             pressure_advice=pressures,
             pressure_advice_text=pressure_text(pressures),
+            **cool,
             _ages={name: st - t for name, t in self._last_update.items()},
         )
+
+    def _cool_view(
+        self,
+        st: float,
+        kind: str,
+        phase: str,
+        player_best: int,
+        field_best: tuple[int, ...],
+        inner: Corners,
+    ) -> dict[str, Any]:
+        """Run-plan and cool-down-lap fields of the snapshot."""
+        out: dict[str, Any] = {}
+        if kind != "qualifying":
+            return out
+        run = self.run
+        temps = inner.as_tuple()
+        hot_i = max(range(4), key=lambda i: temps[i])
+        low_c = self._th("pressure_window_low_c", 88.0)
+        high_c = self._th("pressure_window_high_c", 102.0)
+        if temps[hot_i] > high_c:
+            hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, keep it off the kerbs"
+        elif min(temps) < low_c:
+            cold_i = min(range(4), key=lambda i: temps[i])
+            hint = f"{WHEEL_NAMES[cold_i]} down to {temps[cold_i]:.0f}, keep some heat in it"
+        else:
+            hint = (
+                f"tyres in the window, fronts {(inner.fl + inner.fr) / 2:.0f}, "
+                f"rears {(inner.rl + inner.rr) / 2:.0f}"
+            )
+        cool_lap = phase == "flying" and run.kind == COOL
+        to_hot = (
+            self.track_length_m - self._th("cool_hot_mode_m", 600.0) - self.lap_distance
+            if cool_lap and self.track_length_m > 0
+            else 0.0
+        )
+        plan = run.plan
+        why = ""
+        if plan.reason == "battery":
+            why = f"Battery's {self.ers_store_pct:.0f}"
+        elif plan.reason == "tyres":
+            why = f"{WHEEL_NAMES[hot_i]}'s at {temps[hot_i]:.0f}"
+        elif plan.reason == "time":
+            why = f"{self.session_time_left / 60:.0f} minutes left"
+        elif plan.reason == "fuel":
+            why = "Fuel's tight"
+        elif plan.reason == "flag":
+            why = "That's the flag"
+        elif plan.reason == "safe":
+            why = "You're safe"
+        pole_idx = min(
+            (i for i, b in enumerate(field_best) if b > 0), key=lambda i: field_best[i], default=-1
+        )
+        pole_gap = 0
+        gaps = (0, 0, 0)
+        name = ""
+        if pole_idx >= 0 and pole_idx != self._player_idx and player_best > 0:
+            pole_gap = player_best - field_best[pole_idx]
+            mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
+            theirs = self._best_lap_sectors.get(pole_idx, (0, 0, 0))
+            gaps = (
+                mine[0] - theirs[0] if mine[0] and theirs[0] else 0,
+                mine[1] - theirs[1] if mine[1] and theirs[1] else 0,
+                mine[2] - theirs[2] if mine[2] and theirs[2] else 0,
+            )
+            if pole_idx < len(self.participants):
+                name = self.participants[pole_idx].name
+        worst = max(range(3), key=lambda i: gaps[i])
+        out.update(
+            run_lap_kind=run.kind,
+            line_crossings=run.crossings,
+            run_plan=plan.plan,
+            run_plan_reason=plan.reason,
+            run_plan_why=why,
+            cool_lap=cool_lap,
+            cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            cool_elapsed_s=max(0.0, st - run.cool_start_t) if cool_lap else 0.0,
+            dist_to_hot_mode_m=max(0.0, to_hot),
+            last_hot=run.last_hot,
+            last_hot_mistakes=(
+                mistakes_text(run.last_hot, self._player_sectors) if run.last_hot else ""
+            ),
+            hottest_tyre=WHEEL_NAMES[hot_i],
+            hottest_tyre_c=temps[hot_i],
+            cool_tyre_hint=hint,
+            pole_driver=name,
+            pole_gap_ms=pole_gap,
+            pole_gap_s=round(pole_gap / 1000.0, 1),
+            pole_sector_gaps_ms=gaps,
+            pole_worst_sector=worst + 1 if gaps[worst] > 0 else 0,
+            pole_worst_sector_s=round(max(0, gaps[worst]) / 1000.0, 1),
+            hot_car_behind_s=(
+                self._hot_car_behind_s() if cool_lap or phase == "out_lap" else math.inf
+            ),
+        )
+        return out
+
+    def _hot_car_behind_s(self) -> float:
+        """Seconds until the nearest car on a flying lap behind reaches the player."""
+        if self.cars_lap is None or self.track_length_m <= 0:
+            return math.inf
+        best = math.inf
+        for i, c in enumerate(self.cars_lap):
+            if i == self._player_idx or c.driver_status != DriverStatus.FLYING_LAP:
+                continue
+            if c.pit_status != PitStatus.NONE:
+                continue
+            gap_m = (self.lap_distance - c.lap_distance) % self.track_length_m
+            if gap_m <= 0 or gap_m > 1500:
+                continue
+            speed = 0.0
+            if self.cars_telemetry is not None and i < len(self.cars_telemetry):
+                speed = float(self.cars_telemetry[i].speed) / 3.6
+            best = min(best, gap_m / max(speed, 30.0))
+        return best
 
     def _th(self, name: str, default: float) -> float:
         try:
