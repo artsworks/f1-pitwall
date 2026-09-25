@@ -136,3 +136,33 @@ variants), adaptivity (acknowledge/negative counts, `12-driver-input.md`) and th
 debrief are all deterministic. An LLM would add 300 ms–2 s of latency, a network
 dependency mid-race, per-token cost and untestable behaviour, for the marginal gain of
 more varied wording. Revisit only for post-race Q&A over SQLite, behind an optional key.
+
+**21. LLM-assisted debrief.**
+The agreed shape of the "post-race Q&A" that (20) sanctions. Once M4 has built the
+deterministic HTML debrief (`05-roadmap.md`, M4), add an *optional* LLM pass that reads
+the debrief artifacts — the stint-plot data, deg curves, the decision log with each call's
+inputs and verdict, the `LapSummary` rows and 10 Hz downsample from SQLite, and the
+`.f1bin` recording index — and produces natural-language coaching analysis plus freeform
+Q&A ("why did I lose time in S2 all weekend?", "was the lap-30 call correct?"). Setup
+correlation (9) is a natural input once it exists.
+
+Safe to defer and safe to build: it runs offline after the session, so there is no
+live-latency constraint and no replay-determinism requirement. It sits inside the ADR 0008
+boundary (`adr/0008-natural-phrasing-without-an-llm.md`): the model may phrase or analyse
+but never decide. Deterministic decisions stay replay-testable; the LLM output is advisory
+prose about them.
+
+Depends on the M4 debrief artifacts, the SQLite history schema (the LLM is one more
+consumer of it, so migrations (16) and data growth (15) apply), and M3's recorded sessions
+for real data to analyse.
+
+Open points to settle before building:
+- Cloud vs local model — league sessions contain other players' names and pace, so the
+  privacy question in (13) and (15) decides what may leave the machine.
+- Per-token cost, and an optional API key in the layered config (`08-configuration.md`),
+  absent by default.
+- Surface: embedded in the HTML debrief, or a separate `pitwall debrief --ask` CLI/chat.
+- Grounding: feed structured stats and the decision log, never raw packets, to keep
+  hallucination risk low and context small.
+- Marking LLM-generated text visually so it is never confused with the deterministic,
+  reviewed analysis beside it.

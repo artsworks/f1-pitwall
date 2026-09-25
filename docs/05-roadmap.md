@@ -93,8 +93,11 @@ the call count per lap stays inside budget.
 
 ## Later, if wanted
 
-Defend and survive mindsets, a Streamdeck, a spotter, voice input ("how's the gap?"), and an LLM phrasing layer over the deterministic rule
-outputs — deterministic decisions, natural delivery, never the reverse.
+Defend and survive mindsets, a Streamdeck, a spotter, voice input ("how's the gap?"), an LLM phrasing layer over the deterministic rule
+outputs, and an optional LLM-assisted debrief — coaching analysis and Q&A over the M4
+debrief artifacts and SQLite history, behind an optional API key
+(`10-angles-not-yet-considered.md`, item 21) — deterministic decisions, natural delivery,
+never the reverse.
 
 ## Working agreements
 
