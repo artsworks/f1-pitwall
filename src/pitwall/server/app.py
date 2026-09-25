@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,7 @@ def state_payload(
             "rl": snapshot.brake_ema_fast.rl,
             "rr": snapshot.brake_ema_fast.rr,
         },
+        "damage": dataclasses.asdict(snapshot.damage),
         "fuel_remaining_laps": snapshot.fuel_remaining_laps,
         "ers_pct": snapshot.ers_store_pct,
         "safety_car": snapshot.safety_car_status,

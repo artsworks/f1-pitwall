@@ -127,3 +127,40 @@ def test_min_lap() -> None:
     eng = _engine([_rule(min_lap=3)])
     res = eng.evaluate(_snap(lap_num=1, tyre_inner_ema_fast=_corners(60.0)))
     assert res.suppressed[0].reason == "min_lap"
+
+
+def _default_rule_engine() -> RuleEngine:
+    from pitwall.config.loader import ConfigStore
+
+    store = ConfigStore()
+    s = store.current()
+    return RuleEngine(
+        list(s.rules),
+        thresholds=s.thresholds,
+        mode=store.current().resolved_mindset(),
+        staleness_s=s.engine.staleness_s,
+    )
+
+
+def test_front_wing_damage_rule_fires() -> None:
+    from pitwall.state.session import Damage
+
+    engine = _default_rule_engine()
+    snap = _snap(
+        phase="on_track",
+        damage=Damage(front_left_wing=30),
+        _ages={"car_damage": 0.1},
+    )
+    result = engine.evaluate(snap)
+    ids = [c.rule.defn.id for c in result.candidates]
+    assert "front_wing_damage" in ids
+
+    # below threshold: nothing fires
+    engine2 = _default_rule_engine()
+    snap2 = _snap(
+        phase="on_track",
+        damage=Damage(front_left_wing=5),
+        _ages={"car_damage": 0.1},
+    )
+    result2 = engine2.evaluate(snap2)
+    assert "front_wing_damage" not in [c.rule.defn.id for c in result2.candidates]

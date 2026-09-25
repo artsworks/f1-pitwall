@@ -19,6 +19,7 @@ main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1em;
 .status-cold { color: #6cf; }
 .status-ok { color: #3f6; }
 .status-hot { color: #f66; }
+.warn { color: #ff5c5c; }
 .wear { color: #888; font-size: 0.85rem; }
 
 .rightblock { border: 1px solid #333; padding: 0.75em; }

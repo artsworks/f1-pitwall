@@ -161,3 +161,27 @@ def test_ema_scalar() -> None:
     assert e.value == 100.0
     e.update(3.0, 0.0)  # dt == tau -> retains e^-1 of the old value
     assert e.value == pytest.approx(100.0 * 0.3678794411, abs=1.0)
+
+
+def test_car_damage_reaches_snapshot_and_payload() -> None:
+    from pitwall.server.app import state_payload
+
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.CAR_DAMAGE,
+            {"cars": {0: {"front_left_wing_damage": 25, "floor_damage": 8}}},
+        ),
+        0.0,
+    )
+    snap = state.snapshot(0.0)
+    assert snap.damage.front_left_wing == 25
+    assert snap.damage.floor == 8
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+
+    payload = state_payload(snap, settings=ConfigStore().current(), metrics=Metrics(), quiet=False)
+    assert payload["damage"]["front_left_wing"] == 25
+    assert payload["damage"]["ers_fault"] == 0

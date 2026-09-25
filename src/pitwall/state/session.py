@@ -32,6 +32,25 @@ PACKET_NAMES: dict[int, str] = {
 
 _ZERO_CORNERS = Corners(0.0, 0.0, 0.0, 0.0)
 
+
+@dataclass(frozen=True, slots=True)
+class Damage:
+    """Player car damage (percent unless a fault flag)."""
+
+    front_left_wing: int = 0
+    front_right_wing: int = 0
+    rear_wing: int = 0
+    floor: int = 0
+    diffuser: int = 0
+    sidepod: int = 0
+    gearbox: int = 0
+    engine: int = 0
+    drs_fault: int = 0
+    ers_fault: int = 0
+
+
+_ZERO_DAMAGE = Damage()
+
 # session_time regression larger than this counts as a flashback/rewind.
 REWIND_THRESHOLD_S = 1.0
 
@@ -81,6 +100,7 @@ class Snapshot:
     ers_deploy_mode: int = 0
     drs_allowed: int = 0
     tyres_wear: Corners = _ZERO_CORNERS
+    damage: Damage = _ZERO_DAMAGE
     laps: tuple[LapSummary, ...] = ()
     _ages: dict[str, float] = field(default_factory=dict)
 
@@ -126,6 +146,7 @@ class SessionState:
         self.ers_deploy_mode = 0
         self.drs_allowed = 0
         self.tyres_wear = _ZERO_CORNERS
+        self.damage = _ZERO_DAMAGE
 
         self.tyre_surface_fast = CornersEma(ema_fast_s)
         self.tyre_surface_slow = CornersEma(ema_slow_s)
@@ -257,7 +278,20 @@ class SessionState:
 
     def _on_car_damage(self, pkt: CarDamagePacket) -> None:
         self.cars_damage = pkt.cars
-        self.tyres_wear = pkt.cars[self._player_idx].tyres_wear
+        car = pkt.cars[self._player_idx]
+        self.tyres_wear = car.tyres_wear
+        self.damage = Damage(
+            front_left_wing=car.front_left_wing_damage,
+            front_right_wing=car.front_right_wing_damage,
+            rear_wing=car.rear_wing_damage,
+            floor=car.floor_damage,
+            diffuser=car.diffuser_damage,
+            sidepod=car.sidepod_damage,
+            gearbox=car.gearbox_damage,
+            engine=car.engine_damage,
+            drs_fault=car.drs_fault,
+            ers_fault=car.ers_fault,
+        )
 
     # -- snapshot -----------------------------------------------------------
 
@@ -302,6 +336,7 @@ class SessionState:
             ers_deploy_mode=self.ers_deploy_mode,
             drs_allowed=self.drs_allowed,
             tyres_wear=self.tyres_wear,
+            damage=self.damage,
             laps=tuple(self.laps),
             _ages={name: st - t for name, t in self._last_update.items()},
         )

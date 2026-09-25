@@ -42,6 +42,24 @@
     setText("brakes",
       "brakes FL " + fmt(p.brakes.fl, 0) + " FR " + fmt(p.brakes.fr, 0) +
       " RL " + fmt(p.brakes.rl, 0) + " RR " + fmt(p.brakes.rr, 0));
+    if (p.damage) {
+      var d = p.damage;
+      var parts = [
+        ["front_left_wing", "FW-L"], ["front_right_wing", "FW-R"],
+        ["rear_wing", "RW"], ["floor", "floor"], ["diffuser", "diffuser"],
+        ["sidepod", "sidepod"], ["gearbox", "gearbox"], ["engine", "engine"],
+      ];
+      var items = [], warn = false;
+      parts.forEach(function (pair) {
+        var v = d[pair[0]];
+        if (v > 0) { items.push(pair[1] + " " + v + "%"); if (v >= 20) warn = true; }
+      });
+      if (d.drs_fault) { items.push("DRS fault"); warn = true; }
+      if (d.ers_fault) { items.push("ERS fault"); warn = true; }
+      var dmg = el("damage");
+      dmg.textContent = items.length ? "damage " + items.join(" · ") : "damage none";
+      dmg.className = warn ? "warn" : "dim";
+    }
     if (p.latency) {
       setText("latency",
         "p99 " + fmt(p.latency.trigger_to_speak_p99_ms, 0) + "ms call · " +

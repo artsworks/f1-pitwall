@@ -8,3 +8,12 @@ rules:
     cooldown_s: 30
     requires: [car_telemetry, lap_data]
     say: "Front left is cold, {tyre_inner_ema_fast.FL:.0f}. Drag the brakes through sector three."
+  - id: front_wing_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
+    clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_damage_warn_pct"
+    still_true: "max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say: "Front wing damage, front left {damage.front_left_wing} percent, front right {damage.front_right_wing} percent. Expect understeer."
