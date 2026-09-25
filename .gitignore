@@ -1,0 +1,9 @@
+# recordings and local data
+*.f1bin
+*.f1idx
+*.f1bin.zst
+*.sqlite
+*.db
+recordings/
+__pycache__/
+.venv/
