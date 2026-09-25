@@ -159,10 +159,16 @@ for real data to analyse.
 Open points to settle before building:
 - Cloud vs local model — league sessions contain other players' names and pace, so the
   privacy question in (13) and (15) decides what may leave the machine.
+- Model tier: prefer the fast, cheap tier over frontier models — Gemini Flash,
+  OpenAI's mini/nano class, DeepSeek-V3, Zhipu GLM-Flash — since the inputs are
+  pre-computed structured stats and the job is phrasing and correlation, not reasoning
+  from raw data. Provider behind a small interface so the model is a config line.
 - Per-token cost, and an optional API key in the layered config (`08-configuration.md`),
   absent by default.
 - Surface: embedded in the HTML debrief, or a separate `pitwall debrief --ask` CLI/chat.
 - Grounding: feed structured stats and the decision log, never raw packets, to keep
   hallucination risk low and context small.
 - Marking LLM-generated text visually so it is never confused with the deterministic,
-  reviewed analysis beside it.
+  reviewed analysis beside it. The debrief page design (`16-debrief-design.md`, §6)
+  proposes the rules: one badged, hideable section; every claim anchored to a
+  deterministic section; absent by default.

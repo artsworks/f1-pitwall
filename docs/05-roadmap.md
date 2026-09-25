@@ -83,7 +83,7 @@ the call count per lap stays inside budget.
 ## M4 — Make it better over time (~1 session)
 
 - Post-session HTML debrief: stint plots, deg curves, every call with its inputs and
-  whether it proved right.
+  whether it proved right. Layout and phases in `16-debrief-design.md`.
 - Calibration tool fitting thermal windows and fuel coefficients from recorded sessions.
 - Piper TTS fallback with pre-rendered common phrases.
 - Optional phone client: Web Speech, HTTPS via mkcert, PWA install, wake lock.

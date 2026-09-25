@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall mockup — debrief (Bahrain, 50% race)</title>
+<style>
+:root {
+  --bg:#0a0a0c; --panel:#121216; --panel2:#17171c; --line:#2a2a30;
+  --fg:#ececec; --dim:#8a8a92; --faint:#4a4a52;
+  --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff; --aggr:#ff8a3d;
+  --soft:#c81e1e; --med:#e6b800; --hard:#e8e8e8; --inter:#2fbf4f; --wet:#2f6fd8;
+  --mono:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
+  --sans:system-ui,"Segoe UI",Roboto,sans-serif;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:16px; line-height:1.45; }
+body { display:grid; grid-template-columns: 16rem minmax(0, 1fr); min-height:100vh; }
+a { color:var(--info); }
+.mono, .num, td, th, .stat b, .badge, code, .chip { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+/* agenda nav */
+nav { position:sticky; top:0; height:100vh; border-right:1px solid var(--line); background:var(--panel); padding:1rem; display:flex; flex-direction:column; gap:.2rem; overflow:auto; }
+nav .brand { font-family:var(--mono); color:var(--dim); letter-spacing:.12em; font-size:.8rem; margin-bottom:.6rem; }
+nav .brand b { color:var(--fg); }
+nav a { color:var(--dim); text-decoration:none; padding:.35rem .6rem; border-left:2px solid transparent; font-size:.95rem; }
+nav a:hover { color:var(--fg); }
+nav a.on { color:var(--fg); border-left-color:var(--ok); background:var(--panel2); }
+nav a .n { font-family:var(--mono); color:var(--faint); margin-right:.5rem; }
+nav a.llm .n { color:var(--info); }
+nav .sp { flex:1; }
+nav .foot { font-size:.78rem; color:var(--faint); font-family:var(--mono); line-height:1.5; }
+nav .foot label { display:flex; gap:.4rem; align-items:center; color:var(--dim); cursor:pointer; margin-top:.5rem; }
+
+main { padding:1.5rem 2.5rem 4rem; max-width:80rem; }
+section { padding:1.6rem 0; border-bottom:1px solid var(--line); }
+section h2 { margin:0 0 .9rem; font-family:var(--mono); font-weight:normal; letter-spacing:.12em; font-size:.95rem; color:var(--dim); }
+section h2 .n { color:var(--faint); margin-right:.6rem; }
+p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
+.row { display:grid; gap:1rem; }
+.cols-2 { grid-template-columns:1fr 1fr; }
+.cols-3 { grid-template-columns:repeat(3,1fr); }
+.cols-4 { grid-template-columns:repeat(4,1fr); }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:.35rem; padding:.9rem 1rem; }
+.card h3 { margin:0 0 .5rem; font-family:var(--mono); font-weight:normal; font-size:.8rem; letter-spacing:.1em; color:var(--dim); }
+.card .src { color:var(--faint); font-size:.72rem; font-family:var(--mono); margin-top:.6rem; }
+
+/* header */
+header.session { display:flex; align-items:baseline; gap:1.2rem; flex-wrap:wrap; padding-bottom:1.2rem; border-bottom:1px solid var(--line); }
+header.session h1 { margin:0; font-family:var(--mono); font-size:1.6rem; font-weight:bold; letter-spacing:.02em; }
+header.session .meta { color:var(--dim); font-family:var(--mono); font-size:.9rem; }
+header.session .meta b { color:var(--fg); font-weight:normal; }
+header .actions { margin-left:auto; display:flex; gap:.5rem; }
+.btn { font-family:var(--mono); font-size:.8rem; border:1px solid var(--line); color:var(--dim); background:var(--panel); padding:.3rem .7rem; border-radius:.3rem; cursor:pointer; }
+.btn:hover { color:var(--fg); border-color:var(--dim); }
+
+/* stats */
+.stat b { display:block; font-size:1.7rem; font-weight:bold; line-height:1.1; }
+.stat small { color:var(--dim); }
+.ok { color:var(--ok); } .warn { color:var(--warn); } .crit { color:var(--crit); } .cold { color:var(--cold); } .info { color:var(--info); } .dim { color:var(--dim); }
+
+/* chips / badges */
+.chip { display:inline-block; font-size:.72rem; padding:.05rem .45rem; border-radius:.25rem; border:1px solid var(--line); color:var(--dim); letter-spacing:.06em; }
+.chip.soft { border-color:var(--soft); color:var(--soft); } .chip.med { border-color:var(--med); color:var(--med); } .chip.hard { border-color:var(--hard); color:var(--hard); }
+.chip.p1 { border-color:var(--crit); color:var(--crit); } .chip.p2 { border-color:var(--warn); color:var(--warn); } .chip.p3 { border-color:var(--info); color:var(--info); }
+.chip.sup { border-style:dashed; }
+.badge { font-size:.7rem; letter-spacing:.12em; padding:.1rem .5rem; border-radius:.25rem; }
+.badge.det { background:#173a25; color:var(--ok); }
+.badge.gen { background:#2a2a4a; color:var(--info); }
+
+/* charts */
+svg { display:block; width:100%; height:auto; }
+.axis { stroke:var(--faint); stroke-width:1; }
+.grid { stroke:var(--line); stroke-width:1; }
+.lbl { fill:var(--dim); font-family:var(--mono); font-size:11px; }
+.lbl.b { fill:var(--fg); }
+.pt.soft { fill:var(--soft); } .pt.med { fill:var(--med); } .pt.hard { fill:var(--hard); }
+.pt.inv { fill:none; stroke:var(--faint); stroke-width:1.2; }
+.fit { fill:none; stroke-width:1.6; stroke-dasharray:4 3; }
+.fit.soft { stroke:var(--soft); } .fit.med { stroke:var(--med); } .fit.hard { stroke:var(--hard); }
+.band { fill:var(--warn); opacity:.12; }
+.pitline { stroke:var(--dim); stroke-width:1; stroke-dasharray:2 3; }
+.calltick { fill:var(--warn); } .calltick.p1 { fill:var(--crit); } .calltick.sup { fill:var(--faint); }
+.stint rect.soft { fill:var(--soft); } .stint rect.med { fill:var(--med); } .stint rect.hard { fill:var(--hard); }
+.stint rect.alt { opacity:.35; }
+.bar.gain { fill:var(--ok); } .bar.loss { fill:var(--crit); }
+.trace { fill:none; stroke-width:1.5; }
+.trace.me { stroke:var(--ok); stroke-width:2.2; } .trace.r1 { stroke:var(--dim); } .trace.r2 { stroke:var(--faint); }
+
+/* tables */
+table { width:100%; border-collapse:collapse; font-size:.86rem; }
+th { text-align:left; color:var(--dim); font-weight:normal; letter-spacing:.06em; font-size:.74rem; padding:.35rem .5rem; border-bottom:1px solid var(--line); }
+td { padding:.4rem .5rem; border-bottom:1px solid #1c1c22; vertical-align:top; }
+td.r, th.r { text-align:right; }
+tr.sup td { color:var(--faint); }
+.grade { display:inline-flex; gap:.25rem; }
+.grade button { font-family:var(--mono); font-size:.7rem; border:1px solid var(--line); color:var(--dim); background:transparent; padding:.05rem .4rem; border-radius:.2rem; cursor:pointer; }
+.grade button.on { border-color:var(--ok); color:var(--ok); }
+.grade button.on.bad { border-color:var(--crit); color:var(--crit); }
+details.why { margin-top:.25rem; font-size:.8rem; color:var(--dim); }
+details.why summary { cursor:pointer; color:var(--faint); }
+details.why code { color:var(--dim); }
+
+/* action list */
+ol.actions { margin:0; padding-left:1.4rem; }
+ol.actions li { margin:.4rem 0; }
+ol.actions li .ev { color:var(--dim); font-size:.86rem; }
+
+/* generated (LLM) panel */
+.gen-panel { border:1px dashed var(--info); border-radius:.4rem; background:#14142a; padding:1rem 1.2rem; position:relative; }
+.gen-panel .hdr { display:flex; align-items:center; gap:.7rem; margin-bottom:.6rem; flex-wrap:wrap; }
+.gen-panel .hdr .model { font-family:var(--mono); font-size:.75rem; color:var(--dim); }
+.gen-panel p { margin:.4rem 0; max-width:60rem; }
+.gen-panel .cite { font-family:var(--mono); font-size:.72rem; color:var(--info); text-decoration:none; border-bottom:1px dotted var(--info); }
+.gen-panel .disclaimer { font-size:.74rem; color:var(--dim); margin-top:.7rem; }
+.ask { display:flex; gap:.5rem; margin-top:.8rem; }
+.ask input { flex:1; font-family:var(--mono); background:var(--bg); border:1px solid var(--line); color:var(--fg); padding:.5rem .7rem; border-radius:.3rem; }
+.ask .btn { border-color:var(--info); color:var(--info); }
+.qa { margin-top:.8rem; border-top:1px solid #2a2a4a; padding-top:.6rem; }
+.qa .q { color:var(--dim); font-family:var(--mono); font-size:.85rem; }
+.qa .a { margin:.3rem 0 0; }
+body.nogen .gen-panel, body.nogen nav a.llm { display:none; }
+body.nogen .gen-off { display:block; }
+.gen-off { display:none; color:var(--faint); font-family:var(--mono); font-size:.8rem; }
+
+@media print { nav { display:none; } body { display:block; } main { max-width:none; padding:0; } .grade, .ask { display:none; } }
+@media (max-width: 900px) { body { grid-template-columns:1fr; } nav { position:static; height:auto; } .cols-2,.cols-3,.cols-4 { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand"><b>pitwall</b> · DEBRIEF</div>
+  <a class="on" href="#s0"><span class="n">00</span>Summary</a>
+  <a href="#s1"><span class="n">01</span>Pace &amp; stints</a>
+  <a href="#s2"><span class="n">02</span>Sectors</a>
+  <a href="#s3"><span class="n">03</span>Tyres</a>
+  <a href="#s4"><span class="n">04</span>Strategy calls</a>
+  <a href="#s5"><span class="n">05</span>Radio &amp; decisions</a>
+  <a href="#s6"><span class="n">06</span>Incidents &amp; energy</a>
+  <a href="#s7"><span class="n">07</span>Actions</a>
+  <a class="llm" href="#s8"><span class="n">08</span>Engineer's notes <span class="badge gen">GEN</span></a>
+  <div class="sp"></div>
+  <div class="foot">
+    recording 2026-09-24_bahrain_race.f1bin.zst<br>
+    lite · 34 MB · config a91c2e<br>
+    rules v0.4 · balanced<br>
+    <label><input type="checkbox" id="toggleGen" checked> show generated text</label>
+  </div>
+</nav>
+
+<main>
+<header class="session">
+  <h1>BAHRAIN · RACE 50% · 28 LAPS</h1>
+  <div class="meta">Thu 24 Sep 2026, 21:04 · <b>P4</b> from P6 · <b>MED 1–12 → HARD 13–28</b> · league: Thursday Night GP · 3 humans</div>
+  <div class="actions"><button class="btn">tag: keep</button><button class="btn">open in review mode</button><button class="btn">export HTML</button></div>
+</header>
+
+<!-- 00 SUMMARY -->
+<section id="s0">
+  <h2><span class="n">00</span>SUMMARY <span class="badge det">DETERMINISTIC</span></h2>
+  <p class="lede">Gained two places. Race pace was <b>P3 of the grid</b>; the result was decided by <b>S2</b> (−0.31 s/lap to the car ahead all race) and by <b>pitting one lap late</b> (≈1.4 s lost to the undercut from P5). The engine made 23 calls, 19 of them proved right in hindsight.</p>
+  <div class="row cols-4">
+    <div class="card stat"><h3>RACE PACE</h3><b>1:34.812</b><small>mean valid lap · P3 of 20</small></div>
+    <div class="card stat"><h3>CONSISTENCY</h3><b class="ok">0.28 s</b><small>σ of valid laps · best in field 0.24</small></div>
+    <div class="card stat"><h3>PIT STOP</h3><b class="warn">L13 · 22.9 s</b><small>loss vs green pace · window was L11–12</small></div>
+    <div class="card stat"><h3>CALLS</h3><b>23 <span class="dim">/ 19 right</span></b><small>3 noise · 1 late · 0 wrong</small></div>
+  </div>
+</section>
+
+<!-- 01 PACE -->
+<section id="s1">
+  <h2><span class="n">01</span>PACE &amp; STINTS</h2>
+  <div class="card">
+    <h3>LAP TIME BY LAP · colour = compound · hollow = invalid (pit / SC / flashback) · dashed = deg fit per stint · amber band = SC</h3>
+    <svg viewBox="0 0 960 300" id="laps"></svg>
+    <div class="src">source: laps (valid, invalid_reasons) · stints (deg fit) · pit_events</div>
+  </div>
+  <div class="row cols-2" style="margin-top:1rem">
+    <div class="card">
+      <h3>STINTS · you vs the two cars around you</h3>
+      <svg viewBox="0 0 460 120" id="stints"></svg>
+      <div class="src">source: stints · Session History (rivals) · dim segment = alternative the engine projected</div>
+    </div>
+    <div class="card">
+      <h3>RACE TRACE · gap to reference pace (1:35.0), s · drops are stops</h3>
+      <svg viewBox="0 0 460 200" id="trace"></svg>
+      <div class="src">source: laps · Session History · reference = field median valid lap</div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 SECTORS -->
+<section id="s2">
+  <h2><span class="n">02</span>SECTORS</h2>
+  <div class="row cols-2">
+    <div class="card">
+      <h3>MEAN SECTOR DELTA TO CAR AHEAD (P3, NORRIS) · valid laps · s/lap</h3>
+      <svg viewBox="0 0 460 130" id="sectors"></svg>
+      <div class="src">source: laps.sector1_ms / sector2_ms / sector3_ms vs Session History</div>
+    </div>
+    <div class="card">
+      <h3>WHERE S2 WENT · across the weekend</h3>
+      <table>
+        <tr><th>session</th><th class="r">S1</th><th class="r">S2</th><th class="r">S3</th><th class="r">laps</th></tr>
+        <tr><td>P2</td><td class="r">+0.05</td><td class="r crit">−0.34</td><td class="r">−0.02</td><td class="r">14</td></tr>
+        <tr><td>Q</td><td class="r">+0.02</td><td class="r crit">−0.29</td><td class="r ok">+0.08</td><td class="r">6</td></tr>
+        <tr><td><b>R</b></td><td class="r">+0.04</td><td class="r crit">−0.31</td><td class="r">+0.01</td><td class="r">22</td></tr>
+      </table>
+      <div class="src">source: laps across the weekend entity · S3 = lap − S1 − S2 · corner-level split needs a <code>full</code> recording</div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 TYRES -->
+<section id="s3">
+  <h2><span class="n">03</span>TYRES</h2>
+  <div class="row cols-3">
+    <div class="card">
+      <h3>DEG · s/lap per lap of age · fitted this session vs prior</h3>
+      <table>
+        <tr><th>stint</th><th class="r">fit</th><th class="r">prior</th><th class="r">laps</th><th class="r">R²</th></tr>
+        <tr><td><span class="chip med">MED</span> 1–12</td><td class="r">0.061</td><td class="r dim">0.055</td><td class="r">10</td><td class="r">0.81</td></tr>
+        <tr><td><span class="chip hard">HARD</span> 13–28</td><td class="r">0.024</td><td class="r dim">0.030</td><td class="r">14</td><td class="r">0.72</td></tr>
+      </table>
+      <div class="src">source: stints.deg_* · prior from track_params (2 earlier sessions)</div>
+    </div>
+    <div class="card">
+      <h3>THERMAL · % of green laps in window · inner EMA</h3>
+      <table>
+        <tr><th></th><th class="r">COLD</th><th class="r">OK</th><th class="r">HOT</th></tr>
+        <tr><td>FL</td><td class="r cold">6%</td><td class="r">71%</td><td class="r crit">23%</td></tr>
+        <tr><td>FR</td><td class="r cold">7%</td><td class="r">88%</td><td class="r">5%</td></tr>
+        <tr><td>RL</td><td class="r cold">12%</td><td class="r">86%</td><td class="r">2%</td></tr>
+        <tr><td>RR</td><td class="r cold">11%</td><td class="r">87%</td><td class="r">2%</td></tr>
+      </table>
+      <div class="src">source: 10 Hz downsample · thresholds from config a91c2e</div>
+    </div>
+    <div class="card">
+      <h3>WEAR AT STOP / FINISH</h3>
+      <div class="stat"><b>MED 58% <span class="dim">→</span> HARD 41%</b><small>FL highest both stints · blistering 0 · out-lap FL surface 62° (COLD, called)</small></div>
+      <div class="src">source: Car Damage wear · Car Status</div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 STRATEGY -->
+<section id="s4">
+  <h2><span class="n">04</span>STRATEGY CALLS · what was called, the alternative, and what happened</h2>
+  <div class="card">
+    <table>
+      <tr><th>lap</th><th>call</th><th>projection at the time</th><th>alternative considered</th><th>outcome</th><th>verdict</th></tr>
+      <tr><td class="num">L10</td><td>“Pit window opens next lap. Plan is box lap twelve.”</td><td class="dim">stop L11–12 · net +0.8 s vs P5 · confidence 0.71</td><td class="dim">extend to L14 (deg fit still had 0.06 s/lap) · −0.6 s</td><td>boxed <b>L13</b> after a NEG at L12</td><td><span class="chip warn">LATE</span></td></tr>
+      <tr><td class="num">L12</td><td>“Box, box. Undercut threat from behind.”</td><td class="dim">P5 gap 1.9 s · UC worth 1.2 s · pit loss 22.4 s</td><td class="dim">—</td><td>driver NEG · P5 boxed L12 and emerged 0.7 s ahead</td><td><span class="chip p1">RIGHT</span></td></tr>
+      <tr><td class="num">L21</td><td>“Free stop available, gap 24 behind.” <span class="chip sup">screen only</span></td><td class="dim">gap 24.1 s &gt; measured loss 22.9 s</td><td class="dim">stay out (chosen)</td><td>stayed out; hards held to the flag</td><td><span class="chip ok">RIGHT</span></td></tr>
+    </table>
+    <div class="src">source: calls (inputs snapshot) · decision log · pit_events · Session History. The L12 undercut cost is reconstructed: P5's actual out-lap vs your projected out-lap.</div>
+  </div>
+</section>
+
+<!-- 05 RADIO -->
+<section id="s5">
+  <h2><span class="n">05</span>RADIO &amp; DECISION LOG · every call, its inputs, and one tap to grade it</h2>
+  <div class="card">
+    <h3>CALLS ON THE TIMELINE · tall = spoken, short grey = suppressed · click a tick to open the row</h3>
+    <svg viewBox="0 0 960 70" id="timeline"></svg>
+  </div>
+  <div class="card" style="margin-top:1rem">
+    <table>
+      <tr><th>lap</th><th>pri</th><th>rule</th><th>said</th><th>audio</th><th>ack</th><th>grade</th></tr>
+      <tr><td class="num">L2</td><td><span class="chip p2">P2</span></td><td class="mono">outlap_fl_cold</td><td>“Front left still cold. One more lap before you lean on it.”
+        <details class="why"><summary>why</summary><code>fl.surface=62 &lt; th.cold=75 · phase=out_lap · sector=3 · still_true ✓</code></details></td><td class="dim">▶ 1.9 s</td><td class="ok">ACK</td><td><div class="grade"><button class="on">good</button><button>noise</button><button>late</button><button>wrong</button></div></td></tr>
+      <tr><td class="num">L7</td><td><span class="chip p2">P2</span></td><td class="mono">fl_hot</td><td>“Front left hot. Ease trail braking into ten.”
+        <details class="why"><summary>why</summary><code>fl.inner=111 &gt; th.hot=108 · 3 laps · wear 31%</code></details></td><td class="dim">▶ 2.4 s</td><td class="dim">—</td><td><div class="grade"><button class="on">good</button><button>noise</button><button>late</button><button>wrong</button></div></td></tr>
+      <tr class="sup"><td class="num">L9</td><td><span class="chip p3 sup">P3</span></td><td class="mono">fuel_on_target</td><td>suppressed · budget (2 calls this lap)</td><td>—</td><td>—</td><td class="dim">n/a</td></tr>
+      <tr><td class="num">L12</td><td><span class="chip p1">P1</span></td><td class="mono">undercut_threat</td><td>“Box, box. Undercut threat from behind.”
+        <details class="why"><summary>why</summary><code>behind.gap=1.9 &lt; uc_worth=1.2+pit_margin · deg_remaining=2 laps · confidence 0.78</code></details></td><td class="dim">▶ 2.1 s</td><td class="crit">NEG</td><td><div class="grade"><button class="on">good</button><button>noise</button><button>late</button><button>wrong</button></div></td></tr>
+      <tr><td class="num">L18</td><td><span class="chip p3">P3</span></td><td class="mono">ers_high_into_corner</td><td>“Boost still on into four.”
+        <details class="why"><summary>why</summary><code>overtake=1 at lap_distance 1310 · corner T4</code></details></td><td class="dim">✗ dropped</td><td>—</td><td><div class="grade"><button>good</button><button class="on bad">noise</button><button>late</button><button>wrong</button></div></td></tr>
+    </table>
+    <div class="src">source: calls · decision log (.jsonl) · driver input (ACK/NEG). Grades write to calls.grade — this is the labelled dataset the tuning loop uses.</div>
+  </div>
+</section>
+
+<!-- 06 INCIDENTS & ENERGY -->
+<section id="s6">
+  <h2><span class="n">06</span>INCIDENTS &amp; ENERGY</h2>
+  <div class="row cols-2">
+    <div class="card">
+      <h3>INCIDENTS · from events + driving signals</h3>
+      <table>
+        <tr><th>lap</th><th>what</th><th class="r">cost</th></tr>
+        <tr><td class="num">L4</td><td>Lock-up FL, T1 braking zone (2nd this weekend at T1)</td><td class="r">−0.4 s</td></tr>
+        <tr><td class="num">L15–16</td><td>Safety car · <span class="chip sup">SCAR</span> · no cheap-stop (already stopped)</td><td class="r dim">—</td></tr>
+        <tr><td class="num">L19</td><td>Big slide T10 exit · “easy on the throttle” called</td><td class="r">−0.7 s</td></tr>
+        <tr><td class="num">L23</td><td>Front-wing damage 8% after contact with P5 (no call: below 15%)</td><td class="r">≈−0.1 s/lap</td></tr>
+      </table>
+      <div class="src">source: Event packets · ADR 0007 signals · Car Damage · cost = lap vs stint fit</div>
+    </div>
+    <div class="card">
+      <h3>ENERGY &amp; FUEL</h3>
+      <div class="row cols-2">
+        <div class="stat"><b>−0.3 laps</b><small>fuel at the flag vs target · lift-and-coast called L24, ACK</small></div>
+        <div class="stat"><b>11 / 14</b><small>Overtake Mode uses on the main straight vs T4 exit · per-track map: M4</small></div>
+      </div>
+      <div class="src">source: Car Status fuel · overtake activations · deployment map is the M4 energy item</div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 ACTIONS -->
+<section id="s7">
+  <h2><span class="n">07</span>ACTIONS FOR NEXT SESSION <span class="badge det">DETERMINISTIC</span></h2>
+  <div class="card">
+    <ol class="actions">
+      <li><b>Sector 2 is the weekend.</b> −0.31 s/lap to the car ahead in every session. <span class="ev">Evidence: §02. Record the next Bahrain session with <code>--record full</code> for the corner split.</span></li>
+      <li><b>Trust the pit call.</b> The NEG at L12 cost the position to P5 (≈1.4 s). <span class="ev">Evidence: §04 row 2; undercut projection 0.78 confidence proved right.</span></li>
+      <li><b>FL management.</b> 23% of green laps HOT on FL; the other three corners &lt; 5%. <span class="ev">Evidence: §03. Thermal call fired on 3 laps, ACK on 1.</span></li>
+      <li><b>Rule tuning:</b> <code>ers_high_into_corner</code> graded noise 2 of 2 this session; consider raising its cooldown. <span class="ev">Evidence: §05 grades.</span></li>
+    </ol>
+    <div class="src">generated from rules over the debrief data: largest sector loss, any NEG that proved right, thermal share &gt; 20%, any rule graded noise ≥ 2×</div>
+  </div>
+</section>
+
+<!-- 08 LLM -->
+<section id="s8">
+  <h2><span class="n">08</span>ENGINEER'S NOTES <span class="badge gen">GENERATED</span></h2>
+  <div class="gen-off">generated notes are off · enable an API key in config (llm.provider) to turn them on</div>
+  <div class="gen-panel">
+    <div class="hdr">
+      <span class="badge gen">GENERATED · gemini-flash</span>
+      <span class="model">inputs: §00–§07 tables + decision log · 6.1k tokens · 2.8 s · $0.001</span>
+    </div>
+    <p>Your race was won and lost in the same place as your quali: sector two. The gap to Norris there is steady at about three tenths regardless of compound or fuel load <a class="cite" href="#s2">§02</a>, which points at a line or a braking reference rather than tyre state — the FL thermal spikes <a class="cite" href="#s3">§03</a> happen on laps where S2 is <em>not</em> worse, so heat isn't the cause here.</p>
+    <p>The lap-12 undercut call was correct and you overrode it <a class="cite" href="#s4">§04</a>. The engine's projection had you 0.8 s ahead of P5 after the stop; the extra lap on 12-lap-old mediums cost about 1.4 s and P5 emerged 0.7 s in front. Worth noting the engine only had 0.78 confidence — the pattern to look for next time is "P1 call + confidence &gt; 0.7", which has been right on all four occasions this season.</p>
+    <p>On the positive side: your consistency on the hard (σ 0.24 s) was the best in the field <a class="cite" href="#s1">§01</a>, and the decision to stay out at lap 21 was right by a clear margin.</p>
+    <div class="disclaimer">Advisory prose over the deterministic sections above; it never changed a decision. Every claim links to the table it was read from — if a claim has no link, treat it as unverified.</div>
+    <div class="ask"><input placeholder="ask about this session… e.g. why did I lose time in S2 all weekend?"><button class="btn">ask</button></div>
+    <div class="qa">
+      <div class="q">&gt; was the lap-30 call correct?</div>
+      <p class="a">There was no lap 30 — this was a 28-lap race. If you mean the last strategy call, that was lap 21 (“free stop available”, screen only <a class="cite" href="#s4">§04</a>); you stayed out and the hards held to the flag, so yes.</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+// ---- sample data (illustrative; in the real debrief these come from SQLite) ----
+const laps = [];
+for (let l = 1; l <= 28; l++) {
+  let t, c, inv = null;
+  if (l <= 12) { c = 'med'; t = 94.35 + 0.061 * l + (Math.sin(l * 1.7) * 0.12); }
+  else { c = 'hard'; t = 94.55 + 0.024 * (l - 12) + (Math.sin(l * 2.3) * 0.11); }
+  if (l === 1) { t = 96.9; inv = 'first_lap'; }
+  if (l === 13) { t = 117.2; inv = 'pitted'; }
+  if (l === 14) { t = 95.6; inv = 'after_in_lap'; }
+  if (l === 15 || l === 16) { t = 118 + (l === 16 ? 6 : 0); inv = 'safety_car'; }
+  if (l === 4) t += 0.4; if (l === 19) t += 0.7;
+  laps.push({ l, t, c, inv });
+}
+const svgNS = 'http://www.w3.org/2000/svg';
+const el = (n, a, txt) => { const e = document.createElementNS(svgNS, n); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+
+// ---- lap chart ----
+(function () {
+  const s = document.getElementById('laps'); const W = 960, H = 300, L = 60, R = 20, T = 14, B = 34;
+  const x = l => L + (l - 1) / 27 * (W - L - R);
+  const ymin = 93.8, ymax = 97.2; const y = t => T + (Math.min(t, ymax) - ymin) / (ymax - ymin) * (H - T - B);
+  const yy = t => H - B - (Math.min(t, ymax) - ymin) / (ymax - ymin) * (H - T - B);
+  s.appendChild(el('rect', { x: x(14.5), y: T, width: x(16.5) - x(14.5), height: H - T - B, class: 'band' }));
+  s.appendChild(el('text', { x: x(15.5), y: T + 12, class: 'lbl', 'text-anchor': 'middle' }, 'SC'));
+  for (let t = 94; t <= 97; t += 0.5) { s.appendChild(el('line', { x1: L, x2: W - R, y1: yy(t), y2: yy(t), class: 'grid' })); s.appendChild(el('text', { x: L - 8, y: yy(t) + 4, class: 'lbl', 'text-anchor': 'end' }, '1:' + (t - 60).toFixed(1))); }
+  for (let l = 1; l <= 28; l += 3) s.appendChild(el('text', { x: x(l), y: H - 12, class: 'lbl', 'text-anchor': 'middle' }, 'L' + l));
+  s.appendChild(el('line', { x1: x(12.5), x2: x(12.5), y1: T, y2: H - B, class: 'pitline' }));
+  s.appendChild(el('text', { x: x(12.5) + 4, y: H - B - 6, class: 'lbl' }, 'PIT · window L11–12'));
+  // fits
+  s.appendChild(el('line', { x1: x(2), y1: yy(94.35 + 0.061 * 2), x2: x(12), y2: yy(94.35 + 0.061 * 12), class: 'fit med' }));
+  s.appendChild(el('line', { x1: x(17), y1: yy(94.55 + 0.024 * 5), x2: x(28), y2: yy(94.55 + 0.024 * 16), class: 'fit hard' }));
+  s.appendChild(el('text', { x: x(7), y: yy(94.35 + 0.061 * 7) - 10, class: 'lbl', 'text-anchor': 'middle' }, 'MED +0.061 s/lap'));
+  s.appendChild(el('text', { x: x(23), y: yy(94.55 + 0.024 * 11) - 10, class: 'lbl', 'text-anchor': 'middle' }, 'HARD +0.024 s/lap'));
+  for (const d of laps) {
+    if (d.inv) { s.appendChild(el('circle', { cx: x(d.l), cy: yy(d.t), r: 4, class: 'pt inv' })); if (d.t > ymax) s.appendChild(el('text', { x: x(d.l), y: T + 30, class: 'lbl', 'text-anchor': 'middle' }, '▲')); }
+    else s.appendChild(el('circle', { cx: x(d.l), cy: yy(d.t), r: 4.5, class: 'pt ' + d.c }));
+  }
+  s.appendChild(el('text', { x: x(4), y: yy(laps[3].t) - 8, class: 'lbl', 'text-anchor': 'middle' }, 'lock-up T1'));
+  s.appendChild(el('text', { x: x(19), y: yy(laps[18].t) - 8, class: 'lbl', 'text-anchor': 'middle' }, 'slide T10'));
+})();
+
+// ---- stints ----
+(function () {
+  const s = document.getElementById('stints'); const W = 460, L = 84, R = 10; const x = l => L + (l - 1) / 28 * (W - L - R);
+  const rows = [
+    ['YOU P4', [[1, 12, 'med'], [13, 28, 'hard']], [[13, 14, 'med', true]]],
+    ['NORRIS P3', [[1, 11, 'med'], [12, 28, 'hard']], []],
+    ['LECLERC P5', [[1, 12, 'med'], [13, 28, 'hard']], []],
+  ];
+  rows.forEach((r, i) => {
+    const y = 12 + i * 34;
+    s.appendChild(el('text', { x: L - 8, y: y + 15, class: 'lbl ' + (i === 0 ? 'b' : ''), 'text-anchor': 'end' }, r[0]));
+    const g = el('g', { class: 'stint' }); s.appendChild(g);
+    for (const [a, b, c] of r[1]) { g.appendChild(el('rect', { x: x(a), y, width: x(b + 1) - x(a) - 2, height: 20, rx: 2, class: c })); g.appendChild(el('text', { x: x(a) + 5, y: y + 14, class: 'lbl', fill: '#000' }, c.toUpperCase() + ' ' + a + '–' + b)); }
+    for (const [a, b, c] of r[2]) g.appendChild(el('rect', { x: x(a), y: y + 22, width: x(b + 1) - x(a) - 2, height: 4, class: c + ' alt' }));
+  });
+  for (let l = 1; l <= 28; l += 9) s.appendChild(el('text', { x: x(l), y: 116, class: 'lbl', 'text-anchor': 'middle' }, 'L' + l));
+})();
+
+// ---- race trace ----
+(function () {
+  const s = document.getElementById('trace'); const W = 460, H = 200, L = 44, R = 10, T = 10, B = 26;
+  const x = l => L + (l - 1) / 27 * (W - L - R); const y = g => T + (g + 10) / 40 * (H - T - B);
+  for (let g = -10; g <= 30; g += 10) { s.appendChild(el('line', { x1: L, x2: W - R, y1: y(g), y2: y(g), class: 'grid' })); s.appendChild(el('text', { x: L - 6, y: y(g) + 4, class: 'lbl', 'text-anchor': 'end' }, (g > 0 ? '+' : '') + g)); }
+  s.appendChild(el('rect', { x: x(14.5), y: T, width: x(16.5) - x(14.5), height: H - T - B, class: 'band' }));
+  // cumulative time lost to a 1:35.0 reference; SC laps neutral (field bunches); stop = +22.6 s
+  const mk = (pit, base, cls) => { let cum = 0, p = ''; for (let l = 1; l <= 28; l++) { let t = (l <= pit ? 94.35 + 0.061 * l : 94.55 + 0.024 * (l - pit)) + base; if (l === 1) t = 96.9 + base; if (l === pit + 1) t += 22.6; if (l === 15 || l === 16) t = 95.0; cum += t - 95.0; p += (l === 1 ? 'M' : 'L') + x(l) + ' ' + y(cum) + ' '; } s.appendChild(el('path', { d: p, class: 'trace ' + cls })); return cum; };
+  const gN = mk(11, -0.31, 'r1'), gL = mk(12, 0.05, 'r2'), gMe = mk(12, 0, 'me');
+  s.appendChild(el('text', { x: x(28) - 4, y: y(gMe) - 6, class: 'lbl b', 'text-anchor': 'end' }, 'you'));
+  s.appendChild(el('text', { x: x(28) - 4, y: y(gN) - 6, class: 'lbl', 'text-anchor': 'end' }, 'NOR'));
+  s.appendChild(el('text', { x: x(28) - 4, y: y(gL) + 12, class: 'lbl', 'text-anchor': 'end' }, 'LEC'));
+  s.appendChild(el('text', { x: x(12) - 4, y: y(2), class: 'lbl', 'text-anchor': 'end' }, 'NOR stops L11 →'));
+  for (let l = 1; l <= 28; l += 9) s.appendChild(el('text', { x: x(l), y: H - 8, class: 'lbl', 'text-anchor': 'middle' }, 'L' + l));
+})();
+
+// ---- sectors ----
+(function () {
+  const s = document.getElementById('sectors'); const W = 460, L = 50, mid = 250; const sc = 300; // px per second
+  const rows = [['S1', 0.04], ['S2', -0.31], ['S3', 0.01]];
+  s.appendChild(el('line', { x1: mid, x2: mid, y1: 6, y2: 112, class: 'axis' }));
+  rows.forEach(([n, v], i) => {
+    const y = 12 + i * 34; const w = Math.abs(v) * sc;
+    s.appendChild(el('text', { x: L - 10, y: y + 15, class: 'lbl b', 'text-anchor': 'end' }, n));
+    s.appendChild(el('rect', { x: v < 0 ? mid - w : mid, y, width: w, height: 20, rx: 2, class: 'bar ' + (v < 0 ? 'loss' : 'gain') }));
+    s.appendChild(el('text', { x: v < 0 ? mid - w - 6 : mid + w + 6, y: y + 15, class: 'lbl b', 'text-anchor': v < 0 ? 'end' : 'start' }, (v > 0 ? '+' : '') + v.toFixed(2) + ' s'));
+  });
+  s.appendChild(el('text', { x: mid, y: 126, class: 'lbl', 'text-anchor': 'middle' }, '← you lose · you gain →'));
+})();
+
+// ---- call timeline ----
+(function () {
+  const s = document.getElementById('timeline'); const W = 960, L = 20, R = 20; const x = l => L + (l - 1) / 27 * (W - L - R);
+  s.appendChild(el('line', { x1: L, x2: W - R, y1: 40, y2: 40, class: 'axis' }));
+  const calls = [[2, 'p2'], [4, 'p2'], [7, 'p2'], [9, 'sup'], [10, 'p2'], [11, 'sup'], [12, 'p1'], [14, 'p3'], [15, 'p1'], [16, 'sup'], [18, 'p3'], [19, 'p2'], [21, 'p3'], [22, 'sup'], [24, 'p2'], [26, 'sup'], [27, 'p3']];
+  for (const [l, c] of calls) { const h = c === 'sup' ? 8 : c === 'p1' ? 26 : 18; s.appendChild(el('rect', { x: x(l) - 2.5, y: 40 - h, width: 5, height: h, class: 'calltick ' + c })); }
+  s.appendChild(el('rect', { x: x(14.5), y: 6, width: x(16.5) - x(14.5), height: 34, class: 'band' }));
+  s.appendChild(el('line', { x1: x(12.5), x2: x(12.5), y1: 6, y2: 40, class: 'pitline' }));
+  for (let l = 1; l <= 28; l += 3) s.appendChild(el('text', { x: x(l), y: 60, class: 'lbl', 'text-anchor': 'middle' }, 'L' + l));
+})();
+
+// ---- nav + toggle ----
+const links = [...document.querySelectorAll('nav a')];
+const io = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id)); } }); }, { rootMargin: '-40% 0px -55% 0px' });
+document.querySelectorAll('main section').forEach(sec => io.observe(sec));
+document.getElementById('toggleGen').addEventListener('change', e => document.body.classList.toggle('nogen', !e.target.checked));
+</script>
+</body>
+</html>
