@@ -107,6 +107,20 @@ MIGRATIONS: list[str] = [
 _CALL_OUTCOMES = {"fired", "suppressed", "ack", "neg", "say_again", "quiet_until"}
 
 
+_U64 = 1 << 64
+_I64_MAX = (1 << 63) - 1
+_UID_COLUMNS = ("uid", "session_uid")
+
+
+def _uid_to_sql(uid: int) -> int:
+    """Store the game's uint64 session UID in SQLite's signed 64-bit INTEGER."""
+    return uid - _U64 if uid > _I64_MAX else uid
+
+
+def _uid_from_sql(value: int) -> int:
+    return value + _U64 if value < 0 else value
+
+
 class Database:
     def __init__(self, path: Path | str) -> None:
         self.path = str(path)
@@ -165,7 +179,7 @@ class Database:
                 " config_hash=excluded.config_hash, weather=excluded.weather,"
                 " recording_path=excluded.recording_path",
                 (
-                    uid,
+                    _uid_to_sql(uid),
                     track_id,
                     session_type,
                     started_at if started_at is not None else time.time(),
@@ -184,7 +198,7 @@ class Database:
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
                 " valid, invalid_reasons) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    session_uid,
+                    _uid_to_sql(session_uid),
                     car_idx,
                     lap.lap_num,
                     lap.lap_time_ms,
@@ -207,7 +221,7 @@ class Database:
                     "INSERT INTO bookmarks(session_uid, t, session_time, lap,"
                     " lap_distance, note) VALUES(?,?,?,?,?,?)",
                     (
-                        session_uid,
+                        _uid_to_sql(session_uid),
                         record.get("t"),
                         record.get("session_time"),
                         record.get("lap"),
@@ -226,7 +240,7 @@ class Database:
                 " text, inputs, config_hash, mindset)"
                 " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    session_uid,
+                    _uid_to_sql(session_uid),
                     record.get("call_id"),
                     record.get("t"),
                     record.get("session_time"),
@@ -258,29 +272,36 @@ class Database:
                 " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
                 " grade=excluded.grade, note=excluded.note,"
                 " graded_at=excluded.graded_at",
-                (session_uid, call_id, rule_id, grade, note, time.time()),
+                (_uid_to_sql(session_uid), call_id, rule_id, grade, note, time.time()),
             )
 
     # -- reads ----------------------------------------------------------------
 
     def _rows(self, sql: str, args: tuple[Any, ...]) -> list[dict[str, Any]]:
         cur = self._conn.execute(sql, args)
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+        for row in rows:
+            for column in _UID_COLUMNS:
+                if isinstance(row.get(column), int):
+                    row[column] = _uid_from_sql(row[column])
+        return rows
 
     def calls_for_session(self, uid: int) -> list[dict[str, Any]]:
-        return self._rows("SELECT * FROM calls WHERE session_uid=? ORDER BY t", (uid,))
+        return self._rows("SELECT * FROM calls WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),))
 
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
-        return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (uid,))
+        return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
     def bookmarks_for_session(self, uid: int) -> list[dict[str, Any]]:
-        return self._rows("SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (uid,))
+        return self._rows(
+            "SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
+        )
 
     def latest_session_uid(self) -> int | None:
         row = self._conn.execute(
             "SELECT uid FROM sessions ORDER BY started_at DESC LIMIT 1"
         ).fetchone()
-        return int(row[0]) if row else None
+        return _uid_from_sql(int(row[0])) if row else None
 
 
 def open_configured(settings: Any) -> Database | None:

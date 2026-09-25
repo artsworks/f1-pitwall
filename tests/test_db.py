@@ -81,3 +81,16 @@ def test_insert_lap() -> None:
     rows = db._rows("SELECT * FROM laps WHERE session_uid=?", (7,))  # noqa: SLF001
     assert len(rows) == 1
     assert rows[0]["lap_time_ms"] == 91_234 and rows[0]["valid"] == 0
+
+
+def test_uint64_session_uid_round_trip() -> None:
+    uid = 0xACBF76B8C45ADE98
+    db = Database(":memory:")
+    db.upsert_session(uid, track_id=0, session_type=5)
+    db.insert_call(uid, {"outcome": "fired", "call_id": "c-1", "t": 1.0, "rule_id": "r"})
+    db.insert_call(uid, {"outcome": "bookmark", "t": 2.0})
+    db.grade_call(uid, "c-1", "r", "good")
+    assert db.latest_session_uid() == uid
+    assert db.calls_for_session(uid)[0]["session_uid"] == uid
+    assert db.grades_for_session(uid)[0]["session_uid"] == uid
+    assert db.bookmarks_for_session(uid)[0]["session_uid"] == uid
