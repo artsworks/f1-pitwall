@@ -83,7 +83,7 @@ the call count per lap stays inside budget.
 ## M4 — Make it better over time (~1 session)
 
 - Post-session HTML debrief: stint plots, deg curves, every call with its inputs and
-  whether it proved right.
+  whether it proved right. Layout and phases in `16-debrief-design.md`.
 - Calibration tool fitting thermal windows and fuel coefficients from recorded sessions.
 - Piper TTS fallback with pre-rendered common phrases.
 - Optional phone client: Web Speech, HTTPS via mkcert, PWA install, wake lock.
@@ -93,8 +93,11 @@ the call count per lap stays inside budget.
 
 ## Later, if wanted
 
-Defend and survive mindsets, a Streamdeck, a spotter, voice input ("how's the gap?"), and an LLM phrasing layer over the deterministic rule
-outputs — deterministic decisions, natural delivery, never the reverse.
+Defend and survive mindsets, a Streamdeck, a spotter, voice input ("how's the gap?"), an LLM phrasing layer over the deterministic rule
+outputs, and an optional LLM-assisted debrief — coaching analysis and Q&A over the M4
+debrief artifacts and SQLite history, behind an optional API key
+(`10-angles-not-yet-considered.md`, item 21) — deterministic decisions, natural delivery,
+never the reverse.
 
 ## Working agreements
 

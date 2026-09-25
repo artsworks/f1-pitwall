@@ -33,7 +33,7 @@ current runtime is unchanged; future call-history additions are identified below
   quiet) has a wheel or keyboard binding (`12-driver-input.md`). The screen only
   *displays* their state.
 - Not a debrief tool. Stint plots, deg curves and call grading live in the post-session
-  HTML debrief (M4) and review mode (`07-replay-and-debug.md`).
+  HTML debrief (M4, `16-debrief-design.md`) and review mode (`07-replay-and-debug.md`).
 - No continuous animation. A new call makes a brief, one-time transition into the
   fixed banner while the old call settles into a smaller previous-call line. Urgent
   calls and stale/error states appear immediately; reduced-motion users get no motion.
