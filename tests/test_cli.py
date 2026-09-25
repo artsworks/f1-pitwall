@@ -30,3 +30,20 @@ def test_replay_and_trim_and_index(tmp_path: Path, capsys) -> None:  # type: ign
     (tmp_path / "s.f1idx").unlink(missing_ok=True)
     assert main(["index", str(rec)]) == 0
     assert (tmp_path / "s.f1idx").exists()
+
+
+def test_speak_command(capsys) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    assert main(["speak", "--engine", "null", "hi"]) == 0
+    out = capsys.readouterr().out
+    assert "speaker: null" in out
+    assert "spoken after" in out
+
+
+def test_speak_default_text(capsys) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    assert main(["speak"]) == 0
+    out = capsys.readouterr().out
+    assert "spoken after" in out

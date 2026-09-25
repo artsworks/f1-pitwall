@@ -332,3 +332,30 @@ def test_replay_hub_sink_emits_call(tmp_path) -> None:
     call_frames = [f for f in hub.outbox if f["type"] == "call"]
     assert call_frames
     assert any("wing" in f["payload"]["text"].lower() for f in call_frames)
+
+
+def test_state_payload_stale_after_gap() -> None:
+    """Snapshot built long after the last packet is not live."""
+    from pitwall.server.app import state_payload
+
+    snap = SessionState().snapshot(5.0)
+    payload = state_payload(snap, settings=ConfigStore().current(), metrics=Metrics(), quiet=False)
+    assert payload["live"] is False
+    assert payload["packet_age_ms"] is None
+
+    # feed a packet, then snapshot 5 s later -> stale
+    from pitwall.ingest import Ingest
+    from pitwall.protocol.header import PacketId
+
+    from .synth import pack_packet
+
+    state2 = SessionState()
+    ingest2 = Ingest()
+    state2.register(ingest2)
+    ingest2.on_datagram(pack_packet(PacketId.LAP_DATA), 0.0)
+    snap2 = state2.snapshot(5.0)
+    payload2 = state_payload(
+        snap2, settings=ConfigStore().current(), metrics=Metrics(), quiet=False
+    )
+    assert payload2["live"] is False
+    assert payload2["packet_age_ms"] == 5000.0

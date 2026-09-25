@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 import threading
+import time
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -232,7 +233,7 @@ async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None
                 f"telemetry {rate:.0f} Hz",
                 flush=True,
             )
-        snap = engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
+        snap = engine.state.snapshot(engine.clock.now())
         payload = state_payload(
             snap,
             settings=store.current(),
@@ -269,7 +270,7 @@ async def _serve(
     def _health() -> dict[str, Any]:
         from pitwall.server.app import packet_age_ms
 
-        snap = engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
+        snap = engine.state.snapshot(engine.clock.now())
         age = packet_age_ms(snap)
         return {"packet_age_ms": age, "live": age is not None and age < 1000.0}
 
@@ -375,6 +376,47 @@ def cmd_start(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_speak(args: argparse.Namespace) -> int:
+    """Diagnose the audio path: speak TEXT and report when it was spoken."""
+    from pitwall.audio.speaker import make_speaker
+
+    store = ConfigStore()
+    speech = store.current().speech.model_copy(update={"engine": args.engine})
+    speaker = make_speaker(speech)
+    print(
+        f"speaker: {speaker.name} (engine={args.engine} voice={speech.voice or 'default'} "
+        f"rate={speech.rate} volume={speech.volume})"
+    )
+    done = threading.Event()
+    spoken_at: list[float] = []
+
+    def _on_spoken(cid: str, t: float) -> None:
+        spoken_at.append(time.monotonic())
+        done.set()
+
+    speaker.on_spoken = _on_spoken
+    t0 = time.monotonic()
+    speaker.speak(
+        Call(
+            id="speak",
+            rule_id="speak",
+            priority=3,
+            text=args.text,
+            tags=[],
+            deadline_ms=10000,
+            lap=0,
+            t=t0,
+            trigger_t=t0,
+        )
+    )
+    if done.wait(timeout=10.0):
+        print(f"spoken after {(spoken_at[0] - t0) * 1000:.0f} ms")
+    else:
+        print("TIMEOUT: nothing spoken in 10 s")
+    speaker.close()
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from pitwall.doctor import run_doctor
 
@@ -440,6 +482,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     st2 = sub.add_parser("start", help="live: UDP ingest + rules + dashboard + speech")
     st2.set_defaults(func=cmd_start)
+
+    sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")
+    sp.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
+    sp.add_argument("--engine", choices=["auto", "sapi", "null"], default="auto")
+    sp.set_defaults(func=cmd_speak)
 
     return p
 

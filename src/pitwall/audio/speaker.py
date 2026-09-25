@@ -125,6 +125,13 @@ class SapiSpeaker:
         self._thread.join(timeout=2.0)
 
     def _worker(self) -> None:
+        try:
+            self._work()
+        except Exception as exc:
+            print(f"speech: SAPI worker crashed: {exc!r}", file=sys.stderr)
+            raise
+
+    def _work(self) -> None:
         import pythoncom
         import win32com.client
 
@@ -165,5 +172,9 @@ def make_speaker(settings: SpeechSettings) -> Speaker:
             return SapiSpeaker(settings)
         except Exception as exc:
             log.warning("SAPI unavailable (%s); speech disabled", exc)
+            print(
+                f"speech: SAPI unavailable ({exc!r}); speech disabled",
+                file=sys.stderr,
+            )
             return NullSpeaker()
     return NullSpeaker()
