@@ -35,14 +35,12 @@ SUGGESTED_VOICES = (
     "en_US-lessac-medium",
 )
 CACHE_SIZE = 64
-BLIP_F0_HZ = 740.0
-BLIP_F1_HZ = 620.0
-BLIP_S = 0.09
+BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
+BLIP_PIP_GAP_S = 0.03
 BLIP_GAP_S = 0.06
-BLIP_AMP = 0.2
+BLIP_AMP = 0.16
 BLIP_H2 = 0.12
 BLIP_ATTACK_S = 0.012
-BLIP_DECAY_TAU_S = 0.035
 BLIP_RELEASE_S = 0.008
 
 Synth = Callable[[str], tuple[bytes, float]]
@@ -102,10 +100,10 @@ def download_voice(settings: SpeechSettings, name: str) -> Path:
     return voice_path(settings, name)
 
 
-def _blip_envelope(sample_count: int, sample_rate: int) -> np.ndarray:
+def _blip_envelope(sample_count: int, sample_rate: int, tau_s: float) -> np.ndarray:
     t = np.arange(sample_count) / sample_rate
     attack_samples = int(sample_rate * BLIP_ATTACK_S)
-    envelope = np.exp(-np.maximum(t - BLIP_ATTACK_S, 0) / BLIP_DECAY_TAU_S)
+    envelope = np.exp(-np.maximum(t - BLIP_ATTACK_S, 0) / tau_s)
     envelope[:attack_samples] *= 0.5 - 0.5 * np.cos(
         np.pi * np.arange(attack_samples) / attack_samples
     )
@@ -116,14 +114,23 @@ def _blip_envelope(sample_count: int, sample_rate: int) -> np.ndarray:
     return envelope
 
 
-def radio_blip(sample_rate: int) -> np.ndarray:
-    """Return the soft radio blip followed by its silent gap."""
-    sample_count = int(sample_rate * BLIP_S)
-    frequencies = np.linspace(BLIP_F0_HZ, BLIP_F1_HZ, sample_count)
+def _pip(sample_rate: int, hz: float, seconds: float, tau_s: float) -> np.ndarray:
+    sample_count = int(sample_rate * seconds)
+    frequencies = np.linspace(hz, hz, sample_count)
     phase = 2 * np.pi * np.cumsum(frequencies) / sample_rate
     tone = np.sin(phase) + BLIP_H2 * np.sin(2 * phase)
-    tone = BLIP_AMP * tone * _blip_envelope(sample_count, sample_rate) / (1 + BLIP_H2)
-    return np.concatenate([tone, np.zeros(int(sample_rate * BLIP_GAP_S))])
+    pip: np.ndarray = (
+        BLIP_AMP * tone * _blip_envelope(sample_count, sample_rate, tau_s) / (1 + BLIP_H2)
+    )
+    return pip
+
+
+def radio_blip(sample_rate: int) -> np.ndarray:
+    """Return the soft radio blip followed by its silent gap."""
+    pips = [_pip(sample_rate, hz, seconds, tau_s) for hz, seconds, tau_s in BLIP_PIPS]
+    pip_gap = np.zeros(int(sample_rate * BLIP_PIP_GAP_S))
+    trailing_gap = np.zeros(int(sample_rate * BLIP_GAP_S))
+    return np.concatenate([pips[0], pip_gap, pips[1], trailing_gap])
 
 
 def to_wav(samples: np.ndarray, sample_rate: int) -> bytes:
