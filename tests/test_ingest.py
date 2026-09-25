@@ -9,7 +9,7 @@ from .synth import make_packet
 def test_accepted_and_handlers() -> None:
     ingest = Ingest()
     seen: list[int] = []
-    ingest.register(PacketId.SESSION, lambda h, p: seen.append(h.packet_id))
+    ingest.register(PacketId.SESSION, lambda h, p, t: seen.append(h.packet_id))
     for i in range(3):
         ingest.on_datagram(make_packet(PacketId.SESSION, frame=i), recv_time=float(i))
     census = ingest.census()

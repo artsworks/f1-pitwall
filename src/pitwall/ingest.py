@@ -21,7 +21,7 @@ from pitwall.protocol.header import (
 
 RATE_WINDOW_S = 5.0
 
-PacketHandler = Callable[[PacketHeader, bytes], None]
+PacketHandler = Callable[[PacketHeader, bytes, float], None]
 
 
 class DatagramRecorder(Protocol):
@@ -67,7 +67,7 @@ class Ingest:
         while arrivals and recv_time - arrivals[0] > RATE_WINDOW_S:
             arrivals.popleft()
         for handler in self._handlers[header.packet_id]:
-            handler(header, payload)
+            handler(header, payload, recv_time)
 
     def rate_hz(self, packet_id: int, now: float) -> float:
         """Observed rate over the last RATE_WINDOW_S seconds."""

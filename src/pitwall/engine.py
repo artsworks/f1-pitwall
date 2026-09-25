@@ -37,6 +37,7 @@ class Engine:
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
         self.metrics = dispatcher.metrics
+        self.speaker_name = "null"
 
     @property
     def tick_period(self) -> float:
@@ -45,7 +46,8 @@ class Engine:
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         snapshot = self.state.snapshot(now)
-        self.metrics.note_packet_to_snapshot(snapshot.session_time, now)
+        if self.state.last_recv_wall is not None:
+            self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
             self.dispatcher.submit(result.candidates, snapshot)

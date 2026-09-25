@@ -247,6 +247,7 @@ async def _serve(
     server = uvicorn.Server(config)
     host, port = settings.connection.http_host, settings.connection.http_port
     print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
+    print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store), coro)
 
 
@@ -306,6 +307,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     async def shutdown() -> None:
         pass
 
+    engine.speaker_name = speaker.name
     try:
         asyncio.run(_serve(engine, hub, store, live()))
     except KeyboardInterrupt:

@@ -96,6 +96,7 @@ class SessionState:
         self._last_update: dict[str, float] = {}  # packet name -> session_time
         self._last_session_time: float | None = None
         self.last_packet_t: float | None = None
+        self.last_recv_wall: float | None = None
         self._player_idx = 0
 
         # session context
@@ -147,10 +148,11 @@ class SessionState:
         for pid in PACKET_NAMES:
             ingest.register(pid, self.on_packet)
 
-    def on_packet(self, header: PacketHeader, payload: bytes) -> None:
+    def on_packet(self, header: PacketHeader, payload: bytes, recv_time: float = 0.0) -> None:
         pid = header.packet_id
         self._player_idx = header.player_car_index
         self.last_packet_t = header.session_time
+        self.last_recv_wall = recv_time
         st = header.session_time
         if (
             self._last_session_time is not None
