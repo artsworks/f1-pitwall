@@ -26,7 +26,6 @@ async def replay(
 ) -> int:
     """Feed records to sink. Returns the number of datagrams delivered."""
     delivered = 0
-    start = clock.now()
     with RecordingReader(path) as reader:
         for offset_us, payload in reader:
             if from_us is not None and offset_us < from_us:
@@ -35,8 +34,8 @@ async def replay(
                 break
             t = offset_us / 1_000_000
             if speed is not None:
-                target = start + t / speed
-                delay = target - clock.now()
+                # Pacing in record time: the clock does the speed scaling.
+                delay = t - clock.now()
                 if delay > 0:
                     await clock.sleep(delay)
             sink.on_datagram(payload, t)

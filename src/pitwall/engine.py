@@ -12,7 +12,7 @@ from typing import Any
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
-from pitwall.clock import Clock, VirtualClock, WallClock
+from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
 from pitwall.metrics import Metrics
@@ -68,12 +68,14 @@ class _ReplaySink:
     def __init__(self, ingest: Ingest, engine: Engine) -> None:
         self.ingest = ingest
         self.engine = engine
-        self.next_tick = 0.0
+        self.next_tick: float | None = None
         self.calls: list[Call] = []
 
     def on_datagram(self, payload: bytes, recv_time: float) -> None:
         self.ingest.on_datagram(payload, recv_time)
         period = self.engine.tick_period
+        if self.next_tick is None:
+            self.next_tick = recv_time
         while recv_time >= self.next_tick:
             self.calls.extend(self.engine.tick(self.next_tick))
             self.next_tick += period
@@ -157,5 +159,5 @@ def build_census_engine(clock: Clock | None = None) -> Engine:
 
 
 def record_and_run(path: Path, speed: float | None) -> tuple[int, list[Call]]:
-    engine = build_engine(clock=VirtualClock() if speed is None else WallClock())
+    engine = build_engine(clock=VirtualClock() if speed is None else ReplayClock(speed))
     return asyncio.run(run_replay(path, engine, speed))

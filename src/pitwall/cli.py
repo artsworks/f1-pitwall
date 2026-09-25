@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
-from pitwall.clock import VirtualClock, WallClock
+from pitwall.clock import ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
@@ -87,7 +87,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         if from_us is None:
             print(f"replay: lap {args.from_lap} not found in index of {args.file}")
             return 1
-    clock = VirtualClock() if speed is None else WallClock()
+    clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.no_rules:
         engine = build_census_engine(clock)
     else:

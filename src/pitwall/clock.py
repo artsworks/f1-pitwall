@@ -38,3 +38,20 @@ class VirtualClock:
 
     async def sleep(self, seconds: float) -> None:
         self._t += max(0.0, seconds)
+
+
+class ReplayClock:
+    """Record-time clock: now() advances at `speed`x real time from `start`;
+    sleep(s) waits s/speed real seconds. Keeps every timestamp in the replay
+    path (recv_time, ticks, latency metrics) in one domain."""
+
+    def __init__(self, speed: float, start: float = 0.0) -> None:
+        self._speed = speed
+        self._start = start
+        self._mono0 = time.monotonic()
+
+    def now(self) -> float:
+        return self._start + (time.monotonic() - self._mono0) * self._speed
+
+    async def sleep(self, seconds: float) -> None:
+        await asyncio.sleep(max(0.0, seconds) / self._speed)
