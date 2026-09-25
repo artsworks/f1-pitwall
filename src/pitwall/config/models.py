@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from pitwall.net.profile import ProfileName
+
 
 class ConnectionSettings(BaseModel):
     udp_host: str = "0.0.0.0"
@@ -19,6 +21,7 @@ class ConnectionSettings(BaseModel):
 class RecordingSettings(BaseModel):
     enabled: bool = True
     directory: str = "recordings"
+    profile: ProfileName = "lite"
     compress_on_close: bool = True
 
 

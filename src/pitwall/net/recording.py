@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import struct
+import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ from typing import IO, Any
 
 import zstandard
 
+from pitwall.net.profile import ProfileName, RecordFilter
 from pitwall.protocol.header import (
     EVENT_CODE_LEN,
     EVENT_CODE_OFFSET,
@@ -235,7 +237,11 @@ def write_index(path: Path, entries: list[IndexEntry]) -> None:
 
 class RecordingRotator:
     """PacketSink-shaped writer that starts a new .f1bin file whenever the
-    session UID changes (docs: "a new file per session UID")."""
+    session UID changes (docs: "a new file per session UID").
+
+    `profile` selects which datagrams are written (pitwall.net.profile). With
+    `compress`, each finished file is replaced by its .f1bin.zst: rotated files
+    in a background thread, the last one synchronously on close()."""
 
     def __init__(
         self,
@@ -245,6 +251,8 @@ class RecordingRotator:
         config_hash: int = 0,
         game_version: int = 0,
         metadata: dict[str, Any] | None = None,
+        profile: ProfileName = "full",
+        compress: bool = False,
     ) -> None:
         self._directory = Path(directory)
         self._directory.mkdir(parents=True, exist_ok=True)
@@ -252,10 +260,14 @@ class RecordingRotator:
             "packet_format": packet_format,
             "config_hash": config_hash,
             "game_version": game_version,
-            "metadata": metadata or {},
+            "metadata": {**(metadata or {}), "profile": profile},
         }
+        self._filter = RecordFilter(profile)
+        self._compress = compress
+        self._compressors: list[threading.Thread] = []
         self._writer: RecordingWriter | None = None
         self._uid: int = 0
+        self.last_path: Path | None = None
 
     @property
     def current_path(self) -> Path | None:
@@ -266,19 +278,39 @@ class RecordingRotator:
         if self._writer is None or uid != self._uid:
             self._rotate(uid)
         assert self._writer is not None
-        self._writer.write_datagram(recv_time, payload)
+        if self._filter.keep(recv_time, payload):
+            self._writer.write_datagram(recv_time, payload)
+
+    def _finish(self, background: bool) -> None:
+        if self._writer is None:
+            return
+        self._writer.close()
+        path = self._writer.path
+        self._writer = None
+        self.last_path = path
+        if not self._compress:
+            return
+        if background:
+            t = threading.Thread(target=self._compress_file, args=(path,), name="pitwall-zstd")
+            t.start()
+            self._compressors.append(t)
+        else:
+            self._compress_file(path)
+
+    def _compress_file(self, path: Path) -> None:
+        self.last_path = compress_recording(path, remove=True)
 
     def _rotate(self, uid: int) -> None:
-        if self._writer is not None:
-            self._writer.close()
+        self._finish(background=True)
         name = f"session_{uid:016x}_{int(time.time())}.f1bin"
         self._writer = RecordingWriter(self._directory / name, session_uid=uid, **self._kwargs)
         self._uid = uid
 
     def close(self) -> None:
-        if self._writer is not None:
-            self._writer.close()
-            self._writer = None
+        self._finish(background=False)
+        for t in self._compressors:
+            t.join()
+        self._compressors.clear()
 
 
 class RecordingReader:

@@ -38,6 +38,7 @@ class Engine:
         self.dispatcher = dispatcher
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
+        self.recording_desc = "off"
 
     @property
     def tick_period(self) -> float:

@@ -7,6 +7,7 @@ connection:
 recording:
   enabled: true
   directory: recordings
+  profile: lite  # full | lite | minimal (docs/adr/0006); `pitwall start --record full` overrides
   compress_on_close: true
 engine:
   tick_hz: 10

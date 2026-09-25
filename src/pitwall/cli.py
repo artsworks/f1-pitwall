@@ -21,6 +21,7 @@ from pitwall.clock import ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
+from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
     RecordingRotator,
@@ -48,7 +49,7 @@ def _parse_speed(value: str) -> float | None:
 
 def cmd_record(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
-    recorder = RecordingRotator(out_dir)
+    recorder = RecordingRotator(out_dir, profile=args.profile)
     ingest = Ingest(recorder=recorder)
     clock = WallClock()
 
@@ -67,9 +68,8 @@ def cmd_record(args: argparse.Namespace) -> int:
         asyncio.run(run())
     except KeyboardInterrupt:
         recorder.close()
-    path = recorder.current_path
-    if path is not None:
-        print(f"last recording: {path}")
+    if recorder.last_path is not None:
+        print(f"last recording: {recorder.last_path}")
     return 0
 
 
@@ -146,8 +146,9 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
 
 def cmd_trim(args: argparse.Namespace) -> int:
     src = Path(args.file)
-    from_us = args.from_us
+    from_us = args.from_us if args.from_us is not None else 0
     to_us = args.to_us
+    keep = RecordFilter(args.profile) if args.profile else None
     with (
         RecordingReader(src) as reader,
         RecordingWriter(
@@ -156,15 +157,21 @@ def cmd_trim(args: argparse.Namespace) -> int:
             session_uid=reader.header.session_uid,
             config_hash=reader.header.config_hash,
             game_version=reader.header.game_version,
-            metadata={**reader.header.metadata, "trimmed_from": str(src)},
+            metadata={
+                **reader.header.metadata,
+                "trimmed_from": str(src),
+                **({"profile": args.profile} if args.profile else {}),
+            },
         ) as writer,
     ):
         kept = 0
         for offset_us, payload in reader:
             if offset_us < from_us:
                 continue
-            if offset_us > to_us:
+            if to_us is not None and offset_us > to_us:
                 break
+            if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
+                continue
             # Re-base so the trimmed file starts at 0.
             writer.write_datagram((offset_us - from_us) / 1_000_000, payload)
             kept += 1
@@ -286,6 +293,7 @@ async def _serve(
     host, port = settings.connection.http_host, settings.connection.http_port
     print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
+    print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
     await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store), coro)
 
 
@@ -302,12 +310,15 @@ def cmd_start(args: argparse.Namespace) -> int:
     settings = store.current()
     clock = WallClock()
 
+    profile = args.record or settings.recording.profile
     recorder = None
-    if settings.recording.enabled:
+    if settings.recording.enabled and profile != "off":
         recorder = RecordingRotator(
             Path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
             metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
+            profile=profile,
+            compress=settings.recording.compress_on_close,
         )
     ingest = Ingest(recorder=recorder)
     state = SessionState(
@@ -346,6 +357,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         pass
 
     engine.speaker_name = speaker.name
+    engine.recording_desc = (
+        f"{profile} -> {settings.recording.directory}/" if recorder is not None else "off"
+    )
     if settings.speech.enabled:
         t0 = clock.now()
         speaker.speak(
@@ -368,10 +382,11 @@ def cmd_start(args: argparse.Namespace) -> int:
     finally:
         speaker.close()
         if recorder is not None:
-            path = recorder.current_path
+            if settings.recording.compress_on_close:
+                print("recording: compressing…", flush=True)
             recorder.close()
-            if path is not None and settings.recording.compress_on_close:
-                threading.Thread(target=lambda: compress_recording(path), daemon=True).start()
+            if recorder.last_path is not None:
+                print(f"recording: saved {recorder.last_path}")
         dlog.close()
     return 0
 
@@ -437,6 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--host", default="0.0.0.0")
     rec.add_argument("--port", type=int, default=20777)
     rec.add_argument("--out", default="recordings/")
+    rec.add_argument("--profile", choices=PROFILES, default="full")
     rec.set_defaults(func=cmd_record)
 
     rep = sub.add_parser("replay", help="replay a recording through the engine")
@@ -457,8 +473,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     trim = sub.add_parser("trim", help="extract a time range from a recording")
     trim.add_argument("file")
-    trim.add_argument("--from-us", type=int, required=True)
-    trim.add_argument("--to-us", type=int, required=True)
+    trim.add_argument("--from-us", type=int, default=None)
+    trim.add_argument("--to-us", type=int, default=None)
+    trim.add_argument(
+        "--profile", choices=PROFILES, default=None, help="also downsample (e.g. full -> lite)"
+    )
     trim.add_argument("--out", required=True)
     trim.set_defaults(func=cmd_trim)
 
@@ -481,6 +500,13 @@ def build_parser() -> argparse.ArgumentParser:
     cz.set_defaults(func=cmd_compress)
 
     st2 = sub.add_parser("start", help="live: UDP ingest + rules + dashboard + speech")
+    st2.add_argument(
+        "--record",
+        choices=[*PROFILES, "off"],
+        default=None,
+        help="recording profile (default: settings recording.profile = lite); "
+        "full = every packet at native rate, for debugging/tuning",
+    )
     st2.set_defaults(func=cmd_start)
 
     sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")
