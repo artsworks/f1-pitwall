@@ -1,7 +1,9 @@
 """Hub: WebSocket fan-out and CallSink for the Dispatcher (docs/04).
 
 Envelope {"v":1,"type","seq","t","payload"}. A ring buffer of the last 12
-calls backs the reconnect `snapshot` frame.
+calls backs the reconnect `snapshot` frame; each entry carries its dispatch
+frame time `t` and `audio`: "dispatched" | "started" | "dropped" |
+"interrupted" (docs/15 §7).
 """
 
 from __future__ import annotations
@@ -49,7 +51,9 @@ class Hub:
     def broadcast(self, type_: str, payload: dict[str, Any]) -> dict[str, Any]:
         frame = self.frame(type_, payload)
         if type_ == "call":
-            self.recent_calls.append({"seq": frame["seq"], **payload})
+            self.recent_calls.append(
+                {"seq": frame["seq"], "t": frame["t"], "audio": "dispatched", **payload}
+            )
         self._send(frame)
         return frame
 
@@ -83,8 +87,15 @@ class Hub:
             },
         )
 
+    def _mark(self, call_id: str, update: Any) -> None:
+        for entry in self.recent_calls:
+            if entry.get("id") == call_id:
+                entry["audio"] = update(entry["audio"])
+
     def cancel(self, call_id: str) -> None:
+        self._mark(call_id, lambda a: "interrupted" if a == "started" else "dropped")
         self.broadcast("cancel", {"id": call_id})
 
     def spoken(self, call_id: str, t: float) -> None:
+        self._mark(call_id, lambda a: "started" if a == "dispatched" else a)
         self.broadcast("spoken", {"id": call_id, "t": t})

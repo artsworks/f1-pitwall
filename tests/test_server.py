@@ -359,3 +359,18 @@ def test_state_payload_stale_after_gap() -> None:
     )
     assert payload2["live"] is False
     assert payload2["packet_age_ms"] == 5000.0
+
+
+def test_hub_recent_calls_track_audio_outcome() -> None:
+    hub = Hub()
+    for cid in ("a", "b", "c"):
+        hub.speak(_call(cid))
+    hub.spoken("a", _now)
+    hub.cancel("a")
+    hub.spoken("b", _now)
+    hub.cancel("c")
+    by_id = {c["id"]: c for c in hub.recent_calls}
+    assert by_id["a"]["audio"] == "interrupted"
+    assert by_id["b"]["audio"] == "started"
+    assert by_id["c"]["audio"] == "dropped"
+    assert all(isinstance(c["t"], float) for c in hub.recent_calls)

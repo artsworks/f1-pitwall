@@ -1,6 +1,6 @@
 # Dashboard redesign: the second-monitor race-engineer screen
 
-Status: **proposal, not implemented.** Mockups with static sample data live in
+Status: **phases 1–6 implemented** in `web/` (call evidence, fuel delta and M3 strategy await backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
 `docs/mockups/` (`dashboard-1080p.html`, `dashboard-m3-stale.html`, `radio.html`). They
 are vanilla HTML/CSS, self-contained, no build step — open them in a browser.
 Their call evidence, fuel target and damage values illustrate planned backend fields.
