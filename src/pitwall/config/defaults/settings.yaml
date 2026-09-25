@@ -40,7 +40,7 @@ speech:
   voices_dir: "voices"
   rate: 0
   volume: 100
-  radio_click: true
+  radio_click: true # soft radio blip before each call
 mindset:
   active: balanced
 ui:
