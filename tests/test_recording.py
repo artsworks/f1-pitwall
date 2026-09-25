@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pitwall.net.recording import (
     RecordingReader,
+    RecordingWriter,
     build_index,
     compress_recording,
     index_path_for,
@@ -49,8 +50,9 @@ def test_index_written_on_close(tmp_path: Path) -> None:
     idx = index_path_for(path)
     assert idx.exists()
     entries = json.loads(idx.read_text())
-    assert [e["detail"] for e in entries] == ["SSTA", "CHQF"]
-    assert all(e["kind"] == "event" for e in entries)
+    events = [e["detail"] for e in entries if e["kind"] == "event"]
+    assert events == ["SSTA", "CHQF"]
+    assert any(e["kind"] == "session_type" for e in entries)
 
 
 def test_index_rebuildable(tmp_path: Path) -> None:
@@ -60,3 +62,19 @@ def test_index_rebuildable(tmp_path: Path) -> None:
     idx.unlink()
     rebuilt = [e.to_dict() for e in build_index(path)]
     assert rebuilt == on_disk
+
+
+def test_long_session_offsets_do_not_wrap(tmp_path: Path) -> None:
+    """uint32 absolute offsets wrap at ~71.6 min; delta encoding must not."""
+    path = tmp_path / "long.f1bin"
+    packets = [make_packet(PacketId.SESSION, frame=1), make_packet(PacketId.LAP_DATA, frame=2)]
+    with RecordingWriter(path) as writer:
+        writer.write_datagram(0.0, packets[0])
+        writer.write_datagram(5000.0, packets[1])  # ~83 min later
+    with RecordingReader(path) as reader:
+        records = list(reader)
+    assert len(records) == 2
+    assert records[0][0] == 0
+    assert records[1][0] == 5_000_000_000
+    assert records[0][1] == packets[0]
+    assert records[1][1] == packets[1]

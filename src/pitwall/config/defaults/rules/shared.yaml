@@ -1,0 +1,10 @@
+rules:
+  - id: out_lap_front_left_cold
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase == 'out_lap' and tyre_inner_ema_fast.FL < th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    clear_when: "tyre_inner_ema_fast.FL > th.tyre_inner_cold_c + 5"
+    still_true: "tyre_inner_ema_fast.FL < th.tyre_inner_cold_c + 8"
+    cooldown_s: 30
+    requires: [car_telemetry, lap_data]
+    say: "Front left is cold, {tyre_inner_ema_fast.FL:.0f}. Drag the brakes through sector three."

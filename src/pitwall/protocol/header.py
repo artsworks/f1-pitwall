@@ -28,6 +28,8 @@ assert HEADER_SIZE == 29, HEADER_SIZE
 PACKET_ID_OFFSET = 6
 # Offset of m_sessionUID inside the header.
 SESSION_UID_OFFSET = 7
+# Offset of m_playerCarIndex inside the header.
+PLAYER_CAR_INDEX_OFFSET = 27
 
 
 class PacketId(IntEnum):

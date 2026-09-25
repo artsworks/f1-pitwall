@@ -16,7 +16,7 @@ wrong and you will want to re-run old sessions through a fixed one.
 header:  magic "F1BIN\0" | uint16 file_version | uint16 packet_format
          uint64 session_uid | uint64 wall_clock_start_us | uint32 config_hash
          uint16 game_version | uint16 reserved | utf8 json blob (host, settings, notes)
-record:  uint32 offset_us (from wall_clock_start) | uint16 length | bytes payload
+record:  uint32 delta_us (since previous record) | uint16 length | bytes payload
 ```
 
 Sidecar `.f1idx`, written on close (and rebuildable): byte offsets for every lap start,

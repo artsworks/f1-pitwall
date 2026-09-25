@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 from pitwall.clock import VirtualClock, WallClock
+from pitwall.config.loader import ConfigStore
+from pitwall.engine import build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
 from pitwall.net.recording import (
     RecordingReader,
@@ -17,10 +19,12 @@ from pitwall.net.recording import (
     build_index,
     compress_recording,
     index_path_for,
+    read_index,
     write_index,
 )
-from pitwall.net.replay import replay as replay_recording
 from pitwall.net.udp import listen
+from pitwall.rules.engine import RuleEngine
+from pitwall.state.session import SessionState
 
 
 def _parse_speed(value: str) -> float | None:
@@ -59,14 +63,55 @@ def cmd_record(args: argparse.Namespace) -> int:
     return 0
 
 
+def _lap_seek_us(path: Path, lap: int) -> int | None:
+    for entry in read_index(path):
+        if entry["kind"] == "lap" and entry["detail"] == str(lap):
+            return int(entry["offset_us"])
+    return None
+
+
 def cmd_replay(args: argparse.Namespace) -> int:
-    ingest = Ingest()
     speed = _parse_speed(args.speed)
+    from_us = args.from_us
+    if args.from_lap is not None:
+        from_us = _lap_seek_us(Path(args.file), args.from_lap)
+        if from_us is None:
+            print(f"replay: lap {args.from_lap} not found in index of {args.file}")
+            return 1
     clock = VirtualClock() if speed is None else WallClock()
-    delivered = asyncio.run(replay_recording(Path(args.file), ingest, clock, speed))
-    print(f"replayed {delivered} datagrams from {args.file}")
+    if args.no_rules:
+        engine = build_census_engine(clock)
+    else:
+        engine = build_engine(clock=clock)
+    delivered, calls = asyncio.run(
+        run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
+    )
+    print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
     if args.stats:
-        print(json.dumps(ingest.census(now=clock.now()), indent=2))
+        print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
+    return 0
+
+
+def cmd_rules_check(args: argparse.Namespace) -> int:
+    """Validate all rule expressions compile and evaluate on a dummy snapshot."""
+    store = ConfigStore()
+    settings = store.current()
+    engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=store.current().resolved_mindset(),
+        staleness_s=settings.engine.staleness_s,
+    )
+    snap = SessionState().snapshot(0.0)
+    try:
+        result = engine.evaluate(snap)
+    except Exception as e:
+        print(f"rules check FAILED: {e}")
+        return 1
+    print(
+        f"rules check: {len(engine.rules)} rules compiled, "
+        f"{len(result.candidates)} candidates on empty snapshot"
+    )
     return 0
 
 
@@ -180,11 +225,20 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--out", default="recordings/")
     rec.set_defaults(func=cmd_record)
 
-    rep = sub.add_parser("replay", help="replay a recording through ingest")
+    rep = sub.add_parser("replay", help="replay a recording through the engine")
     rep.add_argument("file")
     rep.add_argument("--speed", default="max", help="1|N|max")
     rep.add_argument("--stats", action="store_true")
+    rep.add_argument("--no-rules", action="store_true", help="packet census only")
+    rep.add_argument("--from-lap", type=int, default=None, help="seek via .f1idx")
+    rep.add_argument("--from-us", type=int, default=None)
+    rep.add_argument("--to-us", type=int, default=None)
     rep.set_defaults(func=cmd_replay)
+
+    rc = sub.add_parser("rules", help="rule tooling")
+    rsub = rc.add_subparsers(dest="rules_command", required=True)
+    rcheck = rsub.add_parser("check", help="validate rule expressions")
+    rcheck.set_defaults(func=cmd_rules_check)
 
     trim = sub.add_parser("trim", help="extract a time range from a recording")
     trim.add_argument("file")

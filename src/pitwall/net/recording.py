@@ -6,12 +6,13 @@ File layout (docs/07-replay-and-debug.md), all little-endian:
              uint64 session_uid | uint64 wall_clock_start_us
              uint32 config_hash | uint16 game_version | uint16 reserved
              uint32 json_len | utf8 json blob (host, settings, notes)
-    record:  uint32 offset_us (from wall_clock_start) | uint16 length | payload
+    record:  uint32 delta_us (since previous record) | uint16 length | payload
 
-The .f1idx sidecar is a JSON list of {kind, byte_offset, offset_us, detail}.
-M0 indexes "event" entries only (Event packets, detail = 4-char event code).
-"session_type" entries are defined in the schema but deferred to M1 when the
-Session parser exists; lap/pit_in/pit_out arrive with the M1 parsers too.
+The .f1idx sidecar is a JSON list of {kind, byte_offset, offset_us, detail}:
+- "event" for every Event packet (detail = 4-char event code)
+- "session_type" for every Session packet (detail = session type id)
+- "lap" when the player's current_lap_num changes (detail = new lap number)
+- "pit_in"/"pit_out" on the player's pit_status 0->1 / 2->0 transitions
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ from pitwall.protocol.header import (
     EVENT_CODE_LEN,
     EVENT_CODE_OFFSET,
     PACKET_ID_OFFSET,
+    PACKET_SIZES,
+    PLAYER_CAR_INDEX_OFFSET,
     PacketId,
 )
 
@@ -42,7 +45,7 @@ FILE_VERSION = 1
 FILE_HEADER_STRUCT = struct.Struct("<6sHHQQIHH")
 # uint32 json_len, then the utf-8 blob
 JSON_LEN_STRUCT = struct.Struct("<I")
-# uint32 offset_us | uint16 length
+# uint32 delta_us (since previous record) | uint16 length
 RECORD_HEADER_STRUCT = struct.Struct("<IH")
 
 FLUSH_INTERVAL_S = 1.0
@@ -78,9 +81,44 @@ class IndexEntry:
 
 
 @dataclass(slots=True)
-class _Record:
-    offset_us: int
-    payload: bytes
+class _IndexState:
+    last_lap: int | None = None
+    last_pit: int | None = None
+
+
+def _index_for_record(
+    payload: bytes, byte_offset: int, offset_us: int, state: _IndexState
+) -> list[IndexEntry]:
+    """Index entries derivable from one record without full parsing."""
+    from pitwall.protocol.packets import SESSION_TYPE_OFFSET, car_field_offset
+
+    if len(payload) < EVENT_CODE_OFFSET + EVENT_CODE_LEN:
+        return []
+    pid = payload[PACKET_ID_OFFSET]
+    entries: list[IndexEntry] = []
+    if pid == PacketId.EVENT:
+        code = payload[EVENT_CODE_OFFSET : EVENT_CODE_OFFSET + EVENT_CODE_LEN]
+        entries.append(
+            IndexEntry("event", byte_offset, offset_us, code.decode("ascii", errors="replace"))
+        )
+    elif pid == PacketId.SESSION and len(payload) == PACKET_SIZES[PacketId.SESSION]:
+        entries.append(
+            IndexEntry("session_type", byte_offset, offset_us, str(payload[SESSION_TYPE_OFFSET]))
+        )
+    elif pid == PacketId.LAP_DATA and len(payload) == PACKET_SIZES[PacketId.LAP_DATA]:
+        player = payload[PLAYER_CAR_INDEX_OFFSET]
+        lap = payload[car_field_offset(PacketId.LAP_DATA, player, "current_lap_num")]
+        pit = payload[car_field_offset(PacketId.LAP_DATA, player, "pit_status")]
+        if state.last_lap is not None and lap != state.last_lap:
+            entries.append(IndexEntry("lap", byte_offset, offset_us, str(lap)))
+        if state.last_pit is not None:
+            if state.last_pit == 0 and pit == 1:
+                entries.append(IndexEntry("pit_in", byte_offset, offset_us, "in"))
+            elif state.last_pit == 2 and pit == 0:
+                entries.append(IndexEntry("pit_out", byte_offset, offset_us, "out"))
+        state.last_lap = lap
+        state.last_pit = pit
+    return entries
 
 
 def _open_maybe_zst(path: Path) -> IO[bytes]:
@@ -139,7 +177,9 @@ class RecordingWriter:
         self._flush_interval_s = flush_interval_s
         self._last_flush = time.monotonic()
         self._t0: float | None = None
+        self._last_offset_us = 0
         self._index: list[IndexEntry] = []
+        self._idx_state = _IndexState()
         self._closed = False
 
     def write_datagram(self, recv_time: float, payload: bytes) -> None:
@@ -149,8 +189,17 @@ class RecordingWriter:
         if self._t0 is None:
             self._t0 = recv_time
         offset_us = int((recv_time - self._t0) * 1_000_000)
+        # Stored as a delta from the previous record so a uint32 covers a full
+        # race (absolute offsets would wrap at ~71.6 min).
+        delta_us = offset_us - self._last_offset_us
+        self._last_offset_us = offset_us
         byte_offset = self._file.tell()
-        self._file.write(RECORD_HEADER_STRUCT.pack(offset_us, len(payload)))
+        # A single uint32 delta can't span gaps longer than ~71.6 min; bridge
+        # them with zero-length filler records.
+        while delta_us > 0xFFFFFFFF:
+            self._file.write(RECORD_HEADER_STRUCT.pack(0xFFFFFFFF, 0))
+            delta_us -= 0xFFFFFFFF
+        self._file.write(RECORD_HEADER_STRUCT.pack(delta_us, len(payload)))
         self._file.write(payload)
         self._maybe_index(payload, byte_offset, offset_us)
         now = time.monotonic()
@@ -159,21 +208,7 @@ class RecordingWriter:
             self._last_flush = now
 
     def _maybe_index(self, payload: bytes, byte_offset: int, offset_us: int) -> None:
-        # M0: only Event packets are indexable from the header alone. session_type,
-        # lap, pit_in and pit_out need real parsers (M1).
-        if (
-            len(payload) >= EVENT_CODE_OFFSET + EVENT_CODE_LEN
-            and payload[PACKET_ID_OFFSET] == PacketId.EVENT
-        ):
-            code = payload[EVENT_CODE_OFFSET : EVENT_CODE_OFFSET + EVENT_CODE_LEN]
-            self._index.append(
-                IndexEntry(
-                    kind="event",
-                    byte_offset=byte_offset,
-                    offset_us=offset_us,
-                    detail=code.decode("ascii", errors="replace"),
-                )
-            )
+        self._index.extend(_index_for_record(payload, byte_offset, offset_us, self._idx_state))
 
     def flush(self) -> None:
         self._file.flush()
@@ -284,13 +319,17 @@ class RecordingReader:
 
     def records(self) -> Iterator[tuple[int, bytes]]:
         """Yield (offset_us, payload) for each record."""
+        offset_us = 0
         while True:
             raw = self._file.read(RECORD_HEADER_STRUCT.size)
             if not raw:
                 return
             if len(raw) != RECORD_HEADER_STRUCT.size:
                 raise ValueError(f"{self.path}: truncated record header")
-            offset_us, length = RECORD_HEADER_STRUCT.unpack(raw)
+            delta_us, length = RECORD_HEADER_STRUCT.unpack(raw)
+            offset_us += delta_us
+            if length == 0:
+                continue  # filler record bridging a >71.6 min gap
             payload = self._file.read(length)
             if len(payload) != length:
                 raise ValueError(f"{self.path}: truncated record payload")
@@ -310,27 +349,24 @@ class RecordingReader:
 
 
 def build_index(path: Path) -> list[IndexEntry]:
-    """Rebuild the .f1idx for a recording by scanning its records. M0 emits
-    "event" entries only (see module docstring)."""
+    """Rebuild the .f1idx for a recording by scanning its records."""
     entries: list[IndexEntry] = []
+    state = _IndexState()
     with RecordingReader(path) as reader:
         byte_offset = reader._record_base  # noqa: SLF001 — same module
         for offset_us, payload in reader:
-            if (
-                len(payload) >= EVENT_CODE_OFFSET + EVENT_CODE_LEN
-                and payload[PACKET_ID_OFFSET] == PacketId.EVENT
-            ):
-                code = payload[EVENT_CODE_OFFSET : EVENT_CODE_OFFSET + EVENT_CODE_LEN]
-                entries.append(
-                    IndexEntry(
-                        kind="event",
-                        byte_offset=byte_offset,
-                        offset_us=offset_us,
-                        detail=code.decode("ascii", errors="replace"),
-                    )
-                )
+            entries.extend(_index_for_record(payload, byte_offset, offset_us, state))
             byte_offset += RECORD_HEADER_STRUCT.size + len(payload)
     return entries
+
+
+def read_index(path: Path) -> list[dict[str, Any]]:
+    """Load a .f1idx sidecar if present; returns [] otherwise."""
+    idx = index_path_for(path)
+    if not idx.exists():
+        return []
+    data = json.loads(idx.read_text())
+    return list(data)
 
 
 def compress_recording(path: Path, *, level: int = 3, remove: bool = False) -> Path:
