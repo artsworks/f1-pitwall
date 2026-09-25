@@ -1,13 +1,23 @@
 rules:
-  - id: out_lap_front_left_cold
+  # Out-lap tyre check lands in sector 3 (sector index 2): by then the tyres have
+  # had two sectors to come in, and every tyre is cold straight out of the pits.
+  # Both read the temperature latched at sector-3 entry, so exactly one speaks.
+  - id: out_lap_s3_tyres_cold
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and tyre_inner_ema_fast.FL < th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
-    clear_when: "tyre_inner_ema_fast.FL > th.tyre_inner_cold_c + 5"
-    still_true: "tyre_inner_ema_fast.FL < th.tyre_inner_cold_c + 8"
-    cooldown_s: 30
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
-    say: "Front left is cold, {tyre_inner_ema_fast.FL:.0f}. Drag the brakes through sector three."
+    say: "Tyres still coming in. {coldest_tyre} coldest at {coldest_tyre_c:.0f}, fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Work them to the line."
+  - id: out_lap_s3_tyres_ready
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap'"
+    requires: [car_telemetry, lap_data]
+    say: "Tyres are in. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Good to push."
   - id: front_wing_damage
     sessions: [practice, qualifying, race]
     priority: 2
@@ -17,3 +27,45 @@ rules:
     cooldown_s: 120
     requires: [car_damage]
     say: "Front wing damage, front left {damage.front_left_wing} percent, front right {damage.front_right_wing} percent. Expect understeer."
+  # Boost still on when the driver lifts or brakes for a corner means full power on the exit.
+  - id: boost_left_on
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "boost_on_s >= th.boost_warn_s and (brake >= th.boost_warn_brake or throttle <= th.boost_warn_lift or boost_on_s >= th.boost_max_s)"
+    clear_when: "boost_on_s == 0"
+    still_true: "boost_on_s > 0"
+    requires: [car_status, car_telemetry]
+    say: "Boost still on. Turn it off for the exit."
+  - id: yellow_ahead
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "yellow_ahead_m <= th.yellow_warn_ahead_m"
+    clear_when: "yellow_ahead_m > th.yellow_warn_ahead_m + 300"
+    still_true: "yellow_ahead_m <= th.yellow_warn_ahead_m or yellow_here"
+    requires: [session, lap_data]
+    say: "Yellow ahead, sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. Careful, no overtaking."
+  - id: yellow_behind
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "yellow_behind_m <= th.yellow_info_behind_m"
+    clear_when: "yellow_behind_m > th.yellow_info_behind_m"
+    still_true: "yellow_behind_m <= th.yellow_info_behind_m"
+    cooldown_s: 30
+    requires: [session, lap_data]
+    say: "Yellow behind you in sector {yellow_behind_sector}. You're clear, ignore it."
+  - id: lockup_front
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "lockup == 'front'"
+    clear_when: "lockup == ''"
+    cooldown_s: 30
+    requires: [motion_ex]
+    say: "Lock-up, {lockup_wheel}. Ease the brake pressure into the corner, that costs tyre."
+  - id: lockup_rear
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "lockup == 'rear'"
+    clear_when: "lockup == ''"
+    cooldown_s: 30
+    requires: [motion_ex]
+    say: "Rears locking, {lockup_wheel}. Move the brake bias forward, you're on {front_brake_bias}."

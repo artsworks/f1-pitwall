@@ -135,8 +135,9 @@ def out_lap_scenario(
     rate_hz: float = 30.0,
     laps: int = 2,
 ) -> list[tuple[float, bytes]]:
-    """(t, packet) stream: race session, player on an out-lap, FL inner temp
-    cold for `cold_s` then warm. Advances session_time like the real game."""
+    """(t, packet) stream: race session, player on an out-lap in sector 3, FL
+    inner temp cold for `cold_s` then warm (other tyres warm). Advances
+    session_time like the real game."""
     packets: list[tuple[float, bytes]] = []
     dt = 1.0 / rate_hz
     total_s = cold_s + 5.0
@@ -153,8 +154,13 @@ def out_lap_scenario(
                     {
                         "cars": {
                             0: {
-                                "tyres_inner_temperature": (0, 0, temp, 0),
-                                "tyres_surface_temperature": (0, 0, temp, 0),
+                                "tyres_inner_temperature": (warm_temp, warm_temp, temp, warm_temp),
+                                "tyres_surface_temperature": (
+                                    warm_temp,
+                                    warm_temp,
+                                    temp,
+                                    warm_temp,
+                                ),
                             }
                         }
                     },
@@ -173,6 +179,7 @@ def out_lap_scenario(
                                 "driver_status": 3,  # out lap
                                 "pit_status": 0,
                                 "current_lap_num": lap,
+                                "sector": 2,
                                 "lap_distance": 100.0 + i,
                             }
                         }

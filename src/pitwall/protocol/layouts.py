@@ -348,3 +348,28 @@ CAR_TELEMETRY_LAYOUT: tuple[Item, ...] = (
 CAR_STATUS_LAYOUT: tuple[Item, ...] = (Array("cars", CAR_STATUS_CAR, CAR_SLOTS),)
 
 CAR_DAMAGE_LAYOUT: tuple[Item, ...] = (Array("cars", CAR_DAMAGE_CAR, CAR_SLOTS),)
+
+MOTION_EX_LAYOUT: tuple[Item, ...] = (
+    Field("suspension_position", "f", 4, corners=True),
+    Field("suspension_velocity", "f", 4, corners=True),
+    Field("suspension_acceleration", "f", 4, corners=True),
+    Field("wheel_speed", "f", 4, corners=True),
+    Field("wheel_slip_ratio", "f", 4, corners=True),
+    Field("wheel_slip_angle", "f", 4, corners=True),
+    Field("wheel_lat_force", "f", 4, corners=True),
+    Field("wheel_long_force", "f", 4, corners=True),
+    Field("height_of_cog_above_ground", "f"),
+    Field("local_velocity", "f", 3),
+    Field("angular_velocity", "f", 3),
+    Field("angular_acceleration", "f", 3),
+    Field("front_wheels_angle", "f"),
+    Field("wheel_vert_force", "f", 4, corners=True),
+    Field("front_aero_height", "f"),
+    Field("rear_aero_height", "f"),
+    Field("front_roll_angle", "f"),
+    Field("rear_roll_angle", "f"),
+    Field("chassis_yaw", "f"),
+    Field("chassis_pitch", "f"),
+    Field("wheel_camber", "f", 4, corners=True),
+    Field("wheel_camber_gain", "f", 4, corners=True),
+)

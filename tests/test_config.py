@@ -14,7 +14,7 @@ def test_defaults_load() -> None:
     assert s.connection.udp_port == 20777
     assert s.engine.tick_hz == 10
     assert s.thresholds["tyre_inner_cold_c"] == 80
-    assert s.rules and s.rules[0].id == "out_lap_front_left_cold"
+    assert s.rules and s.rules[0].id == "out_lap_s3_tyres_cold"
     m = s.resolved_mindset()
     assert m["phrasing"] == "advisory"
 

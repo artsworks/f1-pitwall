@@ -36,7 +36,7 @@ def test_out_lap_cold_fires_once(tmp_path: Path) -> None:
     calls, _ = _replay(tmp_path, None, rec)
     fired = [c.text for c in calls]
     assert len(fired) == 1
-    assert "Front left is cold" in fired[0]
+    assert "Tyres still coming in. front left coldest at 60" in fired[0]
     assert "60" in fired[0]
 
 
@@ -51,7 +51,7 @@ def test_deterministic_across_speeds(tmp_path: Path) -> None:
     assert strip(log_max) == strip(log_10x)
     fired = [r for r in log_max if r["outcome"] == "fired"]
     assert len(fired) == 1
-    assert fired[0]["rule_id"] == "out_lap_front_left_cold"
+    assert fired[0]["rule_id"] == "out_lap_s3_tyres_cold"
     assert fired[0]["mindset"] == "balanced"
 
 

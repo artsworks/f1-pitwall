@@ -36,6 +36,7 @@ class EngineSettings(BaseModel):
             "car_telemetry": 0.5,
             "car_status": 0.5,
             "car_damage": 0.5,
+            "motion_ex": 0.5,
         }
     )
 

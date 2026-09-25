@@ -17,3 +17,4 @@ PC and are git-ignored; the ADR records the finding, not the data.
 | [0004](0004-udp-bind-any-and-explicit-ws-dep.md) | Bind UDP on 0.0.0.0; ship `websockets` explicitly |
 | [0005](0005-recordings-never-committed.md) | Recordings never enter git; learnings do |
 | [0006](0006-recording-profiles.md) | Recording profiles: lite by default, full on demand |
+| [0007](0007-driving-event-signals.md) | Driving-event signals: lock-ups, boost, yellows, out-lap timing |

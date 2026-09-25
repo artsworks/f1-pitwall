@@ -33,8 +33,9 @@ PROFILE_TABLE: dict[ProfileName, RecordingProfile] = {
     "full": RecordingProfile("full", _ALL),
     "lite": RecordingProfile(
         "lite",
-        _ALL - _MOTION,
+        (_ALL - _MOTION) | {PacketId.MOTION_EX},
         {
+            PacketId.MOTION_EX: 10,
             PacketId.LAP_DATA: 10,
             PacketId.CAR_TELEMETRY: 10,
             PacketId.CAR_STATUS: 10,
@@ -57,9 +58,11 @@ PROFILE_TABLE: dict[ProfileName, RecordingProfile] = {
                 PacketId.FINAL_CLASSIFICATION,
                 PacketId.CAR_DAMAGE,
                 PacketId.TYRE_SETS,
+                PacketId.MOTION_EX,
             }
         ),
         {
+            PacketId.MOTION_EX: 10,
             PacketId.LAP_DATA: 5,
             PacketId.CAR_TELEMETRY: 5,
             PacketId.CAR_STATUS: 5,

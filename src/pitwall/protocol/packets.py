@@ -36,6 +36,7 @@ from pitwall.protocol.layouts import (
     LAP_DATA_CAR,
     LAP_DATA_LAYOUT,
     MARSHAL_ZONE,
+    MOTION_EX_LAYOUT,
     SESSION_LAYOUT,
     WEATHER_FORECAST_SAMPLE,
     Array,
@@ -92,6 +93,7 @@ EventPacket: Any = _class_for("EventPacket", EVENT_LAYOUT, ("code", "detail"))
 CarTelemetryPacket: Any = _class_for("CarTelemetryPacket", CAR_TELEMETRY_LAYOUT)
 CarStatusPacket: Any = _class_for("CarStatusPacket", CAR_STATUS_LAYOUT)
 CarDamagePacket: Any = _class_for("CarDamagePacket", CAR_DAMAGE_LAYOUT)
+MotionExPacket: Any = _class_for("MotionExPacket", MOTION_EX_LAYOUT)
 
 _SUB_CLASSES: dict[tuple[Item, ...], Any] = {
     MARSHAL_ZONE: MarshalZone,
@@ -111,6 +113,7 @@ _PACKET_CLASSES: dict[int, tuple[Any, tuple[Item, ...]]] = {
     PacketId.CAR_TELEMETRY: (CarTelemetryPacket, CAR_TELEMETRY_LAYOUT),
     PacketId.CAR_STATUS: (CarStatusPacket, CAR_STATUS_LAYOUT),
     PacketId.CAR_DAMAGE: (CarDamagePacket, CAR_DAMAGE_LAYOUT),
+    PacketId.MOTION_EX: (MotionExPacket, MOTION_EX_LAYOUT),
 }
 
 
