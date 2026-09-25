@@ -12,9 +12,22 @@ from typing import Any
 
 from pitwall.config.models import RuleDefModel
 from pitwall.rules.expr import Predicate, make_namespace
+from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
 
 STALENESS_DEFAULT_S = 1.0
+
+
+class _WithRepeat(dict[str, Any]):
+    """Format mapping: the predicate namespace plus `repeat`, the number of
+    times this call triggered inside its repeat window (1 = first time)."""
+
+    def __init__(self, ns: Mapping[str, Any], repeat: int) -> None:
+        super().__init__(repeat=repeat)
+        self._ns = ns
+
+    def __missing__(self, key: str) -> Any:
+        return self._ns[key]
 
 
 @dataclass(slots=True)
@@ -43,6 +56,7 @@ class Rule:
         self._still_true = Predicate(defn.still_true) if defn.still_true else None
         self.armed = True
         self.fires_this_stint = 0
+        self.phrases = PhraseBook(defn)
 
     def still_true(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         if self._still_true is None:
@@ -122,10 +136,12 @@ class RuleEngine:
             if d.max_per_stint is not None and rule.fires_this_stint >= d.max_per_stint:
                 result.suppressed.append(Suppressed(rule, "max_per_stint"))
                 continue
+            repeat = rule.phrases.trigger(snapshot.now)
+            template = rule.phrases.pick(repeat)
             try:
-                text = d.say.format_map(ns)
+                text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
-                text = d.say
+                text = template
             snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
             inputs = {
                 name: ns.get(name) for name in dict.fromkeys(ns.accessed) if name in snap_attrs

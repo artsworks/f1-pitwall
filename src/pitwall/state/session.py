@@ -20,7 +20,13 @@ from pitwall.protocol.packets import (
     SessionPacket,
     parse,
 )
-from pitwall.state.driving import WHEEL_NAMES, BoostTimer, LockupDetector, YellowTracker
+from pitwall.state.driving import (
+    WHEEL_NAMES,
+    BoostTimer,
+    LockupDetector,
+    SpinDetector,
+    YellowTracker,
+)
 from pitwall.state.ema import CornersEma
 from pitwall.state.lap import LapAccumulator, LapSummary
 
@@ -123,6 +129,8 @@ class Snapshot:
     lockup: str = ""  # "front" | "rear" for a few seconds after a lock-up
     lockup_wheel: str = ""
     lockups_this_lap: int = 0
+    spun: bool = False  # for a few seconds after the car spins
+    spins: int = 0  # this session
     yellow_here: bool = False
     yellow_ahead_m: float = math.inf
     yellow_ahead_sector: int = 0
@@ -181,6 +189,7 @@ class SessionState:
         self.s3_entry_coldest_c = 0.0
 
         self.lockups = LockupDetector()
+        self.spins = SpinDetector()
         self.boost = BoostTimer()
         self.yellows = YellowTracker()
 
@@ -238,6 +247,7 @@ class SessionState:
             self._on_car_damage(pkt)
         elif isinstance(pkt, MotionExPacket):
             self.lockups.update(st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num)
+            self.spins.update(st, pkt.local_velocity)
 
     def _handle_rewind(self) -> None:
         for ema in (
@@ -250,6 +260,7 @@ class SessionState:
         ):
             ema.reset()
         self.lockups.reset()
+        self.spins.reset()
         self.boost.reset()
         self.lap_acc.note_flashback()
 
@@ -410,6 +421,8 @@ class SessionState:
             lockup=lockup,
             lockup_wheel=lockup_wheel,
             lockups_this_lap=self.lockups.count_lap,
+            spun=self.spins.recent(st),
+            spins=self.spins.count,
             yellow_here=yellow.here,
             yellow_ahead_m=_round50(yellow.ahead_m),
             yellow_ahead_sector=yellow.ahead_sector,

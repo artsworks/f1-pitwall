@@ -7,7 +7,7 @@ Run pitwall on the Windows game PC next to F1 26.
 Git and [uv](https://docs.astral.sh/uv/); uv downloads Python 3.12 itself. In PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # official uv installer; reopen PowerShell after
+winget install --id astral-sh.uv -e   # then reopen PowerShell
 git clone https://github.com/artsworks/f1-pitwall.git
 cd f1-pitwall
 uv sync

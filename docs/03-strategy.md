@@ -26,7 +26,8 @@ Fields:
 | `priority` | 1 critical, 2 tactical, 3 informational |
 | `cooldown_s`, `max_per_stint`, `min_lap` | rate limiting per rule |
 | `requires` | packets that must be fresh; the rule is skipped (not fired on stale data) otherwise |
-| `say` | phrasing template with formatted snapshot values |
+| `say` | phrasing template, or a list of variants rotated without repeats (first call uses the first) |
+| `escalate`, `repeat_window_s` | `[{after: N, say: [...]}]`: a different pool once the call has triggered N times inside the window; `{repeat}` is the count (ADR 0008) |
 | `still_true` | revalidated immediately before speaking; deliberately looser than `when` |
 | `screen_only` | show on the dashboard without speaking |
 

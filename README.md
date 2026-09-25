@@ -14,9 +14,9 @@ You need Git and [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 for
 you, so nothing else is required. In PowerShell:
 
 ```powershell
-# 1. Install uv (Astral's official installer; ByPass applies to this one command only)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-# close and reopen PowerShell so `uv` is on PATH
+# 1. Install uv and Git (skip either if you already have it), then close and reopen PowerShell
+winget install --id astral-sh.uv -e
+winget install --id Git.Git -e
 
 # 2. Get pitwall
 git clone https://github.com/artsworks/f1-pitwall.git
@@ -53,7 +53,8 @@ To update later: `git pull; uv sync`.
 
 | Symptom | Fix |
 |---|---|
-| `uv` not recognised after install | Reopen PowerShell, or run `$env:Path += ";$env:USERPROFILE\.local\bin"` |
+| `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
+| `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
 | Dashboard says STALE | Run `uv run pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
 | No speech | `uv run pitwall speak` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
 | Robotic voice | `uv run pitwall voices get`, then restart `pitwall start`. |
@@ -69,6 +70,10 @@ More in [docs/getting-started.md](docs/getting-started.md).
 | Boost left on | ERS boost on for 3 s and you lift or brake, or 12 s regardless |
 | Yellow flag | Ahead within 800 m: careful, no overtaking. Appeared behind you: you're clear |
 | Lock-up | After the wheel releases; front → ease brake pressure, rear → move brake bias forward |
+| Spun | Car turned round: easy on the throttle as you rejoin, the rears are cooked |
+
+Calls rotate through several phrasings, and repeat the same mistake often
+enough and the engineer gets drier about it (ADR 0008).
 
 Every call is a rule in [`src/pitwall/config/defaults/rules/shared.yaml`](src/pitwall/config/defaults/rules/shared.yaml)
 with thresholds in [`thresholds.yaml`](src/pitwall/config/defaults/thresholds.yaml).

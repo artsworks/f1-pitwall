@@ -9,7 +9,7 @@ from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
-from pitwall.state.driving import BoostTimer, LockupDetector, YellowTracker
+from pitwall.state.driving import BoostTimer, LockupDetector, SpinDetector, YellowTracker
 from pitwall.state.session import SessionState, Snapshot
 
 from .synth import pack_packet
@@ -231,3 +231,77 @@ def test_state_yellow_from_session_packet() -> None:
     ingest.on_datagram(session(3, 0.5), 0.5)
     snap = state.snapshot(0.5)
     assert (snap.yellow_ahead_m, snap.yellow_ahead_sector) == (600.0, 2)
+
+
+# -- phrasing and spins ------------------------------------------------------
+
+
+def _lockup_texts(e: RuleEngine, n: int) -> list[str]:
+    out = []
+    for i in range(n):
+        out.append(
+            _texts(e, now=i * 10.0, lockup="front", lockup_wheel="front left")["lockup_front"]
+        )
+        _texts(e, now=i * 10.0 + 5)
+    return out
+
+
+def test_lockup_phrasing_rotates_then_escalates() -> None:
+    texts = _lockup_texts(_engine(), 8)
+    assert texts[0].startswith("Lock-up, front left.")
+    assert texts[1] != texts[0]
+    assert all(a != b for a, b in zip(texts, texts[1:], strict=False))
+    calm = {t for t in texts[:2]}
+    assert not calm & set(texts[2:])  # 3rd trigger inside the window switches pool
+    assert "Lock-up number 6." in texts[5] or texts[5] in {
+        "Again. Brake earlier, it's cheaper than a new set.",
+        "You know what I'm going to say.",
+    }
+
+
+def test_phrasing_is_reproducible_across_runs() -> None:
+    assert _lockup_texts(_engine(), 8) == _lockup_texts(_engine(), 8)
+
+
+def test_repeat_window_resets_tone() -> None:
+    e = _engine()
+    for i in range(3):
+        _texts(e, now=i * 10.0, lockup="front", lockup_wheel="front left")
+        _texts(e, now=i * 10.0 + 5)
+    t = _texts(e, now=2000.0, lockup="front", lockup_wheel="front left")["lockup_front"]
+    assert "front left" in t
+
+
+def _spin_run(det: SpinDetector, slip_deg: float, speed_kmh: float, t: float, s: float) -> float:
+    v = speed_kmh / 3.6
+    vel = (v * math.sin(math.radians(slip_deg)), 0.0, v * math.cos(math.radians(slip_deg)))
+    end = t + s
+    while t < end:
+        det.update(t, vel)
+        t += 1 / 30
+    return t
+
+
+def test_spin_detected_and_rearms_when_driving_forward() -> None:
+    det = SpinDetector()
+    t = _spin_run(det, 10.0, 150.0, 0.0, 2.0)
+    assert not det.recent(t)
+    t = _spin_run(det, 120.0, 80.0, t, 0.5)
+    assert det.recent(t) and det.count == 1
+    t = _spin_run(det, 180.0, 60.0, t, 1.0)  # still sliding backwards: same spin
+    assert det.count == 1
+    t = _spin_run(det, 5.0, 40.0, t, 7.0)
+    assert not det.recent(t)
+    _spin_run(det, 130.0, 90.0, t, 0.5)
+    assert det.count == 2
+
+
+def test_spin_rule_speaks_and_escalates() -> None:
+    e = _engine()
+    first = _texts(e, now=0.0, spun=True)["spun_rejoin"]
+    assert first.startswith("Easy on the throttle")
+    _texts(e, now=10.0)
+    second = _texts(e, now=20.0, spun=True, spins=2)["spun_rejoin"]
+    assert (
+        second != first and "gentle" in second.lower() or "spins" in second or "Pirouette" in second
+    )

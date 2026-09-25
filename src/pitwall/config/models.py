@@ -71,6 +71,13 @@ class MindsetSettings(BaseModel):
     active: str = "balanced"
 
 
+class EscalationModel(BaseModel):
+    """Phrases used once a call has triggered `after` times inside the rule's repeat window."""
+
+    after: int = Field(ge=2)
+    say: list[str]
+
+
 class RuleDefModel(BaseModel):
     """Validated rule definition (rules.RuleDef mirrors this at runtime)."""
 
@@ -84,9 +91,16 @@ class RuleDefModel(BaseModel):
     max_per_stint: int | None = None
     min_lap: int = 0
     requires: list[str] = Field(default_factory=list)
-    say: str = ""
+    say: str | list[str] = ""
+    escalate: list[EscalationModel] = Field(default_factory=list)
+    repeat_window_s: float = 600.0
     screen_only: bool = False
     tags: list[str] = Field(default_factory=list)
+
+    def say_pool(self) -> list[str]:
+        if isinstance(self.say, str):
+            return [self.say] if self.say else []
+        return list(self.say)
 
 
 class Settings(BaseModel):

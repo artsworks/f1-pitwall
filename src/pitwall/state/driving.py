@@ -1,5 +1,5 @@
-"""Packet-rate detectors for driver-behaviour calls: wheel lock-ups, boost
-left on, and yellow flags relative to the player's position.
+"""Packet-rate detectors for driver-behaviour calls: wheel lock-ups, spins,
+boost left on, and yellow flags relative to the player's position.
 
 Each runs on session_time (game clock) and exposes plain values the Snapshot
 copies; rules decide what is worth saying.
@@ -79,6 +79,55 @@ class LockupDetector:
         if self._ended_at is None or self.wheel < 0 or t - self._ended_at > self.hold_s:
             return "", ""
         return ("rear" if self.wheel < 2 else "front"), WHEEL_NAMES[self.wheel]
+
+
+class SpinDetector:
+    """A spin is sideslip (angle between where the car points and where it is
+    travelling, from Motion Ex local velocity) of at least `spin_deg` above
+    `min_speed_kmh`, held for `min_s`. Reported for `hold_s` from detection so
+    the call lands while the car is being turned round, before it rejoins.
+    Re-arms once the car is travelling forward again."""
+
+    def __init__(
+        self,
+        *,
+        spin_deg: float = 100.0,
+        min_speed_kmh: float = 30.0,
+        min_s: float = 0.15,
+        hold_s: float = 6.0,
+        straight_deg: float = 30.0,
+    ) -> None:
+        self.spin_deg = spin_deg
+        self.min_speed_kmh = min_speed_kmh
+        self.min_s = min_s
+        self.hold_s = hold_s
+        self.straight_deg = straight_deg
+        self.count = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self._start: float | None = None
+        self._spinning = False
+        self._at: float | None = None
+
+    def update(self, t: float, local_velocity: tuple[float, float, float]) -> None:
+        vx, _, vz = local_velocity
+        speed_kmh = math.hypot(vx, vz) * 3.6
+        slip_deg = math.degrees(math.atan2(abs(vx), vz)) if speed_kmh > 5 else 0.0
+        if speed_kmh >= self.min_speed_kmh and slip_deg >= self.spin_deg:
+            if self._start is None:
+                self._start = t
+            if not self._spinning and t - self._start >= self.min_s:
+                self._spinning = True
+                self._at = t
+                self.count += 1
+            return
+        self._start = None
+        if self._spinning and speed_kmh > 5 and slip_deg < self.straight_deg:
+            self._spinning = False
+
+    def recent(self, t: float) -> bool:
+        return self._at is not None and 0 <= t - self._at <= self.hold_s
 
 
 class BoostTimer:
