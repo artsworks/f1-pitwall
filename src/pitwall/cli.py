@@ -362,19 +362,23 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     if settings.speech.enabled:
         t0 = clock.now()
-        speaker.speak(
-            Call(
-                id="startup",
-                rule_id="startup",
-                priority=3,
-                text="Pit wall online.",
-                tags=[],
-                deadline_ms=5000,
-                lap=0,
-                t=t0,
-                trigger_t=t0,
+        for call_id, text in (
+            ("startup", "Pit wall online."),
+            ("startup-radio-check", "Radio check, radio check."),
+        ):
+            speaker.speak(
+                Call(
+                    id=call_id,
+                    rule_id="startup",
+                    priority=3,
+                    text=text,
+                    tags=[],
+                    deadline_ms=5000,
+                    lap=0,
+                    t=t0,
+                    trigger_t=t0,
+                )
             )
-        )
     try:
         asyncio.run(_serve(engine, hub, store, live()))
     except KeyboardInterrupt:

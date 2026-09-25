@@ -206,7 +206,7 @@ def test_speak_one_p1_purge_and_on_spoken() -> None:
     urgent = _urgent_event()
     urgent.set()
     done = _speak_one(
-        voice, _call("p1", priority=1), urgent, lambda cid, t: got.append(cid), beep=False
+        voice, _call("p1", priority=1), urgent, lambda cid, t: got.append(cid), blip=None
     )
     assert voice.calls[0][1] == SVSF_ASYNC | SVSF_PURGE_BEFORE_SPEAK
     assert got == ["p1"]
@@ -219,7 +219,7 @@ def test_speak_one_p2_async_only() -> None:
     from pitwall.audio.speaker import SVSF_PURGE_BEFORE_SPEAK as PURGE
 
     voice = _FakeVoice()
-    done = _speak_one(voice, _call("p2", priority=2), _urgent_event(), None, beep=False)
+    done = _speak_one(voice, _call("p2", priority=2), _urgent_event(), None, blip=None)
     assert voice.calls[0][1] == SVSF_ASYNC
     assert voice.calls[0][1] & PURGE == 0
     assert done is True
@@ -231,7 +231,7 @@ def test_speak_one_wait_breaks_on_urgent() -> None:
     voice = _FakeVoice(done_after=100)
     urgent = _urgent_event()
     urgent.set()
-    done = _speak_one(voice, _call("p2", priority=2), urgent, None, beep=False)
+    done = _speak_one(voice, _call("p2", priority=2), urgent, None, blip=None)
     assert done is False
 
 

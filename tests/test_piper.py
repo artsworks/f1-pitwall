@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from pitwall.audio.dispatcher import Call
-from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth, to_wav
+from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth, radio_blip, to_wav
 from pitwall.audio.speaker import NullSpeaker, make_speaker
 from pitwall.config.models import SpeechSettings
 
@@ -106,6 +106,30 @@ def test_to_wav_roundtrip() -> None:
             2,
             2205,
         )
+
+
+def test_radio_blip_shape() -> None:
+    sample_rate = 22050
+    pip1_samples = int(sample_rate * 0.06)
+    pip_gap_samples = int(sample_rate * 0.03)
+    pip2_samples = int(sample_rate * 0.07)
+    trailing_gap_samples = int(sample_rate * 0.06)
+    pip2_start = pip1_samples + pip_gap_samples
+    trailing_gap_start = pip2_start + pip2_samples
+    blip = radio_blip(sample_rate)
+
+    assert len(blip) == pip1_samples + pip_gap_samples + pip2_samples + trailing_gap_samples
+    assert 0.1 < np.abs(blip).max() < 0.2
+    assert abs(blip[0]) < 1e-3
+    assert abs(blip[pip1_samples - 1]) < 1e-3
+    assert abs(blip[pip2_start]) < 1e-3
+    assert abs(blip[trailing_gap_start - 1]) < 1e-3
+    assert np.all(blip[pip1_samples:pip2_start] == 0)
+    assert np.all(blip[trailing_gap_start:] == 0)
+
+    magnitude = np.abs(np.fft.rfft(blip))
+    frequencies = np.fft.rfftfreq(len(blip), 1 / sample_rate)
+    assert np.sum(magnitude * frequencies) / np.sum(magnitude) < 1000
 
 
 def test_missing_voice_falls_back(tmp_path: Path) -> None:

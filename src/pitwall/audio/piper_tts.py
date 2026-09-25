@@ -1,6 +1,6 @@
 """Piper neural TTS backend: offline, natural voice, SAPI kept as fallback.
 
-`PiperSpeaker` renders each call to a WAV (optional radio click + speech) on
+`PiperSpeaker` renders each call to a WAV (optional radio blip + speech) on
 its worker thread and hands it to a `Player`; `on_spoken` fires at playback
 start. Rendered WAVs are cached by text, so repeated calls skip synthesis.
 A P1 call preempts whatever is playing; queued calls play in priority order.
@@ -35,9 +35,13 @@ SUGGESTED_VOICES = (
     "en_US-lessac-medium",
 )
 CACHE_SIZE = 64
-CLICK_HZ = 1200.0
-CLICK_S = 0.04
-CLICK_GAP_S = 0.05
+BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
+BLIP_PIP_GAP_S = 0.03
+BLIP_GAP_S = 0.06
+BLIP_AMP = 0.16
+BLIP_H2 = 0.12
+BLIP_ATTACK_S = 0.012
+BLIP_RELEASE_S = 0.008
 
 Synth = Callable[[str], tuple[bytes, float]]
 
@@ -96,11 +100,39 @@ def download_voice(settings: SpeechSettings, name: str) -> Path:
     return voice_path(settings, name)
 
 
-def _click(sample_rate: int) -> np.ndarray:
-    n = int(sample_rate * CLICK_S)
-    t = np.arange(n) / sample_rate
-    tone = 0.25 * np.sin(2 * np.pi * CLICK_HZ * t) * np.hanning(n)
-    return np.concatenate([tone, np.zeros(int(sample_rate * CLICK_GAP_S))])
+def _blip_envelope(sample_count: int, sample_rate: int, tau_s: float) -> np.ndarray:
+    t = np.arange(sample_count) / sample_rate
+    attack_samples = int(sample_rate * BLIP_ATTACK_S)
+    envelope = np.exp(-np.maximum(t - BLIP_ATTACK_S, 0) / tau_s)
+    envelope[:attack_samples] *= 0.5 - 0.5 * np.cos(
+        np.pi * np.arange(attack_samples) / attack_samples
+    )
+    release_samples = int(sample_rate * BLIP_RELEASE_S)
+    envelope[-release_samples:] *= 0.5 + 0.5 * np.cos(
+        np.pi * np.arange(release_samples) / release_samples
+    )
+    return envelope
+
+
+def _pip(sample_rate: int, hz: float, seconds: float, tau_s: float) -> np.ndarray:
+    sample_count = int(sample_rate * seconds)
+    phase = 2 * np.pi * hz * np.arange(1, sample_count + 1) / sample_rate
+    tone = np.sin(phase) + BLIP_H2 * np.sin(2 * phase)
+    pip: np.ndarray = (
+        BLIP_AMP * tone * _blip_envelope(sample_count, sample_rate, tau_s) / (1 + BLIP_H2)
+    )
+    return pip
+
+
+def radio_blip(sample_rate: int) -> np.ndarray:
+    """Return the soft radio blip followed by its silent gap."""
+    pips = [_pip(sample_rate, hz, seconds, tau_s) for hz, seconds, tau_s in BLIP_PIPS]
+    pip_gap = np.zeros(int(sample_rate * BLIP_PIP_GAP_S))
+    parts: list[np.ndarray] = []
+    for pip in pips:
+        parts += [pip, pip_gap]
+    parts[-1] = np.zeros(int(sample_rate * BLIP_GAP_S))
+    return np.concatenate(parts)
 
 
 def to_wav(samples: np.ndarray, sample_rate: int) -> bytes:
@@ -131,11 +163,11 @@ def make_piper_synth(settings: SpeechSettings) -> Synth:
         volume=max(0, min(100, settings.volume)) / 100.0,
     )
     sample_rate = voice.config.sample_rate
-    click = _click(sample_rate) if settings.radio_click else np.zeros(0)
+    blip = radio_blip(sample_rate) if settings.radio_click else np.zeros(0)
 
     def synth(text: str) -> tuple[bytes, float]:
         parts = [c.audio_float_array for c in voice.synthesize(text, syn_config=cfg)]
-        samples = np.concatenate([click, *parts]) if parts else click
+        samples = np.concatenate([blip, *parts]) if parts else blip
         return to_wav(samples, sample_rate), len(samples) / sample_rate
 
     return synth

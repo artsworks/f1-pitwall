@@ -18,7 +18,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from pitwall.audio.dispatcher import Call
-from pitwall.audio.piper_tts import make_piper_speaker, voice_path
+from pitwall.audio.piper_tts import make_piper_speaker, radio_blip, to_wav, voice_path
 from pitwall.config.models import SpeechSettings
 
 log = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def _speak_one(
     call: Call,
     urgent: threading.Event,
     on_spoken: Callable[[str, float], None] | None,
-    beep: bool,
+    blip: bytes | None,
 ) -> bool:
     """Speak one call on a SAPI voice; return True if speech finished normally
     (False if cut short by `urgent`). Async speak keeps the worker free to
@@ -67,14 +67,14 @@ def _speak_one(
     - P1 -> PURGE|ASYNC so it cuts whatever is speaking, then ASYNC for the rest.
     - on_spoken fires right after Speak returns (speech start).
     - WaitUntilDone(50) returns True when done; urgent breaks the wait.
-    - Beep only when nothing is already playing (previous wait finished
-      normally): the P1 purge already cuts audio, and the beep would delay it.
+    - Play the blip only when nothing is already playing (previous wait finished
+      normally): the P1 purge already cuts audio, and the blip would delay it.
     """
-    if beep:
+    if blip is not None:
         try:
             import winsound
 
-            winsound.Beep(1200, 40)  # type: ignore[attr-defined]
+            winsound.PlaySound(blip, winsound.SND_MEMORY)  # type: ignore[attr-defined]
         except Exception:
             pass
     flags = SVSF_ASYNC | (SVSF_PURGE_BEFORE_SPEAK if call.priority == 1 else 0)
@@ -147,7 +147,7 @@ class SapiSpeaker:
                 if s.voice.lower() in v.GetDescription().lower():
                     voice.Voice = v
                     break
-        beep_enabled = s.radio_click
+        blip = to_wav(radio_blip(22050), 22050) if s.radio_click else None
         finished = True  # whether previous speech finished normally
         while True:
             call = self._q.get()
@@ -161,7 +161,7 @@ class SapiSpeaker:
                 call,
                 self._urgent,
                 self.on_spoken,
-                beep_enabled and finished,
+                blip if finished else None,
             )
 
 
