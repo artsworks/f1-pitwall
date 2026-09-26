@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
 from pitwall.protocol.header import PacketId
@@ -123,8 +125,6 @@ def test_player_laps_carry_wear_fuel_ers(tmp_path: Path) -> None:
     assert len(laps) >= 9
     lap2 = next(r for r in laps if r.lap_num == 2)
     assert lap2.wear_pct > 0.0
-    import pytest
-
     assert lap2.fuel_kg == pytest.approx(110.0 - 1.7 * 3, abs=0.01)  # lap-3 tick value
     assert lap2.ers_deployed_j == 250_000.0
 
@@ -168,3 +168,13 @@ def test_rival_laps_persisted(tmp_path: Path) -> None:
     rival = db.laps_for(uid, 1)
     assert [r.lap_num for r in rival] == [1, 2]
     assert rival[0].lap_time_ms == 91_500 and rival[0].compound == 17
+
+
+def test_rules_facing_snapshot_carries_model(tmp_path: Path) -> None:
+    engine, state, db = _run(tmp_path)
+    snap = engine.state.snapshot(engine.clock.now())
+    assert snap.deg_fit_source in ("blend", "fit")
+    assert snap.laps_of_pace < float("inf")
+    assert snap.pit_loss_source != ""
+    assert snap.predicted_lap_ms > 0
+    assert snap.fuel_source != ""

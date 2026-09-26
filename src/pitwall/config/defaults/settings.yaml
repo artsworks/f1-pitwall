@@ -72,6 +72,20 @@ thresholds:
   fuel_kg_per_lap_default: 1.7
   energy_over_tolerance_j: 200000  # |lap_delta| above this flags over/under
   ers_store_capacity_j: 4000000    # nominal 4 MJ 2026 ERS store
+  # Race phase + rival scope (docs/18)
+  sc_exit_hold_s: 5            # session seconds a flicker can't bounce the SC/VSC phase
+  restricted_detect_laps: 2    # all-zero rival telemetry for this many laps = restricted
+  restricted_confidence_factor: 0.7
+  pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)
+  thermal_hysteresis_c: 4      # overheat/graining latch hysteresis
+  tyre_graining_c: 75          # coldest inner at or below this = graining band
+  drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
+  drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
+  penalty_recent_s: 10         # session seconds a PENA stays "recent"
+  rain_inter_pct: 60           # forecast rain -> crossover bands
+  rain_wet_pct: 85
+  rain_dry_pct: 30
+  rain_hysteresis_pct: 5       # crossover band hysteresis
 ui:
   state_hz: 5
 input:

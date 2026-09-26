@@ -7,7 +7,9 @@ max-speed replay makes identical decisions to 1x (determinism per docs/07).
 from __future__ import annotations
 
 import asyncio
+import math
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from pitwall.audio.decision_log import DecisionLog
@@ -18,10 +20,11 @@ from pitwall.ingest import Ingest
 from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
-from pitwall.model.deg import DegFit, Prior, fit_stint, resolve_prior
+from pitwall.model.deg import DegFit, Prior, fit_stint, laps_of_pace, resolve_prior
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.lap import LapSummary
+from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState
 from pitwall.store.db import LapRow
 
@@ -69,6 +72,11 @@ class Engine:
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._fuel_last_kg: float | None = None
+        self._stint_fuel_ref = 0.0
+        self._stint_laps: list[LapRow] = []
+        self._model_key: tuple[int | None, int, int] | None = None
+        self._fuel_prior = Prior(0.0, 0.0, "default")
+        self._wear_per_lap = 0.0
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
@@ -184,6 +192,8 @@ class Engine:
                             )
 
         if tail:
+            self._stint_laps = tail
+            self._stint_fuel_ref = max((r.fuel_remaining_laps for r in tail), default=0.0)
             compound = tail[0].compound
             prior = self._deg_prior(track_id, compound, settings)
             fuel_param = db.get_param(track_id, compound, "fuel_ms_per_lap")
@@ -321,7 +331,7 @@ class Engine:
             fuel_ms_per_lap=fuel_p.value,
             n=0,
             rmse_ms=0.0,
-            confidence=0.3,
+            confidence={"learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2),
             source=deg_p.source,
         )
 
@@ -329,14 +339,29 @@ class Engine:
         v = self.store.current().thresholds.get(name, default)
         return float(v) if isinstance(v, int | float) else default
 
-    def _update_budgets(self) -> None:
-        settings = self.store.current()
+    def _update_model(self) -> None:
+        """Refresh priors (once per lap) and budgets (every tick), then hand
+        the whole model view to SessionState for the rules-facing snapshot."""
         state = self.state
-        laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        settings = self.store.current()
+        mode = settings.resolved_mindset()
+        state.set_mode_offsets(
+            thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0)
+        )
         track_id = state.track_id
         overlay = settings.track
-        if self.db is not None:
-            fuel_p = resolve_prior(
+        key = (state.session_uid, self._laps_written, state.lap_num)
+        if key != self._model_key:
+            self._model_key = key
+            self.pit_loss_prior = current_pit_loss(
+                self.db,
+                state.session_uid,
+                track_id,
+                state.safety_car_status,
+                overlay,
+                settings.thresholds,
+            )
+            self._fuel_prior = resolve_prior(
                 self.db,
                 track_id,
                 0,
@@ -349,33 +374,89 @@ class Engine:
                 default=self._th("fuel_kg_per_lap_default", 1.7),
                 min_weight=self._th("prior_min_weight", 2),
             )
-            self.fuel_budget = fuel_budget(
-                laps_remaining=laps_remaining,
-                fuel_in_tank_kg=state.fuel_in_tank,
-                per_lap_kg=fuel_p.value,
-                source=fuel_p.source,
+            # Wear rate this stint: median of positive consecutive deltas.
+            wear_deltas = [
+                b.wear_pct - a.wear_pct
+                for a, b in zip(self._stint_laps, self._stint_laps[1:], strict=False)
+                if a.wear_pct > 0 and b.wear_pct > a.wear_pct
+            ]
+            self._wear_per_lap = (
+                median(wear_deltas) if wear_deltas else self._th("wear_per_lap_default_pct", 2.5)
             )
-            cap = self._th("ers_store_capacity_j", 4_000_000)
-            self.energy_budget = energy_budget(
-                store_j=state.ers_store_energy_j,
-                store_capacity_j=cap,
-                laps_remaining=laps_remaining,
-                deployed_this_lap_j=state.ers_deployed_this_lap_j,
-                harvested_this_lap_j=(state.ers_harvested_mguk_j + state.ers_harvested_mguh_j),
-                harvest_limit_per_lap_j=state.ers_harvest_limit_per_lap_j,
-                soc_floor_pct=0.0,
-                over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
-                attack_ok=state.ers_deploy_mode == 1,
+
+        laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        self.fuel_budget = fuel_budget(
+            laps_remaining=laps_remaining,
+            fuel_in_tank_kg=state.fuel_in_tank,
+            per_lap_kg=self._fuel_prior.value,
+            source=self._fuel_prior.source,
+        )
+        self.energy_budget = energy_budget(
+            store_j=state.ers_store_energy_j,
+            store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
+            laps_remaining=laps_remaining,
+            deployed_this_lap_j=state.ers_deployed_this_lap_j,
+            harvested_this_lap_j=state.ers_harvested_mguk_j + state.ers_harvested_mguh_j,
+            harvest_limit_per_lap_j=state.ers_harvest_limit_per_lap_j,
+            soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
+            over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
+            attack_ok=mode.get("ers_policy") == "attack_rival",
+        )
+
+        fit = self.deg_fit
+        wear_mean = sum(state.tyres_wear.as_tuple()) / 4.0
+        lop = math.inf
+        predicted = 0
+        if fit is not None:
+            lop = laps_of_pace(
+                fit,
+                state.tyre_age_laps,
+                wear_mean,
+                cliff_ms=self._th("tyre_cliff_ms", 1500),
+                wear_cliff_pct=self._th("wear_cliff_pct", 70),
+                wear_per_lap=self._wear_per_lap,
             )
+            burned = self._stint_fuel_ref - state.fuel_remaining_laps
+            predicted = int(
+                fit.base_ms
+                + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
+                + fit.fuel_ms_per_lap * (burned + 1)
+            )
+        eb = self.energy_budget
+        fb = self.fuel_budget
+        state.set_model(
+            ModelView(
+                deg_fit_source=fit.source if fit is not None else "",
+                deg_ms_per_lap=fit.deg_ms_per_lap if fit is not None else 0.0,
+                deg_confidence=fit.confidence if fit is not None else 0.0,
+                base_pace_ms=fit.base_ms if fit is not None else 0.0,
+                laps_of_pace=lop,
+                wear_per_lap_pct=self._wear_per_lap,
+                pit_loss_s=(
+                    self.pit_loss_prior.value / 1000.0 if self.pit_loss_prior is not None else 0.0
+                ),
+                pit_loss_source=(
+                    self.pit_loss_prior.source if self.pit_loss_prior is not None else ""
+                ),
+                fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
+                fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
+                fuel_source=fb.source if fb is not None else "",
+                energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
+                energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
+                energy_laps_to_floor=eb.laps_to_floor if eb is not None else math.inf,
+                energy_mode=eb.mode if eb is not None else "",
+                predicted_lap_ms=predicted,
+            )
+        )
 
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
-        snapshot = self.state.snapshot(now)
-        if snapshot.track_id != self._track_loaded:
-            self._track_loaded = snapshot.track_id
-            self.store.set_track(snapshot.track_id if snapshot.track_id >= 0 else None)
+        if self.state.track_id != self._track_loaded:
+            self._track_loaded = self.state.track_id
+            self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
         self._write_laps()
-        self._update_budgets()
+        self._update_model()
+        snapshot = self.state.snapshot(now)
         if (
             snapshot.session_ended
             and not self._session_ended_written

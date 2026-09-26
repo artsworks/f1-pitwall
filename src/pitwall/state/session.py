@@ -7,8 +7,10 @@ import dataclasses
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from statistics import median
 from typing import Any
 
+from pitwall.model.deg import rival_pace_ms
 from pitwall.protocol.enums import DriverStatus, PitStatus, SessionType, VisualCompound
 from pitwall.protocol.header import PacketHeader, PacketId
 from pitwall.protocol.layouts import CAR_SLOTS, Corners
@@ -25,6 +27,8 @@ from pitwall.protocol.packets import (
     SessionHistoryPacket,
     SessionPacket,
     TyreSetsPacket,
+    WeatherForecastSample,
+    Zone,
     parse,
 )
 from pitwall.state.driving import (
@@ -36,6 +40,7 @@ from pitwall.state.driving import (
 )
 from pitwall.state.ema import CornersEma
 from pitwall.state.lap import LapAccumulator, LapSummary
+from pitwall.state.model_view import ModelView
 from pitwall.state.pressure import PressureCall, RunTemps, pressure_advice, pressure_text
 from pitwall.state.quali import (
     ReleaseWindow,
@@ -45,6 +50,7 @@ from pitwall.state.quali import (
     quali_margin_ms,
     release_window,
 )
+from pitwall.state.race import RacePhase, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 
 PACKET_NAMES: dict[int, str] = {
@@ -103,6 +109,14 @@ class CarLap:
     driver_status: int = 0
     pit_status: int = 0
     result_status: int = 0
+    current_lap_num: int = 0
+    delta_to_car_in_front_ms: int = 0
+    num_pit_stops: int = 0
+    penalties: int = 0
+    total_warnings: int = 0
+    corner_cutting_warnings: int = 0
+    num_unserved_drive_through_pens: int = 0
+    num_unserved_stop_go_pens: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +240,75 @@ class Snapshot:
     weather: int = 0
     game_mode: int = 0
     since_rewind_s: float = math.inf
+    # M3 race engine (docs/18). Model fields mirror ModelView; set_model()
+    # fills them.
+    laps_remaining: int = 0
+    race_phase: str = ""
+    sc_laps: int = 0
+    lights_out: bool = False
+    chequered: bool = False
+    gap_ahead_s: float = math.inf
+    gap_behind_s: float = math.inf
+    rival_ahead_idx: int = -1
+    rival_behind_idx: int = -1
+    rival_pit_exit_idx: int = -1
+    rival_ahead_pace_ms: int = 0
+    rival_behind_pace_ms: int = 0
+    rival_pit_exit_pace_ms: int = 0
+    rival_ahead_name: str = ""
+    rival_behind_name: str = ""
+    rival_pit_exit_name: str = ""
+    rival_ahead_age: int = 0
+    rival_behind_age: int = 0
+    rival_ahead_pitted: bool = False
+    rival_behind_pitted: bool = False
+    rival_data_restricted: bool = False
+    pit_exit_rival_gap_s: float = math.inf
+    pit_exit_clean: bool = False
+    deg_fit_source: str = ""
+    deg_ms_per_lap: float = 0.0
+    deg_confidence: float = 0.0
+    base_pace_ms: float = 0.0
+    laps_of_pace: float = math.inf
+    wear_mean_pct: float = 0.0
+    wear_per_lap_pct: float = 0.0
+    blister_max_pct: int = 0
+    graining: bool = False
+    overheat: bool = False
+    pit_loss_s: float = 0.0
+    pit_loss_source: str = ""
+    fuel_margin_laps: float = 0.0
+    fuel_per_lap_kg: float = 0.0
+    fuel_source: str = ""
+    energy_per_lap_mj: float = 0.0
+    energy_lap_delta_mj: float = 0.0
+    energy_laps_to_floor: float = math.inf
+    energy_mode: str = ""
+    drs_zone_ahead: bool = False
+    drs_available: bool = False
+    penalty_s: int = 0
+    penalty_type: int = 0
+    penalty_infringement: int = 0
+    unserved_drive_through: int = 0
+    unserved_stop_go: int = 0
+    warnings: int = 0
+    corner_cut_warnings: int = 0
+    penalty_recent: bool = False
+    blue_flag: bool = False
+    weather_now: int = 0
+    rain_pct_now: int = 0
+    rain_pct_in_10: int = 0
+    rain_pct_in_30: int = 0
+    weather_crossover: str = ""
+    pit_plan: str = ""
+    pit_plan_lap: int = 0
+    pit_plan_gain_s: float = 0.0
+    pit_plan_confidence: float = 0.0
+    pit_plan_risk: float = 0.0
+    pit_plan_rival_idx: int = -1
+    pit_plan_rival_name: str = ""
+    pit_plan_reason: str = ""
+    predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
     # M2: extra player lap fields
@@ -414,6 +497,7 @@ class SessionState:
         self.tyre_age_laps = 0
         self.fuel_remaining_laps = 0.0
         self.fuel_in_tank = 0.0
+        self.blister_max_pct = 0
         self.ers_store_pct = 0.0
         self.ers_store_energy_j = 0.0
         self.ers_deployed_this_lap_j = 0.0
@@ -476,6 +560,46 @@ class SessionState:
         self.overtake_active = 0
         self.overtake_activation_distance_m = 0
         self.driving_wrong_way = False
+
+        # M3 race state (docs/18)
+        self.result_status = 0
+        self.delta_to_car_in_front_ms = 0
+        self.num_pit_stops = 0
+        self.penalty_s = 0
+        self.warnings = 0
+        self.corner_cut_warnings = 0
+        self.unserved_drive_through = 0
+        self.unserved_stop_go = 0
+        self.vehicle_fia_flags = 0
+        self.penalty_type = 0
+        self.penalty_infringement = 0
+        self._last_penalty_st: float | None = None
+        self.lights_out = False
+        self.chequered = False
+        self._race = RacePhase()
+        self.race_phase = "formation"
+        self.sc_laps = 0
+        self._prev_lap_num = 0
+        self._cars_pitted_this_lap: set[int] = set()
+        self._pitted_lap_snapshot: set[int] = set()
+        self._restricted_streak = 0
+        self.rival_data_restricted = False
+        self._forecast_samples: tuple[WeatherForecastSample, ...] = ()
+        self._drs_zones: tuple[Zone, ...] = ()
+        self._aero_zones: tuple[Zone, ...] = ()
+        self._weather_crossover = ""
+        self._overheat = False
+        self._graining = False
+        self._model = ModelView()
+        self._thermal_warn_offset_c = 0.0
+
+    def set_model(self, view: ModelView) -> None:
+        """Model outputs for the next snapshot (Engine -> state -> snapshot)."""
+        self._model = view
+
+    def set_mode_offsets(self, *, thermal_warn_offset_c: float) -> None:
+        """Mindset-dependent warning offsets (resolved in the Engine)."""
+        self._thermal_warn_offset_c = thermal_warn_offset_c
 
     # -- ingest entry point -----------------------------------------------
 
@@ -580,6 +704,13 @@ class SessionState:
         self.game_paused = bool(pkt.game_paused)
         self.weather = pkt.weather
         self.game_mode = pkt.game_mode
+        self._forecast_samples = pkt.weather_forecast_samples[: pkt.num_weather_forecast_samples]
+        self._drs_zones = pkt.drs_zones[: pkt.num_drs_zones]
+        self._aero_zones = (
+            pkt.active_aero_zones_full[: pkt.num_active_aero_zones_full]
+            + pkt.active_aero_zones_partial[: pkt.num_active_aero_zones_partial]
+        )
+        self._update_weather_crossover()
         zones = pkt.marshal_zones[: pkt.num_marshal_zones]
         self.yellows.update(
             [z.zone_start for z in zones],
@@ -593,6 +724,14 @@ class SessionState:
     def _on_lap_data(self, pkt: LapDataPacket) -> None:
         self.cars_lap = pkt.cars
         car = pkt.cars[self._player_idx]
+        lap_boundary = car.current_lap_num != self.lap_num and self.lap_num != 0
+        if lap_boundary:
+            self._pitted_lap_snapshot = self._cars_pitted_this_lap
+            self._cars_pitted_this_lap = set()
+            self._note_lap_boundary()
+        for i, c in enumerate(pkt.cars):
+            if i != self._player_idx and c.pit_status != 0:
+                self._cars_pitted_this_lap.add(i)
         self.lap_num = car.current_lap_num
         self.lap_distance = car.lap_distance
         if car.sector == 2 and self.sector != 2:
@@ -611,6 +750,14 @@ class SessionState:
         self.sector2_time_ms = car.sector2_ms
         self.current_lap_invalid = car.current_lap_invalid
         self.pit_lane_time_ms = car.pit_lane_time_in_lane_ms
+        self.result_status = car.result_status
+        self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
+        self.num_pit_stops = car.num_pit_stops
+        self.penalty_s = car.penalties
+        self.warnings = car.total_warnings
+        self.corner_cut_warnings = car.corner_cutting_warnings
+        self.unserved_drive_through = car.num_unserved_drive_through_pens
+        self.unserved_stop_go = car.num_unserved_stop_go_pens
         # Red flag clears once the car is released back onto the track after
         # having been back in the garage.
         if car.driver_status == DriverStatus.IN_GARAGE:
@@ -622,6 +769,21 @@ class SessionState:
         ):
             self.red_flag = False
             self._was_in_garage = False
+        st = self._last_session_time or 0.0
+        self.race_phase = self._race.update(
+            session_time=st,
+            safety_car_status=self.safety_car_status,
+            pit_status=car.pit_status,
+            driver_status=car.driver_status,
+            result_status=car.result_status,
+            lap_num=car.current_lap_num,
+            lap_boundary=lap_boundary,
+            lights_out_seen=self.lights_out,
+            chequered_seen=self.chequered,
+            red_flag=self.red_flag,
+            sc_exit_hold_s=self._th("sc_exit_hold_s", 5.0),
+        )
+        self.sc_laps = self._race.sc_laps
         summary = self.lap_acc.update(
             current_lap_num=car.current_lap_num,
             last_lap_time_ms=car.last_lap_time_ms,
@@ -737,6 +899,15 @@ class SessionState:
             self.red_flag = False
         elif pkt.code == "SEND":
             self.session_ended = True
+        elif pkt.code == "LGOT":
+            self.lights_out = True
+        elif pkt.code == "CHQF":
+            self.chequered = True
+        elif pkt.code == "PENA":
+            if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
+                self._last_penalty_st = pkt.header.session_time
+                self.penalty_type = int(pkt.detail.get("penalty_type", 0))
+                self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -834,6 +1005,55 @@ class SessionState:
             )
         self._rival_laps_emitted[pkt.car_idx] = completed
 
+    def _note_lap_boundary(self) -> None:
+        """Player crossed the line: evaluate restricted-telemetry streak."""
+        status = self.cars_status
+        damage = self.cars_damage
+        lap = self.cars_lap
+        if status is None or damage is None or lap is None:
+            return
+        active = [i for i, c in enumerate(lap) if i != self._player_idx and c.result_status == 2]
+        all_zero = bool(active) and all(
+            float(status[i].fuel_in_tank) == 0.0
+            and float(status[i].ers_store_energy) == 0.0
+            and sum(damage[i].tyres_wear.as_tuple()) == 0.0
+            for i in active
+            if i < len(status) and i < len(damage)
+        )
+        if all_zero and len(active) <= sum(
+            1 for i in active if i < len(status) and i < len(damage)
+        ):
+            self._restricted_streak += 1
+        else:
+            self._restricted_streak = 0
+        self.rival_data_restricted = self._restricted_streak >= int(
+            self._th("restricted_detect_laps", 2.0)
+        )
+
+    def _update_weather_crossover(self) -> None:
+        """Crossover direction from the forecast, with % hysteresis so it
+        doesn't flap around the thresholds."""
+        rain_10, rain_30 = self._rain_at(10), self._rain_at(30)
+        rain = max(rain_10, rain_30)
+        wet = self._th("rain_wet_pct", 85.0)
+        inter = self._th("rain_inter_pct", 60.0)
+        dry = self._th("rain_dry_pct", 30.0)
+        hyst = self._th("rain_hysteresis_pct", 5.0)
+        cur = self._weather_crossover
+        # Wetter states need the forecast past the band edge; clearing a
+        # state needs it back below the band edge (hysteresis).
+        if rain >= wet + (0.0 if cur == "to_inter" else hyst):
+            cand = "to_wet"
+        elif rain >= inter + (0.0 if cur == "to_wet" else hyst):
+            cand = "to_inter"
+        elif self.weather >= 5 and rain < dry - (0.0 if cur else hyst):
+            cand = "to_dry"
+        elif cur in ("to_inter", "to_wet") and rain < inter - hyst:
+            cand = ""
+        else:
+            cand = cur
+        self._weather_crossover = cand
+
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
         self.num_active_cars = pkt.num_active_cars
         self.participants = tuple(
@@ -912,12 +1132,14 @@ class SessionState:
         self.ers_harvest_limit_per_lap_j = float(car.ers_harvest_limit_per_lap)
         self.ers_deploy_mode = car.ers_deploy_mode
         self.drs_allowed = car.drs_allowed
+        self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
 
     def _on_car_damage(self, pkt: CarDamagePacket) -> None:
         self.cars_damage = pkt.cars
         car = pkt.cars[self._player_idx]
         self.tyres_wear = car.tyres_wear
+        self.blister_max_pct = max(int(b) for b in car.tyre_blisters.as_tuple())
         self.damage = Damage(
             front_left_wing=car.front_left_wing_damage,
             front_right_wing=car.front_right_wing_damage,
@@ -956,6 +1178,14 @@ class SessionState:
                     driver_status=c.driver_status,
                     pit_status=c.pit_status,
                     result_status=c.result_status,
+                    current_lap_num=c.current_lap_num,
+                    delta_to_car_in_front_ms=c.delta_to_car_in_front_ms,
+                    num_pit_stops=c.num_pit_stops,
+                    penalties=c.penalties,
+                    total_warnings=c.total_warnings,
+                    corner_cutting_warnings=c.corner_cutting_warnings,
+                    num_unserved_drive_through_pens=c.num_unserved_drive_through_pens,
+                    num_unserved_stop_go_pens=c.num_unserved_stop_go_pens,
                 )
                 for c in self.cars_lap
             )
@@ -1086,6 +1316,7 @@ class SessionState:
             rear_range=self._psi_range("rear"),
         )
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
+        race = self._race_view(st, kind, cars, field_best)
         return Snapshot(
             now=now,
             session_time=st,
@@ -1115,6 +1346,33 @@ class SessionState:
             rewinds=self.rewinds,
             weather=self.weather,
             game_mode=self.game_mode,
+            laps_remaining=(
+                max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
+            ),
+            lights_out=self.lights_out,
+            chequered=self.chequered,
+            gap_ahead_s=self.delta_to_car_in_front_ms / 1000.0
+            if self.delta_to_car_in_front_ms > 0
+            else math.inf,
+            blister_max_pct=self.blister_max_pct,
+            wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
+            unserved_drive_through=self.unserved_drive_through,
+            unserved_stop_go=self.unserved_stop_go,
+            warnings=self.warnings,
+            corner_cut_warnings=self.corner_cut_warnings,
+            penalty_s=self.penalty_s,
+            penalty_type=self.penalty_type,
+            penalty_infringement=self.penalty_infringement,
+            penalty_recent=(
+                self._last_penalty_st is not None
+                and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            blue_flag=self.vehicle_fia_flags == 4,
+            weather_now=self.weather,
+            rain_pct_now=self._rain_at(0),
+            rain_pct_in_10=self._rain_at(10),
+            rain_pct_in_30=self._rain_at(30),
+            weather_crossover=self._weather_crossover,
             since_rewind_s=(
                 math.inf if self._last_rewind_t is None else max(0.0, st - self._last_rewind_t)
             ),
@@ -1211,6 +1469,7 @@ class SessionState:
             pressure_advice=pressures,
             pressure_advice_text=pressure_text(pressures),
             **cool,
+            **race,
             **self._traffic(player_best_lap),
             dist_to_line_m=(
                 max(0.0, self.track_length_m - self.lap_distance)
@@ -1324,6 +1583,176 @@ class SessionState:
         )
         return out
 
+    def _rain_at(self, offset_min: int) -> int:
+        """Rain % of the nearest forecast sample for this session type at
+        time_offset >= offset_min (0 = current conditions sample)."""
+        return next(
+            (
+                int(s.rain_percentage)
+                for s in self._forecast_samples
+                if s.session_type == self.session_type and s.time_offset >= offset_min
+            ),
+            0,
+        )
+
+    def _rival_age(self, car_idx: int) -> int:
+        """Tyre age of the rival's current stint from its Session History."""
+        if self.rival_data_restricted:
+            return 0
+        pkt = self._histories.get(car_idx)
+        if pkt is None or pkt.num_tyre_stints == 0:
+            return 0
+        stints = pkt.tyre_stints[: pkt.num_tyre_stints]
+        prev_end = stints[-2].end_lap if len(stints) >= 2 else 0
+        return int(max(0, pkt.num_laps - prev_end))
+
+    def _race_view(
+        self,
+        st: float,
+        kind: str,
+        cars: tuple[CarLap, ...],
+        field_best: tuple[int, ...],
+    ) -> dict[str, Any]:
+        """M3 race fields of the snapshot (docs/18)."""
+        overheat, graining = self._thermal()
+        model = self._model
+        base: dict[str, Any] = dict(
+            race_phase=self.race_phase,
+            sc_laps=self.sc_laps,
+            deg_fit_source=model.deg_fit_source,
+            deg_ms_per_lap=model.deg_ms_per_lap,
+            deg_confidence=model.deg_confidence,
+            base_pace_ms=model.base_pace_ms,
+            laps_of_pace=model.laps_of_pace,
+            wear_per_lap_pct=model.wear_per_lap_pct,
+            pit_loss_s=model.pit_loss_s,
+            pit_loss_source=model.pit_loss_source,
+            fuel_margin_laps=model.fuel_margin_laps,
+            fuel_per_lap_kg=model.fuel_per_lap_kg,
+            fuel_source=model.fuel_source,
+            energy_per_lap_mj=model.energy_per_lap_mj,
+            energy_lap_delta_mj=model.energy_lap_delta_mj,
+            energy_laps_to_floor=model.energy_laps_to_floor,
+            energy_mode=model.energy_mode,
+            predicted_lap_ms=model.predicted_lap_ms,
+            pit_plan=model.pit_plan,
+            pit_plan_lap=model.pit_plan_lap,
+            pit_plan_gain_s=model.pit_plan_gain_s,
+            pit_plan_confidence=model.pit_plan_confidence,
+            pit_plan_risk=model.pit_plan_risk,
+            pit_plan_rival_idx=model.pit_plan_rival_idx,
+            pit_plan_rival_name=model.pit_plan_rival_name,
+            pit_plan_reason=model.pit_plan_reason,
+            rival_data_restricted=self.rival_data_restricted,
+            overheat=overheat,
+            graining=graining,
+            drs_zone_ahead=self._drs_zone_ahead(),
+        )
+        if kind != "race" or not cars or self.track_length_m <= 0:
+            base["race_phase"] = self.race_phase if kind == "race" else ""
+            return base
+
+        # Player pace = median of the last 3 valid own laps (best-lap
+        # fallback); pit-exit rival projected by the docs/03 formula.
+        own = [lap.lap_time_ms for lap in self.laps if lap.valid and lap.lap_time_ms > 0]
+        pace_ms = int(median(own[-3:])) if own else self._best_laps.get(self._player_idx, 0)
+        pit_s = model.pit_loss_s if model.pit_loss_s > 0 else self._th("pit_loss_default_s", 22.0)
+        metres_lost = self.track_length_m * pit_s / (pace_ms / 1000.0) if pace_ms > 0 else math.inf
+        ahead_i, behind_i, exit_i = relevant_rivals(
+            cars,
+            self._player_idx,
+            math.inf,
+            (self.lap_distance, self.track_length_m, metres_lost),
+        )
+        # gap_behind = the car behind's delta to the car in front of it (us).
+        gap_behind = math.inf
+        if behind_i >= 0:
+            d = cars[behind_i].delta_to_car_in_front_ms
+            gap_behind = d / 1000.0 if d > 0 else math.inf
+
+        def pace_of(i: int) -> int:
+            h = self._histories.get(i)
+            if h is None:
+                return self._best_laps.get(i, 0)
+            return rival_pace_ms(h, int(self._th("rival_pace_window", 3.0))) or self._best_laps.get(
+                i, 0
+            )
+
+        def name_of(i: int) -> str:
+            return self.participants[i].name if 0 <= i < len(self.participants) else ""
+
+        pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
+        # Pit-exit clean air: reuse the quali release window with the pit
+        # loss as the out-lap and the race clean-gap threshold.
+        release = release_window(
+            cars,
+            self._player_idx,
+            self.track_length_m,
+            self._th("pit_exit_m", 0.0),
+            pit_s,
+            field_best,
+            pace_ms / 1000.0 if pace_ms > 0 else self._th("release_fallback_lap_s", 95.0),
+            self._th("pit_exit_clean_gap_s", 2.0),
+        )
+        exit_gap = math.inf
+        if exit_i >= 0:
+            v = self.track_length_m / (pace_of(exit_i) / 1000.0) if pace_of(exit_i) > 0 else 50.0
+            fwd = (cars[exit_i].lap_distance - self._th("pit_exit_m", 0.0)) % self.track_length_m
+            exit_gap = (
+                fwd / v if fwd <= self.track_length_m / 2 else -((self.track_length_m - fwd) / v)
+            )
+        base.update(
+            gap_behind_s=gap_behind,
+            rival_ahead_idx=ahead_i,
+            rival_behind_idx=behind_i,
+            rival_pit_exit_idx=exit_i,
+            rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
+            rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
+            rival_pit_exit_pace_ms=pace_of(exit_i) if exit_i >= 0 else 0,
+            rival_ahead_name=name_of(ahead_i),
+            rival_behind_name=name_of(behind_i),
+            rival_pit_exit_name=name_of(exit_i),
+            rival_ahead_age=self._rival_age(ahead_i) if ahead_i >= 0 else 0,
+            rival_behind_age=self._rival_age(behind_i) if behind_i >= 0 else 0,
+            rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
+            rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
+            pit_exit_rival_gap_s=exit_gap,
+            pit_exit_clean=release.clean,
+            drs_available=(
+                bool(self.drs_allowed)
+                and self.delta_to_car_in_front_ms > 0
+                and self.delta_to_car_in_front_ms / 1000.0 < self._th("drs_detection_gap_s", 1.0)
+                and self.safety_car_status == 0
+            ),
+        )
+        return base
+
+    def _drs_zone_ahead(self) -> bool:
+        """A DRS/active-aero zone starts within the lookahead distance."""
+        if self.track_length_m <= 0:
+            return False
+        lookahead = self._th("drs_zone_lookahead_m", 300.0)
+        for zone in (*self._drs_zones, *self._aero_zones):
+            dist = (float(zone.zone_start) - self.lap_distance) % self.track_length_m
+            if 0 < dist <= lookahead:
+                return True
+        return False
+
+    def _thermal(self) -> tuple[bool, bool]:
+        """(overheat, graining) with hysteresis on the slow inner EMA."""
+        temps = self._ema_or_zero(self.tyre_inner_slow).as_tuple()
+        hot = max(temps)
+        coldest = min(temps)
+        hot_c = self._th("tyre_inner_hot_c", 110.0) + self._thermal_warn_offset_c
+        hyst = self._th("thermal_hysteresis_c", 4.0)
+        grain_c = self._th("tyre_graining_c", 75.0)
+        self._overheat = (self._overheat and hot > hot_c - hyst) or hot >= hot_c
+        in_context = self.race_phase == "racing" and self.tyre_age_laps >= 2
+        self._graining = in_context and (
+            (self._graining and coldest < grain_c + hyst) or coldest <= grain_c
+        )
+        return self._overheat, self._graining
+
     def _psi_range(self, axle: str) -> tuple[float, float] | None:
         lo = self._th(f"pressure_{axle}_min_psi", 0.0)
         hi = self._th(f"pressure_{axle}_max_psi", 0.0)
@@ -1407,6 +1836,11 @@ class SessionState:
         return default
 
     def _phase(self) -> str:
+        try:
+            if SessionType(self.session_type).kind() == "race":
+                return "red_flag" if self.red_flag else self.race_phase
+        except ValueError:
+            pass
         if self.red_flag:
             return "red_flag"
         if self.driver_status == DriverStatus.IN_GARAGE:
