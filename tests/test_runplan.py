@@ -178,8 +178,10 @@ def test_cool_lap_coaching_rules() -> None:
     # plan_cool already said "recharge"; the separate reminder is for driver-initiated cools
     assert "cool_recharge" not in _ids(_qsnap(sector=0, **cool))
     assert "cool_recharge" in _ids(_qsnap(sector=0, cool_lap=True, run_plan="push"))
-    # recharge-mode check is off while the mode mapping is unknown (-1)
-    assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=30.0, **cool))
+    # recharge is deploy mode 0; the check nags only once the cool lap is under way
+    assert "cool_recharge_check" in _ids(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=2, **cool))
+    assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=5.0, ers_deploy_mode=2, **cool))
+    assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=0, **cool))
     ids = _ids(
         _qsnap(
             sector=1,

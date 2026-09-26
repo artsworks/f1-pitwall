@@ -55,4 +55,4 @@ thresholds:
   cool_pace_pct: 10          # sector 1 this much slower than best = driver is cooling
   cool_hot_mode_m: 600       # metres before the line to switch back to hot-lap mode
   cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
-  ers_recharge_mode: -1      # ers_deploy_mode value for recharge; -1 = unknown, don't check
+  ers_recharge_mode: 0       # ers_deploy_mode value for recharge (Q3 recording: battery only rises in 0); -1 = don't check

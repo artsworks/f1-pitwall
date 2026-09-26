@@ -99,6 +99,7 @@ def quali_payload(
             ],
             "ers_pct": snapshot.ers_store_pct,
             "ers_mode": snapshot.ers_deploy_mode,
+            "recharging": snapshot.ers_deploy_mode == th.get("ers_recharge_mode", -1),
             "plan_reason": snapshot.run_plan_reason or None,
             "extend": snapshot.cool_extend,
             "dist_to_hot_m": snapshot.dist_to_hot_mode_m if snapshot.track_length_m else None,

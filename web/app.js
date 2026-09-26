@@ -237,7 +237,12 @@
     if (bar) bar.style.width = Math.max(0, Math.min(100, c.ers_pct)) + "%";
     var mark = el("c-ers-min");
     if (mark) mark.style.left = minPct + "%";
-    setText("c-mode", "target " + fmt(minPct, 0) + "% · deploy mode " + c.ers_mode);
+    var mode = el("c-mode");
+    if (mode) {
+      mode.textContent = (c.recharging ? "RECHARGE" : "NOT IN RECHARGE · mode " + c.ers_mode) +
+        " · target " + fmt(minPct, 0) + "%";
+      mode.className = "sub" + (c.recharging ? "" : " c-warn");
+    }
     var hotTile = el("c-hot-tile"), d = c.dist_to_hot_m;
     setText("c-hot", d === null ? "--" : d >= 1000 ? fmt(d / 1000, 1) + " km" : fmt(d, 0) + " m");
     if (hotTile) hotTile.className = "c-tile" + (d !== null && d < 300 ? " warn" : "");

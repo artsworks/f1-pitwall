@@ -231,6 +231,7 @@ rules:
     say:
       - "Still not in recharge mode. Switch it over"
       - "Recharge mode, please. You're still deploying"
+      - "Battery's not charging. Flick it to recharge"
   - id: cool_status
     sessions: [qualifying]
     priority: 3

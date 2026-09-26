@@ -227,6 +227,7 @@ body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
   margin: .3rem 0; }
 .cool .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
 .cool .c-tile.warn .bar .fill { background: var(--warn); }
+.cool .sub.c-warn { color: var(--warn); font-weight: bold; }
 .cool .bar .mark { position: absolute; top: -4px; width: 3px; height: calc(100% + 8px);
   background: var(--fg); }
 .c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 2.2rem;
