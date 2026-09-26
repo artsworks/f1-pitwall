@@ -41,10 +41,11 @@ thresholds:
   # Run plan / cool-down lap (docs/17)
   cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
   cool_ers_need_max_pct: 70  # cap on the learned battery need
-  # Fuel (game's "laps remaining") needed at the line after a hot lap. Cool and
-  # in laps burn far less than a push lap: Q2 cool + hot + in used ~1.7.
-  fuel_push_need_laps: 1.2   # hot + in lap
-  fuel_cool_need_laps: 2.2   # cool + hot + in lap
+  # Fuel (game's "laps remaining") needed at the line after a hot lap. No in
+  # lap: the game can return to the garage from the menu. Q2/Q3 recordings: a
+  # hot lap burns ~0.8-0.9, a cool lap ~0.9.
+  fuel_push_need_laps: 0.9   # one more hot lap
+  fuel_cool_need_laps: 1.8   # cool + hot lap
   slow_car_warn_s: 5         # hot lap: warn when a slow car ahead is this many seconds from being caught
   slow_car_delta_kmh: 60     # a flying-lap car this much slower counts as slow too
   cool_tyre_hot_c: 104       # hottest carcass at the line at or above this -> cool

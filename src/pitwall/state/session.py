@@ -1169,7 +1169,7 @@ class SessionState:
         elif plan.reason == "time":
             why = f"{self.session_time_left / 60:.0f} minutes left"
         elif plan.reason == "fuel":
-            why = "Fuel's tight"
+            why = "No fuel for another lap"
         elif plan.reason == "flag":
             why = "That's the flag"
         elif plan.reason == "safe":

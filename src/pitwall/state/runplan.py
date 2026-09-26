@@ -54,7 +54,8 @@ def run_plan(
     """Decision on crossing the line after a hot lap.
 
     Cooling needs time for a cool lap before the flag and fuel for cool + hot
-    + in lap; pushing needs fuel for hot + in lap. Outside the cut with no
+    lap; pushing needs fuel for one hot lap (no in lap: the garage is a menu
+    option). Outside the cut with no
     time or fuel to cool, keep pushing on whatever battery is left."""
     if time_left_s <= 0:
         return Plan("box", "flag")

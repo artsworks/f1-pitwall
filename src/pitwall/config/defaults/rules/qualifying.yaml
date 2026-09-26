@@ -176,16 +176,16 @@ rules:
     priority: 2
     when: "phase == 'flying' and run_plan == 'box' and run_plan_reason != 'safe' and sector == 0"
     clear_when: "sector != 0"
-    cooldown_s: 30
+    cooldown_s: 120
     cooldown_group: run_plan
     requires: [lap_data, car_status]
     say:
-      - "Box, box. {run_plan_why}"
-      - "{run_plan_why}. Box this lap"
+      - "{run_plan_why}. That's the run, back to the garage"
+      - "{run_plan_why}. Run's over, garage from the menu"
     response_window_s: 30
     on_ack:
-      - "Copy, box this lap"
-      - "Copy that. Box"
+      - "Copy. Garage"
+      - "Copy that. Good run"
     on_neg:
       - "Understood, staying out. Your call"
       - "Copy, stay out"
