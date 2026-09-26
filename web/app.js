@@ -11,6 +11,7 @@
   var clockOffset = 0; // server epoch seconds - local epoch seconds
   var startedAt = performance.now(), lastFrameAt = null, lastState = null, lastStateAt = null;
   var stateTimes = [], shownCurrentId = null, shownPreviousId = null;
+  var pressTimer = null;
 
   function el(id) { return document.getElementById(id); }
   function setText(id, txt) { var n = el(id); if (n) n.textContent = txt; }
@@ -86,12 +87,30 @@
     if (v) {
       v.innerHTML = "";
       v.appendChild(document.createTextNode(p.verbosity || ""));
+      if (p.silent) {
+        var s = document.createElement("span");
+        s.className = "silent";
+        s.textContent = " RADIO SILENT";
+        v.appendChild(s);
+      }
       if (p.quiet) {
         var q = document.createElement("span");
-        q.className = "quiet"; q.textContent = " QUIET";
+        q.className = "quiet";
+        q.textContent = " QUIET" + (p.quiet_left_s ? " " + clock(p.quiet_left_s) : "");
         v.appendChild(q);
       }
     }
+    var flag = el("flag");
+    if (flag) {
+      var word = p.red_flag ? "RED FLAG" : p.paused ? "PAUSED" : "";
+      flag.hidden = !word;
+      flag.textContent = word;
+      flag.className = "flag" + (p.red_flag ? " red" : "");
+    }
+    document.body.classList.toggle("redflag", !!p.red_flag);
+    renderQuali(p.quali);
+    renderCool(p.quali ? p.quali.cool : null, p.quali);
+    renderPitBoard(p.pit_board, p.quali, p.phase);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -136,6 +155,280 @@
       setText("latency", "call p99 " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
         " ms · ws p99 " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
     }
+  }
+
+  function clock(s) {
+    if (s === null || s === undefined || isNaN(s)) return "--:--";
+    s = Math.max(0, Math.floor(s));
+    return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+  }
+  function lapTime(ms) {
+    if (!ms) return "--";
+    var s = ms / 1000, m = Math.floor(s / 60);
+    return m + ":" + ("0" + (s - m * 60).toFixed(3)).slice(-6);
+  }
+  function signed(ms) {
+    if (ms === null || ms === undefined) return "--";
+    return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(3);
+  }
+
+  // Zone F in qualifying (docs/15 §8): release window in the garage, lap vs cut-off
+  // while flying. Race/practice keep the M3 placeholder.
+  function renderQuali(q) {
+    var box = el("quali"), ph = el("strat-ph");
+    if (!box) return;
+    box.hidden = !q;
+    if (ph) ph.hidden = !!q;
+    setText("strat-title", q ? "QUALIFYING" : "STRATEGY");
+    if (!q) return;
+    var main = el("q-main");
+    var sub = [clock(q.session_time_left) + " left", q.fresh_sets + " fresh set" +
+      (q.fresh_sets === 1 ? "" : "s"), "best " + lapTime(q.best_lap_ms),
+      "cut " + lapTime(q.cutoff_ms)];
+    if (q.release) {
+      var r = q.release;
+      if (r.clean) {
+        main.textContent = "RELEASE NOW" +
+          (r.gap_ahead_s !== null ? " · clear " + fmt(r.gap_ahead_s, 0) + " s ahead" : "");
+        main.className = "qmain ok";
+      } else if (r.wait_s !== null) {
+        main.textContent = "release in " + fmt(r.wait_s, 0) + " s";
+        main.className = "qmain warn";
+      } else {
+        main.textContent = "TRAFFIC · no gap in 60 s";
+        main.className = "qmain crit";
+      }
+      sub.unshift(r.cars_on_track + " on track");
+    } else if (q.lap) {
+      var d = q.lap.delta_ms;
+      main.textContent = "proj " + lapTime(q.lap.projected_ms) + " · " +
+        (d === null ? "no cut-off" : signed(d) + " to cut") +
+        (q.lap.abort ? " · ABORT" : "");
+      main.className = "qmain " + (q.lap.abort ? "crit" : d !== null && d <= 0 ? "ok" : "warn");
+    } else {
+      main.textContent = q.through ? "THROUGH" : "--";
+      main.className = "qmain" + (q.through ? " ok" : "");
+    }
+    if (q.through) sub.push("THROUGH");
+    if (q.margin_ms !== null && q.margin_ms !== undefined) {
+      sub.push((q.margin_kind === "pole" ? "vs P2 " : "vs cut ") + signed(-q.margin_ms));
+    }
+    setText("q-sub", sub.join(" · "));
+    var press = el("q-press");
+    if (press) {
+      press.hidden = !q.pressure;
+      if (q.pressure) {
+        press.textContent = "PRESSURES " + (q.pressure.length ? q.pressure.map(function (p) {
+          return p.corner.toUpperCase() + " " + (p.delta_psi > 0 ? "+" : "") +
+            p.delta_psi.toFixed(1) + (p.target_psi ? " → " + p.target_psi.toFixed(1) : "") +
+            " (" + p.size + ", " + Math.round(p.avg_c) + "°)";
+        }).join(" · ") : "in window");
+      }
+    }
+  }
+
+
+  // Pit board (garage / pitting): release light, per-corner pressure target,
+  // next-run summary and the car setup in game-menu order.
+  var SETUP_GROUPS = [
+    ["AERODYNAMICS", [["front_wing", "F wing", 0], ["rear_wing", "R wing", 0]]],
+    ["TRANSMISSION", [["on_throttle", "on-thr", 0, "%"], ["off_throttle", "off-thr", 0, "%"],
+      ["engine_braking", "eng brk", 0, "%"]]],
+    ["SUSP. GEOMETRY", [["front_camber", "F camber", 2, "°"], ["rear_camber", "R camber", 2, "°"],
+      ["front_toe", "F toe", 2, "°"], ["rear_toe", "R toe", 2, "°"]]],
+    ["SUSPENSION", [["front_suspension", "F spr", 0], ["rear_suspension", "R spr", 0],
+      ["front_anti_roll_bar", "F arb", 0], ["rear_anti_roll_bar", "R arb", 0],
+      ["front_suspension_height", "F ride", 0], ["rear_suspension_height", "R ride", 0]]],
+    ["BRAKES", [["brake_pressure", "pressure", 0, "%"], ["brake_bias", "bias", 0, "%"]]],
+    ["TYRES", null],
+    ["FUEL", [["fuel_load", "load", 1, " kg"]]]
+  ];
+  var CORNERS = ["fl", "fr", "rl", "rr"];
+
+  function releaseState(q, phase) {
+    var r = q && q.release;
+    if (!r) return { text: phase === "pitting" ? "PITTING" : "IN GARAGE", cls: "", sub: "" };
+    var sub = [r.cars_on_track + " on track"];
+    if (r.gap_ahead_s !== null) sub.push(fmt(r.gap_ahead_s, 0) + " s clear ahead");
+    if (r.gap_behind_s !== null) sub.push(fmt(r.gap_behind_s, 0) + " s behind");
+    if (r.time_for_out_lap === false) {
+      return { text: "STAY IN · NO TIME FOR A LAP", cls: "crit", sub: sub.join(" · ") };
+    }
+    if (r.clean) return { text: "GO · TRACK CLEAR", cls: "ok", sub: sub.join(" · ") };
+    if (r.wait_s !== null) return { text: "HOLD · " + fmt(r.wait_s, 0) + " s", cls: "warn", sub: sub.join(" · ") };
+    return { text: "HOLD · TRAFFIC", cls: "crit", sub: "no gap in 60 s · " + sub.join(" · ") };
+  }
+
+  function renderCorner(k, t) {
+    var node = el("pb-" + k);
+    if (!node) return;
+    var move = node.querySelector(".pb-move"), psi = node.querySelector(".pb-psi"),
+      det = node.querySelector(".pb-det");
+    var now = t.psi !== null ? fmt(t.psi, 1) : "--", cls = "none", word = "--", psiTxt = now;
+    if (t.limited) {
+      cls = "limit"; word = t.edge === "min" ? "AT MIN" : "AT MAX";
+    } else if (t.target_psi !== null && t.delta_psi) {
+      cls = t.applied ? "set" : t.delta_psi > 0 ? "up" : "down";
+      word = t.applied ? "SET ✓" : (t.delta_psi > 0 ? "▲ +" : "▼ −") + fmt(Math.abs(t.delta_psi), 1);
+      psiTxt = t.applied ? now + " psi" : now + " → " + fmt(t.target_psi, 1);
+    } else if (t.avg_c !== null) {
+      cls = "hold"; word = "HOLD";
+    }
+    node.className = "pb-corner " + cls;
+    move.textContent = word;
+    psi.textContent = psiTxt;
+    det.textContent = t.avg_c !== null ? "run avg " + Math.round(t.avg_c) + "°" : "no run data";
+  }
+
+  function setupRow(list, group, value, state, tag) {
+    var li = document.createElement("li");
+    if (state) li.className = state;
+    var box = document.createElement("span");
+    box.className = "box"; box.textContent = state === "todo" ? "☐" : state === "done" ? "☑" : "·";
+    var g = document.createElement("span");
+    g.className = "grp"; g.textContent = group;
+    var v = document.createElement("span");
+    v.textContent = value;
+    var t = document.createElement("span");
+    t.className = "tag"; t.textContent = tag;
+    [box, g, v, t].forEach(function (n) { li.appendChild(n); });
+    list.appendChild(li);
+  }
+
+  function renderSetup(b) {
+    var list = el("pb-setup");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!b.setup) {
+      var e = document.createElement("li");
+      e.className = "dim"; e.textContent = "no setup packet yet";
+      list.appendChild(e);
+      return;
+    }
+    SETUP_GROUPS.forEach(function (g) {
+      if (g[1] === null) {
+        var todo = CORNERS.filter(function (k) {
+          var t = b.tyres[k];
+          return t.target_psi !== null && t.delta_psi && !t.limited;
+        });
+        var left = todo.filter(function (k) { return !b.tyres[k].applied; });
+        var value = CORNERS.map(function (k) {
+          var t = b.tyres[k];
+          return k.toUpperCase() + " " + fmt(t.psi, 1) +
+            (todo.indexOf(k) >= 0 && !t.applied ? "→" + fmt(t.target_psi, 1) : "");
+        }).join("  ");
+        setupRow(list, g[0], value, todo.length ? (left.length ? "todo" : "done") : "",
+          todo.length ? (left.length ? left.length + " to change" : "changed") : "no change");
+        return;
+      }
+      var parts = g[1].map(function (f) {
+        var v = b.setup[f[0]];
+        return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || ""));
+      });
+      setupRow(list, g[0], parts.join("  "), "", "no change");
+    });
+  }
+
+  function renderPitBoard(b, q, phase) {
+    var box = el("pitboard");
+    if (!box) return;
+    box.hidden = !b;
+    document.body.classList.toggle("pit", !!b);
+    if (!b) return;
+    var rel = releaseState(q, phase);
+    setText("pb-release", rel.text);
+    setClass("pb-release", "pb-release " + rel.cls);
+    setText("pb-release-sub", rel.sub || (b.has_advice ? "" : "no run data yet"));
+    setText("pb-press-note", b.has_advice ? "" : "· no flying laps this run");
+    CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k]); });
+    var plan = q && q.plan;
+    setText("pb-plan", plan ? "PLAN " + plan.plan.toUpperCase() +
+      (plan.reason ? " · " + plan.reason : "") : "PLAN --");
+    var fuelOk = b.fuel_laps >= b.fuel_need_laps;
+    setText("pb-fuel", "FUEL " + fmt(b.fuel_laps, 1) + " laps · need " + fmt(b.fuel_need_laps, 1));
+    setClass("pb-fuel", "pb-row " + (fuelOk ? "ok" : "crit"));
+    setText("pb-ers", "BATTERY " + fmt(b.ers_pct, 0) + "% · want " + fmt(b.ers_need_pct, 0) + "%");
+    setClass("pb-ers", "pb-row " + (b.ers_pct >= b.ers_need_pct ? "ok" : "warn"));
+    setText("pb-time", q ? clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh set" +
+      (q.fresh_sets === 1 ? "" : "s") : "--");
+    var pole = el("pb-pole");
+    if (pole) {
+      pole.hidden = !q;
+      if (q) {
+        pole.textContent = "BEST " + lapTime(q.best_lap_ms) +
+          (q.margin_ms !== null && q.margin_ms !== undefined ?
+            (q.margin_kind === "pole" ? " · vs P2 " : " · vs cut ") + signed(-q.margin_ms) : "") +
+          (q.through ? " · THROUGH" : "");
+        pole.className = "pb-row " + (q.through || (q.margin_ms > 0) ? "ok" : "");
+      }
+    }
+    renderSetup(b);
+  }
+
+  // Cool-down lap (docs/17): shown only while the payload carries `cool`; the
+  // server drops it at the hot-lap-mode point so the normal layout returns.
+  var PLAN_WORDS = { battery: "battery low", tyres: "tyres hot" };
+  function renderCool(c, q) {
+    var box = el("cool");
+    if (!box) return;
+    box.hidden = !c;
+    document.body.classList.toggle("cool", !!c);
+    if (!c) return;
+    var minPct = c.ers_min_pct, ready = c.ers_pct >= minPct;
+    var ersTile = el("c-ers-tile");
+    if (ersTile) ersTile.className = "c-tile " + (ready ? "ok" : "warn");
+    setText("c-ers", fmt(c.ers_pct, 0) + "%");
+    var bar = el("c-ers-bar");
+    if (bar) bar.style.width = Math.max(0, Math.min(100, c.ers_pct)) + "%";
+    var mark = el("c-ers-min");
+    if (mark) mark.style.left = minPct + "%";
+    var mode = el("c-mode");
+    if (mode) {
+      mode.textContent = (c.recharging ? "RECHARGE" : "NOT IN RECHARGE · mode " + c.ers_mode) +
+        " · target " + fmt(minPct, 0) + "%";
+      mode.className = "sub" + (c.recharging ? "" : " c-warn");
+    }
+    var hotTile = el("c-hot-tile"), d = c.dist_to_hot_m;
+    setText("c-hot", d === null ? "--" : d >= 1000 ? fmt(d / 1000, 1) + " km" : fmt(d, 0) + " m");
+    if (hotTile) hotTile.className = "c-tile" + (d !== null && d < 300 ? " warn" : "");
+    setText("c-plan", c.extend ? "ONE MORE COOL LAP" : c.plan_reason ?
+      "cooling: " + (PLAN_WORDS[c.plan_reason] || c.plan_reason) : "--");
+    var behind = el("c-behind");
+    if (behind) {
+      var s = c.car_behind_s;
+      behind.className = "c-alert " + (s === null ? "clear" : s <= 3 ? "crit" : "warn");
+      behind.textContent = s === null ? "NO HOT LAP BEHIND" :
+        "HOT LAP BEHIND " + fmt(s, 1) + " s — OFF THE LINE";
+    }
+    var low = c.window_c[0], high = c.window_c[1];
+    ["fl", "fr", "rl", "rr"].forEach(function (k) {
+      var node = el("c-" + k), v = c.tyres[k];
+      if (!node) return;
+      node.textContent = k.toUpperCase() + " " + fmt(v, 0) + "°";
+      node.className = v > high ? "hot" : v < low ? "cold" : "ok";
+    });
+    setText("c-hint", c.tyre_hint || "--");
+    var pole = el("c-pole");
+    if (pole) {
+      pole.innerHTML = "";
+      if (c.pole) {
+        var g = c.pole.sector_gaps_ms, worst = g.indexOf(Math.max.apply(null, g));
+        pole.appendChild(document.createTextNode("POLE " + (c.pole.driver || "") + " " +
+          signed(-c.pole.gap_ms).replace("−", "-") + " · "));
+        g.forEach(function (ms, i) {
+          var s = document.createElement("span");
+          s.textContent = "S" + (i + 1) + " " + (ms ? signed(ms) : "--") + " ";
+          if (i === worst && ms > 0) s.className = "worst";
+          pole.appendChild(s);
+        });
+      } else {
+        pole.textContent = "POLE --";
+      }
+    }
+    setText("c-mis", "LAST LAP " + (c.last_hot_ms ? lapTime(c.last_hot_ms) : "--") + " · " +
+      (c.mistakes || "clean"));
+    setText("c-sub", (q ? clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh · " : "") +
+      "fuel " + fmt(c.fuel_laps, 1) + " laps");
   }
 
   function renderDamage(d) {
@@ -314,7 +607,12 @@
     lastFrameAt = performance.now();
     if (typeof m.t === "number") clockOffset = m.t - Date.now() / 1000;
     var p = m.payload;
-    if (m.type === "state" || m.type === "snapshot") {
+    if (m.type === "hello") {
+      if (p && p.review) {
+        document.body.classList.add("review");
+        if (window.pitwallReviewInit) window.pitwallReviewInit();
+      }
+    } else if (m.type === "state" || m.type === "snapshot") {
       lastState = p; lastStateAt = performance.now();
       stateTimes.push(lastStateAt);
       renderState(p);
@@ -334,6 +632,17 @@
       });
     } else if (m.type === "spoken") {
       calls.forEach(function (c) { if (c.id === p.id && c.audio === "dispatched") c.audio = "started"; });
+    } else if (m.type === "press") {
+      var pe = el("press");
+      if (pe) {
+        var label = { ack: "ACK", neg: "NEG", silent: "RADIO SILENT", unsilent: "RADIO ON" }[p.kind] || "BOOKMARK";
+        pe.hidden = false;
+        pe.className = "press " + p.kind;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(function () { pe.hidden = true; }, 8000);
+        pe.textContent = label + " L" + (p.lap || "--") +
+          (p.text ? " ▸ " + p.text : "");
+      }
     }
     render();
   }
@@ -354,6 +663,26 @@
       if (!mismatched) setTimeout(connect, backoff = Math.min(backoff * 2, 5000));
     };
   }
+
+  // Spacebar = driver ack/neg/bookmark input (docs/12). Only while the
+  // dashboard has focus; auto-repeat keydowns are ignored.
+  function sendPress(down) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "press", down: down }));
+    }
+  }
+  document.addEventListener("keydown", function (ev) {
+    if (ev.code === "Space" && !ev.repeat && document.hasFocus()) {
+      ev.preventDefault();
+      sendPress(true);
+    }
+  });
+  document.addEventListener("keyup", function (ev) {
+    if (ev.code === "Space" && document.hasFocus()) {
+      ev.preventDefault();
+      sendPress(false);
+    }
+  });
 
   setInterval(render, 250);
   render();

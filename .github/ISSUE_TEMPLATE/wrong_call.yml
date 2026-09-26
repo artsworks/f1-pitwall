@@ -1,0 +1,28 @@
+name: Wrong call
+description: The engineer said something wrong for the situation
+title: "[wrong-call] "
+labels: [triage, rules]
+body:
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id
+      placeholder: e.g. out_lap_s3_tyres_cold
+    validations: { required: true }
+  - type: input
+    id: lap
+    attributes:
+      label: Lap / session time
+      placeholder: e.g. L24, or ~32:15 into the recording
+  - type: textarea
+    id: said
+    attributes:
+      label: What was said vs expected
+      placeholder: "Said: ...\nExpected: ..."
+    validations: { required: true }
+  - type: textarea
+    id: bundle
+    attributes:
+      label: pitwall report bundle
+      description: Run `pitwall report` and attach the zip (drag it here).
+    validations: { required: false }

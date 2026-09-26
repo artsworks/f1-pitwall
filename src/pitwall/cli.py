@@ -8,7 +8,7 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
-from pitwall.clock import ReplayClock, VirtualClock, WallClock
+from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
@@ -81,6 +81,8 @@ def _lap_seek_us(path: Path, lap: int) -> int | None:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
+    from pitwall.store.db import Database
+
     speed = _parse_speed(args.speed)
     from_us = args.from_us
     if args.from_lap is not None:
@@ -92,11 +94,15 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if args.serve:
         from pitwall.audio.dispatcher import LogSink
         from pitwall.server.hub import Hub
+        from pitwall.server.review import ReviewController
 
         hub = Hub()
+        seed_db = Database(args.seed_db)
 
         class _ReplaySpokenSink:
             """No speaker in replay: mark calls spoken in the hub immediately."""
+
+            speaks_audio = False
 
             def speak(self, call: Call) -> None:
                 hub.spoken(call.id, call.t)
@@ -104,21 +110,132 @@ def cmd_replay(args: argparse.Namespace) -> int:
             def cancel(self, call_id: str) -> None:
                 pass
 
-        if args.no_rules:
-            engine = build_census_engine(clock)
-        else:
-            engine = build_engine(clock=clock, sinks=[hub, LogSink(), _ReplaySpokenSink()])
-        replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
+        def _engine_factory(clk: Clock) -> Engine:
+            return build_engine(
+                clock=clk,
+                sinks=[hub, LogSink(), _ReplaySpokenSink()],
+                db=seed_db,
+            )
+
+        live_speed = speed or 1.0  # paced replay drives the dashboard
+        review = ReviewController(
+            Path(args.file),
+            _engine_factory,
+            hub,
+            speed=live_speed,
+            db=seed_db,
+        )
+        engine = _engine_factory(clock)
+        review.engine = engine
+        review.clock = None  # controller builds its own PausableClock on play
+
+        async def _replay_coro() -> None:
+            await review.play()
+            if review._task is not None:  # noqa: SLF001
+                await review._task
+
         store = ConfigStore()
-        asyncio.run(_serve(engine, hub, store, replay_coro))
+        asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
         return 0
-    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock)
+    db: Database | None = Database(args.seed_db) if args.seed_db else None
+    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
     replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
     return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    import glob as _glob
+
+    from pitwall.diff import format_diff, run_diff
+
+    recordings = [Path(f) for f in args.recordings]
+    if args.corpus:
+        recordings += [Path(p) for p in sorted(_glob.glob(args.corpus))]
+    if not recordings:
+        print("diff: no recordings matched")
+        return 0
+    a_dir = Path(args.a) if args.a else None
+    result = run_diff(
+        recordings,
+        a_dir,
+        Path(args.b),
+        a_mindset=args.a_mindset,
+        b_mindset=args.b_mindset,
+    )
+    if args.json:
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        print(format_diff(result))
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Bundle a recording, its index, decision log, config and DB rows into a
+    zip for a bug report."""
+    import platform
+    import zipfile
+
+    import yaml as _yaml
+
+    from pitwall.store.db import open_configured
+
+    store = ConfigStore()
+    settings = store.current()
+    rec_dir = Path(settings.recording.directory)
+    if args.recording:
+        rec_path = Path(args.recording)
+    else:
+        candidates = sorted(rec_dir.glob("*.f1bin"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not candidates:
+            print(f"report: no .f1bin recordings in {rec_dir}")
+            return 1
+        rec_path = candidates[0]
+    out = Path(args.out) if args.out else Path(f"pitwall-report-{int(time.time())}.zip")
+
+    db = open_configured(settings)
+    uid = db.latest_session_uid() if db is not None else None
+    system = {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "pitwall": _pitwall_version(),
+        "config_hash": store.hash,
+        "session_uid": uid,
+    }
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(rec_path, arcname=rec_path.name)
+        idx = index_path_for(rec_path)
+        if idx.exists():
+            z.write(idx, arcname=idx.name)
+        dlog_path = rec_dir / f"{settings.mindset.active}.decisions.jsonl"
+        if dlog_path.exists():
+            z.write(dlog_path, arcname=dlog_path.name)
+        z.writestr(
+            "config.yaml",
+            _yaml.safe_dump(settings.model_dump(mode="json"), sort_keys=True),
+        )
+        if db is not None and uid is not None:
+            z.writestr("calls.json", json.dumps(db.calls_for_session(uid), default=str))
+            z.writestr("grades.json", json.dumps(db.grades_for_session(uid), default=str))
+            z.writestr(
+                "bookmarks.json",
+                json.dumps(db.bookmarks_for_session(uid), default=str),
+            )
+        z.writestr("system.json", json.dumps(system, indent=2))
+    print(f"report bundle: {out}")
+    return 0
+
+
+def _pitwall_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("pitwall")
+    except Exception:
+        return "dev"
 
 
 def cmd_rules_check(args: argparse.Namespace) -> int:
@@ -221,12 +338,20 @@ def _lan_ip() -> str:
         return "127.0.0.1"
 
 
-async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None:
+def _quiet_left_s(engine: Engine, now: float) -> float | None:
+    until = engine.dispatcher.quiet_until
+    return until - now if until is not None and now < until else None
+
+
+async def _state_broadcast(
+    base: Engine, hub: Hub, store: ConfigStore, active: Callable[[], Engine]
+) -> None:
     from pitwall.server.app import state_payload
 
     period = 1.0 / store.current().ui.state_hz
-    last_status = engine.clock.now()
+    last_status = base.clock.now()
     while True:
+        engine = active()
         now = engine.clock.now()
         if now - last_status >= 10.0:
             last_status = now
@@ -246,11 +371,13 @@ async def _state_broadcast(engine: Engine, hub: Hub, store: ConfigStore) -> None
             settings=store.current(),
             metrics=engine.metrics,
             quiet=store.current().policy.quiet,
+            quiet_left_s=_quiet_left_s(engine, now),
+            silent=engine.dispatcher.silent,
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
             engine.metrics.note_packet_to_ws(snap.last_packet_t, engine.clock.now())
-        await engine.clock.sleep(period)
+        await base.clock.sleep(period)
 
 
 async def _serve(
@@ -258,26 +385,40 @@ async def _serve(
     hub: Hub,
     store: ConfigStore,
     coro: Coroutine[Any, Any, Any],
+    review: Any = None,
 ) -> None:
     import uvicorn
 
     from pitwall.server.app import create_app
 
     settings = store.current()
+
+    def active() -> Engine:
+        """Review mode rebuilds the engine on play/seek; follow the current one."""
+        if review is not None and review.engine is not None:
+            current: Engine = review.engine
+            return current
+        return engine
+
+    def _latest() -> Any:
+        e = active()
+        return e.dispatcher.latest_snapshot or e.state.snapshot(e.clock.now())
+
     app = create_app(
         hub,
         store,
         engine.metrics,
         speaker_name=getattr(engine, "speaker_name", "null"),
-        latest_snapshot=lambda: (
-            engine.dispatcher.latest_snapshot or engine.state.snapshot(engine.clock.now())
-        ),
+        latest_snapshot=_latest,
+        on_client_press=lambda down: active().client_press(down),
+        review=review,
     )
 
     def _health() -> dict[str, Any]:
         from pitwall.server.app import packet_age_ms
 
-        snap = engine.state.snapshot(engine.clock.now())
+        e = active()
+        snap = e.state.snapshot(e.clock.now())
         age = packet_age_ms(snap)
         return {"packet_age_ms": age, "live": age is not None and age < 1000.0}
 
@@ -294,7 +435,7 @@ async def _serve(
     print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
-    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store), coro)
+    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -322,7 +463,12 @@ def cmd_start(args: argparse.Namespace) -> int:
         )
     ingest = Ingest(recorder=recorder)
     state = SessionState(
-        ema_fast_s=settings.engine.ema_fast_s, ema_slow_s=settings.engine.ema_slow_s
+        ema_fast_s=settings.engine.ema_fast_s,
+        ema_slow_s=settings.engine.ema_slow_s,
+        straight_hold_s=settings.engine.straight_hold_s,
+        press_bit=settings.input.udp_action_bit,
+        toggle_bit=settings.input.silent_toggle_bit,
+        thresholds=settings.thresholds,
     )
     state.register(ingest)
     speaker = make_speaker(settings.speech)
@@ -335,12 +481,26 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     rec_dir = Path(settings.recording.directory)
     rec_dir.mkdir(parents=True, exist_ok=True)
+    db = None
+    if settings.persistence.enabled:
+        from pitwall.store.db import open_configured
+
+        db = open_configured(settings)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
         mindset=settings.mindset.active,
+        db=db,
+        session_uid_source=lambda: state.session_uid,
     )
-    dispatcher = Dispatcher(settings.policy, clock, decision_log=dlog, sinks=[hub, speaker])
+    dispatcher = Dispatcher(
+        settings.policy,
+        clock,
+        decision_log=dlog,
+        sinks=[hub, speaker],
+        input=settings.input,
+    )
+    dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
 
@@ -508,7 +668,27 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--from-us", type=int, default=None)
     rep.add_argument("--to-us", type=int, default=None)
     rep.add_argument("--serve", action="store_true", help="run dashboard while replaying")
+    rep.add_argument(
+        "--seed-db",
+        default=":memory:",
+        help="SQLite db for replay persistence (default :memory:; never the real DB)",
+    )
     rep.set_defaults(func=cmd_replay)
+
+    dif = sub.add_parser("diff", help="compare two rules dirs over recording(s)")
+    dif.add_argument("recordings", nargs="+")
+    dif.add_argument("--a", default=None, help="rules dir A (default: packaged defaults)")
+    dif.add_argument("--b", required=True, help="rules dir B")
+    dif.add_argument("--a-mindset", default=None)
+    dif.add_argument("--b-mindset", default=None)
+    dif.add_argument("--corpus", default=None, help="glob of extra recordings to aggregate")
+    dif.add_argument("--json", action="store_true")
+    dif.set_defaults(func=cmd_diff)
+
+    rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
+    rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")
+    rpt.add_argument("-o", "--out", default=None, help="output zip path")
+    rpt.set_defaults(func=cmd_report)
 
     rc = sub.add_parser("rules", help="rule tooling")
     rsub = rc.add_subparsers(dest="rules_command", required=True)

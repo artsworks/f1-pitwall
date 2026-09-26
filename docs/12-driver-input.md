@@ -10,7 +10,8 @@ than any threshold tuning.
 |---|---|---|---|
 | Single press | Fanatec wheel **button 2** | **Spacebar** | **Acknowledge** — "copy" |
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now" |
-| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Bookmark** — silent marker for post-race feedback |
+| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off — leave the driver alone in a battle (`input.long_press: bookmark` makes it a silent marker instead) |
+| Radio silent toggle | a second wheel button → UDP Action 3 | — | same as long press; fallback if a held button doesn't register |
 | Optional: mindset toggle | a second wheel button → UDP Action 2 | configurable key | balanced ⇄ aggressive, confirmed by voice |
 
 Both inputs feed the same press detector, so behaviour is identical whichever is used.
@@ -70,13 +71,37 @@ down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMA
 - Presses closer than 60 ms are treated as contact bounce; three presses count as negative.
 - Window length is configurable (`input.double_press_ms`, 250–500).
 
+## Radio silent
+
+For a battle: the driver wants to concentrate, not listen. Long press (or UDP Action 3)
+toggles radio silent:
+
+- Speech stops; every call still reaches the dashboard's banner and radio log as normal.
+- P1 (urgent) calls still speak (`input.silent_keeps_p1`, default on).
+- The toggle is confirmed by voice, with rotating variants — on: "Radio silent. Leave you
+  to it." / "Copy, I'll leave you to it."; off: "Back with you. Feeding you info again."
+- The status bar shows **RADIO SILENT** while it's on; `silent_on` / `silent_off` go in the
+  decision log and on the review timeline.
+- It stays on until toggled off, including across sessions.
+
+Settings: `input.long_press` (`silent` | `bookmark`), `input.silent_toggle_bit`
+(`0x00400000` = UDP Action 3, `0` disables), `input.silent_on_replies`,
+`input.silent_off_replies`.
+
+Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
+whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
+If a hold doesn't toggle, bind UDP Action 3 instead — no code change needed.
+
 ## What a press applies to
 
 A press targets the **most recent spoken call still inside its response window**
 (default 8 s after it finished speaking). With no such call:
 
-- single press → "say again" of the last call;
-- double press → quiet for five minutes (P1 still speaks).
+- single press → nothing (`input.say_again: true` re-speaks the last call instead);
+- double press → quiet for five minutes (P1 still speaks, and calls are not shown).
+
+The packaged response window is 3 s after the call finishes speaking; strategy calls
+can set their own `response_window_s`.
 
 | Call type | Acknowledge | Negative |
 |---|---|---|
@@ -106,3 +131,8 @@ text, newest on top, each with lap, priority colour plus word, and its outcome (
 NEG / —). That makes a missed or misheard call recoverable at a glance, and it is the
 visual counterpart of "say again". A dedicated `/radio` page shows only the log, in large
 type, for a narrow second screen.
+
+> **Status note (M2):** the spacebar route currently reaches the backend via the
+> dashboard WebSocket (`{"type":"press","down":…}` sent on keydown/keyup while
+> the page has focus); the Windows global keyboard hook described above is not
+> yet implemented. The wheel path via `BUTN` UDP actions is implemented.

@@ -13,6 +13,7 @@
     <span id="rate" class="dim">--</span>
     <span class="dim">·</span>
     <span id="phase">--</span>
+    <span id="flag" class="flag" hidden></span>
     <span class="spacer"></span>
     <span id="session">--</span>
     <span id="lap">LAP --</span>
@@ -27,10 +28,24 @@
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>
         <div id="call-meta" class="meta"></div>
+        <div id="press" class="press" hidden></div>
       </div>
       <div id="call-evidence" class="evidence" hidden></div>
       <div id="previous" class="previous" hidden></div>
     </div>
+  </section>
+
+  <section id="transport" class="transport" hidden>
+    <div class="row">
+      <button id="t-prev" title="previous lap">&lt; LAP</button>
+      <button id="t-play" title="play/pause">PLAY</button>
+      <button id="t-next" title="next lap">LAP &gt;</button>
+      <span id="t-lap" class="dim">LAP -- / --</span>
+      <input id="t-scrub" type="range" min="0" max="1000" value="0">
+      <span id="t-pos" class="dim">--:--</span>
+    </div>
+    <div id="t-strip" class="strip"></div>
+    <div id="t-detail" class="detail" hidden></div>
   </section>
 
   <section class="zone tyres">
@@ -56,8 +71,68 @@
   </section>
 
   <section class="zone strat">
-    <h2>STRATEGY</h2>
-    <div class="ph">pit window · gaps · undercut (M3)</div>
+    <h2 id="strat-title">STRATEGY</h2>
+    <div id="strat-ph" class="ph">pit window · gaps · undercut (M3)</div>
+    <div id="quali" class="quali" hidden>
+      <div id="q-main" class="qmain">--</div>
+      <div id="q-sub" class="sub">--</div>
+      <div id="q-press" class="sub" hidden></div>
+    </div>
+  </section>
+
+  <section id="cool" class="zone cool" hidden>
+    <div id="c-behind" class="c-alert clear">NO HOT LAP BEHIND</div>
+    <div class="c-tiles">
+      <div id="c-ers-tile" class="c-tile">
+        <h2>BATTERY</h2>
+        <div id="c-ers" class="c-num">--</div>
+        <div class="bar"><div id="c-ers-bar" class="fill"></div><div id="c-ers-min" class="mark"></div></div>
+        <div id="c-mode" class="sub">--</div>
+      </div>
+      <div id="c-hot-tile" class="c-tile">
+        <h2>HOT-LAP MODE IN</h2>
+        <div id="c-hot" class="c-num">--</div>
+        <div id="c-plan" class="sub">--</div>
+      </div>
+      <div class="c-tile">
+        <h2>TYRES</h2>
+        <div class="c-tyres"><span id="c-fl">--</span><span id="c-fr">--</span><span id="c-rl">--</span><span id="c-rr">--</span></div>
+        <div id="c-hint" class="sub">--</div>
+      </div>
+    </div>
+    <div class="c-info">
+      <div id="c-pole" class="c-row">--</div>
+      <div id="c-mis" class="c-row">--</div>
+      <div id="c-sub" class="c-row dim">--</div>
+    </div>
+  </section>
+
+  <section id="pitboard" class="zone pitboard" hidden>
+    <div id="pb-release" class="pb-release">--</div>
+    <div id="pb-release-sub" class="pb-release-sub dim">--</div>
+    <div class="pb-main">
+      <div>
+        <h2>PRESSURES <span id="pb-press-note"></span></h2>
+        <div class="pb-tyres">
+          <div class="pb-corner" id="pb-fl"><div class="lbl">FL</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
+          <div class="pb-corner" id="pb-fr"><div class="lbl">FR</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
+          <div class="pb-corner" id="pb-rl"><div class="lbl">RL</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
+          <div class="pb-corner" id="pb-rr"><div class="lbl">RR</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
+        </div>
+      </div>
+      <div class="pb-next">
+        <h2>NEXT RUN</h2>
+        <div id="pb-plan" class="pb-row">--</div>
+        <div id="pb-fuel" class="pb-row">--</div>
+        <div id="pb-ers" class="pb-row">--</div>
+        <div id="pb-time" class="pb-row">--</div>
+        <div id="pb-pole" class="pb-row">--</div>
+      </div>
+    </div>
+    <div class="pb-setup">
+      <h2>SETUP · GAME MENU ORDER</h2>
+      <ol id="pb-setup"><li class="dim">no setup packet yet</li></ol>
+    </div>
   </section>
 
   <section class="log"><ol id="log"></ol></section>
@@ -66,5 +141,6 @@
     <span id="ers">ERS --</span><span id="sc">SC --</span><span id="latency"></span>
   </footer>
   <script src="/static/app.js"></script>
+  <script src="/static/review.js"></script>
 </body>
 </html>

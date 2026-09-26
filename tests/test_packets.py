@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import struct
 
+import pytest
+
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.protocol.layouts import Corners
 from pitwall.protocol.packets import (
     CarDamagePacket,
+    CarSetupsPacket,
     CarStatusPacket,
+    CarTelemetry2Packet,
     CarTelemetryPacket,
     EventPacket,
     LapDataPacket,
+    ParticipantsPacket,
+    SessionHistoryPacket,
     SessionPacket,
+    TyreSetsPacket,
     car_field_offset,
     parse,
 )
@@ -177,3 +184,158 @@ def test_parse_header_passthrough() -> None:
     p = parse(PacketId.SESSION, pkt, h)
     assert p.header is h
     assert len(pkt) == PACKET_SIZES[PacketId.SESSION]
+
+
+def test_participants_parse() -> None:
+    pkt = pack_packet(
+        PacketId.PARTICIPANTS,
+        {
+            "num_active_cars": 20,
+            "cars": {
+                0: {
+                    "ai_controlled": 0,
+                    "driver_id": 2,
+                    "team_id": 1,
+                    "race_number": 1,
+                    "name": b"VERSTAPPEN",
+                    "your_telemetry": 1,
+                    "tech_level": 500,
+                    "platform": 1,
+                    "num_colours": 2,
+                    "livery_colours": (255, 0, 0, 0, 255, 0),
+                }
+            },
+        },
+    )
+    p = parse(PacketId.PARTICIPANTS, pkt)
+    assert isinstance(p, ParticipantsPacket)
+    assert p.num_active_cars == 20
+    assert len(p.cars) == 24
+    c = p.cars[0]
+    assert c.name == "VERSTAPPEN"
+    assert c.race_number == 1
+    assert c.driver_id == 2
+    assert c.livery_colours[:3] == (255, 0, 0)
+
+
+def test_car_setups_parse() -> None:
+    pkt = pack_packet(
+        PacketId.CAR_SETUPS,
+        {
+            "cars": {
+                0: {
+                    "front_wing": 12,
+                    "rear_wing": 9,
+                    "brake_bias": 56,
+                    "fuel_load": 32.5,
+                    "front_camber": -3.1,
+                    "ballast": 5,
+                }
+            },
+            "next_front_wing_value": 14.0,
+        },
+    )
+    p = parse(PacketId.CAR_SETUPS, pkt)
+    assert isinstance(p, CarSetupsPacket)
+    c = p.cars[0]
+    assert c.front_wing == 12
+    assert c.rear_wing == 9
+    assert c.brake_bias == 56
+    assert c.fuel_load == 32.5
+    assert c.front_camber == pytest.approx(-3.1)
+    assert p.next_front_wing_value == 14.0
+
+
+def test_session_history_parse() -> None:
+    pkt = pack_packet(
+        PacketId.SESSION_HISTORY,
+        {
+            "car_idx": 3,
+            "num_laps": 2,
+            "num_tyre_stints": 1,
+            "best_lap_time_lap_num": 2,
+            "laps": {
+                0: {"lap_time_ms": 92_000, "lap_valid_bit_flags": 0x0F},
+                1: {
+                    "lap_time_ms": 91_234,
+                    "sector1_ms_part": 25_000,
+                    "sector1_minutes": 0,
+                    "sector2_ms_part": 500,
+                    "sector2_minutes": 1,
+                    "sector3_ms_part": 30_000,
+                    "lap_valid_bit_flags": 0x0F,
+                },
+            },
+            "tyre_stints": {0: {"end_lap": 255, "tyre_visual_compound": 16}},
+        },
+    )
+    p = parse(PacketId.SESSION_HISTORY, pkt)
+    assert isinstance(p, SessionHistoryPacket)
+    assert p.car_idx == 3
+    assert p.num_laps == 2
+    assert len(p.laps) == 100
+    lap = p.laps[1]
+    assert lap.lap_time_ms == 91_234
+    assert lap.sector1_ms == 25_000
+    assert lap.sector2_ms == 60_500  # 1 minute + 500 ms
+    assert lap.sector3_ms == 30_000
+    assert p.tyre_stints[0].tyre_visual_compound == 16
+
+
+def test_tyre_sets_parse() -> None:
+    pkt = pack_packet(
+        PacketId.TYRE_SETS,
+        {
+            "car_idx": 0,
+            "sets": {
+                0: {
+                    "actual_tyre_compound": 18,
+                    "visual_tyre_compound": 16,
+                    "wear": 0,
+                    "available": 1,
+                    "life_span": 20,
+                    "usable_life": 25,
+                    "lap_delta_time": -150,
+                    "fitted": 1,
+                },
+                1: {"visual_tyre_compound": 17, "available": 1, "wear": 30},
+            },
+            "fitted_idx": 0,
+        },
+    )
+    p = parse(PacketId.TYRE_SETS, pkt)
+    assert isinstance(p, TyreSetsPacket)
+    assert p.car_idx == 0
+    assert len(p.sets) == 20
+    s = p.sets[0]
+    assert s.fitted == 1
+    assert s.visual_tyre_compound == 16
+    assert s.lap_delta_time == -150
+    assert p.fitted_idx == 0
+
+
+def test_car_telemetry_2_parse() -> None:
+    pkt = pack_packet(
+        PacketId.CAR_TELEMETRY_2,
+        {
+            "cars": {
+                0: {
+                    "active_aero_mode": 1,
+                    "active_aero_available": 1,
+                    "active_aero_activation_distance": 250,
+                    "overtake_available": 1,
+                    "overtake_active": 1,
+                    "overtake_activation_distance": 0,
+                    "regulations_2026": 1,
+                    "driving_wrong_way": 0,
+                }
+            }
+        },
+    )
+    p = parse(PacketId.CAR_TELEMETRY_2, pkt)
+    assert isinstance(p, CarTelemetry2Packet)
+    c = p.cars[0]
+    assert c.active_aero_mode == 1
+    assert c.overtake_active == 1
+    assert c.active_aero_activation_distance == 250
+    assert c.regulations_2026 == 1

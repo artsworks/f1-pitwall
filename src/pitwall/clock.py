@@ -55,3 +55,41 @@ class ReplayClock:
 
     async def sleep(self, seconds: float) -> None:
         await asyncio.sleep(max(0.0, seconds) / self._speed)
+
+
+class PausableClock:
+    """Wraps a Clock so a paced replay can be paused/resumed. now() excludes
+    time spent paused; sleep() waits out the pause before continuing."""
+
+    def __init__(self, inner: Clock) -> None:
+        self._inner = inner
+        self._paused_at: float | None = None
+        self._paused_total = 0.0
+        self._event = asyncio.Event()
+        self._event.set()
+
+    def pause(self) -> None:
+        if self._paused_at is None:
+            self._paused_at = self._inner.now()
+            self._event.clear()
+
+    def resume(self) -> None:
+        if self._paused_at is not None:
+            self._paused_total += self._inner.now() - self._paused_at
+            self._paused_at = None
+            self._event.set()
+
+    @property
+    def paused(self) -> bool:
+        return self._paused_at is not None
+
+    def now(self) -> float:
+        t = self._inner.now() - self._paused_total
+        if self._paused_at is not None:
+            t -= self._inner.now() - self._paused_at
+        return t
+
+    async def sleep(self, seconds: float) -> None:
+        await self._event.wait()
+        await self._inner.sleep(seconds)
+        await self._event.wait()

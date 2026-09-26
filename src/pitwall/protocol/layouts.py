@@ -232,6 +232,89 @@ CAR_DAMAGE_CAR: tuple[Item, ...] = (
     Field("engine_seized", "B"),
 )
 
+PARTICIPANT_CAR: tuple[Item, ...] = (
+    Field("ai_controlled", "B"),
+    Field("driver_id", "H"),
+    Field("network_id", "H"),
+    Field("team_id", "H"),
+    Field("my_team", "B"),
+    Field("race_number", "B"),
+    Field("nationality", "B"),
+    Field("name", "32s"),
+    Field("your_telemetry", "B"),
+    Field("show_online_names", "B"),
+    Field("tech_level", "H"),
+    Field("platform", "B"),
+    Field("num_colours", "B"),
+    Field("livery_colours", "B", 12),  # 4 x RGB
+)
+
+CAR_SETUP_CAR: tuple[Item, ...] = (
+    Field("front_wing", "B"),
+    Field("rear_wing", "B"),
+    Field("on_throttle", "B"),
+    Field("off_throttle", "B"),
+    Field("front_camber", "f"),
+    Field("rear_camber", "f"),
+    Field("front_toe", "f"),
+    Field("rear_toe", "f"),
+    Field("front_suspension", "B"),
+    Field("rear_suspension", "B"),
+    Field("front_anti_roll_bar", "B"),
+    Field("rear_anti_roll_bar", "B"),
+    Field("front_suspension_height", "B"),
+    Field("rear_suspension_height", "B"),
+    Field("brake_pressure", "B"),
+    Field("brake_bias", "B"),
+    Field("engine_braking", "B"),
+    Field("rear_left_tyre_pressure", "f"),
+    Field("rear_right_tyre_pressure", "f"),
+    Field("front_left_tyre_pressure", "f"),
+    Field("front_right_tyre_pressure", "f"),
+    Field("ballast", "B"),
+    Field("fuel_load", "f"),
+)
+
+LAP_HISTORY: tuple[Item, ...] = (
+    Field("lap_time_ms", "I"),
+    Field("sector1_ms_part", "H"),
+    Field("sector1_minutes", "B"),
+    Field("sector2_ms_part", "H"),
+    Field("sector2_minutes", "B"),
+    Field("sector3_ms_part", "H"),
+    Field("sector3_minutes", "B"),
+    Field("lap_valid_bit_flags", "B"),
+)
+
+TYRE_STINT_HISTORY: tuple[Item, ...] = (
+    Field("end_lap", "B"),
+    Field("tyre_actual_compound", "B"),
+    Field("tyre_visual_compound", "B"),
+)
+
+TYRE_SET: tuple[Item, ...] = (
+    Field("actual_tyre_compound", "B"),
+    Field("visual_tyre_compound", "B"),
+    Field("wear", "B"),
+    Field("available", "B"),
+    Field("recommended_session", "B"),
+    Field("life_span", "B"),
+    Field("usable_life", "B"),
+    Field("lap_delta_time", "h"),
+    Field("fitted", "B"),
+)
+
+CAR_TELEMETRY_2_CAR: tuple[Item, ...] = (
+    Field("active_aero_mode", "B"),
+    Field("active_aero_available", "B"),
+    Field("active_aero_activation_distance", "H"),
+    Field("overtake_available", "B"),
+    Field("overtake_active", "B"),
+    Field("overtake_activation_distance", "H"),
+    Field("regulations_2026", "B"),
+    Field("driving_wrong_way", "B"),
+)
+
 # ------------------------------------------------------------- packet layouts
 
 SESSION_LAYOUT: tuple[Item, ...] = (
@@ -344,6 +427,36 @@ CAR_TELEMETRY_LAYOUT: tuple[Item, ...] = (
     Field("mfd_panel_index_secondary_player", "B"),
     Field("suggested_gear", "b"),
 )
+
+PARTICIPANTS_LAYOUT: tuple[Item, ...] = (
+    Field("num_active_cars", "B"),
+    Array("cars", PARTICIPANT_CAR, CAR_SLOTS),
+)
+
+CAR_SETUPS_LAYOUT: tuple[Item, ...] = (
+    Array("cars", CAR_SETUP_CAR, CAR_SLOTS),
+    Field("next_front_wing_value", "f"),
+)
+
+SESSION_HISTORY_LAYOUT: tuple[Item, ...] = (
+    Field("car_idx", "B"),
+    Field("num_laps", "B"),
+    Field("num_tyre_stints", "B"),
+    Field("best_lap_time_lap_num", "B"),
+    Field("best_sector1_lap_num", "B"),
+    Field("best_sector2_lap_num", "B"),
+    Field("best_sector3_lap_num", "B"),
+    Array("laps", LAP_HISTORY, 100),
+    Array("tyre_stints", TYRE_STINT_HISTORY, 8),
+)
+
+TYRE_SETS_LAYOUT: tuple[Item, ...] = (
+    Field("car_idx", "B"),
+    Array("sets", TYRE_SET, 20),
+    Field("fitted_idx", "B"),
+)
+
+CAR_TELEMETRY_2_LAYOUT: tuple[Item, ...] = (Array("cars", CAR_TELEMETRY_2_CAR, CAR_SLOTS),)
 
 CAR_STATUS_LAYOUT: tuple[Item, ...] = (Array("cars", CAR_STATUS_CAR, CAR_SLOTS),)
 

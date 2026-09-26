@@ -11,8 +11,13 @@ recording:
   compress_on_close: true
 engine:
   tick_hz: 10
+persistence:
+  enabled: true
+  path: ~/.pitwall/pitwall.sqlite
+
   ema_fast_s: 3.0
   ema_slow_s: 30.0
+  straight_hold_s: 1.0
   staleness_s:
     session: 2.0
     lap_data: 0.5
@@ -20,6 +25,11 @@ engine:
     car_status: 0.5
     car_damage: 0.5
     motion_ex: 0.5
+    participants: 15.0
+    car_setups: 5.0
+    session_history: 5.0
+    tyre_sets: 5.0
+    car_telemetry_2: 1.0
 policy:
   verbosity: normal
   deadlines_s:
@@ -45,3 +55,17 @@ mindset:
   active: balanced
 ui:
   state_hz: 5
+input:
+  double_press_ms: 350
+  long_press_ms: 800
+  bounce_ms: 60
+  response_window_s: 3.0   # seconds after a call finishes speaking
+  say_again: false          # a late single press does nothing
+  say_again_window_s: 30.0  # "say again" only repeats a call spoken this recently
+  quiet_minutes: 5
+  spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg
+  udp_action_bit: 0x00100000
+  long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
+  silent_toggle_bit: 0x00400000  # any press on UDP Action 3 also toggles radio silent; 0 disables
+  silent_keeps_p1: true     # urgent (P1) calls still speak while silent
+  negative_mute_laps: 3

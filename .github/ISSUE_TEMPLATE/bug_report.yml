@@ -1,0 +1,20 @@
+name: Bug report
+description: Crash, incorrect telemetry, dashboard or tooling bug
+title: "[bug] "
+labels: [triage, bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened vs expected
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps / command
+      placeholder: e.g. pitwall replay foo.f1bin --serve
+  - type: textarea
+    id: bundle
+    attributes:
+      label: pitwall report bundle
+      description: Run `pitwall report` and attach the zip.

@@ -29,6 +29,7 @@ class EngineSettings(BaseModel):
     tick_hz: int = 10
     ema_fast_s: float = 3.0
     ema_slow_s: float = 30.0
+    straight_hold_s: float = 1.0  # full-throttle hold that counts as "on a straight"
     staleness_s: dict[str, float] = Field(
         default_factory=lambda: {
             "session": 2.0,
@@ -37,6 +38,11 @@ class EngineSettings(BaseModel):
             "car_status": 0.5,
             "car_damage": 0.5,
             "motion_ex": 0.5,
+            "participants": 15.0,
+            "car_setups": 5.0,
+            "session_history": 5.0,
+            "tyre_sets": 5.0,
+            "car_telemetry_2": 1.0,
         }
     )
 
@@ -44,15 +50,53 @@ class EngineSettings(BaseModel):
 class PolicySettings(BaseModel):
     verbosity: Literal["silent", "critical", "normal", "coach"] = "normal"
     deadlines_s: dict[int, float] = Field(default_factory=lambda: {1: 5.0, 2: 3.0, 3: 1.5})
-    calls_per_lap: int = 4
+    calls_per_lap: int | None = None  # None -> verbosity preset table
     min_gap_s: float = 3.0
     dedupe_window_s: float = 20.0
     quiet: bool = False
     mute_until_lap: int = 0
+    p3_straight_only: bool = True
 
 
 class UiSettings(BaseModel):
     state_hz: int = 5
+
+
+class InputSettings(BaseModel):
+    double_press_ms: int = 350
+    long_press_ms: int = 800
+    bounce_ms: int = 60
+    response_window_s: float = 8.0
+    say_again: bool = True  # late single press re-speaks the last call
+    say_again_window_s: float = 30.0
+    spoken_replies: bool = False  # packaged settings.yaml turns this on
+    ack_replies: list[str] = Field(default_factory=lambda: ["Copy.", "Copy that.", "Understood."])
+    neg_replies: list[str] = Field(default_factory=lambda: ["Noted.", "Copy, noted."])
+    quiet_minutes: float = 5.0
+    udp_action_bit: int = 0x00100000
+    long_press: Literal["bookmark", "silent"] = "bookmark"
+    silent_toggle_bit: int = 0  # e.g. 0x00400000 = UDP Action 3; any press toggles
+    silent_keeps_p1: bool = True
+    silent_on_replies: list[str] = Field(
+        default_factory=lambda: [
+            "Radio silent. Leave you to it.",
+            "Copy, I'll leave you to it.",
+            "Going silent. It's all yours.",
+        ]
+    )
+    silent_off_replies: list[str] = Field(
+        default_factory=lambda: [
+            "Back with you. Feeding you info again.",
+            "Radio's back on. I'll keep you posted.",
+            "Back on the radio.",
+        ]
+    )
+    negative_mute_laps: int = 3
+
+
+class PersistenceSettings(BaseModel):
+    enabled: bool = True
+    path: str = "~/.pitwall/pitwall.sqlite"
 
 
 class SpeechSettings(BaseModel):
@@ -97,6 +141,10 @@ class RuleDefModel(BaseModel):
     repeat_window_s: float = 600.0
     screen_only: bool = False
     tags: list[str] = Field(default_factory=list)
+    # Spoken reply when the driver acks / negs this call; generic replies if empty.
+    on_ack: str | list[str] = ""
+    on_neg: str | list[str] = ""
+    response_window_s: float | None = None  # overrides input.response_window_s
 
     def say_pool(self) -> list[str]:
         if isinstance(self.say, str):
@@ -111,8 +159,10 @@ class Settings(BaseModel):
     policy: PolicySettings = Field(default_factory=PolicySettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     ui: UiSettings = Field(default_factory=UiSettings)
+    input: InputSettings = Field(default_factory=InputSettings)
+    persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
-    thresholds: dict[str, float] = Field(default_factory=dict)
+    thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
     rules: list[RuleDefModel] = Field(default_factory=list)
 

@@ -37,6 +37,7 @@ body.dash > * { background: var(--bg); min-width: 0; min-height: 0; }
   padding: .05rem .6rem; font-size: 1.1rem; letter-spacing: .1em; }
 .pill.aggr { border-color: var(--aggr); background: var(--aggr); color: #000; }
 .quiet { color: var(--warn); }
+.silent { color: var(--info); font-weight: 700; }
 body.connecting .status .live { color: var(--dim); }
 body.stale .status { background: color-mix(in srgb, var(--crit) 35%, var(--panel)); }
 body.stale .status .live { color: #fff; }
@@ -164,3 +165,131 @@ body.radio .banner .text { font-size: 2.6rem; }
 body.radio .log ol { font-size: 1.6rem; }
 body.radio .log li { grid-template-columns: 3.2rem .6rem 1.4rem 1fr; }
 body.radio .log .tag { display: none; }
+
+/* M2: flag badge, press chip, qualifying zone F */
+.flag { border: 2px solid var(--warn); color: var(--warn); border-radius: .3rem;
+  padding: .05rem .6rem; font-size: 1.2rem; letter-spacing: .1em; font-weight: bold; }
+.flag.red { border-color: #fff; background: var(--crit); color: #fff; }
+body.redflag .status { background: color-mix(in srgb, var(--crit) 55%, var(--panel)); }
+.press { font-size: 1.2rem; border: 1px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: .1rem .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 30rem; }
+.press.ack { border-color: var(--ok); color: var(--ok); }
+.press.neg { border-color: var(--crit); color: var(--crit); }
+.press.bookmark, .press.silent, .press.unsilent { border-color: var(--info); color: var(--info); }
+.quali .qmain { font-size: 1.9rem; font-weight: bold; line-height: 1.2; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.quali .qmain.ok { color: var(--ok); }
+.quali .qmain.warn { color: var(--warn); }
+.quali .qmain.crit { color: var(--crit); }
+
+/* review-mode transport bar (docs/07): its own full-width row */
+body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
+  grid-template-areas: "status status" "banner banner" "tyres log" "fuel log" "strat log"
+    "transport transport" "footer footer"; }
+.transport { grid-area: transport; padding: 6px 10px; border-top: 1px solid #2a2f36; }
+.transport .row { display: flex; gap: 8px; align-items: center; }
+.transport button { background: #1c2128; color: #e6edf3; border: 1px solid #30363d;
+  border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.transport button.on { border-color: #46a758; }
+.transport input[type=range] { flex: 1; }
+.transport .strip { position: relative; height: 14px; margin-top: 6px;
+  background: #161b22; border-radius: 3px; }
+.transport .tick { position: absolute; top: 2px; width: 3px; height: 10px;
+  border-radius: 1px; cursor: pointer; }
+.transport .tick.graded { outline: 1px solid #46a758; }
+.transport .detail { margin-top: 6px; font-size: 12px; background: #161b22;
+  padding: 8px; border-radius: 4px; max-height: 180px; overflow: auto; }
+.transport .detail table { margin: 4px 0; border-collapse: collapse; }
+.transport .detail td { border: 1px solid #30363d; padding: 1px 6px; }
+.transport .grades { margin-top: 4px; }
+
+/* cool-down lap (docs/17): takes over the tyre/fuel/strategy zones until the
+   hot-lap-mode point, then the normal layout comes back */
+.cool { grid-area: cool; display: flex; flex-direction: column; gap: .8rem; font-size: 1.3rem; }
+/* glance order: traffic behind, then battery / hot-lap countdown / tyres, then detail */
+.c-alert { font-size: 2.6rem; font-weight: bold; text-align: center; padding: .5rem;
+  border-radius: 6px; letter-spacing: .06em; }
+.c-alert.clear { font-size: 1.4rem; color: var(--ok); border: 1px solid var(--line); }
+.c-alert.warn { background: var(--warn); color: #000; }
+.c-alert.crit { background: var(--crit); color: #000; animation: c-flash .8s steps(2) infinite; }
+@keyframes c-flash { 50% { opacity: .55; } }
+.c-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
+.c-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .5rem .7rem; }
+.c-tile.ok { border-color: var(--ok); }
+.c-tile.warn { border-color: var(--warn); }
+.c-tile.crit { border-color: var(--crit); }
+.c-num { font-size: 3.6rem; font-weight: bold; line-height: 1.1; }
+.c-tile.ok .c-num { color: var(--ok); }
+.c-tile.warn .c-num { color: var(--warn); }
+.c-tile.crit .c-num { color: var(--crit); }
+.cool .bar { position: relative; height: .9rem; background: var(--line); border-radius: 3px;
+  margin: .3rem 0; }
+.cool .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
+.cool .c-tile.warn .bar .fill { background: var(--warn); }
+.cool .sub.c-warn { color: var(--warn); font-weight: bold; }
+.cool .bar .mark { position: absolute; top: -4px; width: 3px; height: calc(100% + 8px);
+  background: var(--fg); }
+.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 2.2rem;
+  font-weight: bold; }
+.c-tyres .hot { color: var(--crit); }
+.c-tyres .cold { color: var(--cold); }
+.c-tyres .ok { color: var(--ok); }
+.c-info { display: flex; flex-direction: column; gap: .3rem; font-size: 1.2rem; }
+.c-row .worst { color: var(--warn); font-weight: bold; }
+body.dash.cool { grid-template-areas:
+    "status status" "banner banner" "cool log" "cool log" "cool log" "footer footer"; }
+body.dash.cool .tyres, body.dash.cool .fuel, body.dash.cool .strat { display: none; }
+body.dash.review.cool { grid-template-areas: "status status" "banner banner" "cool log"
+    "cool log" "cool log" "transport transport" "footer footer"; }
+
+/* pit board (garage / pitting): takes over everything below the radio line;
+   the radio shrinks to one line and the log is hidden */
+body.dash.pit { grid-template-rows: 3rem 5.5rem 1fr 2rem;
+  grid-template-areas: "status status" "banner banner" "pit pit" "footer footer"; }
+body.dash.review.pit { grid-template-rows: 3rem 5.5rem 1fr auto 2rem;
+  grid-template-areas: "status status" "banner banner" "pit pit" "transport transport"
+    "footer footer"; }
+body.dash.pit .tyres, body.dash.pit .fuel, body.dash.pit .strat, body.dash.pit .log,
+body.dash.pit .cool, body.dash.pit .previous { display: none; }
+body.dash.pit .banner .text { font-size: 1.8rem; }
+.pitboard { grid-area: pit; display: flex; flex-direction: column; gap: .7rem; overflow: auto; }
+.pb-release { font-size: 3.4rem; font-weight: bold; text-align: center; padding: .4rem;
+  border-radius: 6px; letter-spacing: .06em; border: 2px solid var(--line); }
+.pb-release.ok { background: var(--ok); color: #000; }
+.pb-release.warn { background: var(--warn); color: #000; }
+.pb-release.crit { background: var(--crit); color: #000; }
+.pb-release-sub { text-align: center; font-size: 1.3rem; margin-top: -.3rem; }
+.pb-main { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; }
+.pb-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.pb-corner { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .4rem .7rem; }
+.pb-corner .lbl { color: var(--dim); font-size: 1.1rem; }
+.pb-move { font-size: 2.8rem; font-weight: bold; line-height: 1.1; }
+.pb-psi { font-size: 1.5rem; }
+.pb-det { color: var(--dim); font-size: 1.1rem; }
+.pb-corner.up .pb-move, .pb-corner.down .pb-move { color: var(--warn); }
+.pb-corner.up, .pb-corner.down { border-color: var(--warn); }
+.pb-corner.set { border-color: var(--ok); }
+.pb-corner.set .pb-move, .pb-corner.hold .pb-move { color: var(--ok); }
+.pb-corner.limit .pb-move { color: var(--dim); }
+.pb-corner.none .pb-move { color: var(--faint); }
+.pb-next { display: flex; flex-direction: column; gap: .35rem; }
+.pb-row { font-size: 1.5rem; padding: .3rem .5rem; border-left: 4px solid var(--line); }
+.pb-row.ok { border-color: var(--ok); }
+.pb-row.warn { border-color: var(--warn); color: var(--warn); }
+.pb-row.crit { border-color: var(--crit); color: var(--crit); }
+.pb-setup ol { list-style: none; margin: 0; padding: 0; font-size: 1.2rem; }
+.pb-setup li { display: grid; grid-template-columns: 1.6rem 13rem 1fr auto; gap: .6rem;
+  padding: .3rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.pb-setup li.dim { display: block; }
+.pb-setup .grp { color: var(--dim); letter-spacing: .08em; }
+.pb-setup .tag { color: var(--faint); }
+.pb-setup li.todo .box, .pb-setup li.todo .tag { color: var(--warn); }
+.pb-setup li.done .box, .pb-setup li.done .tag { color: var(--ok); }
+@media (max-width: 800px) {
+  .pb-main { grid-template-columns: 1fr; }
+  .pb-release { font-size: 2.2rem; }
+  .pb-setup li { grid-template-columns: 1.6rem 1fr; }
+}

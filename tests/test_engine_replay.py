@@ -14,6 +14,8 @@ def _replay(tmp_path: Path, speed: float | None, rec_path: Path) -> tuple[list[o
     sink_buf: list[str] = []
 
     class Collect:
+        speaks_audio = False
+
         def speak(self, call) -> None:  # type: ignore[no-untyped-def]
             sink_buf.append(call.text)
 

@@ -8,3 +8,51 @@ thresholds:
   boost_max_s: 12          # or on this long regardless
   yellow_warn_ahead_m: 800
   yellow_info_behind_m: 1500
+  release_clean_gap_s: 4.0   # gap needed both ways at pit exit for "clean air"
+  release_out_lap_s: 0       # 0 = derive: 1.3 x player's best, else fallback
+  release_fallback_lap_s: 95.0
+  out_lap_factor: 1.3        # out lap vs best lap, for "time to start a lap"
+  out_lap_pit_s: 40          # garage -> line overhead; Q3 final run: released at 114 s left, flag beat it
+  pit_exit_m: 0.0            # lap distance of pit exit (per-track overlay later)
+  quali_eliminated: {5: 5, 6: 5, 7: 0}
+  abort_safe_margin_ms: 300  # inside this margin of the cut-off = "through"
+  abort_deficit_ms: 400      # projected deficit that justifies an abort call
+  abort_ers_keep_pct: 60     # ERS above this -> abort earlier (banked for next run)
+  quali_safe_margin_ms: 1000 # clear of the cut / P2 by this much = "play it safe"
+  pressure_window_low_c: 88  # target carcass (inner) temp window over a flying run
+  pressure_window_high_c: 102
+  pressure_hot_sign: 1       # +1: hot tyre -> raise (game: lower pressure runs hotter); -1: lower
+  pressure_front_min_psi: 22.5  # setup range; advice is clamped to it (0 = unknown)
+  pressure_front_max_psi: 29.5
+  pressure_rear_min_psi: 20.5
+  pressure_rear_max_psi: 26.5
+  pressure_size_medium_c: 5  # degrees outside the window for a medium step
+  pressure_size_large_c: 10  # ...and for a large step
+  pressure_step_small_psi: 0.2
+  pressure_step_medium_psi: 0.4
+  pressure_step_large_psi: 0.8
+  pressure_min_flying_s: 30  # flying time a run needs before advising
+  rejoin_traffic_s: 6        # after a spin: car behind closing within this = hold
+  pit_exit_traffic_s: 4      # just out of the pit lane: car behind closing within this
+  prep_gap_m: 800            # out-lap: talk about the gap this far before the line
+  prep_traffic_s: 3          # slow car ahead within this (at push pace) = traffic
+  tow_min_s: 0.7             # push-lap car ahead inside this = dirty air
+  tow_max_s: 2.0             # ...between min and max = a tow
+  prep_clear_s: 5            # nothing ahead within this = clear
+  prep_behind_s: 4           # push-lap car behind closing within this = let it by
+  # Run plan / cool-down lap (docs/17)
+  cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
+  cool_ers_need_max_pct: 70  # cap on the learned battery need
+  # Fuel (game's "laps remaining") needed at the line after a hot lap. No in
+  # lap: the game can return to the garage from the menu. Q2/Q3 recordings: a
+  # hot lap burns ~0.8-0.9, a cool lap ~0.9.
+  fuel_push_need_laps: 0.9   # one more hot lap
+  fuel_cool_need_laps: 1.8   # cool + hot lap
+  slow_car_warn_s: 5         # hot lap: warn when a slow car ahead is this many seconds from being caught
+  slow_car_delta_kmh: 60     # a flying-lap car this much slower counts as slow too
+  cool_tyre_hot_c: 104       # hottest carcass at the line at or above this -> cool
+  cool_lap_factor: 1.3       # cool lap length as a multiple of the best lap
+  cool_pace_pct: 10          # sector 1 this much slower than best = driver is cooling
+  cool_hot_mode_m: 600       # metres before the line to switch back to hot-lap mode
+  cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
+  ers_recharge_mode: 0       # ers_deploy_mode value for recharge (Q3 recording: battery only rises in 0); -1 = don't check

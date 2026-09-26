@@ -42,6 +42,7 @@ class LockupDetector:
         self.hold_s = hold_s
         self.reset()
         self.count_lap = 0
+        self.count = 0  # this session
         self._lap = 0
 
     def reset(self) -> None:
@@ -86,6 +87,7 @@ class LockupDetector:
                 self._ended_at = self._last_locked
                 self.wheel = self._worst_wheel
                 self.count_lap += 1
+                self.count += 1
                 self._note_spot(lap, self._start_dist)
             self._start = None
 

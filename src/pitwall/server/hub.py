@@ -73,6 +73,8 @@ class Hub:
 
     # -- CallSink ----------------------------------------------------------
 
+    speaks_audio = False  # the dashboard displays screen-only calls
+
     def speak(self, call: Call) -> None:
         self.broadcast(
             "call",

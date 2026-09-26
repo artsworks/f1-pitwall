@@ -164,3 +164,46 @@ def test_front_wing_damage_rule_fires() -> None:
     )
     result2 = engine2.evaluate(snap2)
     assert "front_wing_damage" not in [c.rule.defn.id for c in result2.candidates]
+
+
+def test_quali_safe_margin_and_pressure_rules() -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.state.pressure import PressureCall
+
+    ages = {"car_telemetry": 0.1, "lap_data": 0.1, "session_history": 0.1}
+    base = {"session_kind": "qualifying", "session_type": 5, "phase": "in_lap", "_ages": ages}
+    ids = [
+        c.rule.defn.id
+        for c in _default_rule_engine()
+        .evaluate(_snap(**base, quali_margin_ms=1_200, quali_margin_s=1.2, quali_margin_kind="cut"))
+        .candidates
+    ]
+    assert "quali_safe_cut" in ids and "quali_safe_pole" not in ids
+    ids = [
+        c.rule.defn.id
+        for c in _default_rule_engine()
+        .evaluate(_snap(**base, quali_margin_ms=800, quali_margin_kind="pole"))
+        .candidates
+    ]
+    assert "quali_safe_pole" not in ids
+
+    call = PressureCall("fr", "front right", 110.0, "medium", -0.4, 23.8)
+    result = _default_rule_engine().evaluate(
+        _snap(
+            **base,
+            run_flying_s=90.0,
+            run_tyre_inner_avg=Corners(95.0, 95.0, 95.0, 110.0),
+            pressure_advice=(call,),
+            pressure_advice_text="front right down 0.4",
+        )
+    )
+    texts = {c.rule.defn.id: c.text for c in result.candidates}
+    assert texts["tyre_pressure_advice"] == "Pressures: front right down 0.4"
+    assert "tyre_pressure_ok" not in texts
+    # Not enough flying time on the run: no advice either way
+    result = _default_rule_engine().evaluate(
+        _snap(**base, run_flying_s=10.0, pressure_advice_text="")
+    )
+    assert not {"tyre_pressure_advice", "tyre_pressure_ok"} & {
+        c.rule.defn.id for c in result.candidates
+    }

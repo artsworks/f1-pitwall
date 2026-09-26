@@ -374,3 +374,103 @@ def test_hub_recent_calls_track_audio_outcome() -> None:
     assert by_id["b"]["audio"] == "started"
     assert by_id["c"]["audio"] == "dropped"
     assert all(isinstance(c["t"], float) for c in hub.recent_calls)
+
+
+def test_state_payload_quali_zone() -> None:
+    import math
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    race = state_payload(
+        Snapshot(now=1.0, session_kind="race"), settings=settings, metrics=Metrics(), quiet=False
+    )
+    assert race["quali"] is None
+    garage = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="garage",
+            release_clean=False,
+            release_wait_s=7.0,
+            release_gap_ahead_s=math.inf,
+            cars_on_track=3,
+            red_flag=True,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+        quiet_left_s=120.0,
+    )
+    assert garage["red_flag"] is True
+    assert garage["quiet"] is True and garage["quiet_left_s"] == 120.0
+    rel = garage["quali"]["release"]
+    assert rel == {
+        "clean": False,
+        "wait_s": 7.0,
+        "gap_ahead_s": None,
+        "gap_behind_s": None,
+        "cars_on_track": 3,
+        "time_for_out_lap": True,
+    }
+    flying = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="flying",
+            projected_lap_ms=90_700,
+            quali_cutoff_ms=90_000,
+            abort_advised=True,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert flying["quali"]["lap"] == {"projected_ms": 90_700, "delta_ms": 700, "abort": True}
+    assert "release" not in flying["quali"]
+
+
+def test_pit_board_payload() -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import pit_board_payload
+    from pitwall.state.pressure import PressureCall
+    from pitwall.state.session import Snapshot
+
+    assert pit_board_payload(Snapshot(now=1.0, phase="flying")) is None
+    calls = (
+        PressureCall("fl", "front left", 85.0, "small", 0.0, 0.0, True, -0.2),
+        PressureCall("rr", "rear right", 107.0, "medium", 0.4, 21.4),
+        PressureCall("rl", "rear left", 107.0, "medium", 0.4, 21.4),
+    )
+    board = pit_board_payload(
+        Snapshot(
+            now=1.0,
+            phase="garage",
+            run_flying_s=90.0,
+            pressure_advice=calls,
+            pressure_advice_text="rears up 0.4",
+            setup_tyre_pressure=Corners(rl=21.0, rr=21.4, fl=22.5, fr=23.0),
+            setup={"front_wing": 12},
+            fuel_remaining_laps=1.6,
+        ),
+        {"fuel_push_need_laps": 0.9},
+    )
+    assert board is not None
+    t = board["tyres"]
+    assert t["fl"]["limited"] and t["fl"]["edge"] == "min" and t["fl"]["target_psi"] is None
+    assert t["rl"]["target_psi"] == 21.4 and not t["rl"]["applied"]
+    assert t["rr"]["applied"]  # already dialled in
+    assert t["fr"] == {
+        "psi": 23.0,
+        "target_psi": None,
+        "delta_psi": 0.0,
+        "limited": False,
+        "edge": None,
+        "avg_c": None,
+        "applied": False,
+    }
+    assert board["setup"] == {"front_wing": 12}
+    assert board["fuel_need_laps"] == 0.9 and board["has_advice"]
