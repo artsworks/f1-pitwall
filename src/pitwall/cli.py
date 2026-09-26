@@ -136,8 +136,16 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         async def _replay_coro() -> None:
             await review.play()
-            if review._task is not None:  # noqa: SLF001
-                await review._task
+            # A seek cancels the running task and starts a new one: follow it.
+            while (task := review._task) is not None:  # noqa: SLF001
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    if review._task is task:  # noqa: SLF001
+                        raise
+                    continue
+                if review._task is task:  # noqa: SLF001
+                    break
 
         store = ConfigStore()
         asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))

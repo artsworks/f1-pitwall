@@ -202,8 +202,8 @@
     n.appendChild(document.createTextNode((r.pos ? "P" + r.pos + " " : "") +
       String(r.name || "--").toUpperCase() + " " + gapText(gap) + " " + (r.compound || "")));
     if (r.drs) n.appendChild(span(" · DRS", side === "behind" ? "crit" : "ok"));
-    if (side === "ahead" && s.undercut_s) n.appendChild(span(" · UC +" + fmt(s.undercut_s, 1), "ok"));
-    if (side === "behind" && s.overcut_s) n.appendChild(span(" · OC +" + fmt(s.overcut_s, 1), "ok"));
+    if (side === "ahead" && s.undercut_s > 0) n.appendChild(span(" · UC +" + fmt(s.undercut_s, 1), "ok"));
+    if (side === "behind" && s.overcut_s > 0) n.appendChild(span(" · OC +" + fmt(s.overcut_s, 1), "ok"));
     if (r.pitted) n.appendChild(span(" · PITTED", "warn"));
     var tr = trendText(r.gap_trend_s, side);
     if (tr) n.appendChild(span(" · " + tr.text, tr.cls));
@@ -255,8 +255,8 @@
     kv("trend", tr ? tr.text : "steady", tr ? tr.cls : "");
     var threat = [];
     if (r.drs) threat.push("DRS");
-    if (side === "ahead" && s.undercut_s) threat.push("UNDERCUT +" + fmt(s.undercut_s, 1));
-    if (side === "behind" && s.overcut_s) threat.push("OVERCUT +" + fmt(s.overcut_s, 1));
+    if (side === "ahead" && s.undercut_s > 0) threat.push("UNDERCUT +" + fmt(s.undercut_s, 1));
+    if (side === "behind" && s.overcut_s > 0) threat.push("OVERCUT +" + fmt(s.overcut_s, 1));
     if (r.pitted) threat.push("PITTED");
     kv("threat", threat.length ? threat.join(" · ") : "none", threat.length ? (side === "behind" ? "crit" : "ok") : "");
     n.className = "b-card" + (r.drs ? " drs" : threat.length ? " threat" : "");
