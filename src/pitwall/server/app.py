@@ -189,6 +189,33 @@ def strategy_payload(
             "wear_per_lap_pct": snapshot.wear_per_lap_pct,
         },
         "restricted": snapshot.rival_data_restricted,
+        "plans": [
+            {
+                "id": p.id,
+                "kind": p.kind,
+                "label": p.label,
+                "stops": p.stops,
+                "compounds": [_compound(c) for c in p.compounds],
+                "stop_laps": list(p.stop_laps),
+                "window": list(p.window) if p.window[0] > 0 else None,
+                "delta_s": p.delta_s,
+                "active": p.id == snapshot.active_plan,
+            }
+            for p in snapshot.plans
+        ],
+        "active_plan": snapshot.active_plan or None,
+        "on_plan": snapshot.on_plan if snapshot.active_plan else None,
+        "plan_off_s": snapshot.plan_off_s if snapshot.active_plan else None,
+        "plan_target_lap": snapshot.plan_target_lap or None,
+        "plan_switch": (
+            {
+                "from": snapshot.plan_switched_from,
+                "reason": snapshot.plan_switch_reason,
+                "lap": snapshot.plan_switch_lap,
+            }
+            if snapshot.plan_switch_count
+            else None
+        ),
     }
 
 

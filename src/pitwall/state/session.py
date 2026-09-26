@@ -52,6 +52,7 @@ from pitwall.state.quali import (
 )
 from pitwall.state.race import RacePhase, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
+from pitwall.strategy.plans import StrategyPlan
 
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
@@ -328,6 +329,28 @@ class Snapshot:
     pit_window_end: int = 0
     undercut_s: float = 0.0
     overcut_s: float = 0.0
+    plans: tuple[StrategyPlan, ...] = ()
+    active_plan: str = ""
+    on_plan: bool = True
+    plan_label: str = ""
+    plan_spoken: str = ""
+    plan_stops_left: int = 0
+    plan_target_lap: int = 0
+    plan_window_start: int = 0
+    plan_window_end: int = 0
+    plan_window_text: str = ""
+    plan_window_open: bool = False
+    plan_next_compound: str = ""
+    plan_off_s: float = 0.0
+    plan_switch_count: int = 0
+    plan_switched_from: str = ""
+    plan_switch_reason: str = ""
+    plan_switch_lap: int = 0
+    plan_target_shift: int = 0
+    plan_b_spoken: str = ""
+    plan_b_delta_s: float = 0.0
+    plan_c_spoken: str = ""
+    plan_c_delta_s: float = 0.0
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -1721,6 +1744,28 @@ class SessionState:
             pit_window_end=model.pit_window_end,
             undercut_s=model.undercut_s,
             overcut_s=model.overcut_s,
+            plans=model.plans,
+            active_plan=model.active_plan,
+            on_plan=model.on_plan,
+            plan_label=model.plan_label,
+            plan_spoken=model.plan_spoken,
+            plan_stops_left=model.plan_stops_left,
+            plan_target_lap=model.plan_target_lap,
+            plan_window_start=model.plan_window_start,
+            plan_window_end=model.plan_window_end,
+            plan_window_text=model.plan_window_text,
+            plan_window_open=model.plan_window_open,
+            plan_next_compound=model.plan_next_compound,
+            plan_off_s=model.plan_off_s,
+            plan_switch_count=model.plan_switch_count,
+            plan_switched_from=model.plan_switched_from,
+            plan_switch_reason=model.plan_switch_reason,
+            plan_switch_lap=model.plan_switch_lap,
+            plan_target_shift=model.plan_target_shift,
+            plan_b_spoken=model.plan_b_spoken,
+            plan_b_delta_s=model.plan_b_delta_s,
+            plan_c_spoken=model.plan_c_spoken,
+            plan_c_delta_s=model.plan_c_delta_s,
             rival_data_restricted=self.rival_data_restricted,
             overheat=overheat,
             graining=graining,

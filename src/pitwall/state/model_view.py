@@ -7,6 +7,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from pitwall.strategy.plans import StrategyPlan
+
 
 @dataclass(frozen=True, slots=True)
 class ModelView:
@@ -38,3 +40,25 @@ class ModelView:
     pit_window_end: int = 0
     undercut_s: float = 0.0
     overcut_s: float = 0.0
+    plans: tuple[StrategyPlan, ...] = ()
+    active_plan: str = ""
+    on_plan: bool = True
+    plan_label: str = ""
+    plan_spoken: str = ""
+    plan_stops_left: int = 0
+    plan_target_lap: int = 0
+    plan_window_start: int = 0
+    plan_window_end: int = 0
+    plan_window_text: str = ""
+    plan_window_open: bool = False
+    plan_next_compound: str = ""
+    plan_off_s: float = 0.0
+    plan_switch_count: int = 0
+    plan_switched_from: str = ""
+    plan_switch_reason: str = ""
+    plan_switch_lap: int = 0
+    plan_target_shift: int = 0
+    plan_b_spoken: str = ""
+    plan_b_delta_s: float = 0.0
+    plan_c_spoken: str = ""
+    plan_c_delta_s: float = 0.0

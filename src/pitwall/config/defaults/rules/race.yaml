@@ -1,4 +1,101 @@
 rules:
+  # Named strategy plans A/B/C (docs/03 "Strategy plans"). The engine's plan
+  # tracker owns the plan state; these rules only phrase it. plan_sc_box sits
+  # after box_now in the pit group: it speaks only when box_now is gated out.
+  - id: plan_switch
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'pace' and plan_switch_lap == lap_num"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "Switching to Plan {active_plan}. {plan_spoken}, target lap {plan_target_lap}"
+      - "We're going Plan {active_plan} now, {plan_spoken}. Target lap {plan_target_lap}"
+  - id: plan_invalid
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'invalid' and plan_switch_lap == lap_num"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "We're off Plan {plan_switched_from}. New plan is {active_plan}, {plan_spoken}"
+      - "Plan {plan_switched_from} is gone. Plan {active_plan} now, {plan_spoken}"
+  - id: plan_off
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan != '' and not on_plan and plan_off_s >= th.plan_off_s"
+    clear_when: "on_plan"
+    cooldown_s: 90
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "Heads up, we're off Plan {active_plan}. Losing {plan_off_s:.0f} seconds on it, reviewing"
+      - "Plan {active_plan} is costing us {plan_off_s:.0f} seconds now. Stand by for a new plan"
+  - id: plan_announce
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left > 0"
+    clear_when: "active_plan == ''"
+    cooldown_s: 30
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "We're on Plan A, {plan_spoken}. Window laps {plan_window_start} to {plan_window_end}. Plan B is {plan_b_spoken}"
+      - "Plan A is {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
+  - id: plan_announce_no_stop
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left == 0"
+    clear_when: "active_plan == ''"
+    cooldown_s: 30
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "We're on Plan A, {plan_spoken}. We're going long"
+      - "Plan A, {plan_spoken}. Look after the tyres"
+  - id: plan_status
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and active_plan != '' and on_plan and plan_stops_left > 0 and sector == 1 and lap_num >= 2 and lap_num % th.plan_status_every_laps == 0 and lap_num < plan_window_start"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "Still on Plan {active_plan}, window laps {plan_window_start} to {plan_window_end}"
+      - "We're on Plan {active_plan}. Target lap {plan_target_lap}"
+      - "Plan {active_plan} still good, window {plan_window_start} to {plan_window_end}"
+  - id: plan_window_open
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_window_open and on_plan and plan_target_lap > lap_num"
+    clear_when: "not plan_window_open"
+    cooldown_s: 60
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "Pit window is open. Plan {active_plan}, target lap {plan_target_lap}"
+      - "Window open. We're targeting lap {plan_target_lap}, Plan {active_plan}"
+  - id: plan_target_lap
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and on_plan and plan_stops_left > 0 and plan_target_lap == lap_num and laps_remaining > th.pit_min_laps_left"
+    clear_when: "plan_target_lap != lap_num"
+    still_true: "phase == 'racing' and plan_target_lap == lap_num"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Target lap. Plan {active_plan}, box box, {plan_next_compound}s"
+      - "This is the target lap. Box this lap, {plan_next_compound}s on, Plan {active_plan}"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, extend. We'll look again next lap"
   # Pit calls read the optimiser's plan (docs/18). The gate fields sit in
   # `when` so the prediction and its confidence land in the decision log.
   - id: box_now
@@ -11,12 +108,28 @@ rules:
     cooldown_group: pit
     requires: [lap_data, car_status]
     say:
-      - "Box, box. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds in it"
-      - "Box this lap. {pit_plan_reason}"
+      - "Box, box. Plan {active_plan}. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds in it"
+      - "Plan {active_plan}, box this lap. {pit_plan_reason}"
     on_ack:
       - "Copy, box this lap"
     on_neg:
       - "Understood, staying out. Window is laps {pit_window_start} to {pit_window_end}"
+  - id: plan_sc_box
+    sessions: [race]
+    priority: 1
+    when: "phase in ('sc', 'vsc') and active_plan == 'C' and plan_switch_reason == 'sc' and plan_switch_lap == lap_num and laps_remaining > th.pit_min_laps_left"
+    clear_when: "active_plan != 'C' or plan_switch_lap != lap_num"
+    still_true: "phase in ('sc', 'vsc') and active_plan == 'C'"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Plan C, box box. {plan_next_compound}s, cheap stop"
+      - "Plan C, Plan C. Box this lap for {plan_next_compound}s"
+    on_ack:
+      - "Copy, Plan C, box this lap"
+    on_neg:
+      - "Understood, staying out. Plan {plan_switched_from} stays open"
   - id: box_in_n
     sessions: [race]
     priority: 2

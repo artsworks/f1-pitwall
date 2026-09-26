@@ -170,6 +170,27 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX driver_inputs_session ON driver_inputs(session_uid, t);
     """,
+    # 4: named strategy plans (docs/03, docs/18): active plan on every call and
+    # the set/switch/off-plan history, for review grading of plan calls.
+    """
+    ALTER TABLE calls ADD COLUMN active_plan TEXT;
+    ALTER TABLE calls ADD COLUMN on_plan INT;
+    CREATE TABLE plan_events (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        t REAL,
+        session_time REAL,
+        lap INT,
+        kind TEXT,
+        from_plan TEXT,
+        to_plan TEXT,
+        reason TEXT,
+        delta_s REAL,
+        sequence TEXT,
+        plans TEXT
+    );
+    CREATE INDEX plan_events_session ON plan_events(session_uid, t);
+    """,
 ]
 
 
@@ -256,6 +277,10 @@ _UID_COLUMNS = ("uid", "session_uid")
 def _uid_to_sql(uid: int) -> int:
     """Store the game's uint64 session UID in SQLite's signed 64-bit INTEGER."""
     return uid - _U64 if uid > _I64_MAX else uid
+
+
+def _bool_to_sql(value: object) -> int | None:
+    return int(value) if isinstance(value, bool) else None
 
 
 def _uid_from_sql(value: int) -> int:
@@ -390,8 +415,8 @@ class Database:
             self._conn.execute(
                 "INSERT INTO calls(session_uid, call_id, t, session_time, lap,"
                 " lap_distance, rule_id, priority, outcome, suppressed_by,"
-                " text, inputs, config_hash, mindset)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " text, inputs, config_hash, mindset, active_plan, on_plan)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     record.get("call_id"),
@@ -407,6 +432,30 @@ class Database:
                     json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("config_hash"),
                     record.get("mindset"),
+                    record.get("active_plan") or None,
+                    _bool_to_sql(record.get("on_plan")),
+                ),
+            )
+
+    def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
+        """A named-plan set / switch / off / on event (engine plan tracker)."""
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO plan_events(session_uid, t, session_time, lap, kind,"
+                " from_plan, to_plan, reason, delta_s, sequence, plans)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    record.get("t"),
+                    record.get("session_time"),
+                    record.get("lap"),
+                    record.get("kind"),
+                    record.get("from_plan"),
+                    record.get("to_plan"),
+                    record.get("reason"),
+                    record.get("delta_s"),
+                    record.get("sequence"),
+                    json.dumps(record.get("plans", []), default=str),
                 ),
             )
 
@@ -464,6 +513,11 @@ class Database:
 
     def calls_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM calls WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),))
+
+    def plan_events_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM plan_events WHERE session_uid=? ORDER BY id", (_uid_to_sql(uid),)
+        )
 
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
