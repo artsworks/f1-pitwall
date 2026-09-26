@@ -1,0 +1,9 @@
+track_id: 10
+name: spa
+pit_loss_s: {green: 20.5, vsc: 11.0, sc: 7.5}
+pit_exit_m: 350.0
+pit_entry_m: 6800.0
+fuel_kg_per_lap: 1.9
+deg_ms_per_lap: {16: 120, 17: 80, 18: 50}
+base_pace_ms: 0
+thresholds: {}

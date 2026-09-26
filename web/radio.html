@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall — radio</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -11,11 +15,13 @@
     <span id="live" class="live">CONNECTING…</span>
     <span id="age" class="dim">--</span>
     <span class="spacer"></span>
+    <span id="page" class="pill page">RACE</span>
     <span id="lap">LAP --</span>
   </header>
 
   <section id="banner" class="banner idle">
     <div class="bar"></div>
+    <div id="call-life" class="life"></div>
     <div class="body">
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>

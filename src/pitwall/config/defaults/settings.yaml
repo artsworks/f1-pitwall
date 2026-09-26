@@ -11,6 +11,9 @@ recording:
   compress_on_close: true
 engine:
   tick_hz: 10
+  heartbeat_s: 5            # SQLite runtime heartbeat (crash recovery)
+  recovery_max_age_s: 300   # a heartbeat newer than this on start = crashed mid-session
+  recovery_tail_s: 120      # seconds of the recording tail replayed to rebuild state
 persistence:
   enabled: true
   path: ~/.pitwall/pitwall.sqlite
@@ -53,8 +56,71 @@ speech:
   radio_click: true # soft radio blip before each call
 mindset:
   active: balanced
+thresholds:
+  # M3 race engine (docs/18); per-track overlays may override these.
+  prior_min_weight: 2          # model_params weight needed to count as a learned prior
+  param_weight_cap: 50         # cap on fold_param running-mean weight
+  deg_min_laps: 3              # valid laps before an OLS deg fit leaves the prior
+  deg_max_ms_per_lap: 600      # clamp on fitted deg/fuel slopes
+  deg_rmse_bad_ms: 800         # rmse at which fit confidence floors at 0.2
+  deg_default_ms_per_lap: 80   # cold-start deg slope when nothing is known
+  fuel_ms_per_lap_default: 30  # pace gained per lap of fuel burn, default
+  tyre_cliff_ms: 1500          # pace loss vs age 0 that counts as the tyre cliff
+  wear_cliff_pct: 70           # mean wear % that counts as the wear cliff
+  wear_per_lap_default_pct: 2.5  # wear %/lap when not measured this stint
+  rival_pace_window: 3         # laps in the rival-pace median
+  pit_loss_default_s: 22       # green-flag pit loss when nothing is known
+  pit_loss_vsc_default_s: 12
+  pit_loss_sc_default_s: 8
+  fuel_kg_per_lap_default: 1.7
+  energy_over_tolerance_j: 200000  # |lap_delta| above this flags over/under
+  ers_store_capacity_j: 4000000    # nominal 4 MJ 2026 ERS store
+  # Race phase + rival scope (docs/18)
+  sc_exit_hold_s: 5            # session seconds a flicker can't bounce the SC/VSC phase
+  restricted_detect_laps: 2    # all-zero rival telemetry for this many laps = restricted
+  restricted_confidence_factor: 0.7
+  pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)
+  thermal_hysteresis_c: 4      # overheat/graining latch hysteresis
+  tyre_graining_c: 75          # coldest inner at or below this = graining band
+  drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
+  drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
+  penalty_recent_s: 10         # session seconds a PENA stays "recent"
+  rain_inter_pct: 60           # forecast rain -> crossover bands
+  rain_wet_pct: 85
+  rain_dry_pct: 30
+  rain_hysteresis_pct: 5       # crossover band hysteresis
+  # Pit-window optimiser + race rules (docs/18)
+  pit_horizon_laps: 8          # candidate stop laps evaluated ahead
+  pit_min_laps_left: 2         # no stop inside the last N laps
+  cliff_ms_per_lap: 1000       # extra pace loss per lap past the tyre cliff
+  outlap_warmup_s: 0.8         # cold-tyre cost on the out-lap
+  undercut_laps: 2
+  undercut_max_gap_s: 3.0
+  overcut_laps: 2
+  overcut_min_laps: 3
+  free_stop_margin_s: 1.0
+  sc_stop_min_laps_left: 3
+  box_in_max_laps: 3
+  tyre_life_speak_laps: 10
+  blister_warn_pct: 20
+  blister_hysteresis_pct: 5
+  fuel_hysteresis_laps: 0.1
+  fuel_spare_laps: 1.0
+  gap_hysteresis_s: 0.3
+  warnings_warn: 3
+  pit_exit_traffic_s: 1.5
+  # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
+  tune_min_grades: 3
+  tune_gain: 2.0
+  tune_min_cooldown_mult: 0.5
+  tune_max_cooldown_mult: 4.0
 ui:
   state_hz: 5
+  pages: [race, battle, car, track, setup]  # UDP Action 4 cycles in this order
+  auto_page: false              # true: battle page in a fight, track page under SC/VSC/formation
+  auto_page_manual_hold_s: 60   # a manual page choice holds this long before auto may switch
+  auto_page_battle_gap_s: 1.0
+  auto_page_call_hold_s: 8       # never auto-switch while a call banner is up
 input:
   double_press_ms: 350
   long_press_ms: 800
@@ -68,4 +134,6 @@ input:
   long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
   silent_toggle_bit: 0x00400000  # any press on UDP Action 3 also toggles radio silent; 0 disables
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
+  mindset_toggle_bit: 0x00200000  # UDP Action 2: balanced <-> aggressive (live override); 0 disables
+  page_cycle_bit: 0x00800000      # UDP Action 4: next dashboard page; 0 disables
   negative_mute_laps: 3

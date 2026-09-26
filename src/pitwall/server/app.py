@@ -85,6 +85,147 @@ def pit_board_payload(
     }
 
 
+_COMPOUND_WORDS = {16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET"}
+
+
+def _compound(visual: int) -> str | None:
+    return _COMPOUND_WORDS.get(visual) or (f"C{visual}" if visual else None)
+
+
+def strategy_payload(
+    snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
+) -> dict[str, Any] | None:
+    """Zone F / battle page contract (docs/15 §5, docs/18): pit window, the
+    immediate ahead/behind rivals only (never a timing tower), undercut /
+    overcut and a one-line stint plan. None outside races."""
+    if snapshot.session_kind != "race" or not snapshot.race_phase:
+        return None
+    th = thresholds or {}
+    drs_gap = float(th.get("drs_detection_gap_s", 1.0))
+    own_ms = snapshot.predicted_lap_ms or int(snapshot.base_pace_ms)
+
+    def rival(side: str) -> dict[str, Any] | None:
+        ahead = side == "ahead"
+        idx = snapshot.rival_ahead_idx if ahead else snapshot.rival_behind_idx
+        if idx < 0:
+            return None
+        gap = snapshot.gap_ahead_s if ahead else snapshot.gap_behind_s
+        pace = snapshot.rival_ahead_pace_ms if ahead else snapshot.rival_behind_pace_ms
+        gap_f = _finite(gap)
+        return {
+            "idx": idx,
+            "pos": snapshot.rival_ahead_pos if ahead else snapshot.rival_behind_pos,
+            "name": snapshot.rival_ahead_name if ahead else snapshot.rival_behind_name,
+            "gap_s": gap_f,
+            "compound": _compound(
+                snapshot.rival_ahead_compound if ahead else snapshot.rival_behind_compound
+            ),
+            "tyre_age": snapshot.rival_ahead_age if ahead else snapshot.rival_behind_age,
+            # + = the rival is slower than us per lap
+            "pace_delta_s": round((pace - own_ms) / 1000.0, 3) if pace and own_ms else None,
+            "gap_trend_s": snapshot.gap_trend_ahead_s if ahead else snapshot.gap_trend_behind_s,
+            "drs": gap_f is not None and gap_f < drs_gap and snapshot.safety_car_status == 0,
+            "pitted": snapshot.rival_ahead_pitted if ahead else snapshot.rival_behind_pitted,
+        }
+
+    window = None
+    if snapshot.pit_window_start > 0:
+        window = {"start": snapshot.pit_window_start, "end": snapshot.pit_window_end}
+    comp = _compound(snapshot.tyre_visual) or "--"
+    lop = _finite(snapshot.laps_of_pace)
+    if window is not None:
+        stint = f"{comp} to L{window['start']}–{window['end']} · box · to flag"
+    elif lop is not None and lop >= snapshot.laps_remaining > 0:
+        stint = f"{comp} to flag · {snapshot.laps_remaining} laps"
+    elif lop is not None:
+        stint = f"{comp} · {lop:.0f} laps of pace left"
+    else:
+        stint = f"{comp} · deg model warming up"
+    plan = None
+    if snapshot.pit_plan:
+        plan = {
+            "kind": snapshot.pit_plan,
+            "lap": snapshot.pit_plan_lap,
+            "gain_s": snapshot.pit_plan_gain_s,
+            "confidence": snapshot.pit_plan_confidence,
+            "risk": snapshot.pit_plan_risk,
+            "rival": snapshot.pit_plan_rival_name or None,
+            "reason": snapshot.pit_plan_reason,
+        }
+    exit_rival = None
+    if snapshot.rival_pit_exit_idx >= 0:
+        exit_rival = {
+            "name": snapshot.rival_pit_exit_name,
+            "gap_s": _finite(snapshot.pit_exit_rival_gap_s),
+        }
+    return {
+        "phase": snapshot.race_phase,
+        "laps_remaining": snapshot.laps_remaining,
+        "pit_window": window,
+        "plan": plan,
+        "ahead": rival("ahead"),
+        "behind": rival("behind"),
+        "drs": snapshot.drs_available,
+        "undercut_s": snapshot.undercut_s or None,
+        "overcut_s": snapshot.overcut_s or None,
+        "stint_plan": stint,
+        "pit_exit": {"clean": snapshot.pit_exit_clean, "rival": exit_rival},
+        "laps_of_pace": lop,
+        "pit_loss_s": snapshot.pit_loss_s or None,
+        "pit_loss_source": snapshot.pit_loss_source or None,
+        # Backend-owned fuel target (docs/15 open question 1): margin vs the
+        # laps to the flag. Absent -> the client keeps laps remaining prominent.
+        "fuel_delta_laps": (_finite(snapshot.fuel_margin_laps) if snapshot.fuel_source else None),
+        "energy": {
+            "per_lap_mj": snapshot.energy_per_lap_mj,
+            "lap_delta_mj": snapshot.energy_lap_delta_mj,
+            "laps_to_floor": _finite(snapshot.energy_laps_to_floor),
+            "mode": snapshot.energy_mode or None,
+        },
+        "tyres": {
+            "overheat": snapshot.overheat,
+            "graining": snapshot.graining,
+            "blister_max_pct": snapshot.blister_max_pct,
+            "wear_per_lap_pct": snapshot.wear_per_lap_pct,
+        },
+        "restricted": snapshot.rival_data_restricted,
+    }
+
+
+def track_payload(snapshot: Snapshot) -> dict[str, Any]:
+    """Track-awareness page: flags, SC/VSC, weather and forecast, penalties."""
+    return {
+        "phase": snapshot.race_phase or snapshot.phase,
+        "safety_car": snapshot.safety_car_status,
+        "sc_laps": snapshot.sc_laps,
+        "weather": snapshot.weather_now,
+        "rain_pct": [snapshot.rain_pct_now, snapshot.rain_pct_in_10, snapshot.rain_pct_in_30],
+        "weather_crossover": snapshot.weather_crossover or None,
+        "blue_flag": snapshot.blue_flag,
+        "red_flag": snapshot.red_flag,
+        "penalty_s": snapshot.penalty_s,
+        "warnings": snapshot.warnings,
+        "corner_cut_warnings": snapshot.corner_cut_warnings,
+        "unserved": snapshot.unserved_drive_through + snapshot.unserved_stop_go,
+        "cars_on_track": snapshot.cars_on_track,
+        "pit_exit_clean": snapshot.pit_exit_clean,
+        "gap_ahead_s": _finite(snapshot.gap_ahead_s),
+        "gap_behind_s": _finite(snapshot.gap_behind_s),
+    }
+
+
+def setup_payload(snapshot: Snapshot) -> dict[str, Any] | None:
+    """Read-only setup page (display only; no setup advice logic)."""
+    if not snapshot.setup:
+        return None
+    return {
+        "values": dict(snapshot.setup),
+        "pressures": {
+            k: getattr(snapshot.setup_tyre_pressure, k) or None for k in ("fl", "fr", "rl", "rr")
+        },
+    }
+
+
 def quali_payload(
     snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
 ) -> dict[str, Any] | None:
@@ -175,6 +316,8 @@ def state_payload(
     quiet: bool,
     quiet_left_s: float | None = None,
     silent: bool = False,
+    mindset: str | None = None,
+    page: str | None = None,
 ) -> dict[str, Any]:
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
@@ -230,7 +373,9 @@ def state_payload(
         "fuel_remaining_laps": snapshot.fuel_remaining_laps,
         "ers_pct": snapshot.ers_store_pct,
         "safety_car": snapshot.safety_car_status,
-        "mindset": settings.mindset.active,
+        "mindset": mindset or settings.mindset.active,
+        "page": page or (settings.ui.pages[0] if settings.ui.pages else "race"),
+        "pages": list(settings.ui.pages),
         "verbosity": settings.policy.verbosity,
         "quiet": quiet or quiet_left_s is not None,
         "quiet_left_s": quiet_left_s,
@@ -238,7 +383,68 @@ def state_payload(
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
         "quali": quali_payload(snapshot, settings.thresholds),
+        "race": {
+            "phase": snapshot.race_phase,
+            "laps_remaining": snapshot.laps_remaining,
+            "sc_laps": snapshot.sc_laps,
+            "gap_ahead_s": _finite(snapshot.gap_ahead_s),
+            "gap_behind_s": _finite(snapshot.gap_behind_s),
+            "rival_ahead": {
+                "idx": snapshot.rival_ahead_idx,
+                "name": snapshot.rival_ahead_name,
+                "pace_ms": snapshot.rival_ahead_pace_ms,
+                "age": snapshot.rival_ahead_age,
+                "pitted": snapshot.rival_ahead_pitted,
+            },
+            "rival_behind": {
+                "idx": snapshot.rival_behind_idx,
+                "name": snapshot.rival_behind_name,
+                "pace_ms": snapshot.rival_behind_pace_ms,
+                "age": snapshot.rival_behind_age,
+                "pitted": snapshot.rival_behind_pitted,
+            },
+            "rival_pit_exit": {
+                "idx": snapshot.rival_pit_exit_idx,
+                "name": snapshot.rival_pit_exit_name,
+                "pace_ms": snapshot.rival_pit_exit_pace_ms,
+                "gap_s": _finite(snapshot.pit_exit_rival_gap_s),
+            },
+            "rival_data_restricted": snapshot.rival_data_restricted,
+            "pit_exit_clean": snapshot.pit_exit_clean,
+            "laps_of_pace": _finite(snapshot.laps_of_pace),
+            "wear_per_lap_pct": snapshot.wear_per_lap_pct,
+            "deg_ms_per_lap": snapshot.deg_ms_per_lap,
+            "deg_fit_source": snapshot.deg_fit_source,
+            "deg_confidence": snapshot.deg_confidence,
+            "base_pace_ms": snapshot.base_pace_ms,
+            "pit_loss_s": snapshot.pit_loss_s,
+            "pit_loss_source": snapshot.pit_loss_source,
+            "fuel_margin_laps": _finite(snapshot.fuel_margin_laps),
+            "fuel_per_lap_kg": snapshot.fuel_per_lap_kg,
+            "fuel_source": snapshot.fuel_source,
+            "energy_per_lap_mj": snapshot.energy_per_lap_mj,
+            "energy_lap_delta_mj": snapshot.energy_lap_delta_mj,
+            "energy_laps_to_floor": _finite(snapshot.energy_laps_to_floor),
+            "energy_mode": snapshot.energy_mode,
+            "weather_crossover": snapshot.weather_crossover,
+            "pit_plan": snapshot.pit_plan,
+            "pit_plan_lap": snapshot.pit_plan_lap,
+            "pit_plan_gain_s": snapshot.pit_plan_gain_s,
+            "pit_plan_confidence": snapshot.pit_plan_confidence,
+            "pit_plan_risk": snapshot.pit_plan_risk,
+            "pit_plan_rival_idx": snapshot.pit_plan_rival_idx,
+            "pit_plan_rival_name": snapshot.pit_plan_rival_name,
+            "pit_plan_reason": snapshot.pit_plan_reason,
+            "pit_window_start": snapshot.pit_window_start,
+            "pit_window_end": snapshot.pit_window_end,
+            "undercut_s": snapshot.undercut_s,
+            "overcut_s": snapshot.overcut_s,
+            "predicted_lap_ms": snapshot.predicted_lap_ms,
+        },
         "pit_board": pit_board_payload(snapshot, settings.thresholds),
+        "strategy": strategy_payload(snapshot, settings.thresholds),
+        "track_info": track_payload(snapshot),
+        "setup": setup_payload(snapshot),
         "latency": {
             "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],
@@ -254,11 +460,14 @@ def create_app(
     speaker_name: str = "null",
     latest_snapshot: Any = None,
     on_client_press: Any = None,
+    on_client_message: Any = None,
     review: Any = None,
 ) -> FastAPI:
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
     frames (defaults to the hub's no-state placeholder). on_client_press:
-    callable(down: bool) fed by {"type":"press"} client messages. review:
+    callable(down: bool) fed by {"type":"press"} client messages.
+    on_client_message: callable(msg) fed by {"type":"mindset"|"page"} messages.
+    review:
     optional ReviewController; when present the /api/review/* routes are
     mounted and the hello frame carries review=True."""
     app = FastAPI(title="pitwall")
@@ -338,6 +547,12 @@ def create_app(
                     and on_client_press is not None
                 ):
                     on_client_press(bool(msg.get("down")))
+                elif (
+                    isinstance(msg, dict)
+                    and msg.get("type") in ("mindset", "page")
+                    and on_client_message is not None
+                ):
+                    on_client_message(msg)
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:

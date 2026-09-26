@@ -115,9 +115,15 @@ class Dispatcher:
         self._negatives: dict[str, int] = {}
         self._neg_mute_until: dict[str, int] = {}  # rule_id -> lap
         self._cooldown_mult: dict[str, float] = {}
+        # Persisted per-rule cooldown multipliers from graded review (pitwall tune).
+        self.tuned_cooldown: dict[str, float] = {}
         self._acked: dict[str, int] = {}  # rule_id -> lap acknowledged on
         self._defs: dict[str, RuleDefModel] = {}
         self._reply_n: dict[str, int] = {}
+
+    @property
+    def last_call_t(self) -> float | None:
+        return self._last_call_t
 
     # -- submission ----------------------------------------------------------
 
@@ -173,7 +179,11 @@ class Dispatcher:
             return "negative_backoff"
         cd_key = d.cooldown_group or cand.rule.id
         last = self._last_fired.get(cd_key)
-        cooldown = d.cooldown_s * self._cooldown_mult.get(cd_key, 1.0)
+        cooldown = (
+            d.cooldown_s
+            * self._cooldown_mult.get(cd_key, 1.0)
+            * self.tuned_cooldown.get(cand.rule.id, 1.0)
+        )
         if cooldown and last is not None and now - last < cooldown:
             return "cooldown"
         if d.max_per_stint is not None:
@@ -277,6 +287,14 @@ class Dispatcher:
         self._broadcast_press(
             {"kind": "silent" if self.silent else "unsilent", "lap": snapshot.lap_num, "text": ""}
         )
+
+    def announce_mindset(self, name: str, snapshot: Snapshot) -> None:
+        """Log + voice-confirm a live mindset switch (docs/12)."""
+        self.log.mindset = name
+        self._log_press(snapshot.now, snapshot, f"mindset_{name}", None, None)
+        reply = self.input.mindset_replies.get(name)
+        self._reply([reply] if reply else [f"Copy, {name}."], snapshot)
+        self._broadcast_press({"kind": "mindset", "lap": snapshot.lap_num, "text": name})
 
     def purge(self, reason: str, now: float | None = None) -> int:
         """Drop every queued (not yet spoken) call, logging each as suppressed."""

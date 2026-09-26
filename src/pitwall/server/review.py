@@ -12,7 +12,7 @@ import asyncio
 import io
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from pitwall.engine import Engine, run_replay
 from pitwall.net.recording import RecordingReader, read_index
 from pitwall.server.hub import Hub
 from pitwall.store.db import Database
+from pitwall.tune import tune_from_db
 
 # Decision-log outcomes surfaced as ticks on the transport strip.
 _TIMELINE_OUTCOMES = {
@@ -69,8 +70,10 @@ class ReviewController:
         speed: float,
         db: Database | None = None,
         timeline_log: io.StringIO | None = None,
+        thresholds: Mapping[str, Any] | None = None,
     ) -> None:
         self.path = Path(path)
+        self.thresholds: Mapping[str, Any] = thresholds or {}
         self.speed = speed
         self._engine_factory = engine_factory
         self.hub = hub
@@ -221,6 +224,7 @@ class ReviewController:
             if str(d.get("call_id")) == call_id:
                 d["grade"] = grade
         self.db.grade_call(session_uid, call_id, rule_id, grade, note)
+        tune_from_db(self.db, self.thresholds)
         with self.grades_path.open("a") as f:
             f.write(json.dumps(row) + "\n")
         return row

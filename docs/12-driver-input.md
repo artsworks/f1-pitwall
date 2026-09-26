@@ -12,7 +12,8 @@ than any threshold tuning.
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now" |
 | Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off — leave the driver alone in a battle (`input.long_press: bookmark` makes it a silent marker instead) |
 | Radio silent toggle | a second wheel button → UDP Action 3 | — | same as long press; fallback if a held button doesn't register |
-| Optional: mindset toggle | a second wheel button → UDP Action 2 | configurable key | balanced ⇄ aggressive, confirmed by voice |
+| Mindset toggle | a wheel button → UDP Action 2 | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice |
+| Dashboard page cycle | a wheel button → UDP Action 4 | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow |
 
 Both inputs feed the same press detector, so behaviour is identical whichever is used.
 Mid-race nothing requires clicking the dashboard, which would take focus from a
@@ -91,6 +92,24 @@ Settings: `input.long_press` (`silent` | `bookmark`), `input.silent_toggle_bit`
 Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
 whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
 If a hold doesn't toggle, bind UDP Action 3 instead — no code change needed.
+
+## Mindset and page buttons (M3)
+
+UDP Action 2 (`input.mindset_toggle_bit`, default `0x00200000`) steps through
+`input.mindset_cycle` (default `[balanced, aggressive]`). The choice is a live override of
+`mindset.active`: it changes rule thresholds at once, is confirmed by voice
+(`input.mindset_replies`), is written as a `mindset` record in the decision log, and every
+later decision record carries the active mindset.
+
+UDP Action 4 (`input.page_cycle_bit`, default `0x00800000`) steps through `ui.pages`.
+The backend owns the current page and sends it in every state frame, so `/` and `/radio`
+never diverge. Optional auto-paging (`ui.auto_page`, default off) picks the track page in
+formation/SC/VSC and the battle page when a rival is within `ui.auto_page_battle_gap_s`;
+a manual choice holds for `ui.auto_page_manual_hold_s` and no auto swap happens within
+`ui.auto_page_call_hold_s` of a call.
+
+Either bit set to `0` disables that button. No collision with Action 1 (ack/negative,
+`0x00100000`) or Action 3 (radio silent, `0x00400000`).
 
 ## What a press applies to
 

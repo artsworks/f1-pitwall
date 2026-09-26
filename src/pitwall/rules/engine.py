@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pitwall.config.models import RuleDefModel
-from pitwall.rules.expr import Predicate, make_namespace
+from pitwall.rules.expr import Predicate, TrackedNamespace, make_namespace, namespace_data
 from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
 
@@ -120,6 +120,8 @@ class RuleEngine:
     def evaluate(self, snapshot: Snapshot) -> EvalResult:
         self._snapshot = snapshot
         result = EvalResult()
+        data = namespace_data(snapshot, **self._ns_kwargs())
+        snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
         for rule in self.rules:
             d = rule.defn
             if d.sessions and snapshot.session_kind not in d.sessions:
@@ -131,7 +133,7 @@ class RuleEngine:
             if stale:
                 result.suppressed.append(Suppressed(rule, "stale"))
                 continue
-            ns = make_namespace(snapshot, **self._ns_kwargs())
+            ns = TrackedNamespace(data)
             try:
                 fired = bool(rule.when(ns))
             except Exception:
@@ -157,7 +159,6 @@ class RuleEngine:
                 text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
                 text = template
-            snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
             inputs = {
                 name: _jsonable(ns.get(name))
                 for name in dict.fromkeys(ns.accessed)

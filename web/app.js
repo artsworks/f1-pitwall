@@ -12,6 +12,13 @@
   var startedAt = performance.now(), lastFrameAt = null, lastState = null, lastStateAt = null;
   var stateTimes = [], shownCurrentId = null, shownPreviousId = null;
   var pressTimer = null;
+  // motion state: a class stays on for a fixed window so the 4 Hz re-render
+  // never restarts or cancels a running animation (docs/15 §11).
+  var until = {}, shownPage = null, shownPos = null, shownLap = null, tyreSt = {}, seenLog = null;
+  var HIT_MS = 900, FLIP_MS = 700, SWAP_MS = 420;
+  function hold(key, ms) { until[key] = performance.now() + ms; }
+  function on(key) { return (until[key] || 0) > performance.now(); }
+  function mark(key) { return on(key) ? " " + key.split(":")[0] : ""; }
 
   function el(id) { return document.getElementById(id); }
   function setText(id, txt) { var n = el(id); if (n) n.textContent = txt; }
@@ -78,6 +85,15 @@
       String(p.track || "--").toUpperCase());
     setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");
+    if (p.position && shownPos && p.position !== shownPos) {
+      hold(p.position < shownPos ? "gain:pos" : "loss:pos", 1600);
+      delete until[p.position < shownPos ? "loss:pos" : "gain:pos"];
+    }
+    if (p.position) shownPos = p.position;
+    setClass("position", mark("gain:pos") + mark("loss:pos"));
+    if (p.lap_num && shownLap && p.lap_num !== shownLap) hold("tick:lap", 900);
+    if (p.lap_num) shownLap = p.lap_num;
+    setClass("lap", mark("tick:lap"));
     var m = el("mindset");
     if (m) {
       m.textContent = String(p.mindset || "--").toUpperCase();
@@ -111,6 +127,12 @@
     renderQuali(p.quali);
     renderCool(p.quali ? p.quali.cool : null, p.quali);
     renderPitBoard(p.pit_board, p.quali, p.phase);
+    renderPage(p);
+    renderStrategy(p.strategy, p.quali);
+    renderBattle(p.strategy);
+    renderCarPage(p, p.strategy);
+    renderTrackPage(p.track_info);
+    renderSetupPage(p.setup);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -125,7 +147,9 @@
         var t = p.tyres[k], c = el("tyre-" + k);
         if (!c || !t) return;
         var st = String(t.status || "").toLowerCase();
-        c.className = "corner " + st;
+        if (tyreSt[k] && tyreSt[k] !== st) hold("flip:" + k, FLIP_MS);
+        tyreSt[k] = st;
+        c.className = "corner " + st + mark("flip:" + k);
         c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
         c.querySelector(".word").textContent = t.status || "--";
         var det = c.querySelector(".det");
@@ -140,10 +164,20 @@
       });
     }
 
-    setText("fuel", fmt(p.fuel_remaining_laps, 1) + " laps");
     var toGo = p.total_laps && p.lap_num ? p.total_laps - p.lap_num + 1 : null;
-    setText("fuel-sub", toGo !== null && (p.session_kind === "race")
-      ? "left · " + toGo + " to finish" : "laps of fuel left");
+    var fdl = p.strategy ? p.strategy.fuel_delta_laps : null;
+    if (fdl !== null && fdl !== undefined) {
+      // Backend owns the target (docs/15 open question 1): delta vs the flag.
+      setText("fuel", (fdl >= 0 ? "+" : "") + fmt(fdl, 1) + " laps");
+      setClass("fuel", "big" + (fdl < 0 ? " delta-crit" : fdl < 0.5 ? " delta-warn" : " delta-ok"));
+      setText("fuel-sub", (fdl >= 0 ? "spare" : "SHORT") + " vs flag · " +
+        fmt(p.fuel_remaining_laps, 1) + " laps in tank");
+    } else {
+      setText("fuel", fmt(p.fuel_remaining_laps, 1) + " laps");
+      setClass("fuel", "big");
+      setText("fuel-sub", toGo !== null && (p.session_kind === "race")
+        ? "left · " + toGo + " to finish" : "laps of fuel left");
+    }
 
     renderDamage(p.damage);
 
@@ -155,6 +189,239 @@
       setText("latency", "call p99 " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
         " ms · ws p99 " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
     }
+  }
+
+
+  // -- M3 race: zone F strategy + pages ------------------------------------
+
+  function gapText(g) { return g === null || g === undefined ? "--" : (g >= 0 ? "+" : "") + fmt(g, 1); }
+  function trendText(t, side) {
+    // t = gap shrinking per lap (s). Ahead shrinking = we're closing;
+    // behind shrinking = we're being caught. Colour always paired with a word.
+    if (!t) return null;
+    var closing = t > 0;
+    var word = side === "ahead" ? (closing ? "closing" : "dropping") : (closing ? "being caught" : "pulling away");
+    var cls = side === "behind" && closing ? "warn" : side === "ahead" && closing ? "ok" : "";
+    return { text: (closing ? "▲ +" : "▼ ") + fmt(t, 1) + "/lap " + word, cls: cls };
+  }
+  function span(txt, cls) {
+    var n = document.createElement("span");
+    n.textContent = txt;
+    if (cls) n.className = cls;
+    return n;
+  }
+  function rivalRow(id, r, side, s) {
+    var n = el(id);
+    if (!n) return;
+    n.innerHTML = "";
+    n.appendChild(span(side === "ahead" ? "AHEAD" : "BEHIND", "lbl"));
+    if (!r) { n.appendChild(span("clear", "dim")); return; }
+    var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
+    n.appendChild(document.createTextNode((r.pos ? "P" + r.pos + " " : "") +
+      String(r.name || "--").toUpperCase() + " " + gapText(gap) + " " + (r.compound || "")));
+    if (r.drs) n.appendChild(span(" · DRS", side === "behind" ? "crit" : "ok"));
+    if (side === "ahead" && s.undercut_s > 0) n.appendChild(span(" · UC +" + fmt(s.undercut_s, 1), "ok"));
+    if (side === "behind" && s.overcut_s > 0) n.appendChild(span(" · OC +" + fmt(s.overcut_s, 1), "ok"));
+    if (r.pitted) n.appendChild(span(" · PITTED", "warn"));
+    var tr = trendText(r.gap_trend_s, side);
+    if (tr) n.appendChild(span(" · " + tr.text, tr.cls));
+  }
+
+  function renderStrategy(s, q) {
+    var box = el("strategy"), ph = el("strat-ph");
+    if (!box) return;
+    box.hidden = !s || !!q;
+    if (ph && !q) ph.hidden = !!s;
+    if (!s || q) return;
+    setText("strat-title", "STRATEGY");
+    var w = el("s-window");
+    if (s.pit_window) {
+      var lap = lastState ? lastState.lap_num : 0;
+      w.textContent = "PIT WINDOW L" + s.pit_window.start + "–" + s.pit_window.end +
+        (s.plan ? " · " + String(s.plan.kind).toUpperCase().replace("_", " ") : "");
+      w.className = "s-window" + (lap >= s.pit_window.start ? " box" :
+        lap >= s.pit_window.start - 2 ? " soon" : "");
+    } else if (s.plan && s.plan.kind) {
+      w.textContent = String(s.plan.kind).toUpperCase().replace("_", " ") +
+        (s.plan.lap ? " L" + s.plan.lap : "");
+      w.className = "s-window";
+    } else {
+      w.textContent = s.laps_remaining ? "NO STOP · " + s.laps_remaining + " to go" : "NO STOP";
+      w.className = "s-window";
+    }
+    rivalRow("s-ahead", s.ahead, "ahead", s);
+    rivalRow("s-behind", s.behind, "behind", s);
+    setText("s-stint", s.stint_plan + (s.restricted ? " · rival data restricted" : ""));
+  }
+
+  function battleCard(id, r, side, s) {
+    var n = el(id);
+    if (!n) return;
+    n.hidden = !r;
+    if (!r) return;
+    // The gap rail persists across renders so its marker glides between gaps.
+    var rail = n.querySelector(".rail");
+    if (!rail) {
+      rail = document.createElement("div");
+      rail.className = "rail";
+      rail.appendChild(span("DRS", "rz"));
+      rail.appendChild(span("", "rc"));
+    }
+    while (n.firstChild) n.removeChild(n.firstChild);
+    var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
+    var head = span((side === "ahead" ? "AHEAD " : "BEHIND ") + (r.pos ? "P" + r.pos + " " : "") +
+      String(r.name || "--").toUpperCase() + " " + gapText(gap), "b-head");
+    n.appendChild(head);
+    n.appendChild(rail);
+    var abs = r.gap_s === null || r.gap_s === undefined ? null : Math.abs(r.gap_s);
+    rail.hidden = abs === null;
+    if (abs !== null) {
+      rail.style.setProperty("--g", String(Math.min(abs, 3) / 3));
+      rail.className = "rail " + side + (abs <= 1 ? " in" : "");
+    }
+    function kv(k, v, cls) { n.appendChild(span(k, "k")); n.appendChild(span(v, cls)); }
+    kv("tyre", (r.compound || "--") + " · " + (r.tyre_age || 0) + "L");
+    kv("pace", r.pace_delta_s === null || r.pace_delta_s === undefined ? "--" :
+      (r.pace_delta_s > 0 ? "+" + fmt(r.pace_delta_s, 2) + " s/lap slower" : fmt(-r.pace_delta_s, 2) + " s/lap faster"),
+      r.pace_delta_s < 0 ? "warn" : "");
+    var tr = trendText(r.gap_trend_s, side);
+    kv("trend", tr ? tr.text : "steady", tr ? tr.cls : "");
+    var threat = [];
+    if (r.drs) threat.push("DRS");
+    if (side === "ahead" && s.undercut_s > 0) threat.push("UNDERCUT +" + fmt(s.undercut_s, 1));
+    if (side === "behind" && s.overcut_s > 0) threat.push("OVERCUT +" + fmt(s.overcut_s, 1));
+    if (r.pitted) threat.push("PITTED");
+    kv("threat", threat.length ? threat.join(" · ") : "none", threat.length ? (side === "behind" ? "crit" : "ok") : "");
+    n.className = "b-card" + (r.drs ? " drs" : threat.length ? " threat" : "");
+  }
+
+  function renderBattle(s) {
+    var any = s && (s.ahead || s.behind);
+    var ph = el("b-ph");
+    if (ph) ph.hidden = !!any;
+    battleCard("b-ahead", s ? s.ahead : null, "ahead", s || {});
+    battleCard("b-behind", s ? s.behind : null, "behind", s || {});
+    if (!s) { setText("b-exit", "--"); setText("b-plan", "--"); return; }
+    var pe = s.pit_exit || {};
+    setText("b-exit", "PIT EXIT " + (pe.clean ? "CLEAR AIR" : "TRAFFIC") +
+      (pe.rival ? " · " + String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "") +
+      (s.pit_loss_s ? " · loss " + fmt(s.pit_loss_s, 1) + " s (" + (s.pit_loss_source || "prior") + ")" : ""));
+    setText("b-plan", s.plan ? String(s.plan.kind).toUpperCase() + " · " + (s.plan.reason || "") +
+      " · conf " + fmt(100 * (s.plan.confidence || 0), 0) + "%" : s.stint_plan);
+  }
+
+  function renderCarPage(p, s) {
+    var e = s ? s.energy : null;
+    if (e && e.per_lap_mj) {
+      setText("cp-energy", (e.lap_delta_mj >= 0 ? "+" : "") + fmt(e.lap_delta_mj, 2) + " MJ");
+      setText("cp-energy-sub", fmt(e.per_lap_mj, 2) + " MJ/lap budget" +
+        (e.laps_to_floor !== null ? " · floor in " + fmt(e.laps_to_floor, 1) + " laps" : "") +
+        (e.mode ? " · " + e.mode : ""));
+    } else {
+      setText("cp-energy", "ERS " + fmt(p.ers_pct, 0) + "%");
+      setText("cp-energy-sub", "no energy budget yet");
+    }
+    var fd = s ? s.fuel_delta_laps : null;
+    setText("cp-fuel", fd === null || fd === undefined ? fmt(p.fuel_remaining_laps, 1) + " laps" :
+      (fd >= 0 ? "+" : "") + fmt(fd, 1) + " laps");
+    setClass("cp-fuel", "big" + (fd === null || fd === undefined ? "" : fd < 0 ? " delta-crit" : fd < 0.5 ? " delta-warn" : " delta-ok"));
+    setText("cp-fuel-sub", fd === null || fd === undefined ? "laps of fuel left" :
+      (fd >= 0 ? "spare vs flag" : "SHORT vs flag — lift and coast"));
+    setText("cp-life", s && s.laps_of_pace !== null ? fmt(s.laps_of_pace, 0) + " laps" : "--");
+    setText("cp-life-sub", s ? "of pace left · " + (s.laps_remaining || 0) + " to go" +
+      (s.tyres && s.tyres.wear_per_lap_pct ? " · " + fmt(s.tyres.wear_per_lap_pct, 1) + "%/lap wear" : "") : "deg model needs race laps");
+    var f = [];
+    if (s && s.tyres) {
+      if (s.tyres.overheat) f.push("OVERHEATING");
+      if (s.tyres.graining) f.push("GRAINING");
+      if (s.tyres.blister_max_pct) f.push("BLISTER " + s.tyres.blister_max_pct + "%");
+    }
+    setText("cp-flags", f.length ? f.join(" · ") : "tyres nominal");
+    meter("cp-energy-bar", p.ers_pct === null || p.ers_pct === undefined ? null : p.ers_pct / 100);
+    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
+    meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
+      lop !== null && lop !== undefined && togo && lop < togo ? "short" : "");
+    setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " dim"));
+  }
+
+  function meter(id, frac, cls) {
+    var n = el(id);
+    if (!n) return;
+    n.parentNode.hidden = frac === null;
+    if (frac === null) return;
+    n.style.setProperty("--f", String(Math.max(0, Math.min(1, frac))));
+    n.className = cls || "";
+  }
+
+  function tpRow(id, txt, cls) { setText(id, txt); setClass(id, "tp-row" + (cls ? " " + cls : "")); }
+  function renderTrackPage(t) {
+    if (!t) return;
+    var st = el("tp-status");
+    if (st) {
+      st.textContent = t.red_flag ? "RED FLAG" : t.safety_car ? (SC_WORDS[t.safety_car] || "SC") +
+        (t.sc_laps ? " · " + t.sc_laps + " laps" : "") : String(t.phase || "--").replace("_", " ").toUpperCase();
+      st.className = "tp-status" + (t.red_flag ? " red" : t.safety_car ? " sc" : "");
+    }
+    var r = t.rain_pct || [0, 0, 0];
+    tpRow("tp-weather", "RAIN now " + r[0] + "% · 10 min " + r[1] + "% · 30 min " + r[2] + "%" +
+      (t.weather_crossover ? " · CROSSOVER " + String(t.weather_crossover).toUpperCase() : ""),
+      t.weather_crossover ? "warn" : "");
+    tpRow("tp-flags", t.blue_flag ? "BLUE FLAG · let the leader by" : "no blue flag", t.blue_flag ? "warn" : "");
+    tpRow("tp-pens", "PENALTY " + (t.penalty_s || 0) + " s · warnings " + (t.warnings || 0) +
+      " · cuts " + (t.corner_cut_warnings || 0) + (t.unserved ? " · " + t.unserved + " UNSERVED" : ""),
+      t.unserved ? "crit" : t.penalty_s ? "warn" : "");
+    tpRow("tp-traffic", "GAPS ahead " + gapText(t.gap_ahead_s) + " · behind " +
+      gapText(t.gap_behind_s === null ? null : -t.gap_behind_s) + " · pit exit " +
+      (t.pit_exit_clean ? "clear" : "traffic"), t.pit_exit_clean ? "" : "warn");
+  }
+
+  function renderSetupPage(su) {
+    var ol = el("sp-list");
+    if (!ol) return;
+    ol.innerHTML = "";
+    if (!su) { var d = document.createElement("li"); d.className = "dim"; d.textContent = "no setup packet yet"; ol.appendChild(d); return; }
+    Object.keys(su.values).forEach(function (k) {
+      var li = document.createElement("li");
+      li.appendChild(span(k.replace(/_/g, " "), "k"));
+      li.appendChild(span(fmt(su.values[k], 1)));
+      ol.appendChild(li);
+    });
+    ["fl", "fr", "rl", "rr"].forEach(function (k) {
+      if (!su.pressures[k]) return;
+      var li = document.createElement("li");
+      li.appendChild(span(k.toUpperCase() + " pressure", "k"));
+      li.appendChild(span(fmt(su.pressures[k], 1) + " psi"));
+      ol.appendChild(li);
+    });
+  }
+
+  function renderPage(p) {
+    var page = p.page || "race", pages = p.pages || ["race"];
+    if (shownPage !== null && page !== shownPage) {
+      var from = pages.indexOf(shownPage), to = pages.indexOf(page);
+      var back = from >= 0 && to >= 0 && (to === from - 1 || (from === 0 && to === pages.length - 1));
+      document.body.style.setProperty("--swap-dx", back ? "-1.6rem" : "1.6rem");
+      hold("swap", SWAP_MS);
+    }
+    shownPage = page;
+    pages.concat(["race"]).forEach(function (n) {
+      document.body.classList.toggle("page-" + n, n === page);
+    });
+    document.body.classList.toggle("swap", on("swap"));
+    var pe = el("page");
+    if (pe && pe.dataset.key !== page + "|" + pages.join()) {
+      pe.dataset.key = page + "|" + pages.join();
+      pe.innerHTML = "";
+      pe.appendChild(span(page.toUpperCase(), "pg-name"));
+      var dots = span("", "pg-dots");
+      pages.forEach(function (n) { dots.appendChild(span("", n === page ? "on" : "")); });
+      pe.appendChild(dots);
+      if (on("swap")) restart(pe, "pg-flip");
+    }
+  }
+
+  function sendCtl(msg) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }
 
   function clock(s) {
@@ -515,7 +782,20 @@
         banner.className = "banner stalewarn";
         text.textContent = "TELEMETRY STALE · ADVICE PAUSED";
       } else if (cur) {
-        banner.className = "banner p" + cur.priority;
+        if (cur.id !== shownCurrentId) {
+          hold("hit", HIT_MS);
+          var life = el("call-life");
+          if (life) {
+            life.style.setProperty("--life", (IDLE_S[cur.priority] || 20) + "s");
+            life.style.setProperty("--life-at", "-" + (ageS(cur) || 0) + "s");
+            restart(life, "run");
+          }
+          if (cur.priority === 1 && (ageS(cur) || 0) < 3 && navigator.vibrate &&
+              document.visibilityState === "visible") {
+            try { navigator.vibrate([90, 60, 90]); } catch (e) { /* unsupported */ }
+          }
+        }
+        banner.className = "banner p" + cur.priority + mark("hit");
         if (text.textContent !== cur.text) text.textContent = cur.text;
         var pri = document.createElement("span");
         pri.className = "pri"; pri.textContent = "P" + cur.priority;
@@ -567,9 +847,16 @@
       log.appendChild(e);
       return;
     }
+    var fresh = seenLog === null ? {} : null;
     rows.forEach(function (c) {
       var li = document.createElement("li");
-      if (c.audio === "dropped") li.className = "drop";
+      if (seenLog !== null && !seenLog[c.id]) hold("enter:" + c.id, 700);
+      if (fresh) fresh[c.id] = true; else seenLog[c.id] = true;
+      li.className = ((c.audio === "dropped" ? "drop" : "") + mark("enter:" + c.id)).trim();
+      // rows are rebuilt each render: resume the entrance where it left off
+      if (on("enter:" + c.id)) {
+        li.style.animationDelay = (until["enter:" + c.id] - 700 - performance.now()) + "ms";
+      }
       var lap = document.createElement("span");
       lap.className = "lap"; lap.textContent = "L" + c.lap;
       var mk = document.createElement("span");
@@ -586,6 +873,7 @@
       [lap, mk, st, txt, tag].forEach(function (n) { li.appendChild(n); });
       log.appendChild(li);
     });
+    if (fresh) seenLog = fresh;
   }
 
   function render() {
@@ -677,12 +965,63 @@
       sendPress(true);
     }
   });
+  // P = next page, M = next mindset: same backend state the UDP Actions 4/2
+  // drive, so every client (/ and /radio) stays in sync.
+  document.addEventListener("keydown", function (ev) {
+    if (ev.repeat || !document.hasFocus()) return;
+    if (ev.code === "KeyP") sendCtl({ type: "page" });
+    else if (ev.code === "KeyM") sendCtl({ type: "mindset" });
+  });
+  ["page", "mindset"].forEach(function (id) {
+    var n = el(id);
+    if (n) n.addEventListener("click", function () { sendCtl({ type: id }); });
+  });
   document.addEventListener("keyup", function (ev) {
     if (ev.code === "Space" && document.hasFocus()) {
       ev.preventDefault();
       sendPress(false);
     }
   });
+
+  // Phone: swipe left/right steps pages through the same backend page state.
+  var touch0 = null;
+  document.addEventListener("touchstart", function (ev) {
+    touch0 = null;
+    if (ev.touches.length === 1 && !ev.target.closest(".transport")) {
+      touch0 = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    }
+  }, { passive: true });
+  document.addEventListener("touchcancel", function () { touch0 = null; }, { passive: true });
+  document.addEventListener("touchend", function (ev) {
+    if (!touch0 || !lastState) return;
+    var dx = ev.changedTouches[0].clientX - touch0.x, dy = ev.changedTouches[0].clientY - touch0.y;
+    touch0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+    var pages = lastState.pages || ["race"], i = pages.indexOf(lastState.page || "race");
+    var next = pages[(i + (dx < 0 ? 1 : pages.length - 1)) % pages.length];
+    if (next) sendCtl({ type: "page", name: next });
+  }, { passive: true });
+
+  // Phone on the wheel stand: keep the screen awake where the browser allows.
+  var wake = null;
+  function keepAwake() {
+    if (!navigator.wakeLock || document.visibilityState !== "visible" || wake) return;
+    navigator.wakeLock.request("screen").then(function (w) {
+      wake = w;
+      w.addEventListener("release", function () { wake = null; });
+    }).catch(function () { /* insecure origin or denied */ });
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  document.addEventListener("pointerdown", keepAwake);
+  keepAwake();
+
+  // Sticky banner on phone sits directly under the (wrapping) status bar.
+  var statusEl = document.querySelector(".status");
+  if (statusEl && window.ResizeObserver) {
+    new ResizeObserver(function () {
+      document.body.style.setProperty("--status-h", statusEl.offsetHeight + "px");
+    }).observe(statusEl);
+  }
 
   setInterval(render, 250);
   render();

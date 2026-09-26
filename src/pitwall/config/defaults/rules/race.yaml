@@ -1,0 +1,272 @@
+rules:
+  # Pit calls read the optimiser's plan (docs/18). The gate fields sit in
+  # `when` so the prediction and its confidence land in the decision log.
+  - id: box_now
+    sessions: [race]
+    priority: 1
+    when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
+    still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data, car_status]
+    say:
+      - "Box, box. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds in it"
+      - "Box this lap. {pit_plan_reason}"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, staying out. Window is laps {pit_window_start} to {pit_window_end}"
+  - id: box_in_n
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and pit_plan == 'box_in_n' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_gain_s >= mode.pit_gain_min_s"
+    clear_when: "pit_plan != 'box_in_n'"
+    still_true: "pit_plan == 'box_in_n'"
+    cooldown_s: 60
+    cooldown_group: pit
+    requires: [lap_data, car_status]
+    say:
+      - "Plan is box lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
+      - "We're looking at lap {pit_plan_lap} for the stop"
+  - id: overcut_stay_out
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and pit_plan == 'overcut' and pit_plan_confidence >= mode.pit_confidence_min"
+    clear_when: "pit_plan != 'overcut'"
+    cooldown_s: 60
+    cooldown_group: pit
+    requires: [lap_data, session_history]
+    say:
+      - "{pit_plan_rival_name} has boxed. Stay out and push, overcut is on"
+      - "{pit_plan_rival_name} pitted. Push now, we go long"
+  - id: tyre_life
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and laps_of_pace >= 1 and laps_of_pace < laps_remaining and laps_of_pace < th.tyre_life_speak_laps and lap_num % mode.rival_info_every_n_laps == 0"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    requires: [lap_data, car_damage]
+    say:
+      - "These tyres have about {laps_of_pace:.0f} laps of pace left"
+      - "Tyre check, roughly {laps_of_pace:.0f} laps of pace in them"
+  - id: tyre_overheat
+    sessions: [race]
+    priority: 2
+    when: "overheat"
+    clear_when: "not overheat"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are running hot. Ease the slides"
+      - "Temps are high, look after the rears"
+  - id: tyre_graining
+    sessions: [race]
+    priority: 2
+    when: "graining"
+    clear_when: "not graining"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are cold and graining. Work them, lean on the fronts"
+  - id: tyre_blister
+    sessions: [race]
+    priority: 2
+    when: "blister_max_pct >= th.blister_warn_pct"
+    clear_when: "blister_max_pct < th.blister_warn_pct - th.blister_hysteresis_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say:
+      - "Blistering at {blister_max_pct} percent. Manage the tyres"
+  - id: fuel_short
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps < -mode.lift_coast_trigger_laps"
+    clear_when: "fuel_margin_laps >= 0"
+    cooldown_s: 120
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is short, {fuel_margin_laps:.1f} laps. Lift and coast into the big stops"
+      - "We're {fuel_margin_laps:.1f} laps short on fuel. Start lifting"
+  - id: fuel_marginal
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps < mode.fuel_margin_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps"
+    clear_when: "fuel_margin_laps >= mode.fuel_margin_laps + th.fuel_hysteresis_laps"
+    cooldown_s: 180
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is tight, margin {fuel_margin_laps:.1f} laps. Keep an eye on it"
+  - id: fuel_spare
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps > th.fuel_spare_laps and sector == 1"
+    clear_when: "fuel_margin_laps <= th.fuel_spare_laps"
+    cooldown_s: 600
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is good, {fuel_margin_laps:.1f} laps spare. Use it"
+  - id: energy_over
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and energy_mode == 'over' and sector == 2"
+    clear_when: "energy_mode != 'over'"
+    cooldown_s: 120
+    cooldown_group: energy
+    requires: [car_status]
+    say:
+      - "Over the energy budget, {energy_lap_delta_mj:+.1f} megajoules on the lap. Harvest more"
+  - id: energy_under
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and energy_mode == 'under' and sector == 2"
+    clear_when: "energy_mode != 'under'"
+    cooldown_s: 180
+    cooldown_group: energy
+    requires: [car_status]
+    say:
+      - "Energy in hand, {energy_lap_delta_mj:+.1f} megajoules on the lap. You can deploy more"
+  - id: overtake_mode
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and energy_mode == 'attack_ok' and gap_ahead_s <= mode.overtake_call_gap_s and drs_zone_ahead"
+    clear_when: "gap_ahead_s > mode.overtake_call_gap_s + th.gap_hysteresis_s"
+    cooldown_s: 60
+    requires: [car_status, lap_data]
+    say:
+      - "Overtake mode is yours on {rival_ahead_name}. Use it"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Energy is there, go"
+  - id: drs_attack
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and drs_available and drs_zone_ahead"
+    clear_when: "not drs_available"
+    cooldown_s: 90
+    requires: [car_status, lap_data]
+    say:
+      - "DRS on {rival_ahead_name}. {gap_ahead_s:.1f} seconds"
+  - id: penalty
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
+      - "We've been given {penalty_time_s} seconds. {penalty_s} total"
+  - id: serve_penalty
+    sessions: [race]
+    priority: 2
+    when: "unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now', 'box_in_n', 'cheap_stop')"
+    clear_when: "unserved_drive_through + unserved_stop_go == 0"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Unserved penalty on the car. We serve it at the stop"
+  - id: track_warnings
+    sessions: [race]
+    priority: 3
+    when: "corner_cut_warnings >= th.warnings_warn"
+    clear_when: "corner_cut_warnings < th.warnings_warn"
+    cooldown_s: 300
+    requires: [lap_data]
+    say:
+      - "That's {corner_cut_warnings} track limit warnings. Next one's a penalty risk"
+  - id: blue_flag
+    sessions: [race]
+    priority: 1
+    when: "blue_flag"
+    clear_when: "not blue_flag"
+    cooldown_s: 20
+    requires: [car_status]
+    say:
+      - "Blue flag. Let him by"
+      - "Blues, leader behind. Give him the room"
+  - id: rival_ahead_pitted
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and rival_ahead_pitted and pit_plan != 'overcut'"
+    clear_when: "not rival_ahead_pitted"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    requires: [lap_data]
+    say:
+      - "{rival_ahead_name} ahead has boxed"
+      - "{rival_ahead_name} is in the pits"
+  - id: rival_behind_pitted
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and rival_behind_pitted"
+    clear_when: "not rival_behind_pitted"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} behind has boxed. Watch the undercut"
+  - id: weather_to_inter
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_inter'"
+    clear_when: "weather_crossover != 'to_inter'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Inters will be the tyre"
+  - id: weather_to_wet
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_wet'"
+    clear_when: "weather_crossover != 'to_wet'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Full wets will be the tyre"
+  - id: weather_to_dry
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_dry'"
+    clear_when: "weather_crossover != 'to_dry'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Track is drying, slicks soon"
+  - id: sc_deployed
+    sessions: [race]
+    priority: 1
+    when: "phase == 'sc'"
+    clear_when: "phase != 'sc'"
+    requires: [session]
+    say:
+      - "Safety car, safety car. Delta positive, stay above it"
+  - id: vsc_deployed
+    sessions: [race]
+    priority: 1
+    when: "phase == 'vsc'"
+    clear_when: "phase != 'vsc'"
+    requires: [session]
+    say:
+      - "Virtual safety car. Stick to the delta"
+  - id: lights_out
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and lap_num == 1 and lights_out and sector == 1"
+    clear_when: "lap_num != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_laps:.1f}"
+  - id: pit_exit_traffic_race
+    sessions: [race]
+    priority: 2
+    when: "phase == 'out_lap' and rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s"
+    clear_when: "phase != 'out_lap'"
+    requires: [lap_data]
+    say:
+      - "{rival_pit_exit_name} right there at the pit exit. Hold the line"

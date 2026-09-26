@@ -1,0 +1,9 @@
+track_id: 3
+name: sakhir
+pit_loss_s: {green: 23.0, vsc: 12.5, sc: 8.5}
+pit_exit_m: 380.0
+pit_entry_m: 5250.0
+fuel_kg_per_lap: 1.8
+deg_ms_per_lap: {16: 130, 17: 85, 18: 55}
+base_pace_ms: 0
+thresholds: {}

@@ -1,6 +1,6 @@
 # Dashboard redesign: the second-monitor race-engineer screen
 
-Status: **phases 1–6 implemented** in `web/` (call evidence, fuel delta and M3 strategy await backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
+Status: **phases 1–6 implemented** in `web/`; M3 adds the zone F `strategy` block, backend-owned `fuel_delta_laps` and backend-owned pages (§10) (call evidence awaits backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
 `docs/mockups/` (`dashboard-1080p.html`, `dashboard-m3-stale.html`, `radio.html`). They
 are vanilla HTML/CSS, self-contained, no build step — open them in a browser.
 Their call evidence, fuel target and damage values illustrate planned backend fields.
@@ -34,7 +34,7 @@ current runtime is unchanged; future call-history additions are identified below
   *displays* their state.
 - Not a debrief tool. Stint plots, deg curves and call grading live in the post-session
   HTML debrief (M4, `16-debrief-design.md`) and review mode (`07-replay-and-debug.md`).
-- No continuous animation. A new call makes a brief, one-time transition into the
+- No continuous animation (motion rules in §11). A new call makes a brief, one-time transition into the
   fixed banner while the old call settles into a smaller previous-call line. Urgent
   calls and stale/error states appear immediately; reduced-motion users get no motion.
 
@@ -371,3 +371,46 @@ render check against a test recording. No running game is needed.
    derived number acceptable?
 9. **1440p only?** If the second monitor is known, the `clamp()` scaling can be dropped
    for fixed pixel sizes.
+
+## 10. Pages (M3)
+
+The backend owns `page` (sent in every state frame with `pages`); UDP Action 4, `P` or a
+click on the page pill cycles it, and every client follows. Pages are alternate grid
+layouts over the same zones: the status bar, call banner, footer, staleness guard and
+LIVE/STALE never move, and the pit board / cool-down takeovers still win.
+
+| Page | Occasion | Zones |
+|---|---|---|
+| race | default, 90 % of laps | A B C D F E (zone F = strategy) |
+| battle | a rival in scope | battle cards (immediate ahead/behind only: gap, trend, pace delta, tyre + age, DRS/UC/OC threat), pit-exit projection, F, E |
+| car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
+| track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
+| setup | between sessions, display only | read-only Car Setups values and pressures |
+
+Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
+`/radio` keeps its compact layout and shows the current page name.
+
+
+## 11. Motion (M3)
+
+Motion marks a change and then stops. Nothing loops, pulses or scrolls, and every
+number and word is readable in its final state on the first frame.
+
+| Event | Motion | Duration |
+|---|---|---|
+| New call | priority bar stretches back (P1: three white flashes) and a light sweep crosses the banner; text is instant | 700–900 ms |
+| Call age | 3–4 px hairline under the banner shrinks to the fade time for that priority | the call's lifetime |
+| Radio log row | drops in from the banner side with a brief tint | 700 ms |
+| Page swap | page zones slide in from the direction of travel, staggered 0/40/80 ms; the status bar, banner and footer stay put; page dots in the status pill | 420 ms |
+| Tyre status flip | one ring pulse in the new colour | 700 ms |
+| Position change | number lifts green (gain) or drops red (loss) | 1.6 s |
+| Lap change | lap counter flashes | 900 ms |
+| Battle gap | marker on a 0–3 s rail glides to the new gap; DRS third shaded | 600 ms |
+| SC/VSC, red flag, stale | static diagonal stripes on the status bar | while true |
+
+Animations run off timestamps, not the render tick, so the 4–5 Hz re-render never
+restarts one. On phones in portrait the status bar and banner are sticky while the
+page scrolls, with notch-safe insets; the page also swipes left/right to change pages
+(this sends the same `page` message as Action 4) and holds a screen wake lock where the
+browser allows. A P1 vibrates once on phones that support it. `prefers-reduced-motion:
+reduce` cuts every animation and transition to a single frame and hides the age hairline.
