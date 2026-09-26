@@ -57,8 +57,8 @@ measurable effect on the game's 1 % lows.
 - Review mode: replay with a scrubbable timeline of calls and suppressions, plus the
   "grade this call" control.
 - `pitwall diff` for A/B-ing two rule configs over one recording or a corpus.
-- Feedback loop: long-press bookmark, post-session feedback screen, `pitwall report` bundle, GitHub issue templates.
-- Driver input: Fanatec button 2 (bound to UDP Action 1) and spacebar; single press = acknowledge, double = negative; per-rule backoff from negatives.
+- Feedback loop: bookmark, post-session feedback screen, `pitwall report` bundle, GitHub issue templates.
+- Driver input: Fanatec button 2 (bound to UDP Action 1) and spacebar; single press = acknowledge, double = negative, long press = radio silent on/off (UDP Action 3 also toggles); per-rule backoff from negatives.
 
 **Exit:** a full Q1–Q3 driven with the assistant, with the decision log reviewed
 afterwards for false positives. Tune from the recording, not from another run.

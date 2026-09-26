@@ -67,7 +67,7 @@ the game is not attempted; if calls are hard to hear, lower the in-game volume o
 radio to a different device.
 
 **The dashboard is display-only during a session.** Every mid-race control — acknowledge,
-negative, bookmark, mindset toggle, quiet — has a wheel or keyboard binding
+negative, radio silent, bookmark, mindset toggle, quiet — has a wheel or keyboard binding
 (`12-driver-input.md`). Run the game in borderless windowed mode if you want to click the
 dashboard between sessions without minimising it.
 

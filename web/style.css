@@ -37,6 +37,7 @@ body.dash > * { background: var(--bg); min-width: 0; min-height: 0; }
   padding: .05rem .6rem; font-size: 1.1rem; letter-spacing: .1em; }
 .pill.aggr { border-color: var(--aggr); background: var(--aggr); color: #000; }
 .quiet { color: var(--warn); }
+.silent { color: var(--info); font-weight: 700; }
 body.connecting .status .live { color: var(--dim); }
 body.stale .status { background: color-mix(in srgb, var(--crit) 35%, var(--panel)); }
 body.stale .status .live { color: #fff; }
@@ -175,7 +176,7 @@ body.redflag .status { background: color-mix(in srgb, var(--crit) 55%, var(--pan
   max-width: 30rem; }
 .press.ack { border-color: var(--ok); color: var(--ok); }
 .press.neg { border-color: var(--crit); color: var(--crit); }
-.press.bookmark { border-color: var(--info); color: var(--info); }
+.press.bookmark, .press.silent, .press.unsilent { border-color: var(--info); color: var(--info); }
 .quali .qmain { font-size: 1.9rem; font-weight: bold; line-height: 1.2; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .quali .qmain.ok { color: var(--ok); }

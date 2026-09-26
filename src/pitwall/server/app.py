@@ -174,6 +174,7 @@ def state_payload(
     metrics: Metrics,
     quiet: bool,
     quiet_left_s: float | None = None,
+    silent: bool = False,
 ) -> dict[str, Any]:
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
@@ -233,6 +234,7 @@ def state_payload(
         "verbosity": settings.policy.verbosity,
         "quiet": quiet or quiet_left_s is not None,
         "quiet_left_s": quiet_left_s,
+        "silent": silent,
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
         "quali": quali_payload(snapshot, settings.thresholds),

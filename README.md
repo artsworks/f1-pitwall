@@ -47,6 +47,18 @@ Open `http://localhost:8000` on the second monitor (`/radio` is the compact
 log view). You should hear "Pit wall online." on start, and the dashboard goes
 LIVE as soon as you are on track (the game sends nothing from the menus).
 
+### Wheel buttons
+
+In the game's controls menu, bind a free wheel button to **UDP Action 1** (and
+optionally another to **UDP Action 3**). The pit wall answers every press by voice.
+
+| Press | Action |
+|---|---|
+| UDP 1 single | Acknowledge the last call ("Copy.") |
+| UDP 1 double | Negative ("Noted."); with no recent call, quiet for 5 minutes |
+| UDP 1 held ≥ 0.8 s | **Radio silent** on/off: no speech (urgent P1 calls still speak), dashboard keeps the radio |
+| UDP 3 single | Radio silent on/off (use this if the hold doesn't register on your wheel) |
+
 To update later: `git pull; uv sync`.
 
 ### If something is off

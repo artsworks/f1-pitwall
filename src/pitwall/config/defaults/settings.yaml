@@ -65,4 +65,7 @@ input:
   quiet_minutes: 5
   spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg
   udp_action_bit: 0x00100000
+  long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
+  silent_toggle_bit: 0x00400000  # any press on UDP Action 3 also toggles radio silent; 0 disables
+  silent_keeps_p1: true     # urgent (P1) calls still speak while silent
   negative_mute_laps: 3

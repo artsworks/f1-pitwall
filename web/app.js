@@ -87,6 +87,12 @@
     if (v) {
       v.innerHTML = "";
       v.appendChild(document.createTextNode(p.verbosity || ""));
+      if (p.silent) {
+        var s = document.createElement("span");
+        s.className = "silent";
+        s.textContent = " RADIO SILENT";
+        v.appendChild(s);
+      }
       if (p.quiet) {
         var q = document.createElement("span");
         q.className = "quiet";
@@ -629,7 +635,7 @@
     } else if (m.type === "press") {
       var pe = el("press");
       if (pe) {
-        var label = p.kind === "ack" ? "ACK" : p.kind === "neg" ? "NEG" : "BOOKMARK";
+        var label = { ack: "ACK", neg: "NEG", silent: "RADIO SILENT", unsilent: "RADIO ON" }[p.kind] || "BOOKMARK";
         pe.hidden = false;
         pe.className = "press " + p.kind;
         clearTimeout(pressTimer);

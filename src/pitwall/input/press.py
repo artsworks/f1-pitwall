@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Press:
-    kind: str  # "ack" | "neg" | "bookmark"
+    kind: str  # "ack" | "neg" | "bookmark" | "silent"
     t: float
 
 

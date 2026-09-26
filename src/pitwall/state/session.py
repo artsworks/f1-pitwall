@@ -335,6 +335,7 @@ class SessionState:
         *,
         straight_hold_s: float = 1.0,
         press_bit: int | None = None,
+        toggle_bit: int | None = None,
         thresholds: Mapping[str, Any] | None = None,
     ) -> None:
         self.last_packet_t: float | None = None
@@ -347,10 +348,14 @@ class SessionState:
         self.session_listeners: list[Callable[[int], None]] = []
         # Called with (recv_time, down) on each UDP-action button edge.
         self.press_listeners: list[Callable[[float, bool], None]] = []
+        # Called with recv_time on each press of the radio-silent toggle button.
+        self.toggle_listeners: list[Callable[[float], None]] = []
         self._ema_fast_s = ema_fast_s
         self._ema_slow_s = ema_slow_s
         self._straight_hold_s = straight_hold_s
         self._press_bit = press_bit
+        self._toggle_bit = toggle_bit or None
+        self._toggle_down = False
         self._thresholds = dict(thresholds or {})
         self._reset_session()
 
@@ -713,13 +718,20 @@ class SessionState:
             self.red_flag = False
         elif pkt.code == "SEND":
             self.session_ended = True
-        elif pkt.code == "BUTN" and self._press_bit is not None:
+        elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
-            down = bool(status & self._press_bit)
-            if down != self._press_down:
-                self._press_down = down
-                for cb in self.press_listeners:
-                    cb(recv_time, down)
+            if self._press_bit is not None:
+                down = bool(status & self._press_bit)
+                if down != self._press_down:
+                    self._press_down = down
+                    for cb in self.press_listeners:
+                        cb(recv_time, down)
+            if self._toggle_bit is not None:
+                tdown = bool(status & self._toggle_bit)
+                if tdown and not self._toggle_down:
+                    for tcb in self.toggle_listeners:
+                        tcb(recv_time)
+                self._toggle_down = tdown
 
     def _on_session_history(self, pkt: SessionHistoryPacket) -> None:
         self._histories[pkt.car_idx] = pkt

@@ -74,6 +74,23 @@ class InputSettings(BaseModel):
     neg_replies: list[str] = Field(default_factory=lambda: ["Noted.", "Copy, noted."])
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
+    long_press: Literal["bookmark", "silent"] = "bookmark"
+    silent_toggle_bit: int = 0  # e.g. 0x00400000 = UDP Action 3; any press toggles
+    silent_keeps_p1: bool = True
+    silent_on_replies: list[str] = Field(
+        default_factory=lambda: [
+            "Radio silent. Leave you to it.",
+            "Copy, I'll leave you to it.",
+            "Going silent. It's all yours.",
+        ]
+    )
+    silent_off_replies: list[str] = Field(
+        default_factory=lambda: [
+            "Back with you. Feeding you info again.",
+            "Radio's back on. I'll keep you posted.",
+            "Back on the radio.",
+        ]
+    )
     negative_mute_laps: int = 3
 
 

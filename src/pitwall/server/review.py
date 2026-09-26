@@ -32,6 +32,8 @@ _TIMELINE_OUTCOMES = {
     "quiet_until",
     "quiet_off",
     "bookmark",
+    "silent_on",
+    "silent_off",
 }
 
 

@@ -49,6 +49,7 @@ class Engine:
         )
         self._press_queue: list[Press] = []
         state.press_listeners.append(self._on_press_edge)
+        state.toggle_listeners.append(lambda t: self._press_queue.append(Press("silent", t)))
         self.db: Any = dispatcher.log.db
         self._laps_written = 0
         self._session_upserted: int | None = None
@@ -206,6 +207,7 @@ def build_engine(
         ema_slow_s=settings.engine.ema_slow_s,
         straight_hold_s=settings.engine.straight_hold_s,
         press_bit=settings.input.udp_action_bit,
+        toggle_bit=settings.input.silent_toggle_bit,
         thresholds=settings.thresholds,
     )
     state.register(ingest)

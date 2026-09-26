@@ -327,3 +327,38 @@ def test_rule_reply_and_longer_response_window() -> None:
     d.on_press(Press("neg", 16.0), _snap(16.0))  # past the default 8 s window
     assert d.quiet_until is None
     assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]
+
+
+class AudioSink(CollectSink):
+    speaks_audio = True
+
+
+def test_radio_silent_keeps_screen_mutes_headset() -> None:
+    from pitwall.input.press import Press
+
+    d, screen, buf = _dispatcher(min_gap_s=0.0)
+    audio = AudioSink()
+    d.sinks.append(audio)
+    d.input = InputSettings(spoken_replies=True, long_press="silent")
+    d.on_press(Press("bookmark", 0.0), _snap(0.0))  # long press toggles
+    assert d.silent is True
+    d.drain(0.0)
+    assert audio.spoken == ["Radio silent. Leave you to it."]
+    d.submit([_cand("info", priority=2, text="gap 1.2")], _snap(1.0))
+    d.submit([_cand("urgent", priority=1, text="car behind")], _snap(1.0))
+    d.drain(1.0)
+    assert "gap 1.2" in screen.spoken and "gap 1.2" not in audio.spoken
+    assert "car behind" in audio.spoken  # P1 still speaks
+    d.on_press(Press("silent", 2.0), _snap(2.0))  # UDP 3 toggle
+    d.drain(2.0)
+    assert d.silent is False and audio.spoken[-1] == "Back with you. Feeding you info again."
+    outcomes = [r["outcome"] for r in _log(buf)]
+    assert "silent_on" in outcomes and "silent_off" in outcomes and "bookmark" not in outcomes
+
+
+def test_long_press_still_bookmarks_by_default() -> None:
+    from pitwall.input.press import Press
+
+    d, _, buf = _dispatcher()
+    d.on_press(Press("bookmark", 0.0), _snap(0.0))
+    assert d.silent is False and _log(buf)[-1]["outcome"] == "bookmark"

@@ -372,6 +372,7 @@ async def _state_broadcast(
             metrics=engine.metrics,
             quiet=store.current().policy.quiet,
             quiet_left_s=_quiet_left_s(engine, now),
+            silent=engine.dispatcher.silent,
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
@@ -466,6 +467,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         ema_slow_s=settings.engine.ema_slow_s,
         straight_hold_s=settings.engine.straight_hold_s,
         press_bit=settings.input.udp_action_bit,
+        toggle_bit=settings.input.silent_toggle_bit,
         thresholds=settings.thresholds,
     )
     state.register(ingest)

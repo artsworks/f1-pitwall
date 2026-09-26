@@ -109,6 +109,7 @@ class Dispatcher:
         self.latest_snapshot: Snapshot | None = None
         # Driver input: presses and their effects (docs/12).
         self.quiet_until: float | None = None
+        self.silent = False  # radio silent: calls go to the screen, not the headset
         self.on_press_event: Any = None  # callable(payload dict) -> hub broadcast
         self._spoken_calls: list[tuple[Call, float]] = []  # (call, est. speech end t)
         self._negatives: dict[str, int] = {}
@@ -246,8 +247,9 @@ class Dispatcher:
                     sink.cancel(self._current.id)
                 self._current = None
             spoken_t = self.clock.now()
+            muted = call.screen_only or self._silenced(call)
             for sink in self.sinks:
-                if call.screen_only and sink.speaks_audio:
+                if muted and sink.speaks_audio:
                     continue
                 sink.speak(call)
             self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
@@ -259,6 +261,22 @@ class Dispatcher:
         for q in held:
             heapq.heappush(self._queue, q)
         return emitted
+
+    def _silenced(self, call: Call) -> bool:
+        if not self.silent or "reply" in call.tags:
+            return False
+        return not (call.priority == 1 and self.input.silent_keeps_p1)
+
+    def toggle_silent(self, snapshot: Snapshot) -> None:
+        """Radio silent on/off: leave the driver alone; the screen keeps the radio."""
+        self.silent = not self.silent
+        now = snapshot.now
+        self._log_press(now, snapshot, "silent_on" if self.silent else "silent_off", None, None)
+        pool = self.input.silent_on_replies if self.silent else self.input.silent_off_replies
+        self._reply(list(pool), snapshot)
+        self._broadcast_press(
+            {"kind": "silent" if self.silent else "unsilent", "lap": snapshot.lap_num, "text": ""}
+        )
 
     def purge(self, reason: str, now: float | None = None) -> int:
         """Drop every queued (not yet spoken) call, logging each as suppressed."""
@@ -310,6 +328,11 @@ class Dispatcher:
     def on_press(self, press: Press, snapshot: Snapshot) -> None:
         """Route an ack/neg/bookmark to the most recent spoken call (docs/12)."""
         now = snapshot.now
+        if press.kind == "silent" or (
+            press.kind == "bookmark" and self.input.long_press == "silent"
+        ):
+            self.toggle_silent(snapshot)
+            return
         target: Call | None = None
         for call, end_t in reversed(self._spoken_calls):
             if "reply" in call.tags:
@@ -392,7 +415,7 @@ class Dispatcher:
         self._broadcast_press(payload)
 
     def _reply(self, pool: list[str], snapshot: Snapshot) -> None:
-        """Queue a short spoken reply to a press; bypasses quiet and budgets."""
+        """Queue a short spoken reply to a press; bypasses quiet, silent and budgets."""
         if not self.input.spoken_replies or not pool:
             return
         now = snapshot.now

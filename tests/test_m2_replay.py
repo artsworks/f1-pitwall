@@ -109,10 +109,10 @@ def test_replay_deterministic_across_speeds(tmp_path: Path) -> None:
     assert strip(logs[0]) == strip(logs[1])
 
 
-def _butn(down: bool, t: float) -> bytes:
+def _butn(down: bool, t: float, bit: int = 0x00100000) -> bytes:
     import struct
 
-    status = 0x00100000 if down else 0
+    status = bit if down else 0
     return pack_packet(
         PacketId.EVENT,
         {
@@ -320,6 +320,24 @@ def test_butn_ack_and_neg(tmp_path: Path) -> None:
         r for r in rows if r["outcome"] == "suppressed" and r["suppressed_by"] == "negative_backoff"
     ]
     assert backoff and backoff[0]["rule_id"] == "release_hold"
+
+
+def test_long_press_and_udp3_toggle_radio_silent(tmp_path: Path) -> None:
+    stream = _quali_stream(2500.0, 0.0, 6.0)
+    stream.append((1.0, _butn(True, 1.0)))  # UDP 1 held 1.2 s -> silent on
+    stream.append((2.2, _butn(False, 2.2)))
+    stream.append((4.0, _butn(True, 4.0, bit=0x00400000)))  # UDP 3 tap -> silent off
+    stream.append((4.1, _butn(False, 4.1, bit=0x00400000)))
+    stream.sort(key=lambda p: p[0])
+    rec = write_packet_stream(tmp_path / "silent.f1bin", stream)
+    log_path = tmp_path / "silent.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    asyncio.run(run_replay(rec, engine, None))
+    engine.dispatcher.log.flush()
+    outcomes = [r["outcome"] for r in _read_log(log_path)]
+    assert [o for o in outcomes if o.startswith("silent")] == ["silent_on", "silent_off"]
+    assert "bookmark" not in outcomes and "ack" not in outcomes
+    assert engine.dispatcher.silent is False
 
 
 def test_replay_writes_calls_and_laps_to_db(tmp_path: Path) -> None:
