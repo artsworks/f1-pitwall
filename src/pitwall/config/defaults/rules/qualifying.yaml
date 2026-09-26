@@ -2,7 +2,7 @@ rules:
   # Clean-air release at pit exit: speak once when the gap is good, once when a
   # worthwhile wait exists. Shared cooldown group so at most one talks per 30 s.
   - id: release_go
-    sessions: [qualifying]
+    sessions: [practice, qualifying]
     priority: 2
     when: "phase == 'garage' and release_clean and session_time_left > 60"
     clear_when: "not release_clean or phase != 'garage'"
@@ -12,8 +12,9 @@ rules:
     say:
       - "Track's clear at pit exit. Good to go now"
       - "Pit exit is clear. Go when you're ready"
+      - "Gap's there at the exit. Off you go"
   - id: release_hold
-    sessions: [qualifying]
+    sessions: [practice, qualifying]
     priority: 2
     when: "phase == 'garage' and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and session_time_left > 60"
     clear_when: "release_clean or phase != 'garage'"
@@ -23,6 +24,7 @@ rules:
     say:
       - "Traffic at pit exit. Hold about {release_wait_s:.0f} seconds"
       - "Hold {release_wait_s:.0f} seconds for a gap"
+      - "Cars coming past the exit. Give it {release_wait_s:.0f} seconds"
   # Abort advisory: projection is over the cut-off and the lap won't make it.
   - id: abort_lap
     sessions: [qualifying]
@@ -35,6 +37,7 @@ rules:
     say:
       - "Abort the lap, we're {abort_deficit_s:.1f} off the cut. Save the set"
       - "Box this lap, it's not going to be enough"
+      - "That lap's gone, {abort_deficit_s:.1f} down on the cut. Back off and save the tyres"
   - id: quali_through
     sessions: [qualifying]
     priority: 3
@@ -44,6 +47,7 @@ rules:
     requires: [lap_data, session_history]
     say:
       - "You're safe, that time's through. No need to push"
+      - "That's good enough to go through. Bring it home"
   # Comfortable margin after a lap: no need to risk the car or a fresh set.
   - id: quali_safe_cut
     sessions: [qualifying]
@@ -73,7 +77,8 @@ rules:
     clear_when: "phase == 'out_lap'"
     requires: [car_telemetry]
     say:
-      - "Pressures for the next run: {pressure_advice_text}"
+      - "For the next run, {pressure_advice_text}"
+      - "Pressures for next time: {pressure_advice_text}"
   - id: tyre_pressure_ok
     sessions: [practice, qualifying]
     priority: 2
@@ -82,6 +87,7 @@ rules:
     requires: [car_telemetry]
     say:
       - "Tyre temps were in the window on all four. Leave the pressures"
+      - "Temps were spot on all round. No pressure changes"
   # Run plan on crossing the line after a hot lap (docs/17). One per line crossing.
   - id: plan_push
     sessions: [qualifying]
@@ -125,6 +131,7 @@ rules:
     cooldown_group: run_plan
     requires: [lap_data, car_status]
     say:
+      - "Box, box. {run_plan_why}"
       - "{run_plan_why}. Box this lap"
   - id: plan_box_safe
     sessions: [qualifying]
@@ -135,6 +142,7 @@ rules:
     cooldown_group: run_plan
     requires: [lap_data, session_history]
     say:
+      - "Box, box. You're {quali_margin_s:.1f} clear, save the set"
       - "You're {quali_margin_s:.1f} clear. Bring it in, save the set"
   # Cool-down lap coaching.
   - id: cool_recharge
@@ -156,6 +164,7 @@ rules:
     requires: [car_status]
     say:
       - "Still not in recharge mode. Switch it over"
+      - "Recharge mode, please. You're still deploying"
   - id: cool_status
     sessions: [qualifying]
     priority: 3
@@ -165,6 +174,7 @@ rules:
     requires: [car_status, car_telemetry]
     say:
       - "Battery {ers_store_pct:.0f}. {cool_tyre_hint}"
+      - "{ers_store_pct:.0f} percent in the battery. {cool_tyre_hint}"
   - id: cool_vs_pole
     sessions: [qualifying]
     priority: 3
@@ -184,6 +194,7 @@ rules:
     requires: [lap_data]
     say:
       - "Last lap: {last_hot_mistakes}"
+      - "On that lap, {last_hot_mistakes}"
   - id: cool_car_behind
     sessions: [qualifying]
     priority: 1
@@ -195,10 +206,39 @@ rules:
     say:
       - "Car behind on a hot lap, {hot_car_behind_s:.0f} seconds. Off the racing line"
       - "Hot lap behind you. Move over, don't impede"
+  - id: cool_extend
+    sessions: [qualifying]
+    priority: 1
+    when: "cool_prep and cool_extend"
+    clear_when: "not cool_lap"
+    requires: [lap_data, car_status]
+    say:
+      - "Battery's only {ers_store_pct:.0f}, we want {ers_need_pct:.0f}. Stay in recharge, one more cool lap"
+      - "Not enough battery yet, {ers_store_pct:.0f}. Keep harvesting, another cool lap"
+      - "Hold off, battery {ers_store_pct:.0f}. One more lap in recharge, there's time"
+  - id: lap_deleted
+    sessions: [qualifying]
+    priority: 1
+    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and time_for_cool_and_hot"
+    clear_when: "not current_lap_invalid"
+    requires: [lap_data]
+    say:
+      - "Lap's deleted, track limits. Back off, recharge, we go again"
+      - "That one's gone, track limits. Lift, harvest, and we reset for the next"
+      - "Lap deleted. Don't waste the battery, cool it and go again"
+  - id: lap_deleted_last
+    sessions: [qualifying]
+    priority: 1
+    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and not time_for_cool_and_hot"
+    clear_when: "not current_lap_invalid"
+    requires: [lap_data]
+    say:
+      - "Lap's deleted, and no time to cool. Keep pushing, go straight into the next one"
+      - "That one's gone. No time to reset, stay flat and go again from the line"
   - id: cool_hot_mode
     sessions: [qualifying]
     priority: 1
-    when: "cool_prep"
+    when: "cool_prep and not cool_extend"
     clear_when: "not cool_lap"
     requires: [lap_data, car_status]
     say:

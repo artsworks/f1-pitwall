@@ -139,26 +139,127 @@ rules:
         say:
           - "Rears again. Bias forward, you're still on {front_brake_bias}."
           - "That's {repeat} rear lock-ups. The bias won't move itself, {front_brake_bias} now."
-  # Spun: the rears are overheated and have no traction, so a big throttle
-  # input on the rejoin spins it again.
+  # Spun: first check the mirrors. A car closing from behind means hold the
+  # car until it has passed; once clear, rejoin gently on overheated rears.
+  - id: spun_rejoin_traffic
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "spun and traffic_behind_s <= th.rejoin_traffic_s"
+    clear_when: "not spun"
+    still_true: "spun and traffic_behind_s <= th.rejoin_traffic_s + 1"
+    requires: [motion_ex, lap_data]
+    cooldown_s: 8
+    say:
+      - "Car coming, {traffic_behind_s:.1f} seconds. Hold it there, let it through."
+      - "Wait, wait. Traffic behind, {traffic_behind_s:.1f} seconds. Stay put."
+      - "Hold the car. One coming through, {traffic_behind_s:.1f} seconds."
   - id: spun_rejoin
     sessions: [practice, qualifying, race]
     priority: 1
-    when: "spun"
+    when: "spun and traffic_behind_s > th.rejoin_traffic_s + 2"
     clear_when: "not spun"
-    still_true: "spun"
+    still_true: "spun and traffic_behind_s > th.rejoin_traffic_s + 2"
     requires: [motion_ex]
     cooldown_s: 8
     say:
-      - "Easy on the throttle as you get going, the rears are cooked."
-      - "Gentle on the power getting going, rear tyres have no grip left."
-      - "Take your time rejoining. Short-shift, feather the throttle, the rears are hot."
+      - "You're clear behind. Easy on the throttle, the rears are cooked."
+      - "Clear to rejoin. Gentle on the power, no grip in the rears."
+      - "Nobody coming. Short-shift and feather it, the rears are hot."
     escalate:
       - after: 2
         say:
-          - "Lost it again. Same deal, gentle on the throttle."
-          - "That's {repeat} moments now. Rejoin slowly, and a bit less throttle on the exits."
-          - "Number {repeat}. Easy on the power, let the rears cool."
+          - "Lost it again. Clear behind, same deal, gentle on the throttle."
+          - "That's {repeat} moments now. Clear to rejoin, a bit less throttle on the exits."
+          - "Number {repeat}. You're clear. Easy on the power, let the rears cool."
+  # Just out of the pit lane: a car closing on the merge.
+  - id: pit_exit_traffic
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "pit_exit_s <= 3 and traffic_behind_s <= th.pit_exit_traffic_s"
+    clear_when: "pit_exit_s > 10"
+    still_true: "traffic_behind_s <= th.pit_exit_traffic_s + 1"
+    cooldown_s: 30
+    requires: [lap_data]
+    say:
+      - "Car coming as you exit, {traffic_behind_s:.1f} seconds. Stay off the line."
+      - "Watch the merge, one closing, {traffic_behind_s:.1f} seconds behind."
+      - "Traffic on the exit. Keep right of the line and let it go."
+  # Out-lap, last sector: what the hot lap will start into. One per out-lap.
+  - id: prep_car_behind
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_behind_kind == 'flying' and traffic_behind_s <= th.prep_behind_s"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_behind_kind == 'flying'"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    requires: [lap_data]
+    say:
+      - "Car behind on a push lap, {traffic_behind_s:.1f} seconds. Let it go, then start yours."
+      - "Push lap coming up behind. Move over, let it by before the line."
+      - "Someone's on a lap behind you. Give them the track, then go."
+  - id: slow_car_ahead
+    sessions: [practice, qualifying]
+    priority: 1
+    when: "phase == 'flying' and run_lap_kind != 'cool' and (traffic_ahead_kind != 'flying' or traffic_ahead_slow) and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 80"
+    clear_when: "traffic_ahead_m > 400 or traffic_ahead_kind == ''"
+    cooldown_s: 30
+    requires: [lap_data, car_telemetry]
+    say:
+      - "Slow car ahead, {traffic_ahead_m:.0f} metres"
+      - "Traffic ahead, {traffic_ahead_m:.0f} metres. Watch your line"
+      - "Heads up, slow car {traffic_ahead_m:.0f} metres up the road"
+  - id: prep_traffic_ahead
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind != 'flying' and traffic_ahead_s <= th.prep_traffic_s"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_s <= th.prep_traffic_s + 1"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    requires: [lap_data]
+    say:
+      - "Slow car {traffic_ahead_s:.1f} ahead. Back off and make a gap before the line."
+      - "Traffic ahead, {traffic_ahead_s:.1f} seconds, on a slow lap. Drop back a bit."
+      - "You'll catch the car ahead. Ease off, give yourself some room."
+  - id: prep_dirty_air
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s < th.tow_min_s"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_s < th.tow_min_s + 0.3"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    requires: [lap_data]
+    say:
+      - "Too close to the car ahead, {traffic_ahead_s:.1f}. Drop back, you'll be in dirty air."
+      - "Only {traffic_ahead_s:.1f} to the car in front. Let it go a bit more."
+  - id: prep_tow
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s >= th.tow_min_s and traffic_ahead_s <= th.tow_max_s"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_kind == 'flying'"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    requires: [lap_data]
+    say:
+      - "Car {traffic_ahead_s:.1f} ahead on a push lap. That's a tow, use it on the straights."
+      - "Nice gap, {traffic_ahead_s:.1f} to the car ahead. You'll get a tow."
+      - "Tow's there, {traffic_ahead_s:.1f} ahead. Stay in it down the straights."
+  - id: prep_clear
+    sessions: [practice, qualifying]
+    priority: 3
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_s > th.prep_clear_s and not (traffic_behind_kind == 'flying' and traffic_behind_s <= th.prep_behind_s)"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_s > th.prep_clear_s"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    requires: [lap_data]
+    say:
+      - "Clear ahead. Good gap for your lap."
+      - "Nobody in front, clean air. It's all yours."
+      - "Track's clear ahead. Good spacing."
   # Red flag: all sessions; repeats on cooldown while the flag stays out.
   - id: red_flag
     priority: 1
@@ -167,3 +268,4 @@ rules:
     cooldown_s: 60
     say:
       - "Red flag. Red flag. Slow down and return to the pits"
+      - "Red flag, red flag. Back to the pits, careful on the way in"

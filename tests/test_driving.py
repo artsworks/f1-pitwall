@@ -321,9 +321,102 @@ def test_same_spot_rule_replaces_generic_lockup_call() -> None:
 def test_spin_rule_speaks_and_escalates() -> None:
     e = _engine()
     first = _texts(e, now=0.0, spun=True)["spun_rejoin"]
-    assert first.startswith("Easy on the throttle")
+    assert first.startswith("You're clear behind") and "throttle" in first
     _texts(e, now=10.0)
     second = _texts(e, now=20.0, spun=True, spins=2)["spun_rejoin"]
     assert (
         second != first and "gentle" in second.lower() or "moments" in second or "Number" in second
     )
+
+
+def test_spin_with_traffic_behind_says_hold_then_clear() -> None:
+    e = _engine()
+    held = _texts(e, now=0.0, spun=True, traffic_behind_s=3.0)
+    assert "spun_rejoin_traffic" in held and "spun_rejoin" not in held
+    assert "3" in held["spun_rejoin_traffic"]
+    # car has passed while still recovering: now the clear-to-rejoin call
+    clear = _texts(e, now=2.0, spun=True, traffic_behind_s=float("inf"))
+    assert "spun_rejoin" in clear and "spun_rejoin_traffic" not in clear
+
+
+def test_out_lap_gap_calls() -> None:
+    base: dict[str, object] = {
+        "session_kind": "qualifying",
+        "phase": "out_lap",
+        "dist_to_line_m": 500.0,
+    }
+    tow = _texts(_engine(), **base, traffic_ahead_kind="flying", traffic_ahead_s=1.2)
+    assert "prep_tow" in tow and "1.2" in tow["prep_tow"]
+    slow = _texts(_engine(), **base, traffic_ahead_kind="out_lap", traffic_ahead_s=2.0)
+    assert "prep_traffic_ahead" in slow and "prep_tow" not in slow
+    dirty = _texts(_engine(), **base, traffic_ahead_kind="flying", traffic_ahead_s=0.4)
+    assert "prep_dirty_air" in dirty
+    behind = _texts(_engine(), **base, traffic_behind_kind="flying", traffic_behind_s=2.0)
+    assert "prep_car_behind" in behind and "prep_clear" not in behind
+    clear = _texts(_engine(), **base)
+    assert "prep_clear" in clear
+    early = _texts(_engine(), **{**base, "dist_to_line_m": 2500.0})
+    assert not any(k.startswith("prep_") for k in early)
+
+
+def test_pit_exit_traffic() -> None:
+    fired = _texts(_engine(), phase="out_lap", pit_exit_s=1.0, traffic_behind_s=2.5)
+    assert "pit_exit_traffic" in fired
+    late = _texts(_engine(), phase="out_lap", pit_exit_s=20.0, traffic_behind_s=2.5)
+    assert "pit_exit_traffic" not in late
+
+
+def test_slow_car_ahead_on_hot_lap() -> None:
+    base: dict[str, object] = {"session_kind": "qualifying", "run_lap_kind": "hot"}
+    warn = _texts(
+        _engine(),
+        **base,
+        traffic_ahead_kind="in_lap",
+        traffic_ahead_closing_s=3.0,
+        traffic_ahead_m=220.0,
+    )
+    assert "slow_car_ahead" in warn and "220" in warn["slow_car_ahead"]
+    # same-pace flying car ahead: no warning; a much slower one: warning
+    assert "slow_car_ahead" not in _texts(
+        _engine(), **base, traffic_ahead_kind="flying", traffic_ahead_closing_s=3.0
+    )
+    assert "slow_car_ahead" in _texts(
+        _engine(),
+        **base,
+        traffic_ahead_kind="flying",
+        traffic_ahead_closing_s=3.0,
+        traffic_ahead_slow=True,
+    )
+    assert "slow_car_ahead" not in _texts(
+        _engine(),
+        **{**base, "run_lap_kind": "cool"},
+        traffic_ahead_kind="in_lap",
+        traffic_ahead_closing_s=3.0,
+    )
+
+
+def test_invalid_hot_lap_calls() -> None:
+    base: dict[str, object] = {
+        "session_kind": "qualifying",
+        "run_lap_kind": "hot",
+        "current_lap_invalid": 1,
+    }
+    t = _texts(_engine(), **base, time_for_cool_and_hot=True)
+    assert "lap_deleted" in t and "lap_deleted_last" not in t
+    t = _texts(_engine(), **base, time_for_cool_and_hot=False)
+    assert "lap_deleted_last" in t and "lap_deleted" not in t
+
+
+def test_cool_lap_extends_when_battery_short() -> None:
+    base: dict[str, object] = {
+        "session_kind": "qualifying",
+        "cool_lap": True,
+        "cool_prep": True,
+        "run_lap_kind": "cool",
+        "ers_store_pct": 34.0,
+        "ers_need_pct": 60.0,
+    }
+    t = _texts(_engine(), **base, cool_extend=True)
+    assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]
+    t = _texts(_engine(), **base, cool_extend=False)
+    assert "cool_hot_mode" in t and "cool_extend" not in t

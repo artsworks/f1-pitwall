@@ -164,9 +164,11 @@ class RunTracker:
         best_s1_ms: int,
         cool_pace_pct: float,
         decide: Callable[[], Plan],
+        extend_cool: bool = False,
     ) -> HotLap | None:
         """Feed one Lap Data tick. `decide` is a zero-arg callable returning the
-        Plan for the line just crossed after a hot lap. Returns the HotLap
+        Plan for the line just crossed after a hot lap; `extend_cool` keeps a
+        cool lap's plan for another cool lap. Returns the HotLap
         completed on this tick, if any."""
         prev_ms, self._prev_lap_ms = self._prev_lap_ms, lap_time_ms
         prev_sector, self._prev_sector = self._prev_sector, sector
@@ -204,7 +206,7 @@ class RunTracker:
                 )
                 self.last_hot = done
                 self.plan = decide()
-            else:
+            elif not (self.kind == COOL and extend_cool):
                 self.plan = Plan("", "")
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
             return done

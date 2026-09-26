@@ -143,6 +143,13 @@ _PHASE_BY_DRIVER_STATUS = {
 }
 
 
+def _lap_kind(driver_status: int) -> str:
+    try:
+        return _PHASE_BY_DRIVER_STATUS[DriverStatus(driver_status)]
+    except (ValueError, KeyError):
+        return ""
+
+
 @dataclass(slots=True)
 class Snapshot:
     """Frozen per-tick view; everything rules read lives here."""
@@ -279,6 +286,9 @@ class Snapshot:
     cool_lap: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
     cool_elapsed_s: float = 0.0
+    ers_need_pct: float = 0.0  # battery wanted at the line before pushing
+    cool_extend: bool = False  # cool lap ending short of battery, time for another
+    time_for_cool_and_hot: bool = False  # finish this lap slow, then one more hot lap
     dist_to_hot_mode_m: float = 0.0
     last_hot: HotLap | None = None
     last_hot_mistakes: str = ""
@@ -292,6 +302,19 @@ class Snapshot:
     pole_worst_sector: int = 0
     pole_worst_sector_s: float = 0.0
     hot_car_behind_s: float = math.inf
+    # Nearest on-track car either way: metres, seconds, and its lap kind
+    # ("flying" | "out_lap" | "in_lap" | "on_track"). Ahead is timed at the
+    # player's push pace; behind at the other car's own speed.
+    traffic_ahead_m: float = math.inf
+    traffic_ahead_s: float = math.inf
+    traffic_ahead_kind: str = ""
+    traffic_ahead_closing_s: float = math.inf  # time to catch it at the current speeds
+    traffic_ahead_slow: bool = False  # it is much slower than the player right now
+    traffic_behind_m: float = math.inf
+    traffic_behind_s: float = math.inf
+    traffic_behind_kind: str = ""
+    dist_to_line_m: float = math.inf
+    pit_exit_s: float = math.inf  # since the player left the pit lane
     _ages: dict[str, float] = field(default_factory=dict)
 
     def age(self, packet_name: str) -> float:
@@ -351,6 +374,7 @@ class SessionState:
         self.rewinds = 0
         self._last_rewind_t: float | None = None
         self._was_in_garage = False
+        self._pit_exit_t: float | None = None
 
         # player lap data
         self.lap_num = 0
@@ -553,6 +577,8 @@ class SessionState:
         if car.driver_status == DriverStatus.OUT_LAP and self.driver_status != DriverStatus.OUT_LAP:
             self.run_temps.reset()
         self.driver_status = car.driver_status
+        if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
+            self._pit_exit_t = self._last_session_time
         self.pit_status = car.pit_status
         self.current_lap_time_ms = car.current_lap_time_ms
         self.sector1_time_ms = car.sector1_ms
@@ -601,6 +627,7 @@ class SessionState:
                 best_s1_ms=self._player_sectors[0],
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
+                extend_cool=self._cool_extend(),
             )
 
     def _kind(self) -> str:
@@ -625,13 +652,42 @@ class SessionState:
             margin_kind=margin_kind,
             safe_margin_ms=int(self._th("quali_safe_margin_ms", 1000.0)),
             ers_pct=self.ers_store_pct,
-            ers_min_pct=self._th("cool_ers_min_pct", 20.0),
+            ers_min_pct=self._ers_need_pct(),
             hottest_c=max(self._ema_or_zero(self.tyre_inner_fast).as_tuple()),
             tyre_hot_c=self._th("cool_tyre_hot_c", 104.0),
             time_left_s=self.session_time_left,
             cool_lap_s=self._th("cool_lap_factor", 1.3) * lap_s,
             fuel_laps=self.fuel_remaining_laps,
         )
+
+    def _cool_extend(self) -> bool:
+        """Cool lap ending with too little battery and time for another cool lap."""
+        return (
+            self.run.kind == COOL
+            and self.ers_store_pct < self._ers_need_pct()
+            and self._time_for_cool_and_hot()
+        )
+
+    def _ers_need_pct(self) -> float:
+        """Battery wanted at the line to push: the configured floor, or what the
+        last hot lap spent (all of its start charge if it ran flat)."""
+        need = self._th("cool_ers_min_pct", 40.0)
+        last = self.run.last_hot
+        if last is not None:
+            used = last.ers_start_pct - last.ers_end_pct
+            if last.ers_end_pct <= 5.0:
+                used = max(used, last.ers_start_pct)
+            need = max(need, used)
+        return min(need, self._th("cool_ers_need_max_pct", 70.0))
+
+    def _time_for_cool_and_hot(self) -> bool:
+        best = self._best_laps.get(self._player_idx, 0)
+        lap_s = best / 1000.0 if best > 0 else self._th("release_fallback_lap_s", 95.0)
+        cool_s = self._th("cool_lap_factor", 1.3) * lap_s
+        remaining_s = max(0.0, self.track_length_m - self.lap_distance) / max(
+            self.speed_kmh / 3.6, 30.0
+        )
+        return self.session_time_left > remaining_s + cool_s + lap_s * 0.2
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
         if pkt.code == "FLBK":
@@ -920,7 +976,7 @@ class SessionState:
             self.setup_tyre_pressure,
             self._th("pressure_window_low_c", 88.0),
             self._th("pressure_window_high_c", 102.0),
-            hot_sign=self._th("pressure_hot_sign", -1.0),
+            hot_sign=self._th("pressure_hot_sign", 1.0),
             medium_c=self._th("pressure_size_medium_c", 5.0),
             large_c=self._th("pressure_size_large_c", 10.0),
             steps_psi=(
@@ -928,6 +984,8 @@ class SessionState:
                 self._th("pressure_step_medium_psi", 0.4),
                 self._th("pressure_step_large_psi", 0.8),
             ),
+            front_range=self._psi_range("front"),
+            rear_range=self._psi_range("rear"),
         )
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         return Snapshot(
@@ -1052,6 +1110,17 @@ class SessionState:
             pressure_advice=pressures,
             pressure_advice_text=pressure_text(pressures),
             **cool,
+            **self._traffic(player_best_lap),
+            dist_to_line_m=(
+                max(0.0, self.track_length_m - self.lap_distance)
+                if self.track_length_m > 0 and self.lap_distance >= 0
+                else math.inf
+            ),
+            pit_exit_s=(
+                st - self._pit_exit_t
+                if self._pit_exit_t is not None and st >= self._pit_exit_t
+                else math.inf
+            ),
             _ages={name: st - t for name, t in self._last_update.items()},
         )
 
@@ -1129,6 +1198,9 @@ class SessionState:
             run_plan_why=why,
             cool_lap=cool_lap,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            ers_need_pct=round(self._ers_need_pct()),
+            cool_extend=cool_lap and self._cool_extend(),
+            time_for_cool_and_hot=self._time_for_cool_and_hot(),
             cool_elapsed_s=max(0.0, st - run.cool_start_t) if cool_lap else 0.0,
             dist_to_hot_mode_m=max(0.0, to_hot),
             last_hot=run.last_hot,
@@ -1148,6 +1220,57 @@ class SessionState:
                 self._hot_car_behind_s() if cool_lap or phase == "out_lap" else math.inf
             ),
         )
+        return out
+
+    def _psi_range(self, axle: str) -> tuple[float, float] | None:
+        lo = self._th(f"pressure_{axle}_min_psi", 0.0)
+        hi = self._th(f"pressure_{axle}_max_psi", 0.0)
+        return (lo, hi) if 0 < lo < hi else None
+
+    def _traffic(self, player_best_ms: int) -> dict[str, Any]:
+        """Nearest car on track ahead and behind the player, within 1500 m."""
+        out: dict[str, Any] = {}
+        if self.cars_lap is None or self.track_length_m <= 0 or self.pit_status != PitStatus.NONE:
+            return out
+        length = self.track_length_m
+        push_ms = length / (player_best_ms / 1000.0) if player_best_ms > 0 else 55.0
+        ahead: tuple[float, int] | None = None
+        behind: tuple[float, int] | None = None
+        for i, c in enumerate(self.cars_lap):
+            if i == self._player_idx or c.pit_status != PitStatus.NONE:
+                continue
+            if c.driver_status == DriverStatus.IN_GARAGE or c.result_status != 2:
+                continue
+            fwd = (c.lap_distance - self.lap_distance) % length
+            back = length - fwd
+            if 0 < fwd <= 1500 and (ahead is None or fwd < ahead[0]):
+                ahead = (fwd, i)
+            if 0 < back <= 1500 and (behind is None or back < behind[0]):
+                behind = (back, i)
+        if ahead is not None:
+            mine = self.speed_kmh / 3.6
+            theirs = mine
+            if self.cars_telemetry is not None and ahead[1] < len(self.cars_telemetry):
+                theirs = float(self.cars_telemetry[ahead[1]].speed) / 3.6
+            closing = mine - theirs
+            out.update(
+                traffic_ahead_m=round(ahead[0]),
+                traffic_ahead_s=round(ahead[0] / push_ms, 1),
+                traffic_ahead_closing_s=(
+                    round(ahead[0] / closing, 1) if closing > 1.0 else math.inf
+                ),
+                traffic_ahead_slow=closing * 3.6 >= self._th("slow_car_delta_kmh", 60.0),
+                traffic_ahead_kind=_lap_kind(self.cars_lap[ahead[1]].driver_status),
+            )
+        if behind is not None:
+            speed = 0.0
+            if self.cars_telemetry is not None and behind[1] < len(self.cars_telemetry):
+                speed = float(self.cars_telemetry[behind[1]].speed) / 3.6
+            out.update(
+                traffic_behind_m=round(behind[0]),
+                traffic_behind_s=round(behind[0] / max(speed, 30.0), 1),
+                traffic_behind_kind=_lap_kind(self.cars_lap[behind[1]].driver_status),
+            )
         return out
 
     def _hot_car_behind_s(self) -> float:

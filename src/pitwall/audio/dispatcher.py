@@ -326,7 +326,10 @@ class Dispatcher:
         if target is None:
             if press.kind == "ack":
                 # Say again: re-speak the last spoken call without booking it.
-                if self._spoken_calls:
+                if (
+                    self._spoken_calls
+                    and now - self._spoken_calls[-1][1] <= self.input.say_again_window_s
+                ):
                     last, _ = self._spoken_calls[-1]
                     self._log_press(now, snapshot, "say_again", last, None)
                     replay = Call(

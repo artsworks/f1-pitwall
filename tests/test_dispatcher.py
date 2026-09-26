@@ -201,9 +201,20 @@ def test_ack_then_say_again() -> None:
     d.submit([_cand("a", text="box box2")], _snap(1.0))
     assert d.drain(1.0) == []
     # ack with no live target -> say again re-speaks the last call
-    d.on_press(Press("ack", 100.0), _snap(100.0))
-    calls = d.drain(100.0)
+    d.on_press(Press("ack", 20.0), _snap(20.0))
+    calls = d.drain(20.0)
     assert len(calls) == 1 and "say_again" in calls[0].tags
+
+
+def test_say_again_ignores_stale_calls() -> None:
+    from pitwall.input.press import Press
+
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("a", text="pressures")], _snap(0.0))
+    d.drain(0.0)
+    # a press long after the call (e.g. menu buttons in the garage) repeats nothing
+    d.on_press(Press("ack", 100.0), _snap(100.0))
+    assert d.drain(100.0) == []
 
 
 def test_negative_backoff_mutes_not_p1() -> None:

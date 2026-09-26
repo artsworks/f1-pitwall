@@ -2,7 +2,9 @@
 
 Each corner's time-averaged inner temperature is compared with a target
 window; the distance outside it maps to a small/medium/large pressure step.
-`hot_sign` sets the direction: -1 means a hot tyre wants less pressure."""
+`hot_sign` sets the direction: +1 means a hot tyre wants more pressure (the
+F1 games: lower pressure runs hotter). Targets are clamped to the setup's
+pressure range; a corner already at its limit is reported as `limited`."""
 
 from __future__ import annotations
 
@@ -21,6 +23,8 @@ class PressureCall:
     size: str  # "small" | "medium" | "large"
     delta_psi: float  # signed change to make
     target_psi: float  # current + delta; 0 when the setup pressure is unknown
+    limited: bool = False  # already at the setup range limit in that direction
+    wanted_psi: float = 0.0  # the change before clamping to the setup range
 
 
 class RunTemps:
@@ -64,6 +68,8 @@ def pressure_advice(
     medium_c: float = 5.0,
     large_c: float = 10.0,
     steps_psi: tuple[float, float, float] = (0.2, 0.4, 0.8),
+    front_range: tuple[float, float] | None = None,
+    rear_range: tuple[float, float] | None = None,
 ) -> tuple[PressureCall, ...]:
     out: list[PressureCall] = []
     for key, name in _ORDER:
@@ -78,7 +84,16 @@ def pressure_advice(
             continue
         idx = 0 if off < medium_c else 1 if off < large_c else 2
         delta = round((1.0 if sign > 0 else -1.0) * steps_psi[idx], 1)
+        wanted = delta
         cur = float(getattr(current_psi, key))
+        rng = front_range if key.startswith("f") else rear_range
+        target = round(cur + delta, 1) if cur > 0 else 0.0
+        limited = False
+        if cur > 0 and rng is not None:
+            lo, hi = rng
+            target = round(min(max(target, lo), hi), 1)
+            delta = round(target - cur, 1)
+            limited = delta == 0
         out.append(
             PressureCall(
                 corner=key,
@@ -86,13 +101,39 @@ def pressure_advice(
                 avg_c=round(t, 1),
                 size=("small", "medium", "large")[idx],
                 delta_psi=delta,
-                target_psi=round(cur + delta, 1) if cur > 0 else 0.0,
+                target_psi=target,
+                limited=limited,
+                wanted_psi=wanted,
             )
         )
     return tuple(out)
 
 
 def pressure_text(calls: tuple[PressureCall, ...]) -> str:
-    return ", ".join(
-        f"{c.name} {'up' if c.delta_psi > 0 else 'down'} {abs(c.delta_psi):.1f}" for c in calls
-    )
+    """Spoken advice, grouping an axle (or all four) that wants the same change:
+    "drop the fronts 0.4, raise the rear right 0.2"."""
+    by = {c.corner: c for c in calls}
+
+    def same(keys: tuple[str, ...]) -> bool:
+        cs = [by.get(k) for k in keys]
+        return all(cs) and len({(c.delta_psi, c.limited) for c in cs if c}) == 1
+
+    groups: list[tuple[str, PressureCall]] = []
+    if len(by) == 4 and same(("fl", "fr", "rl", "rr")):
+        groups.append(("all four", by["fl"]))
+    else:
+        for keys, label in ((("fl", "fr"), "the fronts"), (("rl", "rr"), "the rears")):
+            if same(keys):
+                groups.append((label, by[keys[0]]))
+            else:
+                groups.extend((f"the {by[k].name}", by[k]) for k in keys if k in by)
+    parts: list[str] = []
+    for label, c in groups:
+        if c.limited:
+            plural = label in ("all four", "the fronts", "the rears")
+            edge = "minimum" if c.wanted_psi < 0 else "maximum"
+            parts.append(f"{label} {'are' if plural else 'is'} already at the {edge}")
+        else:
+            verb = "raise" if c.delta_psi > 0 else "drop"
+            parts.append(f"{verb} {label} {abs(c.delta_psi):.1f}")
+    return ", ".join(parts)

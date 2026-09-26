@@ -227,7 +227,7 @@ def test_cool_payload_swaps_layout() -> None:
     cool = q["cool"]
     assert isinstance(cool, dict)
     assert cool["ers_pct"] == 12.0 and cool["dist_to_hot_m"] == 1800.0
-    assert cool["ers_min_pct"] == 20 and cool["window_c"] == [88, 102]
+    assert cool["ers_min_pct"] == 40 and cool["window_c"] == [88, 102]
     assert cool["pole"] == {"driver": None, "gap_ms": 2_000, "sector_gaps_ms": [100, 1_700, 200]}
     assert cool["car_behind_s"] is None and cool["mistakes"] is None
     assert q["plan"] == {"plan": "cool", "reason": "battery"}
@@ -257,3 +257,31 @@ def test_q1_recording_run_plan(tmp_path: Path) -> None:
     ]
     # Q1 run 1 (2026-09-25): battery 31% after lap 1, then 2% and 6% at the line
     assert fired[:3] == ["plan_push", "plan_cool", "plan_cool"]
+
+
+def test_run_tracker_extends_cool_lap() -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    _feed(rt, 60.0, 75_000, 5000.0, 2)
+    _feed(rt, 61.0, 50, 5.0, 0, ers=0.0, plan=Plan("cool", "battery"))
+    assert rt.kind == COOL
+    _feed(rt, 150.0, 90_000, 5000.0, 2)
+    rt.update(
+        t=151.0,
+        phase="flying",
+        lap_time_ms=50,
+        lap_distance=5.0,
+        sector=0,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=False,
+        ers_pct=34.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=0,
+        cool_pace_pct=10.0,
+        decide=lambda: Plan("push", "ready"),
+        extend_cool=True,
+    )
+    assert rt.kind == COOL and rt.plan == Plan("cool", "battery")

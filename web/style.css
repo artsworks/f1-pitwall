@@ -205,19 +205,36 @@ body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
 
 /* cool-down lap (docs/17): takes over the tyre/fuel/strategy zones until the
    hot-lap-mode point, then the normal layout comes back */
-.cool { grid-area: cool; display: flex; flex-direction: column; gap: .6rem; font-size: 1.3rem; }
-.cool-head { display: flex; justify-content: space-between; align-items: baseline; }
-.cool-title { font-size: 1.9rem; font-weight: bold; color: var(--info); letter-spacing: .08em; }
-.cool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.cool .bar { position: relative; height: .8rem; background: var(--line); border-radius: 3px; }
+.cool { grid-area: cool; display: flex; flex-direction: column; gap: .8rem; font-size: 1.3rem; }
+/* glance order: traffic behind, then battery / hot-lap countdown / tyres, then detail */
+.c-alert { font-size: 2.6rem; font-weight: bold; text-align: center; padding: .5rem;
+  border-radius: 6px; letter-spacing: .06em; }
+.c-alert.clear { font-size: 1.4rem; color: var(--ok); border: 1px solid var(--line); }
+.c-alert.warn { background: var(--warn); color: #000; }
+.c-alert.crit { background: var(--crit); color: #000; animation: c-flash .8s steps(2) infinite; }
+@keyframes c-flash { 50% { opacity: .55; } }
+.c-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
+.c-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .5rem .7rem; }
+.c-tile.ok { border-color: var(--ok); }
+.c-tile.warn { border-color: var(--warn); }
+.c-tile.crit { border-color: var(--crit); }
+.c-num { font-size: 3.6rem; font-weight: bold; line-height: 1.1; }
+.c-tile.ok .c-num { color: var(--ok); }
+.c-tile.warn .c-num { color: var(--warn); }
+.c-tile.crit .c-num { color: var(--crit); }
+.cool .bar { position: relative; height: .9rem; background: var(--line); border-radius: 3px;
+  margin: .3rem 0; }
 .cool .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
-.cool .bar .mark { position: absolute; top: -3px; width: 2px; height: calc(100% + 6px);
-  background: var(--warn); }
-.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 1.9rem;
+.cool .c-tile.warn .bar .fill { background: var(--warn); }
+.cool .bar .mark { position: absolute; top: -4px; width: 3px; height: calc(100% + 8px);
+  background: var(--fg); }
+.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 2.2rem;
   font-weight: bold; }
 .c-tyres .hot { color: var(--crit); }
-.c-tyres .cold { color: var(--info); }
+.c-tyres .cold { color: var(--cold); }
 .c-tyres .ok { color: var(--ok); }
+.c-info { display: flex; flex-direction: column; gap: .3rem; font-size: 1.2rem; }
 .c-row .worst { color: var(--warn); font-weight: bold; }
 body.dash.cool { grid-template-areas:
     "status status" "banner banner" "cool log" "cool log" "cool log" "footer footer"; }

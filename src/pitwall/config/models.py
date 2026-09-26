@@ -67,6 +67,7 @@ class InputSettings(BaseModel):
     long_press_ms: int = 800
     bounce_ms: int = 60
     response_window_s: float = 8.0
+    say_again_window_s: float = 30.0
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
     negative_mute_laps: int = 3

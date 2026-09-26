@@ -88,11 +88,11 @@ def quali_payload(
         }
     if snapshot.run_plan:
         out["plan"] = {"plan": snapshot.run_plan, "reason": snapshot.run_plan_reason}
-    if snapshot.cool_lap and not snapshot.cool_prep:
+    if snapshot.cool_lap and (not snapshot.cool_prep or snapshot.cool_extend):
         inner = snapshot.tyre_inner_ema_fast
         th = thresholds or {}
         out["cool"] = {
-            "ers_min_pct": th.get("cool_ers_min_pct", 20.0),
+            "ers_min_pct": snapshot.ers_need_pct or th.get("cool_ers_min_pct", 40.0),
             "window_c": [
                 th.get("pressure_window_low_c", 88.0),
                 th.get("pressure_window_high_c", 102.0),
@@ -100,6 +100,7 @@ def quali_payload(
             "ers_pct": snapshot.ers_store_pct,
             "ers_mode": snapshot.ers_deploy_mode,
             "plan_reason": snapshot.run_plan_reason or None,
+            "extend": snapshot.cool_extend,
             "dist_to_hot_m": snapshot.dist_to_hot_mode_m if snapshot.track_length_m else None,
             "tyres": {"fl": inner.fl, "fr": inner.fr, "rl": inner.rl, "rr": inner.rr},
             "tyre_hint": snapshot.cool_tyre_hint,

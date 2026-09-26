@@ -81,24 +81,30 @@
   </section>
 
   <section id="cool" class="zone cool" hidden>
-    <div class="cool-head"><span class="cool-title">COOL LAP · RECHARGE</span><span id="c-hot" class="dim">hot-lap mode in --</span></div>
-    <div class="cool-grid">
-      <div>
+    <div id="c-behind" class="c-alert clear">NO HOT LAP BEHIND</div>
+    <div class="c-tiles">
+      <div id="c-ers-tile" class="c-tile">
         <h2>BATTERY</h2>
-        <div id="c-ers" class="big">--</div>
+        <div id="c-ers" class="c-num">--</div>
         <div class="bar"><div id="c-ers-bar" class="fill"></div><div id="c-ers-min" class="mark"></div></div>
         <div id="c-mode" class="sub">--</div>
       </div>
-      <div>
+      <div id="c-hot-tile" class="c-tile">
+        <h2>HOT-LAP MODE IN</h2>
+        <div id="c-hot" class="c-num">--</div>
+        <div id="c-plan" class="sub">--</div>
+      </div>
+      <div class="c-tile">
         <h2>TYRES</h2>
         <div class="c-tyres"><span id="c-fl">--</span><span id="c-fr">--</span><span id="c-rl">--</span><span id="c-rr">--</span></div>
         <div id="c-hint" class="sub">--</div>
       </div>
     </div>
-    <div id="c-pole" class="c-row">--</div>
-    <div id="c-mis" class="c-row">--</div>
-    <div id="c-behind" class="c-row crit" hidden>--</div>
-    <div id="c-sub" class="sub">--</div>
+    <div class="c-info">
+      <div id="c-pole" class="c-row">--</div>
+      <div id="c-mis" class="c-row">--</div>
+      <div id="c-sub" class="c-row dim">--</div>
+    </div>
   </section>
 
   <section class="log"><ol id="log"></ol></section>
