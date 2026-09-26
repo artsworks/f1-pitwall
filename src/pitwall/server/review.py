@@ -35,6 +35,7 @@ _TIMELINE_OUTCOMES = {
     "bookmark",
     "silent_on",
     "silent_off",
+    "driver_input",
 }
 
 

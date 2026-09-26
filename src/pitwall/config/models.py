@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from pitwall.net.profile import ProfileName
 
@@ -84,9 +84,9 @@ class InputSettings(BaseModel):
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
     long_press: Literal["bookmark", "silent"] = "bookmark"
-    silent_toggle_bit: int = 0  # e.g. 0x00400000 = UDP Action 3; any press toggles
+    silent_toggle_bit: int = 0  # e.g. 0x02000000 = UDP Action 6; any press toggles
     silent_keeps_p1: bool = True
-    mindset_toggle_bit: int = 0  # e.g. 0x00200000 = UDP Action 2; balanced <-> aggressive
+    mindset_toggle_bit: int = 0  # e.g. 0x01000000 = UDP Action 5; balanced <-> aggressive
     mindset_cycle: list[str] = Field(default_factory=lambda: ["balanced", "aggressive"])
     mindset_replies: dict[str, str] = Field(
         default_factory=lambda: {
@@ -95,6 +95,10 @@ class InputSettings(BaseModel):
         }
     )
     page_cycle_bit: int = 0  # e.g. 0x00800000 = UDP Action 4; next dashboard page
+    # Driver menu (docs/12): up/down open and scroll; Action 1 confirms while open.
+    menu_up_bit: int = 0  # e.g. 0x00200000 = UDP Action 2
+    menu_down_bit: int = 0  # e.g. 0x00400000 = UDP Action 3
+    menu_close_bit: int = 0  # e.g. 0x04000000 = UDP Action 7; closes without answering
     silent_on_replies: list[str] = Field(
         default_factory=lambda: [
             "Radio silent. Leave you to it.",
@@ -110,6 +114,54 @@ class InputSettings(BaseModel):
         ]
     )
     negative_mute_laps: int = 3
+
+    @model_validator(mode="after")
+    def _unique_bits(self) -> InputSettings:
+        bits = {
+            "udp_action_bit": self.udp_action_bit,
+            "silent_toggle_bit": self.silent_toggle_bit,
+            "mindset_toggle_bit": self.mindset_toggle_bit,
+            "page_cycle_bit": self.page_cycle_bit,
+            "menu_up_bit": self.menu_up_bit,
+            "menu_down_bit": self.menu_down_bit,
+            "menu_close_bit": self.menu_close_bit,
+        }
+        seen: dict[int, str] = {}
+        for name, bit in bits.items():
+            if not bit:
+                continue
+            if bit in seen:
+                raise ValueError(f"input.{name} and input.{seen[bit]} share bit {bit:#010x}")
+            seen[bit] = name
+        return self
+
+
+MenuAction = Literal["mindset", "silent", "page"]
+
+
+class MenuItemModel(BaseModel):
+    """One driver-menu entry (docs/12). `kind`:
+    question -> answered from the snapshot by the `answer` handler (defaults to id);
+    opinion  -> recorded (decision log + SQLite) and acknowledged from `replies`;
+    action   -> runs `action` (mindset / silent / page)."""
+
+    id: str
+    label: str  # shown on the overlay and spoken on scroll; keep it 2-3 words
+    kind: Literal["question", "opinion", "action"] = "question"
+    answer: str = ""
+    action: MenuAction | None = None
+    topic: str = ""  # opinions: items sharing a topic replace each other (e.g. "balance")
+    # case -> reply templates (variants rotate). Opinions and actions use "default".
+    replies: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class MenuSettings(BaseModel):
+    enabled: bool = True
+    timeout_s: float = 6.0  # idle seconds before the menu closes by itself
+    speak_on_scroll: bool = True  # speak each item name as it is highlighted
+    wrap: bool = True
+    opinion_hold_laps: int = 5  # a balance opinion biases advice this many laps
+    items: list[MenuItemModel] = Field(default_factory=list)
 
 
 class PersistenceSettings(BaseModel):
@@ -193,6 +245,7 @@ class Settings(BaseModel):
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     ui: UiSettings = Field(default_factory=UiSettings)
     input: InputSettings = Field(default_factory=InputSettings)
+    menu: MenuSettings = Field(default_factory=MenuSettings)
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)

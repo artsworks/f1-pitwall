@@ -8,12 +8,14 @@ than any threshold tuning.
 
 | Input | Primary | Secondary | Meaning |
 |---|---|---|---|
-| Single press | Fanatec wheel **button 2** | **Spacebar** | **Acknowledge** — "copy" |
-| Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now" |
-| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off — leave the driver alone in a battle (`input.long_press: bookmark` makes it a silent marker instead) |
-| Radio silent toggle | a second wheel button → UDP Action 3 | — | same as long press; fallback if a held button doesn't register |
-| Mindset toggle | a wheel button → UDP Action 2 | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice |
-| Dashboard page cycle | a wheel button → UDP Action 4 | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow |
+| Single press | Fanatec wheel **button 2** → UDP Action 1 | **Spacebar** | **Acknowledge** — "copy"; **confirm** while the driver menu is open |
+| Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now"; closes the menu while open |
+| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off (`input.long_press: bookmark` makes it a marker instead) |
+| Menu up / down | UDP Action 2 / 3 | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
+| Dashboard page cycle | UDP Action 4 | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow |
+| Mindset toggle | UDP Action 5 | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item |
+| Radio silent toggle | UDP Action 6 | — | same as long press; also a menu item |
+| Menu close | UDP Action 7 | `Esc` | close the menu without answering |
 
 Both inputs feed the same press detector, so behaviour is identical whichever is used.
 Mid-race nothing requires clicking the dashboard, which would take focus from a
@@ -75,7 +77,7 @@ down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMA
 ## Radio silent
 
 For a battle: the driver wants to concentrate, not listen. Long press (or UDP Action 3)
-toggles radio silent:
+(or UDP Action 6, or the "Radio silent" menu item) toggles radio silent:
 
 - Speech stops; every call still reaches the dashboard's banner and radio log as normal.
 - P1 (urgent) calls still speak (`input.silent_keeps_p1`, default on).
@@ -86,16 +88,17 @@ toggles radio silent:
 - It stays on until toggled off, including across sessions.
 
 Settings: `input.long_press` (`silent` | `bookmark`), `input.silent_toggle_bit`
-(`0x00400000` = UDP Action 3, `0` disables), `input.silent_on_replies`,
+(`0x02000000` = UDP Action 6, `0` disables), `input.silent_on_replies`,
 `input.silent_off_replies`.
 
 Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
 whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
-If a hold doesn't toggle, bind UDP Action 3 instead — no code change needed.
+If a hold doesn't toggle, bind UDP Action 6 (or use the menu item) — no code change needed.
 
 ## Mindset and page buttons (M3)
 
-UDP Action 2 (`input.mindset_toggle_bit`, default `0x00200000`) steps through
+UDP Action 5 (`input.mindset_toggle_bit`, default `0x01000000`; was Action 2 before the
+driver menu took it) steps through
 `input.mindset_cycle` (default `[balanced, aggressive]`). The choice is a live override of
 `mindset.active`: it changes rule thresholds at once, is confirmed by voice
 (`input.mindset_replies`), is written as a `mindset` record in the decision log, and every
@@ -108,8 +111,95 @@ formation/SC/VSC and the battle page when a rival is within `ui.auto_page_battle
 a manual choice holds for `ui.auto_page_manual_hold_s` and no auto swap happens within
 `ui.auto_page_call_hold_s` of a call.
 
-Either bit set to `0` disables that button. No collision with Action 1 (ack/negative,
-`0x00100000`) or Action 3 (radio silent, `0x00400000`).
+Either bit set to `0` disables that button. Every `input.*_bit` is checked for
+collisions when the config loads: two actions on one bit is a config error.
+
+## Driver menu (driver → pit wall)
+
+The radio is no longer one way only: a short rolling menu lets the driver ask a preset
+question or state an opinion. Driving, it has to be three buttons and a glance.
+
+### Remap (M3 + menu)
+
+Twelve UDP Actions exist (`buttonStatus` bits, UDP Action *n* = `0x00100000 << (n-1)`).
+Before the menu, four were used: 1 ack/neg/silent, 2 mindset, 3 radio silent, 4 page.
+The driver can free three more (5–7), mirrored on a Stream Deck.
+
+| UDP Action | Bit | Setting | Wheel / Stream Deck suggestion | Menu closed | Menu open |
+|---|---|---|---|---|---|
+| 1 | `0x00100000` | `input.udp_action_bit` | button 2 (thumb) / big key; Spacebar | tap ack · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
+| 2 | `0x00200000` | `input.menu_up_bit` | rotary/funky switch up / key ▲ | **open** on the last item | previous item |
+| 3 | `0x00400000` | `input.menu_down_bit` | rotary/funky switch down / key ▼ | **open** on the first item | next item |
+| 4 | `0x00800000` | `input.page_cycle_bit` | spare button / key PAGE | next dashboard page | next dashboard page |
+| 5 | `0x01000000` | `input.mindset_toggle_bit` | freed button / key MODE | balanced ⇄ aggressive | same (menu stays open) |
+| 6 | `0x02000000` | `input.silent_toggle_bit` | freed button / key SILENT | radio silent on/off | same |
+| 7 | `0x04000000` | `input.menu_close_bit` | freed button / key BACK | — | close, no answer |
+| 8–12 | `0x08000000`–`0x80000000` | — | free | — | — |
+
+- Conflict resolution: Actions 2/3 become menu up/down, so **mindset moves to Action 5
+  and radio silent to Action 6**. Both are also **menu items** (bottom of the list, one
+  `Up` press away), so a driver with only four buttons loses nothing: set
+  `mindset_toggle_bit`, `silent_toggle_bit` and `menu_close_bit` to `0` and use the menu
+  plus the Action 1 long press / double press.
+- Action 1 semantics are unchanged while the menu is closed.
+- All bits are YAML (`input.*_bit`); `0` disables the binding; a duplicate bit fails to load.
+- Keyboard: `↑` `↓` `Enter` `Esc` on the focused dashboard (`/` or `/radio`); Space still
+  mirrors Action 1. A Stream Deck can send the same keys or be bound as UDP Actions.
+
+### Behaviour
+
+- **Open:** `Down` opens on the first item, `Up` on the last. The highlighted item's
+  name is spoken briefly (`menu.speak_on_scroll`); each new highlight replaces the
+  previous prompt, so scrolling fast never builds a queue. Prompts are audio only (not in
+  the radio log or decision log, and never repeated by "say again").
+- **Scroll:** up/down wrap around (`menu.wrap`).
+- **Confirm:** Action 1 single press (or `Enter`) answers the highlighted item and
+  closes the menu. The answer is a P1 reply: it bypasses the call budget and radio silent,
+  and appears in the radio log.
+- **Close:** Action 7, `Esc`, or an Action 1 double press closes without answering.
+  After `menu.timeout_s` (default 6 s) without a press it closes by itself.
+- **Owned by the backend.** The state frame carries `menu: {open, index, items, left_s,
+  timeout_s}`; `/` and `/radio` draw the same overlay, fixed below the call banner and
+  over the upper-left zone, without reflowing anything.
+- **Replayable.** Wheel presses are `BUTN` events and so are in the recording; the menu
+  runs inside `Engine.tick` on press timestamps, so a replay makes the same picks and the
+  same answers. Keyboard/Stream Deck presses via the dashboard are not in the recording
+  (same as the Space route today).
+
+### Items and answers
+
+Items are YAML (`menu.items` in `config/defaults/menu.yaml`, overridable per profile).
+Each has `id`, a 2–3 word `label`, a `kind` and `replies`: a map of **case → template
+variants**. A deterministic handler (`pitwall.input.menu.ANSWERS`, keyed by `answer`
+or `id`) picks the case from the current snapshot and fills the placeholders; variants
+rotate per item and case. No language model is involved (ADR 0008). `pitwall rules
+check` validates ids, handlers and placeholders.
+
+| Item | Kind | Cases (from the snapshot) | Example reply |
+|---|---|---|---|
+| Tyres gone? | question | gone / fading / ok / unknown (`laps_of_pace`, `wear_mean_pct`) | "Fading. About 3 laps of pace left." |
+| Pit now? | question | box_now / soon / stay_out / no_stop / unknown (`pit_plan`) | "Not yet. Box in 2, lap 26." |
+| Gap ahead? | question | closing / opening / steady / none (`gap_ahead_s`, `gap_trend_ahead_s`) | "1.4 to Norris, closing 0.3 a lap." |
+| Gap behind? | question | closing / steady / none | "0.9 to Piastri behind, closing 0.2." |
+| Fuel OK? | question | short / tight / ok / spare / unknown (`fuel_margin_laps`) | "Short by 0.4 laps. Lift and coast." |
+| Plan? | question | box_now / stop / to_end / unknown | "Box lap 26. Window open soon." |
+| Push or save? | question | save_fuel / save_energy / save_tyres / attack / push | "Push. 0.8 to the car ahead." |
+| Rain coming? | question | crossover / coming / chance / dry (`rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent in ten." |
+| Understeer | opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
+| Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
+| Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |
+| Radio silent | action | — | the usual silent on/off confirmation |
+| Next page | action | — | none (the page changes) |
+
+### Opinions and records
+
+Every confirmed item is a `driver_input` record in the decision log (item, kind, topic,
+case, template values, reply text) and a row in the SQLite `driver_inputs` table
+(migration 3), so review and debrief can line them up with the calls; the review
+timeline shows them as ticks. An opinion with a `topic` also holds for
+`menu.opinion_hold_laps` laps (default 5): the balance topic sets `snapshot.driver_balance`
+(`"understeer"` / `"oversteer"` / `""`), which rules can read, e.g. to suggest brake bias
+or differential changes only once the driver has said the car is out of balance.
 
 ## What a press applies to
 

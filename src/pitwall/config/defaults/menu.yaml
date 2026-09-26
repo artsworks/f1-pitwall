@@ -1,0 +1,97 @@
+# Driver -> pit wall menu (docs/12). Up/Down (UDP Action 2/3) open and scroll,
+# UDP Action 1 confirms, Action 7 (or a double press) closes.
+# Down from closed opens on the first item, Up from closed on the last one,
+# so the driver's own switches sit one Up-press away at the bottom.
+# Replies are deterministic templates (ADR 0008): the case is picked from the
+# snapshot, variants rotate. Placeholders: see pitwall.input.menu.TEMPLATE_KEYS.
+menu:
+  enabled: true
+  timeout_s: 6.0
+  speak_on_scroll: true
+  wrap: true
+  opinion_hold_laps: 5
+  items:
+    - id: tyres
+      label: "Tyres gone?"
+      replies:
+        gone: ["Yes, they're done. {wear} percent worn.", "They're gone. Box when you can."]
+        fading: ["Fading. About {pace_laps} laps of pace left.", "Dropping off, {pace_laps} laps left in them."]
+        ok: ["Tyres are fine. {wear} percent worn.", "No, still good. {pace_laps} laps of pace."]
+        unknown: ["No tyre read yet.", "Not enough data yet."]
+    - id: pit
+      label: "Pit now?"
+      replies:
+        box_now: ["Yes, box this lap. {reason}.", "Box, box. {reason}."]
+        soon: ["Not yet. Box in {in_laps}, lap {plan_lap}.", "Stay out, box lap {plan_lap}."]
+        stay_out: ["No, stay out. {reason}.", "Negative, stay out."]
+        no_stop: ["No stop. Tyres make the end.", "Stay out to the end."]
+        unknown: ["No plan yet. Stay out.", "Still working on it. Stay out."]
+    - id: gap
+      label: "Gap ahead?"
+      replies:
+        closing: ["{gap} to {name}, closing {trend} a lap.", "{name}, {gap}. You're gaining {trend}."]
+        opening: ["{gap} to {name}, losing {trend} a lap.", "{name}, {gap}. He's pulling {trend}."]
+        steady: ["{gap} to {name}, steady.", "{name}, {gap}. Holding."]
+        none: ["Nobody ahead. Clear air.", "You're leading. Clear air."]
+    - id: gap_behind
+      label: "Gap behind?"
+      replies:
+        closing: ["{gap} to {name} behind, closing {trend}.", "{name} behind, {gap}. He's coming."]
+        steady: ["{gap} to {name} behind.", "{name}, {gap} behind. Covered."]
+        none: ["Nobody behind.", "Clear behind."]
+    - id: fuel
+      label: "Fuel OK?"
+      replies:
+        short: ["Short by {margin} laps. Lift and coast.", "Fuel's short, {margin} laps. Save."]
+        tight: ["Tight. Plus {margin}. Keep an eye on it.", "Just about. Small margin."]
+        ok: ["Fuel's fine.", "Fuel OK, plus {margin} laps."]
+        spare: ["Plenty. Plus {margin} laps, push.", "Spare fuel, use it."]
+        unknown: ["No fuel read yet.", "Not enough data yet."]
+    - id: plan
+      label: "Plan?"
+      replies:
+        box_now: ["Box this lap. {reason}.", "Plan is box now."]
+        stop: ["Box lap {plan_lap}. {reason}.", "Plan, box lap {plan_lap}. Window {window}."]
+        to_end: ["No more stops. {laps_left} to go.", "Go to the end. {laps_left} laps."]
+        unknown: ["Plan's open. {laps_left} to go.", "Still working on it."]
+    - id: push
+      label: "Push or save?"
+      replies:
+        save_fuel: ["Save fuel. Short {margin} laps.", "Save. Lift and coast."]
+        save_energy: ["Save battery. Harvest this lap.", "Save energy, you're over."]
+        save_tyres: ["Save the tyres.", "Manage tyres, long way to go."]
+        attack: ["Push. {gap} to the car ahead.", "Attack now."]
+        push: ["Push. Nothing to save.", "Free to push."]
+    - id: rain
+      label: "Rain coming?"
+      replies:
+        crossover: ["Yes, it's {to} time. Box when ready.", "Crossover, {to}."]
+        coming: ["Rain coming. {in10} percent in ten.", "Yes, {in30} percent in thirty."]
+        chance: ["Maybe. {in10} percent in ten.", "Small chance, {in30} percent."]
+        dry: ["No, staying dry.", "Dry. No rain expected."]
+    - id: understeer
+      label: "Understeer"
+      kind: opinion
+      topic: balance
+      replies:
+        default: ["Copy, understeer. Bias back one, to {bias_to}.", "Understeer noted. Try bias {bias_to}, diff on entry lower."]
+        no_bias: ["Copy, understeer. Try bias back one.", "Understeer noted."]
+    - id: oversteer
+      label: "Oversteer"
+      kind: opinion
+      topic: balance
+      replies:
+        default: ["Copy, oversteer. Bias forward one, to {bias_to}.", "Oversteer noted. Try bias {bias_to}, ease the diff."]
+        no_bias: ["Copy, oversteer. Try bias forward one.", "Oversteer noted."]
+    - id: mindset
+      label: "Mindset"
+      kind: action
+      action: mindset
+    - id: silent
+      label: "Radio silent"
+      kind: action
+      action: silent
+    - id: page
+      label: "Next page"
+      kind: action
+      action: page

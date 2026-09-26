@@ -316,6 +316,8 @@ class Snapshot:
     weather_crossover: str = ""
     pit_plan: str = ""
     pit_plan_lap: int = 0
+    # Driver menu opinion (docs/12): "understeer" | "oversteer" | "" while it holds.
+    driver_balance: str = ""
     pit_plan_gain_s: float = 0.0
     pit_plan_confidence: float = 0.0
     pit_plan_risk: float = 0.0

@@ -151,6 +151,25 @@ MIGRATIONS: list[str] = [
         lap_num INT
     );
     """,
+    # 3: driver menu picks (docs/12): questions, opinions, actions
+    """
+    CREATE TABLE driver_inputs (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        t REAL,
+        session_time REAL,
+        lap INT,
+        lap_distance REAL,
+        item_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        topic TEXT,
+        label TEXT,
+        reply TEXT,
+        inputs TEXT,
+        mindset TEXT
+    );
+    CREATE INDEX driver_inputs_session ON driver_inputs(session_uid, t);
+    """,
 ]
 
 
@@ -361,6 +380,9 @@ class Database:
                     ),
                 )
             return
+        if outcome == "driver_input":
+            self._insert_driver_input(session_uid, record)
+            return
         if outcome not in _CALL_OUTCOMES:
             return
         inputs = record.get("inputs")
@@ -384,6 +406,29 @@ class Database:
                     record.get("text"),
                     json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("config_hash"),
+                    record.get("mindset"),
+                ),
+            )
+
+    def _insert_driver_input(self, session_uid: int, record: dict[str, Any]) -> None:
+        inputs = record.get("inputs")
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO driver_inputs(session_uid, t, session_time, lap, lap_distance,"
+                " item_id, kind, topic, label, reply, inputs, mindset)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    record.get("t"),
+                    record.get("session_time"),
+                    record.get("lap"),
+                    record.get("lap_distance"),
+                    record.get("item_id"),
+                    record.get("kind"),
+                    record.get("topic") or None,
+                    record.get("label"),
+                    record.get("text"),
+                    json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("mindset"),
                 ),
             )
@@ -426,6 +471,11 @@ class Database:
     def bookmarks_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows(
             "SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
+        )
+
+    def driver_inputs_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM driver_inputs WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
         )
 
     def latest_session_uid(self) -> int | None:
