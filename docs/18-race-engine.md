@@ -359,15 +359,34 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `energy_over` / `energy_under` | 2/3 | `energy_mode == 'over'`/`'under'` at lap end |
 | `overtake_mode` | 2 | `energy_mode == 'attack_ok' and gap_ahead_s <= mode.overtake_call_gap_s and drs_available` |
 | `drs_enabled` | 3 | DRS enabled event after SC / lap 2 |
-| `penalty` | 1 | `penalty_recent` |
+| `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
+| `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |
 | `serve_penalty` | 2 | `unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now','box_in_n')` |
 | `warnings` | 3 | `corner_cut_warnings >= th.warnings_warn` |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
-| `rival_pitted` | 2 | `rival_ahead_pitted or rival_behind_pitted` |
+| `rival_pitted` | 2 | `rival_ahead_pitted or rival_behind_pitted`; the behind call waits until our own tyres are 2 laps old, so it never announces cars that stopped alongside us |
 | `weather_crossover` | 2 | `weather_crossover != ''` |
 | `sc_deployed` / `vsc_deployed` / `sc_ending` | 1 | phase transitions |
 | `lights_out` | 3 | LGOT: "laps_remaining, fuel margin, plan" |
 | `pit_exit_traffic_race` | 2 | out_lap and `pit_exit_rival_gap_s < th.pit_exit_traffic_s` |
+
+Fuel burn per lap: this session's measured burn (median of green-lap deltas, ≥ 2 laps)
+→ the game's own MFD estimate `fuel_in_tank / (laps_remaining + fuel_remaining_laps)` →
+the learned/overlay/default prior. Energy allowance is net store drawdown per lap,
+`(store − floor) / laps_remaining`, compared against `deployed − harvested`; the energy
+calls skip laps 1–2, which spend the launch charge.
+
+Race phase: `in_lap` starts on the *transition* into driver status IN_LAP (the game can
+hold it there for the rest of the race) or on pit entry; `out_lap` only follows an
+observed pit-lane visit.
+
+Setup feedback: brake bias (`front_brake_bias`, Car Status) is read live and quoted in
+lock-up advice (rear lock → bias forward; the same front lock-up on 3+ laps → brake
+earlier or bias rearward). The differential comes from Car Setups
+(`setup_on_throttle_diff` / `setup_off_throttle_diff`), which the game rebroadcasts after
+in-race MFD changes (the reviewed race recording shows on-throttle 60 → 50 and bias
+57 → 56 mid-race); repeated rear lock-ups on entry also suggest more off-throttle diff.
+There is no wheelspin/traction detector yet, so no on-throttle diff advice is given.
 
 `mindset` remains a first-class field of every decision-log record; `Engine.apply_settings()`
 propagates a live mindset change to the rule engine (`mode`), dispatcher (`budget_override`)

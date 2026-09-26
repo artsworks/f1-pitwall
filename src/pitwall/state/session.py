@@ -352,6 +352,8 @@ class Snapshot:
     setup_front_wing: int = 0
     setup_rear_wing: int = 0
     setup_brake_bias: int = 0
+    setup_on_throttle_diff: int = 0
+    setup_off_throttle_diff: int = 0
     active_aero_mode: int = 0
     active_aero_available: int = 0
     overtake_available: int = 0
@@ -595,6 +597,8 @@ class SessionState:
         self.setup_front_wing = 0
         self.setup_rear_wing = 0
         self.setup_brake_bias = 0
+        self.setup_on_throttle_diff = 0
+        self.setup_off_throttle_diff = 0
         self.active_aero_mode = 0
         self.active_aero_available = 0
         self.overtake_available = 0
@@ -1134,6 +1138,8 @@ class SessionState:
         self.setup_front_wing = car.front_wing
         self.setup_rear_wing = car.rear_wing
         self.setup_brake_bias = car.brake_bias
+        self.setup_on_throttle_diff = car.on_throttle
+        self.setup_off_throttle_diff = car.off_throttle
         self.setup = dataclasses.asdict(car)
         self.setup_tyre_pressure = Corners(
             car.rear_left_tyre_pressure,
@@ -1463,6 +1469,8 @@ class SessionState:
             setup_front_wing=self.setup_front_wing,
             setup_rear_wing=self.setup_rear_wing,
             setup_brake_bias=self.setup_brake_bias,
+            setup_on_throttle_diff=self.setup_on_throttle_diff,
+            setup_off_throttle_diff=self.setup_off_throttle_diff,
             active_aero_mode=self.active_aero_mode,
             active_aero_available=self.active_aero_available,
             overtake_available=self.overtake_available,

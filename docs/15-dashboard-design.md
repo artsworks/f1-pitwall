@@ -47,13 +47,13 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 | 1 | **Call banner** — current call, priority, age, lap, one evidence line | The spoken word is the product; the screen confirms and explains it | ~60 px text, 160–190 px tall |
 | 2 | **Freshness** — LIVE/STALE, packet age, WS rate | A stale screen must be recognisable instantly | 26 px, top-left corner, always the same place |
 | 3 | **Previous radio** — one line below the current call | Preserves the last call as the next one arrives, without competing for attention | 22 px, dim |
-| 4 | **Radio log** — older calls, lap, priority, audio state / ACK / NEG | "What did it say two laps ago?" | 26 px |
+| 4 | **Radio log** — the 3 most recent older calls, lap, priority, audio state / ACK / NEG | "What did it say two laps ago?" | 26 px |
 | 5 | **Tyres** — 2×2 car plan view; inner EMA temp, surface, wear %, status word | Justifies thermal / wear calls; the most common M1–M2 call family | 52 px temp, 22–23 px labels and detail, 20 px brake |
 | 6 | **Fuel** — laps remaining, then delta to a real target when available | Justifies lift-and-coast / fuel calls | 40 px |
 | 7 | **Lap / position / session phase** | Context for every call | 32 px |
 | 8 | **Damage** — front wing L/R, rear wing, floor, diffuser, sidepod, gearbox, engine | Justifies "box for a wing"; hidden when all zero | 22 px, list |
 | 9 | **Mindset** BALANCED / AGGRESSIVE + verbosity + quiet | One-press control; must be visible to trust the calls | 24 px pill |
-| 10 (M3) | **Pit window**, undercut/overcut threats, gaps ahead/behind, stint plan | Race strategy; the tactical block | 32 px |
+| 10 (M3) | **Pit window**, undercut/overcut threats, gaps ahead/behind, stint plan | Race strategy; the tactical block. In a race the ahead/behind duel cards (gap rail, tyre, pace, trend, threat) take the top of the right column above the 3-row log | 32 px |
 | — | ERS, SC status, latency p99 | Footer, small, dim. Diagnostics, not driving information | 18 px |
 
 ## 3. Layout grid

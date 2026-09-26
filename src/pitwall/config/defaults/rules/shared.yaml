@@ -135,6 +135,9 @@ rules:
       - "Rear's locking on entry. Bias forward a click or two from {front_brake_bias}."
       - "{lockup_wheel} locked. Try more front bias, currently {front_brake_bias}."
     escalate:
+      - after: 2
+        say:
+          - "Rears still stepping out on entry. Bias forward from {front_brake_bias}, or more off-throttle diff, you're on {setup_off_throttle_diff} percent."
       - after: 3
         say:
           - "Rears again. Bias forward, you're still on {front_brake_bias}."

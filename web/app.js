@@ -130,6 +130,7 @@
     renderPage(p);
     renderStrategy(p.strategy, p.quali);
     renderBattle(p.strategy);
+    renderDuel(p.strategy, p.quali);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
     renderSetupPage(p.setup);
@@ -308,6 +309,21 @@
       (s.pit_loss_s ? " · loss " + fmt(s.pit_loss_s, 1) + " s (" + (s.pit_loss_source || "prior") + ")" : ""));
     setText("b-plan", s.plan ? String(s.plan.kind).toUpperCase() + " · " + (s.plan.reason || "") +
       " · conf " + fmt(100 * (s.plan.confidence || 0), 0) + "%" : s.stint_plan);
+  }
+
+  // Race page right column: ahead/behind cards above a short radio log.
+  function renderDuel(s, q) {
+    var on = !!(s && !q && (s.ahead || s.behind));
+    document.body.classList.toggle("duel-on", on);
+    if (!on) return;
+    battleCard("d-ahead", s.ahead, "ahead", s);
+    battleCard("d-behind", s.behind, "behind", s);
+    var pe = s.pit_exit || {}, bits = [];
+    if (s.plan && s.plan.kind) bits.push(String(s.plan.kind).toUpperCase().replace("_", " ") +
+      (s.plan.lap ? " L" + s.plan.lap : ""));
+    bits.push("PIT EXIT " + (pe.clean ? "CLEAR" : "TRAFFIC") +
+      (pe.rival ? " " + String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : ""));
+    setText("d-plan", bits.join(" · "));
   }
 
   function renderCarPage(p, s) {
@@ -836,11 +852,14 @@
     renderLog(cur, prev);
   }
 
+  var LOG_ROWS = 3;  // older calls shown under the banner (docs/15 §4)
+
   function renderLog(cur, prev) {
     var log = el("log");
     if (!log) return;
     log.innerHTML = "";
-    var rows = calls.filter(function (c) { return c !== cur && c !== prev; }).reverse();
+    var rows = calls.filter(function (c) { return c !== cur && c !== prev; }).reverse()
+      .slice(0, LOG_ROWS);
     if (!rows.length) {
       var e = document.createElement("li");
       e.className = "empty"; e.textContent = "no earlier radio";

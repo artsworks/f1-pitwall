@@ -326,6 +326,16 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 .b-card .k { color: var(--dim); }
 .b-foot { font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .carpage { grid-area: carpage; flex-direction: column; gap: .8rem; }
+/* race page right column: ahead/behind duel cards above a 3-row radio log */
+.duel { grid-area: duel; display: none; flex-direction: column; gap: .5rem; overflow: hidden; }
+body.dash.page-race.duel-on:not(.pit):not(.cool) .duel { display: flex; }
+body.dash.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres duel" "fuel log" "strat log" "footer footer"; }
+body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres duel" "fuel log" "strat log"
+    "transport transport" "footer footer"; }
+body.dash.page-race.duel-on #s-ahead, body.dash.page-race.duel-on #s-behind { display: none; }
+body.stale .duel > * { filter: grayscale(1); opacity: .4; }
 .cp-grid { display: grid; grid-template-columns: 1fr; gap: .7rem; }
 .cp-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
   padding: .5rem .8rem; }
@@ -405,6 +415,10 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
   .setuppage ol { columns: 1; }
   body.radio .status { flex-wrap: wrap; white-space: normal; gap: .3rem .8rem;
     padding: .4rem .6rem; }
+  body.dash.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "strat" "duel" "tyres" "fuel" "log" "footer"; }
+  body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "strat" "duel" "tyres" "fuel" "log" "transport" "footer"; }
   body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "battle" "strat" "log" "footer"; }
   body.dash.review.page-battle:not(.pit):not(.cool) { grid-template-areas:
