@@ -48,6 +48,8 @@ def run_plan(
     time_left_s: float,
     cool_lap_s: float,
     fuel_laps: float,
+    fuel_push_laps: float = 2.0,
+    fuel_cool_laps: float = 3.0,
 ) -> Plan:
     """Decision on crossing the line after a hot lap.
 
@@ -58,14 +60,14 @@ def run_plan(
         return Plan("box", "flag")
     if margin_kind and margin_ms >= safe_margin_ms:
         return Plan("box", "safe")
-    if fuel_laps < 2:
+    if fuel_laps < fuel_push_laps:
         return Plan("box", "fuel")
     need = "battery" if ers_pct < ers_min_pct else "tyres" if hottest_c >= tyre_hot_c else ""
     if not need:
         return Plan("push", "ready")
     if time_left_s < cool_lap_s:
         return Plan("push_now", "time")
-    if fuel_laps < 3:
+    if fuel_laps < fuel_cool_laps:
         return Plan("push_now", "fuel")
     return Plan("cool", need)
 

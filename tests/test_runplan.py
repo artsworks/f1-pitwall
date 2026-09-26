@@ -285,3 +285,9 @@ def test_run_tracker_extends_cool_lap() -> None:
         extend_cool=True,
     )
     assert rt.kind == COOL and rt.plan == Plan("cool", "battery")
+
+
+def test_fuel_thresholds_configurable() -> None:
+    # Q2 recording: 2.84 laps at the line was enough for cool + hot + in.
+    assert _plan(ers_pct=0.0, fuel_laps=2.84, fuel_cool_laps=2.2) == Plan("cool", "battery")
+    assert _plan(ers_pct=0.0, fuel_laps=2.0, fuel_cool_laps=2.2) == Plan("push_now", "fuel")

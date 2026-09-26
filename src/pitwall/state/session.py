@@ -658,6 +658,8 @@ class SessionState:
             time_left_s=self.session_time_left,
             cool_lap_s=self._th("cool_lap_factor", 1.3) * lap_s,
             fuel_laps=self.fuel_remaining_laps,
+            fuel_push_laps=self._th("fuel_push_need_laps", 2.0),
+            fuel_cool_laps=self._th("fuel_cool_need_laps", 3.0),
         )
 
     def _cool_extend(self) -> bool:
