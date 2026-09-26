@@ -552,14 +552,23 @@ body.swap .strat { animation-delay: 80ms; }
   .rail { height: 1.1rem; }
 }
 
-/* phone landscape on a wheel stand: compress the banner, keep the grid */
+/* phone landscape on a wheel stand: too short for the fixed grid, so the
+   zones take their natural height and the page scrolls under a pinned status
+   bar and banner */
 @media (max-height: 500px) and (orientation: landscape) {
-  body.dash { grid-template-rows: 2.4rem 6.5rem 1fr auto auto 1.6rem; }
-  body.dash.review { grid-template-rows: 2.4rem 6.5rem 1fr auto auto auto 1.6rem; }
+  body.dash, body.dash.review, body.dash.cool, body.dash.pit { height: auto; min-height: 100vh;
+    overflow: visible; grid-template-rows: auto; grid-auto-rows: auto; }
+  body.dash .status { position: sticky; top: 0; z-index: 3; font-size: 1.1rem; gap: .8rem; }
+  body.dash .banner { position: sticky; top: var(--status-h, 2.4rem); z-index: 2;
+    min-height: 5.5rem; box-shadow: 0 .6rem 1rem -.6rem #000; }
   body.dash .banner .text { font-size: 2rem; -webkit-line-clamp: 1; }
-  body.dash .status { font-size: 1.1rem; gap: .8rem; }
+  body.dash .tyres { min-height: 16rem; }
+  body.dash .car { min-height: 14rem; }
+  body.dash .log { max-height: 14rem; }
   body.dash .corner .temp { font-size: 2rem; }
   body.dash .footer { font-size: .8rem; }
+  body.dash .battle, body.dash .carpage, body.dash .trackpage, body.dash .setuppage {
+    overflow: visible; }
 }
 
 /* phone portrait: status and the call banner stay pinned while the page
