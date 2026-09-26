@@ -104,6 +104,7 @@
     document.body.classList.toggle("redflag", !!p.red_flag);
     renderQuali(p.quali);
     renderCool(p.quali ? p.quali.cool : null, p.quali);
+    renderPitBoard(p.pit_board, p.quali, p.phase);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -218,6 +219,144 @@
         }).join(" · ") : "in window");
       }
     }
+  }
+
+
+  // Pit board (garage / pitting): release light, per-corner pressure target,
+  // next-run summary and the car setup in game-menu order.
+  var SETUP_GROUPS = [
+    ["AERODYNAMICS", [["front_wing", "F wing", 0], ["rear_wing", "R wing", 0]]],
+    ["TRANSMISSION", [["on_throttle", "on-thr", 0, "%"], ["off_throttle", "off-thr", 0, "%"],
+      ["engine_braking", "eng brk", 0, "%"]]],
+    ["SUSP. GEOMETRY", [["front_camber", "F camber", 2, "°"], ["rear_camber", "R camber", 2, "°"],
+      ["front_toe", "F toe", 2, "°"], ["rear_toe", "R toe", 2, "°"]]],
+    ["SUSPENSION", [["front_suspension", "F spr", 0], ["rear_suspension", "R spr", 0],
+      ["front_anti_roll_bar", "F arb", 0], ["rear_anti_roll_bar", "R arb", 0],
+      ["front_suspension_height", "F ride", 0], ["rear_suspension_height", "R ride", 0]]],
+    ["BRAKES", [["brake_pressure", "pressure", 0, "%"], ["brake_bias", "bias", 0, "%"]]],
+    ["TYRES", null],
+    ["FUEL", [["fuel_load", "load", 1, " kg"]]]
+  ];
+  var CORNERS = ["fl", "fr", "rl", "rr"];
+
+  function releaseState(q, phase) {
+    var r = q && q.release;
+    if (!r) return { text: phase === "pitting" ? "PITTING" : "IN GARAGE", cls: "", sub: "" };
+    var sub = [r.cars_on_track + " on track"];
+    if (r.gap_ahead_s !== null) sub.push(fmt(r.gap_ahead_s, 0) + " s clear ahead");
+    if (r.gap_behind_s !== null) sub.push(fmt(r.gap_behind_s, 0) + " s behind");
+    if (r.time_for_out_lap === false) {
+      return { text: "STAY IN · NO TIME FOR A LAP", cls: "crit", sub: sub.join(" · ") };
+    }
+    if (r.clean) return { text: "GO · TRACK CLEAR", cls: "ok", sub: sub.join(" · ") };
+    if (r.wait_s !== null) return { text: "HOLD · " + fmt(r.wait_s, 0) + " s", cls: "warn", sub: sub.join(" · ") };
+    return { text: "HOLD · TRAFFIC", cls: "crit", sub: "no gap in 60 s · " + sub.join(" · ") };
+  }
+
+  function renderCorner(k, t) {
+    var node = el("pb-" + k);
+    if (!node) return;
+    var move = node.querySelector(".pb-move"), psi = node.querySelector(".pb-psi"),
+      det = node.querySelector(".pb-det");
+    var now = t.psi !== null ? fmt(t.psi, 1) : "--", cls = "none", word = "--", psiTxt = now;
+    if (t.limited) {
+      cls = "limit"; word = t.edge === "min" ? "AT MIN" : "AT MAX";
+    } else if (t.target_psi !== null && t.delta_psi) {
+      cls = t.applied ? "set" : t.delta_psi > 0 ? "up" : "down";
+      word = t.applied ? "SET ✓" : (t.delta_psi > 0 ? "▲ +" : "▼ −") + fmt(Math.abs(t.delta_psi), 1);
+      psiTxt = t.applied ? now + " psi" : now + " → " + fmt(t.target_psi, 1);
+    } else if (t.avg_c !== null) {
+      cls = "hold"; word = "HOLD";
+    }
+    node.className = "pb-corner " + cls;
+    move.textContent = word;
+    psi.textContent = psiTxt;
+    det.textContent = t.avg_c !== null ? "run avg " + Math.round(t.avg_c) + "°" : "no run data";
+  }
+
+  function setupRow(list, group, value, state, tag) {
+    var li = document.createElement("li");
+    if (state) li.className = state;
+    var box = document.createElement("span");
+    box.className = "box"; box.textContent = state === "todo" ? "☐" : state === "done" ? "☑" : "·";
+    var g = document.createElement("span");
+    g.className = "grp"; g.textContent = group;
+    var v = document.createElement("span");
+    v.textContent = value;
+    var t = document.createElement("span");
+    t.className = "tag"; t.textContent = tag;
+    [box, g, v, t].forEach(function (n) { li.appendChild(n); });
+    list.appendChild(li);
+  }
+
+  function renderSetup(b) {
+    var list = el("pb-setup");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!b.setup) {
+      var e = document.createElement("li");
+      e.className = "dim"; e.textContent = "no setup packet yet";
+      list.appendChild(e);
+      return;
+    }
+    SETUP_GROUPS.forEach(function (g) {
+      if (g[1] === null) {
+        var todo = CORNERS.filter(function (k) {
+          var t = b.tyres[k];
+          return t.target_psi !== null && t.delta_psi && !t.limited;
+        });
+        var left = todo.filter(function (k) { return !b.tyres[k].applied; });
+        var value = CORNERS.map(function (k) {
+          var t = b.tyres[k];
+          return k.toUpperCase() + " " + fmt(t.psi, 1) +
+            (todo.indexOf(k) >= 0 && !t.applied ? "→" + fmt(t.target_psi, 1) : "");
+        }).join("  ");
+        setupRow(list, g[0], value, todo.length ? (left.length ? "todo" : "done") : "",
+          todo.length ? (left.length ? left.length + " to change" : "changed") : "no change");
+        return;
+      }
+      var parts = g[1].map(function (f) {
+        var v = b.setup[f[0]];
+        return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || ""));
+      });
+      setupRow(list, g[0], parts.join("  "), "", "no change");
+    });
+  }
+
+  function renderPitBoard(b, q, phase) {
+    var box = el("pitboard");
+    if (!box) return;
+    box.hidden = !b;
+    document.body.classList.toggle("pit", !!b);
+    if (!b) return;
+    var rel = releaseState(q, phase);
+    setText("pb-release", rel.text);
+    setClass("pb-release", "pb-release " + rel.cls);
+    setText("pb-release-sub", rel.sub || (b.has_advice ? "" : "no run data yet"));
+    setText("pb-press-note", b.has_advice ? "" : "· no flying laps this run");
+    CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k]); });
+    var plan = q && q.plan;
+    setText("pb-plan", plan ? "PLAN " + plan.plan.toUpperCase() +
+      (plan.reason ? " · " + plan.reason : "") : "PLAN --");
+    var fuelOk = b.fuel_laps >= b.fuel_need_laps;
+    setText("pb-fuel", "FUEL " + fmt(b.fuel_laps, 1) + " laps · need " + fmt(b.fuel_need_laps, 1));
+    setClass("pb-fuel", "pb-row " + (fuelOk ? "ok" : "crit"));
+    setText("pb-ers", "BATTERY " + fmt(b.ers_pct, 0) + "% · want " + fmt(b.ers_need_pct, 0) + "%");
+    setClass("pb-ers", "pb-row " + (b.ers_pct >= b.ers_need_pct ? "ok" : "warn"));
+    setText("pb-time", q ? clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh set" +
+      (q.fresh_sets === 1 ? "" : "s") : "--");
+    var pole = el("pb-pole");
+    if (pole) {
+      pole.hidden = !q;
+      if (q) {
+        pole.textContent = "BEST " + lapTime(q.best_lap_ms) +
+          (q.margin_ms !== null && q.margin_ms !== undefined ?
+            (q.margin_kind === "pole" ? " · vs P2 " : " · vs cut ") + signed(-q.margin_ms) : "") +
+          (q.through ? " · THROUGH" : "");
+        pole.className = "pb-row " + (q.through || (q.margin_ms > 0) ? "ok" : "");
+      }
+    }
+    renderSetup(b);
   }
 
   // Cool-down lap (docs/17): shown only while the payload carries `cool`; the

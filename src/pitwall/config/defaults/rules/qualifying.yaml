@@ -113,8 +113,8 @@ rules:
     clear_when: "phase == 'out_lap'"
     requires: [car_telemetry]
     say:
-      - "For the next run, {pressure_advice_text}"
-      - "Pressures for next time: {pressure_advice_text}"
+      - "Pressures: {pressure_advice_text}"
+      - "On pressures, {pressure_advice_text}"
   - id: tyre_pressure_ok
     sessions: [practice, qualifying]
     priority: 2

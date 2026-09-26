@@ -109,31 +109,64 @@ def pressure_advice(
     return tuple(out)
 
 
+_GROUPS = (
+    (("fl", "fr", "rl", "rr"), "all round"),
+    (("fl", "fr"), "fronts"),
+    (("rl", "rr"), "rears"),
+    (("fl", "rl"), "lefts"),
+    (("fr", "rr"), "rights"),
+)
+
+
+def _group(keys: list[str]) -> list[tuple[str, list[str]]]:
+    """Largest named groups first: all round, axles, sides, then single corners."""
+    left = list(keys)
+    out: list[tuple[str, list[str]]] = []
+    for ks, label in _GROUPS:
+        if all(k in left for k in ks):
+            out.append((label, list(ks)))
+            left = [k for k in left if k not in ks]
+    out.extend((dict(_ORDER)[k], [k]) for k in left)
+    return out
+
+
 def pressure_text(calls: tuple[PressureCall, ...]) -> str:
-    """Spoken advice, grouping an axle (or all four) that wants the same change:
-    "drop the fronts 0.4, raise the rear right 0.2"."""
-    by = {c.corner: c for c in calls}
-
-    def same(keys: tuple[str, ...]) -> bool:
-        cs = [by.get(k) for k in keys]
-        return all(cs) and len({(c.delta_psi, c.limited) for c in cs if c}) == 1
-
-    groups: list[tuple[str, PressureCall]] = []
-    if len(by) == 4 and same(("fl", "fr", "rl", "rr")):
-        groups.append(("all four", by["fl"]))
-    else:
-        for keys, label in ((("fl", "fr"), "the fronts"), (("rl", "rr"), "the rears")):
-            if same(keys):
-                groups.append((label, by[keys[0]]))
-            else:
-                groups.extend((f"the {by[k].name}", by[k]) for k in keys if k in by)
+    """Short spoken advice: "rights down 0.2. Lefts are already at the minimum",
+    "up 0.4 all round, rear right just 0.2"."""
+    moves = [c for c in calls if not c.limited]
+    limited = [c for c in calls if c.limited]
     parts: list[str] = []
-    for label, c in groups:
-        if c.limited:
-            plural = label in ("all four", "the fronts", "the rears")
-            edge = "minimum" if c.wanted_psi < 0 else "maximum"
-            parts.append(f"{label} {'are' if plural else 'is'} already at the {edge}")
-        else:
-            verb = "raise" if c.delta_psi > 0 else "drop"
-            parts.append(f"{verb} {label} {abs(c.delta_psi):.1f}")
-    return ", ".join(parts)
+    if len(moves) == 4 and len({c.delta_psi for c in moves}) == 2:
+        amounts = [c.delta_psi for c in moves]
+        common = max(set(amounts), key=amounts.count)
+        odd = [c for c in moves if c.delta_psi != common]
+        if len(odd) == 1 and (odd[0].delta_psi > 0) == (common > 0):
+            verb = "up" if common > 0 else "down"
+            odd_psi = abs(odd[0].delta_psi)
+            parts.append(f"{verb} {abs(common):.1f} all round, {odd[0].name} just {odd_psi:.1f}")
+            moves = []
+    by_delta: dict[float, list[str]] = {}
+    for c in moves:
+        by_delta.setdefault(c.delta_psi, []).append(c.corner)
+    for delta, keys in by_delta.items():
+        verb = "up" if delta > 0 else "down"
+        for label, _ in _group(keys):
+            if label == "all round":
+                parts.append(f"{verb} {abs(delta):.1f} all round")
+            else:
+                parts.append(f"{label} {verb} {abs(delta):.1f}")
+    text = ", ".join(parts)
+    notes: list[str] = []
+    for edge in ("minimum", "maximum"):
+        keys = [c.corner for c in limited if (c.wanted_psi < 0) == (edge == "minimum")]
+        for label, ks in _group(keys):
+            if label == "all round":
+                notes.append(f"already at the {edge} all round")
+            else:
+                notes.append(f"{label} {'are' if len(ks) > 1 else 'is'} already at the {edge}")
+    if not notes:
+        return text
+    note = ", ".join(notes)
+    if not text:
+        return note
+    return f"{text}. {note[0].upper()}{note[1:]}"

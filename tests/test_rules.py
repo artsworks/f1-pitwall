@@ -198,7 +198,7 @@ def test_quali_safe_margin_and_pressure_rules() -> None:
         )
     )
     texts = {c.rule.defn.id: c.text for c in result.candidates}
-    assert texts["tyre_pressure_advice"] == "For the next run, front right down 0.4"
+    assert texts["tyre_pressure_advice"] == "Pressures: front right down 0.4"
     assert "tyre_pressure_ok" not in texts
     # Not enough flying time on the run: no advice either way
     result = _default_rule_engine().evaluate(

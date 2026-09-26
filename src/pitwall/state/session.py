@@ -3,6 +3,7 @@ frozen view rules read. Player car only for M1 (24-slot arrays kept)."""
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -273,6 +274,7 @@ class Snapshot:
     quali_margin_s: float = 0.0
     quali_margin_kind: str = ""  # "cut" (Q1/Q2) | "pole" (Q3) | "" unknown
     setup_tyre_pressure: Corners = _ZERO_CORNERS
+    setup: Mapping[str, float] = field(default_factory=dict)
     run_tyre_inner_avg: Corners = _ZERO_CORNERS
     run_flying_s: float = 0.0
     pressure_advice: tuple[PressureCall, ...] = ()
@@ -396,6 +398,8 @@ class SessionState:
         self.brake_temp = _ZERO_CORNERS
         self.run_temps = RunTemps()
         self.setup_tyre_pressure = _ZERO_CORNERS
+        self.setup: dict[str, float] = {}
+        self._pressure_base: Corners | None = None
         self.tyre_compound = 0
         self.tyre_visual = 0
         self.tyre_age_laps = 0
@@ -577,6 +581,7 @@ class SessionState:
         self.position = car.car_position
         if car.driver_status == DriverStatus.OUT_LAP and self.driver_status != DriverStatus.OUT_LAP:
             self.run_temps.reset()
+            self._pressure_base = None
         self.driver_status = car.driver_status
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
             self._pit_exit_t = self._last_session_time
@@ -777,6 +782,7 @@ class SessionState:
         self.setup_front_wing = car.front_wing
         self.setup_rear_wing = car.rear_wing
         self.setup_brake_bias = car.brake_bias
+        self.setup = dataclasses.asdict(car)
         self.setup_tyre_pressure = Corners(
             car.rear_left_tyre_pressure,
             car.rear_right_tyre_pressure,
@@ -981,9 +987,16 @@ class SessionState:
                 abort_advised = advice.advised
                 abort_reason = advice.reason
         run_avg = self.run_temps.mean()
+        # Advice is against the setup the run was driven on, so it stays put
+        # while the driver dials the new pressures in.
+        if phase in ("in_lap", "pitting", "garage"):
+            if self._pressure_base is None:
+                self._pressure_base = self.setup_tyre_pressure
+        else:
+            self._pressure_base = None
         pressures = pressure_advice(
             run_avg,
-            self.setup_tyre_pressure,
+            self._pressure_base or self.setup_tyre_pressure,
             self._th("pressure_window_low_c", 88.0),
             self._th("pressure_window_high_c", 102.0),
             hot_sign=self._th("pressure_hot_sign", 1.0),
@@ -1115,6 +1128,7 @@ class SessionState:
             quali_margin_s=round(margin_ms / 1000.0, 1),
             quali_margin_kind=margin_kind,
             setup_tyre_pressure=self.setup_tyre_pressure,
+            setup=dict(self.setup),
             run_tyre_inner_avg=run_avg,
             run_flying_s=self.run_temps.seconds,
             pressure_advice=pressures,

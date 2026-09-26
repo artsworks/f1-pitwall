@@ -41,6 +41,50 @@ def _finite(x: float) -> float | None:
     return x if math.isfinite(x) else None
 
 
+PIT_BOARD_PHASES = ("pitting", "garage")
+
+
+def pit_board_payload(
+    snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
+) -> dict[str, Any] | None:
+    """Full-screen pit board while pitting / in the garage: pressure target per
+    corner, car setup as the game reports it, and what the next run has."""
+    if snapshot.phase not in PIT_BOARD_PHASES:
+        return None
+    th = thresholds or {}
+    advice = {c.corner: c for c in snapshot.pressure_advice} if snapshot.run_flying_s > 0 else {}
+    tyres: dict[str, dict[str, Any]] = {}
+    for name in ("fl", "fr", "rl", "rr"):
+        now_psi = getattr(snapshot.setup_tyre_pressure, name) or None
+        c = advice.get(name)
+        target = c.target_psi if c and c.target_psi else None
+        tyres[name] = {
+            "psi": now_psi,
+            "target_psi": target,
+            "delta_psi": c.delta_psi if c else 0.0,
+            "limited": c.limited if c else False,
+            "edge": ("min" if c.wanted_psi < 0 else "max") if c and c.limited else None,
+            "avg_c": c.avg_c if c else None,
+            "applied": bool(
+                c
+                and not c.limited
+                and target is not None
+                and now_psi is not None
+                and abs(now_psi - target) < 0.05
+            ),
+        }
+    return {
+        "has_advice": bool(advice),
+        "advice_text": snapshot.pressure_advice_text if advice else "",
+        "tyres": tyres,
+        "setup": dict(snapshot.setup) or None,
+        "fuel_laps": snapshot.fuel_remaining_laps,
+        "fuel_need_laps": th.get("fuel_push_need_laps", 0.9),
+        "ers_pct": snapshot.ers_store_pct,
+        "ers_need_pct": snapshot.ers_need_pct or th.get("cool_ers_min_pct", 40.0),
+    }
+
+
 def quali_payload(
     snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
 ) -> dict[str, Any] | None:
@@ -75,6 +119,7 @@ def quali_payload(
             "gap_ahead_s": _finite(snapshot.release_gap_ahead_s),
             "gap_behind_s": _finite(snapshot.release_gap_behind_s),
             "cars_on_track": snapshot.cars_on_track,
+            "time_for_out_lap": snapshot.time_for_out_lap,
         }
     if snapshot.phase == "flying" and snapshot.projected_lap_ms:
         out["lap"] = {
@@ -191,6 +236,7 @@ def state_payload(
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
         "quali": quali_payload(snapshot, settings.thresholds),
+        "pit_board": pit_board_payload(snapshot, settings.thresholds),
         "latency": {
             "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],

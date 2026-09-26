@@ -414,6 +414,7 @@ def test_state_payload_quali_zone() -> None:
         "gap_ahead_s": None,
         "gap_behind_s": None,
         "cars_on_track": 3,
+        "time_for_out_lap": True,
     }
     flying = state_payload(
         Snapshot(
@@ -430,3 +431,46 @@ def test_state_payload_quali_zone() -> None:
     )
     assert flying["quali"]["lap"] == {"projected_ms": 90_700, "delta_ms": 700, "abort": True}
     assert "release" not in flying["quali"]
+
+
+def test_pit_board_payload() -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import pit_board_payload
+    from pitwall.state.pressure import PressureCall
+    from pitwall.state.session import Snapshot
+
+    assert pit_board_payload(Snapshot(now=1.0, phase="flying")) is None
+    calls = (
+        PressureCall("fl", "front left", 85.0, "small", 0.0, 0.0, True, -0.2),
+        PressureCall("rr", "rear right", 107.0, "medium", 0.4, 21.4),
+        PressureCall("rl", "rear left", 107.0, "medium", 0.4, 21.4),
+    )
+    board = pit_board_payload(
+        Snapshot(
+            now=1.0,
+            phase="garage",
+            run_flying_s=90.0,
+            pressure_advice=calls,
+            pressure_advice_text="rears up 0.4",
+            setup_tyre_pressure=Corners(rl=21.0, rr=21.4, fl=22.5, fr=23.0),
+            setup={"front_wing": 12},
+            fuel_remaining_laps=1.6,
+        ),
+        {"fuel_push_need_laps": 0.9},
+    )
+    assert board is not None
+    t = board["tyres"]
+    assert t["fl"]["limited"] and t["fl"]["edge"] == "min" and t["fl"]["target_psi"] is None
+    assert t["rl"]["target_psi"] == 21.4 and not t["rl"]["applied"]
+    assert t["rr"]["applied"]  # already dialled in
+    assert t["fr"] == {
+        "psi": 23.0,
+        "target_psi": None,
+        "delta_psi": 0.0,
+        "limited": False,
+        "edge": None,
+        "avg_c": None,
+        "applied": False,
+    }
+    assert board["setup"] == {"front_wing": 12}
+    assert board["fuel_need_laps"] == 0.9 and board["has_advice"]
