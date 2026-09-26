@@ -104,7 +104,7 @@ MIGRATIONS: list[str] = [
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
 # `bookmarks`, everything else (paused/resumed/session_reset) stays JSONL-only.
-_CALL_OUTCOMES = {"fired", "suppressed", "ack", "neg", "say_again", "quiet_until"}
+_CALL_OUTCOMES = {"fired", "suppressed", "ack", "neg", "say_again", "quiet_until", "quiet_off"}
 
 
 _U64 = 1 << 64

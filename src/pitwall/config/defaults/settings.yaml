@@ -62,5 +62,6 @@ input:
   response_window_s: 8.0
   say_again_window_s: 30.0  # "say again" only repeats a call spoken this recently
   quiet_minutes: 5
+  spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg
   udp_action_bit: 0x00100000
   negative_mute_laps: 3

@@ -6,7 +6,7 @@ import json
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
-from pitwall.config.models import PolicySettings, RuleDefModel
+from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot
 
@@ -273,3 +273,45 @@ def test_budget_resets_per_quali_run_on_same_lap() -> None:
         d.drain(float(i))
     fired = [r["rule_id"] for r in _log(buf) if r["outcome"] == "fired"]
     assert fired == ["r0", "r2", "r3"]
+
+
+def test_press_gets_spoken_reply() -> None:
+    from pitwall.input.press import Press
+
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(spoken_replies=True)
+    d.submit([_cand("a", text="box box")], _snap(0.0))
+    d.drain(0.0)
+    d.on_press(Press("ack", 1.0), _snap(1.0))
+    calls = d.drain(1.0)
+    assert len(calls) == 1 and calls[0].rule_id == "reply" and calls[0].text == "Copy."
+    d.on_press(Press("neg", 2.0), _snap(2.0))
+    assert [c.text for c in d.drain(2.0)] == ["Noted."]
+
+
+def test_neg_without_target_announces_quiet_and_ack_ends_it() -> None:
+    from pitwall.input.press import Press
+
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(spoken_replies=True)
+    d.on_press(Press("neg", 0.0), _snap(0.0))
+    assert d.quiet_until is not None
+    assert "going quiet" in d.drain(0.0)[0].text
+    d.on_press(Press("ack", 10.0), _snap(10.0))
+    assert d.quiet_until is None
+    assert d.drain(10.0)[0].text == "Radio's back on."
+
+
+def test_rule_reply_and_longer_response_window() -> None:
+    from pitwall.input.press import Press
+
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(spoken_replies=True)
+    cand = _cand(
+        "through", text="no need to push", response_window_s=30, on_neg=["Your call, push on"]
+    )
+    d.submit([cand], _snap(0.0))
+    d.drain(0.0)
+    d.on_press(Press("neg", 16.0), _snap(16.0))  # past the default 8 s window
+    assert d.quiet_until is None
+    assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]

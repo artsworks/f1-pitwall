@@ -38,6 +38,13 @@ rules:
       - "Abort the lap, we're {abort_deficit_s:.1f} off the cut. Save the set"
       - "Box this lap, it's not going to be enough"
       - "That lap's gone, {abort_deficit_s:.1f} down on the cut. Back off and save the tyres"
+    response_window_s: 30
+    on_ack:
+      - "Copy, back it off. Recharge and go again"
+      - "Copy. Cool it"
+    on_neg:
+      - "Understood, keep going. Make it count"
+      - "Copy, stay on it"
   - id: quali_through
     sessions: [qualifying]
     priority: 3
@@ -48,6 +55,13 @@ rules:
     say:
       - "You're safe, that time's through. No need to push"
       - "That's good enough to go through. Bring it home"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Bring it home, nice and easy"
+      - "Copy that. Easy in-lap"
+    on_neg:
+      - "Understood, your call. Go for it, keep it clean"
+      - "Copy, push on. Nothing to lose, just keep it on the track"
   # Comfortable margin after a lap: no need to risk the car or a fresh set.
   - id: quali_safe_cut
     sessions: [qualifying]
@@ -59,6 +73,13 @@ rules:
     say:
       - "You're {quali_margin_s:.1f} clear of the cut. No need to go again, save the set"
       - "That's {quali_margin_s:.1f} inside the cut. Play it safe and keep the tyres"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Box this lap, we save the set"
+      - "Copy that. Bring it in"
+    on_neg:
+      - "Understood, your call. Push on, keep it clean"
+      - "Copy, stay out. Don't risk the car"
   - id: quali_safe_pole
     sessions: [qualifying]
     priority: 2
@@ -69,6 +90,13 @@ rules:
     say:
       - "Provisional pole by {quali_margin_s:.1f}. Play it safe, no risks from here"
       - "You're {quali_margin_s:.1f} up on P2. If you go again, a tidy lap is enough"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Bring it home"
+      - "Copy that. Easy in-lap"
+    on_neg:
+      - "Understood, go for it. Keep it clean"
+      - "Copy, push on. No risks"
   # Pressure advice for the next run from the carcass temps on this run's flying laps.
   - id: tyre_pressure_advice
     sessions: [practice, qualifying]
@@ -100,6 +128,13 @@ rules:
     say:
       - "Go again. Battery {ers_store_pct:.0f}, tyres are fine"
       - "Keep pushing, you've got {ers_store_pct:.0f} percent battery"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Go get it"
+      - "Copy that. Full send"
+    on_neg:
+      - "Understood, your call. Cool this one then"
+      - "Copy. Your call"
   - id: plan_cool
     sessions: [qualifying]
     priority: 2
@@ -111,6 +146,13 @@ rules:
     say:
       - "{run_plan_why}. Cool this one, recharge mode, then we go again"
       - "{run_plan_why}. Back off for a lap, recharge and cool the tyres"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Recharge mode"
+      - "Copy that. Cool it"
+    on_neg:
+      - "Understood, pushing. Watch the battery"
+      - "Copy, go again. Battery's low, use it on the straights"
   - id: plan_push_now
     sessions: [qualifying]
     priority: 2
@@ -122,6 +164,13 @@ rules:
     say:
       - "{run_plan_why}, no time to cool. Keep pushing, battery {ers_store_pct:.0f}. Use it on the straights"
       - "{run_plan_why}. We can't afford a cool lap, go again now"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Go get it"
+      - "Copy that"
+    on_neg:
+      - "Understood. Your call"
+      - "Copy, noted"
   - id: plan_box
     sessions: [qualifying]
     priority: 2
@@ -133,6 +182,13 @@ rules:
     say:
       - "Box, box. {run_plan_why}"
       - "{run_plan_why}. Box this lap"
+    response_window_s: 30
+    on_ack:
+      - "Copy, box this lap"
+      - "Copy that. Box"
+    on_neg:
+      - "Understood, staying out. Your call"
+      - "Copy, stay out"
   - id: plan_box_safe
     sessions: [qualifying]
     priority: 2
@@ -144,6 +200,13 @@ rules:
     say:
       - "Box, box. You're {quali_margin_s:.1f} clear, save the set"
       - "You're {quali_margin_s:.1f} clear. Bring it in, save the set"
+    response_window_s: 30
+    on_ack:
+      - "Copy, box this lap. We save the set"
+      - "Copy that. Bring it in"
+    on_neg:
+      - "Understood, staying out. Keep it clean"
+      - "Copy, your call. No risks"
   # Cool-down lap coaching.
   - id: cool_recharge
     sessions: [qualifying]
@@ -216,6 +279,13 @@ rules:
       - "Battery's only {ers_store_pct:.0f}, we want {ers_need_pct:.0f}. Stay in recharge, one more cool lap"
       - "Not enough battery yet, {ers_store_pct:.0f}. Keep harvesting, another cool lap"
       - "Hold off, battery {ers_store_pct:.0f}. One more lap in recharge, there's time"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Stay in recharge"
+      - "Copy that. One more cool lap"
+    on_neg:
+      - "Understood, pushing. Battery's short, pick your straights"
+      - "Copy, go now. Battery's low"
   - id: lap_deleted
     sessions: [qualifying]
     priority: 1
@@ -226,6 +296,13 @@ rules:
       - "Lap's deleted, track limits. Back off, recharge, we go again"
       - "That one's gone, track limits. Lift, harvest, and we reset for the next"
       - "Lap deleted. Don't waste the battery, cool it and go again"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Cool it and go again"
+      - "Copy that. Recharge"
+    on_neg:
+      - "Understood, keep pushing. It won't count"
+      - "Copy, stay on it"
   - id: lap_deleted_last
     sessions: [qualifying]
     priority: 1
@@ -235,6 +312,10 @@ rules:
     say:
       - "Lap's deleted, and no time to cool. Keep pushing, go straight into the next one"
       - "That one's gone. No time to reset, stay flat and go again from the line"
+    response_window_s: 30
+    on_ack:
+      - "Copy. Go again from the line"
+      - "Copy that"
   - id: cool_hot_mode
     sessions: [qualifying]
     priority: 1

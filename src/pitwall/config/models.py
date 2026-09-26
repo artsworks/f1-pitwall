@@ -68,6 +68,9 @@ class InputSettings(BaseModel):
     bounce_ms: int = 60
     response_window_s: float = 8.0
     say_again_window_s: float = 30.0
+    spoken_replies: bool = False  # packaged settings.yaml turns this on
+    ack_replies: list[str] = Field(default_factory=lambda: ["Copy.", "Copy that.", "Understood."])
+    neg_replies: list[str] = Field(default_factory=lambda: ["Noted.", "Copy, noted."])
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
     negative_mute_laps: int = 3
@@ -120,6 +123,10 @@ class RuleDefModel(BaseModel):
     repeat_window_s: float = 600.0
     screen_only: bool = False
     tags: list[str] = Field(default_factory=list)
+    # Spoken reply when the driver acks / negs this call; generic replies if empty.
+    on_ack: str | list[str] = ""
+    on_neg: str | list[str] = ""
+    response_window_s: float | None = None  # overrides input.response_window_s
 
     def say_pool(self) -> list[str]:
         if isinstance(self.say, str):

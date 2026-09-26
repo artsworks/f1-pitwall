@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.clock import Clock
-from pitwall.config.models import InputSettings, PolicySettings
+from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.input.press import Press
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate
@@ -115,6 +115,8 @@ class Dispatcher:
         self._neg_mute_until: dict[str, int] = {}  # rule_id -> lap
         self._cooldown_mult: dict[str, float] = {}
         self._acked: dict[str, int] = {}  # rule_id -> lap acknowledged on
+        self._defs: dict[str, RuleDefModel] = {}
+        self._reply_n: dict[str, int] = {}
 
     # -- submission ----------------------------------------------------------
 
@@ -125,6 +127,7 @@ class Dispatcher:
         now = snapshot.now
         allowed_p = _VERBOSITY_PRIORITIES[self.policy.verbosity]
         for cand in candidates:
+            self._defs[cand.rule.id] = cand.rule.defn
             suppressed = self._suppression_reason(cand, snapshot, now, allowed_p)
             if suppressed is not None:
                 self._log(cand, snapshot, now, "suppressed", suppressed)
@@ -307,9 +310,14 @@ class Dispatcher:
     def on_press(self, press: Press, snapshot: Snapshot) -> None:
         """Route an ack/neg/bookmark to the most recent spoken call (docs/12)."""
         now = snapshot.now
-        window = self.input.response_window_s
         target: Call | None = None
         for call, end_t in reversed(self._spoken_calls):
+            if "reply" in call.tags:
+                continue
+            d = self._defs.get(call.rule_id)
+            window = self.input.response_window_s
+            if d is not None and d.response_window_s is not None:
+                window = d.response_window_s
             if now - end_t <= window:
                 target = call
                 break
@@ -324,13 +332,15 @@ class Dispatcher:
             self._broadcast_press(payload)
             return
         if target is None:
-            if press.kind == "ack":
+            if press.kind == "ack" and self.quiet_until is not None and now < self.quiet_until:
+                self.quiet_until = None
+                self._log_press(now, snapshot, "quiet_off", None, None)
+                self._reply(["Radio's back on.", "Back with you."], snapshot)
+            elif press.kind == "ack":
                 # Say again: re-speak the last spoken call without booking it.
-                if (
-                    self._spoken_calls
-                    and now - self._spoken_calls[-1][1] <= self.input.say_again_window_s
-                ):
-                    last, _ = self._spoken_calls[-1]
+                said = [(c, t) for c, t in self._spoken_calls if "reply" not in c.tags]
+                if said and now - said[-1][1] <= self.input.say_again_window_s:
+                    last, _ = said[-1]
                     self._log_press(now, snapshot, "say_again", last, None)
                     replay = Call(
                         id=f"c-{next(self._counter)}",
@@ -349,9 +359,19 @@ class Dispatcher:
             else:  # neg with no target: quiet for quiet_minutes
                 self.quiet_until = now + self.input.quiet_minutes * 60
                 self._log_press(now, snapshot, "quiet_until", None, None)
+                mins = f"{self.input.quiet_minutes:g}"
+                self._reply(
+                    [f"Copy, going quiet for {mins} minutes. One click brings me back."],
+                    snapshot,
+                )
             self._broadcast_press(payload)
             return
         self._log_press(now, snapshot, press.kind, target, press.kind)
+        d = self._defs.get(target.rule_id)
+        own = (d.on_ack if press.kind == "ack" else d.on_neg) if d is not None else ""
+        pool = [own] if isinstance(own, str) and own else list(own) if own else []
+        generic = self.input.ack_replies if press.kind == "ack" else self.input.neg_replies
+        self._reply(pool or generic, snapshot)
         if press.kind == "ack":
             self._acked[target.rule_id] = snapshot.lap_num
         else:
@@ -366,6 +386,26 @@ class Dispatcher:
                     key = target.rule_id
                     self._cooldown_mult[key] = self._cooldown_mult.get(key, 1.0) * 2
         self._broadcast_press(payload)
+
+    def _reply(self, pool: list[str], snapshot: Snapshot) -> None:
+        """Queue a short spoken reply to a press; bypasses quiet and budgets."""
+        if not self.input.spoken_replies or not pool:
+            return
+        now = snapshot.now
+        n = self._reply_n.get(pool[0], 0)
+        self._reply_n[pool[0]] = n + 1
+        reply = Call(
+            id=f"c-{next(self._counter)}",
+            rule_id="reply",
+            priority=1,
+            text=pool[n % len(pool)],
+            tags=["reply"],
+            deadline_ms=3000,
+            lap=snapshot.lap_num,
+            t=now,
+            trigger_t=now,
+        )
+        heapq.heappush(self._queue, _Queued((1, now), reply))
 
     def _log_press(
         self,
