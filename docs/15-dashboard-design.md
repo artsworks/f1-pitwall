@@ -34,7 +34,7 @@ current runtime is unchanged; future call-history additions are identified below
   *displays* their state.
 - Not a debrief tool. Stint plots, deg curves and call grading live in the post-session
   HTML debrief (M4, `16-debrief-design.md`) and review mode (`07-replay-and-debug.md`).
-- No continuous animation. A new call makes a brief, one-time transition into the
+- No continuous animation (motion rules in §11). A new call makes a brief, one-time transition into the
   fixed banner while the old call settles into a smaller previous-call line. Urgent
   calls and stale/error states appear immediately; reduced-motion users get no motion.
 
@@ -390,3 +390,27 @@ LIVE/STALE never move, and the pit board / cool-down takeovers still win.
 Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
 `/radio` keeps its compact layout and shows the current page name.
 
+
+## 11. Motion (M3)
+
+Motion marks a change and then stops. Nothing loops, pulses or scrolls, and every
+number and word is readable in its final state on the first frame.
+
+| Event | Motion | Duration |
+|---|---|---|
+| New call | priority bar stretches back (P1: three white flashes) and a light sweep crosses the banner; text is instant | 700–900 ms |
+| Call age | 3–4 px hairline under the banner shrinks to the fade time for that priority | the call's lifetime |
+| Radio log row | drops in from the banner side with a brief tint | 700 ms |
+| Page swap | page zones slide in from the direction of travel, staggered 0/40/80 ms; the status bar, banner and footer stay put; page dots in the status pill | 420 ms |
+| Tyre status flip | one ring pulse in the new colour | 700 ms |
+| Position change | number lifts green (gain) or drops red (loss) | 1.6 s |
+| Lap change | lap counter flashes | 900 ms |
+| Battle gap | marker on a 0–3 s rail glides to the new gap; DRS third shaded | 600 ms |
+| SC/VSC, red flag, stale | static diagonal stripes on the status bar | while true |
+
+Animations run off timestamps, not the render tick, so the 4–5 Hz re-render never
+restarts one. On phones in portrait the status bar and banner are sticky while the
+page scrolls, with notch-safe insets; the page also swipes left/right to change pages
+(this sends the same `page` message as Action 4) and holds a screen wake lock where the
+browser allows. A P1 vibrates once on phones that support it. `prefers-reduced-motion:
+reduce` cuts every animation and transition to a single frame and hides the age hairline.

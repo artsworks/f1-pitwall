@@ -12,6 +12,13 @@
   var startedAt = performance.now(), lastFrameAt = null, lastState = null, lastStateAt = null;
   var stateTimes = [], shownCurrentId = null, shownPreviousId = null;
   var pressTimer = null;
+  // motion state: a class stays on for a fixed window so the 4 Hz re-render
+  // never restarts or cancels a running animation (docs/15 §11).
+  var until = {}, shownPage = null, shownPos = null, shownLap = null, tyreSt = {}, seenLog = null;
+  var HIT_MS = 900, FLIP_MS = 700, SWAP_MS = 420;
+  function hold(key, ms) { until[key] = performance.now() + ms; }
+  function on(key) { return (until[key] || 0) > performance.now(); }
+  function mark(key) { return on(key) ? " " + key.split(":")[0] : ""; }
 
   function el(id) { return document.getElementById(id); }
   function setText(id, txt) { var n = el(id); if (n) n.textContent = txt; }
@@ -78,6 +85,15 @@
       String(p.track || "--").toUpperCase());
     setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");
+    if (p.position && shownPos && p.position !== shownPos) {
+      hold(p.position < shownPos ? "gain:pos" : "loss:pos", 1600);
+      delete until[p.position < shownPos ? "loss:pos" : "gain:pos"];
+    }
+    if (p.position) shownPos = p.position;
+    setClass("position", mark("gain:pos") + mark("loss:pos"));
+    if (p.lap_num && shownLap && p.lap_num !== shownLap) hold("tick:lap", 900);
+    if (p.lap_num) shownLap = p.lap_num;
+    setClass("lap", mark("tick:lap"));
     var m = el("mindset");
     if (m) {
       m.textContent = String(p.mindset || "--").toUpperCase();
@@ -131,7 +147,9 @@
         var t = p.tyres[k], c = el("tyre-" + k);
         if (!c || !t) return;
         var st = String(t.status || "").toLowerCase();
-        c.className = "corner " + st;
+        if (tyreSt[k] && tyreSt[k] !== st) hold("flip:" + k, FLIP_MS);
+        tyreSt[k] = st;
+        c.className = "corner " + st + mark("flip:" + k);
         c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
         c.querySelector(".word").textContent = t.status || "--";
         var det = c.querySelector(".det");
@@ -241,11 +259,26 @@
     if (!n) return;
     n.hidden = !r;
     if (!r) return;
-    n.innerHTML = "";
+    // The gap rail persists across renders so its marker glides between gaps.
+    var rail = n.querySelector(".rail");
+    if (!rail) {
+      rail = document.createElement("div");
+      rail.className = "rail";
+      rail.appendChild(span("DRS", "rz"));
+      rail.appendChild(span("", "rc"));
+    }
+    while (n.firstChild) n.removeChild(n.firstChild);
     var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
     var head = span((side === "ahead" ? "AHEAD " : "BEHIND ") + (r.pos ? "P" + r.pos + " " : "") +
       String(r.name || "--").toUpperCase() + " " + gapText(gap), "b-head");
     n.appendChild(head);
+    n.appendChild(rail);
+    var abs = r.gap_s === null || r.gap_s === undefined ? null : Math.abs(r.gap_s);
+    rail.hidden = abs === null;
+    if (abs !== null) {
+      rail.style.setProperty("--g", String(Math.min(abs, 3) / 3));
+      rail.className = "rail " + side + (abs <= 1 ? " in" : "");
+    }
     function kv(k, v, cls) { n.appendChild(span(k, "k")); n.appendChild(span(v, cls)); }
     kv("tyre", (r.compound || "--") + " · " + (r.tyre_age || 0) + "L");
     kv("pace", r.pace_delta_s === null || r.pace_delta_s === undefined ? "--" :
@@ -304,7 +337,20 @@
       if (s.tyres.blister_max_pct) f.push("BLISTER " + s.tyres.blister_max_pct + "%");
     }
     setText("cp-flags", f.length ? f.join(" · ") : "tyres nominal");
+    meter("cp-energy-bar", p.ers_pct === null || p.ers_pct === undefined ? null : p.ers_pct / 100);
+    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
+    meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
+      lop !== null && lop !== undefined && togo && lop < togo ? "short" : "");
     setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " dim"));
+  }
+
+  function meter(id, frac, cls) {
+    var n = el(id);
+    if (!n) return;
+    n.parentNode.hidden = frac === null;
+    if (frac === null) return;
+    n.style.setProperty("--f", String(Math.max(0, Math.min(1, frac))));
+    n.className = cls || "";
   }
 
   function tpRow(id, txt, cls) { setText(id, txt); setClass(id, "tp-row" + (cls ? " " + cls : "")); }
@@ -350,12 +396,28 @@
   }
 
   function renderPage(p) {
-    var page = p.page || "race";
-    (p.pages || ["race"]).concat(["race"]).forEach(function (n) {
+    var page = p.page || "race", pages = p.pages || ["race"];
+    if (shownPage !== null && page !== shownPage) {
+      var from = pages.indexOf(shownPage), to = pages.indexOf(page);
+      var back = from >= 0 && to >= 0 && (to === from - 1 || (from === 0 && to === pages.length - 1));
+      document.body.style.setProperty("--swap-dx", back ? "-1.6rem" : "1.6rem");
+      hold("swap", SWAP_MS);
+    }
+    shownPage = page;
+    pages.concat(["race"]).forEach(function (n) {
       document.body.classList.toggle("page-" + n, n === page);
     });
+    document.body.classList.toggle("swap", on("swap"));
     var pe = el("page");
-    if (pe) pe.textContent = page.toUpperCase();
+    if (pe && pe.dataset.key !== page + "|" + pages.join()) {
+      pe.dataset.key = page + "|" + pages.join();
+      pe.innerHTML = "";
+      pe.appendChild(span(page.toUpperCase(), "pg-name"));
+      var dots = span("", "pg-dots");
+      pages.forEach(function (n) { dots.appendChild(span("", n === page ? "on" : "")); });
+      pe.appendChild(dots);
+      if (on("swap")) restart(pe, "pg-flip");
+    }
   }
 
   function sendCtl(msg) {
@@ -720,7 +782,20 @@
         banner.className = "banner stalewarn";
         text.textContent = "TELEMETRY STALE · ADVICE PAUSED";
       } else if (cur) {
-        banner.className = "banner p" + cur.priority;
+        if (cur.id !== shownCurrentId) {
+          hold("hit", HIT_MS);
+          var life = el("call-life");
+          if (life) {
+            life.style.setProperty("--life", (IDLE_S[cur.priority] || 20) + "s");
+            life.style.setProperty("--life-at", "-" + (ageS(cur) || 0) + "s");
+            restart(life, "run");
+          }
+          if (cur.priority === 1 && (ageS(cur) || 0) < 3 && navigator.vibrate &&
+              document.visibilityState === "visible") {
+            try { navigator.vibrate([90, 60, 90]); } catch (e) { /* unsupported */ }
+          }
+        }
+        banner.className = "banner p" + cur.priority + mark("hit");
         if (text.textContent !== cur.text) text.textContent = cur.text;
         var pri = document.createElement("span");
         pri.className = "pri"; pri.textContent = "P" + cur.priority;
@@ -772,9 +847,16 @@
       log.appendChild(e);
       return;
     }
+    var fresh = seenLog === null ? {} : null;
     rows.forEach(function (c) {
       var li = document.createElement("li");
-      if (c.audio === "dropped") li.className = "drop";
+      if (seenLog !== null && !seenLog[c.id]) hold("enter:" + c.id, 700);
+      if (fresh) fresh[c.id] = true; else seenLog[c.id] = true;
+      li.className = ((c.audio === "dropped" ? "drop" : "") + mark("enter:" + c.id)).trim();
+      // rows are rebuilt each render: resume the entrance where it left off
+      if (on("enter:" + c.id)) {
+        li.style.animationDelay = (until["enter:" + c.id] - 700 - performance.now()) + "ms";
+      }
       var lap = document.createElement("span");
       lap.className = "lap"; lap.textContent = "L" + c.lap;
       var mk = document.createElement("span");
@@ -791,6 +873,7 @@
       [lap, mk, st, txt, tag].forEach(function (n) { li.appendChild(n); });
       log.appendChild(li);
     });
+    if (fresh) seenLog = fresh;
   }
 
   function render() {
@@ -899,6 +982,44 @@
       sendPress(false);
     }
   });
+
+  // Phone: swipe left/right steps pages through the same backend page state.
+  var touch0 = null;
+  document.addEventListener("touchstart", function (ev) {
+    if (ev.touches.length === 1 && !ev.target.closest(".transport")) {
+      touch0 = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    }
+  }, { passive: true });
+  document.addEventListener("touchend", function (ev) {
+    if (!touch0 || !lastState) return;
+    var dx = ev.changedTouches[0].clientX - touch0.x, dy = ev.changedTouches[0].clientY - touch0.y;
+    touch0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+    var pages = lastState.pages || ["race"], i = pages.indexOf(lastState.page || "race");
+    var next = pages[(i + (dx < 0 ? 1 : pages.length - 1)) % pages.length];
+    if (next) sendCtl({ type: "page", name: next });
+  }, { passive: true });
+
+  // Phone on the wheel stand: keep the screen awake where the browser allows.
+  var wake = null;
+  function keepAwake() {
+    if (!navigator.wakeLock || document.visibilityState !== "visible" || wake) return;
+    navigator.wakeLock.request("screen").then(function (w) {
+      wake = w;
+      w.addEventListener("release", function () { wake = null; });
+    }).catch(function () { /* insecure origin or denied */ });
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  document.addEventListener("pointerdown", keepAwake);
+  keepAwake();
+
+  // Sticky banner on phone sits directly under the (wrapping) status bar.
+  var statusEl = document.querySelector(".status");
+  if (statusEl && window.ResizeObserver) {
+    new ResizeObserver(function () {
+      document.body.style.setProperty("--status-h", statusEl.offsetHeight + "px");
+    }).observe(statusEl);
+  }
 
   setInterval(render, 250);
   render();

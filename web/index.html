@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -25,6 +29,7 @@
 
   <section id="banner" class="banner idle">
     <div class="bar"></div>
+    <div id="call-life" class="life"></div>
     <div class="body">
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>
@@ -154,9 +159,9 @@
   <section id="carpage" class="zone carpage">
     <h2>ENERGY · FUEL · TYRE LIFE</h2>
     <div class="cp-grid">
-      <div class="cp-tile"><h2>ENERGY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div></div>
+      <div class="cp-tile"><h2>ENERGY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
       <div class="cp-tile"><h2>FUEL VS FLAG</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div></div>
-      <div class="cp-tile"><h2>TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div></div>
+      <div class="cp-tile"><h2>TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div><div class="meter"><i id="cp-life-bar"></i><b id="cp-life-flag"></b></div></div>
     </div>
     <div id="cp-flags" class="cp-flags dim">--</div>
   </section>
