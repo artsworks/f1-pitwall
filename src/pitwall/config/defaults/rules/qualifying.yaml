@@ -4,7 +4,7 @@ rules:
   - id: release_go
     sessions: [practice, qualifying]
     priority: 2
-    when: "phase == 'garage' and release_clean and session_time_left > 60"
+    when: "phase == 'garage' and release_clean and time_for_out_lap and session_time_left > 60"
     clear_when: "not release_clean or phase != 'garage'"
     cooldown_s: 30
     cooldown_group: release
@@ -16,7 +16,7 @@ rules:
   - id: release_hold
     sessions: [practice, qualifying]
     priority: 2
-    when: "phase == 'garage' and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and session_time_left > 60"
+    when: "phase == 'garage' and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and time_for_out_lap and session_time_left > 60"
     clear_when: "release_clean or phase != 'garage'"
     cooldown_s: 30
     cooldown_group: release
@@ -25,6 +25,18 @@ rules:
       - "Traffic at pit exit. Hold about {release_wait_s:.0f} seconds"
       - "Hold {release_wait_s:.0f} seconds for a gap"
       - "Cars coming past the exit. Give it {release_wait_s:.0f} seconds"
+  # Too late to leave: the out lap would reach the line after the flag.
+  - id: release_too_late
+    sessions: [qualifying]
+    priority: 2
+    when: "phase == 'garage' and not time_for_out_lap and session_time_left > 0"
+    clear_when: "phase != 'garage'"
+    cooldown_s: 600
+    cooldown_group: release
+    requires: [lap_data, session]
+    say:
+      - "Not enough time to make the line before the flag. Stay in, that's our session"
+      - "No time for another lap, the flag will beat you to the line. We're done"
   # Abort advisory: projection is over the cut-off and the lap won't make it.
   - id: abort_lap
     sessions: [qualifying]
@@ -38,7 +50,6 @@ rules:
       - "Abort the lap, we're {abort_deficit_s:.1f} off the cut. Save the set"
       - "Box this lap, it's not going to be enough"
       - "That lap's gone, {abort_deficit_s:.1f} down on the cut. Back off and save the tyres"
-    response_window_s: 30
     on_ack:
       - "Copy, back it off. Recharge and go again"
       - "Copy. Cool it"
@@ -55,7 +66,6 @@ rules:
     say:
       - "You're safe, that time's through. No need to push"
       - "That's good enough to go through. Bring it home"
-    response_window_s: 30
     on_ack:
       - "Copy. Bring it home, nice and easy"
       - "Copy that. Easy in-lap"
@@ -73,7 +83,6 @@ rules:
     say:
       - "You're {quali_margin_s:.1f} clear of the cut. No need to go again, save the set"
       - "That's {quali_margin_s:.1f} inside the cut. Play it safe and keep the tyres"
-    response_window_s: 30
     on_ack:
       - "Copy. Box this lap, we save the set"
       - "Copy that. Bring it in"
@@ -90,7 +99,6 @@ rules:
     say:
       - "Provisional pole by {quali_margin_s:.1f}. Play it safe, no risks from here"
       - "You're {quali_margin_s:.1f} up on P2. If you go again, a tidy lap is enough"
-    response_window_s: 30
     on_ack:
       - "Copy. Bring it home"
       - "Copy that. Easy in-lap"
@@ -128,7 +136,6 @@ rules:
     say:
       - "Go again. Battery {ers_store_pct:.0f}, tyres are fine"
       - "Keep pushing, you've got {ers_store_pct:.0f} percent battery"
-    response_window_s: 30
     on_ack:
       - "Copy. Go get it"
       - "Copy that. Full send"
@@ -146,7 +153,6 @@ rules:
     say:
       - "{run_plan_why}. Cool this one, recharge mode, then we go again"
       - "{run_plan_why}. Back off for a lap, recharge and cool the tyres"
-    response_window_s: 30
     on_ack:
       - "Copy. Recharge mode"
       - "Copy that. Cool it"
@@ -164,7 +170,6 @@ rules:
     say:
       - "{run_plan_why}, no time to cool. Keep pushing, battery {ers_store_pct:.0f}. Use it on the straights"
       - "{run_plan_why}. We can't afford a cool lap, go again now"
-    response_window_s: 30
     on_ack:
       - "Copy. Go get it"
       - "Copy that"
@@ -182,7 +187,6 @@ rules:
     say:
       - "{run_plan_why}. That's the run, back to the garage"
       - "{run_plan_why}. Run's over, garage from the menu"
-    response_window_s: 30
     on_ack:
       - "Copy. Garage"
       - "Copy that. Good run"
@@ -200,7 +204,6 @@ rules:
     say:
       - "Box, box. You're {quali_margin_s:.1f} clear, save the set"
       - "You're {quali_margin_s:.1f} clear. Bring it in, save the set"
-    response_window_s: 30
     on_ack:
       - "Copy, box this lap. We save the set"
       - "Copy that. Bring it in"
@@ -265,6 +268,7 @@ rules:
     clear_when: "hot_car_behind_s > th.cool_car_behind_s + 2"
     still_true: "hot_car_behind_s <= th.cool_car_behind_s + 1"
     cooldown_s: 20
+    cooldown_group: car_behind
     requires: [lap_data]
     say:
       - "Car behind on a hot lap, {hot_car_behind_s:.0f} seconds. Off the racing line"
@@ -279,7 +283,6 @@ rules:
       - "Battery's only {ers_store_pct:.0f}, we want {ers_need_pct:.0f}. Stay in recharge, one more cool lap"
       - "Not enough battery yet, {ers_store_pct:.0f}. Keep harvesting, another cool lap"
       - "Hold off, battery {ers_store_pct:.0f}. One more lap in recharge, there's time"
-    response_window_s: 30
     on_ack:
       - "Copy. Stay in recharge"
       - "Copy that. One more cool lap"
@@ -296,7 +299,6 @@ rules:
       - "Lap's deleted, track limits. Back off, recharge, we go again"
       - "That one's gone, track limits. Lift, harvest, and we reset for the next"
       - "Lap deleted. Don't waste the battery, cool it and go again"
-    response_window_s: 30
     on_ack:
       - "Copy. Cool it and go again"
       - "Copy that. Recharge"
@@ -312,7 +314,6 @@ rules:
     say:
       - "Lap's deleted, and no time to cool. Keep pushing, go straight into the next one"
       - "That one's gone. No time to reset, stay flat and go again from the line"
-    response_window_s: 30
     on_ack:
       - "Copy. Go again from the line"
       - "Copy that"

@@ -289,6 +289,7 @@ class Snapshot:
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
     cool_extend: bool = False  # cool lap ending short of battery, time for another
     time_for_cool_and_hot: bool = False  # finish this lap slow, then one more hot lap
+    time_for_out_lap: bool = True  # leaving the garage now still starts a hot lap
     dist_to_hot_mode_m: float = 0.0
     last_hot: HotLap | None = None
     last_hot_mistakes: str = ""
@@ -681,6 +682,13 @@ class SessionState:
                 used = max(used, last.ers_start_pct)
             need = max(need, used)
         return min(need, self._th("cool_ers_need_max_pct", 70.0))
+
+    def _time_for_out_lap(self) -> bool:
+        """Garage to the line before the flag: out lap plus pit-lane allowance."""
+        best = self._best_laps.get(self._player_idx, 0)
+        lap_s = best / 1000.0 if best > 0 else self._th("release_fallback_lap_s", 95.0)
+        need = self._th("out_lap_factor", 1.3) * lap_s + self._th("out_lap_pit_s", 40.0)
+        return self.session_time_left > need
 
     def _time_for_cool_and_hot(self) -> bool:
         best = self._best_laps.get(self._player_idx, 0)
@@ -1203,6 +1211,7 @@ class SessionState:
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),
             time_for_cool_and_hot=self._time_for_cool_and_hot(),
+            time_for_out_lap=self._time_for_out_lap(),
             cool_elapsed_s=max(0.0, st - run.cool_start_t) if cool_lap else 0.0,
             dist_to_hot_mode_m=max(0.0, to_hot),
             last_hot=run.last_hot,

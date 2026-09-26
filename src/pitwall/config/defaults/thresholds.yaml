@@ -11,6 +11,8 @@ thresholds:
   release_clean_gap_s: 4.0   # gap needed both ways at pit exit for "clean air"
   release_out_lap_s: 0       # 0 = derive: 1.3 x player's best, else fallback
   release_fallback_lap_s: 95.0
+  out_lap_factor: 1.3        # out lap vs best lap, for "time to start a lap"
+  out_lap_pit_s: 40          # garage -> line overhead; Q3 final run: released at 114 s left, flag beat it
   pit_exit_m: 0.0            # lap distance of pit exit (per-track overlay later)
   quali_eliminated: {5: 5, 6: 5, 7: 0}
   abort_safe_margin_ms: 300  # inside this margin of the cut-off = "through"

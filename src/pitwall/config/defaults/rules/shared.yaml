@@ -179,6 +179,7 @@ rules:
     clear_when: "pit_exit_s > 10"
     still_true: "traffic_behind_s <= th.pit_exit_traffic_s + 1"
     cooldown_s: 30
+    cooldown_group: car_behind
     requires: [lap_data]
     say:
       - "Car coming as you exit, {traffic_behind_s:.1f} seconds. Stay off the line."
