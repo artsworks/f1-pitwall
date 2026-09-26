@@ -42,6 +42,9 @@ def action_bits(inp: Any) -> dict[str, int]:
     return {"mindset": int(inp.mindset_toggle_bit), "page": int(inp.page_cycle_bit)}
 
 
+_NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
+
+
 class Engine:
     def __init__(
         self,
@@ -102,6 +105,8 @@ class Engine:
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._fuel_last_kg: float | None = None
+        self._session_fuel_last_kg: float | None = None
+        self._session_fuel_deltas: list[float] = []
         self._stint_fuel_ref = 0.0
         self._stint_laps: list[LapRow] = []
         self._model_key: tuple[int | None, int, int] | None = None
@@ -232,6 +237,8 @@ class Engine:
         self._pit_in_lap = None
         self._folded_stints.clear()
         self._fuel_last_kg = None
+        self._session_fuel_last_kg = None
+        self._session_fuel_deltas = []
         self.deg_fit = None
         self._upsert_session(uid)
 
@@ -273,6 +280,7 @@ class Engine:
     def _on_player_lap(self, uid: int, lap: LapSummary) -> None:
         """M3 persistence hooks (docs/18): refit the stint, measure pit loss
         when an out-lap completes, fold fuel-burn deltas."""
+        self._note_session_fuel(lap)
         db = self.db
         if db is None:
             return
@@ -412,6 +420,29 @@ class Engine:
             th,
         )
 
+    def _note_session_fuel(self, lap: LapSummary) -> None:
+        """Burn per lap measured this session; pit, SC and flashback laps break the chain."""
+        if lap.fuel_kg <= 0:
+            return
+        last = self._session_fuel_last_kg
+        green = lap.sc_status == 0 and not set(lap.invalid_reasons) & _NON_GREEN_REASONS
+        if green and last is not None and 0.0 < last - lap.fuel_kg < 10.0:
+            self._session_fuel_deltas.append(last - lap.fuel_kg)
+        self._session_fuel_last_kg = lap.fuel_kg if green else None
+
+    def _fuel_per_lap(self, laps_remaining: int) -> tuple[float, str]:
+        """This session's measured burn, else the game's own MFD estimate, else the prior."""
+        deltas = self._session_fuel_deltas
+        if len(deltas) >= int(self._th("fuel_session_min_laps", 2)):
+            return median(deltas[-8:]), "session"
+        state = self.state
+        laps_in_tank = laps_remaining + state.fuel_remaining_laps
+        if laps_remaining > 0 and state.fuel_in_tank > 0 and laps_in_tank > 0.5:
+            per_lap = state.fuel_in_tank / laps_in_tank
+            if 0.2 <= per_lap <= 5.0:
+                return per_lap, "mfd"
+        return self._fuel_prior.value, self._fuel_prior.source
+
     def _stint_rows(self, laps: list[LapRow]) -> list[LapRow]:
         """Trailing contiguous stint (same compound, increasing tyre age)."""
         tail: list[LapRow] = []
@@ -523,11 +554,12 @@ class Engine:
             )
 
         laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        per_lap_kg, fuel_source = self._fuel_per_lap(laps_remaining)
         self.fuel_budget = fuel_budget(
             laps_remaining=laps_remaining,
             fuel_in_tank_kg=state.fuel_in_tank,
-            per_lap_kg=self._fuel_prior.value,
-            source=self._fuel_prior.source,
+            per_lap_kg=per_lap_kg,
+            source=fuel_source,
         )
         self.energy_budget = energy_budget(
             store_j=state.ers_store_energy_j,

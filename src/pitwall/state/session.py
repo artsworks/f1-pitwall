@@ -77,6 +77,11 @@ SECTOR2_VALID = 0x04
 SECTOR3_VALID = 0x08
 
 
+# PENA penalty_type -> announced kind. Other types (warning 5, lap invalidated
+# 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
+_PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
+
+
 @dataclass(frozen=True, slots=True)
 class Damage:
     """Player car damage (percent unless a fault flag)."""
@@ -297,6 +302,7 @@ class Snapshot:
     penalty_type: int = 0
     penalty_infringement: int = 0
     penalty_time_s: int = 0
+    penalty_kind: str = ""  # 'time' | 'drive_through' | 'stop_go' for the latest real penalty
     unserved_drive_through: int = 0
     unserved_stop_go: int = 0
     warnings: int = 0
@@ -420,6 +426,20 @@ class Snapshot:
     def age(self, packet_name: str) -> float:
         """Seconds since the named source packet last updated the snapshot."""
         return self._ages.get(packet_name, float("inf"))
+
+    @property
+    def fuel_short_laps(self) -> float:
+        return max(0.0, -self.fuel_margin_laps)
+
+    @property
+    def energy_under_mj(self) -> float:
+        return max(0.0, -self.energy_lap_delta_mj)
+
+    @property
+    def penalty_kind_text(self) -> str:
+        return {"drive_through": "drive-through", "stop_go": "stop-go"}.get(
+            self.penalty_kind, self.penalty_kind
+        )
 
 
 class SessionState:
@@ -593,6 +613,7 @@ class SessionState:
         self.unserved_stop_go = 0
         self.vehicle_fia_flags = 0
         self.penalty_type = 0
+        self.penalty_kind = ""
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
@@ -932,10 +953,17 @@ class SessionState:
             self.chequered = True
         elif pkt.code == "PENA":
             if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
-                self._last_penalty_st = pkt.header.session_time
-                self.penalty_type = int(pkt.detail.get("penalty_type", 0))
-                self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
-                self.penalty_time_s = int(pkt.detail.get("time_s", 0))
+                ptype = int(pkt.detail.get("penalty_type", 0))
+                kind = _PENALTY_KINDS.get(ptype, "")
+                if kind:
+                    # Warnings, lap invalidations and retirements also arrive as PENA
+                    # with time_s = 255; only real penalties are announced.
+                    time_s = int(pkt.detail.get("time_s", 0))
+                    self._last_penalty_st = pkt.header.session_time
+                    self.penalty_type = ptype
+                    self.penalty_kind = kind
+                    self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
+                    self.penalty_time_s = time_s if kind == "time" and time_s != 255 else 0
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -1398,6 +1426,7 @@ class SessionState:
             penalty_type=self.penalty_type,
             penalty_infringement=self.penalty_infringement,
             penalty_time_s=self.penalty_time_s,
+            penalty_kind=self.penalty_kind,
             penalty_recent=(
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)

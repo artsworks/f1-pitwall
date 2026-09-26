@@ -194,7 +194,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     if history[i]:
                         emit(PacketId.SESSION_HISTORY, _history(i, history[i][-100:]))
             if spec.penalty_lap == lap and f == frames // 2:
-                event(b"PENA", struct.pack("<BBBBBBB", 0, 7, 0, 255, 5, lap, 0))
+                event(b"PENA", struct.pack("<BBBBBBB", 4, 7, 0, 255, 5, lap, 0))  # time penalty
             t += spec.dt
         player_last_ms = lap_ms
         for i in (1, 2, 3):

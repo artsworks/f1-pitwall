@@ -29,6 +29,8 @@ class RacePhase:
         self._sc_kind = ""  # 'sc' | 'vsc' while inside a neutralised period
         self._sc_last_seen = 0.0
         self._ever_raced = False
+        self._pit_seen = False  # pit lane entered during this in_lap
+        self._last_driver_status = -1
 
     def update(
         self,
@@ -80,18 +82,30 @@ class RacePhase:
                 else:
                     phase = "racing"
             elif self.phase == "in_lap":
-                phase = "out_lap" if pit_status == 0 else "in_lap"
+                if pit_status != 0:
+                    self._pit_seen = True
+                elif self._pit_seen:
+                    phase = "out_lap"
+                elif lap_boundary:
+                    phase = "racing"  # box requested but never came in
             elif self.phase == "out_lap":
                 if pit_status != 0:
                     phase = "in_lap"
+                    self._pit_seen = True
                 elif lap_boundary:
                     phase = "racing"
             if self.phase in ("racing", "sc", "vsc") and pit_status != 0:
                 phase = "in_lap"
-            if phase == "racing" and driver_status == 2:
+                self._pit_seen = True
+            # The game can hold driver_status at IN_LAP for the rest of the race,
+            # so only the transition into it starts an in-lap.
+            fresh_in_lap = driver_status == 2 and self._last_driver_status != 2
+            if phase == "racing" and fresh_in_lap:
                 phase = "in_lap"
-            elif phase == "racing" and driver_status == 3:
-                phase = "out_lap"
+                self._pit_seen = False
+            elif phase == "racing" and driver_status == 3 and self._last_driver_status != 3:
+                phase = "out_lap"  # e.g. a pit-lane start
+        self._last_driver_status = driver_status
         if self._sc_kind:
             self._ever_raced = self._ever_raced or self.phase in ("racing", "in_lap", "out_lap")
 

@@ -87,7 +87,7 @@ rules:
     priority: 3
     when: "lockup == 'front' and lockup_spot_laps >= 1"
     clear_when: "lockup == ''"
-    cooldown_s: 60
+    cooldown_s: 150
     cooldown_group: lockup_front
     requires: [motion_ex]
     say:
@@ -97,8 +97,8 @@ rules:
     escalate:
       - after: 3
         say:
-          - "That braking zone again, {lockup_spot_laps} laps running now. It's not moving, brake earlier."
-          - "Same place, {lockup_spot_laps} laps in a row. Pick a new braking marker."
+          - "That braking zone again, {lockup_spot_laps} laps running now. Brake earlier, or a click of bias rearward from {front_brake_bias}."
+          - "Same place, {lockup_spot_laps} laps in a row. Pick a new marker, or take a click of bias back from {front_brake_bias}."
   - id: lockup_front
     sessions: [practice, qualifying, race]
     priority: 3

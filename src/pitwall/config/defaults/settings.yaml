@@ -44,6 +44,8 @@ policy:
   dedupe_window_s: 20.0
   quiet: false
   mute_until_lap: 0
+  p3_straight_only: true
+  p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
   engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
