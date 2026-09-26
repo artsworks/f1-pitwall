@@ -217,6 +217,18 @@ def test_say_again_ignores_stale_calls() -> None:
     assert d.drain(100.0) == []
 
 
+def test_late_press_does_nothing_without_say_again() -> None:
+    from pitwall.input.press import Press
+
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(say_again=False, spoken_replies=True)
+    d.submit([_cand("a", text="pit exit clear")], _snap(0.0))
+    d.drain(0.0)
+    d.on_press(Press("ack", 20.0), _snap(20.0))  # past the response window
+    assert d.drain(20.0) == []
+    assert d.quiet_until is None
+
+
 def test_negative_backoff_mutes_not_p1() -> None:
     d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.submit([_cand("a", text="call")], _snap(0.0, lap=1))

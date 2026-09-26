@@ -60,6 +60,7 @@ input:
   long_press_ms: 800
   bounce_ms: 60
   response_window_s: 3.0   # seconds after a call finishes speaking
+  say_again: false          # a late single press does nothing
   say_again_window_s: 30.0  # "say again" only repeats a call spoken this recently
   quiet_minutes: 5
   spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg

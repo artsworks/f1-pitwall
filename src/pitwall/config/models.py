@@ -67,6 +67,7 @@ class InputSettings(BaseModel):
     long_press_ms: int = 800
     bounce_ms: int = 60
     response_window_s: float = 8.0
+    say_again: bool = True  # late single press re-speaks the last call
     say_again_window_s: float = 30.0
     spoken_replies: bool = False  # packaged settings.yaml turns this on
     ack_replies: list[str] = Field(default_factory=lambda: ["Copy.", "Copy that.", "Understood."])
