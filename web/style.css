@@ -558,7 +558,11 @@ body.swap .strat { animation-delay: 80ms; }
 @media (max-height: 500px) and (orientation: landscape) {
   body.dash, body.dash.review, body.dash.cool, body.dash.pit { height: auto; min-height: 100vh;
     overflow: visible; grid-template-rows: auto; grid-auto-rows: auto; }
-  body.dash .status { position: sticky; top: 0; z-index: 3; font-size: 1.1rem; gap: .8rem; }
+  body.dash .status { position: sticky; top: 0; z-index: 3; font-size: 1.1rem;
+    flex-wrap: wrap; white-space: normal; gap: .3rem .8rem; padding: .3rem .6rem; }
+  body.dash .corner .det, body.dash .b-foot, body.dash .b-card * { white-space: normal; }
+  .transport .row { flex-wrap: wrap; }
+  .transport .row span { white-space: nowrap; }
   body.dash .banner { position: sticky; top: var(--status-h, 2.4rem); z-index: 2;
     min-height: 5.5rem; box-shadow: 0 .6rem 1rem -.6rem #000; }
   body.dash .banner .text { font-size: 2rem; -webkit-line-clamp: 1; }
