@@ -289,6 +289,7 @@ class Snapshot:
     penalty_s: int = 0
     penalty_type: int = 0
     penalty_infringement: int = 0
+    penalty_time_s: int = 0
     unserved_drive_through: int = 0
     unserved_stop_go: int = 0
     warnings: int = 0
@@ -308,6 +309,10 @@ class Snapshot:
     pit_plan_rival_idx: int = -1
     pit_plan_rival_name: str = ""
     pit_plan_reason: str = ""
+    pit_window_start: int = 0
+    pit_window_end: int = 0
+    undercut_s: float = 0.0
+    overcut_s: float = 0.0
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -573,6 +578,7 @@ class SessionState:
         self.vehicle_fia_flags = 0
         self.penalty_type = 0
         self.penalty_infringement = 0
+        self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
         self.lights_out = False
         self.chequered = False
@@ -592,6 +598,10 @@ class SessionState:
         self._graining = False
         self._model = ModelView()
         self._thermal_warn_offset_c = 0.0
+
+    @property
+    def model(self) -> ModelView:
+        return self._model
 
     def set_model(self, view: ModelView) -> None:
         """Model outputs for the next snapshot (Engine -> state -> snapshot)."""
@@ -908,6 +918,7 @@ class SessionState:
                 self._last_penalty_st = pkt.header.session_time
                 self.penalty_type = int(pkt.detail.get("penalty_type", 0))
                 self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
+                self.penalty_time_s = int(pkt.detail.get("time_s", 0))
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -1363,6 +1374,7 @@ class SessionState:
             penalty_s=self.penalty_s,
             penalty_type=self.penalty_type,
             penalty_infringement=self.penalty_infringement,
+            penalty_time_s=self.penalty_time_s,
             penalty_recent=(
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
@@ -1643,6 +1655,10 @@ class SessionState:
             pit_plan_rival_idx=model.pit_plan_rival_idx,
             pit_plan_rival_name=model.pit_plan_rival_name,
             pit_plan_reason=model.pit_plan_reason,
+            pit_window_start=model.pit_window_start,
+            pit_window_end=model.pit_window_end,
+            undercut_s=model.undercut_s,
+            overcut_s=model.overcut_s,
             rival_data_restricted=self.rival_data_restricted,
             overheat=overheat,
             graining=graining,

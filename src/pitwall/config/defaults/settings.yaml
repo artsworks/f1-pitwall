@@ -86,6 +86,26 @@ thresholds:
   rain_wet_pct: 85
   rain_dry_pct: 30
   rain_hysteresis_pct: 5       # crossover band hysteresis
+  # Pit-window optimiser + race rules (docs/18)
+  pit_horizon_laps: 8          # candidate stop laps evaluated ahead
+  pit_min_laps_left: 2         # no stop inside the last N laps
+  cliff_ms_per_lap: 1000       # extra pace loss per lap past the tyre cliff
+  outlap_warmup_s: 0.8         # cold-tyre cost on the out-lap
+  undercut_laps: 2
+  undercut_max_gap_s: 3.0
+  overcut_laps: 2
+  overcut_min_laps: 3
+  free_stop_margin_s: 1.0
+  sc_stop_min_laps_left: 3
+  box_in_max_laps: 3
+  tyre_life_speak_laps: 10
+  blister_warn_pct: 20
+  blister_hysteresis_pct: 5
+  fuel_hysteresis_laps: 0.1
+  fuel_spare_laps: 1.0
+  gap_hysteresis_s: 0.3
+  warnings_warn: 3
+  pit_exit_traffic_s: 1.5
 ui:
   state_hz: 5
 input:

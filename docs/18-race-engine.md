@@ -288,8 +288,12 @@ Rival scope: `relevant_rivals(cars, player_idx, gap_behind_max_s, pit_exit_proje
 Restricted detection: track per-car `fuel_in_tank`, `ers_store_energy`, and mean `tyres_wear`
 for all non-player active cars; when every one is exactly 0 for `th.restricted_detect_laps`
 consecutive laps, `rival_data_restricted = True`. In restricted mode `rival_*_age` is 0 and the
-optimiser's `confidence` is multiplied by `th.restricted_confidence_factor` (default 0.7), so
-calls degrade rather than fabricate.
+optimiser's `confidence` for rival-dependent plans (undercut, overcut) is multiplied by
+`th.restricted_confidence_factor` (default 0.7), so those calls degrade rather than fabricate;
+plans from the player's own tyre model keep full confidence. `cheap_stop` confidence is the pit-loss source factor alone (measured wear and the
+neutralised pit loss decide it, not the deg fit). Position-loss `risk` is 0 when
+`laps_of_pace < laps_remaining − mode.tyre_life_buffer_laps` (the stop is forced, so the place
+is lost whenever it is taken).
 
 ## `pitwall.strategy.pitwindow`
 

@@ -7,6 +7,7 @@ max-speed replay makes identical decisions to 1x (determinism per docs/07).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import math
 from pathlib import Path
 from statistics import median
@@ -25,8 +26,9 @@ from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import SessionState
+from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow
+from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 
 
 class Engine:
@@ -67,6 +69,9 @@ class Engine:
         # the snapshot.
         self.deg_fit: DegFit | None = None
         self.pit_loss_prior: Prior | None = None
+        self.pit_plan: PitPlan = NO_PLAN
+        self._fresh_prior: DegFit | None = None
+        self._green_pit_loss_s = 0.0
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
         self._pit_in_lap: LapSummary | None = None
@@ -374,6 +379,11 @@ class Engine:
                 default=self._th("fuel_kg_per_lap_default", 1.7),
                 min_weight=self._th("prior_min_weight", 2),
             )
+            green = current_pit_loss(
+                self.db, state.session_uid, track_id, 0, overlay, settings.thresholds
+            )
+            self._green_pit_loss_s = green.value / 1000.0
+            self._fresh_prior = self._deg_prior(track_id, state.tyre_compound, settings)
             # Wear rate this stint: median of positive consecutive deltas.
             wear_deltas = [
                 b.wear_pct - a.wear_pct
@@ -449,6 +459,88 @@ class Engine:
             )
         )
 
+    def _plan(self, snap: Snapshot) -> Snapshot:
+        """Run the pit-window optimiser on the fresh snapshot and fold the
+        plan into both the snapshot and the next ModelView."""
+        fit = self.deg_fit
+        if not snap.race_phase or fit is None or self._fresh_prior is None:
+            return snap
+        settings = self.store.current()
+        ahead = (
+            RivalView(
+                snap.rival_ahead_idx,
+                snap.rival_ahead_name,
+                snap.rival_ahead_pace_ms,
+                snap.rival_ahead_pitted,
+            )
+            if snap.rival_ahead_idx >= 0
+            else None
+        )
+        behind = (
+            RivalView(
+                snap.rival_behind_idx,
+                snap.rival_behind_name,
+                snap.rival_behind_pace_ms,
+                snap.rival_behind_pitted,
+            )
+            if snap.rival_behind_idx >= 0
+            else None
+        )
+        plan = optimise(
+            lap_num=snap.lap_num,
+            laps_remaining=snap.laps_remaining,
+            tyre_age=snap.tyre_age_laps,
+            wear_mean=snap.wear_mean_pct,
+            fit=fit,
+            fresh=self._fresh_prior,
+            laps_of_pace=snap.laps_of_pace,
+            pit_loss_s=snap.pit_loss_s,
+            pit_loss_source=snap.pit_loss_source,
+            green_pit_loss_s=self._green_pit_loss_s,
+            sc_status=snap.safety_car_status,
+            rival_ahead=ahead,
+            rival_behind=behind,
+            gap_ahead_s=snap.gap_ahead_s,
+            gap_behind_s=snap.gap_behind_s,
+            pit_exit_clean=snap.pit_exit_clean,
+            restricted=snap.rival_data_restricted,
+            mode=settings.resolved_mindset(),
+            th=settings.thresholds,
+        )
+        self.pit_plan = plan
+        self.state.set_model(
+            dataclasses.replace(
+                self.state.model,
+                pit_plan=plan.plan,
+                pit_plan_lap=plan.lap,
+                pit_plan_gain_s=plan.gain_s,
+                pit_plan_confidence=plan.confidence,
+                pit_plan_risk=plan.risk,
+                pit_plan_rival_idx=plan.rival_idx,
+                pit_plan_rival_name=plan.rival_name,
+                pit_plan_reason=plan.reason,
+                pit_window_start=plan.window[0],
+                pit_window_end=plan.window[1],
+                undercut_s=plan.undercut_s,
+                overcut_s=plan.overcut_s,
+            )
+        )
+        return dataclasses.replace(
+            snap,
+            pit_plan=plan.plan,
+            pit_plan_lap=plan.lap,
+            pit_plan_gain_s=plan.gain_s,
+            pit_plan_confidence=plan.confidence,
+            pit_plan_risk=plan.risk,
+            pit_plan_rival_idx=plan.rival_idx,
+            pit_plan_rival_name=plan.rival_name,
+            pit_plan_reason=plan.reason,
+            pit_window_start=plan.window[0],
+            pit_window_end=plan.window[1],
+            undercut_s=plan.undercut_s,
+            overcut_s=plan.overcut_s,
+        )
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         if self.state.track_id != self._track_loaded:
@@ -456,7 +548,7 @@ class Engine:
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
         self._write_laps()
         self._update_model()
-        snapshot = self.state.snapshot(now)
+        snapshot = self._plan(self.state.snapshot(now))
         if (
             snapshot.session_ended
             and not self._session_ended_written

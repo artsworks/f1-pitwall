@@ -1,6 +1,6 @@
 """ModelView: model outputs the Engine computes and SessionState carries
 into the Snapshot (docs/18). Plain floats/ints/strs so rules and JSON can
-use them. pit_plan_* fields hold neutral defaults until H3's optimiser."""
+use them."""
 
 from __future__ import annotations
 
@@ -34,3 +34,7 @@ class ModelView:
     pit_plan_rival_idx: int = -1
     pit_plan_rival_name: str = ""
     pit_plan_reason: str = ""
+    pit_window_start: int = 0
+    pit_window_end: int = 0
+    undercut_s: float = 0.0
+    overcut_s: float = 0.0

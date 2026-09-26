@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from pitwall.store.db import Database, LapRow
 
 
+_FUEL_SPAN_MIN_LAPS = 0.5
+
+
 @dataclass(frozen=True, slots=True)
 class DegFit:
     base_ms: float  # pace at tyre_age 0, fuel normalised to fuel_ref
@@ -110,6 +113,8 @@ def fit_stint(
     # fuel term: laps' worth of fuel burned relative to the stint's first
     # observed fuel level (fuel_ref).
     fuel_ref = max(lap.fuel_remaining_laps for lap in usable)
+    if fuel_ref - min(lap.fuel_remaining_laps for lap in usable) < _FUEL_SPAN_MIN_LAPS:
+        fuel_coeff_fixed = prior.fuel_ms_per_lap if fuel_coeff_fixed is None else fuel_coeff_fixed
     rows: list[list[float]] = []
     ys: list[float] = []
     for lap in usable:
