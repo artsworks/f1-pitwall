@@ -587,5 +587,5 @@ body.swap .strat { animation-delay: 80ms; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0s !important;
     animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
-  .banner .life.run { animation: none !important; transform: scaleX(1); }
+  .banner .life { display: none !important; }
 }
