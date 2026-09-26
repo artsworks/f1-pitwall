@@ -257,7 +257,14 @@
     if (!s || q) return;
     setText("strat-title", "STRATEGY");
     var w = el("s-window");
-    if (s.pit_window) {
+    var ap = activePlan(s);
+    if (ap) {
+      var lapNow = lastState ? lastState.lap_num : 0, win = ap.window;
+      w.textContent = "PLAN " + ap.id + " · " + (s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN") +
+        (win ? " · BOX L" + win[0] + "–" + win[1] : " · NO STOP");
+      w.className = "s-window" + (s.on_plan === false ? " soon" : win && lapNow >= win[0] ? " box" :
+        win && lapNow >= win[0] - 2 ? " soon" : "");
+    } else if (s.pit_window) {
       var lap = lastState ? lastState.lap_num : 0;
       w.textContent = "PIT WINDOW L" + s.pit_window.start + "–" + s.pit_window.end +
         (s.plan ? " · " + String(s.plan.kind).toUpperCase().replace("_", " ") : "");
@@ -273,7 +280,26 @@
     }
     rivalRow("s-ahead", s.ahead, "ahead", s);
     rivalRow("s-behind", s.behind, "behind", s);
-    setText("s-stint", s.stint_plan + (s.restricted ? " · rival data restricted" : ""));
+    setText("s-stint", (ap ? planText(ap) + alternates(s) : s.stint_plan) +
+      (s.restricted ? " · rival data restricted" : ""));
+  }
+
+  function activePlan(s) {
+    var ps = s && s.plans ? s.plans : [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
+    return null;
+  }
+
+  function planText(p) {
+    return (p.compounds || []).map(function (c) { return String(c || "?").charAt(0).toUpperCase(); })
+      .join("→") + " · " + p.stops + (p.stops === 1 ? " stop" : " stops");
+  }
+
+  function alternates(s) {
+    return (s.plans || []).filter(function (p) { return !p.active; }).map(function (p) {
+      return " · " + p.id + " " + (p.delta_s !== null && p.delta_s !== undefined ?
+        (p.delta_s >= 0 ? "+" : "") + fmt(p.delta_s, 1) + "s" : p.kind);
+    }).join("");
   }
 
   function battleCard(id, r, side, s) {
@@ -340,7 +366,9 @@
     battleCard("d-ahead", s.ahead, "ahead", s);
     battleCard("d-behind", s.behind, "behind", s);
     var pe = s.pit_exit || {}, bits = [];
-    if (s.plan && s.plan.kind) bits.push(String(s.plan.kind).toUpperCase().replace("_", " ") +
+    var ap = activePlan(s);
+    if (ap) bits.push("PLAN " + ap.id + (s.plan_target_lap ? " TARGET L" + s.plan_target_lap : ""));
+    else if (s.plan && s.plan.kind) bits.push(String(s.plan.kind).toUpperCase().replace("_", " ") +
       (s.plan.lap ? " L" + s.plan.lap : ""));
     bits.push("PIT EXIT " + (pe.clean ? "CLEAR" : "TRAFFIC") +
       (pe.rival ? " " + String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : ""));
