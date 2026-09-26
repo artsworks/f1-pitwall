@@ -986,10 +986,12 @@
   // Phone: swipe left/right steps pages through the same backend page state.
   var touch0 = null;
   document.addEventListener("touchstart", function (ev) {
+    touch0 = null;
     if (ev.touches.length === 1 && !ev.target.closest(".transport")) {
       touch0 = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
     }
   }, { passive: true });
+  document.addEventListener("touchcancel", function () { touch0 = null; }, { passive: true });
   document.addEventListener("touchend", function (ev) {
     if (!touch0 || !lastState) return;
     var dx = ev.changedTouches[0].clientX - touch0.x, dy = ev.changedTouches[0].clientY - touch0.y;
