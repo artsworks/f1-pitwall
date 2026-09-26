@@ -398,6 +398,7 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
   body.dash .banner { min-height: 8rem; }
   body.dash .banner .text { font-size: 2.2rem; }
   body.dash .car { min-height: 16rem; }
+  body.dash .corner .det, body.dash .b-foot { white-space: normal; }
   body.dash .log { min-height: 12rem; }
   body.dash .footer { flex-wrap: wrap; white-space: normal; gap: .6rem; padding: .3rem .6rem; }
   body.dash .fuel { grid-template-columns: 1fr 1fr; }
