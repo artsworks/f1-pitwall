@@ -326,8 +326,8 @@ def test_long_press_and_udp3_toggle_radio_silent(tmp_path: Path) -> None:
     stream = _quali_stream(2500.0, 0.0, 6.0)
     stream.append((1.0, _butn(True, 1.0)))  # UDP 1 held 1.2 s -> silent on
     stream.append((2.2, _butn(False, 2.2)))
-    stream.append((4.0, _butn(True, 4.0, bit=0x00400000)))  # UDP 3 tap -> silent off
-    stream.append((4.1, _butn(False, 4.1, bit=0x00400000)))
+    stream.append((4.0, _butn(True, 4.0, bit=0x02000000)))  # UDP 6 tap -> silent off
+    stream.append((4.1, _butn(False, 4.1, bit=0x02000000)))
     stream.sort(key=lambda p: p[0])
     rec = write_packet_stream(tmp_path / "silent.f1bin", stream)
     log_path = tmp_path / "silent.jsonl"

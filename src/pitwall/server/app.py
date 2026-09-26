@@ -318,6 +318,7 @@ def state_payload(
     silent: bool = False,
     mindset: str | None = None,
     page: str | None = None,
+    menu: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
     hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
@@ -380,6 +381,7 @@ def state_payload(
         "quiet": quiet or quiet_left_s is not None,
         "quiet_left_s": quiet_left_s,
         "silent": silent,
+        "menu": menu or {"open": False},
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
         "quali": quali_payload(snapshot, settings.thresholds),
@@ -549,7 +551,7 @@ def create_app(
                     on_client_press(bool(msg.get("down")))
                 elif (
                     isinstance(msg, dict)
-                    and msg.get("type") in ("mindset", "page")
+                    and msg.get("type") in ("mindset", "page", "menu")
                     and on_client_message is not None
                 ):
                     on_client_message(msg)

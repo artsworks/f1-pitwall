@@ -239,12 +239,14 @@ class Dispatcher:
         while self._queue:
             q = heapq.heappop(self._queue)
             call = q.call
+            prompt = "menu" in call.tags
             waits_for_straight = call.priority == 3 and self.policy.p3_straight_only
             deadline_ms = call.deadline_ms
             if waits_for_straight:
                 deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
             if (now - call.t) * 1000 > deadline_ms:
-                self._log_call(call, "suppressed", "deadline")
+                if not prompt:
+                    self._log_call(call, "suppressed", "deadline")
                 continue
             if waits_for_straight and not on_straight:
                 held.append(q)
@@ -263,11 +265,15 @@ class Dispatcher:
             spoken_t = self.clock.now()
             muted = call.screen_only or self._silenced(call)
             for sink in self.sinks:
+                if prompt and not sink.speaks_audio:
+                    continue
                 if muted and sink.speaks_audio:
                     continue
                 sink.speak(call)
-            self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
             self._current = call
+            if prompt:
+                continue  # menu item names: audio only, not logged or repeatable
+            self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
             self._spoken_calls.append((call, now + len(call.text) / _CHARS_PER_SECOND))
             self._spoken_calls = self._spoken_calls[-16:]
             self._log_call(call, "fired", None)
@@ -299,6 +305,44 @@ class Dispatcher:
         reply = self.input.mindset_replies.get(name)
         self._reply([reply] if reply else [f"Copy, {name}."], snapshot)
         self._broadcast_press({"kind": "mindset", "lap": snapshot.lap_num, "text": name})
+
+    # -- driver menu (docs/12) -------------------------------------------------
+
+    def menu_prompt(self, text: str, snapshot: Snapshot) -> None:
+        """Speak a highlighted menu item: short, replaces any earlier prompt."""
+        self.cancel_menu_prompt()
+        self._push_reply(text, "menu", ["reply", "menu"], 1500, snapshot)
+
+    def menu_reply(self, text: str, rule_id: str, snapshot: Snapshot) -> None:
+        """Pit-wall answer to a menu pick: P1 reply, bypasses budget and silence."""
+        self._push_reply(text, rule_id, ["reply", "menu_answer"], 4000, snapshot)
+
+    def cancel_menu_prompt(self) -> None:
+        kept = [q for q in self._queue if "menu" not in q.call.tags]
+        if len(kept) != len(self._queue):
+            self._queue = kept
+            heapq.heapify(self._queue)
+        if self._current is not None and "menu" in self._current.tags:
+            for sink in self.sinks:
+                sink.cancel(self._current.id)
+            self._current = None
+
+    def _push_reply(
+        self, text: str, rule_id: str, tags: list[str], deadline_ms: int, snapshot: Snapshot
+    ) -> None:
+        now = snapshot.now
+        call = Call(
+            id=f"c-{next(self._counter)}",
+            rule_id=rule_id,
+            priority=1,
+            text=text,
+            tags=tags,
+            deadline_ms=deadline_ms,
+            lap=snapshot.lap_num,
+            t=now,
+            trigger_t=now,
+        )
+        heapq.heappush(self._queue, _Queued((1, now), call))
 
     def purge(self, reason: str, now: float | None = None) -> int:
         """Drop every queued (not yet spoken) call, logging each as suppressed."""

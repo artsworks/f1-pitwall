@@ -609,3 +609,18 @@ body.swap .strat { animation-delay: 80ms; }
     animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
   .banner .life { display: none !important; }
 }
+
+/* Driver -> pit wall menu overlay (docs/12): fixed, below the call banner */
+.drvmenu { position: fixed; z-index: 20; left: .9rem; top: calc(14rem + .9rem);
+  width: min(24rem, 42vw); max-height: calc(100vh - 17.5rem); overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--info);
+  box-shadow: 0 .4rem 1.6rem #000c; font-size: 1.7rem; }
+.drvmenu-head { display: flex; justify-content: space-between; padding: .35rem .7rem;
+  font-size: 1rem; letter-spacing: .14em; color: var(--info); border-bottom: 1px solid var(--line); }
+.drvmenu ol { list-style: none; margin: 0; padding: .2rem 0; }
+.drvmenu li { padding: .3rem .7rem; color: var(--dim); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; border-left: .35rem solid transparent; }
+.drvmenu li.sel { color: var(--fg); font-weight: bold; border-left-color: var(--info);
+  background: color-mix(in srgb, var(--info) 18%, transparent); }
+body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width: auto;
+  max-height: calc(100vh - 14rem); font-size: 2rem; }

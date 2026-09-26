@@ -21,6 +21,7 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
+from pitwall.input.menu import validate as validate_menu
 from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
@@ -292,6 +293,11 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
         mode=store.current().resolved_mindset(),
         staleness_s=settings.engine.staleness_s,
     )
+    menu_errors = validate_menu(settings.menu)
+    for err in menu_errors:
+        print(f"rules check FAILED: {err}")
+    if menu_errors:
+        return 1
     snap = SessionState().snapshot(0.0)
     try:
         result = engine.evaluate(snap)
@@ -419,6 +425,7 @@ async def _state_broadcast(
             silent=engine.dispatcher.silent,
             mindset=engine.mindset,
             page=engine.page,
+            menu=engine.menu_payload(now),
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:

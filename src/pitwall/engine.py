@@ -20,8 +20,9 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.config.models import resolve_mindset
+from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
 from pitwall.ingest import Ingest
+from pitwall.input.menu import DriverMenu, ReplyPicker, answer
 from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
@@ -37,9 +38,23 @@ from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.tune import load_cooldown_mults
 
 
-def action_bits(inp: Any) -> dict[str, int]:
+def action_bits(inp: InputSettings) -> dict[str, int]:
     """Named UDP Action buttons beyond ack/silent (docs/12)."""
-    return {"mindset": int(inp.mindset_toggle_bit), "page": int(inp.page_cycle_bit)}
+    return {
+        "mindset": int(inp.mindset_toggle_bit),
+        "page": int(inp.page_cycle_bit),
+        "menu_up": int(inp.menu_up_bit),
+        "menu_down": int(inp.menu_down_bit),
+        "menu_close": int(inp.menu_close_bit),
+    }
+
+
+_MENU_CLIENT_OPS = {
+    "up": "menu_up",
+    "down": "menu_down",
+    "confirm": "menu_confirm",
+    "close": "menu_close",
+}
 
 
 _NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
@@ -80,6 +95,10 @@ class Engine:
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
         self._page_manual_t: float | None = None
+        # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
+        self.menu = DriverMenu()
+        self._menu_replies = ReplyPicker()
+        self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
         # recording tail with the rules muted.
@@ -210,8 +229,9 @@ class Engine:
         self.set_page(target, now, manual=False)
 
     def client_message(self, msg: dict[str, Any]) -> None:
-        """Dashboard control messages: {"type":"mindset","name"} and
-        {"type":"page","name"|"cycle":true}."""
+        """Dashboard control messages: {"type":"mindset","name"},
+        {"type":"page","name"|"cycle":true} and
+        {"type":"menu","op":"up"|"down"|"confirm"|"close"}."""
         now = self.clock.now()
         if msg.get("type") == "mindset":
             name = msg.get("name")
@@ -225,13 +245,118 @@ class Engine:
                 self.set_page(name, now)
             else:
                 self.cycle_page(now)
+        elif msg.get("type") == "menu":
+            op = msg.get("op")
+            kind = _MENU_CLIENT_OPS.get(op) if isinstance(op, str) else None
+            if kind is not None:
+                self._press_queue.append(Press(kind, now))
 
     def client_press(self, down: bool) -> None:
         """WebSocket/spacebar press path (docs/12): feed the same detector."""
         self._on_press_edge(self.clock.now(), down)
 
+    # -- driver menu (docs/12) -------------------------------------------------
+
+    def menu_payload(self, now: float) -> dict[str, object]:
+        return self.menu.payload(self.store.current().menu, now)
+
+    def _menu_press(self, p: Press, snapshot: Snapshot) -> bool:
+        """Route a press through the menu. False: not a menu press; the
+        caller handles it as usual."""
+        settings = self.store.current().menu
+        if p.kind in ("menu_up", "menu_down"):
+            was_open = self.menu.open
+            item = self.menu.step(settings, -1 if p.kind == "menu_up" else 1, p.t)
+            if item is None:
+                return True
+            if not was_open:
+                self._menu_log(p.t, snapshot, "menu_open", None, "")
+            if settings.speak_on_scroll:
+                self.dispatcher.menu_prompt(item.label, snapshot)
+            return True
+        if p.kind == "menu_close":
+            self._menu_close(p.t, snapshot, "close")
+            return True
+        if not self.menu.open:
+            return p.kind == "menu_confirm"
+        if p.kind in ("ack", "menu_confirm"):
+            self._menu_confirm(p.t, snapshot)
+            return True
+        if p.kind in ("neg", "bookmark"):
+            self._menu_close(p.t, snapshot, "cancel")
+            return True
+        return False
+
+    def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
+        if not self.menu.open:
+            return
+        self.menu.close()
+        self.dispatcher.cancel_menu_prompt()
+        self._menu_log(t, snapshot, "menu_close", None, reason)
+
+    def _menu_log(
+        self,
+        t: float,
+        snapshot: Snapshot,
+        outcome: str,
+        item: MenuItemModel | None,
+        text: str,
+        inputs: dict[str, str] | None = None,
+    ) -> None:
+        self.dispatcher.log.write(
+            {
+                "t": t,
+                "session_time": snapshot.session_time,
+                "lap": snapshot.lap_num,
+                "lap_distance": snapshot.lap_distance,
+                "call_id": None,
+                "rule_id": f"menu:{item.id}" if item else None,
+                "priority": 1 if item else None,
+                "outcome": outcome,
+                "suppressed_by": None,
+                "item_id": item.id if item else None,
+                "kind": item.kind if item else None,
+                "topic": item.topic if item else None,
+                "label": item.label if item else None,
+                "inputs": inputs or {},
+                "text": text,
+            }
+        )
+
+    def _menu_confirm(self, t: float, snapshot: Snapshot) -> None:
+        item = self.menu.selected(self.store.current().menu)
+        self.menu.close()
+        self.dispatcher.cancel_menu_prompt()
+        if item is None:
+            return
+        snap = dataclasses.replace(snapshot, now=t)
+        case, values = answer(item, snap, self.mindset)
+        text = self._menu_replies.pick(item, case, values)
+        self._menu_log(t, snap, "driver_input", item, text, {"case": case, **values})
+        if item.kind == "opinion" and item.topic:
+            self.opinions[item.topic] = (item.id, snapshot.lap_num)
+        if item.action == "mindset":
+            self.cycle_mindset(t)
+        elif item.action == "silent":
+            self.dispatcher.toggle_silent(snap)
+        elif item.action == "page":
+            self.cycle_page(t)
+        if text:
+            self.dispatcher.menu_reply(text, f"menu:{item.id}", snap)
+
+    def driver_balance(self, lap: int) -> str:
+        """Latest balance opinion while it still holds (docs/12 advice bias)."""
+        held = self.opinions.get("balance")
+        hold = self.store.current().menu.opinion_hold_laps
+        if held is None or lap - held[1] > hold:
+            return ""
+        return held[0]
+
     def _on_new_session(self, uid: int) -> None:
         self.dispatcher.reset_session()
+        self.menu.close()
+        self._menu_replies.reset()
+        self.opinions.clear()
         self._laps_written = len(self.state.laps)
         self._session_ended_written = False
         self._pit_in_lap = None
@@ -720,7 +845,12 @@ class Engine:
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
+        balance = self.driver_balance(snapshot.lap_num)
+        if balance != snapshot.driver_balance:
+            snapshot = dataclasses.replace(snapshot, driver_balance=balance)
         for p in self._press_queue:
+            if self._menu_press(p, snapshot):
+                continue
             if p.kind == "mindset":
                 self.cycle_mindset(p.t)
             elif p.kind == "page":
@@ -728,6 +858,8 @@ class Engine:
             else:
                 self.dispatcher.on_press(p, snapshot)
         self._press_queue.clear()
+        if self.menu.expired(self.store.current().menu, now):
+            self._menu_close(now, snapshot, "timeout")
         self._auto_page(snapshot, now)
         if self.state.last_recv_wall is not None:
             self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)

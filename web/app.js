@@ -77,7 +77,28 @@
 
   // -- telemetry zones --------------------------------------------------------
 
+  // Driver -> pit wall menu (docs/12): backend-owned, a 5-row window around
+  // the highlight. Fixed overlay below the call banner; no zone reflows.
+  function renderMenu(m) {
+    var box = el("drvmenu");
+    if (!box) return;
+    if (!m || !m.open || !m.items || !m.items.length) { box.hidden = true; return; }
+    var list = el("drvmenu-list"), n = m.items.length, rows = Math.min(5, n);
+    var start = Math.max(0, Math.min(m.index - 2, n - rows));
+    list.textContent = "";
+    for (var i = start; i < start + rows; i++) {
+      var li = document.createElement("li");
+      li.textContent = m.items[i];
+      if (i === m.index) li.className = "sel";
+      list.appendChild(li);
+    }
+    setText("drvmenu-left", (m.index + 1) + "/" + n +
+      (m.left_s !== null && m.left_s !== undefined ? " · " + Math.ceil(m.left_s) + "s" : ""));
+    box.hidden = false;
+  }
+
   function renderState(p) {
+    renderMenu(p.menu);
     var phase = (p.phase || "--").replace("_", " ").toUpperCase();
     setText("phase", phase);
     setClass("phase", p.phase === "out_lap" ? "amber" : "");
@@ -990,6 +1011,16 @@
     if (ev.repeat || !document.hasFocus()) return;
     if (ev.code === "KeyP") sendCtl({ type: "page" });
     else if (ev.code === "KeyM") sendCtl({ type: "mindset" });
+  });
+  // Arrow Up/Down = menu up/down (UDP Actions 2/3), Enter = confirm,
+  // Escape = close (docs/12). Space still confirms like UDP Action 1.
+  var MENU_KEYS = { ArrowUp: "up", ArrowDown: "down", Enter: "confirm", Escape: "close" };
+  document.addEventListener("keydown", function (ev) {
+    var op = MENU_KEYS[ev.code];
+    if (!op || ev.repeat || !document.hasFocus()) return;
+    if (ev.target && ev.target.closest && ev.target.closest("input, textarea, select, button")) return;
+    ev.preventDefault();
+    sendCtl({ type: "menu", op: op });
   });
   ["page", "mindset"].forEach(function (id) {
     var n = el(id);
