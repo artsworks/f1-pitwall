@@ -339,6 +339,20 @@ waiting gains). Decisions:
 `pit_plan_confidence >= mode.pit_confidence_min`, `pit_plan_gain_s >= mode.pit_gain_min_s`,
 `pit_plan_risk <= mode.position_loss_risk_max`.
 
+## Named strategy plans (`pitwall.strategy.plans`)
+
+Plan A/B/C portfolio on top of the tactical optimiser (model and calls in docs/03
+"Strategy plans"). `Engine._plans()` runs after `optimise()` on each lap, stop, SC/VSC or
+compound change, feeds `PlanTracker.update()` and folds `PlanFields` into `ModelView` and
+the `Snapshot` (`active_plan`, `on_plan`, `plan_spoken`, `plan_target_lap`,
+`plan_window_start/end`, `plan_window_open`, `plan_off_s`, `plan_switch_*`,
+`plan_b_spoken`, `plan_c_spoken`, ...). Thresholds: `plan_*` in `settings.yaml`.
+
+Migration 3 (append-only): `calls.active_plan TEXT`, `calls.on_plan INT` and a
+`plan_events(session_uid, t, session_time, lap, kind, from_plan, to_plan, reason, delta_s,
+sequence, plans JSON)` table; `Database.insert_plan_event()` /
+`plan_events_for_session()`.
+
 ## Rules (`config/defaults/rules/race.yaml`)
 
 All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.call_budget_per_lap`

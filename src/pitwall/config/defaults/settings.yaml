@@ -109,6 +109,21 @@ thresholds:
   gap_hysteresis_s: 0.3
   warnings_warn: 3
   pit_exit_traffic_s: 1.5
+  # Named strategy plans A/B/C (docs/03 "Strategy plans")
+  plan_max_stops: 2            # candidate strategies up to this many stops
+  plan_min_stint_laps: 3       # shortest stint a candidate may contain
+  plan_window_s: 1.5           # stop laps within this of the best form the window
+  plan_two_compound_rule: 1    # dry race must use two dry compounds
+  plan_off_s: 3.0              # active plan this much slower than best = off plan
+  plan_off_hysteresis_s: 1.0   # back on plan once inside plan_off_s minus this
+  plan_switch_s: 5.0           # switch plans once the active one loses this much
+  plan_status_every_laps: 5    # "still on Plan A" cadence (sector 1, P3, budgeted)
+  plan_deg_factor_soft: 1.6    # deg vs medium when a compound has no learned prior
+  plan_deg_factor_medium: 1.0
+  plan_deg_factor_hard: 0.6
+  plan_pace_soft_ms: -400      # fresh-set pace vs medium at age 0
+  plan_pace_medium_ms: 0
+  plan_pace_hard_ms: 400
   # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
   tune_min_grades: 3
   tune_gain: 2.0

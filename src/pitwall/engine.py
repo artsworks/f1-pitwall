@@ -34,12 +34,50 @@ from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
+from pitwall.strategy.plans import (
+    DRY,
+    CompoundModel,
+    PlanEvent,
+    PlanFields,
+    PlanInputs,
+    PlanState,
+    PlanTracker,
+    view_fields,
+)
 from pitwall.tune import load_cooldown_mults
 
 
 def action_bits(inp: Any) -> dict[str, int]:
     """Named UDP Action buttons beyond ack/silent (docs/12)."""
     return {"mindset": int(inp.mindset_toggle_bit), "page": int(inp.page_cycle_bit)}
+
+
+def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
+    return dataclasses.replace(
+        obj,
+        plans=f.plans,
+        active_plan=f.active_plan,
+        on_plan=f.on_plan,
+        plan_label=f.plan_label,
+        plan_spoken=f.plan_spoken,
+        plan_stops_left=f.plan_stops_left,
+        plan_target_lap=f.plan_target_lap,
+        plan_window_start=f.plan_window_start,
+        plan_window_end=f.plan_window_end,
+        plan_window_text=f.plan_window_text,
+        plan_window_open=f.plan_window_open,
+        plan_next_compound=f.plan_next_compound,
+        plan_off_s=f.plan_off_s,
+        plan_switch_count=f.plan_switch_count,
+        plan_switched_from=f.plan_switched_from,
+        plan_switch_reason=f.plan_switch_reason,
+        plan_switch_lap=f.plan_switch_lap,
+        plan_target_shift=f.plan_target_shift,
+        plan_b_spoken=f.plan_b_spoken,
+        plan_b_delta_s=f.plan_b_delta_s,
+        plan_c_spoken=f.plan_c_spoken,
+        plan_c_delta_s=f.plan_c_delta_s,
+    )
 
 
 class Engine:
@@ -97,6 +135,14 @@ class Engine:
         self.pit_plan: PitPlan = NO_PLAN
         self._fresh_prior: DegFit | None = None
         self._green_pit_loss_s = 0.0
+        self._sc_pit_loss_s = 0.0
+        # Named strategy plans (docs/03 "Strategy plans").
+        self.plan_tracker = PlanTracker()
+        self._plan_key: tuple[int, int, bool, bool, int] | None = None
+        self._stops_done = 0
+        self._used_compounds: set[int] = set()
+        self._prev_race_phase = ""
+        self._compound_priors: dict[int, DegFit] = {}
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
         self._pit_in_lap: LapSummary | None = None
@@ -233,6 +279,11 @@ class Engine:
         self._folded_stints.clear()
         self._fuel_last_kg = None
         self.deg_fit = None
+        self.plan_tracker.reset()
+        self._plan_key = None
+        self._stops_done = 0
+        self._used_compounds.clear()
+        self._prev_race_phase = ""
         self._upsert_session(uid)
 
     def _upsert_session(self, uid: int) -> None:
@@ -511,6 +562,11 @@ class Engine:
                 self.db, state.session_uid, track_id, 0, overlay, settings.thresholds
             )
             self._green_pit_loss_s = green.value / 1000.0
+            sc = current_pit_loss(
+                self.db, state.session_uid, track_id, 1, overlay, settings.thresholds
+            )
+            self._sc_pit_loss_s = sc.value / 1000.0
+            self._compound_priors.clear()
             self._fresh_prior = self._deg_prior(track_id, state.tyre_compound, settings)
             # Wear rate this stint: median of positive consecutive deltas.
             wear_deltas = [
@@ -591,8 +647,10 @@ class Engine:
         """Run the pit-window optimiser on the fresh snapshot and fold the
         plan into both the snapshot and the next ModelView."""
         fit = self.deg_fit
-        if not snap.race_phase or fit is None or self._fresh_prior is None:
+        if not snap.race_phase or self._fresh_prior is None:
             return snap
+        if fit is None:
+            return self._plans(snap, self._fresh_prior, NO_PLAN)
         settings = self.store.current()
         ahead = (
             RivalView(
@@ -653,7 +711,7 @@ class Engine:
                 overcut_s=plan.overcut_s,
             )
         )
-        return dataclasses.replace(
+        snap = dataclasses.replace(
             snap,
             pit_plan=plan.plan,
             pit_plan_lap=plan.lap,
@@ -668,6 +726,110 @@ class Engine:
             undercut_s=plan.undercut_s,
             overcut_s=plan.overcut_s,
         )
+        return self._plans(snap, fit, plan)
+
+    def _compound_models(self, snap: Snapshot, cur: DegFit) -> tuple[CompoundModel, ...]:
+        """Fresh-set pace per dry compound: learned/overlay deg for the set's
+        actual compound when known, else the current slope scaled by the
+        per-compound factor; sets left from the Tyre Sets packet."""
+        settings = self.store.current()
+        current = snap.tyre_visual
+        names = {16: "soft", 17: "medium", 18: "hard"}
+        out: list[CompoundModel] = []
+        for v in DRY:
+            actual = next((s.actual for s in snap.tyre_sets if s.visual == v and s.actual), 0)
+            deg = cur.deg_ms_per_lap * (
+                self._th(f"plan_deg_factor_{names[v]}", 1.0)
+                / self._th(f"plan_deg_factor_{names.get(current, 'medium')}", 1.0)
+            )
+            if actual:
+                prior = self._compound_priors.get(actual)
+                if prior is None:
+                    prior = self._deg_prior(snap.track_id, actual, settings)
+                    self._compound_priors[actual] = prior
+                if prior.source in ("learned", "overlay"):
+                    deg = prior.deg_ms_per_lap
+            off = self._th(f"plan_pace_{names[v]}_ms", 0.0)
+            off_cur = self._th(f"plan_pace_{names[current]}_ms", 0.0) if current in names else 0.0
+            sets = (
+                sum(1 for s in snap.tyre_sets if s.visual == v and s.available and not s.fitted)
+                if snap.tyre_sets
+                else -1
+            )
+            out.append(CompoundModel(v, cur.base_ms + off - off_cur, deg, sets))
+        return tuple(out)
+
+    def _plans(self, snap: Snapshot, cur: DegFit, pit: PitPlan) -> Snapshot:
+        """Named strategy plans: recompute on each lap / stop / SC change,
+        persist set/switch/off events, fold scalars into snapshot + model."""
+        phase = snap.race_phase
+        if phase == "out_lap" and self._prev_race_phase != "out_lap":
+            self._stops_done += 1
+        self._prev_race_phase = phase
+        tracker = self.plan_tracker
+        if phase in ("racing", "sc", "vsc") and snap.tyre_visual and snap.laps_remaining > 0:
+            self._used_compounds.add(snap.tyre_visual)
+            neutral = phase in ("sc", "vsc")
+            cheap = pit.plan == "cheap_stop"
+            key = (snap.lap_num, self._stops_done, neutral, cheap, snap.tyre_visual)
+            if key != self._plan_key:
+                self._plan_key = key
+                lop = snap.laps_of_pace
+                cliff = self._th("tyre_cliff_ms", 1500)
+                cliff_age = (
+                    snap.tyre_age_laps + lop
+                    if math.isfinite(lop)
+                    else (cliff / cur.deg_ms_per_lap if cur.deg_ms_per_lap > 0 else math.inf)
+                )
+                tracker.update(
+                    PlanInputs(
+                        lap_num=snap.lap_num,
+                        laps_remaining=snap.laps_remaining,
+                        tyre_age=snap.tyre_age_laps,
+                        current=snap.tyre_visual,
+                        cur=cur,
+                        cur_cliff_age=cliff_age,
+                        compounds=self._compound_models(snap, cur),
+                        used=frozenset(self._used_compounds),
+                        green_loss_s=self._green_pit_loss_s or snap.pit_loss_s,
+                        sc_loss_s=self._sc_pit_loss_s or snap.pit_loss_s,
+                    ),
+                    self.store.current().thresholds,
+                    stops_done=self._stops_done,
+                    neutralised=neutral,
+                    cheap_stop=cheap,
+                )
+                for ev in tracker.drain():
+                    self._persist_plan_event(snap, ev, tracker.state)
+        st: PlanState = tracker.state
+        if not st.active:
+            return snap
+        fields = view_fields(st, snap.lap_num)
+        self.state.set_model(_with_plan(self.state.model, fields))
+        return _with_plan(snap, fields)
+
+    def _persist_plan_event(self, snap: Snapshot, ev: PlanEvent, st: PlanState) -> None:
+        plans = [
+            {"id": p.id, "sequence": p.sequence, "window": list(p.window), "delta_s": p.delta_s}
+            for p in st.plans
+        ]
+        record = {
+            "t": snap.now,
+            "session_time": snap.session_time,
+            "lap": ev.lap,
+            "rule_id": None,
+            "outcome": "plan",
+            "kind": ev.kind,
+            "from_plan": ev.from_plan,
+            "to_plan": ev.to_plan,
+            "reason": ev.reason,
+            "delta_s": ev.delta_s,
+            "sequence": ev.sequence,
+            "plans": plans,
+        }
+        self.dispatcher.log.write(record)
+        if self.db is not None and self.state.session_uid is not None:
+            self.db.insert_plan_event(self.state.session_uid, record)
 
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)

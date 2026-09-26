@@ -222,6 +222,14 @@ existing snapshot's `calls[]`; an audio-finished event if "heard in full" is nee
 `rate_hz` populated;
 M3: `strategy: {pit_window: [26, 28], ahead: {pos, name, gap_s, compound}, behind: {...},
 undercut_s, overcut_s, stint_plan: [...]}`.
+Named plans (docs/03 "Strategy plans") add, inside `strategy`:
+`plans: [{id: 'A'|'B'|'C', kind: 'primary'|'alternative'|'reactive', label: '1-stop M-H',
+stops, compounds: ['MEDIUM','HARD'], stop_laps: [27], window: [26, 28] | null, delta_s,
+active}]` (delta vs the active plan, negative = faster; C is "box now under SC/VSC"),
+`active_plan` (`'A'`/`'B'`/`'C'` or null before lap 1), `on_plan` (bool or null),
+`plan_off_s` (active plan's loss vs the best legal strategy), `plan_target_lap` (next stop
+of the active plan or null) and `plan_switch: {from, reason: 'pace'|'invalid'|'sc', lap}`
+or null. Backend only; UI rendering is a separate PR.
 
 ## 6. Stale and reconnect behaviour
 

@@ -501,6 +501,8 @@ class Dispatcher:
                 "suppressed_by": by,
                 "inputs": cand.inputs,
                 "text": cand.text,
+                "active_plan": snap.active_plan,
+                "on_plan": snap.on_plan if snap.active_plan else None,
             }
         )
 
@@ -519,5 +521,7 @@ class Dispatcher:
                 "suppressed_by": by,
                 "inputs": call.inputs,
                 "text": call.text,
+                "active_plan": snap.active_plan if snap else "",
+                "on_plan": snap.on_plan if snap and snap.active_plan else None,
             }
         )

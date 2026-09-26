@@ -135,6 +135,63 @@ unserved penalties, damage-driven pace loss.
 `m_timeOffset`, with `m_rainPercentage` — call the crossover lap for inters/wets and warn
 on the transition, not merely on the change.
 
+## Strategy plans (Plan A/B/C)
+
+**How real pit walls talk strategy.** Teams pre-brief a small set of named strategies
+before the race and then speak in references to them, not in full explanations — the radio
+is public and bandwidth is tiny. Common patterns:
+
+- *Lettered plans.* Ferrari famously name them "Plan A / B / C" ("we are on Plan C",
+  "let's go Plan F" is folklore); Mercedes and Red Bull say "Plan B" / "we're switching to
+  Plan B" or "option B". The driver knows what each letter means from the briefing, so the
+  call carries status, not detail.
+- *Status confirmations.* "We're on Plan A", "still Plan A", "target lap 26", "pit window
+  is open", "window laps 26 to 28".
+- *Execution words.* "Box, box" (pit this lap), "box, confirm" / "stay out, stay out",
+  "extend" / "we're going long" (lengthen the stint), "box opposite" (react to a rival).
+- *Pace instructions tied to strategy.* "Hammer time" (Mercedes, push flat out for the
+  undercut/overcut), "manage the tyres", "we need 26 laps from this set".
+- *Engine/strat modes.* "Strat 3", "Strategy 5" and similar are numbered power-unit
+  modes rather than race strategies; pitwall does not reuse the numbering.
+- *Reactive plans.* Under SC/VSC the pre-briefed plan is "Plan C, box box" or "safety
+  car, box this lap", because the neutralised pit loss changes the answer instantly.
+
+**Model.** `pitwall.strategy.plans` enumerates every compound sequence with 0–2 stops
+(`plan_max_stops`) that is legal: sets left per compound from the Tyre Sets packet
+(unknown = unlimited), the mandatory two-dry-compound rule (`plan_two_compound_rule`) and
+`plan_min_stint_laps`. Each sequence gets its best stop laps from the same deg model and
+pit-loss the optimiser uses (fresh-set pace per compound = learned prior, else the current
+slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`). The window is every first-
+stop lap within `plan_window_s` of the best.
+
+- **Plan A** = fastest sequence at race start; **Plan B** = fastest with a different stop
+  count (else a different sequence); **Plan C** = reactive: box this lap at the SC/VSC pit
+  loss, re-derived every recompute until taken.
+- A and B are frozen as compound sequences; their timing is re-optimised every lap. If the
+  active plan falls more than `plan_off_s` behind the best legal strategy we're *off plan*
+  (hysteresis `plan_off_hysteresis_s`); beyond `plan_switch_s` the engine switches to the
+  plan that matches the best sequence (reason `pace`). A plan becomes *invalid* when its
+  remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
+- A cheap-stop SC/VSC recommendation switches the active plan to C (reason `sc`).
+
+**Calls** (`rules/race.yaml`, all through the dispatcher budget/cooldowns):
+
+| rule | P | example |
+| --- | --- | --- |
+| `plan_announce` | 2 | "We're on Plan A, one stop, medium then hard. Window laps 26 to 28. Plan B is two stop, medium then hard then soft" |
+| `plan_announce_no_stop` | 2 | "We're on Plan A, no stop, hard to the end. We're going long" |
+| `plan_status` | 3 | every `plan_status_every_laps` in sector 1 before the window: "Still on Plan A, window laps 26 to 28" |
+| `plan_window_open` | 2 | "Pit window is open. Plan A, target lap 27" |
+| `plan_target_lap` | 1 | "Target lap. Plan A, box box, hards" (neg: "Understood, extend") |
+| `plan_off` | 2 | "Heads up, we're off Plan A. Losing 4 seconds on it, reviewing" |
+| `plan_switch` | 2 | "Switching to Plan B. two stop, medium then hard then soft, target lap 18" |
+| `plan_invalid` | 2 | "We're off Plan C. New plan is A, one stop, medium then hard" |
+| `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Cheap stop under the safety car" |
+| `plan_sc_box` | 1 | fallback when `box_now` is gated out: "Plan C, box box. Hards, cheap stop" |
+
+Every set/switch/off/on transition is written to the decision log (`outcome: plan`) and the
+`plan_events` table; every call row carries `active_plan` and `on_plan` for review grading.
+
 ## Qualifying calls
 
 **Out-lap priming.** Target windows per compound and track from config, phrased as
