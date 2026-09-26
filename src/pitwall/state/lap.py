@@ -21,6 +21,11 @@ class LapSummary:
     fuel_remaining_laps_at_end: float
     valid: bool
     invalid_reasons: list[str] = field(default_factory=list)
+    wear_pct: float = 0.0  # mean of the 4 corner wear values at lap end
+    fuel_kg: float = 0.0  # fuel_in_tank at lap end
+    ers_deployed_j: float = 0.0  # ers_deployed_this_lap at lap end
+    sc_status: int = 0  # max safety_car_status seen during the lap
+    weather: int = 0
 
 
 class LapAccumulator:
@@ -34,6 +39,7 @@ class LapAccumulator:
         self._saw_sc = False
         self._saw_flashback = False
         self._saw_invalid = False
+        self._sc_max = 0
         self._last_driver_status = 0
 
     def note_flashback(self) -> None:
@@ -41,6 +47,7 @@ class LapAccumulator:
 
     def reset_stint_flags(self) -> None:
         self._saw_pit = self._saw_sc = self._saw_flashback = self._saw_invalid = False
+        self._sc_max = 0
 
     def update(
         self,
@@ -56,6 +63,10 @@ class LapAccumulator:
         compound: int,
         tyre_age_laps: int,
         fuel_remaining_laps: float,
+        wear_mean_pct: float = 0.0,
+        fuel_in_tank: float = 0.0,
+        ers_deployed_this_lap: float = 0.0,
+        weather: int = 0,
     ) -> LapSummary | None:
         """Feed one Lap Data tick for the player. Returns a summary when the
         lap counter increments."""
@@ -73,6 +84,7 @@ class LapAccumulator:
             self._saw_flashback,
             self._saw_invalid,
             self._prev_was_in_lap,
+            self._sc_max,
         )
         self.reset_stint_flags()
         self._prev_was_in_lap = driver_status == 2  # in lap
@@ -81,7 +93,7 @@ class LapAccumulator:
 
         if finished == 0:
             return None  # first observation; nothing completed
-        saw_pit, saw_sc, saw_fb, saw_inv, prev_in_lap = prev_flags
+        saw_pit, saw_sc, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
         reasons: list[str] = []
         if finished == 1:
             reasons.append("first_lap")
@@ -105,9 +117,15 @@ class LapAccumulator:
             fuel_remaining_laps_at_end=fuel_remaining_laps,
             valid=not reasons,
             invalid_reasons=reasons,
+            wear_pct=wear_mean_pct,
+            fuel_kg=fuel_in_tank,
+            ers_deployed_j=ers_deployed_this_lap,
+            sc_status=sc_max,
+            weather=weather,
         )
 
     def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:
         self._saw_pit |= pit_status != 0
         self._saw_sc |= sc != 0
         self._saw_invalid |= invalid != 0
+        self._sc_max = max(self._sc_max, sc)

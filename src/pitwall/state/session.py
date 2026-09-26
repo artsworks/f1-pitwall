@@ -223,6 +223,8 @@ class Snapshot:
     red_flag: bool = False
     session_ended: bool = False
     rewinds: int = 0
+    weather: int = 0
+    game_mode: int = 0
     since_rewind_s: float = math.inf
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -376,6 +378,8 @@ class SessionState:
         self.pit_speed_limit = 0
         self.game_paused = False
         self.network_paused = False
+        self.weather = 0
+        self.game_mode = 0
         self.num_active_cars = 0
         self.red_flag = False
         self.session_ended = False
@@ -411,6 +415,11 @@ class SessionState:
         self.fuel_remaining_laps = 0.0
         self.fuel_in_tank = 0.0
         self.ers_store_pct = 0.0
+        self.ers_store_energy_j = 0.0
+        self.ers_deployed_this_lap_j = 0.0
+        self.ers_harvested_mguk_j = 0.0
+        self.ers_harvested_mguh_j = 0.0
+        self.ers_harvest_limit_per_lap_j = 0.0
         self.ers_deploy_mode = 0
         self.drs_allowed = 0
         self.tyres_wear = _ZERO_CORNERS
@@ -436,6 +445,10 @@ class SessionState:
         self.lap_acc = LapAccumulator()
         self.run = RunTracker()
         self.laps: list[LapSummary] = []
+        # Newly completed rival laps from Session History (car_idx, lap);
+        # drained by Engine._write_laps into SQLite.
+        self.rival_laps: list[tuple[int, LapSummary]] = []
+        self._rival_laps_emitted: dict[int, int] = {}
 
         self.cars_lap: tuple[Any, ...] | None = None
         self.cars_telemetry: tuple[Any, ...] | None = None
@@ -565,6 +578,8 @@ class SessionState:
         self.track_length_m = float(pkt.track_length)
         self.pit_speed_limit = pkt.pit_speed_limit
         self.game_paused = bool(pkt.game_paused)
+        self.weather = pkt.weather
+        self.game_mode = pkt.game_mode
         zones = pkt.marshal_zones[: pkt.num_marshal_zones]
         self.yellows.update(
             [z.zone_start for z in zones],
@@ -619,6 +634,10 @@ class SessionState:
             compound=self.tyre_compound,
             tyre_age_laps=self.tyre_age_laps,
             fuel_remaining_laps=self.fuel_remaining_laps,
+            wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
+            fuel_in_tank=self.fuel_in_tank,
+            ers_deployed_this_lap=self.ers_deployed_this_lap_j,
+            weather=self.weather,
         )
         if summary is not None:
             self.laps.append(summary)
@@ -742,6 +761,8 @@ class SessionState:
             default=None,
         )
         self._best_laps[pkt.car_idx] = best_lap.lap_time_ms if best_lap is not None else 0
+        if pkt.car_idx != self._player_idx:
+            self._emit_rival_laps(pkt)
         self._best_lap_sectors[pkt.car_idx] = (
             (best_lap.sector1_ms, best_lap.sector2_ms, best_lap.sector3_ms)
             if best_lap is not None
@@ -775,6 +796,43 @@ class SessionState:
                     default=0,
                 ),
             )
+
+    def _emit_rival_laps(self, pkt: SessionHistoryPacket) -> None:
+        """Expose newly completed rival laps as LapSummary rows. Completed
+        laps are indices < num_laps - 1 (the last entry is in progress)."""
+        completed = max(0, pkt.num_laps - 1)
+        emitted = self._rival_laps_emitted.get(pkt.car_idx, 0)
+        if completed <= emitted:
+            return
+        stints = pkt.tyre_stints[: pkt.num_tyre_stints]
+        for i in range(emitted, completed):
+            lap = pkt.laps[i]
+            lap_num = i + 1
+            compound = 0
+            stint_start = 1
+            for stint in stints:
+                compound = stint.tyre_actual_compound
+                if stint.end_lap >= lap_num:
+                    break
+                stint_start = stint.end_lap + 1
+            valid = bool(lap.lap_valid_bit_flags & LAP_VALID) and lap.lap_time_ms > 0
+            self.rival_laps.append(
+                (
+                    pkt.car_idx,
+                    LapSummary(
+                        lap_num=lap_num,
+                        lap_time_ms=lap.lap_time_ms,
+                        sector1_ms=lap.sector1_ms,
+                        sector2_ms=lap.sector2_ms,
+                        compound=compound,
+                        tyre_age_laps=max(0, lap_num - stint_start),
+                        fuel_remaining_laps_at_end=0.0,
+                        valid=valid,
+                        invalid_reasons=[] if valid else ["invalid"],
+                    ),
+                )
+            )
+        self._rival_laps_emitted[pkt.car_idx] = completed
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
         self.num_active_cars = pkt.num_active_cars
@@ -846,7 +904,12 @@ class SessionState:
         self.fuel_remaining_laps = car.fuel_remaining_laps
         self.fuel_in_tank = car.fuel_in_tank
         cap = 4_000_000.0  # nominal 4 MJ ERS store
+        self.ers_store_energy_j = float(car.ers_store_energy)
         self.ers_store_pct = min(100.0, car.ers_store_energy / cap * 100.0)
+        self.ers_deployed_this_lap_j = float(car.ers_deployed_this_lap)
+        self.ers_harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
+        self.ers_harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
+        self.ers_harvest_limit_per_lap_j = float(car.ers_harvest_limit_per_lap)
         self.ers_deploy_mode = car.ers_deploy_mode
         self.drs_allowed = car.drs_allowed
         self.network_paused = bool(car.network_paused)
@@ -1050,6 +1113,8 @@ class SessionState:
             red_flag=self.red_flag,
             session_ended=self.session_ended,
             rewinds=self.rewinds,
+            weather=self.weather,
+            game_mode=self.game_mode,
             since_rewind_s=(
                 math.inf if self._last_rewind_t is None else max(0.0, st - self._last_rewind_t)
             ),

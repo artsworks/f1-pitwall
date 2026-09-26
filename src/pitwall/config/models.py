@@ -152,6 +152,21 @@ class RuleDefModel(BaseModel):
         return list(self.say)
 
 
+class TrackOverlay(BaseModel):
+    """Per-track overlay (docs/18): cold-start priors + threshold overrides.
+    Packaged at config/defaults/tracks/<id>.yaml; ~/.pitwall/tracks wins."""
+
+    track_id: int
+    name: str = ""
+    pit_loss_s: dict[str, float] = Field(default_factory=dict)  # green/vsc/sc
+    pit_exit_m: float = 0.0
+    pit_entry_m: float = 0.0
+    fuel_kg_per_lap: float = 0.0
+    deg_ms_per_lap: dict[int, float] = Field(default_factory=dict)  # actual compound -> ms
+    base_pace_ms: int = 0  # 0 = unknown
+    thresholds: dict[str, float] = Field(default_factory=dict)
+
+
 class Settings(BaseModel):
     connection: ConnectionSettings = Field(default_factory=ConnectionSettings)
     recording: RecordingSettings = Field(default_factory=RecordingSettings)
@@ -163,6 +178,7 @@ class Settings(BaseModel):
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
+    track: TrackOverlay | None = None
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
     rules: list[RuleDefModel] = Field(default_factory=list)
 

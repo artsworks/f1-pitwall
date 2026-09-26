@@ -17,8 +17,13 @@ from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
 from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
+from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
+from pitwall.model.deg import DegFit, Prior, fit_stint, resolve_prior
+from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.rules.engine import RuleEngine
+from pitwall.state.lap import LapSummary
 from pitwall.state.session import SessionState
+from pitwall.store.db import LapRow
 
 
 class Engine:
@@ -53,6 +58,17 @@ class Engine:
         self.db: Any = dispatcher.log.db
         self._laps_written = 0
         self._session_upserted: int | None = None
+        self._track_loaded: int | None = None
+        self._session_ended_written = False
+        # M3 model outputs, exposed on the engine until H2 moves them into
+        # the snapshot.
+        self.deg_fit: DegFit | None = None
+        self.pit_loss_prior: Prior | None = None
+        self.fuel_budget: FuelBudget | None = None
+        self.energy_budget: EnergyBudget | None = None
+        self._pit_in_lap: LapSummary | None = None
+        self._folded_stints: set[tuple[int, int]] = set()
+        self._fuel_last_kg: float | None = None
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
@@ -76,6 +92,11 @@ class Engine:
     def _on_new_session(self, uid: int) -> None:
         self.dispatcher.reset_session()
         self._laps_written = len(self.state.laps)
+        self._session_ended_written = False
+        self._pit_in_lap = None
+        self._folded_stints.clear()
+        self._fuel_last_kg = None
+        self.deg_fit = None
         self._upsert_session(uid)
 
     def _upsert_session(self, uid: int) -> None:
@@ -91,19 +112,278 @@ class Engine:
             game_version=getattr(snap, "game_version", ""),
             config_hash=self.store.hash,
             weather=getattr(snap, "weather", 0),
+            game_mode=getattr(snap, "game_mode", 0),
         )
 
     def _write_laps(self) -> None:
         if self.db is None or self.state.session_uid is None:
             return
-        for lap in self.state.laps[self._laps_written :]:
-            self.db.insert_lap(self.state.session_uid, 0, lap)
+        uid = self.state.session_uid
+        for car_idx, lap in self.state.rival_laps:
+            self.db.insert_lap(uid, car_idx, lap)
+        self.state.rival_laps.clear()
+        new_laps = self.state.laps[self._laps_written :]
+        for lap in new_laps:
+            self.db.insert_lap(uid, 0, lap)
         self._laps_written = len(self.state.laps)
+        for lap in new_laps:
+            self._on_player_lap(uid, lap)
+
+    def _on_player_lap(self, uid: int, lap: LapSummary) -> None:
+        """M3 persistence hooks (docs/18): refit the stint, measure pit loss
+        when an out-lap completes, fold fuel-burn deltas."""
+        db = self.db
+        if db is None:
+            return
+        settings = self.store.current()
+        th = settings.thresholds
+        track_id = self.state.track_id
+        all_laps = db.laps_for(uid, 0)
+
+        # Current stint = contiguous tail with one compound and strictly
+        # increasing tyre_age. Whatever precedes the tail is a closed stint.
+        tail: list[LapRow] = []
+        for row in reversed(all_laps):
+            if tail and (
+                row.compound != tail[-1].compound or row.tyre_age_laps >= tail[-1].tyre_age_laps
+            ):
+                break
+            tail.append(row)
+        tail.reverse()
+
+        if len(tail) < len(all_laps):
+            # A stint just closed; fold its fitted params exactly once.
+            boundary = tail[0].lap_num
+            key = (uid, boundary)
+            if key not in self._folded_stints:
+                self._folded_stints.add(key)
+                prev = self._stint_rows(all_laps[: len(all_laps) - len(tail)])
+                if prev:
+                    prior = self._deg_prior(track_id, prev[0].compound, settings)
+                    fit = fit_stint(
+                        prev,
+                        prior,
+                        min_laps=int(self._th("deg_min_laps", 3)),
+                        fuel_coeff_fixed=None,
+                        deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+                        deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+                    )
+                    if fit.source == "fit":
+                        for name, value in (
+                            ("deg_ms_per_lap", fit.deg_ms_per_lap),
+                            ("base_ms", fit.base_ms),
+                            ("fuel_ms_per_lap", fit.fuel_ms_per_lap),
+                        ):
+                            db.fold_param(
+                                track_id,
+                                prev[0].compound,
+                                name,
+                                value,
+                                weight=float(fit.n),
+                                param_weight_cap=self._th("param_weight_cap", 50),
+                            )
+
+        if tail:
+            compound = tail[0].compound
+            prior = self._deg_prior(track_id, compound, settings)
+            fuel_param = db.get_param(track_id, compound, "fuel_ms_per_lap")
+            fuel_fixed = (
+                fuel_param.value
+                if fuel_param is not None and fuel_param.weight >= self._th("prior_min_weight", 2)
+                else None
+            )
+            fit = fit_stint(
+                tail,
+                prior,
+                min_laps=int(self._th("deg_min_laps", 3)),
+                fuel_coeff_fixed=fuel_fixed,
+                deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+                deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+            )
+            self.deg_fit = fit
+            db.upsert_stint(uid, 0, compound, tail[0].lap_num, tail[-1].lap_num, fit)
+
+        # Pit loss: measure when an out-lap completes against a pending in-lap.
+        if "pitted" in lap.invalid_reasons:
+            self._pit_in_lap = lap
+        elif "after_in_lap" in lap.invalid_reasons and self._pit_in_lap is not None:
+            in_lap = self._pit_in_lap
+            self._pit_in_lap = None
+            skip = {"flashback", "red_flag"}
+            reasons = set(in_lap.invalid_reasons) | set(lap.invalid_reasons)
+            if not reasons & skip:
+                ref = ref_pace_ms(all_laps, in_lap.lap_num)
+                if ref > 0:
+                    in_row = next(r for r in all_laps if r.lap_num == in_lap.lap_num)
+                    out_row = next(r for r in all_laps if r.lap_num == lap.lap_num)
+                    neutralised = max(in_row.sc_status, out_row.sc_status)
+                    pit = measure(
+                        in_row,
+                        out_row,
+                        self.state.pit_lane_time_ms,
+                        ref,
+                        neutralised,
+                    )
+                    db.insert_pit_event(
+                        uid,
+                        0,
+                        in_lap.lap_num,
+                        pit.loss_ms,
+                        neutralised,
+                        pit.lane_ms,
+                        pit.in_lap_ms,
+                        pit.out_lap_ms,
+                        pit.ref_pace_ms,
+                    )
+                    suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
+                    db.fold_param(
+                        track_id,
+                        0,
+                        f"pit_loss_{suffix}_ms",
+                        float(pit.loss_ms),
+                        param_weight_cap=self._th("param_weight_cap", 50),
+                    )
+
+        # Fuel burn per lap: fold each consecutive-valid-lap delta.
+        if lap.valid and lap.fuel_kg > 0:
+            if self._fuel_last_kg is not None:
+                delta = self._fuel_last_kg - lap.fuel_kg
+                if 0.0 < delta < 10.0:
+                    db.fold_param(
+                        track_id,
+                        0,
+                        "fuel_kg_per_lap",
+                        delta,
+                        param_weight_cap=self._th("param_weight_cap", 50),
+                    )
+            self._fuel_last_kg = lap.fuel_kg
+        elif lap.fuel_kg > 0:
+            self._fuel_last_kg = lap.fuel_kg
+
+        self.pit_loss_prior = current_pit_loss(
+            db,
+            uid,
+            track_id,
+            lap.sc_status,
+            settings.track,
+            th,
+        )
+
+    def _stint_rows(self, laps: list[LapRow]) -> list[LapRow]:
+        """Trailing contiguous stint (same compound, increasing tyre age)."""
+        tail: list[LapRow] = []
+        for row in reversed(laps):
+            if tail and (
+                row.compound != tail[-1].compound or row.tyre_age_laps >= tail[-1].tyre_age_laps
+            ):
+                break
+            tail.append(row)
+        tail.reverse()
+        return tail
+
+    def _deg_prior(self, track_id: int, compound: int, settings: Any) -> DegFit:
+        overlay = settings.track
+        min_w = self._th("prior_min_weight", 2)
+        deg_p = resolve_prior(
+            self.db,
+            track_id,
+            compound,
+            "deg_ms_per_lap",
+            overlay_value=(overlay.deg_ms_per_lap.get(compound) if overlay is not None else None),
+            default=self._th("deg_default_ms_per_lap", 80),
+            min_weight=min_w,
+        )
+        base_p = resolve_prior(
+            self.db,
+            track_id,
+            compound,
+            "base_ms",
+            overlay_value=(
+                float(overlay.base_pace_ms)
+                if overlay is not None and overlay.base_pace_ms > 0
+                else None
+            ),
+            default=self._th("release_fallback_lap_s", 95.0) * 1000.0,
+            min_weight=min_w,
+        )
+        fuel_p = resolve_prior(
+            self.db,
+            track_id,
+            compound,
+            "fuel_ms_per_lap",
+            overlay_value=None,
+            default=self._th("fuel_ms_per_lap_default", 30),
+            min_weight=min_w,
+        )
+        return DegFit(
+            base_ms=base_p.value,
+            deg_ms_per_lap=deg_p.value,
+            fuel_ms_per_lap=fuel_p.value,
+            n=0,
+            rmse_ms=0.0,
+            confidence=0.3,
+            source=deg_p.source,
+        )
+
+    def _th(self, name: str, default: float) -> float:
+        v = self.store.current().thresholds.get(name, default)
+        return float(v) if isinstance(v, int | float) else default
+
+    def _update_budgets(self) -> None:
+        settings = self.store.current()
+        state = self.state
+        laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        track_id = state.track_id
+        overlay = settings.track
+        if self.db is not None:
+            fuel_p = resolve_prior(
+                self.db,
+                track_id,
+                0,
+                "fuel_kg_per_lap",
+                overlay_value=(
+                    overlay.fuel_kg_per_lap
+                    if overlay is not None and overlay.fuel_kg_per_lap > 0
+                    else None
+                ),
+                default=self._th("fuel_kg_per_lap_default", 1.7),
+                min_weight=self._th("prior_min_weight", 2),
+            )
+            self.fuel_budget = fuel_budget(
+                laps_remaining=laps_remaining,
+                fuel_in_tank_kg=state.fuel_in_tank,
+                per_lap_kg=fuel_p.value,
+                source=fuel_p.source,
+            )
+            cap = self._th("ers_store_capacity_j", 4_000_000)
+            self.energy_budget = energy_budget(
+                store_j=state.ers_store_energy_j,
+                store_capacity_j=cap,
+                laps_remaining=laps_remaining,
+                deployed_this_lap_j=state.ers_deployed_this_lap_j,
+                harvested_this_lap_j=(state.ers_harvested_mguk_j + state.ers_harvested_mguh_j),
+                harvest_limit_per_lap_j=state.ers_harvest_limit_per_lap_j,
+                soc_floor_pct=0.0,
+                over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
+                attack_ok=state.ers_deploy_mode == 1,
+            )
 
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         snapshot = self.state.snapshot(now)
+        if snapshot.track_id != self._track_loaded:
+            self._track_loaded = snapshot.track_id
+            self.store.set_track(snapshot.track_id if snapshot.track_id >= 0 else None)
         self._write_laps()
+        self._update_budgets()
+        if (
+            snapshot.session_ended
+            and not self._session_ended_written
+            and self.db is not None
+            and self.state.session_uid is not None
+        ):
+            self._session_ended_written = True
+            self.db.end_session(self.state.session_uid, now)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)

@@ -53,6 +53,25 @@ speech:
   radio_click: true # soft radio blip before each call
 mindset:
   active: balanced
+thresholds:
+  # M3 race engine (docs/18); per-track overlays may override these.
+  prior_min_weight: 2          # model_params weight needed to count as a learned prior
+  param_weight_cap: 50         # cap on fold_param running-mean weight
+  deg_min_laps: 3              # valid laps before an OLS deg fit leaves the prior
+  deg_max_ms_per_lap: 600      # clamp on fitted deg/fuel slopes
+  deg_rmse_bad_ms: 800         # rmse at which fit confidence floors at 0.2
+  deg_default_ms_per_lap: 80   # cold-start deg slope when nothing is known
+  fuel_ms_per_lap_default: 30  # pace gained per lap of fuel burn, default
+  tyre_cliff_ms: 1500          # pace loss vs age 0 that counts as the tyre cliff
+  wear_cliff_pct: 70           # mean wear % that counts as the wear cliff
+  wear_per_lap_default_pct: 2.5  # wear %/lap when not measured this stint
+  rival_pace_window: 3         # laps in the rival-pace median
+  pit_loss_default_s: 22       # green-flag pit loss when nothing is known
+  pit_loss_vsc_default_s: 12
+  pit_loss_sc_default_s: 8
+  fuel_kg_per_lap_default: 1.7
+  energy_over_tolerance_j: 200000  # |lap_delta| above this flags over/under
+  ers_store_capacity_j: 4000000    # nominal 4 MJ 2026 ERS store
 ui:
   state_hz: 5
 input:
