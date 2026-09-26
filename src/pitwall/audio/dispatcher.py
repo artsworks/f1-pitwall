@@ -239,10 +239,14 @@ class Dispatcher:
         while self._queue:
             q = heapq.heappop(self._queue)
             call = q.call
-            if (now - call.t) * 1000 > call.deadline_ms:
+            waits_for_straight = call.priority == 3 and self.policy.p3_straight_only
+            deadline_ms = call.deadline_ms
+            if waits_for_straight:
+                deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
+            if (now - call.t) * 1000 > deadline_ms:
                 self._log_call(call, "suppressed", "deadline")
                 continue
-            if call.priority == 3 and self.policy.p3_straight_only and not on_straight:
+            if waits_for_straight and not on_straight:
                 held.append(q)
                 continue
             if call.still_true is not None and self.latest_snapshot is not None:

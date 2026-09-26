@@ -200,8 +200,8 @@ rules:
     cooldown_group: fuel
     requires: [car_status]
     say:
-      - "Fuel is short, {fuel_margin_laps:.1f} laps. Lift and coast into the big stops"
-      - "We're {fuel_margin_laps:.1f} laps short on fuel. Start lifting"
+      - "Fuel is short, {fuel_short_laps:.1f} laps down. Lift and coast into the big stops"
+      - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
   - id: fuel_marginal
     sessions: [race]
     priority: 2
@@ -211,7 +211,8 @@ rules:
     cooldown_group: fuel
     requires: [car_status]
     say:
-      - "Fuel is tight, margin {fuel_margin_laps:.1f} laps. Keep an eye on it"
+      - "Fuel is tight, margin {fuel_margin_laps:+.1f} laps. Keep an eye on it"
+      - "Fuel's on the edge, {fuel_margin_laps:+.1f} laps. Save where you can"
   - id: fuel_spare
     sessions: [race]
     priority: 3
@@ -224,6 +225,7 @@ rules:
       - "Fuel is good, {fuel_margin_laps:.1f} laps spare. Use it"
   - id: energy_over
     sessions: [race]
+    min_lap: 3  # lap 1-2 spend the full launch charge
     priority: 2
     when: "phase == 'racing' and energy_mode == 'over' and sector == 2"
     clear_when: "energy_mode != 'over'"
@@ -234,6 +236,7 @@ rules:
       - "Over the energy budget, {energy_lap_delta_mj:+.1f} megajoules on the lap. Harvest more"
   - id: energy_under
     sessions: [race]
+    min_lap: 3  # lap 1-2 spend the full launch charge
     priority: 3
     when: "phase == 'racing' and energy_mode == 'under' and sector == 2"
     clear_when: "energy_mode != 'under'"
@@ -241,7 +244,7 @@ rules:
     cooldown_group: energy
     requires: [car_status]
     say:
-      - "Energy in hand, {energy_lap_delta_mj:+.1f} megajoules on the lap. You can deploy more"
+      - "Energy in hand, {energy_under_mj:.1f} megajoules unused on the lap. You can deploy more"
   - id: overtake_mode
     sessions: [race]
     priority: 2
@@ -264,13 +267,23 @@ rules:
   - id: penalty
     sessions: [race]
     priority: 1
-    when: "penalty_recent"
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0"
     clear_when: "not penalty_recent"
     cooldown_s: 15
     requires: [event]
     say:
       - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
       - "We've been given {penalty_time_s} seconds. {penalty_s} total"
+  - id: penalty_pit
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent and penalty_kind in ('drive_through', 'stop_go')"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "We've got a {penalty_kind_text}. Serve it within three laps"
+      - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
   - id: serve_penalty
     sessions: [race]
     priority: 2
@@ -313,7 +326,7 @@ rules:
   - id: rival_behind_pitted
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and rival_behind_pitted"
+    when: "phase == 'racing' and rival_behind_pitted and tyre_age_laps >= 2"
     clear_when: "not rival_behind_pitted"
     cooldown_s: 45
     cooldown_group: rival_pit
@@ -374,7 +387,7 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_laps:.1f}"
+      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_laps:+.1f} laps"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

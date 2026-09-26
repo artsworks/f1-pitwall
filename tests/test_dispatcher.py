@@ -176,11 +176,26 @@ def test_p3_held_until_on_straight() -> None:
 
 
 def test_p3_dropped_at_deadline_off_straight() -> None:
-    d, sink, _ = _dispatcher(deadlines_s={3: 1.0})
+    d, sink, _ = _dispatcher(deadlines_s={3: 1.0}, p3_straight_wait_s=0.0)
     d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
     d.drain(0.0)
     d.drain(2.0)  # past the 1 s P3 deadline while never on a straight
     assert not sink.spoken
+
+
+def test_p3_waits_for_straight_past_base_deadline() -> None:
+    d, sink, _ = _dispatcher(deadlines_s={3: 1.5}, min_gap_s=0.0)
+    d.submit([_cand("p3", priority=3, text="lock-up")], _snap(0.0))
+    d.drain(0.0)
+    d.drain(3.0)  # braking zone into the next corner: still off the straight
+    assert not sink.spoken
+    d.submit([], Snapshot(now=5.0, lap_num=1, on_straight=True))
+    assert d.drain(5.0) and sink.spoken == ["lock-up"]
+    d2, sink2, _ = _dispatcher(deadlines_s={3: 1.5}, min_gap_s=0.0)
+    d2.submit([_cand("p3", priority=3, text="late")], _snap(0.0))
+    d2.submit([], Snapshot(now=10.0, lap_num=1, on_straight=True))
+    d2.drain(10.0)  # 1.5 s + 8 s straight wait exceeded
+    assert not sink2.spoken
 
 
 def test_p3_straight_only_disabled() -> None:

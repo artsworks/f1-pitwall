@@ -59,6 +59,7 @@ class PolicySettings(BaseModel):
     quiet: bool = False
     mute_until_lap: int = 0
     p3_straight_only: bool = True
+    p3_straight_wait_s: float = 8.0  # extra deadline while a P3 call waits for a straight
 
 
 class UiSettings(BaseModel):

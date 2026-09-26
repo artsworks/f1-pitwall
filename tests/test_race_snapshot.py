@@ -134,3 +134,26 @@ def test_drs_available_needs_gap_and_permission() -> None:
         1.2,
     )
     assert not state.snapshot(1.2).drs_available
+
+
+def test_pena_warning_is_not_a_penalty() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    for t, fields in (
+        (2.0, (5, 27, 0, 255, 255, 5, 0)),  # track-limit warning: time_s is a 255 sentinel
+        (3.0, (4, 21, 0, 255, 3, 5, 0)),  # the 3 s time penalty for repeated warnings
+    ):
+        pena = pack_packet(
+            PacketId.EVENT,
+            {
+                "event_string_code": b"PENA",
+                "event_data": struct.pack("<BBBBBBB", *fields).ljust(12, b"\0"),
+            },
+            session_time=t,
+        )
+        ingest.on_datagram(pena, t)
+        _lap(ingest, t + 0.1)
+        snap = state.snapshot(t + 0.1)
+        if t == 2.0:
+            assert not snap.penalty_recent and snap.penalty_time_s == 0
+    assert snap.penalty_recent and snap.penalty_kind == "time" and snap.penalty_time_s == 3

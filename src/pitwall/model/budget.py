@@ -58,9 +58,11 @@ def energy_budget(
     attack_ok: bool = False,
 ) -> EnergyBudget:
     floor_j = store_capacity_j * soc_floor_pct / 100.0
-    per_lap_j = max(0.0, store_j - floor_j) / max(1, laps_remaining) + harvest_limit_per_lap_j
-    lap_delta_j = deployed_this_lap_j - harvested_this_lap_j - per_lap_j
-    net_drain_j = deployed_this_lap_j - harvested_this_lap_j - harvest_limit_per_lap_j
+    # Allowance is net store drawdown per lap; harvest already offsets deploy in
+    # the lap's own numbers, so the per-lap harvest limit is not added again.
+    per_lap_j = max(0.0, store_j - floor_j) / max(1, laps_remaining)
+    net_drain_j = deployed_this_lap_j - harvested_this_lap_j
+    lap_delta_j = net_drain_j - per_lap_j
     laps_to_floor = (
         (store_j - floor_j) / net_drain_j if net_drain_j > 0 and store_j > floor_j else math.inf
     )
