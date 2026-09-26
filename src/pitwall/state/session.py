@@ -455,6 +455,10 @@ class Snapshot:
         return self._ages.get(packet_name, float("inf"))
 
     @property
+    def fuel_margin_r(self) -> float:
+        return round(self.fuel_margin_laps, 1) + 0.0
+
+    @property
     def fuel_short_laps(self) -> float:
         return max(0.0, -self.fuel_margin_laps)
 

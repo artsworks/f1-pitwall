@@ -34,6 +34,7 @@ thresholds:
   pressure_min_flying_s: 30  # flying time a run needs before advising
   rejoin_traffic_s: 6        # after a spin: car behind closing within this = hold
   pit_exit_traffic_s: 4      # just out of the pit lane: car behind closing within this
+  rival_pit_gap_s: 5.0       # only announce the car ahead pitting when it was this close
   prep_gap_m: 800            # out-lap: talk about the gap this far before the line
   prep_traffic_s: 3          # slow car ahead within this (at push pace) = traffic
   tow_min_s: 0.7             # push-lap car ahead inside this = dirty air

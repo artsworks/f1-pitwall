@@ -211,8 +211,8 @@ rules:
     cooldown_group: fuel
     requires: [car_status]
     say:
-      - "Fuel is tight, margin {fuel_margin_laps:+.1f} laps. Keep an eye on it"
-      - "Fuel's on the edge, {fuel_margin_laps:+.1f} laps. Save where you can"
+      - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
+      - "Fuel's on the edge, {fuel_margin_r:+.1f} laps. Save where you can"
   - id: fuel_spare
     sessions: [race]
     priority: 3
@@ -315,14 +315,14 @@ rules:
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and rival_ahead_pitted and pit_plan != 'overcut'"
+    when: "phase == 'racing' and rival_ahead_pitted and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s"
     clear_when: "not rival_ahead_pitted"
     cooldown_s: 45
     cooldown_group: rival_pit
     requires: [lap_data]
     say:
-      - "{rival_ahead_name} ahead has boxed"
-      - "{rival_ahead_name} is in the pits"
+      - "{rival_ahead_name} ahead has boxed, he was {gap_ahead_s:.1f} up the road"
+      - "{rival_ahead_name} is in the pits. That was the car {gap_ahead_s:.1f} ahead"
   - id: rival_behind_pitted
     sessions: [race]
     priority: 2
@@ -387,7 +387,7 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_laps:+.1f} laps"
+      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_r:+.1f} laps"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
