@@ -331,7 +331,11 @@ def test_long_press_and_udp3_toggle_radio_silent(tmp_path: Path) -> None:
     stream.sort(key=lambda p: p[0])
     rec = write_packet_stream(tmp_path / "silent.f1bin", stream)
     log_path = tmp_path / "silent.jsonl"
-    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    # Action 6 is a Stream Deck shortcut by default; bind it to silent here.
+    toggle: dict[str, object] = {"input": {"silent_toggle_bit": 0x02000000, "shortcuts": []}}
+    engine = build_engine(
+        clock=VirtualClock(), sinks=[], decision_log_path=log_path, overrides=toggle
+    )
     asyncio.run(run_replay(rec, engine, None))
     engine.dispatcher.log.flush()
     outcomes = [r["outcome"] for r in _read_log(log_path)]
