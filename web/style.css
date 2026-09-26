@@ -563,7 +563,7 @@ body.swap .strat { animation-delay: 80ms; }
   body.dash .corner .det, body.dash .b-foot, body.dash .b-card * { white-space: normal; }
   .transport .row { flex-wrap: wrap; }
   .transport input[type=range] { min-width: 0; flex-basis: 8rem; }
-  body.dash .s-row { white-space: normal; }
+  body.dash .s-row, body.dash .s-stint { white-space: normal; }
   .transport .row span { white-space: nowrap; }
   body.dash .banner { position: sticky; top: var(--status-h, 2.4rem); z-index: 2;
     min-height: 5.5rem; box-shadow: 0 .6rem 1rem -.6rem #000; }
