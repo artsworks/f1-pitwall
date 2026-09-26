@@ -71,6 +71,20 @@ class UiSettings(BaseModel):
     auto_page_call_hold_s: float = 8.0  # no auto switch this soon after a call went out
 
 
+class ShortcutBinding(BaseModel):
+    """A dedicated button that asks one menu item directly (docs/12)."""
+
+    bit: int
+    item: str  # menu item id
+
+
+class MenuOpenActions(BaseModel):
+    """What the page / mindset buttons do while the menu is open ("" = as usual)."""
+
+    page: Literal["confirm", "close", ""] = ""
+    mindset: Literal["confirm", "close", ""] = ""
+
+
 class InputSettings(BaseModel):
     double_press_ms: int = 350
     long_press_ms: int = 800
@@ -98,7 +112,9 @@ class InputSettings(BaseModel):
     # Driver menu (docs/12): up/down open and scroll; Action 1 confirms while open.
     menu_up_bit: int = 0  # e.g. 0x00200000 = UDP Action 2
     menu_down_bit: int = 0  # e.g. 0x00400000 = UDP Action 3
-    menu_close_bit: int = 0  # e.g. 0x04000000 = UDP Action 7; closes without answering
+    menu_close_bit: int = 0  # dedicated close button; closes without answering
+    menu_open_actions: MenuOpenActions = Field(default_factory=MenuOpenActions)
+    shortcuts: list[ShortcutBinding] = Field(default_factory=list)
     silent_on_replies: list[str] = Field(
         default_factory=lambda: [
             "Radio silent. Leave you to it.",
@@ -126,6 +142,12 @@ class InputSettings(BaseModel):
             "menu_down_bit": self.menu_down_bit,
             "menu_close_bit": self.menu_close_bit,
         }
+        items: set[str] = set()
+        for i, sc in enumerate(self.shortcuts):
+            if sc.item in items:
+                raise ValueError(f"input.shortcuts: item {sc.item!r} bound twice")
+            items.add(sc.item)
+            bits[f"shortcuts[{i}]"] = sc.bit
         seen: dict[int, str] = {}
         for name, bit in bits.items():
             if not bit:

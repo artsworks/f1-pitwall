@@ -16,7 +16,7 @@ from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
 from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.engine import Engine, build_engine, run_replay
-from pitwall.input.menu import DriverMenu, ReplyPicker, answer, validate
+from pitwall.input.menu import DriverMenu, ReplyPicker, answer, validate, validate_shortcuts
 from pitwall.protocol.header import PacketId
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
@@ -28,6 +28,9 @@ ACK = 0x00100000
 UP = 0x00200000
 DOWN = 0x00400000
 CLOSE = 0x04000000
+RIGHT = 0x00800000  # page cycle; confirms while the menu is open
+LEFT = 0x01000000  # mindset; closes while the menu is open
+SD6, SD7, SD8 = 0x02000000, 0x04000000, 0x08000000
 
 
 def _butn(status: int, t: float) -> bytes:
@@ -127,7 +130,8 @@ def test_confirm_answers_from_snapshot_and_skips_ack(tmp_path: Path) -> None:
 
 def test_double_press_and_close_button_cancel(tmp_path: Path) -> None:
     presses = [(DOWN, 20.0), (ACK, 21.0), (ACK, 21.2), (UP, 24.0), (CLOSE, 25.0)]
-    engine, _, rows = _run(tmp_path, presses)
+    close_bit: dict[str, object] = {"input": {"menu_close_bit": CLOSE, "shortcuts": []}}
+    engine, _, rows = _run(tmp_path, presses, overrides=close_bit)
     closes = [r["text"] for r in rows if r["outcome"] == "menu_close"]
     assert closes == ["cancel", "close"]
     assert not _inputs(rows) and engine.dispatcher.quiet_until is None
@@ -243,3 +247,86 @@ def test_packaged_menu_is_valid() -> None:
     labels = [i.label for i in settings.menu.items]
     assert labels[0] == "Tyres gone?" and labels[-1] == "Next page"
     assert all(len(label.split()) <= 3 for label in labels)
+
+
+def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None:
+    presses = [(DOWN, 20.0), (DOWN, 20.5), (RIGHT, 21.0), (DOWN, 24.0), (LEFT, 24.5)]
+    engine, _, rows = _run(tmp_path, presses)
+    (rec,) = _inputs(rows)
+    assert rec["item_id"] == "pit"
+    assert [r["text"] for r in rows if r["outcome"] == "menu_close"] == ["close"]
+    assert engine.mindset == "balanced"
+    assert not [r for r in rows if r["outcome"] == "page" and r.get("manual")]
+
+
+def test_stick_right_left_keep_page_and_mindset_when_closed(tmp_path: Path) -> None:
+    engine, _, rows = _run(tmp_path, [(RIGHT, 20.0), (LEFT, 21.0)])
+    assert engine.mindset == "aggressive"
+    assert [r for r in rows if r["outcome"] == "page" and r.get("manual")]
+    assert not [r for r in rows if r["outcome"] == "menu_open"]
+
+
+def test_stream_deck_shortcuts_answer_directly(tmp_path: Path) -> None:
+    db = Database(":memory:")
+    engine, calls, rows = _run(tmp_path, [(SD6, 20.0), (SD7, 25.0), (SD8, 30.0)], db=db)
+    recs = _inputs(rows)
+    assert [r["item_id"] for r in recs] == ["pit", "race_stat", "fight"]
+    assert all(dict(r["inputs"])["via"] == "shortcut" for r in recs)  # type: ignore[call-overload]
+    assert not [r for r in rows if r["outcome"] == "menu_open"] and not engine.menu.open
+    for item in ("pit", "race_stat", "fight"):
+        assert any(c.rule_id == f"menu:{item}" and c.priority == 1 for c in calls)
+    uid = engine.state.session_uid
+    assert uid is not None
+    assert [r["item_id"] for r in db.driver_inputs_for_session(uid)] == [
+        "pit",
+        "race_stat",
+        "fight",
+    ]
+
+
+def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
+    _, _, rows = _run(tmp_path, [(DOWN, 20.0), (SD7, 21.0)])
+    assert [r["text"] for r in rows if r["outcome"] == "menu_close"] == ["shortcut"]
+    assert [r["item_id"] for r in _inputs(rows)] == ["race_stat"]
+
+
+def test_race_stat_and_fight_answers() -> None:
+    stat = MenuItemModel(id="race_stat", label="Race stat")
+    short = Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.6, position=4)
+    assert answer(stat, short, "b")[0] == "fuel_short"
+    plain = Snapshot(now=0.0, position=4, laps_remaining=12, player_best_lap_ms=92_412)
+    case, values = answer(stat, plain, "b")
+    assert case == "position" and values["pos"] == "4" and values["best"] == "1:32.4"
+    assert answer(stat, Snapshot(now=0.0), "b")[0] == "unknown"
+    fight = MenuItemModel(id="fight", label="Fight")
+    snap = Snapshot(
+        now=0.0,
+        laps_remaining=10,
+        rival_ahead_idx=2,
+        rival_ahead_name="Norris",
+        gap_ahead_s=1.2,
+        gap_trend_ahead_s=0.3,
+        rival_ahead_pace_ms=92_700,
+        base_pace_ms=92_400.0,
+        rival_behind_idx=5,
+        rival_behind_name="Russell",
+        gap_behind_s=0.9,
+        gap_trend_behind_s=-0.2,
+    )
+    case, values = answer(fight, snap, "b")
+    assert case == "both"
+    assert values["ahead"] == (
+        "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7."
+    )
+    assert values["behind"] == "Russell 0.9 behind, pulling away 0.2 a lap."
+    assert answer(fight, Snapshot(now=0.0), "b")[0] == "none"
+
+
+def test_shortcut_validation() -> None:
+    with pytest.raises(ValidationError):
+        InputSettings(shortcuts=[{"bit": 0x00200000, "item": "pit"}], menu_up_bit=0x00200000)
+    with pytest.raises(ValidationError):
+        InputSettings(shortcuts=[{"bit": 1, "item": "pit"}, {"bit": 2, "item": "pit"}])
+    inp = InputSettings(shortcuts=[{"bit": 1, "item": "nope"}])
+    menu = MenuSettings(items=[MenuItemModel(id="pit", label="Pit now?")])
+    assert validate_shortcuts(inp, menu) == ["input.shortcuts: unknown menu item 'nope'"]

@@ -69,6 +69,23 @@ menu:
         coming: ["Rain coming. {in10} percent in ten.", "Yes, {in30} percent in thirty."]
         chance: ["Maybe. {in10} percent in ten.", "Small chance, {in30} percent."]
         dry: ["No, staying dry.", "Dry. No rain expected."]
+    - id: race_stat
+      label: "Race stat"
+      replies:
+        fuel_short: ["Fuel's the story. Short {margin} laps, lift and coast.", "Fuel first. Short {margin}, save."]
+        tyres_gone: ["Tyres are the story. {wear} percent, they're done.", "Tyres gone, {wear} percent worn."]
+        energy: ["Battery's the story. Over budget, harvest.", "Energy over, save battery."]
+        box_now: ["Box this lap. {reason}.", "It's box now. {reason}."]
+        pit_soon: ["P{pos}, box lap {plan_lap}. {laps_left} to go.", "Box in {in_laps}. P{pos}, {laps_left} left."]
+        position: ["P{pos}, {laps_left} to go. Best lap {best}.", "Running P{pos}. {laps_left} laps left, best {best}."]
+        unknown: ["No race read yet.", "Not enough data yet."]
+    - id: fight
+      label: "Fight"
+      replies:
+        both: ["{ahead} {behind}"]
+        ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind."]
+        behind: ["Clear ahead. {behind}", "Nobody ahead. {behind}"]
+        none: ["Nobody near. Clear air.", "Clear air, both ways."]
     - id: understeer
       label: "Understeer"
       kind: opinion
