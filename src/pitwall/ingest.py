@@ -30,7 +30,7 @@ class DatagramRecorder(Protocol):
 
 class Ingest:
     def __init__(self, recorder: DatagramRecorder | None = None) -> None:
-        self._recorder = recorder
+        self.recorder = recorder
         self._handlers: dict[int, list[PacketHandler]] = defaultdict(list)
         self._accepted: dict[int, int] = defaultdict(int)
         self._dropped_size: dict[int, int] = defaultdict(int)
@@ -39,14 +39,19 @@ class Ingest:
         self._arrivals: dict[int, deque[float]] = defaultdict(deque)
         self.last_session_uid: int = 0
         self.raw_datagrams: int = 0
+        # Optional payload rewrite applied after recording, before parsing
+        # (e.g. `pitwall replay --mask-restricted`).
+        self.transform: Callable[[bytes], bytes] | None = None
 
     def register(self, packet_id: int, handler: PacketHandler) -> None:
         self._handlers[packet_id].append(handler)
 
     def on_datagram(self, payload: bytes, recv_time: float) -> None:
         self.raw_datagrams += 1
-        if self._recorder is not None:
-            self._recorder.write_datagram(recv_time, payload)
+        if self.recorder is not None:
+            self.recorder.write_datagram(recv_time, payload)
+        if self.transform is not None:
+            payload = self.transform(payload)
         if len(payload) < HEADER_SIZE:
             self._dropped_malformed += 1
             return

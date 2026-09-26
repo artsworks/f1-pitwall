@@ -262,6 +262,13 @@ class Snapshot:
     rival_behind_age: int = 0
     rival_ahead_pitted: bool = False
     rival_behind_pitted: bool = False
+    rival_ahead_pos: int = 0
+    rival_behind_pos: int = 0
+    rival_ahead_compound: int = 0
+    rival_behind_compound: int = 0
+    # Gap change per lap (s, + = gap shrinking), measured line to line.
+    gap_trend_ahead_s: float = 0.0
+    gap_trend_behind_s: float = 0.0
     rival_data_restricted: bool = False
     pit_exit_rival_gap_s: float = math.inf
     pit_exit_clean: bool = False
@@ -426,6 +433,7 @@ class SessionState:
         straight_hold_s: float = 1.0,
         press_bit: int | None = None,
         toggle_bit: int | None = None,
+        action_bits: Mapping[str, int] | None = None,
         thresholds: Mapping[str, Any] | None = None,
     ) -> None:
         self.last_packet_t: float | None = None
@@ -440,6 +448,11 @@ class SessionState:
         self.press_listeners: list[Callable[[float, bool], None]] = []
         # Called with recv_time on each press of the radio-silent toggle button.
         self.toggle_listeners: list[Callable[[float], None]] = []
+        # Called with (kind, recv_time) on each press of a named action button
+        # (e.g. "mindset" on UDP Action 2, "page" on UDP Action 4).
+        self.action_listeners: list[Callable[[str, float], None]] = []
+        self._action_bits = {k: v for k, v in (action_bits or {}).items() if v}
+        self._action_down: dict[str, bool] = {}
         self._ema_fast_s = ema_fast_s
         self._ema_slow_s = ema_slow_s
         self._straight_hold_s = straight_hold_s
@@ -542,6 +555,9 @@ class SessionState:
         self.cars_lap: tuple[Any, ...] | None = None
         self.cars_telemetry: tuple[Any, ...] | None = None
         self.cars_status: tuple[Any, ...] | None = None
+        # (rival idx, gap s) now / at the last two line crossings, for gap trends.
+        self._gap_now: dict[str, tuple[int, float]] = {}
+        self._gap_lines: list[dict[str, tuple[int, float]]] = []
         self.cars_damage: tuple[Any, ...] | None = None
 
         # M2 packet state
@@ -813,6 +829,7 @@ class SessionState:
         )
         if summary is not None:
             self.laps.append(summary)
+            self._gap_lines = [*self._gap_lines[-1:], dict(self._gap_now)]
         if self._kind() == "qualifying":
             self.run.update(
                 t=self._last_session_time or 0.0,
@@ -933,6 +950,12 @@ class SessionState:
                     for tcb in self.toggle_listeners:
                         tcb(recv_time)
                 self._toggle_down = tdown
+            for kind, bit in self._action_bits.items():
+                adown = bool(status & bit)
+                if adown and not self._action_down.get(kind, False):
+                    for acb in self.action_listeners:
+                        acb(kind, recv_time)
+                self._action_down[kind] = adown
 
     def _on_session_history(self, pkt: SessionHistoryPacket) -> None:
         self._histories[pkt.car_idx] = pkt
@@ -1717,7 +1740,36 @@ class SessionState:
             exit_gap = (
                 fwd / v if fwd <= self.track_length_m / 2 else -((self.track_length_m - fwd) / v)
             )
+        d_ahead = self.delta_to_car_in_front_ms
+        self._gap_now = {
+            "ahead": (ahead_i, d_ahead / 1000.0 if d_ahead > 0 else math.inf),
+            "behind": (behind_i, gap_behind),
+        }
+
+        def trend(side: str, idx: int) -> float:
+            if len(self._gap_lines) < 2 or idx < 0:
+                return 0.0
+            a, b = self._gap_lines[0].get(side), self._gap_lines[1].get(side)
+            if a is None or b is None or a[0] != idx or b[0] != idx:
+                return 0.0
+            if not (math.isfinite(a[1]) and math.isfinite(b[1])):
+                return 0.0
+            return round(a[1] - b[1], 3)
+
+        status = self.cars_status
+
+        def compound_of(i: int) -> int:
+            if status is None or not 0 <= i < len(status):
+                return 0
+            return int(status[i].visual_tyre_compound)
+
         base.update(
+            rival_ahead_pos=cars[ahead_i].car_position if ahead_i >= 0 else 0,
+            rival_behind_pos=cars[behind_i].car_position if behind_i >= 0 else 0,
+            rival_ahead_compound=compound_of(ahead_i),
+            rival_behind_compound=compound_of(behind_i),
+            gap_trend_ahead_s=trend("ahead", ahead_i),
+            gap_trend_behind_s=trend("behind", behind_i),
             gap_behind_s=gap_behind,
             rival_ahead_idx=ahead_i,
             rival_behind_idx=behind_i,

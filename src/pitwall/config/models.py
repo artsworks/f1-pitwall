@@ -30,6 +30,9 @@ class EngineSettings(BaseModel):
     ema_fast_s: float = 3.0
     ema_slow_s: float = 30.0
     straight_hold_s: float = 1.0  # full-throttle hold that counts as "on a straight"
+    heartbeat_s: float = 5.0
+    recovery_max_age_s: float = 300.0
+    recovery_tail_s: float = 120.0
     staleness_s: dict[str, float] = Field(
         default_factory=lambda: {
             "session": 2.0,
@@ -60,6 +63,11 @@ class PolicySettings(BaseModel):
 
 class UiSettings(BaseModel):
     state_hz: int = 5
+    pages: list[str] = Field(default_factory=lambda: ["race", "battle", "car", "track", "setup"])
+    auto_page: bool = False  # contextual page switching (battle / track); driver press wins
+    auto_page_manual_hold_s: float = 60.0  # no auto switch this long after a manual choice
+    auto_page_battle_gap_s: float = 1.0  # rival ahead/behind inside this = battle page
+    auto_page_call_hold_s: float = 8.0  # no auto switch this soon after a call went out
 
 
 class InputSettings(BaseModel):
@@ -77,6 +85,15 @@ class InputSettings(BaseModel):
     long_press: Literal["bookmark", "silent"] = "bookmark"
     silent_toggle_bit: int = 0  # e.g. 0x00400000 = UDP Action 3; any press toggles
     silent_keeps_p1: bool = True
+    mindset_toggle_bit: int = 0  # e.g. 0x00200000 = UDP Action 2; balanced <-> aggressive
+    mindset_cycle: list[str] = Field(default_factory=lambda: ["balanced", "aggressive"])
+    mindset_replies: dict[str, str] = Field(
+        default_factory=lambda: {
+            "balanced": "Copy, balanced.",
+            "aggressive": "Copy, aggressive. Pushing.",
+        }
+    )
+    page_cycle_bit: int = 0  # e.g. 0x00800000 = UDP Action 4; next dashboard page
     silent_on_replies: list[str] = Field(
         default_factory=lambda: [
             "Radio silent. Leave you to it.",

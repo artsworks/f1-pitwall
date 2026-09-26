@@ -1,6 +1,6 @@
 # Dashboard redesign: the second-monitor race-engineer screen
 
-Status: **phases 1–6 implemented** in `web/` (call evidence, fuel delta and M3 strategy await backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
+Status: **phases 1–6 implemented** in `web/`; M3 adds the zone F `strategy` block, backend-owned `fuel_delta_laps` and backend-owned pages (§10) (call evidence awaits backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
 `docs/mockups/` (`dashboard-1080p.html`, `dashboard-m3-stale.html`, `radio.html`). They
 are vanilla HTML/CSS, self-contained, no build step — open them in a browser.
 Their call evidence, fuel target and damage values illustrate planned backend fields.
@@ -371,3 +371,22 @@ render check against a test recording. No running game is needed.
    derived number acceptable?
 9. **1440p only?** If the second monitor is known, the `clamp()` scaling can be dropped
    for fixed pixel sizes.
+
+## 10. Pages (M3)
+
+The backend owns `page` (sent in every state frame with `pages`); UDP Action 4, `P` or a
+click on the page pill cycles it, and every client follows. Pages are alternate grid
+layouts over the same zones: the status bar, call banner, footer, staleness guard and
+LIVE/STALE never move, and the pit board / cool-down takeovers still win.
+
+| Page | Occasion | Zones |
+|---|---|---|
+| race | default, 90 % of laps | A B C D F E (zone F = strategy) |
+| battle | a rival in scope | battle cards (immediate ahead/behind only: gap, trend, pace delta, tyre + age, DRS/UC/OC threat), pit-exit projection, F, E |
+| car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
+| track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
+| setup | between sessions, display only | read-only Car Setups values and pressures |
+
+Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
+`/radio` keeps its compact layout and shows the current page name.
+

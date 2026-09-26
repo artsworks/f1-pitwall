@@ -18,7 +18,8 @@
     <span id="session">--</span>
     <span id="lap">LAP --</span>
     <span id="position">P--</span>
-    <span id="mindset" class="pill">--</span>
+    <span id="page" class="pill page" title="page (UDP Action 4 / P)">RACE</span>
+    <span id="mindset" class="pill" title="mindset (UDP Action 2 / M)">--</span>
     <span id="verbosity" class="dim"></span>
   </header>
 
@@ -72,7 +73,13 @@
 
   <section class="zone strat">
     <h2 id="strat-title">STRATEGY</h2>
-    <div id="strat-ph" class="ph">pit window · gaps · undercut (M3)</div>
+    <div id="strat-ph" class="ph">pit window · gaps · undercut — waiting for race data</div>
+    <div id="strategy" class="strategy" hidden>
+      <div id="s-window" class="s-window">--</div>
+      <div id="s-ahead" class="s-row">--</div>
+      <div id="s-behind" class="s-row">--</div>
+      <div id="s-stint" class="s-stint dim">--</div>
+    </div>
     <div id="quali" class="quali" hidden>
       <div id="q-main" class="qmain">--</div>
       <div id="q-sub" class="sub">--</div>
@@ -133,6 +140,41 @@
       <h2>SETUP · GAME MENU ORDER</h2>
       <ol id="pb-setup"><li class="dim">no setup packet yet</li></ol>
     </div>
+  </section>
+
+  <section id="battle" class="zone battle">
+    <h2>BATTLE</h2>
+    <div id="b-ph" class="ph">no rival in scope</div>
+    <div id="b-ahead" class="b-card" hidden></div>
+    <div id="b-behind" class="b-card" hidden></div>
+    <div id="b-exit" class="b-foot">--</div>
+    <div id="b-plan" class="b-foot dim">--</div>
+  </section>
+
+  <section id="carpage" class="zone carpage">
+    <h2>ENERGY · FUEL · TYRE LIFE</h2>
+    <div class="cp-grid">
+      <div class="cp-tile"><h2>ENERGY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div></div>
+      <div class="cp-tile"><h2>FUEL VS FLAG</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div></div>
+      <div class="cp-tile"><h2>TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div></div>
+    </div>
+    <div id="cp-flags" class="cp-flags dim">--</div>
+  </section>
+
+  <section id="trackpage" class="zone trackpage">
+    <h2>TRACK</h2>
+    <div id="tp-status" class="tp-status">--</div>
+    <div class="tp-rows">
+      <div id="tp-weather" class="tp-row">--</div>
+      <div id="tp-flags" class="tp-row">--</div>
+      <div id="tp-pens" class="tp-row">--</div>
+      <div id="tp-traffic" class="tp-row">--</div>
+    </div>
+  </section>
+
+  <section id="setuppage" class="zone setuppage">
+    <h2>SETUP · READ ONLY</h2>
+    <ol id="sp-list"><li class="dim">no setup packet yet</li></ol>
   </section>
 
   <section class="log"><ol id="log"></ol></section>

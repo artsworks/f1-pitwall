@@ -293,3 +293,116 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
   .pb-release { font-size: 2.2rem; }
   .pb-setup li { grid-template-columns: 1.6rem 1fr; }
 }
+
+/* M3 zone F: pit window, immediate ahead/behind only (never a timing tower) */
+.strategy { display: flex; flex-direction: column; gap: .15rem; }
+.s-window { font-size: 1.9rem; font-weight: bold; line-height: 1.2; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.s-window.box { color: var(--crit); }
+.s-window.soon { color: var(--warn); }
+.s-row { font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-row .lbl { color: var(--dim); display: inline-block; width: 5.2rem; }
+.s-row .warn, .b-card .warn { color: var(--warn); font-weight: bold; }
+.s-row .crit, .b-card .crit { color: var(--crit); font-weight: bold; }
+.s-row .ok, .b-card .ok { color: var(--ok); }
+.s-stint { font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.big.delta-ok { color: var(--ok); }
+.big.delta-warn { color: var(--warn); }
+.big.delta-crit { color: var(--crit); }
+.pill.page { border-color: var(--info); color: var(--info); cursor: pointer; }
+#mindset { cursor: pointer; }
+.zone .ph { color: var(--faint); }
+
+/* pages (docs/15 §10): alternate layouts over the same zones. Status bar,
+   banner and footer never move; pit board / cool-down still take over. */
+.battle, .carpage, .trackpage, .setuppage { display: none; font-size: 1.3rem; overflow: hidden; }
+.battle { grid-area: battle; flex-direction: column; gap: .7rem; }
+.b-card { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .5rem .8rem; display: grid; grid-template-columns: 1fr 1fr; gap: .2rem 1.2rem; }
+.b-card .b-head { grid-column: 1 / -1; font-size: 2.2rem; font-weight: bold; }
+.b-card.threat { border-color: var(--warn); }
+.b-card.drs { border-color: var(--crit); }
+.b-card .k { color: var(--dim); }
+.b-foot { font-size: 1.4rem; }
+.carpage { grid-area: carpage; flex-direction: column; gap: .8rem; }
+.cp-grid { display: grid; grid-template-columns: 1fr; gap: .7rem; }
+.cp-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .5rem .8rem; }
+.cp-flags { font-size: 1.3rem; }
+.trackpage { grid-area: trackpage; flex-direction: column; gap: .8rem; }
+.tp-status { font-size: 2.6rem; font-weight: bold; padding: .4rem .6rem; border-radius: 6px;
+  border: 2px solid var(--line); text-align: center; }
+.tp-status.sc { background: var(--warn); color: #000; }
+.tp-status.red { background: var(--crit); color: #fff; }
+.tp-row { font-size: 1.5rem; padding: .3rem .5rem; border-left: 4px solid var(--line); }
+.tp-row.warn { border-color: var(--warn); color: var(--warn); }
+.tp-row.crit { border-color: var(--crit); color: var(--crit); }
+.setuppage { grid-area: setuppage; }
+.setuppage ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 2rem; }
+.setuppage li { display: flex; justify-content: space-between; padding: .3rem 0;
+  border-bottom: 1px solid var(--line); break-inside: avoid; }
+.setuppage li .k { color: var(--dim); }
+
+body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "battle log" "battle log" "strat log" "footer footer"; }
+body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres carpage" "fuel carpage" "strat carpage"
+    "footer footer"; }
+body.dash.page-track:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
+    "footer footer"; }
+body.dash.page-setup:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "setuppage setuppage" "setuppage setuppage"
+    "setuppage setuppage" "footer footer"; }
+body.dash.review.page-battle:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "battle log" "battle log" "strat log"
+    "transport transport" "footer footer"; }
+body.dash.review.page-car:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres carpage" "fuel carpage" "strat carpage"
+    "transport transport" "footer footer"; }
+body.dash.review.page-track:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
+    "transport transport" "footer footer"; }
+body.dash.review.page-setup:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "setuppage setuppage" "setuppage setuppage"
+    "setuppage setuppage" "transport transport" "footer footer"; }
+body.dash.page-battle:not(.pit):not(.cool) .battle,
+body.dash.page-car:not(.pit):not(.cool) .carpage,
+body.dash.page-track:not(.pit):not(.cool) .trackpage,
+body.dash.page-setup:not(.pit):not(.cool) .setuppage { display: flex; }
+body.dash.page-setup:not(.pit):not(.cool) .setuppage { display: block; }
+body.dash.page-battle:not(.pit):not(.cool) .tyres,
+body.dash.page-battle:not(.pit):not(.cool) .fuel,
+body.dash.page-car:not(.pit):not(.cool) .log,
+body.dash.page-track:not(.pit):not(.cool) .tyres,
+body.dash.page-track:not(.pit):not(.cool) .fuel,
+body.dash.page-setup:not(.pit):not(.cool) .tyres,
+body.dash.page-setup:not(.pit):not(.cool) .fuel,
+body.dash.page-setup:not(.pit):not(.cool) .strat,
+body.dash.page-setup:not(.pit):not(.cool) .log { display: none; }
+body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > *,
+body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
+
+/* phone portrait: one column, every page keeps status + banner on top */
+@media (max-width: 700px) and (orientation: portrait) {
+  body.dash { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto auto 1fr auto;
+    grid-template-areas: "status" "banner" "strat" "tyres" "fuel" "log" "footer";
+    height: auto; min-height: 100vh; overflow: auto; }
+  body.dash .status { flex-wrap: wrap; white-space: normal; gap: .6rem; font-size: 1.1rem;
+    padding: .4rem .6rem; }
+  body.dash .banner { min-height: 8rem; }
+  body.dash .banner .text { font-size: 2.2rem; }
+  body.dash .corner .temp { font-size: 2.2rem; }
+  body.dash .car { min-height: 14rem; }
+  body.dash .footer { flex-wrap: wrap; white-space: normal; gap: .6rem; padding: .3rem .6rem; }
+  body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "battle" "strat" "log" "log" "footer"; }
+  body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "carpage" "tyres" "fuel" "strat" "footer"; }
+  body.dash.page-track:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "trackpage" "strat" "log" "log" "footer"; }
+  body.dash.page-setup:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "setuppage" "setuppage" "setuppage" "setuppage" "footer"; }
+  .setuppage ol { columns: 1; }
+  .b-card { grid-template-columns: 1fr; }
+}

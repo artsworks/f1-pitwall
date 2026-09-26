@@ -19,7 +19,7 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
+from pitwall.engine import Engine, action_bits, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
 from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
@@ -81,6 +81,7 @@ def _lap_seek_us(path: Path, lap: int) -> int | None:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
+    from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
 
     speed = _parse_speed(args.speed)
@@ -111,11 +112,14 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 pass
 
         def _engine_factory(clk: Clock) -> Engine:
-            return build_engine(
+            eng = build_engine(
                 clock=clk,
                 sinks=[hub, LogSink(), _ReplaySpokenSink()],
                 db=seed_db,
             )
+            if args.mask_restricted:
+                eng.ingest.transform = mask_restricted
+            return eng
 
         live_speed = speed or 1.0  # paced replay drives the dashboard
         review = ReviewController(
@@ -124,6 +128,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
             hub,
             speed=live_speed,
             db=seed_db,
+            thresholds=ConfigStore().current().thresholds,
         )
         engine = _engine_factory(clock)
         review.engine = engine
@@ -139,6 +144,8 @@ def cmd_replay(args: argparse.Namespace) -> int:
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
     engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
+    if args.mask_restricted:
+        engine.ingest.transform = mask_restricted
     replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
@@ -170,6 +177,35 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2, default=str))
     else:
         print(format_diff(result))
+    if args.record:
+        from pitwall.store.db import open_configured
+        from pitwall.tune import record_diff
+
+        db = open_configured(ConfigStore().current())
+        if db is not None:
+            n = record_diff(
+                db,
+                result,
+                a_dir=str(args.a or ""),
+                b_dir=str(args.b),
+                a_mindset=str(args.a_mindset or ""),
+                b_mindset=str(args.b_mindset or ""),
+            )
+            print(f"diff: recorded {n} A/B rows")
+    return 0
+
+
+def cmd_tune(args: argparse.Namespace) -> int:
+    """Fold graded calls + A/B results from SQLite into persisted rule tuning."""
+    from pitwall.store.db import Database, open_configured
+    from pitwall.tune import format_tune, tune_from_db
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("tune: persistence disabled")
+        return 1
+    print(format_tune(tune_from_db(db, settings.thresholds)))
     return 0
 
 
@@ -373,6 +409,8 @@ async def _state_broadcast(
             quiet=store.current().policy.quiet,
             quiet_left_s=_quiet_left_s(engine, now),
             silent=engine.dispatcher.silent,
+            mindset=engine.mindset,
+            page=engine.page,
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
@@ -411,6 +449,7 @@ async def _serve(
         speaker_name=getattr(engine, "speaker_name", "null"),
         latest_snapshot=_latest,
         on_client_press=lambda down: active().client_press(down),
+        on_client_message=lambda msg: active().client_message(msg),
         review=review,
     )
 
@@ -468,6 +507,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         straight_hold_s=settings.engine.straight_hold_s,
         press_bit=settings.input.udp_action_bit,
         toggle_bit=settings.input.silent_toggle_bit,
+        action_bits=action_bits(settings.input),
         thresholds=settings.thresholds,
     )
     state.register(ingest)
@@ -503,6 +543,11 @@ def cmd_start(args: argparse.Namespace) -> int:
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    if recorder is not None:
+        engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
+    recovered = engine.recover()
+    if recovered is not None:
+        print(f"watchdog: {recovered}", flush=True)
 
     async def live() -> None:
         transport = await udp_listen(
@@ -669,6 +714,11 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--to-us", type=int, default=None)
     rep.add_argument("--serve", action="store_true", help="run dashboard while replaying")
     rep.add_argument(
+        "--mask-restricted",
+        action="store_true",
+        help="zero rival fuel/ERS/tyre-wear fields, as an online lobby with restricted telemetry",
+    )
+    rep.add_argument(
         "--seed-db",
         default=":memory:",
         help="SQLite db for replay persistence (default :memory:; never the real DB)",
@@ -683,7 +733,14 @@ def build_parser() -> argparse.ArgumentParser:
     dif.add_argument("--b-mindset", default=None)
     dif.add_argument("--corpus", default=None, help="glob of extra recordings to aggregate")
     dif.add_argument("--json", action="store_true")
+    dif.add_argument(
+        "--record", action="store_true", help="store per-rule A/B counts in SQLite for tune"
+    )
     dif.set_defaults(func=cmd_diff)
+
+    tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
+    tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    tun.set_defaults(func=cmd_tune)
 
     rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
     rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")

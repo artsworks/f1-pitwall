@@ -474,3 +474,58 @@ def test_pit_board_payload() -> None:
     }
     assert board["setup"] == {"front_wing": 12}
     assert board["fuel_need_laps"] == 0.9 and board["has_advice"]
+
+
+def test_strategy_payload_race_contract() -> None:
+    """Zone F contract: pit window, immediate neighbours only, stint plan,
+    backend-owned fuel delta; absent outside races."""
+    import dataclasses
+
+    from pitwall.server.app import state_payload, strategy_payload
+    from pitwall.state.session import Snapshot
+
+    store = ConfigStore()
+    store.poll(0.0)
+    settings = store.current()
+    assert strategy_payload(Snapshot(now=0.0)) is None
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=20,
+        laps_remaining=38,
+        tyre_visual=17,
+        pit_window_start=26,
+        pit_window_end=28,
+        pit_plan="undercut",
+        pit_plan_lap=26,
+        rival_ahead_idx=3,
+        rival_ahead_pos=4,
+        rival_ahead_name="Norris",
+        rival_ahead_compound=18,
+        rival_ahead_pace_ms=91_200,
+        predicted_lap_ms=91_000,
+        gap_ahead_s=1.4,
+        gap_trend_ahead_s=0.3,
+        rival_behind_idx=5,
+        rival_behind_pos=6,
+        rival_behind_name="Leclerc",
+        gap_behind_s=0.8,
+        undercut_s=1.2,
+        fuel_margin_laps=0.4,
+        fuel_source="fit",
+    )
+    s = strategy_payload(snap, settings.thresholds)
+    assert s is not None
+    assert s["pit_window"] == {"start": 26, "end": 28}
+    assert s["ahead"]["pos"] == 4 and s["ahead"]["compound"] == "HARD"
+    assert s["ahead"]["pace_delta_s"] == 0.2 and s["ahead"]["gap_trend_s"] == 0.3
+    assert s["behind"]["drs"] is True and s["ahead"]["drs"] is False
+    assert s["undercut_s"] == 1.2 and s["fuel_delta_laps"] == 0.4
+    assert "L26–28" in s["stint_plan"]
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="battle")
+    assert body["strategy"]["ahead"]["name"] == "Norris"
+    assert body["page"] == "battle" and "battle" in body["pages"]
+    assert body["track_info"]["gap_ahead_s"] == 1.4
+    assert body["setup"] is None

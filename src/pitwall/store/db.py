@@ -660,6 +660,28 @@ class Database:
             updated_at=float(r["updated_at"] or 0.0),
         )
 
+    def set_param(
+        self, track_id: int, compound: int, name: str, value: float, weight: float
+    ) -> ModelParam:
+        """Overwrite a model_params row (recomputed values, e.g. pitwall tune)."""
+        now = time.time()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO model_params(track_id, compound, name, value, weight,"
+                " updated_at) VALUES(?,?,?,?,?,?)"
+                " ON CONFLICT(track_id, compound, name) DO UPDATE SET"
+                " value=excluded.value, weight=excluded.weight,"
+                " updated_at=excluded.updated_at",
+                (track_id, compound, name, value, weight, now),
+            )
+        return ModelParam(track_id, compound, name, value, weight, now)
+
+    def all_grades(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM call_grades ORDER BY graded_at", ())
+
+    def ab_results(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM ab_results ORDER BY recorded_at", ())
+
     def params_for_track(self, track_id: int) -> list[ModelParam]:
         rows = self._conn.execute(
             "SELECT * FROM model_params WHERE track_id=? ORDER BY compound, name",

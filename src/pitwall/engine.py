@@ -7,8 +7,11 @@ max-speed replay makes identical decisions to 1x (determinism per docs/07).
 from __future__ import annotations
 
 import asyncio
+import collections
 import dataclasses
 import math
+import time
+import traceback
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -17,18 +20,26 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.models import resolve_mindset
 from pitwall.ingest import Ingest
 from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
 from pitwall.model.deg import DegFit, Prior, fit_stint, laps_of_pace, resolve_prior
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
+from pitwall.net.recording import RecordingReader
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
+from pitwall.tune import load_cooldown_mults
+
+
+def action_bits(inp: Any) -> dict[str, int]:
+    """Named UDP Action buttons beyond ack/silent (docs/12)."""
+    return {"mindset": int(inp.mindset_toggle_bit), "page": int(inp.page_cycle_bit)}
 
 
 class Engine:
@@ -60,7 +71,21 @@ class Engine:
         self._press_queue: list[Press] = []
         state.press_listeners.append(self._on_press_edge)
         state.toggle_listeners.append(lambda t: self._press_queue.append(Press("silent", t)))
+        state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
+        # Live overrides owned by the backend and pushed to every client.
+        self.mindset_override: str | None = None
+        pages = store.current().ui.pages
+        self.page = pages[0] if pages else "race"
+        self._page_manual_t: float | None = None
+        self._apply_mode()
+        # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
+        # recording tail with the rules muted.
+        self.recording_path_source: Any = None  # callable -> Path | None
+        self._last_heartbeat: float | None = None
+        self.recovering = False
+        self.tick_errors = 0
         self.db: Any = dispatcher.log.db
+        self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
         self._track_loaded: int | None = None
@@ -98,6 +123,104 @@ class Engine:
         if press is not None:
             self._press_queue.append(press)
 
+    # -- live overrides: mindset (UDP Action 2) and dashboard page (Action 4) --
+
+    @property
+    def mindset(self) -> str:
+        return self.mindset_override or self.store.current().mindset.active
+
+    def mode(self) -> dict[str, Any]:
+        settings = self.store.current()
+        return resolve_mindset(settings.mindsets, self.mindset)
+
+    def _apply_mode(self) -> None:
+        mode = self.mode()
+        if self.rule_engine is not None:
+            self.rule_engine.mode = mode
+        budget = mode.get("call_budget_per_lap")
+        self.dispatcher.budget_override = int(budget) if budget is not None else None
+        self.dispatcher.log.mindset = self.mindset
+
+    def set_mindset(self, name: str, now: float) -> bool:
+        if name not in self.store.current().mindsets or name == self.mindset:
+            return False
+        self.mindset_override = name
+        self._apply_mode()
+        snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
+        self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
+        return True
+
+    def cycle_mindset(self, now: float) -> None:
+        cycle = [m for m in self.store.current().input.mindset_cycle if m]
+        if not cycle:
+            return
+        cur = self.mindset
+        nxt = cycle[(cycle.index(cur) + 1) % len(cycle)] if cur in cycle else cycle[0]
+        self.set_mindset(nxt, now)
+
+    def set_page(self, name: str, now: float, *, manual: bool = True) -> bool:
+        if name not in self.store.current().ui.pages:
+            return False
+        if manual:
+            self._page_manual_t = now
+        if name == self.page:
+            return False
+        self.page = name
+        self.dispatcher.log.write(
+            {"t": now, "outcome": "page", "rule_id": None, "text": name, "manual": manual}
+        )
+        return True
+
+    def cycle_page(self, now: float) -> None:
+        pages = self.store.current().ui.pages
+        if not pages:
+            return
+        i = pages.index(self.page) if self.page in pages else -1
+        self.set_page(pages[(i + 1) % len(pages)], now)
+
+    def _auto_page(self, snap: Snapshot, now: float) -> None:
+        """Contextual page (off by default). A manual choice holds, and a
+        page never changes under a fresh call banner."""
+        ui = self.store.current().ui
+        if not ui.auto_page:
+            return
+        if (
+            self._page_manual_t is not None
+            and now - self._page_manual_t < ui.auto_page_manual_hold_s
+        ):
+            return
+        last = self.dispatcher.last_call_t
+        if last is not None and now - last < ui.auto_page_call_hold_s:
+            return
+        gap = ui.auto_page_battle_gap_s
+        if snap.race_phase in ("formation", "sc", "vsc"):
+            target = "track"
+        elif snap.session_kind == "race" and (
+            (snap.rival_ahead_idx >= 0 and 0 < snap.gap_ahead_s <= gap)
+            or (snap.rival_behind_idx >= 0 and 0 < snap.gap_behind_s <= gap)
+        ):
+            target = "battle"
+        else:
+            target = ui.pages[0] if ui.pages else "race"
+        self.set_page(target, now, manual=False)
+
+    def client_message(self, msg: dict[str, Any]) -> None:
+        """Dashboard control messages: {"type":"mindset","name"} and
+        {"type":"page","name"|"cycle":true}."""
+        now = self.clock.now()
+        if msg.get("type") == "mindset":
+            name = msg.get("name")
+            if isinstance(name, str):
+                self.set_mindset(name, now)
+            else:
+                self.cycle_mindset(now)
+        elif msg.get("type") == "page":
+            name = msg.get("name")
+            if isinstance(name, str):
+                self.set_page(name, now)
+            else:
+                self.cycle_page(now)
+
     def client_press(self, down: bool) -> None:
         """WebSocket/spacebar press path (docs/12): feed the same detector."""
         self._on_press_edge(self.clock.now(), down)
@@ -130,6 +253,11 @@ class Engine:
 
     def _write_laps(self) -> None:
         if self.db is None or self.state.session_uid is None:
+            return
+        if self.recovering:
+            # Rebuilt laps are already committed; don't insert or fold twice.
+            self.state.rival_laps.clear()
+            self._laps_written = len(self.state.laps)
             return
         uid = self.state.session_uid
         for car_idx, lap in self.state.rival_laps:
@@ -349,7 +477,7 @@ class Engine:
         the whole model view to SessionState for the rules-facing snapshot."""
         state = self.state
         settings = self.store.current()
-        mode = settings.resolved_mindset()
+        mode = self.mode()
         state.set_mode_offsets(
             thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0)
         )
@@ -504,7 +632,7 @@ class Engine:
             gap_behind_s=snap.gap_behind_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
-            mode=settings.resolved_mindset(),
+            mode=self.mode(),
             th=settings.thresholds,
         )
         self.pit_plan = plan
@@ -561,8 +689,14 @@ class Engine:
         if press is not None:
             self._press_queue.append(press)
         for p in self._press_queue:
-            self.dispatcher.on_press(p, snapshot)
+            if p.kind == "mindset":
+                self.cycle_mindset(p.t)
+            elif p.kind == "page":
+                self.cycle_page(p.t)
+            else:
+                self.dispatcher.on_press(p, snapshot)
         self._press_queue.clear()
+        self._auto_page(snapshot, now)
         if self.state.last_recv_wall is not None:
             self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)
         if snapshot.paused != self._paused:
@@ -580,16 +714,103 @@ class Engine:
             and self._session_upserted != self.state.session_uid
         ):
             self._upsert_session(self.state.session_uid)
+        self._heartbeat(now)
+        if self.recovering:
+            return []
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
             self.dispatcher.submit(result.candidates, snapshot)
         return self.dispatcher.drain(now)
 
+    def _heartbeat(self, now: float) -> None:
+        period = self.store.current().engine.heartbeat_s
+        if self.db is None or self.state.session_uid is None or period <= 0:
+            return
+        if self._last_heartbeat is not None and now - self._last_heartbeat < period:
+            return
+        self._last_heartbeat = now
+        path = self.recording_path_source() if self.recording_path_source is not None else None
+        self.db.write_heartbeat(
+            self.state.session_uid,
+            float(self.state.last_packet_t or 0.0),
+            time.time(),
+            str(path or ""),
+            self.state.lap_num,
+        )
+
+    def recover(self, wall_now: float | None = None) -> str | None:
+        """Mid-session restart: if the SQLite heartbeat is fresh and names a
+        recording, replay that recording's tail through ingest (not the
+        recorder, rules muted) so EMAs, laps and phase are rebuilt; the model
+        reads its lap history from the committed SQLite rows. Returns a short
+        description, or None when there is nothing to recover."""
+        if self.db is None:
+            return None
+        hb = self.db.read_heartbeat()
+        eng = self.store.current().engine
+        wall_now = time.time() if wall_now is None else wall_now
+        if hb is None or not hb.recording_path or wall_now - hb.wall_t > eng.recovery_max_age_s:
+            return None
+        path = Path(hb.recording_path)
+        if not path.is_file():
+            return None
+        tail: collections.deque[tuple[int, bytes]] = collections.deque()
+        horizon_us = int(eng.recovery_tail_s * 1e6)
+        try:
+            with RecordingReader(path) as reader:
+                for offset_us, payload in reader:
+                    tail.append((offset_us, payload))
+                    while tail and offset_us - tail[0][0] > horizon_us:
+                        tail.popleft()
+        except ValueError:
+            pass  # a crash leaves a truncated final record; keep what parsed
+        if not tail:
+            return None
+        recorder, self.ingest.recorder = self.ingest.recorder, None
+        self.recovering = True
+        period = self.tick_period
+        try:
+            next_tick = tail[0][0] / 1e6
+            for offset_us, payload in tail:
+                t = offset_us / 1e6
+                self.ingest.on_datagram(payload, t)
+                while t >= next_tick:
+                    self.tick(next_tick)
+                    next_tick += period
+        finally:
+            self.recovering = False
+            self.ingest.recorder = recorder
+            self.dispatcher.purge(reason="recovery", now=self.clock.now())
+        if self.state.session_uid is not None and self.state.session_uid != hb.session_uid:
+            return None
+        self._session_upserted = self.state.session_uid
+        self.dispatcher.log.write(
+            {
+                "t": self.clock.now(),
+                "outcome": "recovered",
+                "rule_id": None,
+                "text": f"{path.name} tail {len(tail)} datagrams, lap {self.state.lap_num}",
+            }
+        )
+        return f"recovered lap {self.state.lap_num} from {path.name} ({len(tail)} datagrams)"
+
     async def run_live(self) -> None:
-        """Tick at tick_hz forever; dispatch drains on its own loop."""
+        """Tick at tick_hz forever; dispatch drains on its own loop. The
+        watchdog keeps the loop alive through a failing tick (logged)."""
         period = self.tick_period
         while True:
-            self.tick(self.clock.now())
+            try:
+                self.tick(self.clock.now())
+            except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race
+                self.tick_errors += 1
+                self.dispatcher.log.write(
+                    {
+                        "t": self.clock.now(),
+                        "outcome": "tick_error",
+                        "rule_id": None,
+                        "text": traceback.format_exc(limit=3),
+                    }
+                )
             await self.clock.sleep(period)
 
 
@@ -661,6 +882,7 @@ def build_engine(
         straight_hold_s=settings.engine.straight_hold_s,
         press_bit=settings.input.udp_action_bit,
         toggle_bit=settings.input.silent_toggle_bit,
+        action_bits=action_bits(settings.input),
         thresholds=settings.thresholds,
     )
     state.register(ingest)

@@ -11,6 +11,9 @@ recording:
   compress_on_close: true
 engine:
   tick_hz: 10
+  heartbeat_s: 5            # SQLite runtime heartbeat (crash recovery)
+  recovery_max_age_s: 300   # a heartbeat newer than this on start = crashed mid-session
+  recovery_tail_s: 120      # seconds of the recording tail replayed to rebuild state
 persistence:
   enabled: true
   path: ~/.pitwall/pitwall.sqlite
@@ -106,8 +109,18 @@ thresholds:
   gap_hysteresis_s: 0.3
   warnings_warn: 3
   pit_exit_traffic_s: 1.5
+  # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
+  tune_min_grades: 3
+  tune_gain: 2.0
+  tune_min_cooldown_mult: 0.5
+  tune_max_cooldown_mult: 4.0
 ui:
   state_hz: 5
+  pages: [race, battle, car, track, setup]  # UDP Action 4 cycles in this order
+  auto_page: false              # true: battle page in a fight, track page under SC/VSC/formation
+  auto_page_manual_hold_s: 60   # a manual page choice holds this long before auto may switch
+  auto_page_battle_gap_s: 1.0
+  auto_page_call_hold_s: 8       # never auto-switch while a call banner is up
 input:
   double_press_ms: 350
   long_press_ms: 800
@@ -121,4 +134,6 @@ input:
   long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
   silent_toggle_bit: 0x00400000  # any press on UDP Action 3 also toggles radio silent; 0 disables
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
+  mindset_toggle_bit: 0x00200000  # UDP Action 2: balanced <-> aggressive (live override); 0 disables
+  page_cycle_bit: 0x00800000      # UDP Action 4: next dashboard page; 0 disables
   negative_mute_laps: 3
