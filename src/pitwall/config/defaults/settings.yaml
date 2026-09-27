@@ -118,6 +118,10 @@ thresholds:
   tyre_life_speak_laps: 10
   blister_warn_pct: 20
   blister_hysteresis_pct: 5
+  wear_corner_window_laps: 3    # stint laps the per-corner wear rate is measured over
+  wear_corner_ratio: 1.4         # one corner (or axle) wearing this many times the rest = abnormal
+  wear_corner_hysteresis: 0.15   # ratio drop before an abnormal-wear flag clears
+  wear_corner_min_delta_pct: 0.6 # and at least this many % per lap more than the rest
   fuel_hysteresis_laps: 0.1
   fuel_spare_laps: 1.0
   gap_hysteresis_s: 0.3

@@ -52,6 +52,8 @@ SCENARIOS = {
     "vsc": RaceSpec(laps=8, sc_laps=(3, 4), vsc=True),
     "start_gained": RaceSpec(laps=8, grid_position=6, finish=True),
     "start_lost": RaceSpec(laps=6, grid_position=1, finish=True, gap_behind_s=0.6),
+    "wear_fl": RaceSpec(laps=8, wear_scale=(1.0, 1.0, 1.7, 1.0)),
+    "wear_rears": RaceSpec(laps=8, wear_scale=(1.6, 1.6, 1.0, 1.0)),
 }
 
 
@@ -232,3 +234,21 @@ def test_control_race_lap1_held(runs) -> None:
     calls, _ = runs["base"]
     assert "lap1_held" in _ids(calls)
     assert not {"puncture", "front_wing_lost_box", "sc_restart", "last_lap_defend"} & _ids(calls)
+
+
+def test_abnormal_corner_wear_names_the_corner(runs) -> None:
+    calls, _ = runs["wear_fl"]
+    call = next(c for c in calls if c.rule_id == "wear_front_left")
+    assert "front left" in call.text.lower() and "right-handers" in call.text
+    assert not _ids(calls) & {"wear_fronts", "wear_rear_left", "wear_front_right"}
+
+
+def test_abnormal_axle_wear_says_rears(runs) -> None:
+    calls, _ = runs["wear_rears"]
+    assert "wear_rears" in _ids(calls)
+    assert not _ids(calls) & {"wear_rear_left", "wear_rear_right"}
+
+
+def test_even_wear_is_not_flagged(runs) -> None:
+    calls, _ = runs["base"]
+    assert not any(c.rule_id.startswith("wear_") for c in calls)
