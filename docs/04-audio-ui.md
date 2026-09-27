@@ -18,7 +18,7 @@ The dispatcher's main job is suppression. Layered, all configurable:
 1. **Hysteresis** at the rule level (separate trigger and clear predicates).
 2. **Per-rule cooldown** and `max_per_stint`.
 3. **Dedupe**: identical or semantically equal text inside a window is dropped.
-4. **Global budget**: at most N calls per lap (default 4) and a minimum gap between calls
+4. **Global budget**: at most N calls per lap (default 12; driver menu "Radio calls" cycles it) and a minimum gap between calls
    (default 3 s), excluding level 1.
 5. **Screen-only demotion**: anything already legible on the dashboard is not spoken
    unless it just crossed a threshold.

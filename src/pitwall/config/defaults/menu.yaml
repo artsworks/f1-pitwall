@@ -10,6 +10,7 @@ menu:
   speak_on_scroll: true
   wrap: true
   opinion_hold_laps: 5
+  budget_steps: [4, 8, 12, 20]  # "Radio calls" item cycles the calls-per-lap limit
   items:
     - id: tyres
       label: "Tyres gone?"
@@ -69,6 +70,12 @@ menu:
         coming: ["Rain coming. {in10} percent in ten.", "Yes, {in30} percent in thirty."]
         chance: ["Maybe. {in10} percent in ten.", "Small chance, {in30} percent."]
         dry: ["No, staying dry.", "Dry. No rain expected."]
+    - id: budget
+      label: "Radio calls"
+      kind: action
+      action: budget
+      replies:
+        default: ["Copy, up to {budget} calls a lap.", "Understood, {budget} calls a lap."]
     - id: understeer
       label: "Understeer"
       kind: opinion

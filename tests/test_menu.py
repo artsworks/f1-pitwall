@@ -161,6 +161,20 @@ def test_action_items_run_their_action(tmp_path: Path) -> None:
     assert engine2.dispatcher.silent is True
 
 
+def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
+    # page, silent, mindset, oversteer, understeer, budget
+    presses = [(UP, 20.0 + 0.5 * i) for i in range(6)] + [(ACK, 23.5)]
+    engine, calls, rows = _run(tmp_path, presses)
+    (rec,) = _inputs(rows)
+    assert rec["item_id"] == "budget"
+    assert engine.budget_live == 20 and engine.dispatcher.budget_override == 20
+    assert any(c.text == "Copy, up to 20 calls a lap." for c in calls)
+    engine.cycle_budget()
+    assert engine.dispatcher.budget_override == 4  # wraps
+    engine.set_mindset("aggressive", 30.0)
+    assert engine.dispatcher.budget_override == 4  # menu choice beats the mindset
+
+
 def test_menu_bits_disableable(tmp_path: Path) -> None:
     overrides: dict[str, object] = {"input": {"menu_up_bit": 0, "menu_down_bit": 0}}
     engine, _, rows = _run(tmp_path, [(DOWN, 20.0), (ACK, 21.0)], overrides=overrides)

@@ -39,7 +39,7 @@ policy:
     1: 5.0
     2: 3.0
     3: 1.5
-  calls_per_lap: 4
+  calls_per_lap: 12
   min_gap_s: 3.0
   dedupe_window_s: 20.0
   quiet: false

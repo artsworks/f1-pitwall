@@ -185,6 +185,7 @@ check` validates ids, handlers and placeholders.
 | Plan? | question | box_now / stop / to_end / unknown | "Box lap 26. Window open soon." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / attack / push | "Push. 0.8 to the car ahead." |
 | Rain coming? | question | crossover / coming / chance / dry (`rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent in ten." |
+| Radio calls | action | default (`budget`) | cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (4 / 8 / 12 / 20), overriding the mindset's `call_budget_per_lap`: "Copy, up to 20 calls a lap." |
 | Understeer | opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
 | Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
 | Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |

@@ -100,7 +100,7 @@ against recordings, not conclusions.
 | `overtake_call_gap_s` | 0.8 | 1.0 | gap at which "Overtake available" is spoken | calls the opportunity earlier |
 | `rival_focus_ahead` | 0.5 | 0.8 | weight on the car ahead vs behind (behind = 1 − ahead) | "he's on 18-lap-old mediums, you're half a second a lap quicker" |
 | `rival_info_every_n_laps` | 3 | 1 | how often the rival summary is repeated | a gap every lap when hunting |
-| `call_budget_per_lap` | 4 | 5 | P2/P3 calls per lap (P1 unlimited) | slightly chattier, not twice as chatty |
+| `call_budget_per_lap` | 12 | 15 | P2/P3 calls per lap (P1 unlimited); raised for debugging, the driver menu's "Radio calls" item overrides it live | slightly chattier, not twice as chatty |
 | `phrasing` | `advisory` | `directive` | template set used | "consider boxing" versus "box this lap" |
 
 ```yaml
@@ -122,7 +122,7 @@ mindsets:
     overtake_call_gap_s: 0.8
     rival_focus_ahead: 0.5
     rival_info_every_n_laps: 3
-    call_budget_per_lap: 4
+    call_budget_per_lap: 12
     phrasing: advisory
   aggressive:
     inherits: balanced
@@ -142,7 +142,7 @@ mindsets:
     overtake_call_gap_s: 1.0
     rival_focus_ahead: 0.8
     rival_info_every_n_laps: 1
-    call_budget_per_lap: 5
+    call_budget_per_lap: 15
     phrasing: directive
 ```
 

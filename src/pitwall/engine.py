@@ -142,6 +142,7 @@ class Engine:
         state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         # Live overrides owned by the backend and pushed to every client.
         self.mindset_override: str | None = None
+        self.budget_live: int | None = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
         self._page_manual_t: float | None = None
@@ -222,7 +223,9 @@ class Engine:
         mode = self.mode()
         if self.rule_engine is not None:
             self.rule_engine.mode = mode
-        budget = mode.get("call_budget_per_lap")
+        budget = (
+            self.budget_live if self.budget_live is not None else mode.get("call_budget_per_lap")
+        )
         self.dispatcher.budget_override = int(budget) if budget is not None else None
         self.dispatcher.log.mindset = self.mindset
 
@@ -234,6 +237,15 @@ class Engine:
         snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
         self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
+
+    def cycle_budget(self) -> int:
+        """Next driver-menu calls-per-lap step; overrides the mindset's budget."""
+        steps = self.store.current().menu.budget_steps or [4]
+        cur = self.dispatcher.budget_override
+        nxt = next((s for s in steps if cur is None or s > cur), steps[0])
+        self.budget_live = nxt
+        self._apply_mode()
+        return nxt
 
     def cycle_mindset(self, now: float) -> None:
         cycle = [m for m in self.store.current().input.mindset_cycle if m]
@@ -392,6 +404,8 @@ class Engine:
             return
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
+        if item.action == "budget":
+            values["budget"] = str(self.cycle_budget())
         text = self._menu_replies.pick(item, case, values)
         self._menu_log(t, snap, "driver_input", item, text, {"case": case, **values})
         if item.kind == "opinion" and item.topic:
