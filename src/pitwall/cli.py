@@ -726,6 +726,53 @@ def cmd_voices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_voice(args: argparse.Namespace) -> int:
+    """Voice channel tooling (docs/21): grammar, devices, spike."""
+    from pitwall.voice.grammar import VoiceGrammar
+
+    settings = ConfigStore().current()
+    voice = settings.voice
+    if args.action == "grammar":
+        print(VoiceGrammar.from_mapping(voice.intents).to_srgs(args.lang), end="")
+        return 0
+    if sys.platform != "win32":
+        print("voice devices/spike need Windows SAPI (pywin32)")
+        return 1
+    if args.action == "devices":
+        from pitwall.voice.sapi import list_inputs
+
+        recs, ins = list_inputs()
+        print("recognisers (voice.recognizer matches a substring):")
+        for r in recs:
+            print(f"  {r}")
+        print("audio inputs (voice.device):")
+        for i, name in enumerate(ins):
+            print(f"  {i}: {name}")
+        return 0
+    from pitwall.voice.spike import run_spike
+
+    update: dict[str, object] = {}
+    if args.device is not None:
+        update["device"] = args.device
+    if args.recognizer is not None:
+        update["recognizer"] = args.recognizer
+    if args.confidence is not None:
+        update["confidence_min"] = args.confidence
+    if args.affinity is not None:
+        update["affinity_mask"] = int(args.affinity, 0)
+    voice = voice.model_copy(update=update)
+    log = Path(args.log or f"recordings/voice-spike-{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
+    return run_spike(
+        voice,
+        settings.input,
+        host=settings.connection.udp_host,
+        port=None if args.no_udp else (args.port or settings.connection.udp_port),
+        log_path=log,
+        grammar_mode=args.grammar,
+        say=args.say,
+    )
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from pitwall.doctor import run_doctor
 
@@ -821,6 +868,20 @@ def build_parser() -> argparse.ArgumentParser:
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file")
     st.set_defaults(func=cmd_stats)
+
+    vc = sub.add_parser("voice", help="voice channel: SRGS grammar, SAPI devices, Phase 0 spike")
+    vc.add_argument("action", choices=["spike", "devices", "grammar"])
+    vc.add_argument("--port", type=int, default=None, help="UDP port for Action 1 taps")
+    vc.add_argument("--no-udp", action="store_true", help="Enter key only; don't bind UDP")
+    vc.add_argument("--device", type=int, default=None, help="audio input index")
+    vc.add_argument("--recognizer", default=None, help="recogniser description substring")
+    vc.add_argument("--confidence", type=float, default=None, help="confidence_min override")
+    vc.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
+    vc.add_argument("--grammar", choices=["srgs", "api"], default="srgs")
+    vc.add_argument("--lang", default="en-US", help="xml:lang for `grammar`")
+    vc.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
+    vc.add_argument("--log", default=None, help="JSONL log path")
+    vc.set_defaults(func=cmd_voice)
 
     doc = sub.add_parser("doctor", help="bind-test the port and report observed telemetry")
     doc.add_argument("--host", default="0.0.0.0")

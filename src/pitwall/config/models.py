@@ -188,6 +188,23 @@ class MenuSettings(BaseModel):
     items: list[MenuItemModel] = Field(default_factory=list)
 
 
+class VoiceSettings(BaseModel):
+    """Driver voice channel (docs/21). Phase 0: `pitwall voice spike` only."""
+
+    enabled: bool = False
+    engine: Literal["sapi"] = "sapi"
+    recognizer: str = ""  # SAPI recogniser token description substring; "" = first installed
+    device: int = 0  # index into the SAPI audio inputs (`pitwall voice devices`)
+    early_close_ms: int = 300  # SAPI CompleteResponseSpeed: silence after a full phrase
+    close_silence_ms: int = 1000  # SAPI IncompleteResponseSpeed: silence after a partial one
+    max_open_s: float = 6.0  # hard cap on an open channel
+    open_warn_s: float = 3.0  # dashboard turns amber after this with nothing recognised
+    confidence_min: float = 0.7  # EngineConfidence below this is a miss
+    priority: Literal["below_normal", "normal"] = "below_normal"
+    affinity_mask: int = 0  # 0 = leave the OS default
+    intents: dict[str, list[str]] = Field(default_factory=dict)  # intent -> phrases
+
+
 class PersistenceSettings(BaseModel):
     enabled: bool = True
     path: str = "~/.pitwall/pitwall.sqlite"
@@ -275,6 +292,7 @@ class Settings(BaseModel):
     input: InputSettings = Field(default_factory=InputSettings)
     menu: MenuSettings = Field(default_factory=MenuSettings)
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
+    voice: VoiceSettings = Field(default_factory=VoiceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
     track: TrackOverlay | None = None
