@@ -4,6 +4,7 @@ persistence, disabled bits and replay determinism."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import math
 import struct
@@ -157,7 +158,7 @@ def test_opinion_persisted_and_biases_snapshot(tmp_path: Path) -> None:
 
 
 def test_action_items_run_their_action(tmp_path: Path) -> None:
-    presses = [(UP, 20.0), (UP, 20.5), (UP, 21.0), (ACK, 22.0)]  # page, silent, mindset
+    presses = [(UP, 20.0), (UP, 20.5), (UP, 21.0), (ACK, 22.0)]  # cooldown, silent, mindset
     engine, _, rows = _run(tmp_path, presses)
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "mindset" and engine.mindset == "aggressive"
@@ -259,8 +260,26 @@ def test_packaged_menu_is_valid() -> None:
     settings = engine.store.current()
     assert validate(settings.menu) == []
     labels = [i.label for i in settings.menu.items]
-    assert labels[0] == "Tyres gone?" and labels[-1] == "Next page"
+    assert labels[0] == "Tyres gone?" and labels[-1] == "Cooldown lap"
+    assert "Next page" not in labels
     assert all(len(label.split()) <= 3 for label in labels)
+
+
+def test_cooldown_menu_action_overrides_hot_lap_coaching(tmp_path: Path) -> None:
+    engine, calls, rows = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)])
+    (rec,) = _inputs(rows)
+    assert rec["item_id"] == "cooldown"
+    assert dict(rec["inputs"])["case"] == "on"  # type: ignore[call-overload]
+    assert any("cooldown lap" in c.text.lower() for c in calls)
+    # the override covers one lap; the replay runs on past it
+    assert engine._manual_cooldown is False
+
+
+def test_cooldown_menu_toggles_back_to_hot_lap(tmp_path: Path) -> None:
+    _, calls, rows = _run(tmp_path, [(UP, 20.0), (ACK, 21.0), (UP, 23.0), (ACK, 24.0)])
+    cases = [dict(r["inputs"])["case"] for r in _inputs(rows)]  # type: ignore[call-overload]
+    assert cases == ["on", "off"]
+    assert any("hot-lap" in c.text.lower() for c in calls)
 
 
 def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None:
@@ -312,6 +331,11 @@ def test_race_stat_and_fight_answers() -> None:
     case, values = answer(stat, plain, "b")
     assert case == "position" and values["pos"] == "4" and values["best"] == "1:32.4"
     assert answer(stat, Snapshot(now=0.0), "b")[0] == "unknown"
+    practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
+    assert answer(stat, practice, "b")[0] == "practice_no_best"
+    timed = dataclasses.replace(practice, player_best_lap_ms=81_298, tyre_age_laps=5)
+    case, values = answer(stat, timed, "b")
+    assert case == "practice" and values["best"] == "1:21.3"
     fight = MenuItemModel(id="fight", label="Fight")
     snap = Snapshot(
         now=0.0,

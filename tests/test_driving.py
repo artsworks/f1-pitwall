@@ -420,3 +420,21 @@ def test_cool_lap_extends_when_battery_short() -> None:
     assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]
     t = _texts(_engine(), **base, cool_extend=False)
     assert "cool_hot_mode" in t and "cool_extend" not in t
+
+
+def test_spin_calls_capped_per_stint_but_traffic_hold_is_not() -> None:
+    rules = {r.id: r for r in ConfigStore().current().rules}
+    assert rules["spun_rejoin"].max_per_stint == 5
+    assert rules["spun_rejoin_traffic"].max_per_stint is None
+
+
+def test_practice_invalid_lap_gets_one_reset_call() -> None:
+    e = _engine()
+    base: dict[str, object] = {"session_kind": "practice", "current_lap_invalid": True}
+    t = _texts(e, **base)
+    assert "practice_lap_invalid" in t and "next" in t["practice_lap_invalid"].lower()
+    assert "practice_lap_invalid" not in _texts(e, now=5.0, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), cool_lap=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), phase="out_lap", **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), driving_wrong_way=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), current_lap_invalid=True)

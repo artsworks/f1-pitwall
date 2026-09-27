@@ -257,6 +257,7 @@ rules:
     still_true: "spun and traffic_behind_s > th.rejoin_traffic_s + 2"
     requires: [motion_ex]
     cooldown_s: 8
+    max_per_stint: 5
     say:
       - "You're clear behind. Easy on the throttle, the rears are cooked."
       - "Clear to rejoin. Gentle on the power, no grip in the rears."
@@ -267,6 +268,17 @@ rules:
           - "Lost it again. Clear behind, same deal, gentle on the throttle."
           - "That's {repeat} moments now. Clear to rejoin, a bit less throttle on the exits."
           - "Number {repeat}. You're clear. Easy on the power, let the rears cool."
+  # Practice: a deleted lap is not a benchmark; say so once and give the reset.
+  - id: practice_lap_invalid
+    sessions: [practice]
+    priority: 2
+    when: "phase == 'flying' and current_lap_invalid and not cool_lap and not driving_wrong_way"
+    clear_when: "not current_lap_invalid"
+    requires: [lap_data]
+    say:
+      - "Lap's deleted, track limits. Won't count as a benchmark. Finish it for the tyre data and go again next lap."
+      - "That one's invalid. Keep it for practice, not the timesheet. Next lap, two wheels inside the white line."
+      - "Lap deleted. Don't chase this one. Reset and give me a clean one next time round."
   # Just out of the pit lane: a car closing on the merge.
   - id: pit_exit_traffic
     sessions: [practice, qualifying, race]

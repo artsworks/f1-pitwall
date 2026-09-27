@@ -226,6 +226,10 @@ def _race_stat(snap: Snapshot) -> Answer:
     )
     if snap.fuel_source and snap.fuel_margin_laps < -0.2:
         return "fuel_short", v
+    if snap.session_kind == "practice":
+        if snap.wear_mean_pct >= 70:
+            return "tyres_gone", v
+        return ("practice" if snap.player_best_lap_ms > 0 else "practice_no_best"), v
     if snap.wear_mean_pct >= 70 or (snap.tyre_age_laps > 0 and snap.laps_of_pace < 1):
         return "tyres_gone", v
     if snap.energy_mode == "over":
