@@ -458,7 +458,7 @@ rules:
           - "Another one. The white line is not the racing line"
   - id: track_limit_last_warning
     sessions: [race]
-    priority: 2
+    priority: 1
     when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn == th.warnings_warn - 1"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
