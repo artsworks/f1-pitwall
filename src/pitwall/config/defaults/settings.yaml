@@ -56,6 +56,11 @@ speech:
   rate: 0
   volume: 100
   radio_click: true # soft radio blip before each call
+  # Delivery by priority (Piper): speed multiplier and expression (pitch/energy variation).
+  tone_urgent_speed: 1.1      # P1: quicker, more urgent
+  tone_urgent_expression: 1.2
+  tone_calm_speed: 0.95       # P3: unhurried, flatter
+  tone_calm_expression: 0.85
 mindset:
   active: balanced
 thresholds:

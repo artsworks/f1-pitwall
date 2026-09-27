@@ -13,6 +13,7 @@ rules:
     say:
       - "Switching to Plan {active_plan}. {plan_spoken}, target lap {plan_target_lap}"
       - "We're going Plan {active_plan} now, {plan_spoken}. Target lap {plan_target_lap}"
+      - "Change of plan. Plan {active_plan}, {plan_spoken}. Lap {plan_target_lap} is the target"
   - id: plan_invalid
     sessions: [race]
     priority: 2
@@ -24,6 +25,7 @@ rules:
     say:
       - "We're off Plan {plan_switched_from}. New plan is {active_plan}, {plan_spoken}"
       - "Plan {plan_switched_from} is gone. Plan {active_plan} now, {plan_spoken}"
+      - "Plan {plan_switched_from} is off the table. Going Plan {active_plan}, {plan_spoken}"
   - id: plan_off
     sessions: [race]
     priority: 2
@@ -35,6 +37,7 @@ rules:
     say:
       - "Heads up, we're off Plan {active_plan}. Losing {plan_off_s:.0f} seconds on it, reviewing"
       - "Plan {active_plan} is costing us {plan_off_s:.0f} seconds now. Stand by for a new plan"
+      - "We're drifting off Plan {active_plan}, about {plan_off_s:.0f} seconds. Looking at options"
   - id: plan_announce
     sessions: [race]
     priority: 2
@@ -46,6 +49,7 @@ rules:
     say:
       - "We're on Plan A, {plan_spoken}. Window laps {plan_window_start} to {plan_window_end}. Plan B is {plan_b_spoken}"
       - "Plan A is {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
+      - "Strategy is Plan A, {plan_spoken}. Window {plan_window_start} to {plan_window_end}, Plan B {plan_b_spoken}"
   - id: plan_announce_no_stop
     sessions: [race]
     priority: 2
@@ -57,6 +61,7 @@ rules:
     say:
       - "We're on Plan A, {plan_spoken}. We're going long"
       - "Plan A, {plan_spoken}. Look after the tyres"
+      - "Plan A is {plan_spoken}. Tyres have to go the distance, so manage them"
   - id: plan_status
     sessions: [race]
     priority: 3
@@ -80,6 +85,7 @@ rules:
     say:
       - "Pit window is open. Plan {active_plan}, target lap {plan_target_lap}"
       - "Window open. We're targeting lap {plan_target_lap}, Plan {active_plan}"
+      - "Okay, window's open. Plan {active_plan}, we're looking at lap {plan_target_lap}"
   - id: plan_target_lap
     sessions: [race]
     priority: 1
@@ -92,6 +98,7 @@ rules:
     say:
       - "Target lap. Plan {active_plan}, box box, {plan_next_compound}s"
       - "This is the target lap. Box this lap, {plan_next_compound}s on, Plan {active_plan}"
+      - "Box box, box box. Plan {active_plan}, {plan_next_compound}s"
     on_ack:
       - "Copy, box this lap"
     on_neg:
@@ -110,6 +117,7 @@ rules:
     say:
       - "Box, box. Plan {active_plan}. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds in it"
       - "Plan {active_plan}, box this lap. {pit_plan_reason}"
+      - "Box this lap, box this lap. Plan {active_plan}, {pit_plan_reason}"
     on_ack:
       - "Copy, box this lap"
     on_neg:
@@ -126,6 +134,7 @@ rules:
     say:
       - "Plan C, box box. {plan_next_compound}s, cheap stop"
       - "Plan C, Plan C. Box this lap for {plan_next_compound}s"
+      - "Box box, Plan C. Cheap stop, {plan_next_compound}s"
     on_ack:
       - "Copy, Plan C, box this lap"
     on_neg:
@@ -142,6 +151,7 @@ rules:
     say:
       - "Plan is box lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
       - "We're looking at lap {pit_plan_lap} for the stop"
+      - "Stop is lap {pit_plan_lap}. Window runs {pit_window_start} to {pit_window_end}"
   - id: overcut_stay_out
     sessions: [race]
     priority: 2
@@ -153,6 +163,7 @@ rules:
     say:
       - "{pit_plan_rival_name} has boxed. Stay out and push, overcut is on"
       - "{pit_plan_rival_name} pitted. Push now, we go long"
+      - "{pit_plan_rival_name}'s in. Stay out, give me some quick laps"
   - id: tyre_life
     sessions: [race]
     priority: 3
@@ -163,6 +174,7 @@ rules:
     say:
       - "These tyres have about {laps_of_pace:.0f} laps of pace left"
       - "Tyre check, roughly {laps_of_pace:.0f} laps of pace in them"
+      - "About {laps_of_pace:.0f} laps of pace left in this set"
   - id: tyre_overheat
     sessions: [race]
     priority: 2
@@ -173,6 +185,7 @@ rules:
     say:
       - "Tyres are running hot. Ease the slides"
       - "Temps are high, look after the rears"
+      - "Tyre temps are climbing. Smooth on the throttle, fewer slides"
   - id: tyre_graining
     sessions: [race]
     priority: 2
@@ -182,6 +195,8 @@ rules:
     requires: [car_telemetry]
     say:
       - "Tyres are cold and graining. Work them, lean on the fronts"
+      - "We're seeing graining. Get some load into the fronts, it'll clean up"
+      - "Graining on the tyres. Keep working them, it should come back"
   - id: tyre_blister
     sessions: [race]
     priority: 2
@@ -191,6 +206,8 @@ rules:
     requires: [car_damage]
     say:
       - "Blistering at {blister_max_pct} percent. Manage the tyres"
+      - "Blisters starting, {blister_max_pct} percent. Look after them"
+      - "{blister_max_pct} percent blistering. Easy on the traction zones"
   - id: fuel_short
     sessions: [race]
     priority: 1
@@ -202,6 +219,7 @@ rules:
     say:
       - "Fuel is short, {fuel_short_laps:.1f} laps down. Lift and coast into the big stops"
       - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
+      - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast now"
   - id: fuel_marginal
     sessions: [race]
     priority: 2
@@ -213,6 +231,7 @@ rules:
     say:
       - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
       - "Fuel's on the edge, {fuel_margin_r:+.1f} laps. Save where you can"
+      - "Fuel margin is {fuel_margin_r:+.1f} laps. A bit of lift and coast where it's cheap"
   - id: fuel_spare
     sessions: [race]
     priority: 3
@@ -223,6 +242,8 @@ rules:
     requires: [car_status]
     say:
       - "Fuel is good, {fuel_margin_laps:.1f} laps spare. Use it"
+      - "Plenty of fuel, {fuel_margin_laps:.1f} laps in hand. No saving needed"
+      - "Fuel's fine, {fuel_margin_laps:.1f} laps spare. Push"
   - id: energy_over
     sessions: [race]
     min_lap: 3  # lap 1-2 spend the full launch charge
@@ -234,6 +255,8 @@ rules:
     requires: [car_status]
     say:
       - "Over the energy budget, {energy_lap_delta_mj:+.1f} megajoules on the lap. Harvest more"
+      - "We're {energy_lap_delta_mj:+.1f} megajoules over this lap. More harvest please"
+      - "Energy's running ahead of budget, {energy_lap_delta_mj:+.1f} on the lap. Harvest"
   - id: energy_under
     sessions: [race]
     min_lap: 3  # lap 1-2 spend the full launch charge
@@ -245,6 +268,8 @@ rules:
     requires: [car_status]
     say:
       - "Energy in hand, {energy_under_mj:.1f} megajoules unused on the lap. You can deploy more"
+      - "{energy_under_mj:.1f} megajoules left on the table that lap. Use it"
+      - "Plenty of battery, {energy_under_mj:.1f} megajoules unused. Deploy more"
   - id: overtake_mode
     sessions: [race]
     priority: 2
@@ -255,6 +280,7 @@ rules:
     say:
       - "Overtake mode is yours on {rival_ahead_name}. Use it"
       - "{gap_ahead_s:.1f} to {rival_ahead_name}. Energy is there, go"
+      - "{rival_ahead_name}, {gap_ahead_s:.1f} ahead. Overtake mode, use it"
   - id: drs_attack
     sessions: [race]
     priority: 3
@@ -264,6 +290,8 @@ rules:
     requires: [car_status, lap_data]
     say:
       - "DRS on {rival_ahead_name}. {gap_ahead_s:.1f} seconds"
+      - "DRS, {gap_ahead_s:.1f} to {rival_ahead_name}. Go get him"
+      - "You've got DRS on {rival_ahead_name}, {gap_ahead_s:.1f}"
   - id: penalty
     sessions: [race]
     priority: 1
@@ -274,6 +302,7 @@ rules:
     say:
       - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
       - "We've been given {penalty_time_s} seconds. {penalty_s} total"
+      - "{penalty_time_s} second penalty. {penalty_s} total now"
   - id: penalty_pit
     sessions: [race]
     priority: 1
@@ -284,6 +313,7 @@ rules:
     say:
       - "We've got a {penalty_kind_text}. Serve it within three laps"
       - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
+      - "{penalty_kind_text}. Three laps to serve it, we'll call it"
   - id: serve_penalty
     sessions: [race]
     priority: 2
@@ -293,6 +323,8 @@ rules:
     requires: [lap_data]
     say:
       - "Unserved penalty on the car. We serve it at the stop"
+      - "We'll take the penalty at the stop, it's still on the car"
+      - "Reminder, penalty's unserved. It comes off at the stop"
   - id: track_warnings
     sessions: [race]
     priority: 3
@@ -302,6 +334,8 @@ rules:
     requires: [lap_data]
     say:
       - "That's {corner_cut_warnings} track limit warnings. Next one's a penalty risk"
+      - "{corner_cut_warnings} track limit warnings now. Careful, next one could be a penalty"
+      - "Track limits, that's {corner_cut_warnings}. Keep it inside the lines"
   - id: blue_flag
     sessions: [race]
     priority: 1
@@ -312,6 +346,7 @@ rules:
     say:
       - "Blue flag. Let him by"
       - "Blues, leader behind. Give him the room"
+      - "Blue flags. Let him through, cleanly"
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
@@ -323,6 +358,7 @@ rules:
     say:
       - "{rival_ahead_name} ahead has boxed, he was {gap_ahead_s:.1f} up the road"
       - "{rival_ahead_name} is in the pits. That was the car {gap_ahead_s:.1f} ahead"
+      - "Car ahead's boxing, {rival_ahead_name}. He was {gap_ahead_s:.1f} up"
   - id: rival_behind_pitted
     sessions: [race]
     priority: 2
@@ -333,6 +369,8 @@ rules:
     requires: [lap_data]
     say:
       - "{rival_behind_name} behind has boxed. Watch the undercut"
+      - "{rival_behind_name} has pitted behind. Undercut threat, push this lap"
+      - "Car behind's in, {rival_behind_name}. Give me a good lap, cover the undercut"
   - id: weather_to_inter
     sessions: [race]
     priority: 2
@@ -343,6 +381,8 @@ rules:
     requires: [session]
     say:
       - "Weather change coming, {rain_pct_in_10} percent rain in ten. Inters will be the tyre"
+      - "Rain's coming, {rain_pct_in_10} percent in ten. Inters are the likely call"
+      - "Heads up, {rain_pct_in_10} percent rain in ten minutes. Thinking inters"
   - id: weather_to_wet
     sessions: [race]
     priority: 2
@@ -353,6 +393,8 @@ rules:
     requires: [session]
     say:
       - "Weather change coming, {rain_pct_in_10} percent rain in ten. Full wets will be the tyre"
+      - "Heavy rain coming, {rain_pct_in_10} percent in ten. Full wets likely"
+      - "Big rain on the way, {rain_pct_in_10} percent in ten. Prepare for wets"
   - id: weather_to_dry
     sessions: [race]
     priority: 2
@@ -363,6 +405,8 @@ rules:
     requires: [session]
     say:
       - "Weather change coming, {rain_pct_in_10} percent rain in ten. Track is drying, slicks soon"
+      - "Track's drying, {rain_pct_in_10} percent rain in ten. Slicks soon"
+      - "It's drying out. Rain {rain_pct_in_10} percent in ten, slicks are coming"
   - id: sc_deployed
     sessions: [race]
     priority: 1
@@ -371,6 +415,8 @@ rules:
     requires: [session]
     say:
       - "Safety car, safety car. Delta positive, stay above it"
+      - "Safety car deployed. Keep the delta positive"
+      - "Safety car, safety car. Watch the delta"
   - id: vsc_deployed
     sessions: [race]
     priority: 1
@@ -379,6 +425,8 @@ rules:
     requires: [session]
     say:
       - "Virtual safety car. Stick to the delta"
+      - "VSC, VSC. Stay on the delta"
+      - "Virtual safety car deployed. Delta, keep it positive"
   - id: lights_out
     sessions: [race]
     priority: 3
@@ -388,6 +436,8 @@ rules:
     requires: [lap_data]
     say:
       - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_r:+.1f} laps"
+      - "Good launch. {laps_remaining} to go, let's settle in"
+      - "Nice start. {laps_remaining} laps, fuel margin {fuel_margin_r:+.1f}"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
@@ -396,3 +446,5 @@ rules:
     requires: [lap_data]
     say:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
+      - "Careful at the exit, {rival_pit_exit_name} is right there"
+      - "{rival_pit_exit_name} coming at the pit exit. Hold your line"

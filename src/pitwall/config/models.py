@@ -201,6 +201,10 @@ class SpeechSettings(BaseModel):
     rate: int = 0
     volume: int = 100
     radio_click: bool = True
+    tone_urgent_speed: float = 1.1
+    tone_urgent_expression: float = 1.2
+    tone_calm_speed: float = 0.95
+    tone_calm_expression: float = 0.85
 
 
 class MindsetSettings(BaseModel):
