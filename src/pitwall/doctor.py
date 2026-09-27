@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import IO
 
+from pitwall.audio.kokoro_tts import kokoro_installed
 from pitwall.audio.piper_tts import voice_path
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
@@ -164,6 +165,17 @@ def run_doctor(
 
     # Speech.
     speech = settings.speech
+    if kokoro_installed(speech):
+        _line(
+            out,
+            "PASS",
+            f"Kokoro model installed (voice {speech.kokoro_voice}, "
+            f"{speech.kokoro_threads} threads)",
+        )
+    else:
+        _line(
+            out, "INFO", "Kokoro model not installed (lighter, more natural): pitwall voices kokoro"
+        )
     if voice_path(speech).exists():
         _line(out, "PASS", f"Piper voice {speech.piper_voice} installed")
     else:

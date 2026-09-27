@@ -48,15 +48,20 @@ policy:
   p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
-  engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
+  engine: "auto"          # auto = kokoro, else piper, whichever is downloaded, else sapi (Windows)
   voice: null             # SAPI voice name filter
   piper_voice: "en_GB-northern_english_male-medium"
   piper_speed: 1.3        # >1 faster; 1.0 = voice natural pace
+  kokoro_voice: "bm_george"   # British male; also bm_lewis, bm_daniel, bf_emma, am_michael
+  kokoro_speed: 1.1
+  kokoro_lang: "en-gb"
+  kokoro_threads: 2           # CPU threads for synthesis; keep low so the game keeps its cores
   voices_dir: "voices"
   rate: 0
   volume: 100
   radio_click: true # soft radio blip before each call
-  # Delivery by priority (Piper): speed multiplier and expression (pitch/energy variation).
+  # Delivery by priority: speed multiplier (Piper and Kokoro) and expression
+  # (pitch/energy variation, Piper only).
   tone_urgent_speed: 1.1      # P1: quicker, more urgent
   tone_urgent_expression: 1.2
   tone_calm_speed: 0.95       # P3: unhurried, flatter

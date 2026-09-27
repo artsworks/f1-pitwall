@@ -195,10 +195,14 @@ class PersistenceSettings(BaseModel):
 
 class SpeechSettings(BaseModel):
     enabled: bool = True
-    engine: Literal["auto", "piper", "sapi", "null"] = "auto"
+    engine: Literal["auto", "kokoro", "piper", "sapi", "null"] = "auto"
     voice: str | None = None
     piper_voice: str = "en_GB-northern_english_male-medium"
     piper_speed: float = 1.3
+    kokoro_voice: str = "bm_george"
+    kokoro_speed: float = 1.1
+    kokoro_lang: str = "en-gb"
+    kokoro_threads: int = 2
     voices_dir: str = "voices"
     rate: int = 0
     volume: int = 100

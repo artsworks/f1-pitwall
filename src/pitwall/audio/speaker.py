@@ -3,8 +3,9 @@ implementation is non-blocking and reports `on_spoken(call_id, t)` — fired at
 speech start (the latency we measure).
 
 `SapiSpeaker` imports pywin32 lazily so this module loads on Linux.
-`speech.engine`: "auto" = piper if its voice is downloaded, else sapi on
-Windows, else null; "piper"/"sapi"/"null" explicit. Piper falls back to SAPI.
+`speech.engine`: "auto" = kokoro if its model is downloaded, else piper if its
+voice is, else sapi on Windows, else null; "kokoro"/"piper"/"sapi"/"null"
+explicit. Kokoro falls back to Piper, Piper to SAPI.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from pitwall.audio.dispatcher import Call
+from pitwall.audio.kokoro_tts import kokoro_installed, make_kokoro_speaker
 from pitwall.audio.piper_tts import make_piper_speaker, radio_blip, to_wav, voice_path
 from pitwall.config.models import SpeechSettings
 
@@ -171,10 +173,21 @@ class SapiSpeaker:
 def make_speaker(settings: SpeechSettings) -> Speaker:
     engine = settings.engine
     if engine == "auto":
-        if voice_path(settings).exists() and sys.platform == "win32":
+        if sys.platform != "win32":
+            engine = "null"
+        elif kokoro_installed(settings):
+            engine = "kokoro"
+        elif voice_path(settings).exists():
             engine = "piper"
         else:
-            engine = "sapi" if sys.platform == "win32" else "null"
+            engine = "sapi"
+    if engine == "kokoro":
+        try:
+            return make_kokoro_speaker(settings)
+        except Exception as exc:
+            log.warning("Kokoro unavailable (%s); falling back", exc)
+            print(f"speech: Kokoro unavailable ({exc}); falling back to Piper", file=sys.stderr)
+            engine = "piper"
     if engine == "piper":
         try:
             return make_piper_speaker(settings)

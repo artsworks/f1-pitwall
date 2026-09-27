@@ -54,6 +54,22 @@ P1 urgent (`speech.tone_urgent_speed` / `tone_urgent_expression`), P2 normal and
 (`tone_calm_*`). Expression scales Piper's pitch and energy variation (1.0 is the voice's
 default).
 
+## Lighter, more natural voice (Kokoro)
+
+Kokoro-82M sounds more natural than Piper and stays light: it synthesizes on
+2 CPU threads (`speech.kokoro_threads`) with no busy-waiting, so the game keeps
+its cores and the GPU is never used. Download the model once (~350 MB, into
+`voices/`); with it present `pitwall start` prefers Kokoro, then Piper, then SAPI:
+
+```powershell
+uv run pitwall voices kokoro
+uv run pitwall speak --engine kokoro "Box box, box box. Plan A, hards."
+```
+
+The voice is `speech.kokoro_voice` (default `bm_george`; also `bm_lewis`, `bm_daniel`,
+`bf_emma`, `am_michael`), pace `speech.kokoro_speed`. P1 and P3 calls use the same
+`tone_urgent_speed` / `tone_calm_speed` multipliers; Kokoro has no expression control.
+
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.
 

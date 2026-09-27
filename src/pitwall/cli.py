@@ -618,6 +618,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_speak(args: argparse.Namespace) -> int:
     """Diagnose the audio path: speak TEXT and report when it was spoken."""
+    from pitwall.audio.kokoro_tts import kokoro_installed, make_kokoro_tone_synths
     from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth
     from pitwall.audio.speaker import make_speaker
 
@@ -630,8 +631,10 @@ def cmd_speak(args: argparse.Namespace) -> int:
     speech = store.current().speech.model_copy(update=update)
     if args.save:
         t0 = time.monotonic()
+        use_kokoro = args.engine == "kokoro" or (args.engine == "auto" and kokoro_installed(speech))
         try:
-            wav, seconds = make_piper_synth(speech)(args.text)
+            synth = make_kokoro_tone_synths(speech)[2] if use_kokoro else make_piper_synth(speech)
+            wav, seconds = synth(args.text)
         except FileNotFoundError as exc:
             print(exc)
             return 1
@@ -678,9 +681,15 @@ def cmd_speak(args: argparse.Namespace) -> int:
 
 
 def cmd_voices(args: argparse.Namespace) -> int:
+    from pitwall.audio.kokoro_tts import SUGGESTED_KOKORO_VOICES, download_kokoro
     from pitwall.audio.piper_tts import SUGGESTED_VOICES, download_voice, installed_voices
 
     speech = ConfigStore().current().speech
+    if args.action == "kokoro":
+        for path in download_kokoro(speech):
+            print(f"kokoro: {path}")
+        print(f"voice: {speech.kokoro_voice} (also: {', '.join(SUGGESTED_KOKORO_VOICES)})")
+        return 0
     if args.action == "get":
         for name in args.names or [speech.piper_voice]:
             path = download_voice(speech, name)
@@ -808,14 +817,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")
     sp.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
-    sp.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
+    sp.add_argument("--engine", choices=["auto", "kokoro", "piper", "sapi", "null"], default="auto")
     sp.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
     sp.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
-    sp.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
+    sp.add_argument("--save", metavar="WAV", help="render with Kokoro/Piper to a WAV file instead")
     sp.set_defaults(func=cmd_speak)
 
-    vo = sub.add_parser("voices", help="list or download Piper voices")
-    vo.add_argument("action", nargs="?", choices=["list", "get"], default="list")
+    vo = sub.add_parser(
+        "voices", help="list or download Piper voices; `kokoro` downloads the Kokoro model"
+    )
+    vo.add_argument("action", nargs="?", choices=["list", "get", "kokoro"], default="list")
     vo.add_argument("names", nargs="*", help="voice names for get (default: configured)")
     vo.set_defaults(func=cmd_voices)
 
