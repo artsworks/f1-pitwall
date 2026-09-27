@@ -68,6 +68,7 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
         "menu_up": int(inp.menu_up_bit),
         "menu_down": int(inp.menu_down_bit),
         "menu_close": int(inp.menu_close_bit),
+        **{f"item:{sc.item}": int(sc.bit) for sc in inp.shortcuts},
     }
 
 
@@ -337,9 +338,21 @@ class Engine:
         """Route a press through the menu. False: not a menu press; the
         caller handles it as usual."""
         settings = self.store.current().menu
-        if p.kind in ("menu_up", "menu_down"):
+        kind = p.kind
+        if kind.startswith("item:"):
+            item = next((i for i in settings.items if i.id == kind[5:]), None)
+            if item is not None:
+                self._menu_close(p.t, snapshot, "shortcut")
+                self._menu_answer(item, p.t, snapshot, "shortcut")
+            return True
+        if self.menu.open and kind in ("page", "mindset"):
+            remap = self.store.current().input.menu_open_actions
+            op = remap.page if kind == "page" else remap.mindset
+            if op:
+                kind = f"menu_{op}"
+        if kind in ("menu_up", "menu_down"):
             was_open = self.menu.open
-            item = self.menu.step(settings, -1 if p.kind == "menu_up" else 1, p.t)
+            item = self.menu.step(settings, -1 if kind == "menu_up" else 1, p.t)
             if item is None:
                 return True
             if not was_open:
@@ -347,15 +360,15 @@ class Engine:
             if settings.speak_on_scroll:
                 self.dispatcher.menu_prompt(item.label, snapshot)
             return True
-        if p.kind == "menu_close":
+        if kind == "menu_close":
             self._menu_close(p.t, snapshot, "close")
             return True
         if not self.menu.open:
-            return p.kind == "menu_confirm"
-        if p.kind in ("ack", "menu_confirm"):
+            return kind == "menu_confirm"
+        if kind in ("ack", "menu_confirm"):
             self._menu_confirm(p.t, snapshot)
             return True
-        if p.kind in ("neg", "bookmark"):
+        if kind in ("neg", "bookmark"):
             self._menu_close(p.t, snapshot, "cancel")
             return True
         return False
@@ -400,14 +413,16 @@ class Engine:
         item = self.menu.selected(self.store.current().menu)
         self.menu.close()
         self.dispatcher.cancel_menu_prompt()
-        if item is None:
-            return
+        if item is not None:
+            self._menu_answer(item, t, snapshot, "menu")
+
+    def _menu_answer(self, item: MenuItemModel, t: float, snapshot: Snapshot, via: str) -> None:
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
         if item.action == "budget":
             values["budget"] = str(self.cycle_budget())
         text = self._menu_replies.pick(item, case, values)
-        self._menu_log(t, snap, "driver_input", item, text, {"case": case, **values})
+        self._menu_log(t, snap, "driver_input", item, text, {"case": case, "via": via, **values})
         if item.kind == "opinion" and item.topic:
             self.opinions[item.topic] = (item.id, snapshot.lap_num)
         if item.action == "mindset":

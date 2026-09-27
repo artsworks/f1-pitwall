@@ -10,7 +10,7 @@ import math
 import string
 from collections.abc import Callable, Mapping
 
-from pitwall.config.models import MenuItemModel, MenuSettings
+from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.state.session import Snapshot
 
 Answer = tuple[str, dict[str, str]]  # (case, template values)
@@ -205,6 +205,95 @@ def _push(snap: Snapshot) -> Answer:
     return "push", v
 
 
+def _lap_time(ms: float) -> str:
+    if ms <= 0 or not math.isfinite(ms):
+        return "?"
+    m, sec = divmod(ms / 1000.0, 60.0)
+    return f"{int(m)}:{sec:04.1f}"
+
+
+def _race_stat(snap: Snapshot) -> Answer:
+    """The one fact that matters most right now: a critical fuel, tyre or
+    energy problem, then the pit call, else position and laps left."""
+    pit_case, v = _pit(snap)
+    v.update(
+        {
+            "pos": str(snap.position),
+            "best": _lap_time(snap.player_best_lap_ms),
+            "margin": _n(abs(snap.fuel_margin_laps)),
+            "wear": _n(snap.wear_mean_pct, 0),
+        }
+    )
+    if snap.fuel_source and snap.fuel_margin_laps < -0.2:
+        return "fuel_short", v
+    if snap.wear_mean_pct >= 70 or (snap.tyre_age_laps > 0 and snap.laps_of_pace < 1):
+        return "tyres_gone", v
+    if snap.energy_mode == "over":
+        return "energy", v
+    if pit_case == "box_now":
+        return "box_now", v
+    if pit_case == "soon":
+        return "pit_soon", v
+    if snap.position <= 0:
+        return "unknown", v
+    return "position", v
+
+
+def _side(
+    name: str, gap: float, trend: float, rival_ms: int, own_ms: float, laps_left: int, ahead: bool
+) -> str:
+    """One sentence on a neighbour: gap, gap trend per lap, laps to catch or be
+    caught, and model pace (ours vs theirs) when both are known."""
+    where = "ahead" if ahead else "behind"
+    out = f"{name} {_n(gap)} {where}"
+    if trend > 0.05:
+        out += f", closing {_n(trend)} a lap" if ahead else f", he's gaining {_n(trend)} a lap"
+        laps = math.ceil(gap / trend)
+        if 0 < laps <= max(laps_left, 1):
+            out += f", catch in {laps}" if ahead else f", on you in {laps}"
+    elif trend < -0.05:
+        out += f", losing {_n(-trend)} a lap" if ahead else f", pulling away {_n(-trend)} a lap"
+    else:
+        out += ", holding"
+    out += "."
+    if rival_ms > 0 and own_ms > 0:
+        out += f" Pace {_lap_time(own_ms)} to his {_lap_time(rival_ms)}."
+    return out
+
+
+def _fight(snap: Snapshot) -> Answer:
+    has_ahead = snap.rival_ahead_idx >= 0 and math.isfinite(snap.gap_ahead_s)
+    has_behind = snap.rival_behind_idx >= 0 and math.isfinite(snap.gap_behind_s)
+    v = {"ahead": "", "behind": ""}
+    if has_ahead:
+        v["ahead"] = _side(
+            snap.rival_ahead_name or "Car",
+            snap.gap_ahead_s,
+            snap.gap_trend_ahead_s,
+            snap.rival_ahead_pace_ms,
+            snap.base_pace_ms,
+            snap.laps_remaining,
+            True,
+        )
+    if has_behind:
+        v["behind"] = _side(
+            snap.rival_behind_name or "Car",
+            snap.gap_behind_s,
+            snap.gap_trend_behind_s,
+            snap.rival_behind_pace_ms,
+            snap.base_pace_ms,
+            snap.laps_remaining,
+            False,
+        )
+    if has_ahead and has_behind:
+        return "both", v
+    if has_ahead:
+        return "ahead", v
+    if has_behind:
+        return "behind", v
+    return "none", v
+
+
 def _balance(snap: Snapshot, step: int) -> Answer:
     bias = snap.front_brake_bias
     if bias <= 0:
@@ -221,6 +310,8 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
     "plan": _plan,
     "rain": _rain,
     "push": _push,
+    "race_stat": _race_stat,
+    "fight": _fight,
     "understeer": lambda s: _balance(s, -1),  # bias rearward frees the front
     "oversteer": lambda s: _balance(s, +1),  # bias forward calms the rear
 }
@@ -228,7 +319,7 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
 TEMPLATE_KEYS = frozenset(
     {"lap", "laps_left", "mindset", "wear", "age", "pace_laps", "plan_lap", "in_laps"}
     | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets"}
-    | {"in10", "in30", "to", "bias", "bias_to", "label", "budget"}
+    | {"in10", "in30", "to", "bias", "bias_to", "label", "pos", "best", "ahead", "behind", "budget"}
 )
 
 
@@ -296,3 +387,12 @@ def validate(settings: MenuSettings) -> list[str]:
                 if bad:
                     errors.append(f"{where} [{case}]: unknown placeholder(s) {sorted(bad)}")
     return errors
+
+
+def validate_shortcuts(inp: InputSettings, settings: MenuSettings) -> list[str]:
+    ids = {i.id for i in settings.items}
+    return [
+        f"input.shortcuts: unknown menu item {sc.item!r}"
+        for sc in inp.shortcuts
+        if sc.item not in ids
+    ]
