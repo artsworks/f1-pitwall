@@ -303,6 +303,10 @@ class Snapshot:
     wear_mean_pct: float = 0.0
     wear_per_lap_pct: float = 0.0
     blister_max_pct: int = 0
+    wear_hot_corner: str = ""
+    wear_hot_ratio: float = 0.0
+    wear_hot_rate: float = 0.0
+    wear_hot_pct: float = 0.0
     graining: bool = False
     overheat: bool = False
     pit_loss_s: float = 0.0
@@ -694,6 +698,11 @@ class SessionState:
         self.grid_position = 0
         self.sc_ending = False
         self.puncture_corner = ""
+        self._wear_marks: list[tuple[float, ...]] = []
+        self.wear_hot_corner = ""
+        self.wear_hot_ratio = 0.0
+        self.wear_hot_rate = 0.0
+        self.wear_hot_pct = 0.0
         self._race = RacePhase()
         self.race_phase = "formation"
         self.sc_laps = 0
@@ -851,6 +860,7 @@ class SessionState:
             self._pitted_lap_snapshot = self._cars_pitted_this_lap
             self._cars_pitted_this_lap = set()
             self._note_lap_boundary()
+            self._note_corner_wear()
         for i, c in enumerate(pkt.cars):
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
@@ -1182,6 +1192,47 @@ class SessionState:
         self.rival_data_restricted = self._restricted_streak >= int(
             self._th("restricted_detect_laps", 2.0)
         )
+
+    def _note_corner_wear(self) -> None:
+        """Per-corner wear rate over the last few stint laps vs the other three.
+
+        Sets `wear_hot_corner` to a corner name, or "fronts"/"rears" when both
+        tyres on one axle outpace the other axle.
+        """
+        wear = self.tyres_wear.as_tuple()
+        marks = self._wear_marks
+        if marks and any(w < m - 1.0 for w, m in zip(wear, marks[-1], strict=True)):
+            marks.clear()
+        marks.append(wear)
+        window = max(1, int(self._th("wear_corner_window_laps", 3)))
+        del marks[: -(window + 1)]
+        self.wear_hot_corner = ""
+        if len(marks) <= window:
+            return
+        rates = [(a - b) / window for a, b in zip(marks[-1], marks[0], strict=True)]
+        ratio_min = self._th("wear_corner_ratio", 1.4)
+        if self.wear_hot_ratio >= ratio_min:
+            ratio_min -= self._th("wear_corner_hysteresis", 0.15)
+        delta_min = self._th("wear_corner_min_delta_pct", 0.6)
+        front, rear = (rates[2] + rates[3]) / 2, (rates[0] + rates[1]) / 2
+        axles = (("fronts", front, rear, (2, 3)), ("rears", rear, front, (0, 1)))
+        for name, hi, lo, idx in axles:
+            same_axle = min(rates[i] for i in idx) >= ratio_min * lo
+            if lo > 0 and same_axle and hi - lo >= delta_min:
+                self._set_wear_hot(name, hi / lo, hi, max(wear[i] for i in idx))
+                return
+        i = max(range(4), key=rates.__getitem__)
+        others = (sum(rates) - rates[i]) / 3
+        if others > 0 and rates[i] >= ratio_min * others and rates[i] - others >= delta_min:
+            self._set_wear_hot(_CORNER_WORDS[i], rates[i] / others, rates[i], wear[i])
+        else:
+            self.wear_hot_ratio = 0.0
+
+    def _set_wear_hot(self, corner: str, ratio: float, rate: float, pct: float) -> None:
+        self.wear_hot_corner = corner
+        self.wear_hot_ratio = ratio
+        self.wear_hot_rate = rate
+        self.wear_hot_pct = pct
 
     def _update_weather_crossover(self) -> None:
         """Crossover direction from the forecast, with % hysteresis so it
@@ -1524,6 +1575,10 @@ class SessionState:
             if self.delta_to_car_in_front_ms > 0
             else math.inf,
             blister_max_pct=self.blister_max_pct,
+            wear_hot_corner=self.wear_hot_corner,
+            wear_hot_ratio=self.wear_hot_ratio,
+            wear_hot_rate=self.wear_hot_rate,
+            wear_hot_pct=self.wear_hot_pct,
             wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
             unserved_drive_through=self.unserved_drive_through,
             unserved_stop_go=self.unserved_stop_go,

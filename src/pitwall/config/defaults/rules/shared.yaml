@@ -366,3 +366,72 @@ rules:
     say:
       - "Red flag. Red flag. Slow down and return to the pits"
       - "Red flag, red flag. Back to the pits, careful on the way in"
+
+  # Abnormal per-corner / per-axle wear (SessionState._note_corner_wear).
+  # Loaded corner: front left and rear left carry the load in right-handers.
+  - id: wear_front_left
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'front left'"
+    clear_when: "wear_hot_corner != 'front left'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Front left is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Protect it in the right-handers, less entry speed, no sliding"
+      - "Front left's taking a beating, {wear_hot_ratio:.1f} times the rest. Brake a touch earlier into the right-handers, don't slide it"
+      - "Watch the front left, it's wearing {wear_hot_ratio:.1f} times faster. Slow in, fast out in the right-handers"
+  - id: wear_front_right
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'front right'"
+    clear_when: "wear_hot_corner != 'front right'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Front right is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Protect it in the left-handers, less entry speed, no sliding"
+      - "Front right's taking a beating, {wear_hot_ratio:.1f} times the rest. Brake a touch earlier into the left-handers, don't slide it"
+      - "Watch the front right, it's wearing {wear_hot_ratio:.1f} times faster. Slow in, fast out in the left-handers"
+  - id: wear_rear_left
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'rear left'"
+    clear_when: "wear_hot_corner != 'rear left'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Rear left is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Smooth on the throttle out of the right-handers, short-shift"
+      - "Rear left's going, {wear_hot_ratio:.1f} times the rest. Easy with boost out of the right-handers, no wheelspin"
+      - "Look after the rear left, {wear_hot_ratio:.1f} times faster wear. Short-shift out of the slow right-handers"
+  - id: wear_rear_right
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'rear right'"
+    clear_when: "wear_hot_corner != 'rear right'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Rear right is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Smooth on the throttle out of the left-handers, short-shift"
+      - "Rear right's going, {wear_hot_ratio:.1f} times the rest. Easy with boost out of the left-handers, no wheelspin"
+      - "Look after the rear right, {wear_hot_ratio:.1f} times faster wear. Short-shift out of the slow left-handers"
+  - id: wear_fronts
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'fronts'"
+    clear_when: "wear_hot_corner != 'fronts'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Fronts are wearing {wear_hot_ratio:.1f} times the rears. That's understeer eating them. Slow in, fast out"
+      - "Front tyres going {wear_hot_ratio:.1f} times faster than the rears. Less entry speed, don't push through the understeer"
+      - "We're front limited, {wear_hot_ratio:.1f} times the rears. Brake straighter and let the car rotate"
+  - id: wear_rears
+    sessions: [practice, race]
+    priority: 2
+    when: "wear_hot_corner == 'rears'"
+    clear_when: "wear_hot_corner != 'rears'"
+    cooldown_s: 300
+    requires: [car_damage, lap_data]
+    say:
+      - "Rears are wearing {wear_hot_ratio:.1f} times the fronts. Traction. Smooth throttle, short-shift, less boost out of slow corners"
+      - "Rear tyres going {wear_hot_ratio:.1f} times faster than the fronts. Kill the wheelspin, easy on boost in the low gears"
+      - "We're rear limited, {wear_hot_ratio:.1f} times the fronts. Short-shift and feed the throttle in"

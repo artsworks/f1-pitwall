@@ -42,6 +42,7 @@ class RaceSpec:
     puncture_lap: int | None = None  # rear-left tyre damage 100% from mid-lap
     vsc: bool = False  # sc_laps are a VSC instead of a full SC
     finish: bool = False  # chequered flag, then the line
+    wear_scale: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)  # RL RR FL FR
     extra: dict[str, object] = field(default_factory=dict)
 
 
@@ -183,8 +184,8 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 },
             )
             damage: dict[str, object] = {
-                "tyres_wear": (wear,) * 4,
-                "tyres_damage": (int(wear),) * 4,
+                "tyres_wear": tuple(wear * k for k in spec.wear_scale),
+                "tyres_damage": tuple(int(wear * k) for k in spec.wear_scale),
             }
             if spec.wing_lost_lap is not None and (lap, frac) >= (spec.wing_lost_lap, 0.5):
                 damage["front_right_wing_damage"] = 100
