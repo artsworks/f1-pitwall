@@ -218,6 +218,35 @@ def cmd_tune(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_digest(args: argparse.Namespace) -> int:
+    """Grade a session in hindsight and write its compact JSON digest."""
+    from pitwall.digest import build_digest, format_digest
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("digest: persistence disabled")
+        return 1
+    uid = db.latest_session_uid() if args.session in (None, "latest") else int(args.session)
+    if uid is None:
+        print("digest: no sessions in the database")
+        return 1
+    digest = build_digest(db, uid, settings.thresholds)
+    if args.json:
+        print(json.dumps(digest, indent=2, default=str))
+    else:
+        print(format_digest(digest))
+    if args.out != "-":
+        default = Path(settings.persistence.path).expanduser().parent / "digests"
+        out_dir = Path(args.out) if args.out else default
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{uid}.json"
+        path.write_text(json.dumps(digest, indent=2, default=str))
+        print(f"digest: {path}")
+    return 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     """Bundle a recording, its index, decision log, config and DB rows into a
     zip for a bug report."""
@@ -756,6 +785,13 @@ def build_parser() -> argparse.ArgumentParser:
     tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
     tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     tun.set_defaults(func=cmd_tune)
+
+    dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
+    dg.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    dg.add_argument("--session", default=None, help="session uid (default: latest)")
+    dg.add_argument("--out", default=None, help="digest dir (default: ~/.pitwall/digests, - none)")
+    dg.add_argument("--json", action="store_true")
+    dg.set_defaults(func=cmd_digest)
 
     rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
     rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")

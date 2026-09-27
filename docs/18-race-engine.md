@@ -450,6 +450,9 @@ Watchdog: `pitwall start` runs the engine in a supervised thread-free loop; a st
 
 Every write is to SQLite or the learned YAML overlay — never to in-memory state.
 
+`pitwall digest` (docs/20) adds hindsight outcomes (migration 6, `outcomes`): automatic
+`good`/`wrong` labels that `tune` weights by `tune_auto_weight` for calls without a human grade.
+
 ## Fixtures and tests
 
 Real recordings stay out of git (ADR 0005); `tests/race_synth.py` builds a deterministic

@@ -131,6 +131,14 @@ thresholds:
   tune_gain: 2.0
   tune_min_cooldown_mult: 0.5
   tune_max_cooldown_mult: 4.0
+  tune_auto_weight: 0.5         # a hindsight outcome counts this much of a human grade
+  # Hindsight grader (pitwall digest, docs/20)
+  hind_stop_window_laps: 1      # a box call counts as taken if the stop is within this
+  hind_stop_tol_s: 1.5          # stop lap within this of the hindsight-best is "good"
+  hind_lap_tol_ms: 500          # predicted vs actual lap time
+  hind_laps_tol: 2              # laps of pace vs the observed cliff
+  hind_fuel_tol_laps: 0.5       # predicted vs actual finish fuel margin
+  digest_max_findings: 5
 ui:
   state_hz: 5
   pages: [race, battle, car, track, setup]  # UDP Action 4 cycles in this order

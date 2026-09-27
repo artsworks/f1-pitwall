@@ -191,6 +191,24 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX plan_events_session ON plan_events(session_uid, t);
     """,
+    # 6: hindsight outcomes (pitwall digest): automatic labels for fired calls
+    # and plan events against what actually happened; recomputed per session.
+    """
+    CREATE TABLE outcomes (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        call_id TEXT,
+        rule_id TEXT,
+        lap INT,
+        metric TEXT,
+        predicted REAL,
+        actual REAL,
+        error REAL,
+        label TEXT,
+        detail TEXT
+    );
+    CREATE INDEX outcomes_session ON outcomes(session_uid, lap);
+    """,
 ]
 
 
@@ -518,6 +536,50 @@ class Database:
         return self._rows(
             "SELECT * FROM plan_events WHERE session_uid=? ORDER BY id", (_uid_to_sql(uid),)
         )
+
+    def replace_outcomes(self, session_uid: int, rows: list[dict[str, Any]]) -> None:
+        """Replace a session's hindsight outcomes (recomputed as a whole)."""
+        uid = _uid_to_sql(session_uid)
+        with self._conn:
+            self._conn.execute("DELETE FROM outcomes WHERE session_uid=?", (uid,))
+            self._conn.executemany(
+                "INSERT INTO outcomes(session_uid, call_id, rule_id, lap, metric,"
+                " predicted, actual, error, label, detail) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        uid,
+                        r.get("call_id"),
+                        r.get("rule_id"),
+                        r.get("lap"),
+                        r.get("metric"),
+                        r.get("predicted"),
+                        r.get("actual"),
+                        r.get("error"),
+                        r.get("label"),
+                        r.get("detail", ""),
+                    )
+                    for r in rows
+                ],
+            )
+
+    def outcomes_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM outcomes WHERE session_uid=? ORDER BY lap, id", (_uid_to_sql(uid),)
+        )
+
+    def all_outcomes(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM outcomes ORDER BY session_uid, lap, id", ())
+
+    def session_row(self, uid: int) -> dict[str, Any] | None:
+        rows = self._rows("SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),))
+        return rows[0] if rows else None
+
+    def stints_for_session(self, session_uid: int, car_idx: int = 0) -> list[StintRow]:
+        rows = self._conn.execute(
+            "SELECT * FROM stints WHERE session_uid=? AND car_idx=? ORDER BY start_lap",
+            (_uid_to_sql(session_uid), car_idx),
+        ).fetchall()
+        return [self._stint_row(r) for r in rows]
 
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
