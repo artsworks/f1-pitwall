@@ -144,6 +144,30 @@ Per set: actual and visual compound, `m_wear`, `m_available`, `m_recommendedSess
 `m_lifeSpan` (laps left), `m_usableLife`, `m_lapDeltaTime` (ms versus the fitted set),
 `m_fitted`. 20 sets per car (13 dry + 7 wet), plus `m_carIdx` and `m_fittedIdx`.
 
+## Differential (Car Setups, ID 5)
+
+The game exposes the diff only as two setup percentages, `m_onThrottle` and `m_offThrottle`
+(uint8, % locking). There is no live diff-lock or torque-split channel. Observed in the
+first full race recording:
+
+- The values are rebroadcast when changed from the MFD mid-race, a few seconds after
+  the change (bias 57 → 56 at 807 s, on-throttle 60 → 50 at 810 s; off-throttle stayed 25).
+- MFD changes step in 10-point increments on on-throttle; off-throttle was not touched,
+  so its in-race step is unconfirmed.
+
+How the game interprets the percentage is not in the UDP spec; the setup-screen and
+community convention (not verified against game internals) is:
+
+| Setting | Higher % (more locked) | Lower % (more open) |
+|---|---|---|
+| On-throttle | better straight-line traction, more stable exits, more exit understeer | more rotation on exit, inside rear spins up |
+| Off-throttle | more stable turn-in, less lift-off oversteer, more entry understeer | more rotation on entry and mid-corner |
+
+Wheelspin is measurable from Motion Ex `m_wheelSlipRatio` (rear slip with high throttle).
+In that race, rear spin samples (slip > 0.08, throttle > 0.7, 60–200 km/h) ran ~3–13 %
+per lap before the change and ~4–30 % after; tyre age and traffic make it inconclusive
+whether the lower on-throttle diff helped or hurt.
+
 ## Restricted telemetry
 
 With "Your Telemetry: Restricted" (the default), other players see zeros for that car's

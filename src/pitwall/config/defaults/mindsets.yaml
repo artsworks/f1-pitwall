@@ -16,7 +16,7 @@ mindsets:
     overtake_call_gap_s: 0.8
     rival_focus_ahead: 0.5
     rival_info_every_n_laps: 3
-    call_budget_per_lap: 4
+    call_budget_per_lap: 12
     phrasing: advisory
   aggressive:
     inherits: balanced
@@ -36,5 +36,5 @@ mindsets:
     overtake_call_gap_s: 1.0
     rival_focus_ahead: 0.8
     rival_info_every_n_laps: 1
-    call_budget_per_lap: 5
+    call_budget_per_lap: 15
     phrasing: directive

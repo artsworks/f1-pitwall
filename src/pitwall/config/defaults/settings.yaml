@@ -11,6 +11,9 @@ recording:
   compress_on_close: true
 engine:
   tick_hz: 10
+  heartbeat_s: 5            # SQLite runtime heartbeat (crash recovery)
+  recovery_max_age_s: 300   # a heartbeat newer than this on start = crashed mid-session
+  recovery_tail_s: 120      # seconds of the recording tail replayed to rebuild state
 persistence:
   enabled: true
   path: ~/.pitwall/pitwall.sqlite
@@ -36,11 +39,14 @@ policy:
     1: 5.0
     2: 3.0
     3: 1.5
-  calls_per_lap: 4
+  calls_per_lap: 12
   min_gap_s: 3.0
+  min_gap_defer_s: 10.0     # a call inside min_gap waits in the queue up to this long
   dedupe_window_s: 20.0
   quiet: false
   mute_until_lap: 0
+  p3_straight_only: true
+  p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
   engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
@@ -51,10 +57,123 @@ speech:
   rate: 0
   volume: 100
   radio_click: true # soft radio blip before each call
+  # Delivery by priority (Piper): speed multiplier and expression (pitch/energy variation).
+  tone_urgent_speed: 1.1      # P1: quicker, more urgent
+  tone_urgent_expression: 1.2
+  tone_calm_speed: 0.95       # P3: unhurried, flatter
+  tone_calm_expression: 0.85
 mindset:
   active: balanced
+thresholds:
+  # M3 race engine (docs/18); per-track overlays may override these.
+  prior_min_weight: 2          # model_params weight needed to count as a learned prior
+  param_weight_cap: 50         # cap on fold_param running-mean weight
+  deg_min_laps: 3              # valid laps before an OLS deg fit leaves the prior
+  deg_max_ms_per_lap: 600      # clamp on fitted deg/fuel slopes
+  deg_rmse_bad_ms: 800         # rmse at which fit confidence floors at 0.2
+  deg_default_ms_per_lap: 80   # cold-start deg slope when nothing is known
+  fuel_ms_per_lap_default: 30  # pace gained per lap of fuel burn, default
+  tyre_cliff_ms: 1500          # pace loss vs age 0 that counts as the tyre cliff
+  wear_cliff_pct: 70           # mean wear % that counts as the wear cliff
+  wear_per_lap_default_pct: 2.5  # wear %/lap when not measured this stint
+  rival_pace_window: 3         # laps in the rival-pace median
+  pit_loss_default_s: 22       # green-flag pit loss when nothing is known
+  pit_loss_vsc_default_s: 12
+  pit_loss_sc_default_s: 8
+  fuel_kg_per_lap_default: 1.7
+  energy_over_tolerance_j: 200000  # |lap_delta| above this flags over/under
+  ers_store_capacity_j: 4000000    # nominal 4 MJ 2026 ERS store
+  # Race phase + rival scope (docs/18)
+  sc_exit_hold_s: 5            # session seconds a flicker can't bounce the SC/VSC phase
+  neutral_green_s: 6           # "green, green" window after an SC/VSC period ends
+  puncture_gap_pct: 40         # tyre damage this far above wear = puncture
+  front_wing_lost_pct: 50      # wing damage at or above this = wing gone, box for a nose
+  damage_warn_pct: 20          # rear wing / floor / sidepod damage worth a call
+  powertrain_damage_warn_pct: 30  # gearbox / engine damage worth a call
+  last_lap_fight_s: 1.0        # last lap: car within this either way = attack/defend call
+  restricted_detect_laps: 2    # all-zero rival telemetry for this many laps = restricted
+  restricted_confidence_factor: 0.7
+  pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)
+  thermal_hysteresis_c: 4      # overheat/graining latch hysteresis
+  tyre_graining_c: 75          # coldest inner at or below this = graining band
+  drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
+  drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
+  penalty_recent_s: 10         # session seconds a PENA stays "recent"
+  rain_inter_pct: 60           # forecast rain -> crossover bands
+  rain_wet_pct: 85
+  rain_dry_pct: 30
+  rain_hysteresis_pct: 5       # crossover band hysteresis
+  # Pit-window optimiser + race rules (docs/18)
+  pit_horizon_laps: 8          # candidate stop laps evaluated ahead
+  pit_min_laps_left: 2         # no stop inside the last N laps
+  cliff_ms_per_lap: 1000       # extra pace loss per lap past the tyre cliff
+  outlap_warmup_s: 0.8         # cold-tyre cost on the out-lap
+  undercut_laps: 2
+  undercut_max_gap_s: 3.0
+  overcut_laps: 2
+  overcut_min_laps: 3
+  free_stop_margin_s: 1.0
+  sc_stop_min_laps_left: 3
+  box_in_max_laps: 3
+  tyre_life_speak_laps: 10
+  blister_warn_pct: 20
+  blister_hysteresis_pct: 5
+  fuel_hysteresis_laps: 0.1
+  fuel_spare_laps: 1.0
+  gap_hysteresis_s: 0.3
+  warnings_warn: 3
+  pit_exit_traffic_s: 1.5
+  # Named strategy plans A/B/C (docs/03 "Strategy plans")
+  plan_max_stops: 2            # candidate strategies up to this many stops
+  plan_min_stint_laps: 3       # shortest stint a candidate may contain
+  plan_window_s: 1.5           # stop laps within this of the best form the window
+  plan_two_compound_rule: 1    # dry race must use two dry compounds
+  plan_off_s: 3.0              # active plan this much slower than best = off plan
+  plan_off_hysteresis_s: 1.0   # back on plan once inside plan_off_s minus this
+  plan_switch_s: 5.0           # switch plans once the active one loses this much
+  plan_status_every_laps: 5    # "still on Plan A" cadence (sector 1, P3, budgeted)
+  plan_deg_factor_soft: 1.6    # deg vs medium when a compound has no learned prior
+  plan_deg_factor_medium: 1.0
+  plan_deg_factor_hard: 0.6
+  plan_pace_soft_ms: -400      # fresh-set pace vs medium at age 0
+  plan_pace_medium_ms: 0
+  plan_pace_hard_ms: 400
+  # Battle state + racecraft coaching (docs/20 L3); attack range = mindset attack_window_s
+  battle_defend_gap_s: 1.0      # car behind within this: defending
+  battle_threat_gap_s: 3.0      # car behind within this and closing: under threat
+  battle_catch_gap_s: 5.0       # car ahead within this and closing: catching
+  battle_closing_min_s: 0.2     # closing rate (s/lap) that counts as a trend
+  battle_min_episode_s: 5.0     # shorter attack/defend spells don't train the pass model
+  battle_result_hold_s: 20.0    # "passed / held / lost" stays reportable this long
+  battle_prior_weight: 4.0      # pseudo-episodes behind the pass/hold priors
+  battle_pass_drs_prior: 0.35
+  battle_pass_nodrs_prior: 0.15
+  battle_hold_prior: 0.7
+  battle_attack_prob_min: 0.3   # below this, attacking is patience + tyres, not "go"
+  battle_patience_laps: 2       # laps stuck in attack range before the patience call
+  battle_manage_every_laps: 5   # "gaps stable" cadence
+  # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
+  tune_min_grades: 3
+  tune_gain: 2.0
+  tune_min_cooldown_mult: 0.5
+  tune_max_cooldown_mult: 4.0
+  tune_auto_weight: 0.5         # a hindsight outcome counts this much of a human grade
+  # Hindsight grader (pitwall digest, docs/20)
+  hind_stop_window_laps: 1      # a box call counts as taken if the stop is within this
+  hind_stop_tol_s: 1.5          # stop lap within this of the hindsight-best is "good"
+  hind_extrapolate_laps: 3      # stop-cost search may stretch a stint this far past what was driven
+  hind_cliff_sustain_laps: 2    # consecutive laps past tyre_cliff_ms before hindsight calls it a cliff
+  hind_lap_tol_ms: 500          # predicted vs actual lap time
+  hind_laps_tol: 2              # laps of pace vs the observed cliff
+  hind_fuel_tol_laps: 0.5       # predicted vs actual finish fuel margin
+  digest_max_findings: 5
 ui:
   state_hz: 5
+  pages: [race, battle, car, track, setup]  # UDP Action 4 cycles in this order
+  auto_page: false              # true: battle page in a fight, track page under SC/VSC/formation
+  auto_page_manual_hold_s: 60   # a manual page choice holds this long before auto may switch
+  auto_page_battle_gap_s: 1.0
+  auto_page_call_hold_s: 8       # never auto-switch while a call banner is up
 input:
   double_press_ms: 350
   long_press_ms: 800
@@ -66,6 +185,19 @@ input:
   spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg
   udp_action_bit: 0x00100000
   long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
-  silent_toggle_bit: 0x00400000  # any press on UDP Action 3 also toggles radio silent; 0 disables
+  silent_toggle_bit: 0            # dedicated radio-silent toggle; hold Action 1 or the menu instead
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
+  mindset_toggle_bit: 0x01000000  # UDP Action 5 (stick left): balanced <-> aggressive; 0 disables
+  page_cycle_bit: 0x00800000      # UDP Action 4 (stick right): next dashboard page; 0 disables
+  # Driver menu (docs/12, menu.yaml): Up/Down open + scroll, Action 1 confirms while open.
+  menu_up_bit: 0x00200000         # UDP Action 2 (stick up); 0 disables
+  menu_down_bit: 0x00400000       # UDP Action 3 (stick down); 0 disables
+  menu_close_bit: 0               # dedicated close button; 0 disables
+  menu_open_actions:              # while the menu is open: stick right confirms, left closes
+    page: confirm
+    mindset: close
+  shortcuts:                      # Stream Deck taps: ask one menu item directly
+    - {bit: 0x02000000, item: pit}        # UDP Action 6: Pit now?
+    - {bit: 0x04000000, item: race_stat}  # UDP Action 7: most relevant race stat
+    - {bit: 0x08000000, item: fight}      # UDP Action 8: fight + pace briefing
   negative_mute_laps: 3

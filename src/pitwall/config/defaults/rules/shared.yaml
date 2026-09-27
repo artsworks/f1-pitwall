@@ -27,7 +27,7 @@ rules:
   - id: front_wing_damage
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase != 'garage' and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
+    when: "phase != 'garage' and th.front_wing_damage_warn_pct <= max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
     clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_damage_warn_pct"
     still_true: "max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_damage_warn_pct"
     cooldown_s: 120
@@ -40,6 +40,99 @@ rules:
         say:
           - "More wing damage. Left {damage.front_left_wing}, right {damage.front_right_wing} percent. We'll talk about a new nose."
           - "Wing's getting worse, {damage.front_left_wing} and {damage.front_right_wing} percent. Keep it off the kerbs."
+  # Wing gone in a race: box for a nose unless the flag is too close.
+  - id: front_wing_lost_box
+    sessions: [race]
+    priority: 1
+    when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining > th.pit_min_laps_left"
+    clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
+    still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct"
+    cooldown_s: 60
+    requires: [car_damage, lap_data]
+    say:
+      - "Front wing's gone. Box this lap, box this lap for a new nose"
+      - "We've lost the front wing. Box, box, new nose this lap"
+      - "Wing's broken, front left {damage.front_left_wing}, front right {damage.front_right_wing}. Box this lap"
+  - id: front_wing_lost_nurse
+    sessions: [race]
+    priority: 1
+    when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining <= th.pit_min_laps_left"
+    clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
+    cooldown_s: 60
+    requires: [car_damage, lap_data]
+    say:
+      - "Front wing's gone, but it's too late to stop. Stay out, nurse it home, it'll push"
+      - "Wing's damaged. Not worth a stop now, bring it home, early on the brakes"
+  - id: puncture
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "phase not in ('garage', 'in_lap', 'finished') and puncture_corner != ''"
+    clear_when: "puncture_corner == ''"
+    still_true: "puncture_corner != ''"
+    cooldown_s: 60
+    requires: [car_damage]
+    say:
+      - "Puncture, {puncture_corner}. Box, box. Bring it back steady, off the racing line"
+      - "We've got a puncture, {puncture_corner}. Box this lap, easy through the fast stuff"
+      - "{puncture_corner} tyre's gone. Box, box, nurse it back"
+  - id: rear_wing_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and damage.rear_wing >= th.damage_warn_pct"
+    clear_when: "damage.rear_wing < th.damage_warn_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say:
+      - "Rear wing damage, {damage.rear_wing} percent. Less rear grip, gentle on the throttle out of the slow corners"
+      - "We've got {damage.rear_wing} percent rear wing damage. Watch the rear on corner exit"
+  - id: floor_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and max(damage.floor, damage.diffuser, damage.sidepod) >= th.damage_warn_pct"
+    clear_when: "max(damage.floor, damage.diffuser, damage.sidepod) < th.damage_warn_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say:
+      - "Floor damage. We've lost downforce, brake a touch earlier into the fast stuff"
+      - "Damage on the floor. Less grip in the high-speed corners, adjust your lines"
+  - id: gearbox_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and damage.gearbox >= th.powertrain_damage_warn_pct"
+    clear_when: "damage.gearbox < th.powertrain_damage_warn_pct"
+    cooldown_s: 180
+    requires: [car_damage]
+    say:
+      - "Gearbox damage, {damage.gearbox} percent. Short-shift and be gentle on the downshifts"
+      - "Gearbox is at {damage.gearbox} percent damage. Smooth shifts, no kerb abuse"
+  - id: engine_damage
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and damage.engine >= th.powertrain_damage_warn_pct"
+    clear_when: "damage.engine < th.powertrain_damage_warn_pct"
+    cooldown_s: 180
+    requires: [car_damage]
+    say:
+      - "Engine damage, {damage.engine} percent. Lift and coast into the big stops, look after it"
+      - "Engine's at {damage.engine} percent damage. Short-shift where you can"
+  - id: drs_fault
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and damage.drs_fault != 0"
+    clear_when: "damage.drs_fault == 0"
+    requires: [car_damage]
+    say:
+      - "DRS fault. No DRS for us, overtakes have to come on the brakes"
+      - "We've lost DRS, it's faulty. Work the exits instead"
+  - id: ers_fault
+    sessions: [practice, qualifying, race]
+    priority: 1
+    when: "phase != 'garage' and damage.ers_fault != 0"
+    clear_when: "damage.ers_fault == 0"
+    requires: [car_damage]
+    say:
+      - "ERS fault, no deployment. Protect the braking zones, they'll come at you on the straights"
+      - "We've got an ERS fault. No battery, defend the inside"
   # Boost still on when the driver lifts or brakes for a corner means full power on the exit.
   - id: boost_left_on
     sessions: [practice, qualifying, race]
@@ -87,7 +180,7 @@ rules:
     priority: 3
     when: "lockup == 'front' and lockup_spot_laps >= 1"
     clear_when: "lockup == ''"
-    cooldown_s: 60
+    cooldown_s: 150
     cooldown_group: lockup_front
     requires: [motion_ex]
     say:
@@ -97,8 +190,8 @@ rules:
     escalate:
       - after: 3
         say:
-          - "That braking zone again, {lockup_spot_laps} laps running now. It's not moving, brake earlier."
-          - "Same place, {lockup_spot_laps} laps in a row. Pick a new braking marker."
+          - "That braking zone again, {lockup_spot_laps} laps running now. Brake earlier, or a click of bias rearward from {front_brake_bias}."
+          - "Same place, {lockup_spot_laps} laps in a row. Pick a new marker, or take a click of bias back from {front_brake_bias}."
   - id: lockup_front
     sessions: [practice, qualifying, race]
     priority: 3
@@ -135,6 +228,9 @@ rules:
       - "Rear's locking on entry. Bias forward a click or two from {front_brake_bias}."
       - "{lockup_wheel} locked. Try more front bias, currently {front_brake_bias}."
     escalate:
+      - after: 2
+        say:
+          - "Rears still stepping out on entry. Bias forward from {front_brake_bias}, or more off-throttle diff, you're on {setup_off_throttle_diff} percent."
       - after: 3
         say:
           - "Rears again. Bias forward, you're still on {front_brake_bias}."

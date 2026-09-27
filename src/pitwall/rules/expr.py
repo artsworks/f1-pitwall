@@ -22,6 +22,7 @@ _ALLOWED_NODES = (
     ast.Attribute,
     ast.Constant,
     ast.Subscript,
+    ast.Tuple,
     ast.Call,
     ast.Load,
     # operators
@@ -138,13 +139,44 @@ def make_namespace(
 ) -> TrackedNamespace:
     """Locals for one predicate evaluation. `fresh(name)` checks a source
     packet's age against its staleness limit."""
+    return TrackedNamespace(
+        namespace_data(
+            snapshot,
+            thresholds=thresholds,
+            mode=mode,
+            staleness_age=staleness_age,
+            staleness_limit=staleness_limit,
+        )
+    )
+
+
+_PUBLIC_NAMES: dict[type, tuple[str, ...]] = {}
+
+
+def public_names(obj: Any) -> tuple[str, ...]:
+    """Public attribute names of `obj`'s type (cached; snapshots share one type)."""
+    cls = type(obj)
+    names = _PUBLIC_NAMES.get(cls)
+    if names is None:
+        names = _PUBLIC_NAMES[cls] = tuple(n for n in dir(obj) if not n.startswith("_"))
+    return names
+
+
+def namespace_data(
+    snapshot: Any,
+    *,
+    thresholds: Mapping[str, Any],
+    mode: Mapping[str, Any],
+    staleness_age: Any,
+    staleness_limit: Any,
+) -> dict[str, Any]:
+    """Read-only name table for one snapshot, shared by every rule's
+    TrackedNamespace in a tick."""
 
     def fresh(name: str) -> bool:
         return bool(staleness_age(name) < staleness_limit(name))
 
-    data: dict[str, Any] = {
-        name: getattr(snapshot, name) for name in dir(snapshot) if not name.startswith("_")
-    }
+    data: dict[str, Any] = {name: getattr(snapshot, name) for name in public_names(snapshot)}
     data.update(
         {
             "th": AttrView(thresholds),
@@ -156,4 +188,4 @@ def make_namespace(
             "fresh": fresh,
         }
     )
-    return TrackedNamespace(data)
+    return data
