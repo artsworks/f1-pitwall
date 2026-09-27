@@ -353,6 +353,43 @@ Migration 3 (append-only): `calls.active_plan TEXT`, `calls.on_plan INT` and a
 sequence, plans JSON)` table; `Database.insert_plan_event()` /
 `plan_events_for_session()`.
 
+## Battle state (`pitwall.strategy.battle`)
+
+`Engine._battle()` runs every racing tick after the plans and classifies the fight around
+the player (first match wins):
+
+| mode | condition |
+|---|---|
+| `defending` | car behind within `battle_defend_gap_s` (1.0 s) |
+| `attacking` | car ahead within the mindset's `attack_window_s` |
+| `under_threat` | car behind within `battle_threat_gap_s` (3 s), closing ≥ `battle_closing_min_s` and in range before the flag |
+| `catching` | car ahead within `battle_catch_gap_s` (5 s), closing ≥ `battle_closing_min_s` and in range before the flag |
+| `managing` | a car within catch/threat range but gaps stable |
+| `free_air` | otherwise |
+
+Closing rate = measured gap trend when available, else the rival pace delta. Attack and
+defend ranges get `gap_hysteresis_s` once entered. Snapshot fields: `battle_mode`,
+`battle_mode_laps`, `battle_catch_laps`, `battle_threat_laps`, `battle_closing_*_s`,
+`battle_tyre_offset_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
+`battle_result_recent`, `battle_result_name`.
+
+**Episodes and the pass model.** Each attacking / defending spell against one rival is an
+episode, closed when the mode or rival changes: attack → `passed` (position gained and the
+rival no longer ahead) or `failed`; defend → `held` or `lost`. Episodes shorter than
+`battle_min_episode_s` that change nothing are dropped. Each is written to the decision log
+(`outcome: "battle"`) and folded into `model_params` (track, compound 0) as
+`battle_pass_drs`, `battle_pass_nodrs` or `battle_hold`. Live `battle_pass_prob` /
+`battle_hold_prob` are those rates shrunk toward the `battle_*_prior` settings with
+`battle_prior_weight` pseudo-episodes, so one race can't swing them.
+
+**Calls** (shared `battle` cooldown group, budgeted; mode calls re-arm each lap so a
+budget-suppressed call is retried): `battle_catching` ("Push now…, on him in 4 laps"),
+`battle_attack` ("Hammer time", only when `battle_pass_prob ≥ battle_attack_prob_min`),
+`battle_patience` (stuck in range where passing is hard: "stay with him, look after the
+tyres"), `battle_defend` (P2), `battle_under_threat`, `battle_manage` (every
+`battle_manage_every_laps`), and encouragement `battle_passed` / `battle_held` /
+`battle_lost`.
+
 ## Rules (`config/defaults/rules/race.yaml`)
 
 All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.call_budget_per_lap`

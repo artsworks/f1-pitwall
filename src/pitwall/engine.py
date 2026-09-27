@@ -34,6 +34,18 @@ from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow
+from pitwall.strategy.battle import (
+    HOLD,
+    PASS_COMPOUND,
+    PASS_DRS,
+    PASS_NODRS,
+    Battle,
+    BattleInputs,
+    BattleRates,
+    BattleTracker,
+    Episode,
+    shrink,
+)
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
@@ -56,6 +68,7 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
         "menu_up": int(inp.menu_up_bit),
         "menu_down": int(inp.menu_down_bit),
         "menu_close": int(inp.menu_close_bit),
+        **{f"item:{sc.item}": int(sc.bit) for sc in inp.shortcuts},
     }
 
 
@@ -130,6 +143,7 @@ class Engine:
         state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         # Live overrides owned by the backend and pushed to every client.
         self.mindset_override: str | None = None
+        self.budget_live: int | None = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
         self._page_manual_t: float | None = None
@@ -165,6 +179,9 @@ class Engine:
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
+        # Battle state + learned pass model (docs/20 L3).
+        self.battle_tracker = BattleTracker()
+        self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
         self._pit_in_lap: LapSummary | None = None
@@ -207,7 +224,9 @@ class Engine:
         mode = self.mode()
         if self.rule_engine is not None:
             self.rule_engine.mode = mode
-        budget = mode.get("call_budget_per_lap")
+        budget = (
+            self.budget_live if self.budget_live is not None else mode.get("call_budget_per_lap")
+        )
         self.dispatcher.budget_override = int(budget) if budget is not None else None
         self.dispatcher.log.mindset = self.mindset
 
@@ -219,6 +238,15 @@ class Engine:
         snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
         self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
+
+    def cycle_budget(self) -> int:
+        """Next driver-menu calls-per-lap step; overrides the mindset's budget."""
+        steps = self.store.current().menu.budget_steps or [4]
+        cur = self.dispatcher.budget_override
+        nxt = next((s for s in steps if cur is None or s > cur), steps[0])
+        self.budget_live = nxt
+        self._apply_mode()
+        return nxt
 
     def cycle_mindset(self, now: float) -> None:
         cycle = [m for m in self.store.current().input.mindset_cycle if m]
@@ -310,9 +338,21 @@ class Engine:
         """Route a press through the menu. False: not a menu press; the
         caller handles it as usual."""
         settings = self.store.current().menu
-        if p.kind in ("menu_up", "menu_down"):
+        kind = p.kind
+        if kind.startswith("item:"):
+            item = next((i for i in settings.items if i.id == kind[5:]), None)
+            if item is not None:
+                self._menu_close(p.t, snapshot, "shortcut")
+                self._menu_answer(item, p.t, snapshot, "shortcut")
+            return True
+        if self.menu.open and kind in ("page", "mindset"):
+            remap = self.store.current().input.menu_open_actions
+            op = remap.page if kind == "page" else remap.mindset
+            if op:
+                kind = f"menu_{op}"
+        if kind in ("menu_up", "menu_down"):
             was_open = self.menu.open
-            item = self.menu.step(settings, -1 if p.kind == "menu_up" else 1, p.t)
+            item = self.menu.step(settings, -1 if kind == "menu_up" else 1, p.t)
             if item is None:
                 return True
             if not was_open:
@@ -320,15 +360,15 @@ class Engine:
             if settings.speak_on_scroll:
                 self.dispatcher.menu_prompt(item.label, snapshot)
             return True
-        if p.kind == "menu_close":
+        if kind == "menu_close":
             self._menu_close(p.t, snapshot, "close")
             return True
         if not self.menu.open:
-            return p.kind == "menu_confirm"
-        if p.kind in ("ack", "menu_confirm"):
+            return kind == "menu_confirm"
+        if kind in ("ack", "menu_confirm"):
             self._menu_confirm(p.t, snapshot)
             return True
-        if p.kind in ("neg", "bookmark"):
+        if kind in ("neg", "bookmark"):
             self._menu_close(p.t, snapshot, "cancel")
             return True
         return False
@@ -373,12 +413,16 @@ class Engine:
         item = self.menu.selected(self.store.current().menu)
         self.menu.close()
         self.dispatcher.cancel_menu_prompt()
-        if item is None:
-            return
+        if item is not None:
+            self._menu_answer(item, t, snapshot, "menu")
+
+    def _menu_answer(self, item: MenuItemModel, t: float, snapshot: Snapshot, via: str) -> None:
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
+        if item.action == "budget":
+            values["budget"] = str(self.cycle_budget())
         text = self._menu_replies.pick(item, case, values)
-        self._menu_log(t, snap, "driver_input", item, text, {"case": case, **values})
+        self._menu_log(t, snap, "driver_input", item, text, {"case": case, "via": via, **values})
         if item.kind == "opinion" and item.topic:
             self.opinions[item.topic] = (item.id, snapshot.lap_num)
         if item.action == "mindset":
@@ -413,6 +457,8 @@ class Engine:
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
+        self.battle_tracker.reset()
+        self._battle_rates = None
         self._stops_done = 0
         self._used_compounds.clear()
         self._prev_race_phase = ""
@@ -988,6 +1034,106 @@ class Engine:
         if self.db is not None and self.state.session_uid is not None:
             self.db.insert_plan_event(self.state.session_uid, record)
 
+    def battle_rates(self, track_id: int) -> BattleRates:
+        """Per-track pass / hold rates from model_params, shrunk to the priors."""
+        if self._battle_rates is not None and self._battle_rates[0] == track_id:
+            return self._battle_rates[1]
+        w = self._th("battle_prior_weight", 4.0)
+        priors = {
+            PASS_DRS: self._th("battle_pass_drs_prior", 0.35),
+            PASS_NODRS: self._th("battle_pass_nodrs_prior", 0.15),
+            HOLD: self._th("battle_hold_prior", 0.7),
+        }
+        vals: dict[str, float] = {}
+        for name, prior in priors.items():
+            p = self.db.get_param(track_id, PASS_COMPOUND, name) if self.db else None
+            vals[name] = shrink(p.value if p else None, p.weight if p else 0.0, prior, w)
+        rates = BattleRates(vals[PASS_DRS], vals[PASS_NODRS], vals[HOLD])
+        self._battle_rates = (track_id, rates)
+        return rates
+
+    def _battle(self, snap: Snapshot) -> Snapshot:
+        """Battle mode + attack/defend episodes; episode outcomes fold into
+        the track's pass model and are written to the decision log."""
+        if snap.session_kind != "race" or snap.race_phase != "racing":
+            return snap
+        attack = self.mode().get("attack_window_s", 1.0)
+        own = snap.predicted_lap_ms or int(snap.base_pace_ms)
+        inp = BattleInputs(
+            now=snap.now,
+            lap_num=snap.lap_num,
+            position=snap.position,
+            laps_remaining=snap.laps_remaining,
+            ahead_idx=snap.rival_ahead_idx,
+            behind_idx=snap.rival_behind_idx,
+            gap_ahead_s=snap.gap_ahead_s,
+            gap_behind_s=snap.gap_behind_s,
+            trend_ahead_s=snap.gap_trend_ahead_s,
+            trend_behind_s=snap.gap_trend_behind_s,
+            own_pace_ms=own,
+            ahead_pace_ms=snap.rival_ahead_pace_ms,
+            behind_pace_ms=snap.rival_behind_pace_ms,
+            own_age=snap.tyre_age_laps,
+            ahead_age=snap.rival_ahead_age,
+            behind_age=snap.rival_behind_age,
+            drs_available=snap.drs_available,
+            attack_gap_s=float(attack) if isinstance(attack, int | float) else 1.0,
+        )
+        tracker = self.battle_tracker
+        b: Battle = tracker.update(
+            inp, self.store.current().thresholds, self.battle_rates(snap.track_id)
+        )
+        for ep in tracker.drain():
+            self._persist_episode(snap, ep)
+        name = ""
+        if 0 <= b.result_rival_idx < len(snap.participants):
+            name = snap.participants[b.result_rival_idx].name
+        return dataclasses.replace(
+            snap,
+            battle_mode=b.mode,
+            battle_mode_laps=b.mode_laps,
+            battle_catch_laps=b.catch_laps,
+            battle_threat_laps=b.threat_laps,
+            battle_closing_ahead_s=b.closing_ahead_s,
+            battle_closing_behind_s=b.closing_behind_s,
+            battle_tyre_offset_ahead=b.tyre_offset_ahead,
+            battle_tyre_offset_behind=b.tyre_offset_behind,
+            battle_pass_prob=b.pass_prob,
+            battle_hold_prob=b.hold_prob,
+            battle_result=b.result,
+            battle_result_recent=b.result_recent,
+            battle_result_name=name,
+        )
+
+    def _persist_episode(self, snap: Snapshot, ep: Episode) -> None:
+        self.dispatcher.log.write(
+            {
+                "t": snap.now,
+                "session_time": snap.session_time,
+                "lap": ep.end_lap,
+                "rule_id": None,
+                "outcome": "battle",
+                "kind": ep.kind,
+                "rival_idx": ep.rival_idx,
+                "start_lap": ep.start_lap,
+                "drs": ep.drs,
+                "result": ep.result,
+            }
+        )
+        if self.db is None or snap.track_id < 0:
+            return
+        name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
+        cap = self._th("param_weight_cap", 50.0)
+        self.db.fold_param(
+            snap.track_id,
+            PASS_COMPOUND,
+            name,
+            1.0 if ep.success else 0.0,
+            1.0,
+            param_weight_cap=cap,
+        )
+        self._battle_rates = None
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         if self.state.track_id != self._track_loaded:
@@ -995,7 +1141,7 @@ class Engine:
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
         self._write_laps()
         self._update_model()
-        snapshot = self._plan(self.state.snapshot(now))
+        snapshot = self._battle(self._plan(self.state.snapshot(now)))
         if (
             snapshot.session_ended
             and not self._session_ended_written

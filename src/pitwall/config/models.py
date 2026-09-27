@@ -71,6 +71,20 @@ class UiSettings(BaseModel):
     auto_page_call_hold_s: float = 8.0  # no auto switch this soon after a call went out
 
 
+class ShortcutBinding(BaseModel):
+    """A dedicated button that asks one menu item directly (docs/12)."""
+
+    bit: int
+    item: str  # menu item id
+
+
+class MenuOpenActions(BaseModel):
+    """What the page / mindset buttons do while the menu is open ("" = as usual)."""
+
+    page: Literal["confirm", "close", ""] = ""
+    mindset: Literal["confirm", "close", ""] = ""
+
+
 class InputSettings(BaseModel):
     double_press_ms: int = 350
     long_press_ms: int = 800
@@ -98,7 +112,9 @@ class InputSettings(BaseModel):
     # Driver menu (docs/12): up/down open and scroll; Action 1 confirms while open.
     menu_up_bit: int = 0  # e.g. 0x00200000 = UDP Action 2
     menu_down_bit: int = 0  # e.g. 0x00400000 = UDP Action 3
-    menu_close_bit: int = 0  # e.g. 0x04000000 = UDP Action 7; closes without answering
+    menu_close_bit: int = 0  # dedicated close button; closes without answering
+    menu_open_actions: MenuOpenActions = Field(default_factory=MenuOpenActions)
+    shortcuts: list[ShortcutBinding] = Field(default_factory=list)
     silent_on_replies: list[str] = Field(
         default_factory=lambda: [
             "Radio silent. Leave you to it.",
@@ -126,6 +142,12 @@ class InputSettings(BaseModel):
             "menu_down_bit": self.menu_down_bit,
             "menu_close_bit": self.menu_close_bit,
         }
+        items: set[str] = set()
+        for i, sc in enumerate(self.shortcuts):
+            if sc.item in items:
+                raise ValueError(f"input.shortcuts: item {sc.item!r} bound twice")
+            items.add(sc.item)
+            bits[f"shortcuts[{i}]"] = sc.bit
         seen: dict[int, str] = {}
         for name, bit in bits.items():
             if not bit:
@@ -136,14 +158,14 @@ class InputSettings(BaseModel):
         return self
 
 
-MenuAction = Literal["mindset", "silent", "page"]
+MenuAction = Literal["mindset", "silent", "page", "budget"]
 
 
 class MenuItemModel(BaseModel):
     """One driver-menu entry (docs/12). `kind`:
     question -> answered from the snapshot by the `answer` handler (defaults to id);
     opinion  -> recorded (decision log + SQLite) and acknowledged from `replies`;
-    action   -> runs `action` (mindset / silent / page)."""
+    action   -> runs `action` (mindset / silent / page / budget)."""
 
     id: str
     label: str  # shown on the overlay and spoken on scroll; keep it 2-3 words
@@ -161,6 +183,8 @@ class MenuSettings(BaseModel):
     speak_on_scroll: bool = True  # speak each item name as it is highlighted
     wrap: bool = True
     opinion_hold_laps: int = 5  # a balance opinion biases advice this many laps
+    # "budget" action cycles the P2/P3 calls-per-lap limit through these (overrides mindset)
+    budget_steps: list[int] = Field(default_factory=lambda: [4, 8, 12, 20])
     items: list[MenuItemModel] = Field(default_factory=list)
 
 
@@ -179,6 +203,10 @@ class SpeechSettings(BaseModel):
     rate: int = 0
     volume: int = 100
     radio_click: bool = True
+    tone_urgent_speed: float = 1.1
+    tone_urgent_expression: float = 1.2
+    tone_calm_speed: float = 0.95
+    tone_calm_expression: float = 0.85
 
 
 class MindsetSettings(BaseModel):

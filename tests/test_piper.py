@@ -149,3 +149,27 @@ def test_real_piper_synth_renders_speech() -> None:
     assert 0.5 < seconds < 5.0
     with wave.open(io.BytesIO(wav)) as w:
         assert w.getnframes() / w.getframerate() == pytest.approx(seconds)
+
+
+def test_piper_speaker_renders_each_priority_with_its_tone() -> None:
+    player = FakePlayer()
+    used: list[str] = []
+
+    def tone(name: str) -> Callable[[str], tuple[bytes, float]]:
+        def synth(text: str) -> tuple[bytes, float]:
+            used.append(name)
+            return f"{name}:{text}".encode(), 0.0
+
+        return synth
+
+    tones = {1: tone("urgent"), 2: tone("normal"), 3: tone("calm")}
+    sp = PiperSpeaker(tones[2], player, tones=tones)
+    spoken: list[str] = []
+    sp.on_spoken = lambda cid, t: spoken.append(cid)
+    sp.speak(_call("a", priority=3, text="x"))
+    _wait_for(lambda: spoken == ["a"])
+    sp.speak(_call("b", priority=1, text="x"))
+    _wait_for(lambda: spoken == ["a", "b"])
+    assert used == ["calm", "urgent"]
+    assert player.played == [b"calm:x", b"urgent:x"]
+    sp.close()

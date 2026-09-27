@@ -11,11 +11,11 @@ than any threshold tuning.
 | Single press | Fanatec wheel **button 2** → UDP Action 1 | **Spacebar** | **Acknowledge** — "copy"; **confirm** while the driver menu is open |
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now"; closes the menu while open |
 | Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off (`input.long_press: bookmark` makes it a marker instead) |
-| Menu up / down | UDP Action 2 / 3 | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
-| Dashboard page cycle | UDP Action 4 | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow |
-| Mindset toggle | UDP Action 5 | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item |
-| Radio silent toggle | UDP Action 6 | — | same as long press; also a menu item |
-| Menu close | UDP Action 7 | `Esc` | close the menu without answering |
+| Menu up / down | UDP Action 2 / 3 (stick up / down) | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
+| Dashboard page cycle | UDP Action 4 (stick right) | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow. **Confirm** while the menu is open |
+| Mindset toggle | UDP Action 5 (stick left) | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item. **Close** while the menu is open |
+| Shortcuts | UDP Action 6 / 7 / 8 (Stream Deck) | — | ask "Pit now?" / "Race stat" / "Fight" directly |
+| Menu close | — | `Esc` | close the menu without answering |
 
 Both inputs feed the same press detector, so behaviour is identical whichever is used.
 Mid-race nothing requires clicking the dashboard, which would take focus from a
@@ -76,8 +76,7 @@ down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMA
 
 ## Radio silent
 
-For a battle: the driver wants to concentrate, not listen. Long press (or UDP Action 3)
-(or UDP Action 6, or the "Radio silent" menu item) toggles radio silent:
+For a battle: the driver wants to concentrate, not listen. Long press (or the "Radio silent" menu item, or `input.silent_toggle_bit` if bound) toggles radio silent:
 
 - Speech stops; every call still reaches the dashboard's banner and radio log as normal.
 - P1 (urgent) calls still speak (`input.silent_keeps_p1`, default on).
@@ -88,12 +87,13 @@ For a battle: the driver wants to concentrate, not listen. Long press (or UDP Ac
 - It stays on until toggled off, including across sessions.
 
 Settings: `input.long_press` (`silent` | `bookmark`), `input.silent_toggle_bit`
-(`0x02000000` = UDP Action 6, `0` disables), `input.silent_on_replies`,
+(default `0`: a dedicated toggle button; Action 6 is a Stream Deck shortcut by default), `input.silent_on_replies`,
 `input.silent_off_replies`.
 
 Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
 whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
-If a hold doesn't toggle, bind UDP Action 6 (or use the menu item) — no code change needed.
+If a hold doesn't toggle, use the "Radio silent" menu item or set `input.silent_toggle_bit`
+to a free UDP Action — no code change needed.
 
 ## Mindset and page buttons (M3)
 
@@ -123,28 +123,35 @@ question or state an opinion. Driving, it has to be three buttons and a glance.
 
 Twelve UDP Actions exist (`buttonStatus` bits, UDP Action *n* = `0x00100000 << (n-1)`).
 Before the menu, four were used: 1 ack/neg/silent, 2 mindset, 3 radio silent, 4 page.
-The driver can free three more (5–7), mirrored on a Stream Deck.
+The driver has **five wheel inputs** (Action 1 plus the Fanatec F1 V2.5 left-thumb stick
+up/down/right/left) and **three Stream Deck keys** (Actions 6–8). A Stream Deck key sends
+a tap only (holding it may not hold the game key), so the deck keys have one meaning each.
 
-| UDP Action | Bit | Setting | Wheel / Stream Deck suggestion | Menu closed | Menu open |
+| UDP Action | Bit | Setting | Input | Menu closed | Menu open |
 |---|---|---|---|---|---|
-| 1 | `0x00100000` | `input.udp_action_bit` | button 2 (thumb) / big key; Spacebar | tap ack · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
-| 2 | `0x00200000` | `input.menu_up_bit` | rotary/funky switch up / key ▲ | **open** on the last item | previous item |
-| 3 | `0x00400000` | `input.menu_down_bit` | rotary/funky switch down / key ▼ | **open** on the first item | next item |
-| 4 | `0x00800000` | `input.page_cycle_bit` | spare button / key PAGE | next dashboard page | next dashboard page |
-| 5 | `0x01000000` | `input.mindset_toggle_bit` | freed button / key MODE | balanced ⇄ aggressive | same (menu stays open) |
-| 6 | `0x02000000` | `input.silent_toggle_bit` | freed button / key SILENT | radio silent on/off | same |
-| 7 | `0x04000000` | `input.menu_close_bit` | freed button / key BACK | — | close, no answer |
-| 8–12 | `0x08000000`–`0x80000000` | — | free | — | — |
+| 1 | `0x00100000` | `input.udp_action_bit` | wheel button; Spacebar | tap ack · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
+| 2 | `0x00200000` | `input.menu_up_bit` | stick up; key `↑` | **open** on the last item | previous item |
+| 3 | `0x00400000` | `input.menu_down_bit` | stick down; key `↓` | **open** on the first item | next item |
+| 4 | `0x00800000` | `input.page_cycle_bit` + `menu_open_actions.page: confirm` | stick right | next dashboard page | **confirm** |
+| 5 | `0x01000000` | `input.mindset_toggle_bit` + `menu_open_actions.mindset: close` | stick left | balanced ⇄ aggressive | **close**, no answer |
+| 6 | `0x02000000` | `input.shortcuts: {item: pit}` | Stream Deck tap | asks "Pit now?" | same (closes the menu first) |
+| 7 | `0x04000000` | `input.shortcuts: {item: race_stat}` | Stream Deck tap | most relevant race stat | same |
+| 8 | `0x08000000` | `input.shortcuts: {item: fight}` | Stream Deck tap | fight + pace briefing | same |
+| 9–12 | `0x10000000`–`0x80000000` | — | free | — | — |
 
-- Conflict resolution: Actions 2/3 become menu up/down, so **mindset moves to Action 5
-  and radio silent to Action 6**. Both are also **menu items** (bottom of the list, one
-  `Up` press away), so a driver with only four buttons loses nothing: set
-  `mindset_toggle_bit`, `silent_toggle_bit` and `menu_close_bit` to `0` and use the menu
-  plus the Action 1 long press / double press.
+- The stick works like a d-pad: up/down scroll, right selects, left backs out. The whole
+  menu is one thumb; Action 1 also confirms.
+- Radio silent has no dedicated button: hold Action 1, or pick "Radio silent" in the menu.
+  `input.silent_toggle_bit` and `input.menu_close_bit` still exist (default `0`).
+- `input.menu_open_actions` (`page`, `mindset`: `confirm` | `close` | `""`) decides what
+  those two buttons do while the menu is open; `""` keeps their usual action.
+- `input.shortcuts` binds a bit to any menu item id; a shortcut answers that item at once
+  (no menu, no scrolling). `pitwall rules check` rejects unknown item ids.
 - Action 1 semantics are unchanged while the menu is closed.
-- All bits are YAML (`input.*_bit`); `0` disables the binding; a duplicate bit fails to load.
+- All bits are YAML; `0` disables the binding; a duplicate bit (including shortcuts) fails
+  to load.
 - Keyboard: `↑` `↓` `Enter` `Esc` on the focused dashboard (`/` or `/radio`); Space still
-  mirrors Action 1. A Stream Deck can send the same keys or be bound as UDP Actions.
+  mirrors Action 1.
 
 ### Behaviour
 
@@ -156,7 +163,7 @@ The driver can free three more (5–7), mirrored on a Stream Deck.
 - **Confirm:** Action 1 single press (or `Enter`) answers the highlighted item and
   closes the menu. The answer is a P1 reply: it bypasses the call budget and radio silent,
   and appears in the radio log.
-- **Close:** Action 7, `Esc`, or an Action 1 double press closes without answering.
+- **Close:** stick left, `Esc`, or an Action 1 double press closes without answering.
   After `menu.timeout_s` (default 6 s) without a press it closes by itself.
 - **Owned by the backend.** The state frame carries `menu: {open, index, items, left_s,
   timeout_s}`; `/` and `/radio` draw the same overlay, fixed below the call banner and
@@ -185,6 +192,9 @@ check` validates ids, handlers and placeholders.
 | Plan? | question | box_now / stop / to_end / unknown | "Box lap 26. Window open soon." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / attack / push | "Push. 0.8 to the car ahead." |
 | Rain coming? | question | crossover / coming / chance / dry (`rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent in ten." |
+| Race stat | question | fuel_short / tyres_gone / energy / box_now / pit_soon / position / unknown (first that applies) | "P4, 12 to go. Best lap 1:32.4." |
+| Fight | question | both / ahead / behind / none (gap, gap trend, laps to catch, model pace) | "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7. Russell 0.9 behind, pulling away 0.2 a lap." |
+| Radio calls | action | default (`budget`) | cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (4 / 8 / 12 / 20), overriding the mindset's `call_budget_per_lap`: "Copy, up to 20 calls a lap." |
 | Understeer | opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
 | Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
 | Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |
