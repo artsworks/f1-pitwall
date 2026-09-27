@@ -33,6 +33,12 @@ class EngineSettings(BaseModel):
     heartbeat_s: float = 5.0
     recovery_max_age_s: float = 300.0
     recovery_tail_s: float = 120.0
+    watchdog: bool = True  # `pitwall start` = recorder/supervisor + engine child
+    engine_port: int = 20787  # loopback port the supervisor forwards datagrams to
+    watchdog_stall_s: float = 20.0
+    watchdog_grace_s: float = 60.0
+    watchdog_backoff_max_s: float = 10.0
+    watchdog_reset_s: float = 60.0
     staleness_s: dict[str, float] = Field(
         default_factory=lambda: {
             "session": 2.0,

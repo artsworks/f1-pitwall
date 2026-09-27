@@ -38,6 +38,7 @@ from pitwall.net.udp import listen
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
+from pitwall.supervisor import ALIVE_FILE, Supervisor, read_recording_pointer, runtime_dir
 
 
 def _parse_speed(value: str) -> float | None:
@@ -530,14 +531,18 @@ def cmd_start(args: argparse.Namespace) -> int:
     from pitwall.server.hub import Hub
 
     set_below_normal_priority()
-    hub = Hub()
     store = ConfigStore()
     settings = store.current()
+    child = bool(args.child)
+    if settings.engine.watchdog and not child and not args.no_watchdog:
+        return _start_supervised(args, store)
+    hub = Hub()
     clock = WallClock()
+    rt_dir = runtime_dir(Path(settings.recording.directory))
 
     profile = args.record or settings.recording.profile
     recorder = None
-    if settings.recording.enabled and profile != "off":
+    if settings.recording.enabled and profile != "off" and not child:
         recorder = RecordingRotator(
             Path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
@@ -590,14 +595,18 @@ def cmd_start(args: argparse.Namespace) -> int:
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
+    elif child:
+        engine.recording_path_source = lambda: read_recording_pointer(rt_dir)
+        engine.alive_path = rt_dir / ALIVE_FILE
     recovered = engine.recover()
     if recovered is not None:
-        print(f"watchdog: {recovered}", flush=True)
+        print(f"watchdog: {recovered}; radio: {engine.rejoin_text()}", flush=True)
+    udp_host, udp_port = settings.connection.udp_host, settings.connection.udp_port
+    if child:
+        udp_host, udp_port = "127.0.0.1", settings.engine.engine_port
 
     async def live() -> None:
-        transport = await udp_listen(
-            settings.connection.udp_host, settings.connection.udp_port, ingest, clock
-        )
+        transport = await udp_listen(udp_host, udp_port, ingest, clock)
         try:
             await engine.run_live()
         finally:
@@ -608,14 +617,23 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     engine.speaker_name = speaker.name
     engine.recording_desc = (
-        f"{profile} -> {settings.recording.directory}/" if recorder is not None else "off"
+        f"{profile} -> {settings.recording.directory}/"
+        if recorder is not None
+        else "supervisor"
+        if child and settings.recording.enabled
+        else "off"
     )
     if settings.speech.enabled:
         t0 = clock.now()
-        for call_id, text in (
-            ("startup", "Pit wall online."),
-            ("startup-radio-check", "Radio check, radio check."),
-        ):
+        lines = (
+            (("rejoin", engine.rejoin_text()),)
+            if recovered is not None
+            else (
+                ("startup", "Pit wall online."),
+                ("startup-radio-check", "Radio check, radio check."),
+            )
+        )
+        for call_id, text in lines:
             speaker.speak(
                 Call(
                     id=call_id,
@@ -629,11 +647,14 @@ def cmd_start(args: argparse.Namespace) -> int:
                     trigger_t=t0,
                 )
             )
+    clean = False
     try:
         asyncio.run(_serve(engine, hub, store, live()))
     except KeyboardInterrupt:
-        pass
+        clean = True
     finally:
+        if clean and db is not None:
+            db.clear_heartbeat()  # a later start is a fresh session, not a crash
         speaker.close()
         if recorder is not None:
             if settings.recording.compress_on_close:
@@ -642,6 +663,43 @@ def cmd_start(args: argparse.Namespace) -> int:
             if recorder.last_path is not None:
                 print(f"recording: saved {recorder.last_path}")
         dlog.close()
+    return 0
+
+
+def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
+    """Recorder + watchdog in this process; the engine runs as a restartable child."""
+    settings = store.current()
+    profile = args.record or settings.recording.profile
+    rec_dir = Path(settings.recording.directory)
+    recorder = None
+    if settings.recording.enabled and profile != "off":
+        recorder = RecordingRotator(
+            rec_dir,
+            config_hash=int(store.hash, 16) % (2**32),
+            metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
+            profile=profile,
+            compress=settings.recording.compress_on_close,
+        )
+    cmd = [sys.executable, "-m", "pitwall", "start", "--child"]
+    if args.record:
+        cmd += ["--record", args.record]
+    host, port = settings.connection.udp_host, settings.connection.udp_port
+    sup = Supervisor(
+        settings.engine,
+        recorder,
+        cmd,
+        runtime_dir(rec_dir),
+        udp_host=host,
+        udp_port=port,
+        log=lambda m: print(m, flush=True),
+    )
+    print(
+        f"watchdog: recorder on {host}:{port}, engine on 127.0.0.1:{settings.engine.engine_port}",
+        flush=True,
+    )
+    sup.run()
+    if recorder is not None and recorder.last_path is not None:
+        print(f"recording: saved {recorder.last_path}")
     return 0
 
 
@@ -901,6 +959,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="recording profile (default: settings recording.profile = lite); "
         "full = every packet at native rate, for debugging/tuning",
     )
+    st2.add_argument(
+        "--no-watchdog",
+        action="store_true",
+        help="run recorder and engine in one process (no crash restart)",
+    )
+    st2.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     st2.set_defaults(func=cmd_start)
 
     sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")

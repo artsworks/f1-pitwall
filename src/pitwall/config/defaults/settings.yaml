@@ -14,6 +14,12 @@ engine:
   heartbeat_s: 5            # SQLite runtime heartbeat (crash recovery)
   recovery_max_age_s: 300   # a heartbeat newer than this on start = crashed mid-session
   recovery_tail_s: 120      # seconds of the recording tail replayed to rebuild state
+  watchdog: true            # start = recorder/supervisor process + restartable engine child
+  engine_port: 20787        # loopback port the supervisor forwards telemetry to
+  watchdog_stall_s: 20      # engine liveness file older than this = hung, kill + restart
+  watchdog_grace_s: 60      # startup time before stall checks (voice load, recovery replay)
+  watchdog_backoff_max_s: 10
+  watchdog_reset_s: 60      # an engine that ran this long restarts without backoff
 persistence:
   enabled: true
   path: ~/.pitwall/pitwall.sqlite

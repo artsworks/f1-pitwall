@@ -191,6 +191,10 @@ def test_crash_recovery_rebuilds_from_db_and_recording_tail(tmp_path: Path) -> N
     assert msg is not None and second.state.lap_num == lap
     assert second.state.session_uid == uid
     assert len(db.laps_for(uid, 0)) == n_laps  # nothing re-inserted
+    assert second.rejoin_text().startswith(f"Back with you. Lap {lap}")
+
+    db.clear_heartbeat()
+    assert build_engine(clock=VirtualClock(), sinks=[], db=db).recover() is None
 
     stale = build_engine(clock=VirtualClock(), sinks=[], db=db)
     assert stale.recover(wall_now=time.time() + 10_000) is None
