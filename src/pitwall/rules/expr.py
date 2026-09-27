@@ -150,6 +150,18 @@ def make_namespace(
     )
 
 
+_PUBLIC_NAMES: dict[type, tuple[str, ...]] = {}
+
+
+def public_names(obj: Any) -> tuple[str, ...]:
+    """Public attribute names of `obj`'s type (cached; snapshots share one type)."""
+    cls = type(obj)
+    names = _PUBLIC_NAMES.get(cls)
+    if names is None:
+        names = _PUBLIC_NAMES[cls] = tuple(n for n in dir(obj) if not n.startswith("_"))
+    return names
+
+
 def namespace_data(
     snapshot: Any,
     *,
@@ -164,9 +176,7 @@ def namespace_data(
     def fresh(name: str) -> bool:
         return bool(staleness_age(name) < staleness_limit(name))
 
-    data: dict[str, Any] = {
-        name: getattr(snapshot, name) for name in dir(snapshot) if not name.startswith("_")
-    }
+    data: dict[str, Any] = {name: getattr(snapshot, name) for name in public_names(snapshot)}
     data.update(
         {
             "th": AttrView(thresholds),

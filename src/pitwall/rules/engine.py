@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pitwall.config.models import RuleDefModel
-from pitwall.rules.expr import Predicate, TrackedNamespace, make_namespace, namespace_data
+from pitwall.rules.expr import (
+    Predicate,
+    TrackedNamespace,
+    make_namespace,
+    namespace_data,
+    public_names,
+)
 from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
 
@@ -121,7 +127,7 @@ class RuleEngine:
         self._snapshot = snapshot
         result = EvalResult()
         data = namespace_data(snapshot, **self._ns_kwargs())
-        snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
+        snap_attrs = frozenset(public_names(snapshot))
         for rule in self.rules:
             d = rule.defn
             if d.sessions and snapshot.session_kind not in d.sessions:
