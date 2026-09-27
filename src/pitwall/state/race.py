@@ -31,6 +31,8 @@ class RacePhase:
         self._ever_raced = False
         self._pit_seen = False  # pit lane entered during this in_lap
         self._last_driver_status = -1
+        self.neutral_end_kind = ""  # 'sc' | 'vsc' of the last neutralisation that ended
+        self.neutral_end_t = -math.inf
 
     def update(
         self,
@@ -67,6 +69,9 @@ class RacePhase:
         elif self._sc_kind and session_time - self._sc_last_seen < sc_exit_hold_s:
             phase = self._sc_kind  # hold so a flicker doesn't bounce
         else:
+            if self._sc_kind:
+                self.neutral_end_kind = self._sc_kind
+                self.neutral_end_t = session_time
             self._sc_kind = ""
             if self.phase in ("sc", "vsc", "formation", "racing"):
                 # Pit sequence only applies from the free-running phases.

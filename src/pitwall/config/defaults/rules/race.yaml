@@ -569,17 +569,143 @@ rules:
       - "Virtual safety car. Stick to the delta"
       - "VSC, VSC. Stay on the delta"
       - "Virtual safety car deployed. Delta, keep it positive"
-  - id: lights_out
+  - id: sc_ending
     sessions: [race]
-    priority: 3
-    when: "phase == 'racing' and lap_num == 1 and lights_out and sector == 1"
-    clear_when: "lap_num != 1"
+    priority: 1
+    when: "phase == 'sc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "Safety car in this lap. Heat in the tyres and brakes, be ready for the restart"
+      - "Safety car's coming in. Get the tyres warm, restart's coming"
+      - "SC in this lap, SC in this lap. Stay close, be ready to go"
+  - id: vsc_ending
+    sessions: [race]
+    priority: 1
+    when: "phase == 'vsc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "VSC ending, VSC ending. Be ready to go"
+      - "VSC ending. Stay on the delta until it goes green"
+  - id: sc_restart
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and neutral_ended_kind == 'sc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green flag, green flag. Racing again, push now"
+      - "Green, green. We're racing, full attack"
+      - "Safety car's in, green flag. Go"
+  - id: vsc_restart
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and neutral_ended_kind == 'vsc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green, green. VSC's over, full power"
+      - "VSC over, go, go, go"
+  # End of lap 1: report against the grid slot.
+  - id: lap1_gained
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained > 0"
+    clear_when: "lap_num != 2"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Good start. {laps_remaining} laps to go, fuel margin {fuel_margin_r:+.1f} laps"
-      - "Good launch. {laps_remaining} to go, let's settle in"
-      - "Nice start. {laps_remaining} laps, fuel margin {fuel_margin_r:+.1f}"
+      - "Great start. P{position}, up {positions_gained} from the grid. {laps_remaining} to go"
+      - "Lap one done, P{position}. That's {positions_gained} gained, now settle in"
+      - "Mega start, P{position}. {positions_gained} places up, fuel margin {fuel_margin_r:+.1f}"
+  - id: lap1_lost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_lost > 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one done, P{position}. Lost {positions_lost}, plenty of race left. {laps_remaining} to go"
+      - "P{position} after lap one, {positions_lost} down on the grid. Stay calm, they'll come back"
+  - id: lap1_held
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained == 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one done, holding P{position}. {laps_remaining} to go, fuel margin {fuel_margin_r:+.1f} laps"
+      - "Clean first lap, P{position}. {laps_remaining} to go, let's settle in"
+  - id: three_to_go
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and total_laps >= 6 and laps_remaining == 3 and sector == 0"
+    clear_when: "laps_remaining != 3"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Three laps to go. P{position}, keep it tidy"
+      - "Three to go, P{position}. No mistakes now"
+  - id: last_lap_defend
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. {rival_behind_name} is {gap_behind_s:.1f} behind. Defend, cover the inside"
+      - "Final lap, {rival_behind_name} right there, {gap_behind_s:.1f}. Hold him off, no mistakes"
+  - id: last_lap_attack
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_ahead_s < th.last_lap_fight_s and not gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. {rival_ahead_name} {gap_ahead_s:.1f} ahead. Everything you've got"
+      - "Final lap, {gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
+  - id: last_lap
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and not gap_behind_s < th.last_lap_fight_s and not gap_ahead_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. P{position}, bring it home"
+      - "Final lap, P{position}. Nice and clean to the flag"
+  - id: finish_gained
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_gained > 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, up {positions_gained} from P{grid_position}. Great drive"
+      - "That's the flag. P{position}, {positions_gained} places gained. Brilliant job"
+  - id: finish_lost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_lost > 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, from P{grid_position}. We'll go through it in the debrief"
+      - "That's the flag, P{position}. Tough one, we'll find the time in the debrief"
+  - id: finish_held
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_gained == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, same as the grid. Solid job"
+      - "That's the flag, P{position}. Held the grid slot, good work"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

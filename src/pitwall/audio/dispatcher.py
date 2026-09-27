@@ -57,6 +57,7 @@ class Call:
     still_true: Any = None
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
+    not_before: float = 0.0  # held in the queue until this time (min-gap spacing)
 
 
 @dataclass(order=True)
@@ -136,6 +137,11 @@ class Dispatcher:
         for cand in candidates:
             self._defs[cand.rule.id] = cand.rule.defn
             suppressed = self._suppression_reason(cand, snapshot, now, allowed_p)
+            not_before = now
+            if suppressed == "min_gap":
+                assert self._last_call_t is not None
+                not_before = self._last_call_t + self.policy.min_gap_s
+                suppressed = None if not_before - now <= self.policy.min_gap_defer_s else "budget"
             if suppressed is not None:
                 self._log(cand, snapshot, now, "suppressed", suppressed)
                 continue
@@ -152,8 +158,9 @@ class Dispatcher:
                 trigger_t=cand.trigger_t,
                 still_true=cand.still_true,
                 inputs=cand.inputs,
+                not_before=not_before,
             )
-            self._book_call(call, cand, now)
+            self._book_call(call, cand, not_before)
             heapq.heappush(self._queue, _Queued((cand.priority, now), call))
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
 
@@ -215,7 +222,7 @@ class Dispatcher:
             if self._calls_this_lap >= budget:
                 return "budget"
             if self._last_call_t is not None and now - self._last_call_t < self.policy.min_gap_s:
-                return "budget"
+                return "min_gap"
         return None
 
     def _book_call(self, call: Call, cand: Candidate, now: float) -> None:
@@ -244,11 +251,11 @@ class Dispatcher:
             deadline_ms = call.deadline_ms
             if waits_for_straight:
                 deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
-            if (now - call.t) * 1000 > deadline_ms:
+            if (now - max(call.t, call.not_before)) * 1000 > deadline_ms:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
                 continue
-            if waits_for_straight and not on_straight:
+            if now < call.not_before or (waits_for_straight and not on_straight):
                 held.append(q)
                 continue
             if call.still_true is not None and self.latest_snapshot is not None:

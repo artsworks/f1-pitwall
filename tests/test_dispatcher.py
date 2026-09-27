@@ -377,3 +377,31 @@ def test_long_press_still_bookmarks_by_default() -> None:
     d, _, buf = _dispatcher()
     d.on_press(Press("bookmark", 0.0), _snap(0.0))
     assert d.silent is False and _log(buf)[-1]["outcome"] == "bookmark"
+
+
+def test_min_gap_defers_instead_of_dropping() -> None:
+    d, sink, buf = _dispatcher(min_gap_s=3.0)
+    d.submit([_cand("a")], _snap(0.0))
+    d.drain(0.0)
+    d.submit([_cand("wing", text="wing gone")], _snap(1.0))
+    assert d.drain(1.0) == []  # held: radio still busy
+    assert [c.rule_id for c in d.drain(3.0)] == ["wing"]
+    assert not any(r.get("suppressed_by") == "budget" for r in _log(buf))
+
+
+def test_min_gap_deferred_calls_are_spaced() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=3.0)
+    d.submit([_cand("a")], _snap(0.0))
+    d.drain(0.0)
+    d.submit([_cand("b"), _cand("c")], _snap(0.5))
+    assert [c.rule_id for c in d.drain(3.0)] == ["b"]
+    assert d.drain(5.0) == []
+    assert [c.rule_id for c in d.drain(6.0)] == ["c"]
+
+
+def test_min_gap_drops_past_defer_limit() -> None:
+    d, sink, buf = _dispatcher(min_gap_s=3.0, min_gap_defer_s=4.0)
+    d.submit([_cand("a")], _snap(0.0))
+    d.drain(0.0)
+    d.submit([_cand("b"), _cand("c")], _snap(0.5))  # c would wait until 6.0
+    assert [r["rule_id"] for r in _log(buf) if r.get("suppressed_by") == "budget"] == ["c"]
