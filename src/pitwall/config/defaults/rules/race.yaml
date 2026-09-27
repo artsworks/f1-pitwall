@@ -397,7 +397,7 @@ rules:
   - id: penalty
     sessions: [race]
     priority: 1
-    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0"
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement != 21"
     clear_when: "not penalty_recent"
     cooldown_s: 15
     requires: [event]
@@ -427,17 +427,57 @@ rules:
       - "Unserved penalty on the car. We serve it at the stop"
       - "We'll take the penalty at the stop, it's still on the car"
       - "Reminder, penalty's unserved. It comes off at the stop"
-  - id: track_warnings
+  - id: penalty_track_limits
     sessions: [race]
-    priority: 3
-    when: "corner_cut_warnings >= th.warnings_warn"
-    clear_when: "corner_cut_warnings < th.warnings_warn"
-    cooldown_s: 300
-    requires: [lap_data]
+    priority: 1
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement == 21"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
     say:
-      - "That's {corner_cut_warnings} track limit warnings. Next one's a penalty risk"
-      - "{corner_cut_warnings} track limit warnings now. Careful, next one could be a penalty"
-      - "Track limits, that's {corner_cut_warnings}. Keep it inside the lines"
+      - "And there it is. {penalty_time_s} seconds for track limits. {penalty_s} total"
+      - "{penalty_time_s} second penalty, track limits. The white lines were a suggestion, apparently. {penalty_s} total"
+      - "Stewards have had enough. {penalty_time_s} seconds for track limits, {penalty_s} total on the car"
+      - "{penalty_time_s} seconds, track limits. We did warn you. {penalty_s} total"
+  - id: track_limit_warning
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn != th.warnings_warn - 1 and corner_cut_warnings % th.warnings_warn != 0"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Track limits. The track's the grey bit, mate"
+      - "That's a warning for track limits. The kerb isn't a suggestion"
+      - "Track limits warning. Lovely bit of grass you found there"
+      - "Warning for track limits. Stewards noticed, so did we"
+    escalate:
+      - after: 2
+        say:
+          - "Track limits again. Are we racing or sightseeing?"
+          - "Another one. The white line is not the racing line"
+  - id: track_limit_last_warning
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn == th.warnings_warn - 1"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "That's {corner_cut_warnings} for track limits. One more and it's a penalty, so keep it on the tarmac"
+      - "Track limits, {corner_cut_warnings} now. Next one costs time. Tidy it up"
+      - "{corner_cut_warnings} track limit warnings. One more and the stewards hand us a penalty. Your call"
+  - id: track_limit_overtake
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind == 'overtake'"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Warning for passing off track. Nice move, wrong postcode"
+      - "That pass was off the circuit. Warning logged, next time do it on the tarmac"
+      - "Stewards saw that pass off track. Warning. Keep it on the circuit"
   - id: blue_flag
     sessions: [race]
     priority: 1

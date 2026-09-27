@@ -81,6 +81,16 @@ SECTOR3_VALID = 0x08
 # PENA penalty_type -> announced kind. Other types (warning 5, lap invalidated
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
+PENALTY_TYPE_WARNING = 5
+# PENA infringement_type -> kind of track-limit / corner-cutting warning.
+_TRACK_WARNING_KINDS = {
+    7: "cut",
+    8: "overtake",
+    9: "overtake",
+    27: "minor",
+    28: "significant",
+    29: "extreme",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,6 +319,8 @@ class Snapshot:
     warnings: int = 0
     corner_cut_warnings: int = 0
     penalty_recent: bool = False
+    track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
+    track_warning_recent: bool = False
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -664,6 +676,8 @@ class SessionState:
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
+        self.track_warning_kind = ""
+        self._last_track_warning_st: float | None = None
         self.lights_out = False
         self.chequered = False
         self._race = RacePhase()
@@ -1002,6 +1016,11 @@ class SessionState:
             if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
                 ptype = int(pkt.detail.get("penalty_type", 0))
                 kind = _PENALTY_KINDS.get(ptype, "")
+                infringement = int(pkt.detail.get("infringement_type", 0))
+                warn_kind = _TRACK_WARNING_KINDS.get(infringement, "")
+                if ptype == PENALTY_TYPE_WARNING and warn_kind:
+                    self.track_warning_kind = warn_kind
+                    self._last_track_warning_st = pkt.header.session_time
                 if kind:
                     # Warnings, lap invalidations and retirements also arrive as PENA
                     # with time_s = 255; only real penalties are announced.
@@ -1479,6 +1498,11 @@ class SessionState:
             penalty_recent=(
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            track_warning_kind=self.track_warning_kind,
+            track_warning_recent=(
+                self._last_track_warning_st is not None
+                and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)
             ),
             blue_flag=self.vehicle_fia_flags == 4,
             weather_now=self.weather,

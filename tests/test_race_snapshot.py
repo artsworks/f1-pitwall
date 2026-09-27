@@ -157,3 +157,24 @@ def test_pena_warning_is_not_a_penalty() -> None:
         if t == 2.0:
             assert not snap.penalty_recent and snap.penalty_time_s == 0
     assert snap.penalty_recent and snap.penalty_kind == "time" and snap.penalty_time_s == 3
+
+
+def test_pena_track_limit_warning_kind() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    assert not state.snapshot(1.0).track_warning_recent
+    pena = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"PENA",
+            "event_data": struct.pack("<BBBBBBB", 5, 28, 0, 255, 255, 5, 0).ljust(12, b"\0"),
+        },
+        session_time=2.0,
+    )
+    ingest.on_datagram(pena, 2.0)
+    _lap(ingest, 2.1)
+    snap = state.snapshot(2.1)
+    assert snap.track_warning_recent and snap.track_warning_kind == "significant"
+    assert not snap.penalty_recent
+    _lap(ingest, 30.0)
+    assert not state.snapshot(30.0).track_warning_recent
