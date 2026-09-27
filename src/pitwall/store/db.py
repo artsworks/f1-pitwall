@@ -209,6 +209,11 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX outcomes_session ON outcomes(session_uid, lap);
     """,
+    # 7: race distance, so the hindsight grader can tell a finished session
+    # from a partial / aborted / retired one (censored labels).
+    """
+    ALTER TABLE sessions ADD COLUMN total_laps INT NOT NULL DEFAULT 0;
+    """,
 ]
 
 
@@ -574,12 +579,11 @@ class Database:
         rows = self._rows("SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),))
         return rows[0] if rows else None
 
-    def stints_for_session(self, session_uid: int, car_idx: int = 0) -> list[StintRow]:
-        rows = self._conn.execute(
-            "SELECT * FROM stints WHERE session_uid=? AND car_idx=? ORDER BY start_lap",
-            (_uid_to_sql(session_uid), car_idx),
-        ).fetchall()
-        return [self._stint_row(r) for r in rows]
+    def set_session_total_laps(self, uid: int, total_laps: int) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
+            )
 
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))

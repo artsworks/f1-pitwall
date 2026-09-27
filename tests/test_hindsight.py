@@ -24,16 +24,19 @@ def _lap(
     )
 
 
-def _race(db: Database, stop_lap: int, laps: int = 20) -> None:
+def _race(
+    db: Database, stop_lap: int, laps: int = 20, *, uid: int = UID, total: int | None = None
+) -> None:
     """M (base 90 s, +200 ms/lap) then H (base 90.5 s, +50 ms/lap)."""
-    db.upsert_session(UID, track_id=7, session_type=15)
+    db.upsert_session(uid, track_id=7, session_type=15)
+    db.set_session_total_laps(uid, laps if total is None else total)
     age = 0
     compound = MEDIUM
     for n in range(1, laps + 1):
         base, deg = (90_000, 200) if compound == MEDIUM else (90_500, 50)
         pitted = n == stop_lap
         db.insert_lap(
-            UID,
+            uid,
             0,
             _lap(n, base + deg * age, compound, age, pitted=pitted, fuel=0.8 if n == laps else 3.0),
         )
@@ -42,9 +45,9 @@ def _race(db: Database, stop_lap: int, laps: int = 20) -> None:
             compound, age = HARD, 0
 
 
-def _call(db: Database, cid: str, rule: str, lap: int, **inputs: object) -> None:
+def _call(db: Database, cid: str, rule: str, lap: int, uid: int = UID, **inputs: object) -> None:
     db.insert_call(
-        UID,
+        uid,
         {
             "call_id": cid,
             "rule_id": rule,
@@ -91,32 +94,85 @@ def test_grades_box_fuel_and_ignored_calls(tmp_path: Path) -> None:
     assert by["c4"].label == "wrong"
 
 
+def test_refired_box_call_graded_once(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 16)
+    for lap in (14, 15, 16):
+        _call(db, f"b{lap}", "box_now", lap, pit_plan="box_now")
+    by = {o.call_id: o for o in grade_session(db, UID, {})}
+    assert by["b14"].label == by["b15"].label == "n/a" and "refired" in by["b14"].detail
+    assert by["b16"].metric == "stop_cost_s" and by["b16"].label == "wrong"
+
+
+def test_neutralised_and_tactical_stops_not_graded_on_deg(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 16)
+    _call(db, "sc", "plan_sc_box", 16)
+    _call(db, "cheap", "box_now", 16, pit_plan="cheap_stop")
+    by = {o.call_id: o for o in grade_session(db, UID, {})}
+    assert by["sc"].metric == by["cheap"].metric == "stop_cost_s"
+    assert by["sc"].label == by["cheap"].label == "n/a"
+
+
+def test_unfinished_session_censors_fuel(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 8, laps=12, total=20)
+    _call(db, "f", "fuel_marginal", 3, fuel_margin_laps=0.8)
+    (o,) = grade_session(db, UID, {})
+    assert o.metric == "fuel_margin" and o.label == "censored"
+
+
+def test_laps_of_pace_uses_age_zero_reference(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    db.set_session_total_laps(UID, 30)
+    for n in range(1, 31):
+        db.insert_lap(UID, 0, _lap(n, 90_000 + 100 * (n - 1), MEDIUM, n - 1))
+    _call(db, "t", "tyre_life", 10, laps_of_pace=6.0)  # 1500/100 - age 9
+    (o,) = grade_session(db, UID, {"tyre_cliff_ms": 1500})
+    assert o.metric == "laps_of_pace" and o.label == "good" and o.actual == 6.0
+
+
+def test_executed_compound_ignores_new_set_on_in_lap(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    for n in range(1, 13):
+        compound, age = (MEDIUM, n - 1) if n < 8 else (HARD, n - 8)
+        db.insert_lap(UID, 0, _lap(n, 90_000, compound, age, pitted=n == 8))
+    db.insert_plan_event(UID, {"lap": 1, "kind": "set", "to_plan": "A", "sequence": "M-H"})
+    (o,) = grade_session(db, UID, {})
+    assert o.label == "good", o.detail
+
+
 def test_plan_followed(tmp_path: Path) -> None:
     db = Database(tmp_path / "h.sqlite")
     _race(db, 10)
     db.insert_plan_event(UID, {"lap": 1, "kind": "set", "to_plan": "A", "sequence": "M-H"})
     db.insert_plan_event(UID, {"lap": 3, "kind": "switch", "to_plan": "B", "sequence": "M-H-S"})
     labels = [o.label for o in grade_session(db, UID, {}) if o.metric == "plan_followed"]
-    assert labels == ["good", "wrong"]
+    assert labels == ["n/a", "wrong"]  # A superseded by B before any stop
 
 
 def test_digest_is_idempotent_and_feeds_tune(tmp_path: Path) -> None:
     db = Database(tmp_path / "h.sqlite")
-    _race(db, 16)
-    for i in range(4):
-        _call(db, f"b{i}", "box_now", 16)
+    uids = [UID + i for i in range(4)]
+    for i, uid in enumerate(uids):
+        _race(db, 16, uid=uid)
+        _call(db, f"b{i}", "box_now", 16, uid=uid)
     first = build_digest(db, UID, {})
     assert build_digest(db, UID, {}) == first
-    assert len(db.outcomes_for_session(UID)) == 4
+    assert len(db.outcomes_for_session(UID)) == 1
     assert first["strategy"]["executed"] == "M-H"
-    assert first["calls"]["box_now"]["auto_wrong"] == 4
+    assert first["calls"]["box_now"]["auto_wrong"] == 1
     assert any("Stop cost" in f for f in first["findings"])
     json.dumps(first)
+    for uid in uids[1:]:
+        build_digest(db, uid, {})
 
     rows = {r.rule_id: r for r in tune_from_db(db, {})}
     assert rows["box_now"].auto == 4 and rows["box_now"].cooldown_mult > 1.0
-    for i in range(4):
-        db.grade_call(UID, f"b{i}", "box_now", "good", "")
+    for i, uid in enumerate(uids):
+        db.grade_call(uid, f"b{i}", "box_now", "good", "")
     rows = {r.rule_id: r for r in tune_from_db(db, {})}
     assert rows["box_now"].auto == 0 and rows["box_now"].cooldown_mult < 1.0
 

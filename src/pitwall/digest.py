@@ -10,9 +10,8 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from pitwall.hindsight import Outcome, grade_and_store, stints, stop_laps
+from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
-from pitwall.strategy.plans import LETTERS
 
 DIGEST_VERSION = 1
 
@@ -134,7 +133,7 @@ def build_digest(db: Database, uid: int, th: Mapping[str, object]) -> dict[str, 
         },
         "stints": [
             {
-                "compound": LETTERS.get(p[-1].compound, "?"),
+                "compound": stint_compound(p),
                 "start_lap": p[0].lap_num,
                 "end_lap": p[-1].lap_num,
                 "start_age": p[0].tyre_age_laps,
@@ -147,7 +146,7 @@ def build_digest(db: Database, uid: int, th: Mapping[str, object]) -> dict[str, 
             for p in pits
         ],
         "strategy": {
-            "executed": "-".join(LETTERS.get(p[-1].compound, "?") for p in parts),
+            "executed": "-".join(stint_compound(p) for p in parts),
             "plan_events": [
                 {k: e.get(k) for k in ("lap", "kind", "from_plan", "to_plan", "reason", "sequence")}
                 for e in db.plan_events_for_session(uid)
