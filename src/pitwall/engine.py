@@ -496,6 +496,8 @@ class Engine:
         for lap in new_laps:
             self.db.insert_lap(uid, 0, lap)
         self._laps_written = len(self.state.laps)
+        if new_laps and self.state.total_laps > 0:
+            self.db.set_session_total_laps(uid, self.state.total_laps)
         for lap in new_laps:
             self._on_player_lap(uid, lap)
 

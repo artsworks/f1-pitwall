@@ -1104,6 +1104,9 @@ class SessionState:
         if completed <= emitted:
             return
         stints = pkt.tyre_stints[: pkt.num_tyre_stints]
+        # Persisted laps keep car_idx 0 for the player; a rival in slot 0 takes
+        # the player's (otherwise unused) slot instead.
+        slot = self._player_idx if pkt.car_idx == 0 else pkt.car_idx
         for i in range(emitted, completed):
             lap = pkt.laps[i]
             lap_num = i + 1
@@ -1117,7 +1120,7 @@ class SessionState:
             valid = bool(lap.lap_valid_bit_flags & LAP_VALID) and lap.lap_time_ms > 0
             self.rival_laps.append(
                 (
-                    pkt.car_idx,
+                    slot,
                     LapSummary(
                         lap_num=lap_num,
                         lap_time_ms=lap.lap_time_ms,
