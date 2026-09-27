@@ -37,6 +37,11 @@ class RaceSpec:
     track_id: int = 7
     dt: float = 0.25
     hot_tyres_lap: int | None = None
+    grid_position: int = 3
+    wing_lost_lap: int | None = None  # front-right wing 100% from mid-lap
+    puncture_lap: int | None = None  # rear-left tyre damage 100% from mid-lap
+    vsc: bool = False  # sc_laps are a VSC instead of a full SC
+    finish: bool = False  # chequered flag, then the line
     extra: dict[str, object] = field(default_factory=dict)
 
 
@@ -100,7 +105,9 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             player_wear0 = 0.0
         age = lap - stint_start
         lap_ms = spec.base_ms + spec.deg_ms * age
-        sc = 1 if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1] else 0
+        sc = 0
+        if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1]:
+            sc = 2 if spec.vsc else 1
         if sc:
             lap_ms = int(lap_ms * 1.4)
         frames = max(1, int(lap_ms / 1000 / spec.dt))
@@ -142,6 +149,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                             "current_lap_num": lap,
                             "last_lap_time_ms": player_last_ms,
                             "car_position": 3,
+                            "grid_position": spec.grid_position,
                             "lap_distance": d,
                             "sector": int(frac * 3),
                             "result_status": 2,
@@ -174,7 +182,15 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     }
                 },
             )
-            emit(PacketId.CAR_DAMAGE, {"cars": {0: {"tyres_wear": (wear,) * 4}}})
+            damage: dict[str, object] = {
+                "tyres_wear": (wear,) * 4,
+                "tyres_damage": (int(wear),) * 4,
+            }
+            if spec.wing_lost_lap is not None and (lap, frac) >= (spec.wing_lost_lap, 0.5):
+                damage["front_right_wing_damage"] = 100
+            if spec.puncture_lap is not None and (lap, frac) >= (spec.puncture_lap, 0.5):
+                damage["tyres_damage"] = (100, int(wear), int(wear), int(wear))
+            emit(PacketId.CAR_DAMAGE, {"cars": {0: damage}})
             hot = spec.hot_tyres_lap is not None and lap >= spec.hot_tyres_lap
             emit(
                 PacketId.CAR_TELEMETRY,
@@ -193,6 +209,8 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 for i in (1, 2, 3):
                     if history[i]:
                         emit(PacketId.SESSION_HISTORY, _history(i, history[i][-100:]))
+            if spec.sc_laps is not None and lap == spec.sc_laps[1] and f == frames // 2:
+                event(b"SCAR", struct.pack("<BB", 2 if spec.vsc else 1, 1))  # returning
             if spec.penalty_lap == lap and f == frames // 2:
                 event(b"PENA", struct.pack("<BBBBBBB", 4, 7, 0, 255, 5, lap, 0))  # time penalty
             t += spec.dt
@@ -201,4 +219,29 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             pit = spec.rival_pit_lap if i == 1 else None
             rival_age = lap - (pit + 1) if pit is not None and lap > pit else lap - 1
             history[i].append(spec.base_ms + 50 + spec.deg_ms * rival_age)
+    if spec.finish:
+        event(b"CHQF")
+        for f in range(int(4 / spec.dt)):
+            d = f * spec.dt * TRACK_M / (spec.base_ms / 1000.0)
+            emit(
+                PacketId.LAP_DATA,
+                {
+                    "cars": {
+                        0: {
+                            "current_lap_num": spec.laps + 1,
+                            "last_lap_time_ms": player_last_ms,
+                            "car_position": 3,
+                            "grid_position": spec.grid_position,
+                            "lap_distance": d,
+                            "result_status": 3,
+                            "driver_status": 4,
+                            "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
+                        },
+                        1: _rival(spec, spec.laps + 1, d, 0.0, 1, spec.gap_ahead_s, 2, False),
+                        2: _rival(spec, spec.laps + 1, d, 0.0, 2, -spec.gap_behind_s, 4, False),
+                        3: _rival(spec, spec.laps + 1, d, 0.0, 3, 20.0, 1, False),
+                    }
+                },
+            )
+            t += spec.dt
     return pkts

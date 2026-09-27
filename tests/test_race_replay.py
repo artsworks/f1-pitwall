@@ -46,6 +46,12 @@ SCENARIOS = {
     "hot": RaceSpec(laps=6, hot_tyres_lap=3),
     "rival_pit": RaceSpec(laps=10, rival_pit_lap=5),
     "player_pit": RaceSpec(laps=12, player_pit_lap=6),
+    "wing_lost": RaceSpec(laps=8, wing_lost_lap=3),
+    "wing_late": RaceSpec(laps=8, wing_lost_lap=7),
+    "puncture": RaceSpec(laps=6, puncture_lap=3),
+    "vsc": RaceSpec(laps=8, sc_laps=(3, 4), vsc=True),
+    "start_gained": RaceSpec(laps=8, grid_position=6, finish=True),
+    "start_lost": RaceSpec(laps=6, grid_position=1, finish=True, gap_behind_s=0.6),
 }
 
 
@@ -169,3 +175,60 @@ def test_exit_criterion_race(tmp_path: Path, fraction: float) -> None:
     first = box[0]["inputs"]
     assert first["pit_plan_confidence"] >= 0.7 or first["laps_of_pace"] < 1
     assert first["laps_remaining"] > 2
+
+
+def _fired(rows: list[dict], rule_id: str) -> list[dict]:
+    return [r for r in rows if r["rule_id"] == rule_id and r["outcome"] == "fired"]
+
+
+def test_wing_lost_calls_box(runs) -> None:
+    calls, rows = runs["wing_lost"]
+    assert "front_wing_lost_box" in _ids(calls)
+    assert "front_wing_damage" not in _ids(calls)  # one urgent call, not two
+    row = _fired(rows, "front_wing_lost_box")[0]
+    assert row["lap"] == 3 and row["inputs"]["damage"]["front_right_wing"] == 100
+
+
+def test_wing_lost_near_flag_says_nurse(runs) -> None:
+    calls, _ = runs["wing_late"]
+    assert "front_wing_lost_nurse" in _ids(calls)
+    assert "front_wing_lost_box" not in _ids(calls)
+
+
+def test_puncture_calls_box_with_corner(runs) -> None:
+    calls, _ = runs["puncture"]
+    call = next(c for c in calls if c.rule_id == "puncture")
+    assert call.lap == 3 and "rear left" in call.text.lower()
+
+
+def test_sc_ending_and_restart(runs) -> None:
+    calls, _ = runs["sc"]
+    ids = [c.rule_id for c in calls]
+    assert ids.index("sc_deployed") < ids.index("sc_ending") < ids.index("sc_restart")
+    assert next(c for c in calls if c.rule_id == "sc_restart").lap == 7
+
+
+def test_vsc_ending_and_restart(runs) -> None:
+    calls, _ = runs["vsc"]
+    ids = [c.rule_id for c in calls]
+    assert ids.index("vsc_deployed") < ids.index("vsc_ending") < ids.index("vsc_restart")
+    assert not {"sc_deployed", "sc_ending", "sc_restart"} & set(ids)
+
+
+def test_lap1_and_finish_report_against_grid(runs) -> None:
+    calls, _ = runs["start_gained"]
+    ids = _ids(calls)
+    assert {"lap1_gained", "three_to_go", "last_lap", "finish_gained"} <= ids
+    assert not {"lap1_lost", "lap1_held", "finish_lost", "finish_held"} & ids
+    text = next(c.text for c in calls if c.rule_id == "finish_gained")
+    assert "P3" in text and ("3" in text)
+    calls, _ = runs["start_lost"]
+    ids = _ids(calls)
+    assert {"lap1_lost", "last_lap_defend", "finish_lost"} <= ids
+    assert "last_lap" not in ids
+
+
+def test_control_race_lap1_held(runs) -> None:
+    calls, _ = runs["base"]
+    assert "lap1_held" in _ids(calls)
+    assert not {"puncture", "front_wing_lost_box", "sc_restart", "last_lap_defend"} & _ids(calls)

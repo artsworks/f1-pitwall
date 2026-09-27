@@ -55,6 +55,7 @@ class PolicySettings(BaseModel):
     deadlines_s: dict[int, float] = Field(default_factory=lambda: {1: 5.0, 2: 3.0, 3: 1.5})
     calls_per_lap: int | None = None  # None -> verbosity preset table
     min_gap_s: float = 3.0
+    min_gap_defer_s: float = 10.0  # a call inside min_gap waits up to this long, else dropped
     dedupe_window_s: float = 20.0
     quiet: bool = False
     mute_until_lap: int = 0

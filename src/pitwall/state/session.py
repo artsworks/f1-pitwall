@@ -110,6 +110,7 @@ class Damage:
 
 
 _ZERO_DAMAGE = Damage()
+_CORNER_WORDS = ("rear left", "rear right", "front left", "front right")  # wire order
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +264,12 @@ class Snapshot:
     sc_laps: int = 0
     lights_out: bool = False
     chequered: bool = False
+    grid_position: int = 0
+    positions_gained: int = 0  # grid slot minus current position (+ = gained)
+    sc_ending: bool = False  # SC in this lap / VSC ending (SCAR event)
+    neutral_ended_s: float = math.inf  # since the last SC/VSC ended
+    neutral_ended_kind: str = ""  # 'sc' | 'vsc'
+    puncture_corner: str = ""  # e.g. "rear left"; tyre damage far above wear
     gap_ahead_s: float = math.inf
     gap_behind_s: float = math.inf
     rival_ahead_idx: int = -1
@@ -485,6 +492,10 @@ class Snapshot:
         return round(self.fuel_margin_laps, 1) + 0.0
 
     @property
+    def positions_lost(self) -> int:
+        return max(0, -self.positions_gained)
+
+    @property
     def fuel_short_laps(self) -> float:
         return max(0.0, -self.fuel_margin_laps)
 
@@ -680,6 +691,9 @@ class SessionState:
         self._last_track_warning_st: float | None = None
         self.lights_out = False
         self.chequered = False
+        self.grid_position = 0
+        self.sc_ending = False
+        self.puncture_corner = ""
         self._race = RacePhase()
         self.race_phase = "formation"
         self.sc_laps = 0
@@ -892,6 +906,10 @@ class SessionState:
             sc_exit_hold_s=self._th("sc_exit_hold_s", 5.0),
         )
         self.sc_laps = self._race.sc_laps
+        if self.race_phase not in ("sc", "vsc"):
+            self.sc_ending = False
+        if car.grid_position and not self.grid_position:
+            self.grid_position = car.grid_position
         summary = self.lap_acc.update(
             current_lap_num=car.current_lap_num,
             last_lap_time_ms=car.last_lap_time_ms,
@@ -1012,6 +1030,10 @@ class SessionState:
             self.lights_out = True
         elif pkt.code == "CHQF":
             self.chequered = True
+        elif pkt.code == "SCAR":
+            if isinstance(pkt.detail, dict):
+                # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
+                self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2)
         elif pkt.code == "PENA":
             if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
                 ptype = int(pkt.detail.get("penalty_type", 0))
@@ -1273,6 +1295,20 @@ class SessionState:
         car = pkt.cars[self._player_idx]
         self.tyres_wear = car.tyres_wear
         self.blister_max_pct = max(int(b) for b in car.tyre_blisters.as_tuple())
+        gap = self._th("puncture_gap_pct", 40)
+        self.puncture_corner = next(
+            (
+                name
+                for name, dmg, wear in zip(
+                    _CORNER_WORDS,
+                    car.tyres_damage.as_tuple(),
+                    car.tyres_wear.as_tuple(),
+                    strict=True,
+                )
+                if dmg - wear >= gap
+            ),
+            "",
+        )
         self.damage = Damage(
             front_left_wing=car.front_left_wing_damage,
             front_right_wing=car.front_right_wing_damage,
@@ -1761,6 +1797,14 @@ class SessionState:
         base: dict[str, Any] = dict(
             race_phase=self.race_phase,
             sc_laps=self.sc_laps,
+            grid_position=self.grid_position,
+            positions_gained=(
+                self.grid_position - self.position if self.grid_position and self.position else 0
+            ),
+            sc_ending=self.sc_ending and self.race_phase in ("sc", "vsc"),
+            neutral_ended_s=max(0.0, (self._last_session_time or 0.0) - self._race.neutral_end_t),
+            neutral_ended_kind=self._race.neutral_end_kind,
+            puncture_corner=self.puncture_corner,
             deg_fit_source=model.deg_fit_source,
             deg_ms_per_lap=model.deg_ms_per_lap,
             deg_confidence=model.deg_confidence,
