@@ -5,23 +5,29 @@ Feasibility, design and impact analysis. Design only — nothing here is impleme
 The driver menu (doc 12, M3) already lets the driver ask the pit wall a preset question
 with the thumb stick: open, scroll, confirm, and a deterministic handler answers from the
 snapshot. That works, but it costs a hand off the wheel and a glance at the second screen,
-and in a battle neither is free. Voice removes the navigation: the driver holds a button,
-says "gap ahead?", and the same handler answers.
+and in a battle neither is free. Voice removes the navigation: the driver taps a button
+to open the channel, says "gap ahead?", and the same handler answers.
 
 The short version:
 
-- **Feasible, with a small footprint,** if it is *push-to-talk* with a *closed grammar* of
-  roughly 40 phrases, recognised offline on the CPU in a **separate process** at
-  below-normal priority. Idle cost is an audio callback; the recogniser only runs while
-  the button is held and for ~300 ms after release.
+- **Feasible, with a small footprint,** if it is a *talk toggle* (tap to open the channel,
+  tap or silence to close it) with a *closed grammar* of roughly 40 phrases, recognised
+  offline on the CPU in a **separate process** at below-normal priority. Idle cost is an
+  audio callback; the recogniser only runs while the channel is open (capped at a few
+  seconds) and for ~300 ms after it closes.
+- **The driver's request takes priority on the radio.** Opening the channel puts the
+  dispatcher on hold: P2/P3 calls queue instead of speaking (P1 safety calls still
+  interrupt). After the reply, each held call is dropped if it is stale, dropped if the
+  reply already covered it, spoken if it is the only one left, or folded with the others
+  into a single deterministic "Also: …" digest. Every outcome is in the decision log.
 - **Voice is a new input route into the existing menu, not a new answer system.** The
   reply side (cases, templates, variants, decision log, `driver_inputs` table) is reused
   untouched. No LLM anywhere (ADR 0008 applies to the ear as much as the mouth).
 - **Memory is not the constraint on 32 GB.** The recommended recogniser adds an estimated
   150–300 MB RSS; the game plus browser plus backend leave well over 10 GB free. The risk
   that matters is the same one as in doc 09: a CPU burst landing on the render thread.
-  PTT gating, process priority, affinity and a single decode thread bound that burst, and
-  the frame-time A/B in doc 09 is how we prove it.
+  Channel gating, process priority, affinity and a single decode thread bound that burst,
+  and the frame-time A/B in doc 09 is how we prove it.
 - **Not recommended:** always-on wake word (continuous inference and false triggers from
   game audio), open-vocabulary Whisper-class models (bursty, larger, unneeded), and
   anything cloud (network mid-race, non-replayable).
@@ -48,36 +54,106 @@ Non-goals (for the first version)
 
 ## 2. Interaction design
 
-### Push-to-talk
+### Talk toggle (open the channel, say it, channel closes)
 
-Hold a button, speak, release. The recogniser starts on press (with a 400 ms pre-roll
-from the ring buffer, so a word that started a fraction before the press is not lost)
-and finalises on release. Release is the end-of-utterance signal, so there is no
-silence detection to tune and no waiting for a timeout.
+Tap once to open the channel, speak, and the channel closes **by itself** on the first
+of:
 
-Why PTT and not a wake word: it is the single biggest performance and reliability lever.
-Nothing runs while the button is up, so idle cost is zero; the game's engine note,
-crowd, the engineer's own replies and Discord never reach the recogniser; and "pit wall,
-gap ahead?" becomes just "gap ahead?".
+1. **the request is recognised** — the streaming partial result matches a complete
+   grammar phrase and `voice.early_close_ms` (default 300 ms) of silence follows; the
+   reply is the acknowledgement, so the driver never has to toggle off;
+2. `voice.close_silence_ms` (default 1.0 s) of silence after speech was heard (the
+   words did not match a phrase yet — finalise and try);
+3. a second tap (manual close, also cancels: a tap during the reply stops it);
+4. the hard cap `voice.max_open_s` (default 6 s).
+
+In normal use the driver taps once and talks; the channel is closed by the time the
+answer starts. The recogniser starts on open (with a 400 ms
+pre-roll from the ring buffer, so a word that started a fraction before the tap is not
+lost) and finalises on close. A tap is all it takes, so the binding works identically on
+a wheel button and on a Stream Deck key, and nothing depends on the game reporting a
+*held* UDP Action (doc 12 flags that as untested).
+
+Why a toggle rather than hold-to-talk: one tap and the hand is back on the wheel, and
+the open channel is an explicit state the dispatcher can act on (below). Why not a wake
+word: nothing runs while the channel is closed, so idle cost is zero; the game's engine
+note, crowd, the engineer's own replies and Discord never reach the recogniser; and
+"pit wall, gap ahead?" becomes just "gap ahead?".
+
+End-of-speech detection is a plain RMS energy gate in the voice process (speech = above
+`voice.vad_db` for 100 ms; silence = below it for `close_silence_ms`). It is a few
+multiplies per 20 ms block, and it only runs while the channel is open. The hard cap is
+the safety net for a channel left open by mistake, and it bounds the recogniser's CPU
+per request.
 
 Binding: a free UDP Action (**Action 9**, `voice.ptt_bit`, default `0x10000000`) on a
-wheel button or a Stream Deck key, or a keyboard key via the dashboard (`V`). The
-UDP route is preferred for the same reasons as doc 12: no hook, no anti-cheat question,
-and the press is in the recording. A Stream Deck key may not report *held*, so a
-Stream Deck PTT falls back to **tap-to-talk**: tap starts listening, end of speech is
-detected by 600 ms of silence or a 4 s cap (`voice.tap_mode`).
+wheel button or a Stream Deck key, or a keyboard key via the dashboard (`V`). Actions
+1–5 are the wheel, 6–8 the Stream Deck shortcuts; 10–12 stay free. The UDP route is
+preferred for the same reasons as doc 12: no hook, no anti-cheat question, and the tap
+is in the recording. `ptt_bit` joins the existing collision check for `input.*_bit`.
 
-Feedback so the driver knows the mic is open, without looking:
+Feedback so the driver knows the channel is open, without looking:
 
-- **Press:** the existing radio blip (the two-pip open-channel sound), slightly softer.
-- **Release, recognised:** the reply itself, within ~0.5 s. No extra "copy".
-- **Release, not recognised:** "Say again?" once; a second miss in a row is silent (the
+- **Open:** the existing radio blip (the two-pip open-channel sound), slightly softer.
+- **Close, recognised:** the reply itself, within ~0.5 s. No extra "copy".
+- **Close, not recognised:** "Say again?" once; a second miss in a row is silent (the
   dashboard shows what was heard). Never guess at a low-confidence action.
-- **Dashboard:** a `LISTENING` pill beside the call banner while held; then the
-  recognised text and intent for 3 s (or `?` and the raw text on a miss). Same overlay
-  slot as the menu, so nothing reflows.
-- **P2/P3 speech is held** while the button is down and until the reply is done. P1
-  still speaks (safety first, same as radio silent).
+- **Channel still open with nothing understood** (mis-tap, or the driver changed their
+  mind): no speech. The dashboard pill turns amber `CHANNEL OPEN` with a countdown to
+  the hard cap; at the cap the channel closes with a single soft closing pip. A forgotten
+  toggle is therefore visible on the second screen but never talked about on the radio,
+  and it can only happen when no request was recognised.
+- **Dashboard:** a `LISTENING` pill beside the call banner while open (amber with a
+  countdown once `voice.open_warn_s`, default 3 s, has passed without a recognised
+  request); then the recognised text and intent for 3 s (or `?` and the raw text on a
+  miss). Same overlay slot as the menu, so nothing reflows.
+
+### The driver's request takes priority: the dispatcher hold
+
+When the channel opens the dispatcher enters **hold** and stays there until the reply
+has finished speaking (or the channel closed with nothing to answer). While on hold:
+
+- Speech in progress at P2/P3 is cut at the end of the current sentence (Piper renders
+  one call as one WAV; it is stopped, and the call is re-queued as held).
+- New P2/P3 candidates are accepted by the rules and dispatcher as usual (cooldowns,
+  dedupe and budget still book them) but go into the **held list** with their
+  submission time, priority, `still_true` predicate and topic, instead of being spoken.
+- Per-priority deadlines (P2 3 s, P3 1.5 s) **pause** during the hold; otherwise every
+  held P3 would expire before the driver finished the sentence. `still_true` remains the
+  real gate.
+- **P1 still speaks and preempts**, including the reply. Safety car, puncture, forced
+  box, imminent penalty do not wait for a gap question. This is the one exception to
+  "driver first", and it is the same exception radio silent makes.
+
+When the hold ends, the dispatcher runs **release** once, in priority then age order,
+and each held call gets exactly one of four outcomes:
+
+| Outcome | Rule | Example |
+|---|---|---|
+| **drop, stale** | `still_true` now false, or the call's paused deadline has less than 0 left after re-adding the hold duration, or a `clear_when` fired during the hold | "Norris closing, 0.8" held while the driver asked about fuel; Norris has since passed — dropped |
+| **drop, covered** | the reply's item has a topic that matches the held call's `topic` (both are YAML tags: `gap_ahead`, `gap_behind`, `fuel`, `tyres`, `pit_plan`, `energy`, `weather`, `position`) | driver asked "gap ahead?", the held call was a gap-ahead update — the answer already said it |
+| **speak** | one call remains (or a P2 recommendation remains — recommendations are never digested) | "Box this lap, box box." spoken right after the reply |
+| **digest** | two or more P3 (and non-recommendation P2) calls remain | "Also: Piastri 0.9 behind closing. Front-left temps high." |
+
+The digest is deterministic and comes from YAML like everything else (ADR 0008): each
+rule may carry a `brief:` template (a 3–6 word form of the call; `say` variants are the
+long form). Release joins up to `voice.digest_max_items` (default 3) briefs, highest
+priority first, under `voice.digest_prefix` ("Also: "); anything beyond the cap is
+dropped as `digest_overflow`. A rule without `brief` cannot be digested — if it survives
+to release it is spoken in full only if it is the sole survivor, else dropped. The
+digest counts as **one** call against the lap budget and against the minimum gap, and it
+is a P2 so it is not itself workload-gated to a straight.
+
+Every held call's outcome is a decision-log record (`held` → `spoken_after_hold` |
+`dropped_stale` | `dropped_covered` | `digested` | `digest_overflow`, with the hold
+duration and the driver intent that caused it) and a row in `calls` with that outcome,
+so review mode can show what the driver's question displaced and the learning loop
+(doc 20) can grade whether the digest was worth saying. In replay the hold is driven by
+the recorded channel-open/close and intent records, so release makes the same choices.
+
+The same hold and release also apply to the stick menu (`menu.hold_radio`, default on):
+an open menu is a driver request too. Today the menu does not hold P2/P3, which is why a
+gap update can talk over a menu prompt.
 
 ### What can be said
 
@@ -137,7 +213,7 @@ game ──UDP──▶ backend (ingest → state → rules → dispatcher → s
              voice process  ◀── mic (WASAPI shared, 16 kHz mono) ── ring buffer
              (below-normal priority, pinned, 1 decode thread)
                  ▲
-                 └── PTT edge: BUTN Action 9 (via backend ws) or key
+                 └── channel tap: BUTN Action 9 (via backend ws) or key
 ```
 
 **A separate process, not a thread.** Three reasons, all from doc 09: the recogniser's
@@ -158,16 +234,23 @@ moves off the game PC.
   `pitwall.input.menu.answer()`, or to the press/say-again/page paths. New question
   handlers (`laps_left`, `position`) and the two statements go into `menu.ANSWERS` and
   `menu.yaml` so they are also available on the stick.
-- PTT edge from `BUTN` Action 9 is forwarded to the voice process as
-  `{"type":"ptt","down":true|false,"t":..}`; a `V` key on the dashboard sends the same.
-- Dispatcher: `hold_low_priority(until)` while listening/replying; the reply is a P1 reply
-  as menu answers already are.
-- Recording: the intent message is written as a synthetic record (reserved packet id,
-  like the planned keyboard records), so `pitwall replay` re-injects it at the same
-  session time and never runs the recogniser. Decision log: a `driver_input` record with
-  `source: "voice"`, `heard`, `conf`; SQLite `driver_inputs` gains `source` and `heard`
-  columns (migration).
-- State frame: `voice: {available, listening, heard, intent, conf, age_s}`.
+- A tap on `BUTN` Action 9 toggles the channel; the backend owns the channel state and
+  tells the voice process `{"type":"channel","open":true|false,"t":..}`; a `V` key on
+  the dashboard toggles the same. The voice process reports a silence/cap close back as
+  `{"type":"channel","open":false,"reason":"silence"|"cap"}` so the backend state
+  matches.
+- Dispatcher: `hold()` on channel open, `release(reply_topic)` when the reply has been
+  spoken (or the channel closed with a miss), with the four outcomes above. The reply is
+  a P1 reply as menu answers already are.
+- Recording: channel open/close and the intent message are written as synthetic records
+  (reserved packet id, like the planned keyboard records), so `pitwall replay` re-injects
+  them at the same session time and never runs the recogniser. Decision log: a
+  `driver_input` record with `source: "voice"`, `heard`, `conf`, plus the held-call
+  outcome records; SQLite `driver_inputs` gains `source` and `heard` columns and `calls`
+  gains the hold outcomes (migration).
+- Rules YAML: optional `brief:` and `topic:` per rule; menu items gain `topic:` so
+  "covered" can be decided. `pitwall rules check` warns about P3 rules without `brief`.
+- State frame: `voice: {available, channel_open, heard, intent, conf, age_s, held: n}`.
 
 **Voice process:**
 
@@ -176,11 +259,12 @@ moves off the game PC.
    format or touches the game's output stream.
 2. Loads the model at startup and warms it with one silent decode, so the first press in
    the race pays nothing.
-3. On `ptt down`: takes the last 400 ms from the ring and streams audio into a fresh
-   recogniser configured with the grammar. On `ptt up`: feeds the trailing 200 ms,
-   finalises, matches, sends the intent (or a `miss`) to the backend. Hard cap 6 s of
-   audio per press.
-4. Idle: nothing but the audio callback. No VAD, no wake word, no timers.
+3. On `channel open`: takes the last 400 ms from the ring and streams audio into a fresh
+   recogniser configured with the grammar; the energy gate watches for speech then
+   silence. On close (second tap, silence after speech, or `max_open_s`): feeds the
+   trailing 200 ms, finalises, matches, sends the intent (or a `miss`) and the close
+   reason to the backend.
+4. Idle: nothing but the audio callback. No energy gate, no wake word, no timers.
 5. Optional `voice.save_audio: true` writes each utterance as a WAV next to the recording,
    for offline accuracy measurement (never committed, ADR 0005 applies).
 
@@ -241,29 +325,32 @@ beyond the recogniser object) and confirm with a perf-counter log over a full ra
 - **Idle:** the WASAPI capture callback delivers 20 ms blocks into a ring buffer. This
   is well under 0.5 % of one core and has no burst; it is the same work Discord does
   while you are muted.
-- **While held (1–3 s per question):** streaming decode at RTF ≈ 0.1–0.3 means 10–30 % of
-  one core *during the hold only*. Kaldi's BLAS thread count is pinned to 1
-  (`OPENBLAS_NUM_THREADS=1`) so it cannot fan out across cores.
-- **On release:** finalisation, ≈ 100–300 ms of one core. This is the only burst and it
+- **While the channel is open (1–3 s per question, 6 s hard cap):** streaming decode at
+  RTF ≈ 0.1–0.3 means 10–30 % of one core *while open only*, plus the energy gate, which
+  is negligible. Kaldi's BLAS thread count is pinned to 1 (`OPENBLAS_NUM_THREADS=1`) so
+  it cannot fan out across cores. The cap bounds the worst case for a channel left open.
+- **On close:** finalisation, ≈ 100–300 ms of one core. This is the only burst and it
   is small and bounded.
 - **Per race:** at 10–30 questions a race that is a few core-seconds in total.
 
 Mitigations, all default-on and all from doc 09's playbook:
 
 1. The voice process runs at **below-normal priority** (`SetPriorityClass`); the game
-   wins every scheduling contest.
+   wins every scheduling contest. The hold/release logic itself is a few list
+   operations inside the existing dispatcher drain — no measurable cost.
 2. **Affinity** to the same trailing cores as the backend (`voice.cpu_affinity`,
    inherits `cpu_affinity` when unset). On CPUs with E-cores, pin to E-cores.
 3. **One decode thread.** No thread pools, no GPU/DirectML providers.
 4. **Model load and warm-up at startup**, in the garage, never mid-lap.
-5. **No timer-resolution changes**; PTT edges arrive as events, no polling loops.
+5. **No timer-resolution changes**; channel taps arrive as events, no polling loops.
 6. `voice.enabled: false` removes the process entirely — a one-line A/B.
 
 Where micro-stutter could still come from, and the check for each:
 
 | Suspected cause | Why it is unlikely | How we check |
 |---|---|---|
-| Decode burst on the render core | below-normal priority + affinity keep it off the busy cores; ≤ 300 ms of one core | frame-time A/B with a scripted PTT burst every 20 s |
+| Decode burst on the render core | below-normal priority + affinity keep it off the busy cores; ≤ 300 ms of one core | frame-time A/B with a scripted channel open/question every 20 s |
+| Channel left open (6 s of decoding) | hard cap; silence close | scripted worst case: open with no speech, repeated |
 | Audio device contention | shared-mode capture is a separate WASAPI stream; the game's output is unaffected; never exclusive mode | verify no format change / no dropouts in the game audio while listening |
 | Python GIL / event loop | separate process; the backend only handles a 200-byte WS message per question | tick-overrun histogram unchanged |
 | Page faults on first press | model warm-up at startup; steady RSS | RSS log flat across the race |
@@ -273,22 +360,24 @@ Where micro-stutter could still come from, and the check for each:
 
 Doc 09's procedure, extended: the same hotlap benchmark, three runs each of (a) backend
 off, (b) backend on, (c) backend on + voice process idle, (d) backend on + a scripted
-PTT question every 20 s. Capture with PresentMon or CapFrameX; compare 1 % and 0.1 %
-lows. Acceptance: (c) and (d) inside the run-to-run noise of (b). If (d) fails, the
+spoken question every 20 s. Capture with PresentMon or CapFrameX; compare 1 % and 0.1 %
+lows, where (d) alternates real questions with worst-case opens that hit the 6 s cap.
+Acceptance: (c) and (d) inside the run-to-run noise of (b). If (d) fails, the
 first knob is affinity to E-cores, the second is the SAPI fallback, the third is moving
 the voice process to another machine — the architecture allows all three without code
 changes to the backend.
 
-### Latency budget (driver's release → reply starts)
+### Latency budget (channel close → reply starts)
 
 | Step | Est. |
 |---|---|
-| `BUTN` release reaching the backend and forwarded to the voice process | 10–40 ms on loopback |
+| Silence close: `close_silence_ms` after the last word (a second tap skips this) | 0–1000 ms |
+| Close reaching the recogniser (tap: `BUTN` → backend → voice process on loopback) | 10–40 ms |
 | Recogniser finalise (small model, streaming already consumed the audio) | 100–300 ms |
 | Intent match + `menu.answer()` | < 5 ms |
 | Piper synthesis (cached common replies: 0; else ~40 ms measured) | 0–60 ms |
 | Playback start (winsound / device) | ~50 ms |
-| **Total** | **~0.2–0.5 s** — feels like a person answering |
+| **Total** | **~0.2–0.5 s after a closing tap; ~1.2–1.5 s after the last word on silence close** — the pause a real engineer takes before answering |
 
 ## 6. Determinism, replay and review
 
@@ -299,6 +388,9 @@ changes to the backend.
   templates, same seeded variant rotation).
 - Misses are recorded too (`intent: null`), so the review timeline shows "asked, not
   understood" and the accuracy of the recogniser can be graded per race like calls are.
+- Held-call outcomes are recorded per call, so the review can answer "what did the
+  driver's question cost?" (how much was dropped, how much digested) and the grader can
+  mark a digest or a stale-drop as right or wrong.
 - Optional utterance WAVs (`voice.save_audio`) plus the recorded heard text give an
   offline test set for tuning the grammar; `pitwall voice eval <dir>` re-runs the
   recogniser over saved WAVs and reports intent accuracy and confusion pairs.
@@ -313,17 +405,21 @@ voice:
   engine: auto              # auto = vosk if its model is present, else sapi (Windows), else off
   model_dir: models/vosk-small-en-us
   device: null              # input device name filter; null = default
-  ptt_bit: 0x10000000       # UDP Action 9; 0 disables the wheel PTT
+  ptt_bit: 0x10000000       # UDP Action 9: tap opens / closes the channel; 0 disables
   ptt_key: "V"              # dashboard key, mirrors the wheel button
-  tap_mode: false           # tap starts, silence (tap_silence_ms) or tap_max_s ends
-  tap_silence_ms: 600
-  tap_max_s: 4.0
+  early_close_ms: 300       # close as soon as a full phrase is recognised and this much silence follows
+  close_silence_ms: 1000    # close after this much silence once speech was heard
+  max_open_s: 6.0           # hard cap on an open channel
+  open_warn_s: 3.0          # dashboard pill turns amber with a countdown after this
+  vad_db: -35               # energy gate for speech / silence
   preroll_ms: 400
-  max_utterance_s: 6.0
   confidence_min: 0.7
   margin_min: 0.15
   say_again_on_miss: true   # "Say again?" once, then silent until a hit
-  hold_low_priority: true   # hold P2/P3 speech while listening and replying
+  hold: true                # driver first: hold P2/P3 while the channel is open and replying
+  digest_max_items: 3       # held calls folded into one "Also: …" after the reply
+  digest_prefix: "Also: "
+  digest_priority: 2
   cpu_affinity: null        # inherits the backend setting
   save_audio: false
   grammar: voice.yaml
@@ -345,15 +441,14 @@ intents:
       page: {battle: ["battle", "fight"], car: ["car"], track: ["track"], race: ["race"], setup: ["setup"]}
 ```
 
-`ptt_bit` joins the existing collision check for `input.*_bit`.
-
 ## 8. Plan
 
 Phase 0 — spike (one session, no backend changes, decides go/no-go)
 
 1. On the game PC: install Vosk + the small English model; record 60 utterances of the
    grammar through the driving headset **while driving** (engine noise, breathing,
-   clipped words), with PTT timestamps.
+   clipped words), with tap timestamps; also record natural mid-sentence pause lengths
+   to set `close_silence_ms` and `early_close_ms`.
 2. Measure: intent accuracy and confusion pairs; process RSS and CPU during idle, hold
    and finalise; finalise latency.
 3. Run the four-way frame-time A/B above with the standalone voice process.
@@ -363,23 +458,28 @@ Phase 0 — spike (one session, no backend changes, decides go/no-go)
 
 Phase 1 — questions by voice (one to two sessions)
 
-- `pitwall voice` process, PTT via Action 9 and `V`, grammar for the existing menu
-  questions and opinions, backend `intent` message → `menu.answer()`, state pill,
-  recording + replay, decision log, `pitwall rules check` for `voice.yaml`.
-- Tests: intent matcher (unit, incl. thresholds and slots); engine `intent` handling on a
-  replay with synthetic intent records; grammar validation.
+- `pitwall voice` process, channel toggle via Action 9 and `V` with recognised /
+  silence / cap auto-close, grammar for the existing menu questions and opinions,
+  backend `intent` message → `menu.answer()`, dispatcher hold/release with the four
+  outcomes and `brief`/`topic` on the race rules, state pill with the open-channel
+  countdown, recording + replay, decision log, `pitwall rules check` for `voice.yaml`.
+- Tests: intent matcher (unit, incl. thresholds and slots); channel state machine
+  (early close on a recognised phrase, silence close, tap close, cap close, tap during
+  the reply cancels it); dispatcher hold/release (unit: stale drop, covered drop, single
+  survivor spoken, digest of 2–3, overflow, P1 preempting during hold, deadline pause,
+  budget counting the digest as one); engine `intent` handling on a replay with
+  synthetic channel and intent records; grammar validation; menu hold parity.
 
 Phase 2 — actions and statements (one session)
 
 - `ack`, `negative`, `say_again`, `boxing`, `staying_out`, `laps_left`, `position`,
-  slot-driven `mindset` / `silent` / `budget` / `page`; dispatcher hold; tap-to-talk;
-  `voice eval` over saved audio.
+  slot-driven `mindset` / `silent` / `budget` / `page`; `voice eval` over saved audio.
 
 Phase 3 — optional, only if asked for
 
 - Wake word ("pit wall") via a small keyword spotter, always-on. Costs a few percent of
   one core continuously and re-opens the false-trigger problem with game audio; only
-  worth it if PTT proves to be a hand-off-the-wheel problem in practice.
+  worth it if the tap proves to be a hand-off-the-wheel problem in practice.
 
 ## 9. Risks and open questions
 
@@ -388,18 +488,32 @@ Phase 3 — optional, only if asked for
   among 40 phrases), but the spike decides. Fallback: respell phrasings to lexicon words,
   or Rhino.
 - **Microphone while driving.** A wheel-rig headset mic picks up breathing and the rig;
-  PTT plus the short pre-roll is the main defence. If the driver uses speakers, PTT is
-  mandatory (the engineer's own voice would otherwise be recognised).
-- **Held UDP Action.** Doc 12 already flags that a *held* UDP Action is untested on the
-  wheel. If the game reports only taps, tap-to-talk is the default. Check in the spike.
-- **Two-way talk-over.** The driver asks while the engineer is mid-sentence: the P2/P3
-  hold covers the reply side; on the capture side the pit wall's own audio is in the
-  headphones, not the mic, so it is not heard. With speakers it would be — see above.
-- **Discord / league voice.** A PTT key shared with Discord would send the question to
+  the closed channel plus the short pre-roll is the main defence. If the driver uses
+  speakers, the engineer's reply must never overlap an open channel — which the
+  auto-close on recognition guarantees (the channel is closed before the reply starts).
+- **Silence close mis-fires.** A pause mid-sentence ("gap… ahead?") longer than 1 s
+  closes the channel early and the recogniser sees half a phrase, usually a miss. The
+  driver can re-tap; `close_silence_ms` is tunable; the spike measures natural pause
+  lengths while driving.
+- **Early close on a false partial.** The streaming partial could match a short phrase
+  ("gap") before the driver finishes ("gap behind"). Early close therefore requires the
+  partial to match a *complete* phrase that is not a prefix of another, plus 300 ms of
+  silence; prefix phrases wait for the normal silence close.
+- **Two-way talk-over.** The driver asks while the engineer is mid-sentence: the hold
+  stops the engineer at the end of the sentence and re-queues it; on the capture side
+  the pit wall's own audio is in the headphones, not the mic, so it is not heard. With
+  speakers it would be — see above.
+- **Digest quality.** A three-item "Also:" can sound like a list. The cap is 3, briefs
+  are 3–6 words, recommendations are never digested, and the grader will tell us if the
+  digest is noise; if so, lower `digest_max_items` to 1.
+- **Hold duration.** A question plus reply plus digest can hold P2/P3 for 5–8 s. A P2
+  recommendation (box this lap) is spoken first at release, and P1 never waits, so the
+  cost is only ever informational calls arriving late — which stale-drop then handles.
+- **Discord / league voice.** A talk key shared with Discord would send the question to
   the league too. Use a separate button.
 - **Windows only.** Capture (WASAPI) and the SAPI fallback are Windows; Vosk is
   cross-platform, so the voice process could run on a Linux/Pi box beside a LAN backend.
-- **Not in the recording:** keyboard-PTT and Stream Deck routes go through the
+- **Not in the recording:** keyboard and Stream Deck routes go through the
   dashboard, as the Space route does today; the intent record is what makes replay
   complete, the press edge itself is not needed.
 - **Dependency:** `vosk` (and its model download via `pitwall voices get`-style command)
