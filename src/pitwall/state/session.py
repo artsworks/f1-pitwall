@@ -351,6 +351,20 @@ class Snapshot:
     plan_b_delta_s: float = 0.0
     plan_c_spoken: str = ""
     plan_c_delta_s: float = 0.0
+    # Battle state (docs/20 L3, pitwall.strategy.battle), filled by the engine.
+    battle_mode: str = "free_air"
+    battle_mode_laps: int = 0
+    battle_catch_laps: float = math.inf
+    battle_threat_laps: float = math.inf
+    battle_closing_ahead_s: float = 0.0
+    battle_closing_behind_s: float = 0.0
+    battle_tyre_offset_ahead: int = 0
+    battle_tyre_offset_behind: int = 0
+    battle_pass_prob: float = 0.0
+    battle_hold_prob: float = 0.0
+    battle_result: str = ""
+    battle_result_recent: bool = False
+    battle_result_name: str = ""
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()

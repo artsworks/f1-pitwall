@@ -319,7 +319,7 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
 TEMPLATE_KEYS = frozenset(
     {"lap", "laps_left", "mindset", "wear", "age", "pace_laps", "plan_lap", "in_laps"}
     | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets"}
-    | {"in10", "in30", "to", "bias", "bias_to", "label", "pos", "best", "ahead", "behind"}
+    | {"in10", "in30", "to", "bias", "bias_to", "label", "pos", "best", "ahead", "behind", "budget"}
 )
 
 

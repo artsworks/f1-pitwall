@@ -194,6 +194,7 @@ check` validates ids, handlers and placeholders.
 | Rain coming? | question | crossover / coming / chance / dry (`rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent in ten." |
 | Race stat | question | fuel_short / tyres_gone / energy / box_now / pit_soon / position / unknown (first that applies) | "P4, 12 to go. Best lap 1:32.4." |
 | Fight | question | both / ahead / behind / none (gap, gap trend, laps to catch, model pace) | "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7. Russell 0.9 behind, pulling away 0.2 a lap." |
+| Radio calls | action | default (`budget`) | cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (4 / 8 / 12 / 20), overriding the mindset's `call_budget_per_lap`: "Copy, up to 20 calls a lap." |
 | Understeer | opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
 | Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
 | Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |

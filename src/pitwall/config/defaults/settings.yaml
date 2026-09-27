@@ -39,7 +39,7 @@ policy:
     1: 5.0
     2: 3.0
     3: 1.5
-  calls_per_lap: 4
+  calls_per_lap: 12
   min_gap_s: 3.0
   dedupe_window_s: 20.0
   quiet: false
@@ -131,6 +131,20 @@ thresholds:
   plan_pace_soft_ms: -400      # fresh-set pace vs medium at age 0
   plan_pace_medium_ms: 0
   plan_pace_hard_ms: 400
+  # Battle state + racecraft coaching (docs/20 L3); attack range = mindset attack_window_s
+  battle_defend_gap_s: 1.0      # car behind within this: defending
+  battle_threat_gap_s: 3.0      # car behind within this and closing: under threat
+  battle_catch_gap_s: 5.0       # car ahead within this and closing: catching
+  battle_closing_min_s: 0.2     # closing rate (s/lap) that counts as a trend
+  battle_min_episode_s: 5.0     # shorter attack/defend spells don't train the pass model
+  battle_result_hold_s: 20.0    # "passed / held / lost" stays reportable this long
+  battle_prior_weight: 4.0      # pseudo-episodes behind the pass/hold priors
+  battle_pass_drs_prior: 0.35
+  battle_pass_nodrs_prior: 0.15
+  battle_hold_prior: 0.7
+  battle_attack_prob_min: 0.3   # below this, attacking is patience + tyres, not "go"
+  battle_patience_laps: 2       # laps stuck in attack range before the patience call
+  battle_manage_every_laps: 5   # "gaps stable" cadence
   # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
   tune_min_grades: 3
   tune_gain: 2.0

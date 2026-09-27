@@ -158,14 +158,14 @@ class InputSettings(BaseModel):
         return self
 
 
-MenuAction = Literal["mindset", "silent", "page"]
+MenuAction = Literal["mindset", "silent", "page", "budget"]
 
 
 class MenuItemModel(BaseModel):
     """One driver-menu entry (docs/12). `kind`:
     question -> answered from the snapshot by the `answer` handler (defaults to id);
     opinion  -> recorded (decision log + SQLite) and acknowledged from `replies`;
-    action   -> runs `action` (mindset / silent / page)."""
+    action   -> runs `action` (mindset / silent / page / budget)."""
 
     id: str
     label: str  # shown on the overlay and spoken on scroll; keep it 2-3 words
@@ -183,6 +183,8 @@ class MenuSettings(BaseModel):
     speak_on_scroll: bool = True  # speak each item name as it is highlighted
     wrap: bool = True
     opinion_hold_laps: int = 5  # a balance opinion biases advice this many laps
+    # "budget" action cycles the P2/P3 calls-per-lap limit through these (overrides mindset)
+    budget_steps: list[int] = Field(default_factory=lambda: [4, 8, 12, 20])
     items: list[MenuItemModel] = Field(default_factory=list)
 
 

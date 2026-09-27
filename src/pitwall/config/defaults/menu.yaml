@@ -10,6 +10,7 @@ menu:
   speak_on_scroll: true
   wrap: true
   opinion_hold_laps: 5
+  budget_steps: [4, 8, 12, 20]  # "Radio calls" item cycles the calls-per-lap limit
   items:
     - id: tyres
       label: "Tyres gone?"
@@ -86,6 +87,12 @@ menu:
         ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind."]
         behind: ["Clear ahead. {behind}", "Nobody ahead. {behind}"]
         none: ["Nobody near. Clear air.", "Clear air, both ways."]
+    - id: budget
+      label: "Radio calls"
+      kind: action
+      action: budget
+      replies:
+        default: ["Copy, up to {budget} calls a lap.", "Understood, {budget} calls a lap."]
     - id: understeer
       label: "Understeer"
       kind: opinion
