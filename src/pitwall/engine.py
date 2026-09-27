@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
 import dataclasses
 import math
 import time
@@ -157,6 +158,8 @@ class Engine:
         self.recording_path_source: Any = None  # callable -> Path | None
         self._last_heartbeat: float | None = None
         self.recovering = False
+        self.alive_path: Path | None = None  # touched each live loop for the supervisor
+        self._alive_t = -math.inf
         self.tick_errors = 0
         self.db: Any = dispatcher.log.db
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
@@ -1190,6 +1193,10 @@ class Engine:
             self._upsert_session(self.state.session_uid)
         self._heartbeat(now)
         if self.recovering:
+            if self.rule_engine is not None:
+                # Arm/disarm edges on the rebuilt state so conditions already
+                # true before the crash don't all fire on the first live tick.
+                self.rule_engine.evaluate(snapshot)
             return []
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
@@ -1268,11 +1275,25 @@ class Engine:
         )
         return f"recovered lap {self.state.lap_num} from {path.name} ({len(tail)} datagrams)"
 
+    def rejoin_text(self) -> str:
+        """Spoken after a successful recover()."""
+        st = self.state
+        parts = ["Back with you."]
+        if st.lap_num > 0:
+            parts.append(f"Lap {st.lap_num}" + (f", P{st.position}." if st.position else "."))
+        if st.total_laps > 0 and st.lap_num > 0:
+            parts.append(f"{max(0, st.total_laps - st.lap_num + 1)} to go.")
+        return " ".join(parts)
+
     async def run_live(self) -> None:
         """Tick at tick_hz forever; dispatch drains on its own loop. The
         watchdog keeps the loop alive through a failing tick (logged)."""
         period = self.tick_period
         while True:
+            if self.alive_path is not None and time.monotonic() - self._alive_t >= 1.0:
+                self._alive_t = time.monotonic()
+                with contextlib.suppress(OSError):
+                    self.alive_path.touch()
             try:
                 self.tick(self.clock.now())
             except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race

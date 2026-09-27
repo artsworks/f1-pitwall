@@ -910,6 +910,10 @@ class Database:
                 (_uid_to_sql(session_uid), session_t, wall_t, recording_path, lap_num),
             )
 
+    def clear_heartbeat(self) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM runtime WHERE key='heartbeat'")
+
     def read_heartbeat(self) -> Heartbeat | None:
         r = self._conn.execute("SELECT * FROM runtime WHERE key='heartbeat'").fetchone()
         if r is None:

@@ -465,9 +465,28 @@ at `heartbeat.lap_num` through the current engine with the rule engine muted (di
 `quiet` for the tail) so state is rebuilt without re-speaking old calls. Logged as
 `{"outcome": "recovered", "from_lap": …, "tail_s": …}`.
 
-Watchdog: `pitwall start` runs the engine in a supervised thread-free loop; a stalled tick
-(`> th.watchdog_stall_s` wall seconds without a tick while packets arrive) logs
-`{"outcome":"watchdog_stall"}` and resets the dispatcher queue. Graceful exit sets `ended_at`.
+Watchdog (`pitwall.supervisor`). `pitwall start` is split into two processes, so the
+recorder is the first thing to start and the last to stop:
+
+```
+pitwall start                     # supervisor: binds udp_port, RecordingRotator, watchdog
+  └─ python -m pitwall start --child   # engine: rules, dashboard, speech on 127.0.0.1:engine_port
+```
+
+- **Supervisor:** writes each datagram to the recording, then forwards it to the child. It
+  writes the live recording path to `recordings/.runtime/current_recording`; the child's
+  heartbeat and `recover()` read the recording through that pointer.
+- **Crash:** if the child exits non-zero, it is respawned. The backoff doubles up to
+  `engine.watchdog_backoff_max_s`, and resets once the child has run `watchdog_reset_s`.
+  Exit 0 (Ctrl-C) stops everything.
+- **Hang:** if `recordings/.runtime/engine.alive`, which `run_live` touches every second, is
+  older than `watchdog_stall_s` after `watchdog_grace_s`, the child is killed and respawned.
+- **Rejoin:** the respawned child runs `recover()`. The rule engine sees the replayed tail,
+  so conditions that were already true don't all fire on the first live tick. The child then
+  speaks `Engine.rejoin_text()`: "Back with you. Lap 30, P4. 21 to go."
+- **Clean exit:** a clean child exit calls `clear_heartbeat()`, so the next `start` is a
+  fresh session and not a recovery.
+- `pitwall start --no-watchdog` keeps the old single-process mode.
 
 ## Learning loop: `pitwall tune`
 
