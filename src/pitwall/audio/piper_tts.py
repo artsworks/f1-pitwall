@@ -29,6 +29,9 @@ from pitwall.audio.dispatcher import Call
 from pitwall.config.models import SpeechSettings
 
 SUGGESTED_VOICES = (
+    "en_GB-cori-medium",
+    "en_GB-jenny_dioco-medium",
+    "en_GB-alba-medium",
     "en_GB-northern_english_male-medium",
     "en_GB-alan-medium",
     "en_US-ryan-high",
