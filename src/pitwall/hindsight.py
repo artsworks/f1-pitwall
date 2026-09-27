@@ -45,13 +45,26 @@ def _num(inputs: Mapping[str, object], name: str) -> float | None:
     return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else None
 
 
+def _new_set(prev: LapRow, cur: LapRow) -> bool:
+    return cur.lap_num == prev.lap_num + 1 and (
+        cur.tyre_age_laps < prev.tyre_age_laps or cur.compound != prev.compound
+    )
+
+
 def stop_laps(laps: Sequence[LapRow]) -> list[int]:
-    """In-laps of the player's stops: flagged 'pitted', else a tyre-age reset."""
-    out = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons}
-    for prev, cur in zip(laps, laps[1:], strict=False):
-        if cur.lap_num == prev.lap_num + 1 and cur.tyre_age_laps < prev.tyre_age_laps:
-            if not any(s in out for s in (prev.lap_num, cur.lap_num)):
-                out.add(prev.lap_num)
+    """In-laps of the player's tyre stops: a 'pitted' lap next to a tyre change
+    (drive-throughs / stop-go penalties change nothing), else a bare tyre-age
+    reset."""
+    changes = [
+        (prev.lap_num, cur.lap_num)
+        for prev, cur in zip(laps, laps[1:], strict=False)
+        if _new_set(prev, cur)
+    ]
+    near = {n for pair in changes for n in pair}
+    out = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons and lap.lap_num in near}
+    for prev_n, cur_n in changes:
+        if not any(s in out for s in (prev_n, cur_n)):
+            out.add(prev_n)
     return sorted(out)
 
 
@@ -75,9 +88,25 @@ def _green(stint: Sequence[LapRow]) -> list[LapRow]:
     return [lap for lap in stint if lap.valid == 1 and lap.sc_status == 0 and lap.lap_time_ms > 0]
 
 
-def linear_deg(stint: Sequence[LapRow]) -> tuple[float, float, int] | None:
-    """(base_ms at age 0, deg ms/lap, n) from the stint's green valid laps."""
-    pts = [(float(lap.tyre_age_laps), float(lap.lap_time_ms)) for lap in _green(stint)]
+def fuel_corrected_ms(stint: Sequence[LapRow], fuel_ms: float) -> dict[int, float]:
+    """Green lap times with the fuel-burn gain added back (fuel_ms per lap of
+    fuel burned since the stint's heaviest lap), keyed by lap number, so what
+    is left is tyre age (the deg model's fuel term, docs/03)."""
+    green = _green(stint)
+    if not green:
+        return {}
+    ref = max(lap.fuel_remaining_laps for lap in green)
+    return {
+        lap.lap_num: lap.lap_time_ms + fuel_ms * max(0.0, ref - lap.fuel_remaining_laps)
+        for lap in green
+    }
+
+
+def linear_deg(stint: Sequence[LapRow], fuel_ms: float = 0.0) -> tuple[float, float, int] | None:
+    """(base_ms at age 0, deg ms/lap, n) from the stint's green valid laps,
+    fuel-corrected at fuel_ms per lap of fuel burned."""
+    ms = fuel_corrected_ms(stint, fuel_ms)
+    pts = [(float(lap.tyre_age_laps), ms[lap.lap_num]) for lap in stint if lap.lap_num in ms]
     n = len(pts)
     if n < 2:
         return None
@@ -91,25 +120,30 @@ def linear_deg(stint: Sequence[LapRow]) -> tuple[float, float, int] | None:
 
 
 def stop_cost_s(
-    before: Sequence[LapRow], after: Sequence[LapRow], min_stint: int, extrapolate: int = 3
+    before: Sequence[LapRow],
+    after: Sequence[LapRow],
+    min_stint: int,
+    extrapolate: int = 3,
+    fuel_ms: float = 0.0,
 ) -> tuple[float, int] | None:
     """Hindsight cost of the actual stop lap vs the best one, holding both
     stints' fitted pace and the total laps fixed (pit loss cancels out).
     Neither stint is stretched more than `extrapolate` laps past what was
     actually driven on it, so an unseen cliff can't make a later stop look
     better. Returns (cost seconds, best in-lap)."""
-    f1 = linear_deg(before)
-    f2 = linear_deg(after)
+    f1 = linear_deg(before, fuel_ms)
+    f2 = linear_deg(after, fuel_ms)
     if f1 is None or f2 is None:
         return None
     first = before[0].lap_num
     age0 = before[0].tyre_age_laps
+    age2 = after[0].tyre_age_laps
     total = len(before) + len(after)
     actual_k = len(before)
 
     def t(k: int) -> float:
         s1 = sum(f1[0] + f1[1] * (age0 + i) for i in range(k))
-        s2 = sum(f2[0] + f2[1] * j for j in range(total - k))
+        s2 = sum(f2[0] + f2[1] * (age2 + j) for j in range(total - k))
         return s1 + s2
 
     lo = max(max(1, min_stint), total - len(after) - extrapolate)
@@ -122,19 +156,34 @@ def stop_cost_s(
 
 
 def _cliff_laps(
-    stint: Sequence[LapRow], call_lap: int, end_lap: int, cliff_ms: float
+    stint: Sequence[LapRow],
+    call_lap: int,
+    end_lap: int,
+    cliff_ms: float,
+    fuel_ms: float = 0.0,
+    sustain: int = 2,
 ) -> tuple[float, int | None] | None:
-    """Laps after the call until pace is cliff_ms slower than the stint's
-    fitted age-0 pace (the model's own laps_of_pace reference), from the
-    green laps up to the call. None if there's no reference; (base, None)
-    if the cliff never came before end_lap."""
-    fit = linear_deg([lap for lap in stint if lap.lap_num <= call_lap])
+    """Laps after the call until fuel-corrected pace stays cliff_ms slower
+    than the stint's fitted age-0 pace (the model's own laps_of_pace
+    reference) for `sustain` consecutive green laps, so one off lap isn't
+    a cliff. None if there's no reference; (base, None) if the cliff never
+    came before end_lap."""
+    fit = linear_deg([lap for lap in stint if lap.lap_num <= call_lap], fuel_ms)
     if fit is None:
         return None
     base = fit[0]
-    for lap in _green(stint):
-        if call_lap < lap.lap_num <= end_lap and lap.lap_time_ms - base >= cliff_ms:
-            return base, lap.lap_num - call_lap
+    ms = fuel_corrected_ms(stint, fuel_ms)
+    after = [n for n in sorted(ms) if call_lap < n <= end_lap]
+    run: list[int] = []
+    for n in after:
+        if ms[n] - base >= cliff_ms and (not run or n == run[-1] + 1):
+            run.append(n)
+        elif ms[n] - base >= cliff_ms:
+            run = [n]
+        else:
+            run = []
+        if len(run) >= sustain:
+            return base, run[0] - call_lap
     return base, None
 
 
@@ -156,6 +205,8 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
     cliff_ms = _th(th, "tyre_cliff_ms", 1500)
     min_stint = int(_th(th, "plan_min_stint_laps", 3))
     extrapolate = int(_th(th, "hind_extrapolate_laps", 3))
+    fuel_ms = _th(th, "fuel_ms_per_lap_default", 30)
+    sustain = int(_th(th, "hind_cliff_sustain_laps", 2))
     out: list[Outcome] = []
     fired = [c for c in db.calls_for_session(uid) if c.get("outcome") == "fired"]
 
@@ -199,7 +250,7 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
                     )
                     continue
                 res = (
-                    stop_cost_s(parts[i], parts[i + 1], min_stint, extrapolate)
+                    stop_cost_s(parts[i], parts[i + 1], min_stint, extrapolate, fuel_ms)
                     if i + 1 < len(parts)
                     else None
                 )
@@ -235,7 +286,7 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
         if rule in TYRE_RULES and lop is not None:
             end = next((s for s in stops if s >= lap_n), last_lap)
             stint = next((p for p in parts if p[0].lap_num <= lap_n <= p[-1].lap_num), [])
-            res_cliff = _cliff_laps(stint, lap_n, end, cliff_ms)
+            res_cliff = _cliff_laps(stint, lap_n, end, cliff_ms, fuel_ms, sustain)
             cliff = res_cliff[1] if res_cliff is not None else None
             if res_cliff is None:
                 out.append(Outcome(cid, rule, lap_n, "laps_of_pace", lop, None, None, NA))
@@ -264,7 +315,7 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
             out.append(
                 Outcome(cid, rule, lap_n, "fuel_margin", margin, None, None, CENSORED, "no finish")
             )
-        elif rule in FUEL_RULES and margin is not None and laps[-1].fuel_remaining_laps:
+        elif rule in FUEL_RULES and margin is not None:
             actual = laps[-1].fuel_remaining_laps
             err = margin - actual
             label = GOOD if abs(err) <= fuel_tol else WRONG
@@ -300,7 +351,23 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
         seq = [c for c in str(ev.get("sequence") or "").split("-") if c]
         i = max((j for j, s in enumerate(starts) if s <= lap_n), default=0)
         run_seq = executed[i:]
-        followed = bool(seq) and run_seq[: len(seq)] == seq
+        followed = bool(seq) and run_seq == seq
+        if not followed and not finished and seq[: len(run_seq)] == run_seq:
+            # Ended early on the plan so far: can't say it wasn't followed.
+            out.append(
+                Outcome(
+                    f"plan:{ev.get('id')}",
+                    f"plan_{ev.get('kind')}",
+                    lap_n,
+                    "plan_followed",
+                    None,
+                    None,
+                    None,
+                    CENSORED,
+                    f"plan {ev.get('to_plan')} {'-'.join(seq)}, ran {'-'.join(run_seq)}, no finish",
+                )
+            )
+            continue
         out.append(
             Outcome(
                 f"plan:{ev.get('id')}",

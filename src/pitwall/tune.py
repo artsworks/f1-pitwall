@@ -18,6 +18,9 @@ COOLDOWN_PREFIX = "cooldown_mult:"
 AB_PREFIX = "ab_net:"
 
 _BAD = ("noise", "wrong", "too_late")
+# Fuel margin at the flag also moves with the driver's response to the call
+# (lift and coast after fuel_short), so it grades the forecast, not the call.
+_AUTO_SKIP_METRICS = ("fuel_margin",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,13 +56,18 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
         counts[str(g["rule_id"])][str(g["grade"])] += 1
         graded.add((g["session_uid"], str(g["call_id"])))
     auto: dict[str, Counter[str]] = defaultdict(Counter)
+    seen: set[tuple[object, str]] = set()
     for o in db.all_outcomes():
         label = str(o["label"])
         cid = str(o["call_id"] or "")
         if label not in ("good", "wrong") or cid.startswith("plan:"):
             continue
-        if (o["session_uid"], cid) in graded:
+        if str(o["metric"]) in _AUTO_SKIP_METRICS:
             continue
+        key = (o["session_uid"], cid)
+        if key in graded or key in seen:
+            continue
+        seen.add(key)
         auto[str(o["rule_id"])][label] += 1
     ab: dict[str, int] = defaultdict(int)
     for r in db.ab_results():

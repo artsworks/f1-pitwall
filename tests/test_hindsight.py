@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from pitwall.cli import main
 from pitwall.digest import build_digest
-from pitwall.hindsight import grade_session, stints, stop_cost_s, stop_laps
+from pitwall.hindsight import grade_session, linear_deg, stints, stop_cost_s, stop_laps
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 from pitwall.tune import tune_from_db
@@ -186,3 +187,66 @@ def test_digest_cli_writes_json(tmp_path: Path, capsys: object) -> None:
     assert main(["digest", "--db", str(db_path), "--out", str(out)]) == 0
     data = json.loads((out / f"{UID}.json").read_text())
     assert data["session"]["track_id"] == 7 and data["stops"] == [8]
+
+
+def test_stop_cost_prices_used_second_set_at_its_age(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    for n in range(1, 31):
+        compound, age = (MEDIUM, n - 1) if n <= 15 else (HARD, n - 11)  # used H, age 5
+        base, deg = (90_000, 200) if compound == MEDIUM else (90_500, 200)
+        db.insert_lap(UID, 0, _lap(n, base + deg * age, compound, age, pitted=n == 15))
+    laps = db.laps_for(UID, 0)
+    before, after = stints(laps, stop_laps(laps))
+    fresh = stop_cost_s(before, [replace(r, tyre_age_laps=r.tyre_age_laps - 5) for r in after], 3)
+    used = stop_cost_s(before, after, 3)
+    assert fresh is not None and used is not None
+    assert used == fresh  # same pace data: only the set's real age, not a reset to 0, prices it
+
+
+def test_linear_deg_adds_back_fuel_burn(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    for n in range(1, 11):  # +120 ms/lap deg masked by -130 ms/lap fuel
+        db.insert_lap(UID, 0, _lap(n, 90_000 - 10 * n, MEDIUM, n, fuel=20.0 - n))
+    laps = db.laps_for(UID, 0)
+    raw = linear_deg(laps)
+    assert raw is not None and raw[1] == 0.0
+    fit = linear_deg(laps, 130.0)
+    assert fit is not None and abs(fit[1] - 120.0) < 1e-6
+
+
+def test_drive_through_is_not_a_stop(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 16)
+    db.insert_lap(UID, 0, _lap(21, 95_000, HARD, 5, pitted=True))  # penalty, same set
+    laps = db.laps_for(UID, 0)
+    assert stop_laps(laps) == [16]
+
+
+def test_plan_censored_when_session_ends_early(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 99, laps=10, total=20)  # retired on lap 10, never stopped
+    db.insert_plan_event(UID, {"lap": 1, "kind": "set", "to_plan": "A", "sequence": "M-H"})
+    (o,) = grade_session(db, UID, {})
+    assert o.label == "censored"
+
+
+def test_unplanned_extra_stop_is_not_following_plan(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _race(db, 10)
+    db.insert_plan_event(UID, {"lap": 1, "kind": "set", "to_plan": "A", "sequence": "M"})
+    (o,) = grade_session(db, UID, {})
+    assert o.label == "wrong", o.detail
+
+
+def test_single_off_lap_is_not_the_cliff(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    db.set_session_total_laps(UID, 30)
+    for n in range(1, 31):
+        ms = 90_000 + 100 * (n - 1) + (1_600 if n == 14 else 0)
+        db.insert_lap(UID, 0, _lap(n, ms, MEDIUM, n - 1))
+    _call(db, "t", "tyre_life", 10, laps_of_pace=6.0)
+    (o,) = grade_session(db, UID, {"tyre_cliff_ms": 1500})
+    assert o.label == "good" and o.actual == 6.0

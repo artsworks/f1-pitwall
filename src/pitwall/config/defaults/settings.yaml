@@ -155,6 +155,7 @@ thresholds:
   hind_stop_window_laps: 1      # a box call counts as taken if the stop is within this
   hind_stop_tol_s: 1.5          # stop lap within this of the hindsight-best is "good"
   hind_extrapolate_laps: 3      # stop-cost search may stretch a stint this far past what was driven
+  hind_cliff_sustain_laps: 2    # consecutive laps past tyre_cliff_ms before hindsight calls it a cliff
   hind_lap_tol_ms: 500          # predicted vs actual lap time
   hind_laps_tol: 2              # laps of pace vs the observed cliff
   hind_fuel_tol_laps: 0.5       # predicted vs actual finish fuel margin

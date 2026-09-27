@@ -28,13 +28,13 @@ running it again is idempotent. They're stored in the `outcomes` table (migratio
 | Calls | Metric | Label |
 |---|---|---|
 | `box_now`, `plan_target_lap`, `plan_sc_box` | `stop_taken` | `ignored` when no stop within `hind_stop_window_laps`. A call re-fired within the window with no stop in between is `n/a` (`refired`); only the last call of the run is graded, so one stop counts once |
-| same, stop taken | `stop_cost_s` | Fits both stints linearly (lap time vs tyre age), holds total laps fixed, and searches legal in-laps, stretching neither stint more than `hind_extrapolate_laps` past what was driven. Pit loss cancels, so `plan_sc_box`, `pit_plan` cheap/free/undercut stops and stops with SC/VSC on the in- or out-lap are `n/a`. `good` if the actual stop is within `hind_stop_tol_s` of the best |
+| same, stop taken | `stop_cost_s` | Fits both stints linearly (fuel-corrected lap time at `fuel_ms_per_lap_default` vs tyre age; the second stint priced from its real starting age), holds total laps fixed, and searches legal in-laps, stretching neither stint more than `hind_extrapolate_laps` past what was driven. Pit loss cancels, so `plan_sc_box`, `pit_plan` cheap/free/undercut stops and stops with SC/VSC on the in- or out-lap are `n/a`. `good` if the actual stop is within `hind_stop_tol_s` of the best |
 | any call with `inputs.predicted_lap_ms` | `lap_ms` | vs that lap's actual time (valid green laps only), tolerance `hind_lap_tol_ms` |
-| `tyre_life` (`inputs.laps_of_pace`) | `laps_of_pace` | vs laps after the call until pace is `tyre_cliff_ms` slower than the stint's fitted age-0 pace (the model's reference, fitted from green laps up to the call). No cliff before the stop or flag: `censored` |
-| `fuel_*` (`inputs.fuel_margin_laps`) | `fuel_margin` | vs the final lap's fuel-remaining laps, tolerance `hind_fuel_tol_laps`. `censored` unless the session reached `sessions.total_laps` (migration 7) |
-| plan `set` / `switch` events | `plan_followed` | Did the compounds actually run from that lap start with the plan's sequence (a stint's compound is its first lap's)? A plan replaced before any stop is `n/a` |
+| `tyre_life` (`inputs.laps_of_pace`) | `laps_of_pace` | vs laps after the call until fuel-corrected pace stays `tyre_cliff_ms` slower for `hind_cliff_sustain_laps` consecutive green laps, than the stint's fitted age-0 pace (the model's reference, fitted from green laps up to the call). No cliff before the stop or flag: `censored` |
+| `fuel_*` (`inputs.fuel_margin_laps`) | `fuel_margin` | vs the final lap's fuel-remaining laps, tolerance `hind_fuel_tol_laps`. `censored` unless the session reached `sessions.total_laps` (migration 7). Kept in the digest as forecast calibration but not fed to `pitwall tune` (the driver's response to the call moves it) |
+| plan `set` / `switch` events | `plan_followed` | Did the compounds actually run from that lap match the plan's sequence exactly (a stint's compound is its first lap's)? A plan replaced before any stop is `n/a`; a session that ended early while still on the plan so far is `censored` |
 
-Stops are laps flagged `pitted`, else a tyre-age reset. Labels: `good`, `wrong`, `ignored`,
+Stops are laps flagged `pitted` next to a tyre change (drive-throughs don't count), else a tyre-age reset. Player laps are always `car_idx` 0; a rival in slot 0 is stored under the player's slot. Labels: `good`, `wrong`, `ignored`,
 `censored`, `n/a` (not enough green laps to judge).
 
 `pitwall tune` now also uses `good`/`wrong` outcomes, each weighted `tune_auto_weight` (0.5),
