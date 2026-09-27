@@ -165,9 +165,9 @@ rules:
   - id: yellow_behind
     sessions: [practice, qualifying, race]
     priority: 3
-    when: "yellow_behind_m <= th.yellow_info_behind_m"
+    when: "yellow_behind_m <= th.yellow_info_behind_m and phase not in ('sc', 'vsc', 'red_flag')"
     clear_when: "yellow_behind_m > th.yellow_info_behind_m"
-    still_true: "yellow_behind_m <= th.yellow_info_behind_m"
+    still_true: "yellow_behind_m <= th.yellow_info_behind_m and phase not in ('sc', 'vsc', 'red_flag')"
     cooldown_s: 30
     requires: [session, lap_data]
     say:

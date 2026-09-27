@@ -481,8 +481,8 @@ rules:
   - id: blue_flag
     sessions: [race]
     priority: 1
-    when: "blue_flag"
-    clear_when: "not blue_flag"
+    when: "blue_flag and phase not in ('red_flag', 'sc', 'vsc')"
+    clear_when: "not blue_flag or phase in ('red_flag', 'sc', 'vsc')"
     cooldown_s: 20
     requires: [car_status]
     say:
@@ -679,6 +679,31 @@ rules:
     say:
       - "Last lap. P{position}, bring it home"
       - "Final lap, P{position}. Nice and clean to the flag"
+  # Fastest lap (FTLP event). The player's is always worth a word; a rival's
+  # only late on, when the player's best is close enough to take it back.
+  - id: fastest_lap_mine
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and fastest_lap_mine and fastest_lap_age_s < th.fastest_lap_fresh_s"
+    clear_when: "not fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "fastest_lap_mine"
+    cooldown_s: 30
+    requires: [lap_data]
+    say:
+      - "Fastest lap! {fastest_lap_time}, that's purple."
+      - "Purple lap. {fastest_lap_time}, fastest of anyone."
+      - "That's the fastest lap of the race, {fastest_lap_time}. Lovely."
+  - id: fastest_lap_taken
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and not fastest_lap_mine and fastest_lap_age_s >= th.fastest_lap_settle_s and fastest_lap_age_s < th.fastest_lap_fresh_s and laps_remaining <= th.fastest_lap_chase_laps and fastest_lap_gap_s <= th.fastest_lap_chase_s"
+    clear_when: "fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "not fastest_lap_mine"
+    cooldown_s: 60
+    requires: [lap_data]
+    say:
+      - "{fastest_lap_name} has fastest lap, {fastest_lap_time}. You're {fastest_lap_gap_s:.1f} off it."
+      - "Fastest lap to {fastest_lap_name}, {fastest_lap_time}. {fastest_lap_gap_s:.1f} to find if you want it back."
   - id: finish_gained
     sessions: [race]
     priority: 2

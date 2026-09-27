@@ -97,6 +97,10 @@ thresholds:
   damage_warn_pct: 20          # rear wing / floor / sidepod damage worth a call
   powertrain_damage_warn_pct: 30  # gearbox / engine damage worth a call
   last_lap_fight_s: 1.0        # last lap: car within this either way = attack/defend call
+  fastest_lap_fresh_s: 10      # fastest-lap call window after the FTLP event
+  fastest_lap_settle_s: 1.5    # rival fastest lap: wait in case the player beats it at once
+  fastest_lap_chase_laps: 5    # rival fastest lap only worth a call this late
+  fastest_lap_chase_s: 0.5     # ...and only if the player best is within this
   restricted_detect_laps: 2    # all-zero rival telemetry for this many laps = restricted
   restricted_confidence_factor: 0.7
   pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)

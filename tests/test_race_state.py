@@ -83,3 +83,14 @@ def test_driver_status_stuck_on_in_lap_after_stop() -> None:
     assert _step(rp, 3.0, driver_status=2) == "out_lap"
     assert _step(rp, 4.0, driver_status=2, lap_boundary=True) == "racing"
     assert _step(rp, 5.0, driver_status=2) == "racing"  # game never clears IN_LAP
+
+
+def test_red_flag_supersedes_sc_without_restart_call() -> None:
+    rp = RacePhase()
+    _step(rp, 0.0)
+    assert _step(rp, 1.0, safety_car_status=1) == "sc"
+    assert _step(rp, 2.0, safety_car_status=1, red_flag=True) == "red_flag"
+    assert _step(rp, 100.0, safety_car_status=1, red_flag=True) == "red_flag"
+    assert _step(rp, 101.0) == "racing"
+    assert _step(rp, 102.0, driver_status=3) == "racing"
+    assert rp.neutral_end_kind == ""
