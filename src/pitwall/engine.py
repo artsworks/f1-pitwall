@@ -34,6 +34,18 @@ from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow
+from pitwall.strategy.battle import (
+    HOLD,
+    PASS_COMPOUND,
+    PASS_DRS,
+    PASS_NODRS,
+    Battle,
+    BattleInputs,
+    BattleRates,
+    BattleTracker,
+    Episode,
+    shrink,
+)
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
@@ -165,6 +177,9 @@ class Engine:
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
+        # Battle state + learned pass model (docs/20 L3).
+        self.battle_tracker = BattleTracker()
+        self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
         self._pit_in_lap: LapSummary | None = None
@@ -413,6 +428,8 @@ class Engine:
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
+        self.battle_tracker.reset()
+        self._battle_rates = None
         self._stops_done = 0
         self._used_compounds.clear()
         self._prev_race_phase = ""
@@ -988,6 +1005,106 @@ class Engine:
         if self.db is not None and self.state.session_uid is not None:
             self.db.insert_plan_event(self.state.session_uid, record)
 
+    def battle_rates(self, track_id: int) -> BattleRates:
+        """Per-track pass / hold rates from model_params, shrunk to the priors."""
+        if self._battle_rates is not None and self._battle_rates[0] == track_id:
+            return self._battle_rates[1]
+        w = self._th("battle_prior_weight", 4.0)
+        priors = {
+            PASS_DRS: self._th("battle_pass_drs_prior", 0.35),
+            PASS_NODRS: self._th("battle_pass_nodrs_prior", 0.15),
+            HOLD: self._th("battle_hold_prior", 0.7),
+        }
+        vals: dict[str, float] = {}
+        for name, prior in priors.items():
+            p = self.db.get_param(track_id, PASS_COMPOUND, name) if self.db else None
+            vals[name] = shrink(p.value if p else None, p.weight if p else 0.0, prior, w)
+        rates = BattleRates(vals[PASS_DRS], vals[PASS_NODRS], vals[HOLD])
+        self._battle_rates = (track_id, rates)
+        return rates
+
+    def _battle(self, snap: Snapshot) -> Snapshot:
+        """Battle mode + attack/defend episodes; episode outcomes fold into
+        the track's pass model and are written to the decision log."""
+        if snap.session_kind != "race" or snap.race_phase != "racing":
+            return snap
+        attack = self.mode().get("attack_window_s", 1.0)
+        own = snap.predicted_lap_ms or int(snap.base_pace_ms)
+        inp = BattleInputs(
+            now=snap.now,
+            lap_num=snap.lap_num,
+            position=snap.position,
+            laps_remaining=snap.laps_remaining,
+            ahead_idx=snap.rival_ahead_idx,
+            behind_idx=snap.rival_behind_idx,
+            gap_ahead_s=snap.gap_ahead_s,
+            gap_behind_s=snap.gap_behind_s,
+            trend_ahead_s=snap.gap_trend_ahead_s,
+            trend_behind_s=snap.gap_trend_behind_s,
+            own_pace_ms=own,
+            ahead_pace_ms=snap.rival_ahead_pace_ms,
+            behind_pace_ms=snap.rival_behind_pace_ms,
+            own_age=snap.tyre_age_laps,
+            ahead_age=snap.rival_ahead_age,
+            behind_age=snap.rival_behind_age,
+            drs_available=snap.drs_available,
+            attack_gap_s=float(attack) if isinstance(attack, int | float) else 1.0,
+        )
+        tracker = self.battle_tracker
+        b: Battle = tracker.update(
+            inp, self.store.current().thresholds, self.battle_rates(snap.track_id)
+        )
+        for ep in tracker.drain():
+            self._persist_episode(snap, ep)
+        name = ""
+        if 0 <= b.result_rival_idx < len(snap.participants):
+            name = snap.participants[b.result_rival_idx].name
+        return dataclasses.replace(
+            snap,
+            battle_mode=b.mode,
+            battle_mode_laps=b.mode_laps,
+            battle_catch_laps=b.catch_laps,
+            battle_threat_laps=b.threat_laps,
+            battle_closing_ahead_s=b.closing_ahead_s,
+            battle_closing_behind_s=b.closing_behind_s,
+            battle_tyre_offset_ahead=b.tyre_offset_ahead,
+            battle_tyre_offset_behind=b.tyre_offset_behind,
+            battle_pass_prob=b.pass_prob,
+            battle_hold_prob=b.hold_prob,
+            battle_result=b.result,
+            battle_result_recent=b.result_recent,
+            battle_result_name=name,
+        )
+
+    def _persist_episode(self, snap: Snapshot, ep: Episode) -> None:
+        self.dispatcher.log.write(
+            {
+                "t": snap.now,
+                "session_time": snap.session_time,
+                "lap": ep.end_lap,
+                "rule_id": None,
+                "outcome": "battle",
+                "kind": ep.kind,
+                "rival_idx": ep.rival_idx,
+                "start_lap": ep.start_lap,
+                "drs": ep.drs,
+                "result": ep.result,
+            }
+        )
+        if self.db is None or snap.track_id < 0:
+            return
+        name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
+        cap = self._th("param_weight_cap", 50.0)
+        self.db.fold_param(
+            snap.track_id,
+            PASS_COMPOUND,
+            name,
+            1.0 if ep.success else 0.0,
+            1.0,
+            param_weight_cap=cap,
+        )
+        self._battle_rates = None
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         if self.state.track_id != self._track_loaded:
@@ -995,7 +1112,7 @@ class Engine:
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
         self._write_laps()
         self._update_model()
-        snapshot = self._plan(self.state.snapshot(now))
+        snapshot = self._battle(self._plan(self.state.snapshot(now)))
         if (
             snapshot.session_ended
             and not self._session_ended_written

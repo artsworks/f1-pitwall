@@ -231,6 +231,12 @@ active}]` (delta vs the active plan, negative = faster; C is "box now under SC/V
 of the active plan or null) and `plan_switch: {from, reason: 'pace'|'invalid'|'sc', lap}`
 or null. Backend only; UI rendering is a separate PR.
 
+Battle state (docs/18 "Battle state") adds `battle: {mode: 'free_air'|'catching'|
+'attacking'|'defending'|'under_threat'|'managing', mode_laps, catch_laps | null,
+threat_laps | null, closing_ahead_s, closing_behind_s, pass_prob, hold_prob,
+result: 'passed'|'failed'|'held'|'lost' | null}` (result only for ~20 s after an episode).
+Backend only.
+
 ## 6. Stale and reconnect behaviour
 
 Two independent staleness sources, either one greys the page:

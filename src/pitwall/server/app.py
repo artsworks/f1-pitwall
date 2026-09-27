@@ -216,6 +216,17 @@ def strategy_payload(
             if snapshot.plan_switch_count
             else None
         ),
+        "battle": {
+            "mode": snapshot.battle_mode,
+            "mode_laps": snapshot.battle_mode_laps,
+            "catch_laps": _finite(snapshot.battle_catch_laps),
+            "threat_laps": _finite(snapshot.battle_threat_laps),
+            "closing_ahead_s": snapshot.battle_closing_ahead_s,
+            "closing_behind_s": snapshot.battle_closing_behind_s,
+            "pass_prob": snapshot.battle_pass_prob,
+            "hold_prob": snapshot.battle_hold_prob,
+            "result": snapshot.battle_result or None,
+        },
     }
 
 

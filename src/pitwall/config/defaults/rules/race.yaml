@@ -264,6 +264,108 @@ rules:
     requires: [car_status, lap_data]
     say:
       - "DRS on {rival_ahead_name}. {gap_ahead_s:.1f} seconds"
+  # Battle coaching (docs/20 L3): push / attack / defend / manage / encourage,
+  # driven by battle_mode (pitwall.strategy.battle) and the learned pass model.
+  # Mode calls re-arm every lap (sector gate) so a budget-suppressed call is
+  # retried; the shared `battle` cooldown group keeps them sparse.
+  - id: battle_catching
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
+    clear_when: "sector != 1"
+    cooldown_s: 90
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}, you're {battle_closing_ahead_s:.1f} a lap quicker. On him in {battle_catch_laps:.0f} laps"
+      - "Push now. {rival_ahead_name} is {gap_ahead_s:.1f} up the road, catching {battle_closing_ahead_s:.1f} a lap"
+  - id: battle_attack
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "You're in range of {rival_ahead_name}. Hammer time"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Go for it, this is the chance"
+  - id: battle_patience
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
+    clear_when: "sector != 1"
+    cooldown_s: 180
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "Hard to pass here. Stay with {rival_ahead_name}, look after the tyres, we'll do it on strategy"
+      - "Patience with {rival_ahead_name}. Out of the dirty air when you can, save the rears"
+  - id: battle_defend
+    sessions: [race]
+    min_lap: 2
+    priority: 2
+    when: "phase == 'racing' and battle_mode == 'defending' and sector != 2"
+    clear_when: "sector == 2 or battle_mode != 'defending'"
+    cooldown_s: 60
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} is {gap_behind_s:.1f} behind. Defend, cover the inside on the braking zones"
+      - "Car behind within a second. Keep the battery for the straight, one move only"
+  - id: battle_under_threat
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
+    clear_when: "sector != 1"
+    cooldown_s: 120
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} closing, {battle_closing_behind_s:.1f} a lap. In range in {battle_threat_laps:.0f} laps. Pick it up"
+      - "Gap behind {gap_behind_s:.1f} and coming down. Need a bit more pace"
+  - id: battle_manage
+    sessions: [race]
+    min_lap: 3
+    priority: 3
+    when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
+    cooldown_s: 240
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "Gaps are stable. Manage the tyres, we're in good shape"
+      - "All under control. Look after the tyres, no need to push"
+  - id: battle_passed
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'passed' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "Great move. P{position}, now build the gap"
+      - "Nicely done, P{position}. Get out of his DRS"
+  - id: battle_held
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'held' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "Good defending. Held off {battle_result_name}"
+      - "Well held. Keep it tidy, he'll drop back"
+  - id: battle_lost
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'lost' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "He's through. Stay with him, you'll have DRS"
+      - "Lost it to {battle_result_name}. Reset, stay close, the tyres will come to us"
   - id: penalty
     sessions: [race]
     priority: 1
