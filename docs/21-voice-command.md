@@ -86,11 +86,26 @@ multiplies per 20 ms block, and it only runs while the channel is open. The hard
 the safety net for a channel left open by mistake, and it bounds the recogniser's CPU
 per request.
 
-Binding: a free UDP Action (**Action 9**, `voice.ptt_bit`, default `0x10000000`) on a
-wheel button or a Stream Deck key, or a keyboard key via the dashboard (`V`). Actions
-1–5 are the wheel, 6–8 the Stream Deck shortcuts; 10–12 stay free. The UDP route is
-preferred for the same reasons as doc 12: no hook, no anti-cheat question, and the tap
-is in the recording. `ptt_bit` joins the existing collision check for `input.*_bit`.
+Binding: **Action 1 is repurposed** (`input.ack_bit`, `0x00100000`, the existing wheel
+button — no new binding, and Actions 9–12 all stay free). With `voice.enabled: true`:
+
+| Action 1 gesture | Today (doc 12) | With voice |
+|---|---|---|
+| single tap | acknowledge | **open the channel** (tap again = close) |
+| double tap | negative | negative (unchanged) |
+| long press | radio silent | radio silent (unchanged) |
+| tap while the stick menu is open | confirm | confirm (unchanged; the menu owns the button) |
+
+Acknowledge moves to the voice grammar ("copy", "understood", "got it") with one
+fallback that keeps the old muscle memory: a tap that **closes on silence with nothing
+heard while a call's response window is open** is recorded as `ack` — the driver tapped
+and said nothing, exactly as before, and it lands ~1 s later than today. A tap with a
+recognised request is *not* an acknowledge; the request is answered and the response
+window stays open. With `voice.enabled: false` (or the voice process down) Action 1
+reverts to doc 12 behaviour, so the wheel never has a dead button. The dashboard key `V`
+mirrors the tap. The UDP route is preferred for the same reasons as doc 12: no hook, no
+anti-cheat question, and the tap is in the recording. No new `*_bit` and no new collision
+case; `PressDetector` already separates single / double / long for Action 1.
 
 Feedback so the driver knows the channel is open, without looking:
 
@@ -179,7 +194,7 @@ unchanged. A few are new because they are natural to say and awkward to scroll t
 | `oversteer` | menu `oversteer` | "oversteer", "rear's loose", "I've got oversteer" | opinion |
 | `boxing` | new statement | "boxing this lap", "I'm coming in", "box box" | statement → confirms pit plan for this lap; plan handler treats it like an accepted box recommendation |
 | `staying_out` | new statement | "staying out", "I'll stay out", "not stopping" | statement → rejects the current box recommendation |
-| `ack` | press ACK | "copy", "understood", "got it" | acts on the open response window, same as a single press |
+| `ack` | press ACK | "copy", "understood", "got it" | acts on the open response window; also the outcome of a silent tap while a window is open (see binding) |
 | `negative` | press NEG | "negative", "no", "not now" | same as a double press |
 | `say_again` | say again | "say again", "repeat", "what was that" | re-speaks the last call inside `say_again_window_s` |
 | `mindset` | menu `mindset` | "aggressive", "go aggressive", "balanced", "calm it down" | action; the word chooses the mindset rather than toggling |
@@ -213,7 +228,7 @@ game ──UDP──▶ backend (ingest → state → rules → dispatcher → s
              voice process  ◀── mic (WASAPI shared, 16 kHz mono) ── ring buffer
              (below-normal priority, pinned, 1 decode thread)
                  ▲
-                 └── channel tap: BUTN Action 9 (via backend ws) or key
+                 └── channel tap: BUTN Action 1 single tap (via backend ws) or key
 ```
 
 **A separate process, not a thread.** Three reasons, all from doc 09: the recogniser's
@@ -234,7 +249,7 @@ moves off the game PC.
   `pitwall.input.menu.answer()`, or to the press/say-again/page paths. New question
   handlers (`laps_left`, `position`) and the two statements go into `menu.ANSWERS` and
   `menu.yaml` so they are also available on the stick.
-- A tap on `BUTN` Action 9 toggles the channel; the backend owns the channel state and
+- A single tap on `BUTN` Action 1 toggles the channel; the backend owns the channel state and
   tells the voice process `{"type":"channel","open":true|false,"t":..}`; a `V` key on
   the dashboard toggles the same. The voice process reports a silence/cap close back as
   `{"type":"channel","open":false,"reason":"silence"|"cap"}` so the backend state
@@ -405,8 +420,9 @@ voice:
   engine: auto              # auto = vosk if its model is present, else sapi (Windows), else off
   model_dir: models/vosk-small-en-us
   device: null              # input device name filter; null = default
-  ptt_bit: 0x10000000       # UDP Action 9: tap opens / closes the channel; 0 disables
-  ptt_key: "V"              # dashboard key, mirrors the wheel button
+  # channel tap = Action 1 single tap (input.ack_bit); double / long press keep doc 12 meaning
+  silent_tap_is_ack: true   # empty tap while a response window is open counts as acknowledge
+  channel_key: "V"          # dashboard key, mirrors the wheel button
   early_close_ms: 300       # close as soon as a full phrase is recognised and this much silence follows
   close_silence_ms: 1000    # close after this much silence once speech was heard
   max_open_s: 6.0           # hard cap on an open channel
@@ -458,14 +474,16 @@ Phase 0 — spike (one session, no backend changes, decides go/no-go)
 
 Phase 1 — questions by voice (one to two sessions)
 
-- `pitwall voice` process, channel toggle via Action 9 and `V` with recognised /
+- `pitwall voice` process, channel toggle via Action 1 single tap and `V` with recognised /
   silence / cap auto-close, grammar for the existing menu questions and opinions,
   backend `intent` message → `menu.answer()`, dispatcher hold/release with the four
   outcomes and `brief`/`topic` on the race rules, state pill with the open-channel
   countdown, recording + replay, decision log, `pitwall rules check` for `voice.yaml`.
 - Tests: intent matcher (unit, incl. thresholds and slots); channel state machine
   (early close on a recognised phrase, silence close, tap close, cap close, tap during
-  the reply cancels it); dispatcher hold/release (unit: stale drop, covered drop, single
+  the reply cancels it; silent tap in a response window → `ack`, silent tap outside one →
+  nothing; double / long press unaffected; `voice.enabled: false` → doc 12 `ack`);
+  dispatcher hold/release (unit: stale drop, covered drop, single
   survivor spoken, digest of 2–3, overflow, P1 preempting during hold, deadline pause,
   budget counting the digest as one); engine `intent` handling on a replay with
   synthetic channel and intent records; grammar validation; menu hold parity.
@@ -483,6 +501,11 @@ Phase 3 — optional, only if asked for
 
 ## 9. Risks and open questions
 
+- **Acknowledge is ~1 s slower on the button.** A silent tap now waits for
+  `close_silence_ms` before it counts as `ack`; saying "copy" is faster than that. If the
+  response window is shorter than the silence timeout for some call, the window must be
+  extended by the channel-open time (the tap opened before it closed), otherwise the
+  fallback can miss — spec: response windows pause while the channel is open.
 - **Accent and vocabulary.** Small English models are US-trained; "tyres", "box",
   "Norris" may be weak. Grammar constraint helps a lot (the model only has to choose
   among 40 phrases), but the spike decides. Fallback: respell phrasings to lexicon words,
