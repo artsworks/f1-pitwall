@@ -340,8 +340,7 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 
 /* pages (docs/15 §10): alternate layouts over the same zones. Status bar,
    banner and footer never move; pit board / cool-down still take over. */
-.battle, .carpage, .trackpage { display: none; font-size: 1.3rem; overflow: hidden; }
-.battle { grid-area: battle; flex-direction: column; gap: .35rem; font-size: 1.15rem; }
+.carpage, .trackpage { display: none; font-size: 1.3rem; overflow: hidden; }
 /* rival card: fixed row structure (head / rail / pace+tyre / last lap / badges)
    so the card never changes height as values come and go. */
 .b-card { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
@@ -405,12 +404,12 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 .b-foot.dim { display: block; }
 .carpage { grid-area: carpage; flex-direction: column; gap: .8rem; }
 /* race page right column: ahead/behind duel cards above a 3-row radio log */
-.duel { grid-area: duel; display: none; flex-direction: column; gap: .5rem; overflow: hidden; }
+.duel { grid-area: duel; display: none; flex-direction: column; gap: .35rem; overflow: hidden; font-size: 1.15rem; }
 body.dash.page-race.duel-on:not(.pit):not(.cool) .duel { display: flex; }
 body.dash.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "tyres duel" "fuel log" "strat log" "footer footer"; }
+    "status status" "banner banner" "tyres duel" "fuel duel" "strat log" "footer footer"; }
 body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "tyres duel" "fuel log" "strat log"
+    "status status" "banner banner" "tyres duel" "fuel duel" "strat log"
     "transport transport" "footer footer"; }
 body.dash.page-race.duel-on #s-ahead, body.dash.page-race.duel-on #s-behind { display: none; }
 body.stale .duel > * { filter: grayscale(1); opacity: .4; }
@@ -450,32 +449,24 @@ body.stale .duel > * { filter: grayscale(1); opacity: .4; }
 .tp-row.cold { border-color: var(--cold); } .tp-row.cold .v { color: var(--cold); }
 .tp-row.ok { border-color: var(--ok); } .tp-row.ok .v { color: var(--ok); }
 
-body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "battle log" "battle log" "strat log" "footer footer"; }
 body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "tyres carpage" "fuel carpage" "strat carpage"
     "footer footer"; }
 body.dash.page-track:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
     "footer footer"; }
-body.dash.review.page-battle:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "battle log" "battle log" "strat log"
-    "transport transport" "footer footer"; }
 body.dash.review.page-car:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "tyres carpage" "fuel carpage" "strat carpage"
     "transport transport" "footer footer"; }
 body.dash.review.page-track:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
     "transport transport" "footer footer"; }
-body.dash.page-battle:not(.pit):not(.cool) .battle,
 body.dash.page-car:not(.pit):not(.cool) .carpage,
 body.dash.page-track:not(.pit):not(.cool) .trackpage { display: flex; }
-body.dash.page-battle:not(.pit):not(.cool) .tyres,
-body.dash.page-battle:not(.pit):not(.cool) .fuel,
 body.dash.page-car:not(.pit):not(.cool) .log,
 body.dash.page-track:not(.pit):not(.cool) .tyres,
 body.dash.page-track:not(.pit):not(.cool) .fuel { display: none; }
-body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > * {
+body.stale .carpage > *, body.stale .trackpage > * {
   filter: grayscale(1); opacity: .4; }
 
 /* phone portrait: one column, every page keeps status + banner on top.
@@ -501,6 +492,7 @@ body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > * {
   .b-card .b-lap .tr { flex-basis: 100%; text-align: left; padding-left: 5rem; }
   .b-card .b-head .side, .b-card .b-lap .k { width: 4.4rem; }
   body.dash .b-foot { flex-wrap: wrap; }
+  body.dash .b-foot > :last-child { flex-basis: 100%; }
   .b-card .b-badges { gap: .25rem; }
   .b-card .badge { font-size: .9rem; padding: 0 .3rem; letter-spacing: .05em; }
   .tp-wxt .pct { font-size: 2rem; }
@@ -513,10 +505,6 @@ body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > * {
       "status" "banner" "strat" "duel" "tyres" "fuel" "log" "footer"; }
   body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "strat" "duel" "tyres" "fuel" "log" "transport" "footer"; }
-  body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
-      "status" "banner" "battle" "strat" "log" "footer"; }
-  body.dash.review.page-battle:not(.pit):not(.cool) { grid-template-areas:
-      "status" "banner" "battle" "strat" "log" "transport" "footer"; }
   body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "carpage" "tyres" "fuel" "strat" "footer"; }
   body.dash.review.page-car:not(.pit):not(.cool) { grid-template-areas:
@@ -545,7 +533,7 @@ body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > * {
     color var(--t-med) ease, box-shadow var(--t-med) ease;
 }
 .corner .temp, .corner .word, .corner .lbl span { transition: color var(--t-med) ease; }
-.tyres > *, .fuel > *, .strat > *, .log > *, .footer > *, .battle > *, .carpage > *,
+.tyres > *, .fuel > *, .strat > *, .log > *, .footer > *, .carpage > *,
 .trackpage > * { transition: filter var(--t-slow) ease, opacity var(--t-slow) ease; }
 
 /* lap counter and position react to change */
@@ -619,7 +607,7 @@ body.stale .status { --stripe: color-mix(in srgb, var(--crit) 25%, transparent);
 .pg-dots span.on { background: var(--info); transform: scale(1.35); }
 .pill.page.pg-flip .pg-name { animation: pg-name var(--t-med) var(--ease-out); }
 @keyframes pg-name { from { opacity: 0; transform: translateX(var(--swap-dx, 1rem)); } }
-body.swap .tyres, body.swap .fuel, body.swap .strat, body.swap .log, body.swap .battle,
+body.swap .tyres, body.swap .fuel, body.swap .strat, body.swap .log,
 body.swap .carpage, body.swap .trackpage {
   animation: page-in 420ms var(--ease-out) both; }
 body.swap .fuel, body.swap .log { animation-delay: 40ms; }
@@ -677,7 +665,7 @@ body.swap .strat { animation-delay: 80ms; }
   body.dash .log { max-height: 14rem; }
   body.dash .corner .temp { font-size: 2rem; }
   body.dash .footer { font-size: .8rem; }
-  body.dash .battle, body.dash .carpage, body.dash .trackpage {
+  body.dash .carpage, body.dash .trackpage {
     overflow: visible; }
 }
 

@@ -150,7 +150,6 @@
     renderPitBoard(p.pit_board, p.quali, p.phase);
     renderPage(p);
     renderStrategy(p.strategy, p.quali);
-    renderBattle(p.strategy);
     renderDuel(p.strategy, p.quali);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
@@ -469,32 +468,14 @@
     n.appendChild(span(bits.join(" · "), "detail"));
   }
 
-  function renderBattle(s) {
-    var any = s && (s.ahead || s.behind);
-    var ph = el("b-ph");
-    if (ph) ph.hidden = !!any;
-    renderBattleState("b-state", s ? s.battle : null, s);
-    battleCard("b-ahead", s ? s.ahead : null, "ahead", s || {});
-    battleCard("b-behind", s ? s.behind : null, "behind", s || {});
-    if (!s) { setText("b-exit", "--"); setText("b-plan", "--"); return; }
-    var pe = s.pit_exit || {};
-    var ex = el("b-exit");
-    if (ex) {
-      ex.innerHTML = "";
-      ex.appendChild(span("PIT EXIT", "k"));
-      ex.appendChild(span(pe.clean ? "CLEAR AIR" : "TRAFFIC", pe.clean ? "ok" : "warn"));
-      ex.appendChild(span((pe.rival ? String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "") +
-        (s.pit_loss_s ? " · loss " + fmt(s.pit_loss_s, 1) + " s (" + (s.pit_loss_source || "prior") + ")" : ""), "dim"));
-    }
-    setText("b-plan", s.plan ? String(s.plan.kind).toUpperCase().replace("_", " ") + " · " + (s.plan.reason || "") +
-      " · conf " + fmt(100 * (s.plan.confidence || 0), 0) + "%" : s.stint_plan);
-  }
-
-  // Race page right column: ahead/behind cards above a short radio log.
+  // Race page right column: battle state, ahead/behind cards, pit exit; the
+  // radio log sits below. Cards hide (placeholder stays) when no rival is in scope.
   function renderDuel(s, q) {
-    var on = !!(s && !q && (s.ahead || s.behind));
+    var on = !!(s && !q);
     document.body.classList.toggle("duel-on", on);
     if (!on) return;
+    var ph = el("d-ph");
+    if (ph) ph.hidden = !!(s.ahead || s.behind);
     renderBattleState("d-state", s.battle, s);
     battleCard("d-ahead", s.ahead, "ahead", s);
     battleCard("d-behind", s.behind, "behind", s);
@@ -511,7 +492,8 @@
     }
     f.appendChild(span("PIT EXIT", "k"));
     f.appendChild(span(pe.clean ? "CLEAR AIR" : "TRAFFIC", pe.clean ? "ok" : "warn"));
-    f.appendChild(span(pe.rival ? String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "", "dim"));
+    f.appendChild(span((pe.rival ? String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "") +
+      (s.pit_loss_s ? " · loss " + fmt(s.pit_loss_s, 1) + " s (" + (s.pit_loss_source || "prior") + ")" : ""), "dim"));
   }
 
   function renderCarPage(p, s) {

@@ -318,7 +318,7 @@ class Engine:
             (snap.rival_ahead_idx >= 0 and 0 < snap.gap_ahead_s <= gap)
             or (snap.rival_behind_idx >= 0 and 0 < snap.gap_behind_s <= gap)
         ):
-            target = "battle"
+            target = "race"
         else:
             target = ui.pages[0] if ui.pages else "race"
         self.set_page(target, now, manual=False)

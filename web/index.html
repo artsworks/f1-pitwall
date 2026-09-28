@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body class="dash connecting">
   <header class="status">
@@ -147,16 +147,6 @@
     </div>
   </section>
 
-  <section id="battle" class="zone battle">
-    <h2>BATTLE</h2>
-    <div id="b-state" class="b-state" hidden></div>
-    <div id="b-ph" class="ph">no rival in scope</div>
-    <div id="b-ahead" class="b-card" hidden></div>
-    <div id="b-behind" class="b-card" hidden></div>
-    <div id="b-exit" class="b-foot">--</div>
-    <div id="b-plan" class="b-foot dim">--</div>
-  </section>
-
   <section id="carpage" class="zone carpage">
     <h2>ENERGY · FUEL · TYRE LIFE</h2>
     <div class="cp-grid">
@@ -186,6 +176,7 @@
 
   <section id="duel" class="zone duel">
     <div id="d-state" class="b-state" hidden></div>
+    <div id="d-ph" class="ph">no rival in scope</div>
     <div id="d-ahead" class="b-card" hidden></div>
     <div id="d-behind" class="b-card" hidden></div>
     <div id="d-plan" class="b-foot">--</div>
@@ -200,7 +191,7 @@
     <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js"></script>
-  <script src="/static/review.js"></script>
+  <script src="/static/app.js?v=4"></script>
+  <script src="/static/review.js?v=4"></script>
 </body>
 </html>

@@ -395,8 +395,7 @@ LIVE/STALE never move, and the pit board / cool-down takeovers still win.
 
 | Page | Occasion | Zones |
 |---|---|---|
-| race | default, 90 % of laps | A B C D F E (zone F = strategy) |
-| battle | a rival in scope | battle cards (immediate ahead/behind only: gap, trend, pace delta, tyre + age, DRS/UC/OC threat), pit-exit projection, F, E |
+| race | default, 90 % of laps | A B C D F E (zone F = strategy) + rival cards on the right (immediate ahead/behind: battle state, gap rail, pace delta, last lap, tyre + age, DRS/UC/OC/infringements; BEHIND lights up when a threat), pit-exit projection |
 | car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
 | track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
 

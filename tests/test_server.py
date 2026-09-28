@@ -524,9 +524,9 @@ def test_strategy_payload_race_contract() -> None:
     assert s["behind"]["drs"] is True and s["ahead"]["drs"] is False
     assert s["undercut_s"] == 1.2 and s["fuel_delta_laps"] == 0.4
     assert "L26–28" in s["stint_plan"]
-    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="battle")
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="car")
     assert body["strategy"]["ahead"]["name"] == "Norris"
-    assert body["page"] == "battle" and "battle" in body["pages"]
+    assert body["page"] == "car" and "car" in body["pages"]
     assert body["track_info"]["gap_ahead_s"] == 1.4
     assert body["setup"] is None
 

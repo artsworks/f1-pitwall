@@ -49,11 +49,11 @@ def test_action4_cycles_page_and_action2_toggles_mindset(tmp_path: Path) -> None
     assert engine.page == "race" and engine.mindset == "balanced"
     asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()
-    assert engine.page == "car"  # race -> battle -> car
+    assert engine.page == "track"  # race -> car -> track
     assert engine.mindset == "aggressive"
     rows = [json.loads(x) for x in log.read_text().splitlines() if x]
     pages = [r["text"] for r in rows if r.get("outcome") == "page"]
-    assert pages == ["battle", "car"]
+    assert pages == ["car", "track"]
     late = [r for r in rows if float(r.get("t") or 0) > 31.0]
     assert late and all(r["mindset"] == "aggressive" for r in late)
 
@@ -79,7 +79,7 @@ def test_client_messages_select_page_and_mindset() -> None:
     engine.client_message({"type": "page", "name": "nope"})
     assert engine.page == "track"
     engine.client_message({"type": "page", "cycle": True})
-    assert engine.page == "setup"
+    assert engine.page == "race"
     engine.client_message({"type": "mindset", "name": "aggressive"})
     assert engine.mindset == "aggressive"
     assert engine.dispatcher.log.mindset == "aggressive"
