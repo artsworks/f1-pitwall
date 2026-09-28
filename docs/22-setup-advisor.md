@@ -7,9 +7,11 @@ because 17 is taken by `17-quali-run-plan.md`.
 
 Today the only setup advice is tyre pressure (`state/pressure.py`, core temperature vs a
 window, clamped to the setup range), plus the brake-bias / diff hints in the lock-up calls
-(`18-race-engine.md`, `17-quali-run-plan.md` §3). This document extends that to the whole
-setup screen without breaking the two project invariants: decisions are deterministic and
-replayable (ADR 0008), and thresholds live in YAML.
+(`18-race-engine.md`). This document extends that to the whole setup screen without
+breaking the project invariants: decisions are deterministic and replayable (ADR 0008),
+and thresholds live in YAML. An LLM is optional and never required. With no API key the
+advisor runs entirely on the deterministic tables in §4, and every mode, signal, grade and
+replay in this document works unchanged (§7, ADR 0009).
 
 ## 1. Research summary
 
@@ -435,7 +437,8 @@ CREATE TABLE setup_recs (      -- one row per recommendation, JSON as in §4
 
 A "run" for the advisor is a stint segment with one setup state; an in-run MFD change
 splits it. Signals per run are computed at debrief time from `laps` plus the 10 Hz
-downsample (the thermal aggregates `16-debrief-design.md` §7 already asks for), so no new
+downsample. The debrief today shows only lap-mean inner temperature (`16-debrief-design.md`
+§7), so per-run thermal aggregates are new debrief-time work, but there is no new
 live-path work beyond the traction detector, `slip_balance` accumulation and storing
 `parc_ferme_rules` / `next_front_wing_value`.
 
@@ -504,9 +507,10 @@ fold_param(track_id, compound, f"setup_base:{signal}", value=<signal on a balanc
 "Per player" is implicit: the SQLite file is the local player's own history (the Car
 Setups struct used is always the player's car).
 
-YAML table changes (new symptoms, new thresholds, new directions) go through the L2
-lessons ledger and promotion gate like any rule change: a replay fixture per rule, and the
-corpus A/B must not lose must-fire calls.
+YAML table changes (new symptoms, new thresholds, new directions) are reviewed like any rule
+change. Each rule needs a replay fixture, and `pitwall diff --corpus` must not lose
+must-fire calls. The lessons ledger and automatic promotion are not built
+(`20-learning-loop.md`). Until they are, promotion is a reviewed config change.
 
 ## 7. LLM decision (ADR-style)
 
@@ -534,10 +538,15 @@ least well.
 | (c) Post-session Q&A | **Accepted, opt-in** | The item-21 ask box over `setup_states`, `setup_recs`, `outcomes`, stints |
 | Spoken phrasing | **Unchanged** | Garage and race lines stay YAML `say` pools (ADR 0008); the model's `reason` shows only on the dashboard |
 
+**No key, no model.** The LLM is strictly optional. With no key (the default), no provider
+is constructed and no request is made. Every recommendation is the table's top candidate,
+the `llm_*` fields in `setup_recs` stay null, and the second-opinion panel is hidden. A1–A4
+are the complete advisor; nothing in them waits on or degrades without A5.
+
 **Decision.** Build the deterministic advisor first (A1–A4). Then add the chooser for
 `setup.debrief` and `setup.garage` in **shadow** (A5). The model's pick goes into
 `setup_recs` as an extra field (`llm_choice`, `llm_reason`, `llm_log_id`), and the debrief
-shows it beside the table's primary, labelled. Promotion to chooser follows ADR 0009 §5:
+shows it beside the table's primary, labelled. Promotion to chooser follows ADR 0009 §6:
 the table and the model are graded by the same §6 loop. A shadow pick counts only when the
 driver actually ran it, because the debrief lists every candidate and the driver picks.
 With `rule_id = "llm:setup.debrief"` in `outcomes`, `pitwall digest` / `tune` compare the
