@@ -673,6 +673,7 @@ async def _serve(
         host=settings.connection.http_host,
         port=settings.connection.http_port,
         log_level="warning",
+        timeout_graceful_shutdown=settings.connection.shutdown_timeout_s,
         ssl_certfile=str(Path(settings.connection.https_cert).expanduser())
         if settings.connection.https_cert and settings.connection.https_key
         else None,

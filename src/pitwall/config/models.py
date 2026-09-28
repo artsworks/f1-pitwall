@@ -18,6 +18,7 @@ class ConnectionSettings(BaseModel):
     http_port: int = 8000
     https_cert: str = ""
     https_key: str = ""
+    shutdown_timeout_s: int = 3
 
 
 class RecordingSettings(BaseModel):
