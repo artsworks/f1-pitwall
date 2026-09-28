@@ -32,7 +32,9 @@ monitor, display-only during a session; speech played by the backend.
 **Target.** Friends-only online Grand Prix league; tested first on single-player Grand
 Prix, with a built-in feedback loop. See `13-league-multiplayer.md`.
 
-**LLM.** None in the pilot, no API key. Revisit only for post-race Q&A.
+**LLM.** None in the pilot, no API key. Since ADR 0009, an optional model may choose
+among rule-generated candidates, starting in shadow mode and promoted only through the
+learning-loop gate; phrasing stays deterministic.
 
 ## Still open
 
