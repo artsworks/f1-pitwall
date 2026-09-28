@@ -599,20 +599,7 @@ class Engine:
                         deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                         deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
                     )
-                    if fit.source == "fit":
-                        for name, value in (
-                            ("deg_ms_per_lap", fit.deg_ms_per_lap),
-                            ("base_ms", fit.base_ms),
-                            ("fuel_ms_per_lap", fit.fuel_ms_per_lap),
-                        ):
-                            db.fold_param(
-                                track_id,
-                                prev[0].compound,
-                                name,
-                                value,
-                                weight=float(fit.n),
-                                param_weight_cap=self._th("param_weight_cap", 50),
-                            )
+                    self._fold_fit(track_id, prev[0].compound, fit)
                     self._weekend_prior_cache.pop((uid, prev[0].compound), None)
 
         if tail:
@@ -670,19 +657,22 @@ class Engine:
                         pit.ref_pace_ms,
                     )
                     suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    db.fold_param(
-                        track_id,
-                        0,
-                        f"pit_loss_{suffix}_ms",
-                        float(pit.loss_ms),
-                        param_weight_cap=self._th("param_weight_cap", 50),
-                    )
+                    if track_id >= 0:
+                        db.fold_param(
+                            track_id,
+                            0,
+                            f"pit_loss_{suffix}_ms",
+                            float(pit.loss_ms),
+                            param_weight_cap=self._th("param_weight_cap", 50),
+                        )
 
         # Fuel burn per lap: fold each consecutive-valid-lap delta.
         if lap.valid and lap.fuel_kg > 0:
             if self._fuel_last_kg is not None:
                 delta = self._fuel_last_kg - lap.fuel_kg
-                if self._th("fuel_delta_min_kg", 0) < delta < self._th("fuel_delta_max_kg", 10):
+                if track_id >= 0 and self._th("fuel_delta_min_kg", 0) < delta < self._th(
+                    "fuel_delta_max_kg", 10
+                ):
                     db.fold_param(
                         track_id,
                         0,
@@ -827,7 +817,17 @@ class Engine:
         )
         self.db.upsert_stint(uid, 0, stint[0].compound, stint[0].lap_num, stint[-1].lap_num, fit)
         self._weekend_prior_cache.pop((uid, stint[0].compound), None)
-        if fit.source != "fit":
+        self._fold_fit(self.state.track_id, stint[0].compound, fit)
+
+    def _fold_fit(self, track_id: int, compound: int, fit: DegFit) -> None:
+        """Fold a stint fit into the learned priors when it is a clean fit on
+        an identified track; noisy stints stay in `stints` only."""
+        if (
+            self.db is None
+            or track_id < 0
+            or fit.source != "fit"
+            or fit.rmse_ms > self._th("deg_rmse_bad_ms", 800)
+        ):
             return
         for name, value in (
             ("deg_ms_per_lap", fit.deg_ms_per_lap),
@@ -835,8 +835,8 @@ class Engine:
             ("fuel_ms_per_lap", fit.fuel_ms_per_lap),
         ):
             self.db.fold_param(
-                self.state.track_id,
-                stint[0].compound,
+                track_id,
+                compound,
                 name,
                 value,
                 weight=float(fit.n),

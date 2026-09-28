@@ -553,6 +553,8 @@ class Snapshot:
     pole_gap_ms: int = 0  # player best - pole best; 0 when unknown or on pole
     pole_gap_s: float = 0.0
     pole_sector_gaps_ms: tuple[int, int, int] = (0, 0, 0)
+    best_sectors_ms: tuple[int, int, int] = (0, 0, 0)
+    pole_sectors_ms: tuple[int, int, int] = (0, 0, 0)
     pole_worst_sector: int = 0
     pole_worst_sector_s: float = 0.0
     hot_car_behind_s: float = math.inf
@@ -1731,6 +1733,14 @@ class SessionState:
                     player_best_s1,
                     player_best_s2,
                     player_best_s3,
+                    ref_sectors=next(
+                        (
+                            self._best_lap_sectors.get(i, (0, 0, 0))
+                            for i, b in enumerate(field_best)
+                            if b == cutoff_ms and i != self._player_idx
+                        ),
+                        (0, 0, 0),
+                    ),
                 )
                 advice = abort_advice(
                     proj_ms,
@@ -2033,9 +2043,10 @@ class SessionState:
         pole_gap = 0
         gaps = (0, 0, 0)
         name = ""
+        mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
+        theirs: tuple[int, int, int] = (0, 0, 0)
         if pole_idx >= 0 and pole_idx != self._player_idx and player_best > 0:
             pole_gap = player_best - field_best[pole_idx]
-            mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
             theirs = self._best_lap_sectors.get(pole_idx, (0, 0, 0))
             gaps = (
                 mine[0] - theirs[0] if mine[0] and theirs[0] else 0,
@@ -2070,6 +2081,8 @@ class SessionState:
             pole_gap_ms=pole_gap,
             pole_gap_s=round(pole_gap / 1000.0, 1),
             pole_sector_gaps_ms=gaps,
+            best_sectors_ms=mine,
+            pole_sectors_ms=theirs,
             pole_worst_sector=worst + 1 if gaps[worst] > 0 else 0,
             pole_worst_sector_s=round(max(0, gaps[worst]) / 1000.0, 1),
             hot_car_behind_s=(

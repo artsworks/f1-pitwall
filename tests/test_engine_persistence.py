@@ -10,6 +10,7 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
+from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PacketId
 from pitwall.store.db import Database
 
@@ -178,3 +179,17 @@ def test_rules_facing_snapshot_carries_model(tmp_path: Path) -> None:
     assert snap.pit_loss_source != ""
     assert snap.predicted_lap_ms > 0
     assert snap.fuel_source != ""
+
+
+def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), db=db)
+    clean = DegFit(90_000.0, 80.0, 30.0, 8, 150.0, 0.9, "fit")
+    engine._fold_fit(-1, 18, clean)
+    engine._fold_fit(7, 18, DegFit(55_520.0, 600.0, 0.0, 7, 7_992.0, 0.2, "fit"))
+    engine._fold_fit(7, 18, DegFit(90_000.0, 80.0, 30.0, 4, 150.0, 0.5, "blend"))
+    assert db.get_param(-1, 18, "deg_ms_per_lap") is None
+    assert db.get_param(7, 18, "deg_ms_per_lap") is None
+    engine._fold_fit(7, 18, clean)
+    p = db.get_param(7, 18, "deg_ms_per_lap")
+    assert p is not None and p.value == 80.0

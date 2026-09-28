@@ -912,20 +912,21 @@
     setText("c-hint", c.tyre_hint || "--");
     var pole = el("c-pole");
     if (pole) {
-      pole.innerHTML = "";
-      if (c.pole) {
-        var g = c.pole.sector_gaps_ms, worst = g.indexOf(Math.max.apply(null, g));
-        pole.appendChild(document.createTextNode("POLE " + (c.pole.driver || "") + " " +
-          signed(-c.pole.gap_ms).replace("−", "-") + " · "));
-        g.forEach(function (ms, i) {
-          var s = document.createElement("span");
-          s.textContent = "S" + (i + 1) + " " + (ms ? signed(ms) : "--") + " ";
-          if (i === worst && ms > 0) s.className = "worst";
-          pole.appendChild(s);
-        });
-      } else {
-        pole.textContent = "POLE --";
-      }
+      pole.textContent = c.pole
+        ? "POLE " + (c.pole.driver || "") + " " + signed(-c.pole.gap_ms).replace("−", "-")
+        : "POLE --";
+    }
+    var secs = el("c-sectors");
+    if (secs) {
+      var gaps = c.pole ? c.pole.sector_gaps_ms : [0, 0, 0];
+      var mine = (c.pole && c.pole.sectors_ms) || [0, 0, 0];
+      var top = gaps.indexOf(Math.max.apply(null, gaps));
+      Array.prototype.forEach.call(secs.children, function (box, i) {
+        var ms = gaps[i];
+        box.querySelector(".t").textContent = mine[i] ? (mine[i] / 1000).toFixed(3) : "--";
+        box.querySelector(".d").textContent = ms ? signed(ms) : "";
+        box.className = "c-sec" + (i === top && ms > 0 ? " worst" : ms < 0 ? " gain" : "");
+      });
     }
     setText("c-mis", "LAST LAP " + (c.last_hot_ms ? lapTime(c.last_hot_ms) : "--") + " · " +
       (c.mistakes || "clean"));

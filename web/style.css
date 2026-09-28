@@ -243,6 +243,14 @@ body.dash.review { grid-template-rows: 3rem 11rem 1fr auto auto auto 2rem;
 .c-tyres .ok { color: var(--ok); }
 .c-info { display: flex; flex-direction: column; gap: .3rem; font-size: 1.2rem; }
 .c-row .worst { color: var(--warn); font-weight: bold; }
+.c-sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0; }
+.c-sec { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; text-align: center; }
+.c-sec .k { display: block; color: var(--dim); font-size: 0.75em; }
+.c-sec .t { display: block; font-weight: bold; font-variant-numeric: tabular-nums; }
+.c-sec .d { display: block; font-size: 0.8em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.c-sec.worst { border-color: var(--warn); }
+.c-sec.worst .d { color: var(--warn); font-weight: bold; }
+.c-sec.gain .d { color: var(--ok); }
 body.dash.cool { grid-template-areas:
     "status status" "banner banner" "cool log" "cool log" "cool log" "footer footer"; }
 body.dash.cool .tyres, body.dash.cool .fuel, body.dash.cool .strat { display: none; }

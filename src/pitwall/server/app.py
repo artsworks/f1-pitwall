@@ -364,6 +364,8 @@ def quali_payload(
                     "driver": snapshot.pole_driver or None,
                     "gap_ms": snapshot.pole_gap_ms,
                     "sector_gaps_ms": list(snapshot.pole_sector_gaps_ms),
+                    "sectors_ms": list(snapshot.best_sectors_ms),
+                    "pole_sectors_ms": list(snapshot.pole_sectors_ms),
                 }
                 if snapshot.pole_gap_ms > 0
                 else None

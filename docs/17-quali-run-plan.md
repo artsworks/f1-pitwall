@@ -113,7 +113,7 @@ the cool lap is short or traffic calls are active.
 2. `run_plan()` pure function + unit tests; replay test against the Q1 recording (lap 2 →
    COOL expected because it predicts 2 % at the line).
 3. Rules: `run_plan_heads_up`, `run_plan_changed`, `cool_recharge`, `cool_status`,
-   `cool_vs_pole`, `cool_mistakes`, `cool_traffic_behind`, `cool_hot_mode_reminder`.
+   `cool_vs_pole`/`cool_vs_pole_split`, `cool_mistakes`, `cool_traffic_behind`, `cool_hot_mode_reminder`.
 4. Dashboard Zone F: plan chip (PUSH / COOL / BOX / PUSH NOW) and, during a cool lap,
    battery and tyre bars towards target.
 5. Thresholds: `ers_needed_pct`, `ers_cool_gap_pct`, `cool_lap_factor`, `hot_lap_warning_m`.
