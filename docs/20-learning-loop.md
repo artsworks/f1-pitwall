@@ -12,7 +12,7 @@ session ──► SQLite laps, stints, calls and plan events
         ──► optional debrief, evaluation and review-only proposals
 ```
 
-Live decisions remain deterministic (ADR 0008). Learned values are data. A lesson ledger,
+Learned values are data. A lesson ledger,
 automatic promotion and LLM debrief prose are not implemented; LLM prose is deferred
 (item 21).
 

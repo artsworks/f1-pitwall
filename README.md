@@ -87,7 +87,7 @@ Calls rotate through several phrasings, and repeat the same mistake often
 enough and the engineer gets drier about it (ADR 0008).
 
 Every call is a rule in [`src/pitwall/config/defaults/rules/shared.yaml`](src/pitwall/config/defaults/rules/shared.yaml)
-with thresholds in [`settings.yaml`](src/pitwall/config/defaults/settings.yaml).
+with thresholds in [`thresholds.yaml`](src/pitwall/config/defaults/thresholds.yaml).
 
 ### After a session
 

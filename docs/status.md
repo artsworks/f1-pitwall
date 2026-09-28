@@ -2,7 +2,7 @@
 
 Where the build stands against the [roadmap](05-roadmap.md).
 
-_Last updated: M4, PR #21 [https://github.com/artsworks/f1-pitwall/pull/21](https://github.com/artsworks/f1-pitwall/pull/21)._
+_Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 
 ## Milestones
 
