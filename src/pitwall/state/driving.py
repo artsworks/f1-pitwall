@@ -416,3 +416,54 @@ class OffTrackTracker:
 
     def recovered_recent(self, t: float) -> bool:
         return self._recovered_at is not None and 0 <= t - self._recovered_at <= self.hold_s
+
+
+class ContactTracker:
+    """Player collisions (COLL events) grouped into episodes: hits within
+    `merge_s` of the last one extend the episode instead of starting a new
+    check. The damage readings at the first hit are the baseline the
+    post-contact report is measured against."""
+
+    def __init__(self, *, merge_s: float = 8.0) -> None:
+        self.merge_s = merge_s
+        self.episodes = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self.start: float | None = None
+        self.last = 0.0
+        self.other = -1
+        self.severity = 0
+        self.hits = 0
+        self.baseline: dict[str, int] = {}
+
+    def hit(self, t: float, other: int, severity: int, damage: dict[str, int]) -> None:
+        if self.start is None or t - self.last > self.merge_s or t < self.start:
+            self.start, self.other, self.severity, self.hits = t, other, severity, 0
+            self.baseline = dict(damage)
+            self.episodes += 1
+        self.last = t
+        self.hits += 1
+        self.severity = max(self.severity, severity)
+
+    def phase(self, t: float, check_s: float, report_s: float) -> str:
+        """'checking' right after the hit, 'report' once the damage data has
+        settled, '' when there is no recent contact."""
+        if self.start is None:
+            return ""
+        age = t - self.last
+        if 0 <= t - self.start and age < check_s:
+            return "checking"
+        if check_s <= age < check_s + report_s:
+            return "report"
+        return ""
+
+    def worst_new(self, damage: dict[str, int], min_pct: int) -> tuple[str, int]:
+        """(part, percent now) with the biggest rise since the first hit, if
+        the rise is at least `min_pct`."""
+        part, rise = "", 0
+        for name, now in damage.items():
+            d = now - self.baseline.get(name, 0)
+            if d >= min_pct and d > rise:
+                part, rise = name, d
+        return part, damage.get(part, 0)

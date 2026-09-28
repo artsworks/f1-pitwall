@@ -11,6 +11,7 @@ from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.driving import (
     BoostTimer,
+    ContactTracker,
     LockupDetector,
     OffTrackTracker,
     SaveDetector,
@@ -118,7 +119,15 @@ def test_own_yellow_ignored() -> None:
 
 AGES = {
     n: 0.1
-    for n in ("session", "lap_data", "car_telemetry", "car_status", "car_damage", "motion_ex")
+    for n in (
+        "session",
+        "lap_data",
+        "car_telemetry",
+        "car_status",
+        "car_damage",
+        "motion_ex",
+        "participants",
+    )
 }
 
 
@@ -536,3 +545,50 @@ def test_off_track_no_call_without_place_loss_or_after_lap_ends() -> None:
     tr.update_position(4, 3, False)
     t = _off_run(tr, t, 1.0, (0, 0, 0, 0))
     assert not tr.recovered_recent(t)
+
+
+def test_contact_tracker_debounces_and_reports_new_damage() -> None:
+    c = ContactTracker(merge_s=8.0)
+    clean = {"front left wing": 0, "floor": 5}
+    c.hit(100.0, 3, 1, clean)
+    c.hit(103.0, 3, 2, {"front left wing": 4, "floor": 5})  # same episode
+    assert (c.episodes, c.hits, c.severity) == (1, 2, 2)
+    assert c.phase(105.0, 4.0, 10.0) == "checking"
+    assert c.phase(108.0, 4.0, 10.0) == "report"
+    assert c.phase(118.0, 4.0, 10.0) == ""
+    assert c.worst_new({"front left wing": 9, "floor": 6}, 3) == ("front left wing", 9)
+    assert c.worst_new({"front left wing": 2, "floor": 6}, 3) == ("", 0)
+    c.hit(130.0, 5, 0, clean)  # past the merge window: new episode
+    assert (c.episodes, c.hits, c.other) == (2, 1, 5)
+
+
+def test_contact_rules_check_then_report() -> None:
+    e = _engine()
+    t = _texts(e, contact_phase="checking", contact_name="NORRIS")
+    assert "contact_check" in t and "contact_check_teammate" not in t
+    t = _texts(e, now=5.0, contact_phase="report", contact_name="NORRIS")
+    assert "contact_ok" in t and "contact_damage_report" not in t
+    t = _texts(
+        _engine(),
+        contact_phase="report",
+        contact_damage="front left wing",
+        contact_damage_pct=9,
+    )
+    assert "front left wing" in t["contact_damage_report"] and "contact_ok" not in t
+    major = _texts(
+        _engine(),
+        contact_phase="report",
+        contact_damage="front left wing",
+        contact_damage_pct=40,
+        contact_damage_major=True,
+    )
+    assert "contact_damage_report" not in major and "contact_ok" not in major
+    t = _texts(_engine(), contact_phase="checking", contact_teammate=True, contact_name="LAWSON")
+    assert "contact_check_teammate" in t and "contact_check" not in t
+
+
+def test_teammate_fight_rule() -> None:
+    e = _engine()
+    t = _texts(e, phase="racing", teammate_fight=True, teammate_name="LAWSON", teammate_gap_s=0.6)
+    assert "teammate_fight" in t
+    assert "teammate_fight" not in _texts(_engine(), phase="racing", teammate_name="LAWSON")

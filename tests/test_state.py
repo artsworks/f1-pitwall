@@ -470,3 +470,37 @@ def test_tyre_switch_from_field_compound_gap() -> None:
     state.tyre_compound = 17
     assert state._tyre_switch(-2.0, 0.0) == "inters"
     assert state._tyre_switch(2.0, 0.0) == ""
+
+
+def test_collision_event_starts_contact_check_and_reports() -> None:
+    import struct
+
+    from pitwall.state.session import Damage, Participant
+
+    from .synth import make_packet
+
+    ingest, state = _state()
+    state.participants = (
+        Participant(name="ME", team_id=4),
+        Participant(name="OTHER", team_id=7),
+        Participant(name="MATE", team_id=4),
+    )
+
+    def coll(a: int, b: int, t: float) -> None:
+        body = b"COLL" + struct.pack("<BBB", a, b, 1)
+        _send(ingest, make_packet(PacketId.EVENT, body=body, session_time=t), t)
+
+    coll(1, 2, 10.0)  # not us
+    assert state.contacts.episodes == 0
+    coll(2, 0, 10.0)
+    coll(0, 2, 12.0)  # same contact
+    snap = state.snapshot(12.5)
+    assert snap.contact_phase == "checking" and snap.contact_teammate
+    assert snap.contact_name == "MATE" and snap.contact_hits == 2 and snap.contact_episodes == 1
+    state.damage = Damage(front_left_wing=8)
+    _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=17.0), 17.0)
+    snap = state.snapshot(17.0)
+    assert snap.contact_phase == "report"
+    assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 8)
+    assert not snap.contact_damage_major
+    assert state._teammate() == 2

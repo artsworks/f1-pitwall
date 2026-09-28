@@ -96,6 +96,11 @@ thresholds:
   front_wing_lost_pct: 50      # wing damage at or above this = wing gone, box for a nose
   damage_warn_pct: 20          # rear wing / floor / sidepod damage worth a call
   powertrain_damage_warn_pct: 30  # gearbox / engine damage worth a call
+  contact_merge_s: 8            # hits this close together are one contact (debounce)
+  contact_check_s: 4            # after the last hit, wait this long for the damage data
+  contact_report_s: 10          # window for the post-contact damage / "car looks OK" report
+  contact_damage_min_pct: 3     # damage rise since the hit worth reporting
+  teammate_fight_gap_s: 1.0     # teammate directly ahead/behind within this = team fight
   last_lap_fight_s: 1.0        # last lap: car within this either way = attack/defend call
   fastest_lap_fresh_s: 10      # fastest-lap call window after the FTLP event
   fastest_lap_settle_s: 1.5    # rival fastest lap: wait in case the player beats it at once

@@ -34,6 +34,7 @@ from pitwall.protocol.packets import (
 from pitwall.state.driving import (
     WHEEL_NAMES,
     BoostTimer,
+    ContactTracker,
     LockupDetector,
     OffTrackTracker,
     SaveDetector,
@@ -287,6 +288,18 @@ class Snapshot:
     neutral_ended_s: float = math.inf  # since the last SC/VSC ended
     neutral_ended_kind: str = ""  # 'sc' | 'vsc'
     puncture_corner: str = ""  # e.g. "rear left"; tyre damage far above wear
+    # Contact (COLL events): 'checking' right after a hit, then 'report'
+    contact_phase: str = ""
+    contact_name: str = ""
+    contact_teammate: bool = False
+    contact_hits: int = 0  # hits in this episode
+    contact_episodes: int = 0  # contact episodes this session
+    contact_damage: str = ""  # part with the biggest new damage, e.g. "front left wing"
+    contact_damage_pct: int = 0
+    contact_damage_major: bool = False  # crossed its warn threshold: the damage rules speak
+    teammate_name: str = ""
+    teammate_fight: bool = False  # teammate directly ahead/behind within fight range
+    teammate_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
     gap_behind_s: float = math.inf
     rival_ahead_idx: int = -1
@@ -670,6 +683,7 @@ class SessionState:
 
         self.lockups = LockupDetector()
         self.spins = SpinDetector()
+        self.contacts = ContactTracker()
         self.saves = SaveDetector()
         self.off_track = OffTrackTracker()
         self.boost = BoostTimer()
@@ -863,6 +877,7 @@ class SessionState:
         self.lockups.reset()
         self.spins.reset()
         self.saves.reset()
+        self.contacts.reset()
         self.off_track.reset()
         self.boost.reset()
         self.lap_acc.note_flashback()
@@ -1117,6 +1132,18 @@ class SessionState:
         elif pkt.code == "CHQF":
             self.chequered = True
             self._flag_as_leader = self.position == 1
+        elif pkt.code == "COLL":
+            if isinstance(pkt.detail, dict):
+                a = int(pkt.detail.get("vehicle1_idx", 255))
+                b = int(pkt.detail.get("vehicle2_idx", 255))
+                if self._player_idx in (a, b):
+                    self.contacts.merge_s = self._th("contact_merge_s", 8.0)
+                    self.contacts.hit(
+                        pkt.header.session_time,
+                        b if a == self._player_idx else a,
+                        int(pkt.detail.get("severity", 0)),
+                        self._damage_parts(),
+                    )
         elif pkt.code == "FTLP":
             if isinstance(pkt.detail, dict):
                 ms = round(float(pkt.detail.get("lap_time_s", 0.0)) * 1000)
@@ -1474,6 +1501,59 @@ class SessionState:
             drs_fault=car.drs_fault,
             ers_fault=car.ers_fault,
         )
+
+    def _damage_parts(self) -> dict[str, int]:
+        d = self.damage
+        return {
+            "front left wing": d.front_left_wing,
+            "front right wing": d.front_right_wing,
+            "rear wing": d.rear_wing,
+            "floor": d.floor,
+            "diffuser": d.diffuser,
+            "sidepod": d.sidepod,
+            "gearbox": d.gearbox,
+            "engine": d.engine,
+        }
+
+    def _warn_pct(self, part: str) -> float:
+        if part.startswith("front"):
+            return self._th("front_wing_damage_warn_pct", 15.0)
+        if part in ("gearbox", "engine"):
+            return self._th("powertrain_damage_warn_pct", 30.0)
+        return self._th("damage_warn_pct", 20.0)
+
+    def _contact_view(self, st: float) -> dict[str, Any]:
+        c = self.contacts
+        phase = c.phase(st, self._th("contact_check_s", 4.0), self._th("contact_report_s", 10.0))
+        if not phase:
+            return dict(contact_episodes=c.episodes)
+        part, pct = c.worst_new(self._damage_parts(), int(self._th("contact_damage_min_pct", 3.0)))
+        warn = self._warn_pct(part) if part else math.inf
+        me, other = self._player_idx, c.other
+        parts = self.participants
+        mate = (
+            0 <= other < len(parts)
+            and me < len(parts)
+            and parts[other].team_id == parts[me].team_id != 255
+        )
+        return dict(
+            contact_phase=phase,
+            contact_name=parts[other].name if 0 <= other < len(parts) else "",
+            contact_teammate=mate,
+            contact_hits=c.hits,
+            contact_episodes=c.episodes,
+            contact_damage=part,
+            contact_damage_pct=pct,
+            contact_damage_major=pct >= warn and c.baseline.get(part, 0) < warn,
+        )
+
+    def _teammate(self) -> int:
+        parts = self.participants
+        me = self._player_idx
+        if me >= len(parts) or parts[me].team_id == 255:
+            return -1
+        team = parts[me].team_id
+        return next((i for i, p in enumerate(parts) if i != me and p.team_id == team), -1)
 
     # -- snapshot -----------------------------------------------------------
 
@@ -2008,6 +2088,7 @@ class SessionState:
             neutral_ended_s=max(0.0, (self._last_session_time or 0.0) - self._race.neutral_end_t),
             neutral_ended_kind=self._race.neutral_end_kind,
             puncture_corner=self.puncture_corner,
+            **self._contact_view(st),
             deg_fit_source=model.deg_fit_source,
             deg_ms_per_lap=model.deg_ms_per_lap,
             deg_confidence=model.deg_confidence,
@@ -2164,6 +2245,7 @@ class SessionState:
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             pit_exit_rival_gap_s=exit_gap,
+            **self._teammate_view(ahead_i, behind_i, gap_behind, name_of),
             slick_gain_s=slick_gain,
             inter_gain_s=inter_gain,
             tyre_switch_to=self._tyre_switch(slick_gain, inter_gain),
@@ -2179,6 +2261,24 @@ class SessionState:
             ),
         )
         return base
+
+    def _teammate_view(
+        self, ahead_i: int, behind_i: int, gap_behind: float, name_of: Callable[[int], str]
+    ) -> dict[str, Any]:
+        mate = self._teammate()
+        if mate < 0:
+            return {}
+        gap = math.inf
+        if mate == ahead_i and self.delta_to_car_in_front_ms > 0:
+            gap = self.delta_to_car_in_front_ms / 1000.0
+        elif mate == behind_i:
+            gap = gap_behind
+        return dict(
+            teammate_name=name_of(mate),
+            teammate_gap_s=gap,
+            teammate_fight=self.race_phase == "racing"
+            and gap <= self._th("teammate_fight_gap_s", 1.0),
+        )
 
     def _compound_gain(
         self, cars: Sequence[CarLap], wetter: tuple[int, ...], drier: tuple[int, ...]

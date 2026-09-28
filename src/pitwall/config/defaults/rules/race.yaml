@@ -949,3 +949,85 @@ rules:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
       - "Careful at the exit, {rival_pit_exit_name} is right there"
       - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
+  # Team fight: free to race, keep it clean.
+  - id: teammate_fight
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and teammate_fight"
+    clear_when: "not teammate_fight"
+    cooldown_s: 300
+    requires: [lap_data, participants]
+    say:
+      - "It's {teammate_name}. You're free to race, but keep it clean"
+      - "Team-mate fight with {teammate_name}. Free to fight, give each other room"
+      - "{teammate_name}, {teammate_gap_s:.1f}. You can race him, no contact please"
+      - "Fighting your team-mate. Race hard, race clean"
+    escalate:
+      - after: 2
+        say:
+          - "Still you and {teammate_name}. Fine to race, just keep it clean"
+          - "{teammate_name} again. Careful, both cars home please"
+          - "Reminder, it's the team-mate. Plenty of room, no risks"
+  # Contact (COLL): check the car, then report once the damage data settles.
+  # Repeat hits inside th.contact_merge_s are one contact.
+  - id: contact_check_teammate
+    sessions: [race]
+    priority: 1
+    when: "phase != 'garage' and contact_phase == 'checking' and contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    requires: [participants]
+    say:
+      - "Contact with {contact_name}. We're checking the car. Give each other room"
+      - "That's your team-mate! Checking the car, keep it clean"
+      - "Touch with {contact_name}. Checking for damage. Careful, same team"
+  - id: contact_check
+    sessions: [race]
+    priority: 1
+    when: "phase != 'garage' and contact_phase == 'checking' and not contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    say:
+      - "Contact there. Checking the car"
+      - "We saw the contact. Checking for damage, stand by"
+      - "Touch with {contact_name}. Give us a second, checking the car"
+      - "Contact. Checking the data"
+    escalate:
+      - after: 2
+        say:
+          - "Another hit. Checking the car again"
+          - "More contact. Stand by, checking"
+          - "Again with the contact. Checking the car"
+  - id: contact_damage_report
+    sessions: [race]
+    priority: 2
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage != '' and not contact_damage_major"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    requires: [car_damage]
+    say:
+      - "Car check done. Some {contact_damage} damage, {contact_damage_pct} percent. Nothing major, keep going"
+      - "We've got {contact_damage_pct} percent on the {contact_damage}. Small loss, carry on"
+      - "Bit of {contact_damage} damage from that, {contact_damage_pct} percent. Car's driveable"
+  - id: contact_ok
+    sessions: [race]
+    priority: 3
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage == ''"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    requires: [car_damage]
+    say:
+      - "Car looks OK. No damage"
+      - "Checked the car, all good. Carry on"
+      - "No damage from that. Car's fine"
+      - "Data looks clean, no damage. Keep pushing"
+    escalate:
+      - after: 2
+        say:
+          - "Car's still OK. Lucky, keep it clean"
+          - "No damage again, but let's not push our luck"
+          - "Still clean on the data. Careful with the contact"
