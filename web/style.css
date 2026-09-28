@@ -95,6 +95,13 @@ body.sc .status { background: color-mix(in srgb, var(--warn) 30%, var(--panel));
 .comp.inter { border-color: var(--ok); color: var(--ok); }
 .comp.wet { border-color: var(--cold); color: var(--cold); }
 .comp.slick { border-color: var(--fg); color: var(--fg); }
+/* filled variant: rival / plan chips read at a glance */
+.cb .comp, .cseq .comp { color: #111; background: var(--dim); border-color: var(--dim); }
+.cb .comp.soft, .cseq .comp.soft { background: var(--crit); border-color: var(--crit); color: #fff; }
+.cb .comp.medium, .cseq .comp.medium { background: var(--warn); border-color: var(--warn); color: #111; }
+.cb .comp.hard, .cseq .comp.hard, .cb .comp.slick, .cseq .comp.slick { background: var(--fg); border-color: var(--fg); color: #111; }
+.cb .comp.inter, .cseq .comp.inter { background: var(--ok); border-color: var(--ok); color: #111; }
+.cb .comp.wet, .cseq .comp.wet { background: var(--cold); border-color: var(--cold); color: #fff; }
 .car { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
   gap: .4rem; position: relative; min-height: 0; }
 .car::before { content: ""; position: absolute; left: 50%; top: -.3rem; bottom: -.3rem; width: 2px;
@@ -316,7 +323,19 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 .s-row .warn, .b-card .warn { color: var(--warn); font-weight: bold; }
 .s-row .crit, .b-card .crit { color: var(--crit); font-weight: bold; }
 .s-row .ok, .b-card .ok { color: var(--ok); }
-.s-stint { font-size: 1.1rem; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-stint { font-size: 1.1rem; line-height: 1.35; white-space: nowrap; overflow: hidden; display: flex;
+  flex-wrap: wrap; align-items: center; gap: .25rem 1rem; min-height: 1.9rem; }
+.s-stint .plan { display: inline-flex; align-items: center; gap: .4rem; flex: none; }
+.s-stint .plan .pid { font-weight: bold; font-size: 1.25rem; color: var(--fg); border: 2px solid var(--fg);
+  border-radius: .3rem; padding: 0 .4rem; line-height: 1.3; }
+.s-stint .plan.alt .pid { color: var(--dim); border-color: var(--dim); }
+.s-stint .plan .tag { font-size: .85rem; color: var(--warn); border: 1px solid var(--warn); border-radius: .25rem;
+  padding: 0 .25rem; letter-spacing: .08em; }
+.s-stint .cseq { display: inline-flex; align-items: center; gap: .15rem; }
+.s-stint .cseq .comp { font-size: 1rem; padding: 0 .3rem; border-radius: .25rem; font-weight: bold; }
+.s-stint .cseq .arr { color: var(--faint); font-size: .9rem; }
+.s-stint .ok { color: var(--ok); font-weight: bold; }
+.s-stint .warn { color: var(--warn); }
 .big.delta-ok { color: var(--ok); }
 .big.delta-warn { color: var(--warn); }
 .big.delta-crit { color: var(--crit); }
@@ -326,7 +345,7 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 
 /* pages (docs/15 §10): alternate layouts over the same zones. Status bar,
    banner and footer never move; pit board / cool-down still take over. */
-.battle, .carpage, .trackpage, .setuppage { display: none; font-size: 1.3rem; overflow: hidden; }
+.battle, .carpage, .trackpage { display: none; font-size: 1.3rem; overflow: hidden; }
 .battle { grid-area: battle; flex-direction: column; gap: .5rem; font-size: 1.15rem; }
 /* rival card: fixed row structure (head / rail / pace+tyre / last lap / badges)
    so the card never changes height as values come and go. */
@@ -405,15 +424,18 @@ body.stale .duel > * { filter: grayscale(1); opacity: .4; }
 .tp-status.red { background: var(--crit); color: #fff; }
 .tp-wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
 .tp-wxt { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: .4rem .7rem;
-  display: grid; grid-template-rows: auto auto auto auto; min-width: 0; }
+  display: grid; grid-template-rows: auto auto auto auto auto; min-width: 0; }
 .tp-wxt .k { color: var(--dim); font-size: 1.05rem; letter-spacing: .14em; white-space: nowrap; }
-.tp-wxt .sky { font-size: 1.5rem; font-weight: bold; text-transform: uppercase; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-height: 1.9rem; margin-bottom: .3rem; }
-.tp-wxt .pct { font-size: 2.6rem; font-weight: bold; line-height: 1.1; }
-.tp-wxt.dry .pct { color: var(--fg); }
-.tp-wxt.maybe .pct { color: var(--warn); }
-.tp-wxt.wet .pct, .tp-wxt.wet .sky { color: var(--cold); }
+.tp-wxt .ico { font-size: 2.6rem; line-height: 1.15; color: var(--fg); min-height: 3rem; }
+.tp-wxt .sky { font-size: 1.15rem; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-height: 1.5rem; margin-bottom: .3rem; }
+.tp-wxt .pct { font-size: 2.6rem; font-weight: bold; line-height: 1.1; color: var(--fg); }
+.tp-wxt.wet .pct, .tp-wxt.wet .ico { color: var(--cold); }
 .tp-wxt.wet { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 10%, var(--panel)); }
+.tp-wxt.storm .pct, .tp-wxt.storm .ico { color: var(--crit); }
+.tp-wxt.storm { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, var(--panel)); }
+.tp-row .v .cb { margin: 0 .4rem; vertical-align: baseline; }
+.tp-row .v .cb .comp { font-size: 1.1rem; }
 .tp-rows { display: flex; flex-direction: column; gap: .4rem; }
 .tp-row { font-size: 1.5rem; padding: .3rem .6rem; border-left: 4px solid var(--line); display: flex;
   align-items: baseline; gap: .8rem; white-space: nowrap; min-width: 0; min-height: 2.4rem; }
@@ -423,12 +445,6 @@ body.stale .duel > * { filter: grayscale(1); opacity: .4; }
 .tp-row.crit { border-color: var(--crit); } .tp-row.crit .v { color: var(--crit); }
 .tp-row.cold { border-color: var(--cold); } .tp-row.cold .v { color: var(--cold); }
 .tp-row.ok { border-color: var(--ok); } .tp-row.ok .v { color: var(--ok); }
-.setuppage { grid-area: setuppage; }
-.setuppage ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 2rem; }
-.setuppage li { display: flex; justify-content: space-between; align-items: baseline; padding: .3rem 0;
-  border-bottom: 1px solid var(--line); break-inside: avoid; font-size: 1.35rem; }
-.setuppage li .k { color: var(--dim); }
-.setuppage li .v { font-weight: bold; font-size: 1.5rem; }
 
 body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "battle log" "battle log" "strat log" "footer footer"; }
@@ -438,9 +454,6 @@ body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
 body.dash.page-track:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
     "footer footer"; }
-body.dash.page-setup:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "setuppage setuppage" "setuppage setuppage"
-    "setuppage setuppage" "footer footer"; }
 body.dash.review.page-battle:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "battle log" "battle log" "strat log"
     "transport transport" "footer footer"; }
@@ -450,25 +463,16 @@ body.dash.review.page-car:not(.pit):not(.cool) { grid-template-areas:
 body.dash.review.page-track:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "trackpage log" "trackpage log" "strat log"
     "transport transport" "footer footer"; }
-body.dash.review.page-setup:not(.pit):not(.cool) { grid-template-areas:
-    "status status" "banner banner" "setuppage setuppage" "setuppage setuppage"
-    "setuppage setuppage" "transport transport" "footer footer"; }
 body.dash.page-battle:not(.pit):not(.cool) .battle,
 body.dash.page-car:not(.pit):not(.cool) .carpage,
-body.dash.page-track:not(.pit):not(.cool) .trackpage,
-body.dash.page-setup:not(.pit):not(.cool) .setuppage { display: flex; }
-body.dash.page-setup:not(.pit):not(.cool) .setuppage { display: block; }
+body.dash.page-track:not(.pit):not(.cool) .trackpage { display: flex; }
 body.dash.page-battle:not(.pit):not(.cool) .tyres,
 body.dash.page-battle:not(.pit):not(.cool) .fuel,
 body.dash.page-car:not(.pit):not(.cool) .log,
 body.dash.page-track:not(.pit):not(.cool) .tyres,
-body.dash.page-track:not(.pit):not(.cool) .fuel,
-body.dash.page-setup:not(.pit):not(.cool) .tyres,
-body.dash.page-setup:not(.pit):not(.cool) .fuel,
-body.dash.page-setup:not(.pit):not(.cool) .strat,
-body.dash.page-setup:not(.pit):not(.cool) .log { display: none; }
-body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > *,
-body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
+body.dash.page-track:not(.pit):not(.cool) .fuel { display: none; }
+body.stale .battle > *, body.stale .carpage > *, body.stale .trackpage > * {
+  filter: grayscale(1); opacity: .4; }
 
 /* phone portrait: one column, every page keeps status + banner on top.
    Rows size to content and the page scrolls; review adds the transport row. */
@@ -488,7 +492,6 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
   body.dash .log { min-height: 12rem; }
   body.dash .footer { flex-wrap: wrap; white-space: normal; gap: .6rem; padding: .3rem .6rem; }
   body.dash .fuel { grid-template-columns: 1fr 1fr; }
-  .setuppage ol { columns: 1; }
   .b-card .b-pace .words { font-size: 1.4rem; }
   .b-card .b-lap { flex-wrap: wrap; row-gap: 0; }
   .b-card .b-lap .tr { flex-basis: 100%; text-align: left; padding-left: 5rem; }
@@ -497,7 +500,8 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
   .b-card .b-badges { gap: .25rem; }
   .b-card .badge { font-size: .9rem; padding: 0 .3rem; letter-spacing: .05em; }
   .tp-wxt .pct { font-size: 2rem; }
-  .tp-wxt .sky { font-size: 1.15rem; }
+  .tp-wxt .sky { font-size: 1rem; }
+  .tp-wxt .ico { font-size: 2rem; min-height: 2.4rem; }
   .s-row .words { display: none; }
   body.radio .status { flex-wrap: wrap; white-space: normal; gap: .3rem .8rem;
     padding: .4rem .6rem; }
@@ -517,10 +521,6 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
       "status" "banner" "trackpage" "strat" "log" "footer"; }
   body.dash.review.page-track:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "trackpage" "strat" "log" "transport" "footer"; }
-  body.dash.page-setup:not(.pit):not(.cool) { grid-template-areas:
-      "status" "banner" "setuppage" "footer"; }
-  body.dash.review.page-setup:not(.pit):not(.cool) { grid-template-areas:
-      "status" "banner" "setuppage" "transport" "footer"; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -542,7 +542,7 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
 }
 .corner .temp, .corner .word, .corner .lbl span { transition: color var(--t-med) ease; }
 .tyres > *, .fuel > *, .strat > *, .log > *, .footer > *, .battle > *, .carpage > *,
-.trackpage > *, .setuppage > * { transition: filter var(--t-slow) ease, opacity var(--t-slow) ease; }
+.trackpage > * { transition: filter var(--t-slow) ease, opacity var(--t-slow) ease; }
 
 /* lap counter and position react to change */
 #lap.tick { animation: tick 900ms var(--ease-out); }
@@ -616,7 +616,7 @@ body.stale .status { --stripe: color-mix(in srgb, var(--crit) 25%, transparent);
 .pill.page.pg-flip .pg-name { animation: pg-name var(--t-med) var(--ease-out); }
 @keyframes pg-name { from { opacity: 0; transform: translateX(var(--swap-dx, 1rem)); } }
 body.swap .tyres, body.swap .fuel, body.swap .strat, body.swap .log, body.swap .battle,
-body.swap .carpage, body.swap .trackpage, body.swap .setuppage {
+body.swap .carpage, body.swap .trackpage {
   animation: page-in 420ms var(--ease-out) both; }
 body.swap .fuel, body.swap .log { animation-delay: 40ms; }
 body.swap .strat { animation-delay: 80ms; }
@@ -673,7 +673,7 @@ body.swap .strat { animation-delay: 80ms; }
   body.dash .log { max-height: 14rem; }
   body.dash .corner .temp { font-size: 2rem; }
   body.dash .footer { font-size: .8rem; }
-  body.dash .battle, body.dash .carpage, body.dash .trackpage, body.dash .setuppage {
+  body.dash .battle, body.dash .carpage, body.dash .trackpage {
     overflow: visible; }
 }
 

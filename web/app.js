@@ -154,7 +154,6 @@
     renderDuel(p.strategy, p.quali);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
-    renderSetupPage(p.setup);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -284,26 +283,48 @@
     }
     rivalRow("s-ahead", s.ahead, "ahead", s);
     rivalRow("s-behind", s.behind, "behind", s);
-    setText("s-stint", (ap ? planText(ap) + alternates(s) : s.stint_plan) +
-      (s.restricted ? " · rival data restricted" : ""));
+    renderStint(el("s-stint"), s, ap);
+  }
+
+  // Plan line: active plan as compound chips + stop count, then each alternative
+  // as a lettered chip with its race-time delta (negative = faster = green).
+  function renderStint(n, s, ap) {
+    if (!n) return;
+    n.innerHTML = "";
+    if (!ap) { n.appendChild(span(s.stint_plan || "", "dim")); return; }
+    var act = span("", "plan act");
+    act.appendChild(span(ap.id, "pid"));
+    act.appendChild(compoundSeq(ap.compounds));
+    act.appendChild(span(ap.stops === 0 ? "no stop" : ap.stops + (ap.stops === 1 ? " stop" : " stops"), "dim"));
+    n.appendChild(act);
+    (s.plans || []).filter(function (p) { return !p.active; }).forEach(function (p) {
+      var c = span("", "plan alt" + (p.kind === "reactive" ? " sc" : ""));
+      c.appendChild(span(p.id, "pid"));
+      if (p.kind === "reactive") c.appendChild(span("SC", "tag"));
+      c.appendChild(compoundSeq(p.compounds));
+      var d = p.delta_s;
+      if (d === null || d === undefined) c.appendChild(span(p.kind === "reactive" ? "SC box now" : p.kind, "dim"));
+      else if (Math.abs(d) < 0.05) c.appendChild(span("same time", "dim"));
+      else c.appendChild(span((d < 0 ? "−" : "+") + fmt(Math.abs(d), 1) + " s " + (d < 0 ? "faster" : "slower"),
+        d < 0 ? "ok" : "warn"));
+      n.appendChild(c);
+    });
+    if (s.restricted) n.appendChild(span("rival data restricted", "dim"));
+  }
+
+  function compoundSeq(cs) {
+    var q = span("", "cseq");
+    (cs || []).forEach(function (c, i) {
+      if (i) q.appendChild(span("›", "arr"));
+      q.appendChild(span(String(c || "?").charAt(0).toUpperCase(), "comp " + compoundClass(c)));
+    });
+    return q;
   }
 
   function activePlan(s) {
     var ps = s && s.plans ? s.plans : [];
     for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
     return null;
-  }
-
-  function planText(p) {
-    return (p.compounds || []).map(function (c) { return String(c || "?").charAt(0).toUpperCase(); })
-      .join("→") + " · " + p.stops + (p.stops === 1 ? " stop" : " stops");
-  }
-
-  function alternates(s) {
-    return (s.plans || []).filter(function (p) { return !p.active; }).map(function (p) {
-      return " · " + p.id + " " + (p.delta_s !== null && p.delta_s !== undefined ?
-        (p.delta_s >= 0 ? "+" : "") + fmt(p.delta_s, 1) + "s" : p.kind);
-    }).join("");
   }
 
   // Rival vs us. pace_delta_s + = he is slower than our pace; last_lap_delta_s
@@ -528,6 +549,7 @@
   }
 
   var WEATHER_WORDS = { 0: "clear", 1: "light cloud", 2: "overcast", 3: "light rain", 4: "heavy rain", 5: "storm" };
+  var WEATHER_ICONS = { 0: "☀", 1: "☀☁", 2: "☁", 3: "☂", 4: "☔", 5: "⚡" };
   function tpRow(id, k, v, cls) {
     var n = el(id);
     if (!n) return;
@@ -541,9 +563,27 @@
     var n = el("tp-wx-" + i);
     if (!n) return;
     var known = w !== null && w !== undefined && w >= 0;
+    n.querySelector(".ico").textContent = known ? WEATHER_ICONS[w] || "·" : "·";
     n.querySelector(".sky").textContent = known ? WEATHER_WORDS[w] || "--" : "--";
     n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
-    n.className = "tp-wxt" + (!known ? "" : w >= 3 || pct >= 50 ? " wet" : pct >= 20 ? " maybe" : " dry");
+    // Neutral unless rain is actually coming: blue = wet/likely, red = heavy rain / storm.
+    n.className = "tp-wxt" + (!known ? "" : w >= 4 ? " storm" : w >= 3 || pct >= 40 ? " wet" : " dry");
+  }
+  function crossRow(c) {
+    var n = el("tp-cross");
+    if (!n) return;
+    n.innerHTML = "";
+    n.appendChild(span("CROSSOVER", "k"));
+    var v = span("", "v");
+    if (c) {
+      v.appendChild(span("to", "dim"));
+      var cb = span("", "cb");
+      cb.appendChild(span(String(c).toUpperCase(), "comp " + compoundClass(c)));
+      v.appendChild(cb);
+      v.appendChild(span("likely inside the race", ""));
+    } else v.appendChild(span("none forecast", "dim"));
+    n.appendChild(v);
+    n.className = "tp-row" + (c ? " cold" : "");
   }
   function renderTrackPage(t) {
     if (!t) return;
@@ -556,8 +596,7 @@
     var r = t.rain_chance_pct || [null, null, null];
     var wf = t.weather_forecast || [t.weather, -1, -1];
     for (var i = 0; i < 3; i++) wxTile(i, wf[i], r[i]);
-    tpRow("tp-cross", "CROSSOVER", t.weather_crossover ? "to " + String(t.weather_crossover).toUpperCase() +
-      " likely inside the race" : "none forecast", t.weather_crossover ? "warn" : "");
+    crossRow(t.weather_crossover);
     tpRow("tp-flags", "FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
     var pens = [];
     if (t.penalty_s) pens.push("+" + t.penalty_s + " s");
@@ -568,26 +607,6 @@
     tpRow("tp-traffic", "GAPS", "ahead " + gapText(t.gap_ahead_s) + " · behind " +
       gapText(t.gap_behind_s === null || t.gap_behind_s === undefined ? null : -t.gap_behind_s), "");
     tpRow("tp-exit", "PIT EXIT", t.pit_exit_clean ? "CLEAR AIR" : "TRAFFIC", t.pit_exit_clean ? "ok" : "warn");
-  }
-
-  function renderSetupPage(su) {
-    var ol = el("sp-list");
-    if (!ol) return;
-    ol.innerHTML = "";
-    if (!su) { var d = document.createElement("li"); d.className = "dim"; d.textContent = "no setup packet yet"; ol.appendChild(d); return; }
-    Object.keys(su.values).forEach(function (k) {
-      var li = document.createElement("li");
-      li.appendChild(span(k.replace(/_/g, " "), "k"));
-      li.appendChild(span(fmt(su.values[k], /camber|toe|fuel|pressure/.test(k) ? 2 : 0), "v"));
-      ol.appendChild(li);
-    });
-    ["fl", "fr", "rl", "rr"].forEach(function (k) {
-      if (!su.pressures[k]) return;
-      var li = document.createElement("li");
-      li.appendChild(span(k.toUpperCase() + " pressure", "k"));
-      li.appendChild(span(fmt(su.pressures[k], 1) + " psi", "v"));
-      ol.appendChild(li);
-    });
   }
 
   function renderPage(p) {

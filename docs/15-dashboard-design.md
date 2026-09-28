@@ -399,9 +399,8 @@ LIVE/STALE never move, and the pit board / cool-down takeovers still win.
 | battle | a rival in scope | battle cards (immediate ahead/behind only: gap, trend, pace delta, tyre + age, DRS/UC/OC threat), pit-exit projection, F, E |
 | car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
 | track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
-| setup | between sessions, display only | read-only Car Setups values and pressures |
 
-Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
+Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet; shown on the pit board, not as a page).
 `/radio` keeps its compact layout and shows the current page name.
 
 
