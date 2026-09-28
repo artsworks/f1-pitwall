@@ -119,6 +119,7 @@ class CarLap:
 
     lap_distance: float = 0.0
     current_lap_time_ms: int = 0
+    last_lap_time_ms: int = 0
     sector: int = 0
     sector1_ms: int = 0
     sector2_ms: int = 0
@@ -343,7 +344,11 @@ class Snapshot:
     rain_pct_now: int = 0
     rain_pct_in_10: int = 0
     rain_pct_in_30: int = 0
+    weather_in_10: int = -1  # forecast weather type (0 clear .. 5 storm), -1 unknown
+    weather_in_30: int = -1
     weather_crossover: str = ""
+    weather_crossover_pct: int = 0  # forecast rain chance driving the crossover
+    weather_crossover_min: int = 0  # ... and how many minutes out
     pit_plan: str = ""
     pit_plan_lap: int = 0
     # Driver menu opinion (docs/12): "understeer" | "oversteer" | "" while it holds.
@@ -394,6 +399,9 @@ class Snapshot:
     battle_result: str = ""
     battle_result_recent: bool = False
     battle_result_name: str = ""
+    battle_pace_ahead: str = ""  # "three tenths slower": the car ahead vs us, per lap
+    battle_pace_behind: str = ""
+    player_last_lap_ms: int = 0
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -722,6 +730,8 @@ class SessionState:
         self._drs_zones: tuple[Zone, ...] = ()
         self._aero_zones: tuple[Zone, ...] = ()
         self._weather_crossover = ""
+        self._weather_crossover_pct = 0
+        self._weather_crossover_min = 0
         self._overheat = False
         self._graining = False
         self._model = ModelView()
@@ -1251,11 +1261,28 @@ class SessionState:
         self.wear_hot_rate = rate
         self.wear_hot_pct = pct
 
+    def _race_horizon_min(self) -> float:
+        """Minutes of racing left, so forecast samples after the flag don't
+        drive a tyre call. 30 (the forecast's reach) when unknown."""
+        lap_ms = self._best_laps.get(self._player_idx, 0)
+        if self._kind() != "race" or self.total_laps <= 0 or lap_ms <= 0:
+            return 30.0
+        laps_left = max(0, self.total_laps - self.lap_num + 1)
+        return laps_left * lap_ms / 60_000.0
+
     def _update_weather_crossover(self) -> None:
         """Crossover direction from the forecast, with % hysteresis so it
         doesn't flap around the thresholds."""
-        rain_10, rain_30 = self._rain_at(10), self._rain_at(30)
-        rain = max(rain_10, rain_30)
+        horizon = self._race_horizon_min()
+        ahead = [
+            (int(f.rain_percentage), int(f.time_offset))
+            for f in self._forecast_samples
+            if f.session_type == self.session_type
+            and 5 <= f.time_offset
+            and (f.time_offset <= horizon or f.time_offset <= 10)
+        ]
+        rain, rain_min = max(ahead, default=(0, 0))
+        self._weather_crossover_pct, self._weather_crossover_min = rain, rain_min
         wet = self._th("rain_wet_pct", 85.0)
         inter = self._th("rain_inter_pct", 60.0)
         dry = self._th("rain_dry_pct", 30.0)
@@ -1408,6 +1435,7 @@ class SessionState:
                 CarLap(
                     lap_distance=c.lap_distance,
                     current_lap_time_ms=c.current_lap_time_ms,
+                    last_lap_time_ms=c.last_lap_time_ms,
                     sector=c.sector,
                     sector1_ms=c.sector1_ms,
                     sector2_ms=c.sector2_ms,
@@ -1620,7 +1648,11 @@ class SessionState:
             rain_pct_now=self._rain_at(0),
             rain_pct_in_10=self._rain_at(10),
             rain_pct_in_30=self._rain_at(30),
+            weather_in_10=self._weather_at(10),
+            weather_in_30=self._weather_at(30),
             weather_crossover=self._weather_crossover,
+            weather_crossover_pct=self._weather_crossover_pct,
+            weather_crossover_min=self._weather_crossover_min,
             since_rewind_s=(
                 math.inf if self._last_rewind_t is None else max(0.0, st - self._last_rewind_t)
             ),
@@ -1633,6 +1665,9 @@ class SessionState:
             participants=self.participants,
             field_best_laps=tuple(field_best),
             player_best_lap_ms=player_best_lap,
+            player_last_lap_ms=(
+                cars[self._player_idx].last_lap_time_ms if 0 <= self._player_idx < len(cars) else 0
+            ),
             player_best_s1_ms=player_best_s1,
             player_best_s2_ms=player_best_s2,
             player_best_s3_ms=player_best_s3,
@@ -1833,8 +1868,19 @@ class SessionState:
         )
         return out
 
+    def _weather_at(self, offset_min: int) -> int:
+        """Forecast weather type of the nearest sample at time_offset >= offset_min."""
+        return next(
+            (
+                int(s.weather)
+                for s in self._forecast_samples
+                if s.session_type == self.session_type and s.time_offset >= offset_min
+            ),
+            -1,
+        )
+
     def _rain_at(self, offset_min: int) -> int:
-        """Rain % of the nearest forecast sample for this session type at
+        """Rain chance % of the nearest forecast sample for this session type at
         time_offset >= offset_min (0 = current conditions sample)."""
         return next(
             (

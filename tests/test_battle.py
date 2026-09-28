@@ -11,7 +11,7 @@ import pytest
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine
 from pitwall.server.app import strategy_payload
-from pitwall.state.session import Snapshot
+from pitwall.state.session import CarLap, Snapshot
 from pitwall.store.db import Database
 from pitwall.strategy.battle import (
     ATTACKING,
@@ -172,6 +172,31 @@ def test_strategy_payload_battle() -> None:
     assert s["battle"]["catch_laps"] == 4.0
     assert s["battle"]["threat_laps"] is None
     assert s["battle"]["result"] is None
+
+
+def test_strategy_payload_rival_card() -> None:
+    cars = [
+        CarLap(last_lap_time_ms=90_000),
+        CarLap(last_lap_time_ms=90_300, penalties=5, total_warnings=2),
+    ]
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        rival_ahead_idx=1,
+        rival_ahead_name="ALBON",
+        gap_ahead_s=0.8,
+        battle_pace_ahead="three tenths slower",
+        player_last_lap_ms=90_000,
+        cars=tuple(cars),
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    a = s["ahead"]
+    assert a["pace_words"] == "three tenths slower"
+    assert a["last_lap_ms"] == 90_300 and a["last_lap_delta_s"] == 0.3
+    assert a["infringements"]["penalty_s"] == 5 and a["infringements"]["warnings"] == 2
 
 
 @pytest.fixture(scope="module")

@@ -418,6 +418,7 @@
     n.className = cls || "";
   }
 
+  var WEATHER_WORDS = { 0: "clear", 1: "light cloud", 2: "overcast", 3: "light rain", 4: "heavy rain", 5: "storm" };
   function tpRow(id, txt, cls) { setText(id, txt); setClass(id, "tp-row" + (cls ? " " + cls : "")); }
   function renderTrackPage(t) {
     if (!t) return;
@@ -427,8 +428,11 @@
         (t.sc_laps ? " · " + t.sc_laps + " laps" : "") : String(t.phase || "--").replace("_", " ").toUpperCase();
       st.className = "tp-status" + (t.red_flag ? " red" : t.safety_car ? " sc" : "");
     }
-    var r = t.rain_pct || [0, 0, 0];
-    tpRow("tp-weather", "RAIN now " + r[0] + "% · 10 min " + r[1] + "% · 30 min " + r[2] + "%" +
+    var r = t.rain_chance_pct || [0, 0, 0];
+    var wf = t.weather_forecast || [t.weather, -1, -1];
+    function sky(w) { return WEATHER_WORDS[w] || "--"; }
+    tpRow("tp-weather", "NOW " + sky(wf[0]) + " · rain chance " + r[0] + "% · 10 min " + sky(wf[1]) +
+      " " + r[1] + "% · 30 min " + sky(wf[2]) + " " + r[2] + "%" +
       (t.weather_crossover ? " · CROSSOVER " + String(t.weather_crossover).toUpperCase() : ""),
       t.weather_crossover ? "warn" : "");
     tpRow("tp-flags", t.blue_flag ? "BLUE FLAG · let the leader by" : "no blue flag", t.blue_flag ? "warn" : "");

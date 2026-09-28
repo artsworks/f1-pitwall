@@ -47,6 +47,7 @@ from pitwall.strategy.battle import (
     Episode,
     shrink,
 )
+from pitwall.strategy.pace import pace_words
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
@@ -1115,6 +1116,8 @@ class Engine:
             battle_result=b.result,
             battle_result_recent=b.result_recent,
             battle_result_name=name,
+            battle_pace_ahead=pace_words(-b.closing_ahead_s) if snap.rival_ahead_idx >= 0 else "",
+            battle_pace_behind=pace_words(b.closing_behind_s) if snap.rival_behind_idx >= 0 else "",
         )
 
     def _persist_episode(self, snap: Snapshot, ep: Episode) -> None:

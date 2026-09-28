@@ -103,6 +103,7 @@ def strategy_payload(
     th = thresholds or {}
     drs_gap = float(th.get("drs_detection_gap_s", 1.0))
     own_ms = snapshot.predicted_lap_ms or int(snapshot.base_pace_ms)
+    own_last = snapshot.player_last_lap_ms
 
     def rival(side: str) -> dict[str, Any] | None:
         ahead = side == "ahead"
@@ -112,6 +113,7 @@ def strategy_payload(
         gap = snapshot.gap_ahead_s if ahead else snapshot.gap_behind_s
         pace = snapshot.rival_ahead_pace_ms if ahead else snapshot.rival_behind_pace_ms
         gap_f = _finite(gap)
+        car = snapshot.cars[idx] if idx < len(snapshot.cars) else None
         return {
             "idx": idx,
             "pos": snapshot.rival_ahead_pos if ahead else snapshot.rival_behind_pos,
@@ -126,6 +128,26 @@ def strategy_payload(
             "gap_trend_s": snapshot.gap_trend_ahead_s if ahead else snapshot.gap_trend_behind_s,
             "drs": gap_f is not None and gap_f < drs_gap and snapshot.safety_car_status == 0,
             "pitted": snapshot.rival_ahead_pitted if ahead else snapshot.rival_behind_pitted,
+            "pace_words": (snapshot.battle_pace_ahead if ahead else snapshot.battle_pace_behind)
+            or None,
+            "last_lap_ms": car.last_lap_time_ms if car and car.last_lap_time_ms else None,
+            # + = his last lap was slower than ours
+            "last_lap_delta_s": (
+                round((car.last_lap_time_ms - own_last) / 1000.0, 3)
+                if car and car.last_lap_time_ms and own_last
+                else None
+            ),
+            "infringements": (
+                {
+                    "penalty_s": car.penalties,
+                    "warnings": car.total_warnings,
+                    "corner_cut_warnings": car.corner_cutting_warnings,
+                    "drive_throughs": car.num_unserved_drive_through_pens,
+                    "stop_gos": car.num_unserved_stop_go_pens,
+                }
+                if car
+                else None
+            ),
         }
 
     window = None
@@ -237,7 +259,13 @@ def track_payload(snapshot: Snapshot) -> dict[str, Any]:
         "safety_car": snapshot.safety_car_status,
         "sc_laps": snapshot.sc_laps,
         "weather": snapshot.weather_now,
-        "rain_pct": [snapshot.rain_pct_now, snapshot.rain_pct_in_10, snapshot.rain_pct_in_30],
+        "weather_forecast": [snapshot.weather_now, snapshot.weather_in_10, snapshot.weather_in_30],
+        # forecast probability of rain, not intensity (the game sends no intensity)
+        "rain_chance_pct": [
+            snapshot.rain_pct_now,
+            snapshot.rain_pct_in_10,
+            snapshot.rain_pct_in_30,
+        ],
         "weather_crossover": snapshot.weather_crossover or None,
         "blue_flag": snapshot.blue_flag,
         "red_flag": snapshot.red_flag,

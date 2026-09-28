@@ -522,9 +522,9 @@ rules:
     cooldown_group: weather
     requires: [session]
     say:
-      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Inters will be the tyre"
-      - "Rain's coming, {rain_pct_in_10} percent in ten. Inters are the likely call"
-      - "Heads up, {rain_pct_in_10} percent rain in ten minutes. Thinking inters"
+      - "Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters will be the tyre"
+      - "Rain's coming, {weather_crossover_pct} percent chance in {weather_crossover_min}. Inters are the likely call"
+      - "Heads up, {weather_crossover_pct} percent chance of rain in {weather_crossover_min} minutes. Thinking inters"
   - id: weather_to_wet
     sessions: [race]
     priority: 2
@@ -534,9 +534,9 @@ rules:
     cooldown_group: weather
     requires: [session]
     say:
-      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Full wets will be the tyre"
-      - "Heavy rain coming, {rain_pct_in_10} percent in ten. Full wets likely"
-      - "Big rain on the way, {rain_pct_in_10} percent in ten. Prepare for wets"
+      - "Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes. Full wets will be the tyre"
+      - "Heavy rain likely, {weather_crossover_pct} percent in {weather_crossover_min}. Full wets likely"
+      - "Big rain on the way, {weather_crossover_pct} percent chance in {weather_crossover_min}. Prepare for wets"
   - id: weather_to_dry
     sessions: [race]
     priority: 2
@@ -546,9 +546,9 @@ rules:
     cooldown_group: weather
     requires: [session]
     say:
-      - "Weather change coming, {rain_pct_in_10} percent rain in ten. Track is drying, slicks soon"
-      - "Track's drying, {rain_pct_in_10} percent rain in ten. Slicks soon"
-      - "It's drying out. Rain {rain_pct_in_10} percent in ten, slicks are coming"
+      - "Track is drying, rain chance down to {weather_crossover_pct} percent. Slicks soon"
+      - "Track's drying, only {weather_crossover_pct} percent chance of more rain. Slicks soon"
+      - "It's drying out. Rain chance {weather_crossover_pct} percent, slicks are coming"
   - id: sc_deployed
     sessions: [race]
     priority: 1

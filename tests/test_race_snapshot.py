@@ -178,3 +178,14 @@ def test_pena_track_limit_warning_kind() -> None:
     assert not snap.penalty_recent
     _lap(ingest, 30.0)
     assert not state.snapshot(30.0).track_warning_recent
+
+
+def test_weather_crossover_ignores_forecast_after_the_flag() -> None:
+    ingest, state = _state()
+    state._best_laps[0] = 90_000
+    state.lap_num = 15  # 6 laps x 1:30 = 9 minutes left of a 20-lap race
+    _forecast(ingest, 1.0, 6, 70)
+    snap = state.snapshot(1.0)
+    assert snap.weather_crossover == ""
+    assert (snap.weather_crossover_pct, snap.weather_crossover_min) == (6, 10)
+    assert snap.rain_pct_in_30 == 70
