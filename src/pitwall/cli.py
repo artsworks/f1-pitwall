@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sqlite3
 import sys
 import threading
 import time
@@ -752,7 +753,10 @@ def cmd_start(args: argparse.Namespace) -> int:
     if db is not None:
         from pitwall.maintenance import maintain
 
-        print(f"learning: {maintain(db, settings.thresholds).summary()}", flush=True)
+        try:
+            print(f"learning: {maintain(db, settings.thresholds).summary()}", flush=True)
+        except sqlite3.Error as e:
+            print(f"learning: upkeep skipped ({e})", flush=True)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
