@@ -151,6 +151,8 @@ class Engine:
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
+        self._manual_cooldown = False
+        self._manual_cooldown_lap = 0
         self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
@@ -424,6 +426,10 @@ class Engine:
         case, values = answer(item, snap, self.mindset)
         if item.action == "budget":
             values["budget"] = str(self.cycle_budget())
+        elif item.action == "cooldown":
+            self._manual_cooldown = not self._manual_cooldown
+            case = "on" if self._manual_cooldown else "off"
+            self._manual_cooldown_lap = snapshot.lap_num + (snapshot.phase == "out_lap")
         text = self._menu_replies.pick(item, case, values)
         self._menu_log(t, snap, "driver_input", item, text, {"case": case, "via": via, **values})
         if item.kind == "opinion" and item.topic:
@@ -450,6 +456,7 @@ class Engine:
         self.menu.close()
         self._menu_replies.reset()
         self.opinions.clear()
+        self._manual_cooldown = False
         self._laps_written = len(self.state.laps)
         self._session_ended_written = False
         self._pit_in_lap = None
@@ -1147,6 +1154,21 @@ class Engine:
         self._write_laps()
         self._update_model()
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
+        if self._manual_cooldown and (
+            snapshot.lap_num > self._manual_cooldown_lap
+            or snapshot.phase in ("in_lap", "pitting", "garage")
+        ):
+            self._manual_cooldown = False
+        if self._manual_cooldown and snapshot.phase == "flying":
+            snapshot = dataclasses.replace(
+                snapshot,
+                cool_lap=True,
+                cool_prep=False,
+                run_lap_kind="cool",
+                run_plan="manual_cool",
+                run_plan_reason="driver",
+                run_plan_why="Driver requested a cooldown",
+            )
         if (
             snapshot.session_ended
             and not self._session_ended_written

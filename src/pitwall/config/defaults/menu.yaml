@@ -79,6 +79,8 @@ menu:
         box_now: ["Box this lap. {reason}.", "It's box now. {reason}."]
         pit_soon: ["P{pos}, box lap {plan_lap}. {laps_left} to go.", "Box in {in_laps}. P{pos}, {laps_left} left."]
         position: ["P{pos}, {laps_left} to go. Best lap {best}.", "Running P{pos}. {laps_left} laps left, best {best}."]
+        practice: ["P{pos} on the times. Best lap {best}.", "Best lap {best}, that's P{pos}."]
+        practice_no_best: ["No clean lap on the board yet.", "No valid lap yet. Get one in."]
         unknown: ["No race read yet.", "Not enough data yet."]
     - id: fight
       label: "Fight"
@@ -115,7 +117,10 @@ menu:
       label: "Radio silent"
       kind: action
       action: silent
-    - id: page
-      label: "Next page"
+    - id: cooldown
+      label: "Cooldown lap"
       kind: action
-      action: page
+      action: cooldown
+      replies:
+        "on": ["Copy, cooldown lap. I'll stop hot-lap coaching.", "Understood. Cooling this lap, recharge and reset."]
+        "off": ["Copy, back to hot-lap mode.", "Understood. Hot-lap coaching is back."]

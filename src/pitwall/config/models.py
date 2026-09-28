@@ -165,14 +165,14 @@ class InputSettings(BaseModel):
         return self
 
 
-MenuAction = Literal["mindset", "silent", "page", "budget"]
+MenuAction = Literal["mindset", "silent", "page", "budget", "cooldown"]
 
 
 class MenuItemModel(BaseModel):
     """One driver-menu entry (docs/12). `kind`:
     question -> answered from the snapshot by the `answer` handler (defaults to id);
     opinion  -> recorded (decision log + SQLite) and acknowledged from `replies`;
-    action   -> runs `action` (mindset / silent / page / budget)."""
+    action   -> runs `action` (mindset / silent / page / budget / cooldown)."""
 
     id: str
     label: str  # shown on the overlay and spoken on scroll; keep it 2-3 words

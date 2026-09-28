@@ -431,3 +431,29 @@ def test_session_uid_change_resets_state() -> None:
     assert not snap.red_flag
     assert not snap.session_ended
     assert snap.rewinds == 0
+
+
+def test_red_flag_cleared_by_restart_lights_out() -> None:
+    from .synth import make_event_packet
+
+    ingest, state = _state()
+    _send(ingest, make_event_packet(b"RDFL", session_time=1.0), 0.0)
+    assert state.snapshot(0.0).red_flag
+    _send(ingest, make_event_packet(b"LGOT", session_time=900.0), 0.1)
+    snap = state.snapshot(0.1)
+    assert not snap.red_flag and snap.phase != "red_flag" and snap.safety_car_status == 0
+
+
+def test_fastest_lap_event_in_snapshot() -> None:
+    import struct
+
+    from .synth import make_packet
+
+    ingest, state = _state()
+    body = b"FTLP" + struct.pack("<Bf", 0, 79.195)
+    _send(ingest, make_packet(PacketId.EVENT, body=body, session_time=100.0), 0.0)
+    _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=104.0), 0.1)
+    snap = state.snapshot(0.1)
+    assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
+    assert snap.fastest_lap_time == "1:19.195"
+    assert 3.9 < snap.fastest_lap_age_s < 4.1

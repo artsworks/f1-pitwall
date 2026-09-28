@@ -420,3 +420,59 @@ def test_cool_lap_extends_when_battery_short() -> None:
     assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]
     t = _texts(_engine(), **base, cool_extend=False)
     assert "cool_hot_mode" in t and "cool_extend" not in t
+
+
+def test_spin_calls_capped_per_stint_but_traffic_hold_is_not() -> None:
+    rules = {r.id: r for r in ConfigStore().current().rules}
+    assert rules["spun_rejoin"].max_per_stint == 5
+    assert rules["spun_rejoin_traffic"].max_per_stint is None
+
+
+def test_practice_invalid_lap_gets_one_reset_call() -> None:
+    e = _engine()
+    base: dict[str, object] = {"session_kind": "practice", "current_lap_invalid": True}
+    t = _texts(e, **base)
+    assert "practice_lap_invalid" in t and "next" in t["practice_lap_invalid"].lower()
+    assert "practice_lap_invalid" not in _texts(e, now=5.0, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), cool_lap=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), phase="out_lap", **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), driving_wrong_way=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), current_lap_invalid=True)
+
+
+def test_fastest_lap_calls() -> None:
+    mine = _texts(
+        _engine(),
+        phase="racing",
+        fastest_lap_mine=True,
+        fastest_lap_time="1:19.195",
+        fastest_lap_age_s=1.0,
+    )
+    assert "fastest_lap_mine" in mine and "1:19.195" in mine["fastest_lap_mine"]
+    rival: dict[str, object] = {
+        "phase": "racing",
+        "fastest_lap_name": "LECLERC",
+        "fastest_lap_time": "1:18.900",
+        "fastest_lap_age_s": 3.0,
+        "fastest_lap_gap_s": 0.3,
+        "laps_remaining": 3,
+    }
+    t = _texts(_engine(), **rival)
+    assert "fastest_lap_taken" in t and "LECLERC" in t["fastest_lap_taken"]
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "fastest_lap_age_s": 0.5})
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "laps_remaining": 12})
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "fastest_lap_gap_s": 2.0})
+    assert "fastest_lap_mine" not in _texts(
+        _engine(), phase="racing", fastest_lap_mine=True, fastest_lap_age_s=30.0
+    )
+
+
+def test_blue_flag_silent_under_red_flag_and_sc() -> None:
+    assert "blue_flag" in _texts(_engine(), phase="racing", blue_flag=True)
+    for phase in ("red_flag", "sc", "vsc"):
+        assert "blue_flag" not in _texts(_engine(), phase=phase, blue_flag=True)
+
+
+def test_yellow_behind_silent_under_neutralisation() -> None:
+    assert "yellow_behind" in _texts(_engine(), phase="racing", yellow_behind_m=100.0)
+    assert "yellow_behind" not in _texts(_engine(), phase="sc", yellow_behind_m=100.0)

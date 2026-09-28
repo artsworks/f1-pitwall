@@ -31,6 +31,7 @@ class RacePhase:
         self._ever_raced = False
         self._pit_seen = False  # pit lane entered during this in_lap
         self._last_driver_status = -1
+        self._red_restart = False
         self.neutral_end_kind = ""  # 'sc' | 'vsc' of the last neutralisation that ended
         self.neutral_end_t = -math.inf
 
@@ -58,6 +59,13 @@ class RacePhase:
             self._sc_kind = ""
             self.sc_laps = 0
             return "red_flag" if red_flag else self.phase
+
+        if red_flag:
+            # The red flag supersedes any SC/VSC; the restart is a fresh start.
+            self._sc_kind = ""
+            self.sc_laps = 0
+            self._red_restart = True
+            return "red_flag"
 
         phase = self.phase
 
@@ -108,13 +116,19 @@ class RacePhase:
             if phase == "racing" and fresh_in_lap:
                 phase = "in_lap"
                 self._pit_seen = False
-            elif phase == "racing" and driver_status == 3 and self._last_driver_status != 3:
+            elif (
+                phase == "racing"
+                and driver_status == 3
+                and self._last_driver_status != 3
+                and not self._red_restart  # the restart grid reports OUT_LAP too
+            ):
                 phase = "out_lap"  # e.g. a pit-lane start
         self._last_driver_status = driver_status
         if self._sc_kind:
             self._ever_raced = self._ever_raced or self.phase in ("racing", "in_lap", "out_lap")
 
         if lap_boundary:
+            self._red_restart = False
             self.sc_laps = self.sc_laps + 1 if phase in ("sc", "vsc") else 0
         self.phase = phase
         return "red_flag" if red_flag else phase

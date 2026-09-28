@@ -264,6 +264,12 @@ class Snapshot:
     sc_laps: int = 0
     lights_out: bool = False
     chequered: bool = False
+    fastest_lap_ms: int = 0  # race fastest lap (FTLP event)
+    fastest_lap_mine: bool = False
+    fastest_lap_name: str = ""
+    fastest_lap_time: str = ""  # "1:19.195"
+    fastest_lap_age_s: float = math.inf  # since it was set
+    fastest_lap_gap_s: float = math.inf  # player best minus fastest lap
     grid_position: int = 0
     positions_gained: int = 0  # grid slot minus current position (+ = gained)
     sc_ending: bool = False  # SC in this lap / VSC ending (SCAR event)
@@ -695,6 +701,7 @@ class SessionState:
         self._last_track_warning_st: float | None = None
         self.lights_out = False
         self.chequered = False
+        self._fastest_lap: tuple[int, int, float] | None = None  # (car idx, ms, session time)
         self.grid_position = 0
         self.sc_ending = False
         self.puncture_corner = ""
@@ -1037,9 +1044,19 @@ class SessionState:
         elif pkt.code == "SEND":
             self.session_ended = True
         elif pkt.code == "LGOT":
+            # A red-flag restart is a new standing start: lights out ends the red flag
+            # and any safety car left over from before it.
             self.lights_out = True
+            self.red_flag = False
+            self.safety_car_status = 0
         elif pkt.code == "CHQF":
             self.chequered = True
+        elif pkt.code == "FTLP":
+            if isinstance(pkt.detail, dict):
+                ms = round(float(pkt.detail.get("lap_time_s", 0.0)) * 1000)
+                if ms > 0:
+                    idx = int(pkt.detail.get("vehicle_idx", 255))
+                    self._fastest_lap = (idx, ms, pkt.header.session_time)
         elif pkt.code == "SCAR":
             if isinstance(pkt.detail, dict):
                 # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
@@ -1839,6 +1856,23 @@ class SessionState:
         prev_end = stints[-2].end_lap if len(stints) >= 2 else 0
         return int(max(0, pkt.num_laps - prev_end))
 
+    def _fastest_lap_view(self, st: float, field_best: tuple[int, ...]) -> dict[str, Any]:
+        if self._fastest_lap is None:
+            return {}
+        idx, ms, at = self._fastest_lap
+        name = self.participants[idx].name if 0 <= idx < len(self.participants) else ""
+        mine = idx == self._player_idx
+        best = field_best[self._player_idx] if 0 <= self._player_idx < len(field_best) else 0
+        secs = ms / 1000.0
+        return dict(
+            fastest_lap_ms=ms,
+            fastest_lap_mine=mine,
+            fastest_lap_name=name,
+            fastest_lap_time=f"{int(secs // 60)}:{secs % 60:06.3f}",
+            fastest_lap_age_s=max(0.0, st - at),
+            fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
+        )
+
     def _race_view(
         self,
         st: float,
@@ -1857,6 +1891,7 @@ class SessionState:
                 self.grid_position - self.position if self.grid_position and self.position else 0
             ),
             sc_ending=self.sc_ending and self.race_phase in ("sc", "vsc"),
+            **self._fastest_lap_view(st, field_best),
             neutral_ended_s=max(0.0, (self._last_session_time or 0.0) - self._race.neutral_end_t),
             neutral_ended_kind=self._race.neutral_end_kind,
             puncture_corner=self.puncture_corner,
