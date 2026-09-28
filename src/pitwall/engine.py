@@ -6,7 +6,6 @@ max-speed replay makes identical decisions to 1x (determinism per docs/07).
 
 from __future__ import annotations
 
-import asyncio
 import collections
 import contextlib
 import dataclasses
@@ -20,7 +19,7 @@ from typing import Any
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
-from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
+from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
 from pitwall.ingest import Ingest
@@ -846,7 +845,6 @@ class Engine:
             laps_remaining=laps_remaining,
             deployed_this_lap_j=state.ers_deployed_this_lap_j,
             harvested_this_lap_j=state.ers_harvested_mguk_j + state.ers_harvested_mguh_j,
-            harvest_limit_per_lap_j=state.ers_harvest_limit_per_lap_j,
             soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
             over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
             attack_ok=mode.get("ers_policy") == "attack_rival",
@@ -924,16 +922,6 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
-        behind = (
-            RivalView(
-                snap.rival_behind_idx,
-                snap.rival_behind_name,
-                snap.rival_behind_pace_ms,
-                snap.rival_behind_pitted,
-            )
-            if snap.rival_behind_idx >= 0
-            else None
-        )
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -947,7 +935,6 @@ class Engine:
             green_pit_loss_s=self._green_pit_loss_s,
             sc_status=snap.safety_car_status,
             rival_ahead=ahead,
-            rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
             gap_behind_s=snap.gap_behind_s,
             pit_exit_clean=snap.pit_exit_clean,
@@ -1497,8 +1484,3 @@ def build_census_engine(clock: Clock | None = None) -> Engine:
     dlog = DecisionLog()
     dispatcher = Dispatcher(store.current().policy, clock, decision_log=dlog, sinks=[])
     return Engine(store, clock, ingest, state, None, dispatcher)
-
-
-def record_and_run(path: Path, speed: float | None) -> tuple[int, list[Call]]:
-    engine = build_engine(clock=VirtualClock() if speed is None else ReplayClock(speed))
-    return asyncio.run(run_replay(path, engine, speed))

@@ -33,7 +33,6 @@ def run(**kw: object):
         green_pit_loss_s=21.0,
         sc_status=0,
         rival_ahead=None,
-        rival_behind=None,
         gap_ahead_s=math.inf,
         gap_behind_s=math.inf,
         pit_exit_clean=False,

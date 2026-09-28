@@ -658,7 +658,6 @@ class SessionState:
         self.ers_deployed_this_lap_j = 0.0
         self.ers_harvested_mguk_j = 0.0
         self.ers_harvested_mguh_j = 0.0
-        self.ers_harvest_limit_per_lap_j = 0.0
         self.ers_deploy_mode = 0
         self.drs_allowed = 0
         self.tyres_wear = _ZERO_CORNERS
@@ -1439,7 +1438,6 @@ class SessionState:
         self.ers_deployed_this_lap_j = float(car.ers_deployed_this_lap)
         self.ers_harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
         self.ers_harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
-        self.ers_harvest_limit_per_lap_j = float(car.ers_harvest_limit_per_lap)
         self.ers_deploy_mode = car.ers_deploy_mode
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags

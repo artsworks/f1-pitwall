@@ -94,7 +94,6 @@ def optimise(
     green_pit_loss_s: float,
     sc_status: int,
     rival_ahead: RivalView | None,
-    rival_behind: RivalView | None,
     gap_ahead_s: float,
     gap_behind_s: float,
     pit_exit_clean: bool,

@@ -55,7 +55,6 @@ def energy_budget(
     laps_remaining: int,
     deployed_this_lap_j: float,
     harvested_this_lap_j: float,
-    harvest_limit_per_lap_j: float = 0.0,
     soc_floor_pct: float = 0.0,
     over_tolerance_j: float = 200_000.0,
     attack_ok: bool = False,
