@@ -261,29 +261,35 @@
     setText("strat-title", "STRATEGY");
     var w = el("s-window");
     var ap = activePlan(s);
+    w.innerHTML = "";
+    w.className = "s-window";
+    var lapNow = lastState ? lastState.lap_num : 0;
     if (ap) {
-      var lapNow = lastState ? lastState.lap_num : 0, win = ap.window;
-      w.textContent = "PLAN " + ap.id + " · " + (s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN") +
-        (win ? " · BOX L" + win[0] + "–" + win[1] : " · NO STOP");
-      w.className = "s-window" + (s.on_plan === false ? " soon" : win && lapNow >= win[0] ? " box" :
-        win && lapNow >= win[0] - 2 ? " soon" : "");
+      var win = ap.window;
+      w.appendChild(span("PLAN " + ap.id, ""));
+      w.appendChild(span(s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN",
+        s.on_plan === false ? "warn" : "ok"));
+      w.appendChild(boxWord(win ? win[0] : null, win ? win[1] : null, lapNow));
     } else if (s.pit_window) {
-      var lap = lastState ? lastState.lap_num : 0;
-      w.textContent = "PIT WINDOW L" + s.pit_window.start + "–" + s.pit_window.end +
-        (s.plan ? " · " + String(s.plan.kind).toUpperCase().replace("_", " ") : "");
-      w.className = "s-window" + (lap >= s.pit_window.start ? " box" :
-        lap >= s.pit_window.start - 2 ? " soon" : "");
+      w.appendChild(boxWord(s.pit_window.start, s.pit_window.end, lapNow));
+      if (s.plan) w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " "), ""));
     } else if (s.plan && s.plan.kind) {
-      w.textContent = String(s.plan.kind).toUpperCase().replace("_", " ") +
-        (s.plan.lap ? " L" + s.plan.lap : "");
-      w.className = "s-window";
+      w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
+        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
     } else {
-      w.textContent = s.laps_remaining ? "NO STOP · " + s.laps_remaining + " to go" : "NO STOP";
-      w.className = "s-window";
+      w.appendChild(span("NO STOP", ""));
+      if (s.laps_remaining) w.appendChild(span(s.laps_remaining + " to go", "dim"));
     }
     rivalRow("s-ahead", s.ahead, "ahead", s);
     rivalRow("s-behind", s.behind, "behind", s);
     renderStint(el("s-stint"), s, ap);
+  }
+
+  // BOX L33–35: white while far off, amber inside two laps, red once open.
+  function boxWord(a, b, lapNow) {
+    if (a === null || a === undefined) return span("NO STOP", "");
+    var st = lapNow >= a ? "box" : lapNow >= a - 2 ? "soon" : "";
+    return span((st === "box" ? "BOX NOW " : "BOX ") + "L" + a + "–" + b, st);
   }
 
   // Plan line: active plan as compound chips + stop count, then each alternative
@@ -425,9 +431,10 @@
     infringementBadges(r.infringements).forEach(function (b) { bad.appendChild(b); });
     n.appendChild(bad);
 
-    var threat = side === "behind" && (r.drs || inDrs || paceClass(r.pace_delta_s, side) === "crit");
+    var closing = r.gap_trend_s > 0;
+    var threat = side === "behind" && (r.drs || inDrs || closing || paceClass(r.pace_delta_s, side) === "crit");
     var edge = side === "ahead" && (r.drs || inDrs);
-    n.className = "b-card " + side + (threat ? " threat" : edge ? " edge" : "");
+    n.className = "b-card " + side + (threat ? " threat" : side === "behind" ? " calm" : edge ? " edge" : "");
   }
 
   var BATTLE_WORDS = { free_air: "FREE AIR", catching: "CATCHING", attacking: "ATTACKING",
@@ -447,8 +454,9 @@
     n.appendChild(span(res ? (RESULT_WORDS[res] || String(res).toUpperCase()) :
       (BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase()),
       "mode " + (res ? RESULT_CLS[res] || "" : BATTLE_CLS[mode] || "")));
+    if (res) n.appendChild(span(BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase(),
+      "sub " + (BATTLE_CLS[mode] || "")));
     var bits = [];
-    if (res) bits.push(BATTLE_WORDS[mode] || mode);
     if (b.mode_laps) bits.push(b.mode_laps + (b.mode_laps === 1 ? " lap" : " laps"));
     if ((mode === "catching" || mode === "attacking") && b.catch_laps !== null && b.catch_laps !== undefined)
       bits.push("catch in " + fmt(b.catch_laps, 1) + " laps");
@@ -490,14 +498,20 @@
     renderBattleState("d-state", s.battle, s);
     battleCard("d-ahead", s.ahead, "ahead", s);
     battleCard("d-behind", s.behind, "behind", s);
-    var pe = s.pit_exit || {}, bits = [];
+    var pe = s.pit_exit || {}, f = el("d-plan");
+    if (!f) return;
+    f.innerHTML = "";
     var ap = activePlan(s);
-    if (ap) bits.push("PLAN " + ap.id + (s.plan_target_lap ? " TARGET L" + s.plan_target_lap : ""));
-    else if (s.plan && s.plan.kind) bits.push(String(s.plan.kind).toUpperCase().replace("_", " ") +
-      (s.plan.lap ? " L" + s.plan.lap : ""));
-    bits.push("PIT EXIT " + (pe.clean ? "CLEAR" : "TRAFFIC") +
-      (pe.rival ? " " + String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : ""));
-    setText("d-plan", bits.join(" · "));
+    if (ap) {
+      f.appendChild(span("PLAN " + ap.id, "k"));
+      if (s.plan_target_lap) f.appendChild(span("target L" + s.plan_target_lap, ""));
+    } else if (s.plan && s.plan.kind) {
+      f.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
+        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
+    }
+    f.appendChild(span("PIT EXIT", "k"));
+    f.appendChild(span(pe.clean ? "CLEAR AIR" : "TRAFFIC", pe.clean ? "ok" : "warn"));
+    f.appendChild(span(pe.rival ? String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "", "dim"));
   }
 
   function renderCarPage(p, s) {
@@ -535,7 +549,7 @@
       fd < 0 ? "crit" : fd < 0.5 ? "short" : "");
     var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
     meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
-      lop !== null && lop !== undefined && togo && lop < togo ? "short" : "");
+      lop !== null && lop !== undefined && togo && lop < togo ? (lop < togo - 3 ? "crit" : "short") : "");
     setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " ok"));
   }
 
@@ -573,7 +587,7 @@
     var n = el("tp-cross");
     if (!n) return;
     n.innerHTML = "";
-    n.appendChild(span("CROSSOVER", "k"));
+    n.appendChild(span("☂ CROSSOVER", "k"));
     var v = span("", "v");
     if (c) {
       v.appendChild(span("to", "dim"));
@@ -597,13 +611,13 @@
     var wf = t.weather_forecast || [t.weather, -1, -1];
     for (var i = 0; i < 3; i++) wxTile(i, wf[i], r[i]);
     crossRow(t.weather_crossover);
-    tpRow("tp-flags", "FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
+    tpRow("tp-flags", "⚑ FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
     var pens = [];
     if (t.penalty_s) pens.push("+" + t.penalty_s + " s");
     if (t.unserved) pens.push(t.unserved + " UNSERVED");
     if (t.warnings) pens.push(t.warnings + (t.warnings === 1 ? " warning" : " warnings"));
     if (t.corner_cut_warnings) pens.push(t.corner_cut_warnings + (t.corner_cut_warnings === 1 ? " cut" : " cuts"));
-    tpRow("tp-pens", "PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
+    tpRow("tp-pens", "⚠ PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
     tpRow("tp-traffic", "GAPS", "ahead " + gapText(t.gap_ahead_s) + " · behind " +
       gapText(t.gap_behind_s === null || t.gap_behind_s === undefined ? null : -t.gap_behind_s), "");
     tpRow("tp-exit", "PIT EXIT", t.pit_exit_clean ? "CLEAR AIR" : "TRAFFIC", t.pit_exit_clean ? "ok" : "warn");
