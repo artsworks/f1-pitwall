@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>f1-pitwall · planning docs</title>
-<meta name="description" content="Design documents for f1-pitwall, a race engineer for F1 26.">
+<title>f1-pitwall · docs and status</title>
+<meta name="description" content="Documentation and current build status for f1-pitwall, a race engineer for F1 26.">
 <style>
 :root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff}}
@@ -71,7 +71,7 @@ article img{max-width:100%}
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
-  <span class="status">M1 built · live-tested on F1 26</span>
+  <span class="status">M3 built · M4 built in PR #21</span>
   <a class="gh" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
 </header>
 <div class="layout">
@@ -85,8 +85,8 @@ article img{max-width:100%}
 <script>
 const GROUPS = [
   ["Start here", [
-    ["status", "Status", "Milestone progress, what works today, what is next and known gaps."],
-    ["getting-started", "Getting started", "Install, game telemetry settings, doctor, start, recording profiles and replay."],
+    ["status", "Status", "M0–M4 progress, current features, calibration evidence and open gaps."],
+    ["getting-started", "Getting started", "Install, game settings, live use, after-session commands and replay."],
     ["05-roadmap", "Roadmap", "M0 capture and replay through M4 calibration, with exit criteria for each milestone."]
   ]],
   ["Decisions (ADRs)", [
@@ -104,12 +104,14 @@ const GROUPS = [
     ["01-architecture", "Architecture", "Layers, cross-cutting decisions, stack and repository layout."],
     ["02-ingestion", "Ingestion", "Game settings, the F1 26-only parser, send-rate independence and recording."],
     ["03-strategy", "Strategy engine", "Rules as data, the pace and degradation model, pit windows and rivals."],
+    ["17-quali-run-plan", "Qualifying run plan", "Qualifying push, cool and box decisions, release advice and coaching."],
+    ["18-race-engine", "Race engine", "Race strategy, tyre life, race-distance priors and automatic upkeep."],
     ["04-audio-ui", "Audio, UI and transport", "Call priorities, budgets, backend speech and the second-monitor dashboard."],
     ["12-driver-input", "Driver input", "Wheel button 2 and spacebar: acknowledge, negative and bookmark."],
     ["21-voice-command", "Voice command", "Talk toggle on Action 1 (single tap), closed-grammar speech into the driver menu, driver-first radio hold with stale-drop and digest: design, recogniser choice, and the CPU/memory impact on the game PC. Design only."],
     ["15-dashboard-design", "Dashboard redesign", "Second-monitor race-engineer screen: hierarchy, zones, tokens, state mapping, banner lifecycle, phased plan."],
     ["19-guest-tower", "Guest timing tower", "Spectator /tower route for guests in the garage: full field, sectors, pace and our race story. Design only."],
-    ["20-learning-loop", "Learning loop", "Hindsight grader, session digests, lessons ledger and promotion gate: how each race improves the next."],
+    ["20-learning-loop", "Learning loop", "Automatic grading and upkeep, calibration, learned state and optional review commands."],
     ["16-debrief-design", "Debrief screen", "Post-session report page: research-derived agenda, layout, chart grammar, call grading, optional generated section, phased plan."],
     ["13-league-multiplayer", "Friends league", "Three humans plus an AI grid, Restricted telemetry and the feedback loop."]
   ]],
@@ -156,7 +158,7 @@ function overview() {
     <div class="hero">
       <h1>A race engineer for F1 26</h1>
       <p>f1-pitwall reads the game's UDP telemetry, keeps a model of the session, decides what is worth saying, says it over your headset and shows it on a second monitor. This site holds the docs, the design and the build status.</p>
-      <p><a href="#/status"><b>Status: M0 done, M1 built</b></a> · <a href="#/getting-started">Getting started</a> · <a href="mockups/dashboard-1080p.html">Dashboard mockup</a> · <a href="mockups/debrief.html">Debrief mockup</a></p>
+    <p><a href="#/status"><b>Status: M3 built, M4 built</b></a> · <a href="#/getting-started">Getting started</a> · <a href="mockups/dashboard-1080p.html">Dashboard mockup</a> · <a href="mockups/debrief.html">Debrief mockup</a></p>
     </div>
     <div class="pillars">
       <div><b>Record and replay</b>Every session is captured raw, and strategy is tuned offline against recordings.</div>

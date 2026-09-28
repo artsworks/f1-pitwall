@@ -15,15 +15,15 @@ Implements `docs/05-roadmap.md` M3 on top of the M2 pipeline. Governing constrai
 
 | Module | Role |
 | --- | --- |
-| `pitwall.store.db` | migration 2 (below); read/write APIs for stints, pit events, model params |
+| `pitwall.store.db` | migrations 2, 8 and 9; read/write APIs for stints, pit events, model params |
 | `pitwall.model.deg` | pace/degradation fit, laps-of-pace, priors |
 | `pitwall.model.pitloss` | measured pit loss, track priors, cold-start overlay |
 | `pitwall.model.budget` | fuel and 2026 energy per-lap budgets |
 | `pitwall.state.race` | race phase machine, rival scope, weather crossover, discipline facts |
 | `pitwall.strategy.pitwindow` | pit-window optimiser (undercut/overcut/free/cheap stop) |
 | `pitwall.mask` | `--mask-restricted` datagram transformer |
-| `pitwall.recovery` | watchdog heartbeat + crash recovery |
-| `pitwall.tune` | `pitwall tune`: grades + diff results → priors / learned overlay |
+| `pitwall.supervisor` | watchdog restarts the engine while the recorder continues |
+| `pitwall.tune` | `pitwall tune`: grades and A/B results → stored cooldown multipliers |
 
 ## SQLite migration 2
 
@@ -123,11 +123,19 @@ config hash. When a `<id>.yaml` is absent `settings.track` is `None` and models 
 `thresholds` defaults (`pit_loss_default_s`, etc.).
 
 **Prior resolution order** (`model.pitloss.resolve_prior`, `model.deg.resolve_prior`):
-1. `model_params` row with `weight >= th.prior_min_weight` (default 2) → learned prior.
-2. Track overlay value.
-3. Global threshold default.
-Returned as `Prior(value, weight, source)` with `source in {"learned","overlay","default"}`;
-`source` flows to the snapshot so calls say where their number came from.
+For degradation, enough earlier practice data in the same weekend takes precedence. Otherwise,
+a race first looks for its total-distance-scoped `model_params` value with weight at least
+`prior_min_weight`; if it is too light, the engine tries the unscoped value. It then tries the
+track overlay and global default. Non-race stint values are unscoped. A scoped value from one
+race distance is never combined with another.
+
+Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`; `N` is the
+session's total race laps. Weekend degradation uses earlier fitted practice stints on the
+same compound and track. It requires `weekend_min_laps` in total.
+
+For other priors, `model_params` with weight at least `prior_min_weight` wins, then the track
+overlay, then the global default. Sources are reported as `weekend`, `learned`, `overlay`, or
+`default`.
 
 ## `pitwall.model.deg`
 
@@ -154,25 +162,55 @@ when given (from `model_params fuel_ms_per_lap`) so the 2-parameter fit is well-
 short stints; slopes are clamped to `[0, th.deg_max_ms_per_lap]`.
 `confidence = clamp(n / (2*min_laps), 0, 1) * clamp(1 - rmse_ms / th.deg_rmse_bad_ms, 0.2, 1)`.
 
-```python
-def laps_of_pace(fit: DegFit, tyre_age: int, wear_pct: float, *, cliff_ms: float, wear_cliff_pct: float, wear_per_lap: float) -> float
-```
+`laps_of_pace` estimates laps to the pace cliff: when the fitted slope is positive,
+`tyre_cliff_ms / deg_ms_per_lap - tyre_age`, floored at zero. The engine's `laps_of_pace`
+snapshot is the minimum of that estimate and `corner_wear_life`: the earliest of the four
+corner wear limits. Each corner uses its own wear rate since the stint baseline. The default
+rate applies until a lap has run. The baseline resets on a compound change, tyre-age reset,
+or wear drop.
 
-Remaining laps before the tyre is `cliff_ms` slower than at age 0 **or** mean wear crosses
-`wear_cliff_pct`, whichever is sooner: `min((cliff_ms/deg - age), (wear_cliff - wear)/wear_per_lap)`.
-`wear_per_lap` is measured this stint (Δmean wear / Δlaps, from `laps.wear_pct`), falling back
-to `th.wear_per_lap_default_pct`. Returned ≥ 0.
+`planning_fit(fit, prior, deg_rmse_bad_ms)` shrinks the fit's degradation slope toward the
+prior with weight `clamp(1 - rmse / deg_rmse_bad_ms, 0, 1)`. Clean fits are used as-is. The
+planner and pace-cliff estimate use this adjusted fit.
 
 **Rival pace** (`rival_pace_ms(history: SessionHistoryPacket, window: int) -> int`): median of
 the last `window` (default `th.rival_pace_window = 3`) valid laps from Session History, 0 if none.
 Rival rows go to `laps` with `car_idx = i`, `valid` = the packet's valid bit, so rival pace also
 persists and `stints_for_track` can fit rival deg later.
 
-**Persistence hook** (`Engine._write_laps`): after inserting a player lap, refit the current
-stint from `db.laps_for(uid)` (filtered to the current stint range) and `upsert_stint`. When a
-stint ends (compound or `tyre_age_laps` resets to 0 while on track), `fold_param(track,
-compound, 'deg_ms_per_lap', fit.deg_ms_per_lap, weight=fit.n)` and likewise `base_ms`,
-`fuel_ms_per_lap` if `fit.source == 'fit'`.
+**Persistence hook**: after inserting a player lap, refit and store the current stint. A
+stint folds when the next stint starts or the session ends. The fold is deduplicated by
+session and the stint's first lap. Only clean fits on known tracks fold:
+
+- `source == "fit"` and `rmse_ms <= deg_rmse_bad_ms`
+- `0 < deg_ms_per_lap < deg_max_ms_per_lap`
+- `0 <= fuel_ms_per_lap < deg_max_ms_per_lap`
+- `learn_base_min_ms <= base_ms <= learn_base_max_ms`
+
+Race folds use the total-distance-scoped names above; non-race folds use unscoped names.
+
+## SQLite migration 9
+
+Automatic upkeep stores removed or replaced values and its run versions in:
+
+```sql
+CREATE TABLE model_params_quarantine (
+    track_id INT NOT NULL,
+    compound INT NOT NULL,
+    name TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    value REAL NOT NULL,
+    weight REAL NOT NULL,
+    updated_at REAL,
+    quarantined_at REAL,
+    PRIMARY KEY (track_id, compound, name, reason)
+);
+CREATE TABLE maintenance (
+    key TEXT PRIMARY KEY,
+    version INT NOT NULL,
+    ran_at REAL
+);
+```
 
 ## `pitwall.model.pitloss`
 
@@ -470,7 +508,7 @@ recorder is the first thing to start and the last to stop:
 
 ```
 pitwall start                     # supervisor: binds udp_port, RecordingRotator, watchdog
-  └─ python -m pitwall start --child   # engine: rules, dashboard, speech on 127.0.0.1:engine_port
+  └─ engine child process          # rules, dashboard, speech on 127.0.0.1:engine_port
 ```
 
 - **Supervisor:** writes each datagram to the recording, then forwards it to the child. It
@@ -488,26 +526,13 @@ pitwall start                     # supervisor: binds udp_port, RecordingRotator
   fresh session and not a recovery.
 - `pitwall start --no-watchdog` keeps the old single-process mode.
 
-## Learning loop: `pitwall tune`
+## Rule tuning
 
-`pitwall tune [--apply] [--db PATH]` reads `calls` + `call_grades` + `pit_events` + `laps` +
-`ab_results` and prints / writes:
-
-1. **Prediction grading**: for every fired `box_*`/`tyre_life` call with `inputs.predicted_lap_ms`
-   and `inputs.laps_of_pace`, compare with the actual next lap (from `laps`) and the actual laps
-   run before pitting; report mean signed error per track/compound and fold a correction into
-   `model_params 'deg_ms_per_lap'` (`weight` = number of graded calls).
-2. **Grade feedback**: per rule, `noise_ratio = noise / graded`. Rules with `noise_ratio >=
-   th.tune_noise_ratio` get `cooldown_s *= th.tune_cooldown_factor` (and `min_gap` raised) in the
-   learned overlay `~/.pitwall/learned.yaml` (a profile-layer file loaded after `profile.yaml`);
-   rules graded mostly `good` get nothing changed. `--apply` writes the overlay; without it, prints.
-3. **Diff results**: `pitwall diff --record` inserts `ab_results`; `tune` reports rules whose B
-   variant fired strictly less often with no `bad` grades as "candidates to promote".
-
-Every write is to SQLite or the learned YAML overlay — never to in-memory state.
-
-`pitwall digest` (docs/20) adds hindsight outcomes (migration 6, `outcomes`): automatic
-`good`/`wrong` labels that `tune` weights by `tune_auto_weight` for calls without a human grade.
+`pitwall tune [PATHS...] [--calls-mode on|off] [--db PATH]` ingests optional recordings,
+then folds human grades and hindsight outcomes into per-rule cooldown multipliers in SQLite.
+Outcomes count only when no human grade exists for that call. It also reports per-rule A/B
+net counts saved by `pitwall diff --record`. The live dispatcher loads saved cooldown
+multipliers at start.
 
 ## Fixtures and tests
 

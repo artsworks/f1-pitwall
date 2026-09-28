@@ -77,19 +77,28 @@ when backend speech is off to avoid hearing duplicate calls. Browsers may suspen
 speech in background tabs; keep the page open and visible. The PWA caches only
 static assets; live telemetry still requires a connection to the PC.
 
-## Debrief and calibration
+## After a session
 
-After a recording finishes, `pitwall digest <recording-directory> --db <database>` ingests
-new sessions and skips sessions already processed. `pitwall calibrate --db <database>`
-fits tyre, fuel, and energy parameters from the accumulated laps. `pitwall stats --learned
---db <database>` prints the current learned values. Export a standalone review with
-`pitwall debrief --db <database> --session latest --out debrief.html`, or open
-`/debrief/<session-uid>` in the dashboard to grade individual calls. `pitwall evaluate
---db <database>` compares recorded calls-on and calls-off sessions; one mode alone has
-no comparison. `pitwall propose --db <database> --out proposals.yaml` writes review-only
-threshold candidates from converged fits. Supply `--candidate-rules <rules-directory>`
-to also replay every locally available recorded session through `pitwall diff` against
-that candidate ruleset. These proposals never edit the active configuration.
+Nothing is required after a live session. Pitwall grades it when it ends. On the next
+`pitwall start`, automatic upkeep grades any remaining sessions, rebuilds stint priors
+once per learning version, and moves bad learned values to SQLite quarantine with a
+reason such as `unknown_track` or `deg_clamped`. `pitwall doctor` reports the quarantine
+count.
+
+These commands are optional:
+
+| Command | Purpose |
+|---|---|
+| `pitwall debrief --session latest` | Export a session review as HTML |
+| `pitwall stats --learned` | Show learned values and their sources |
+| `pitwall calibrate` | Fit track values from stored sessions |
+| `pitwall evaluate` | Compare calls-on and calls-off sessions |
+| `pitwall propose` | Write threshold candidates for review |
+| `pitwall maintain` | Run upkeep now |
+| `pitwall digest` | Write a digest JSON or ingest external recordings |
+
+Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not
+need to run it for a live session or edit SQLite.
 
 ## Recording
 

@@ -59,17 +59,16 @@ tagged with why, so the debrief can show it.
 The model is what lets the engine answer "box this lap or next", which thresholds cannot.
 
 ```
-lap_time = base(track, compound)
-         + fuel_coeff(track) · fuel_kg
-         + deg(compound, tyre_age, wear_pct)
-         + traffic_penalty
+lap_time_ms = base_ms
+            + deg_ms_per_lap · tyre_age_laps
+            + fuel_ms_per_lap · fuel_laps_burned
 ```
 
-- `fuel_coeff` starts from a per-track prior (~0.03–0.06 s/kg) and is refined from your
-  own stints.
-- `deg` is fitted online by robust regression over the current stint's valid laps, with
-  wear percentage as a covariate; the prior comes from previous sessions at that track
-  and compound, stored in SQLite.
+- The engine fits valid, non-neutralised laps in the current stint. Short fits use or blend
+  toward a prior. The planner shrinks the fitted slope toward the prior based on fit error;
+  clean fits are used as-is.
+- Race priors are scoped by total race laps, so different race distances do not mix.
+  Practice values are unscoped.
 - Rival pace comes from Session History lap times, filtered the same way.
 
 Output to the driver is always in driver currency: "about three laps of life left at this
@@ -116,8 +115,9 @@ rival only after two consecutive missing updates or `m_resultStatus >= 3`.
 
 **Tyre and thermal.** Overheat and graining warnings from the slow (30 s) core EMA with
 hysteresis, blister percentage from Car Damage, and wear phrased as remaining laps of
-pace. Compound choice for the next stint is constrained by what Tyre Sets says you
-actually have left.
+pace. Tyre life is the earlier of the worst corner's wear limit and the pace cliff from
+the degradation fit. Compound choice for the next stint is constrained by what Tyre Sets
+says you actually have left.
 
 **Fuel.** `m_fuelRemainingLaps` versus laps remaining → lift-and-coast or fuel-mix calls,
 stated as "you need half a lap of fuel saving over the next five".
@@ -173,6 +173,8 @@ stop lap within `plan_window_s` of the best.
   plan that matches the best sequence (reason `pace`). A plan becomes *invalid* when its
   remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
 - A cheap-stop SC/VSC recommendation switches the active plan to C (reason `sc`).
+- After a pit stop, the tracker counts the stop on entry to the out-lap and rebases the
+  plan from the new compound, tyre age, laps left and stops completed.
 
 **Calls** (`rules/race.yaml`, all through the dispatcher budget/cooldowns):
 
