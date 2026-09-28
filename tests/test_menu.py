@@ -353,10 +353,8 @@ def test_race_stat_and_fight_answers() -> None:
     )
     case, values = answer(fight, snap, "b")
     assert case == "both"
-    assert values["ahead"] == (
-        "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7."
-    )
-    assert values["behind"] == "Russell 0.9 behind, pulling away 0.2 a lap."
+    assert values["ahead"] == "Norris 1.2 ahead, we're catching 0.3 a lap."
+    assert values["behind"] == "Russell 0.9 behind, we're pulling 0.2 a lap."
     assert answer(fight, Snapshot(now=0.0), "b")[0] == "none"
 
 
@@ -392,3 +390,30 @@ def test_menu_is_situational() -> None:
     menu.close()
     menu.step(settings, 1, 1.0, {"session_kind": "practice", "battle_mode": ""})
     assert menu.payload(settings, 1.0)["items"] == ["Cool", "Silent"]
+
+
+def test_wet_tyre_and_rain_answers() -> None:
+    tyres = MenuItemModel(id="tyres", label="Tyres")
+    rain = MenuItemModel(id="rain", label="Rain")
+    # Mean wear 55 would hide a front at 67: the worst corner decides.
+    worn = Snapshot(
+        now=0.0,
+        tyre_compound=7,
+        tyre_age_laps=10,
+        wear_mean_pct=55.0,
+        wear_max_pct=67.0,
+        laps_of_pace=0.5,
+    )
+    case, values = answer(tyres, worn, "b")
+    assert case == "gone" and values["wear"] == "67"
+    # Already on inters with an inter crossover forecast: stay out.
+    on_inters = Snapshot(now=0.0, tyre_compound=7, weather_crossover="to_inter", rain_pct_in_30=83)
+    assert answer(rain, on_inters, "b")[0] == "right_tyre"
+    # On slicks the forecast only warns; it never says box.
+    on_slicks = dataclasses.replace(on_inters, tyre_compound=17)
+    assert answer(rain, on_slicks, "b")[0] == "crossover"
+    # The field's lap times on the drier tyre make the switch call.
+    drying = dataclasses.replace(on_inters, tyre_switch_to="slicks")
+    case, values = answer(rain, drying, "b")
+    assert case == "switch" and values["to"] == "slicks"
+    assert answer(tyres, dataclasses.replace(worn, tyre_switch_to="slicks"), "b")[0] == "switch"

@@ -457,3 +457,16 @@ def test_fastest_lap_event_in_snapshot() -> None:
     assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
     assert snap.fastest_lap_time == "1:19.195"
     assert 3.9 < snap.fastest_lap_age_s < 4.1
+
+
+def test_tyre_switch_from_field_compound_gap() -> None:
+    state = SessionState()
+    state.tyre_compound = 7
+    assert state._tyre_switch(1.5, 0.0) == "slicks"
+    assert state._tyre_switch(0.4, 0.0) == ""
+    assert state._tyre_switch(0.0, -1.2) == "wets"
+    state.tyre_compound = 8
+    assert state._tyre_switch(0.0, 1.2) == "inters"
+    state.tyre_compound = 17
+    assert state._tyre_switch(-2.0, 0.0) == "inters"
+    assert state._tyre_switch(2.0, 0.0) == ""

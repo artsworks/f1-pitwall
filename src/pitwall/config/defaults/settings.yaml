@@ -80,7 +80,7 @@ thresholds:
   deg_default_ms_per_lap: 80   # cold-start deg slope when nothing is known
   fuel_ms_per_lap_default: 30  # pace gained per lap of fuel burn, default
   tyre_cliff_ms: 1500          # pace loss vs age 0 that counts as the tyre cliff
-  wear_cliff_pct: 70           # mean wear % that counts as the wear cliff
+  wear_cliff_pct: 70           # worst-corner wear % that counts as the wear cliff
   wear_per_lap_default_pct: 2.5  # wear %/lap when not measured this stint
   rival_pace_window: 3         # laps in the rival-pace median
   pit_loss_default_s: 22       # green-flag pit loss when nothing is known
@@ -106,6 +106,12 @@ thresholds:
   pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)
   thermal_hysteresis_c: 4      # overheat/graining latch hysteresis
   tyre_graining_c: 75          # coldest inner at or below this = graining band
+  tyre_inner_hot_inter_c: 95   # inters run cooler: carcass amber from ~95 C
+  tyre_graining_inter_c: 55
+  tyre_inner_hot_wet_c: 90
+  tyre_graining_wet_c: 50
+  compound_gain_min_cars: 2    # cars needed per compound group for a lap-time crossover
+  compound_crossover_s: 1.0    # drier compound this much a lap quicker = switch
   drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
   drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
   penalty_standing_laps: 3     # time penalty vs position calls from this many laps to go

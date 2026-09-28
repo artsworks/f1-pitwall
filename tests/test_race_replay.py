@@ -252,3 +252,9 @@ def test_abnormal_axle_wear_says_rears(runs) -> None:
 def test_even_wear_is_not_flagged(runs) -> None:
     calls, _ = runs["base"]
     assert not any(c.rule_id.startswith("wear_") for c in calls)
+
+
+def test_podium_finish_celebrates(runs) -> None:
+    calls, _ = runs["start_gained"]
+    assert "finish_podium" in _ids(calls)
+    assert "finish_win" not in _ids(calls)

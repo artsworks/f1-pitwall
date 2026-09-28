@@ -853,17 +853,24 @@ class Engine:
         )
 
         fit = self.deg_fit
-        wear_mean = sum(state.tyres_wear.as_tuple()) / 4.0
+        wear = state.tyres_wear.as_tuple()
+        wear_mean = sum(wear) / 4.0
+        wear_max = max(wear)
+        # The worst corner hits the cliff first; scale the stint's mean rate to it.
+        worst_rate = self._wear_per_lap * (wear_max / wear_mean if wear_mean > 0 else 1.0)
+        wear_cliff = self._th("wear_cliff_pct", 70)
         lop = math.inf
         predicted = 0
+        if fit is None and state.tyre_age_laps >= 2 and worst_rate > 0:
+            lop = max(0.0, (wear_cliff - wear_max) / worst_rate)
         if fit is not None:
             lop = laps_of_pace(
                 fit,
                 state.tyre_age_laps,
-                wear_mean,
+                wear_max,
                 cliff_ms=self._th("tyre_cliff_ms", 1500),
-                wear_cliff_pct=self._th("wear_cliff_pct", 70),
-                wear_per_lap=self._wear_per_lap,
+                wear_cliff_pct=wear_cliff,
+                wear_per_lap=worst_rate,
             )
             burned = self._stint_fuel_ref - state.fuel_remaining_laps
             predicted = int(

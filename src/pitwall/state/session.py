@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
@@ -318,6 +318,13 @@ class Snapshot:
     base_pace_ms: float = 0.0
     laps_of_pace: float = math.inf
     wear_mean_pct: float = 0.0
+    wear_max_pct: float = 0.0
+    # Field lap-time gap between compound groups (s, + = the drier tyre is
+    # quicker): median last lap of inter runners minus slick runners, and of
+    # wet runners minus inter runners. 0 when a group has too few cars.
+    slick_gain_s: float = 0.0
+    inter_gain_s: float = 0.0
+    tyre_switch_to: str = ""  # 'slicks' | 'inters' | 'wets' when the field says switch
     wear_per_lap_pct: float = 0.0
     blister_max_pct: int = 0
     wear_hot_corner: str = ""
@@ -735,6 +742,7 @@ class SessionState:
         self._last_track_warning_st: float | None = None
         self.lights_out = False
         self.chequered = False
+        self._flag_as_leader = False
         self._fastest_lap: tuple[int, int, float] | None = None  # (car idx, ms, session time)
         self.grid_position = 0
         self.sc_ending = False
@@ -911,6 +919,15 @@ class SessionState:
         for i, c in enumerate(pkt.cars):
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
+        length = self.track_length_m
+        line_after_flag = self.chequered and (
+            self._flag_as_leader
+            or (
+                length > 0
+                and self.lap_distance > 0.8 * length
+                and 0 <= car.lap_distance < 0.2 * length
+            )
+        )
         self.lap_num = car.current_lap_num
         self.lap_distance = car.lap_distance
         if car.sector == 2 and self.sector != 2:
@@ -959,7 +976,7 @@ class SessionState:
             driver_status=car.driver_status,
             result_status=car.result_status,
             lap_num=car.current_lap_num,
-            lap_boundary=lap_boundary,
+            lap_boundary=lap_boundary or line_after_flag,
             lights_out_seen=self.lights_out,
             chequered_seen=self.chequered,
             red_flag=self.red_flag,
@@ -1100,6 +1117,7 @@ class SessionState:
             self.safety_car_status = 0
         elif pkt.code == "CHQF":
             self.chequered = True
+            self._flag_as_leader = self.position == 1
         elif pkt.code == "FTLP":
             if isinstance(pkt.detail, dict):
                 ms = round(float(pkt.detail.get("lap_time_s", 0.0)) * 1000)
@@ -1333,7 +1351,9 @@ class SessionState:
             cand = "to_wet"
         elif rain >= inter + (0.0 if cur == "to_wet" else hyst):
             cand = "to_inter"
-        elif self.weather >= 5 and rain < dry - (0.0 if cur else hyst):
+        elif (self.weather >= 3 or self.tyre_compound in (7, 8)) and rain < dry - (
+            0.0 if cur else hyst
+        ):
             cand = "to_dry"
         elif cur in ("to_inter", "to_wet") and rain < inter - hyst:
             cand = ""
@@ -1667,6 +1687,7 @@ class SessionState:
             wear_hot_rate=self.wear_hot_rate,
             wear_hot_pct=self.wear_hot_pct,
             wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
+            wear_max_pct=max(self.tyres_wear.as_tuple()),
             unserved_drive_through=self.unserved_drive_through,
             unserved_stop_go=self.unserved_stop_go,
             warnings=self.warnings,
@@ -2121,6 +2142,8 @@ class SessionState:
                 return 0
             return int(status[i].visual_tyre_compound)
 
+        slick_gain = self._compound_gain(cars, (7,), (16, 17, 18))
+        inter_gain = self._compound_gain(cars, (8,), (7,))
         base.update(
             rival_ahead_pos=cars[ahead_i].car_position if ahead_i >= 0 else 0,
             rival_behind_pos=cars[behind_i].car_position if behind_i >= 0 else 0,
@@ -2143,6 +2166,9 @@ class SessionState:
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             pit_exit_rival_gap_s=exit_gap,
+            slick_gain_s=slick_gain,
+            inter_gain_s=inter_gain,
+            tyre_switch_to=self._tyre_switch(slick_gain, inter_gain),
             penalty_position=pen_pos,
             penalty_margin_s=pen_margin,
             penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
@@ -2155,6 +2181,43 @@ class SessionState:
             ),
         )
         return base
+
+    def _compound_gain(
+        self, cars: Sequence[CarLap], wetter: tuple[int, ...], drier: tuple[int, ...]
+    ) -> float:
+        """Median last lap on the wetter compounds minus the drier ones (s), from
+        running cars with at least one full lap on their current set."""
+        status = self.cars_status
+        if status is None or self.race_phase != "racing" or self.safety_car_status != 0:
+            return 0.0
+        pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
+        groups: dict[bool, list[int]] = {True: [], False: []}
+        for i, c in enumerate(cars):
+            if i >= len(status) or i in pitted or c.pit_status != PitStatus.NONE:
+                continue
+            if c.result_status != 2 or c.last_lap_time_ms <= 0 or status[i].tyres_age_laps < 1:
+                continue
+            comp = int(status[i].visual_tyre_compound)
+            if comp in wetter or comp in drier:
+                groups[comp in drier].append(c.last_lap_time_ms)
+        need = int(self._th("compound_gain_min_cars", 2.0))
+        if len(groups[True]) < need or len(groups[False]) < need:
+            return 0.0
+        return round((median(groups[False]) - median(groups[True])) / 1000.0, 2)
+
+    def _tyre_switch(self, slick_gain: float, inter_gain: float) -> str:
+        """Compound the field's lap times say to switch to, else ''."""
+        th = self._th("compound_crossover_s", 1.0)
+        comp = self.tyre_compound
+        if comp == 7 and slick_gain >= th:
+            return "slicks"
+        if comp == 7 and inter_gain <= -th:
+            return "wets"
+        if comp == 8 and inter_gain >= th:
+            return "inters"
+        if comp in (16, 17, 18, 19, 20, 21, 22) and slick_gain <= -th:
+            return "inters"
+        return ""
 
     def _drs_zone_ahead(self) -> bool:
         """A DRS/active-aero zone starts within the lookahead distance."""
@@ -2172,9 +2235,10 @@ class SessionState:
         temps = self._ema_or_zero(self.tyre_inner_slow).as_tuple()
         hot = max(temps)
         coldest = min(temps)
-        hot_c = self._th("tyre_inner_hot_c", 110.0) + self._thermal_warn_offset_c
+        suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
+        hot_c = self._th(f"tyre_inner_hot{suffix}_c", 110.0) + self._thermal_warn_offset_c
         hyst = self._th("thermal_hysteresis_c", 4.0)
-        grain_c = self._th("tyre_graining_c", 75.0)
+        grain_c = self._th(f"tyre_graining{suffix}_c", 75.0)
         self._overheat = (self._overheat and hot > hot_c - hyst) or hot >= hot_c
         in_context = self.race_phase == "racing" and self.tyre_age_laps >= 2
         self._graining = in_context and (

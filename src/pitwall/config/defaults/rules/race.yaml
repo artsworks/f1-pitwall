@@ -190,7 +190,7 @@ rules:
   - id: tyre_overheat
     sessions: [race]
     priority: 2
-    when: "overheat"
+    when: "overheat and tyre_compound not in (7, 8)"
     clear_when: "not overheat"
     cooldown_s: 90
     requires: [car_telemetry]
@@ -198,6 +198,29 @@ rules:
       - "Tyres are running hot. Ease the slides"
       - "Temps are high, look after the rears"
       - "Tyre temps are climbing. Smooth on the throttle, fewer slides"
+  - id: tyre_overheat_wet
+    sessions: [race]
+    priority: 2
+    when: "overheat and tyre_compound in (7, 8)"
+    clear_when: "not overheat"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are cooking, track's drying. Find the wet patches on the straights"
+      - "Tyres overheating, it's drying out. Cool them in the damp, off the dry line"
+      - "Temps are high on these tyres. Use the wet bits to cool them"
+  - id: tyre_switch
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and tyre_switch_to != '' and laps_remaining > 1"
+    clear_when: "tyre_switch_to == ''"
+    cooldown_s: 60
+    requires: [lap_data]
+    say:
+      - "Box, box. {tyre_switch_to}. The field's quicker on them"
+      - "Crossover. {tyre_switch_to} are the tyre, box this lap"
+      - "Box this lap for {tyre_switch_to}. Confirm"
+      - "We're in the crossover. {tyre_switch_to} are quicker, box, box"
   - id: tyre_graining
     sessions: [race]
     priority: 2
@@ -637,7 +660,7 @@ rules:
   - id: weather_to_inter
     sessions: [race]
     priority: 2
-    when: "weather_crossover == 'to_inter'"
+    when: "weather_crossover == 'to_inter' and tyre_compound not in (0, 7)"
     clear_when: "weather_crossover != 'to_inter'"
     cooldown_s: 120
     cooldown_group: weather
@@ -649,7 +672,7 @@ rules:
   - id: weather_to_wet
     sessions: [race]
     priority: 2
-    when: "weather_crossover == 'to_wet'"
+    when: "weather_crossover == 'to_wet' and tyre_compound not in (0, 8)"
     clear_when: "weather_crossover != 'to_wet'"
     cooldown_s: 120
     cooldown_group: weather
@@ -892,6 +915,30 @@ rules:
     say:
       - "Chequered flag. P{position}, same as the grid. Solid job"
       - "That's the flag, P{position}. Held the grid slot, good work"
+  - id: finish_win
+    sessions: [race]
+    priority: 1
+    when: "phase == 'finished' and position == 1 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Yes! Yes! That's it, you've done it! You've won the race!"
+      - "Get in there! P1! You are the winner, mate. Get in!"
+      - "That's the win! Simply lovely. What a drive"
+      - "Race winner! Oh, you beauty! Superb, absolutely superb"
+      - "Chequered flag, P1! Get in there! Wow, what a job"
+      - "Get in there, mate! What a way to do it. P1!"
+  - id: finish_podium
+    sessions: [race]
+    priority: 1
+    when: "phase == 'finished' and position in (2, 3) and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "That's it, you've done it! P{position}, on the podium!"
+      - "P{position}! Podium! Get in there, brilliant job"
+      - "Chequered flag, P{position}. That's a podium, mate. Well driven"
+      - "Yes! P{position}, trophy time. Great stuff"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

@@ -119,15 +119,18 @@ def _common(snap: Snapshot, mindset: str) -> dict[str, str]:
 
 def _tyres(snap: Snapshot) -> Answer:
     v = {
-        "wear": _n(snap.wear_mean_pct, 0),
+        "wear": _n(snap.wear_max_pct, 0),
         "age": str(snap.tyre_age_laps),
         "pace_laps": _laps(snap.laps_of_pace),
+        "to": snap.tyre_switch_to,
     }
-    if snap.wear_mean_pct <= 0 and snap.tyre_age_laps == 0:
+    if snap.wear_max_pct <= 0 and snap.tyre_age_laps == 0:
         return "unknown", v
-    if snap.laps_of_pace < 1 or snap.wear_mean_pct >= 70:
+    if snap.tyre_switch_to:
+        return "switch", v
+    if snap.laps_of_pace < 1 or snap.wear_max_pct >= 70:
         return "gone", v
-    if snap.laps_of_pace < 4 or snap.wear_mean_pct >= 50:
+    if snap.laps_of_pace < 4 or snap.wear_max_pct >= 55:
         return "fading", v
     return "ok", v
 
@@ -208,15 +211,29 @@ def _plan(snap: Snapshot) -> Answer:
     return "unknown", v
 
 
+_CROSSOVER_TYRE = {"to_inter": 7, "to_wet": 8}
+
+
 def _rain(snap: Snapshot) -> Answer:
+    """Forecast rain chance plus what it means for the tyre we're on: the
+    field's lap times decide a switch, a forecast crossover only warns."""
     peak = max(snap.rain_pct_in_10, snap.rain_pct_in_30)
+    to = {"to_inter": "inters", "to_wet": "wets", "to_dry": "slicks"}.get(
+        snap.weather_crossover, ""
+    )
     v = {
         "in10": str(snap.rain_pct_in_10),
         "in30": str(snap.rain_pct_in_30),
-        "to": {"to_inter": "inters", "to_wet": "wets", "to_dry": "slicks"}.get(
-            snap.weather_crossover, ""
-        ),
+        "to": snap.tyre_switch_to or to,
+        "tyre": {7: "inters", 8: "wets"}.get(snap.tyre_compound, "slicks"),
     }
+    if snap.tyre_switch_to:
+        return "switch", v
+    on_it = _CROSSOVER_TYRE.get(snap.weather_crossover, 0) == snap.tyre_compound or (
+        snap.weather_crossover == "to_dry" and snap.tyre_compound not in (7, 8)
+    )
+    if snap.weather_crossover and on_it:
+        return "right_tyre", v
     if snap.weather_crossover:
         return "crossover", v
     if peak >= 50:
@@ -255,16 +272,16 @@ def _race_stat(snap: Snapshot) -> Answer:
             "pos": str(snap.position),
             "best": _lap_time(snap.player_best_lap_ms),
             "margin": _n(abs(snap.fuel_margin_laps)),
-            "wear": _n(snap.wear_mean_pct, 0),
+            "wear": _n(snap.wear_max_pct, 0),
         }
     )
     if snap.fuel_source and snap.fuel_margin_laps < -0.2:
         return "fuel_short", v
     if snap.session_kind == "practice":
-        if snap.wear_mean_pct >= 70:
+        if snap.wear_max_pct >= 70:
             return "tyres_gone", v
         return ("practice" if snap.player_best_lap_ms > 0 else "practice_no_best"), v
-    if snap.wear_mean_pct >= 70 or (snap.tyre_age_laps > 0 and snap.laps_of_pace < 1):
+    if snap.wear_max_pct >= 70 or (snap.tyre_age_laps > 0 and snap.laps_of_pace < 1):
         return "tyres_gone", v
     if snap.energy_mode == "over":
         return "energy", v
@@ -277,26 +294,17 @@ def _race_stat(snap: Snapshot) -> Answer:
     return "position", v
 
 
-def _side(
-    name: str, gap: float, trend: float, rival_ms: int, own_ms: float, laps_left: int, ahead: bool
-) -> str:
-    """One sentence on a neighbour: gap, gap trend per lap, laps to catch or be
-    caught, and model pace (ours vs theirs) when both are known."""
+def _side(name: str, gap: float, trend: float, ahead: bool) -> str:
+    """Gap and which way it's going, per lap: "GASLY 0.4 behind, catching 0.3 a lap"."""
     where = "ahead" if ahead else "behind"
     out = f"{name} {_n(gap)} {where}"
     if trend > 0.05:
-        out += f", closing {_n(trend)} a lap" if ahead else f", he's gaining {_n(trend)} a lap"
-        laps = math.ceil(gap / trend)
-        if 0 < laps <= max(laps_left, 1):
-            out += f", catch in {laps}" if ahead else f", on you in {laps}"
+        out += f", we're catching {_n(trend)} a lap" if ahead else f", catching {_n(trend)} a lap"
     elif trend < -0.05:
-        out += f", losing {_n(-trend)} a lap" if ahead else f", pulling away {_n(-trend)} a lap"
+        out += f", pulling {_n(-trend)} a lap" if ahead else f", we're pulling {_n(-trend)} a lap"
     else:
-        out += ", holding"
-    out += "."
-    if rival_ms > 0 and own_ms > 0:
-        out += f" Pace {_lap_time(own_ms)} to his {_lap_time(rival_ms)}."
-    return out
+        out += ", steady"
+    return out + "."
 
 
 def _fight(snap: Snapshot) -> Answer:
@@ -305,23 +313,11 @@ def _fight(snap: Snapshot) -> Answer:
     v = {"ahead": "", "behind": ""}
     if has_ahead:
         v["ahead"] = _side(
-            snap.rival_ahead_name or "Car",
-            snap.gap_ahead_s,
-            snap.gap_trend_ahead_s,
-            snap.rival_ahead_pace_ms,
-            snap.base_pace_ms,
-            snap.laps_remaining,
-            True,
+            snap.rival_ahead_name or "Car", snap.gap_ahead_s, snap.gap_trend_ahead_s, True
         )
     if has_behind:
         v["behind"] = _side(
-            snap.rival_behind_name or "Car",
-            snap.gap_behind_s,
-            snap.gap_trend_behind_s,
-            snap.rival_behind_pace_ms,
-            snap.base_pace_ms,
-            snap.laps_remaining,
-            False,
+            snap.rival_behind_name or "Car", snap.gap_behind_s, snap.gap_trend_behind_s, False
         )
     if has_ahead and has_behind:
         return "both", v
@@ -357,7 +353,20 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
 TEMPLATE_KEYS = frozenset(
     {"lap", "laps_left", "mindset", "wear", "age", "pace_laps", "plan_lap", "in_laps"}
     | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets"}
-    | {"in10", "in30", "to", "bias", "bias_to", "label", "pos", "best", "ahead", "behind", "budget"}
+    | {
+        "in10",
+        "in30",
+        "to",
+        "tyre",
+        "bias",
+        "bias_to",
+        "label",
+        "pos",
+        "best",
+        "ahead",
+        "behind",
+        "budget",
+    }
 )
 
 
