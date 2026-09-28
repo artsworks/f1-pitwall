@@ -749,6 +749,10 @@ def cmd_start(args: argparse.Namespace) -> int:
         from pitwall.store.db import open_configured
 
         db = open_configured(settings)
+    if db is not None:
+        from pitwall.maintenance import maintain
+
+        print(f"learning: {maintain(db, settings.thresholds).summary()}", flush=True)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
@@ -1047,9 +1051,30 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         else:
             print("  no persisted track learning")
         print(f"  tuned rules: {len(tuned)}")
+        if db is not None:
+            print(f"  database: {db.path}")
+            print(f"  quarantined values: {len(db.quarantined_params())}")
     except Exception:
         print("learned state: unavailable")
     return result
+
+
+def cmd_maintain(args: argparse.Namespace) -> int:
+    """Quarantine bad learned values, rebuild stint priors, grade sessions."""
+    from pitwall.maintenance import maintain
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("maintain: persistence disabled")
+        return 1
+    report = maintain(db, settings.thresholds)
+    print(f"database: {db.path}")
+    for line in report.quarantined:
+        print(f"  quarantined {line}")
+    print(f"maintain: {report.summary()}")
+    return 0
 
 
 def cmd_compress(args: argparse.Namespace) -> int:
@@ -1108,6 +1133,10 @@ def build_parser() -> argparse.ArgumentParser:
     tun.add_argument("--calls-mode", choices=["on", "off"], default=None)
     tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     tun.set_defaults(func=cmd_tune)
+
+    mt = sub.add_parser("maintain", help="repair learned state (runs automatically on start)")
+    mt.add_argument("--db", default=None)
+    mt.set_defaults(func=cmd_maintain)
 
     dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
     dg.add_argument("paths", nargs="*", help="recordings to ingest")

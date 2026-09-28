@@ -230,6 +230,26 @@ MIGRATIONS: list[str] = [
         ingested_at REAL
     );
     """,
+    # 9: automatic maintenance: learned values that failed a sanity check or
+    # were recomputed keep their last value here instead of being lost.
+    """
+    CREATE TABLE model_params_quarantine (
+        track_id INT NOT NULL,
+        compound INT NOT NULL,
+        name TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        value REAL NOT NULL,
+        weight REAL NOT NULL,
+        updated_at REAL,
+        quarantined_at REAL,
+        PRIMARY KEY (track_id, compound, name, reason)
+    );
+    CREATE TABLE maintenance (
+        key TEXT PRIMARY KEY,
+        version INT NOT NULL,
+        ran_at REAL
+    );
+    """,
 ]
 
 
@@ -933,6 +953,74 @@ class Database:
                 (track_id, compound, name, value, weight, now),
             )
         return ModelParam(track_id, compound, name, value, weight, now)
+
+    def quarantine_param(self, param: ModelParam, reason: str) -> None:
+        """Move a model_params row aside so it no longer feeds any prior."""
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO model_params_quarantine(track_id, compound, name, reason,"
+                " value, weight, updated_at, quarantined_at) VALUES(?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(track_id, compound, name, reason) DO UPDATE SET"
+                " value=excluded.value, weight=excluded.weight,"
+                " updated_at=excluded.updated_at, quarantined_at=excluded.quarantined_at",
+                (
+                    param.track_id,
+                    param.compound,
+                    param.name,
+                    reason,
+                    param.value,
+                    param.weight,
+                    param.updated_at,
+                    time.time(),
+                ),
+            )
+            self._conn.execute(
+                "DELETE FROM model_params WHERE track_id=? AND compound=? AND name=?",
+                (param.track_id, param.compound, param.name),
+            )
+
+    def quarantined_params(self) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM model_params_quarantine ORDER BY track_id, compound, name, reason", ()
+        )
+
+    def maintenance_version(self, key: str) -> int:
+        row = self._conn.execute("SELECT version FROM maintenance WHERE key=?", (key,)).fetchone()
+        return int(row["version"]) if row is not None else 0
+
+    def set_maintenance_version(self, key: str, version: int) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO maintenance(key, version, ran_at) VALUES(?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET version=excluded.version,"
+                " ran_at=excluded.ran_at",
+                (key, version, time.time()),
+            )
+
+    def mark_graded(self, uid: int) -> None:
+        self.set_maintenance_version(f"graded:{_uid_to_sql(uid)}", 1)
+
+    def learning_stints(self) -> list[dict[str, Any]]:
+        """Player stints with their session's track, type and race distance,
+        oldest first: the source every stint-derived prior is rebuilt from."""
+        return self._rows(
+            "SELECT se.track_id, se.session_type, se.total_laps, st.compound,"
+            " st.n_valid_laps, st.deg_params FROM stints st"
+            " JOIN sessions se ON se.uid=st.session_uid WHERE st.car_idx=0"
+            " ORDER BY se.started_at, se.uid, st.start_lap",
+            (),
+        )
+
+    def ungraded_sessions(self) -> list[int]:
+        """Sessions with laps but no hindsight outcomes yet."""
+        rows = self._conn.execute(
+            "SELECT se.uid FROM sessions se WHERE EXISTS"
+            " (SELECT 1 FROM laps l WHERE l.session_uid=se.uid)"
+            " AND NOT EXISTS (SELECT 1 FROM outcomes o WHERE o.session_uid=se.uid)"
+            " AND NOT EXISTS (SELECT 1 FROM maintenance m WHERE m.key='graded:' || se.uid)"
+            " ORDER BY se.started_at, se.uid"
+        ).fetchall()
+        return [_uid_from_sql(int(r["uid"])) for r in rows]
 
     def set_session_origin(
         self,

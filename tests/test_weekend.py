@@ -177,5 +177,5 @@ def test_open_final_stint_folds_once_at_session_end(tmp_path) -> None:
     ).fetchall()
     assert len(stints) == 1
     assert stints[0]["end_lap"] >= stints[0]["start_lap"]
-    fitted = db.get_param(7, 17, "deg_ms_per_lap")
+    fitted = db.get_param(7, 17, "deg_ms_per_lap@8L")
     assert fitted is not None and fitted.weight == stints[0]["n_valid_laps"]

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from statistics import median
 from typing import TYPE_CHECKING
 
@@ -183,6 +183,59 @@ def laps_of_pace(
     pace_laps = math.inf if fit.deg_ms_per_lap <= 0 else cliff_ms / fit.deg_ms_per_lap - tyre_age
     wear_laps = math.inf if wear_per_lap <= 0 else (wear_cliff_pct - wear_pct) / wear_per_lap
     return max(0.0, min(pace_laps, wear_laps))
+
+
+def scoped(name: str, race_laps: int) -> str:
+    """model_params name for a stint-derived value: races learn per race
+    distance (tyre wear scales with it), other sessions learn unscoped."""
+    return f"{name}@{race_laps}L" if race_laps > 0 else name
+
+
+def corner_wear_life(
+    wear: Sequence[float],
+    start_wear: Sequence[float],
+    laps_run: float,
+    *,
+    wear_cliff_pct: float,
+    default_rate_pct: float,
+) -> float:
+    """Laps until the worst corner reaches the wear cliff, each corner at its
+    own measured rate this stint (the default rate until a lap is run)."""
+    life = math.inf
+    for now, start in zip(wear, start_wear, strict=True):
+        rate = (now - start) / laps_run if laps_run >= 1 and now > start else default_rate_pct
+        if rate > 0:
+            life = min(life, (wear_cliff_pct - now) / rate)
+    return max(0.0, life)
+
+
+def planning_fit(fit: DegFit, prior: DegFit, rmse_bad_ms: float) -> DegFit:
+    """The stint fit the strategy planner uses: the slope shrunk to the prior
+    as the fit error approaches `rmse_bad_ms`, so noisy laps cannot swing
+    the plan while a clean steep fit is taken at face value."""
+    if fit.source == "prior" or rmse_bad_ms <= 0:
+        return fit
+    w = min(max(1.0 - fit.rmse_ms / rmse_bad_ms, 0.0), 1.0)
+    return replace(fit, deg_ms_per_lap=w * fit.deg_ms_per_lap + (1 - w) * prior.deg_ms_per_lap)
+
+
+def fit_is_clean(
+    fit: DegFit,
+    *,
+    deg_max_ms_per_lap: float,
+    deg_rmse_bad_ms: float,
+    base_min_ms: float,
+    base_max_ms: float,
+) -> bool:
+    """A stint fit good enough to become a learned prior: a real OLS fit, low error,
+    slope inside the clamp and a plausible lap time."""
+    return (
+        fit.source == "fit"
+        and fit.rmse_ms <= deg_rmse_bad_ms
+        and 0 < fit.deg_ms_per_lap < deg_max_ms_per_lap
+        and 0 <= fit.fuel_ms_per_lap < deg_max_ms_per_lap
+        and base_min_ms <= fit.base_ms <= base_max_ms
+    )
 
 
 def rival_pace_ms(history: SessionHistoryPacket, window: int) -> int:
