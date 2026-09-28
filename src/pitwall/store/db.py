@@ -252,8 +252,8 @@ class LapRow:
     ers_deployed_j: float
     sc_status: int
     weather: int
-    tyre_inner_c: float
-    tyre_surface_c: float
+    tyre_inner_c: float = 0.0
+    tyre_surface_c: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
