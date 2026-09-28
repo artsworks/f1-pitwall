@@ -1,7 +1,7 @@
 /* pitwall dashboard — docs/15-dashboard-design.md. Dark, high contrast, offline. */
 :root {
   --bg: #0a0a0c; --panel: #121216; --line: #2a2a30;
-  --fg: #ececec; --dim: #8a8a92; --faint: #4a4a52;
+  --fg: #ececec; --soft: #c8c8d0; --dim: #a2a2ac; --faint: #62626c;
   --ok: #37e07a; --warn: #ffc233; --crit: #ff4d4d; --cold: #5cc8ff;
   --info: #b8b8ff; --aggr: #ff8a3d;
   --font: "Cascadia Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
@@ -483,7 +483,7 @@ body.stale .carpage > *, body.stale .trackpage > * {
 
 /* phone portrait: one column, every page keeps status + banner on top.
    Rows size to content and the page scrolls; review adds the transport row. */
-@media (max-width: 700px) and (orientation: portrait) {
+@media (max-width: 900px) and (orientation: portrait) {
   body.dash, body.dash.review { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
     grid-auto-rows: auto; height: auto; min-height: 100vh; overflow: auto;
     grid-template-areas: "status" "banner" "strat" "tyres" "fuel" "log" "footer"; }
@@ -683,7 +683,7 @@ body.swap .strat { animation-delay: 80ms; }
 
 /* phone portrait: status and the call banner stay pinned while the page
    scrolls; notch-safe insets */
-@media (max-width: 700px) and (orientation: portrait) {
+@media (max-width: 900px) and (orientation: portrait) {
   body.dash, body.radio { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left); }
   body.dash .status, body.radio .status { position: sticky; top: 0; z-index: 3;
@@ -714,3 +714,83 @@ body.swap .strat { animation-delay: 80ms; }
   background: color-mix(in srgb, var(--info) 18%, transparent); }
 body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width: auto;
   max-height: calc(100vh - 14rem); font-size: 2rem; }
+
+/* ---------------------------------------------------------------------------
+   Glance pass: key values in full-contrast type, secondary text in --soft,
+   only true diagnostics in --dim. Icons carry meaning next to the word.
+   --------------------------------------------------------------------------- */
+.sub, .banner .previous, .banner .meta, .s-stint, .b-foot { color: var(--soft); }
+.zone h2 { color: var(--soft); font-weight: bold; }
+.banner .previous b { color: var(--dim); font-weight: bold; }
+.banner .meta { font-size: 1.4rem; }
+.banner .meta .pri { font-weight: bold; letter-spacing: .06em; }
+.banner.p1 .meta .pri { background: var(--crit); color: #fff; padding: 0 .4rem; border-radius: .25rem; }
+
+.status #position { font-size: 2rem; font-weight: bold; padding: 0 .5rem; border-radius: .3rem;
+  background: var(--fg); color: var(--bg); line-height: 1.2; }
+.status #lap { font-weight: bold; }
+.status #age { font-size: 1.1rem; }
+.flag.sc { border-color: var(--warn); background: var(--warn); color: #000; }
+
+.corner .det { color: var(--soft); display: flex; gap: .8rem; align-items: baseline; }
+.corner .det .wear { font-weight: bold; color: var(--fg); font-size: 1.35rem; }
+.corner .det .wear.wear-warn { color: var(--warn); }
+.corner .det .wear.wear-crit { color: var(--crit); }
+.corner .det .surf { color: var(--dim); font-size: 1.1rem; }
+.corner { display: grid; grid-template-columns: auto 1fr; align-content: center; column-gap: .8rem;
+  grid-template-areas: "lbl lbl" "temp word" "det det"; }
+.corner .lbl { grid-area: lbl; }
+.corner .temp { grid-area: temp; }
+.corner .word { grid-area: word; align-self: center; font-weight: bold; font-size: 1.5rem; }
+.corner .det { grid-area: det; }
+.tyres .chip #tyre-age { color: var(--fg); font-weight: bold; }
+.dmg .none { color: var(--ok); }
+
+.strat .ph, .zone .ph, .log li.empty { color: var(--dim); }
+.s-window .togo { color: var(--fg); }
+.s-stint { font-size: 1.25rem; }
+.s-row .lbl, .b-card .b-head .side { color: var(--soft); font-weight: bold; }
+.s-row .lbl { width: 7rem; }
+.b-card .b-head .side { font-size: 1.15rem; letter-spacing: .08em; width: 7rem; }
+.b-card .b-pace .words { text-transform: none; }
+.b-card .b-pace .words.dim { font-size: 1.2rem; color: var(--dim); }
+.b-card .b-lap .k { color: var(--soft); }
+.b-foot { font-size: 1.2rem; }
+.b-foot .k { color: var(--soft); font-weight: bold; }
+.b-state .detail { color: var(--soft); font-weight: bold; }
+.badge.inf { border-color: var(--dim); color: var(--soft); }
+.cp-flags.ok { color: var(--ok); font-weight: bold; }
+.tp-wxt .sky { color: var(--soft); }
+.pb-det, .pb-corner .lbl, .corner .lbl span:first-child { color: var(--soft); }
+.pb-corner .lbl { font-weight: bold; }
+.footer { font-size: 1rem; color: var(--soft); }
+body.sc .footer #sc { color: var(--warn); font-weight: bold; }
+#rate, #latency { color: var(--dim); }
+
+/* laptop / small desktop landscape (e.g. 1366x768, 1024x768): the fixed grid
+   would crush the tyre tiles, so zones keep a readable minimum and the page
+   scrolls under a pinned status bar and call banner */
+@media (max-height: 860px) and (min-height: 501px) and (orientation: landscape) {
+  body.dash, body.dash.review { height: auto; min-height: 100vh; overflow: visible;
+    grid-template-rows: auto; grid-auto-rows: auto; }
+  body.dash .status { position: sticky; top: 0; z-index: 3; }
+  body.dash .banner { position: sticky; top: var(--status-h, 3rem); z-index: 2; min-height: 9rem;
+    box-shadow: 0 .6rem 1rem -.6rem #000; }
+  body.dash .banner .text { font-size: 2.8rem; }
+  body.dash .tyres { min-height: 20rem; }
+  body.dash .car { min-height: 17rem; }
+  body.dash .log { min-height: 10rem; }
+}
+@media (max-width: 1100px) and (orientation: landscape) {
+  body.dash .status { flex-wrap: wrap; white-space: normal; gap: .3rem .9rem; padding: .3rem .6rem;
+    font-size: 1.25rem; }
+  body.dash .status .spacer { flex: 1 0 1rem; }
+  body.dash .corner .det { flex-wrap: wrap; row-gap: 0; }
+}
+@media (max-width: 900px) and (orientation: portrait) {
+  body.dash .status #position { font-size: 1.5rem; }
+  .b-card .b-head .side { width: 6rem; font-size: 1rem; }
+  body.dash .s-row { flex-wrap: wrap; row-gap: .2rem; }
+  body.dash .corner .temp { font-size: 2.6rem; }
+  body.dash .corner .det { flex-wrap: wrap; row-gap: 0; }
+}

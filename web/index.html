@@ -9,13 +9,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body class="dash connecting">
   <header class="status">
     <span id="live" class="live">CONNECTING…</span>
     <span id="age" class="dim">--</span>
-    <span id="rate" class="dim">--</span>
     <span class="dim">·</span>
     <span id="phase">--</span>
     <span id="flag" class="flag" hidden></span>
@@ -73,13 +72,13 @@
     </div>
     <div>
       <h2>DAMAGE</h2>
-      <div id="damage" class="dmg"><span class="none">none</span></div>
+      <div id="damage" class="dmg"><span class="none">✓ none</span></div>
     </div>
   </section>
 
   <section class="zone strat">
     <h2 id="strat-title">STRATEGY</h2>
-    <div id="strat-ph" class="ph">pit window · gaps · undercut — waiting for race data</div>
+    <div id="strat-ph" class="ph">waiting for race data…</div>
     <div id="strategy" class="strategy" hidden>
       <div id="s-window" class="s-window">--</div>
       <div id="s-ahead" class="s-row">--</div>
@@ -103,7 +102,7 @@
         <div id="c-mode" class="sub">--</div>
       </div>
       <div id="c-hot-tile" class="c-tile">
-        <h2>HOT-LAP MODE IN</h2>
+        <h2>PUSH IN</h2>
         <div id="c-hot" class="c-num">--</div>
         <div id="c-plan" class="sub">--</div>
       </div>
@@ -148,17 +147,17 @@
       </div>
     </div>
     <div class="pb-setup">
-      <h2>SETUP · GAME MENU ORDER</h2>
+      <h2>SETUP</h2>
       <ol id="pb-setup"><li class="dim">no setup packet yet</li></ol>
     </div>
   </section>
 
   <section id="carpage" class="zone carpage">
-    <h2>ENERGY · FUEL · TYRE LIFE</h2>
+    <h2>CAR</h2>
     <div class="cp-grid">
-      <div class="cp-tile"><h2>ENERGY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
-      <div class="cp-tile"><h2>FUEL VS FLAG</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
-      <div class="cp-tile"><h2>TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div><div class="meter"><i id="cp-life-bar"></i><b id="cp-life-flag"></b></div></div>
+      <div class="cp-tile"><h2>⚡ BATTERY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
+      <div class="cp-tile"><h2>FUEL AT FINISH</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
+      <div class="cp-tile"><h2>◎ TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div><div class="meter"><i id="cp-life-bar"></i><b id="cp-life-flag"></b></div></div>
     </div>
     <div id="cp-flags" class="cp-flags dim">--</div>
   </section>
@@ -167,9 +166,9 @@
     <h2>TRACK</h2>
     <div id="tp-status" class="tp-status">--</div>
     <div class="tp-wx">
-      <div class="tp-wxt" id="tp-wx-0"><div class="k">NOW</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
-      <div class="tp-wxt" id="tp-wx-1"><div class="k">IN 10 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
-      <div class="tp-wxt" id="tp-wx-2"><div class="k">IN 30 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
+      <div class="tp-wxt" id="tp-wx-0"><div class="k">NOW</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
+      <div class="tp-wxt" id="tp-wx-1"><div class="k">IN 10 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
+      <div class="tp-wxt" id="tp-wx-2"><div class="k">IN 30 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
     </div>
     <div class="tp-rows">
       <div id="tp-cross" class="tp-row">--</div>
@@ -191,13 +190,13 @@
   <section class="log"><ol id="log"></ol></section>
 
   <footer class="footer">
-    <span id="ers">ERS --</span><span id="sc">SC --</span><span id="latency"></span>
+    <span id="ers">⚡ BATTERY --</span><span id="sc">--</span><span id="rate"></span><span id="latency"></span>
   </footer>
   <aside id="drvmenu" class="drvmenu" hidden aria-live="polite">
     <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=4"></script>
-  <script src="/static/review.js?v=4"></script>
+  <script src="/static/app.js?v=5"></script>
+  <script src="/static/review.js?v=5"></script>
 </body>
 </html>

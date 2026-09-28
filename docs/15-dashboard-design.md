@@ -188,7 +188,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 |---|---|---|
 | LIVE/STALE word | `live`, `packet_age_ms` | `LIVE` green when `live`; `STALE` red otherwise. Client also applies its own >1 s guard against local time of the last frame (see §6) |
 | Packet age | `packet_age_ms` | `NNN ms`; amber ≥ 500 ms, red ≥ 1000 ms |
-| WS update rate | *derived client-side* from frame arrival (`rate_hz` is `null` today) | `N WS/s`, dim; do not label it UDP packet rate |
+| WS update rate | *derived client-side* from frame arrival (`rate_hz` is `null` today) | `N upd/s`, footer, dim; do not label it UDP packet rate |
 | Session line | `session_kind`, `session_type`, `track` | `RACE · bahrain` upper-cased; `session_type` numeric is not shown |
 | Lap | `lap_num`, `total_laps` | `LAP 24/57`; `total_laps==0` → `LAP 24` |
 | Position | `position` | `P5`; `0` → `P--` |
@@ -207,8 +207,8 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Call evidence | **planned** optional evidence captured with the call (e.g. `FL inner 112° · HOT`) | One line beneath current call; hidden if no call-specific evidence. Do not present changed live telemetry as if it justified an older call |
 | Log rows | `calls[]` from the current hello `snapshot`, then `call`/`spoken`/`cancel` frames | Earlier calls only; restored rows with unknown audio status stay unmarked. ▶ for confirmed audio start, ✗ for cancellation before start, ✓ only after a future audio-finished event. ACK/NEG chips when `12-driver-input.md` lands |
 | Brakes | `brakes.{fl,fr,rl,rr}` | Secondary `BRK 412°` in each tyre tile's top-right; neutral until a calibrated brake threshold exists |
-| ERS | `ers_pct` | Footer `ERS 62%` |
-| SC | `safety_car` | Footer `SC 0`; non-zero also paints the status bar background amber with the word `SAFETY CAR` / `VSC` |
+| ERS | `ers_pct` | Footer `⚡ BATTERY 62%` |
+| SC | `safety_car` | Footer `TRACK GREEN`; non-zero shows `⚠ SAFETY CAR` / `⚠ VSC` as a status-bar chip and paints the status bar background amber with the word `SAFETY CAR` / `VSC` |
 | Latency | `latency.trigger_to_speak_p99_ms`, `latency.packet_to_ws_p99_ms` | Footer, dim |
 | Protocol mismatch | close code 4001 / `v !== 1` | Banner replaced by red `PROTOCOL MISMATCH — RELOAD`; no reconnect |
 
@@ -278,7 +278,7 @@ Do not use ✓ or say "heard" based on `spoken` alone. If confirmed completion m
 add a separate audio-finished/interrupted event in a subsequent protocol change.
 
 1. **DISPATCHED**: on `call`, show the new P1/P2/P3 text immediately in the fixed,
-   large current area with priority bar, lap and `awaiting audio`. Only P1 is urgent
+   large current area with priority bar, `⚠ URGENT` / `● ACTION` / `◦ INFO`, lap and `… queued`. Only P1 is urgent
    enough to skip all transition effects. New lower-priority calls also replace
    current when dispatched; the old call moves to the dim previous line *only if its
    audio started*. A never-audible call remains in the log as dropped.
@@ -426,3 +426,21 @@ page scrolls, with notch-safe insets; the page also swipes left/right to change 
 (this sends the same `page` message as Action 4) and holds a screen wake lock where the
 browser allows. A P1 vibrates once on phones that support it. `prefers-reduced-motion:
 reduce` cuts every animation and transition to a single frame and hides the age hairline.
+
+## 12. Glance rules (M4 polish)
+
+Written for a driver who has never read this page.
+
+- **Contrast.** Key values use `--fg`. Supporting text uses `--soft` (#c8c8d0). `--dim` is for diagnostics only (lag, update rate, surface and brake temps).
+- **Words over codes.** `WEAR 4%`, `14 laps`, `UNDERCUT`, `2 WARNINGS`, `spare at finish`, `YOU GAIN 0.25s/lap` / `THEY GAIN …`. No `P1`, `UC`, `WS/s`, `L old`.
+- **Icons beside words, never alone.** ▲ ahead, ▼ behind, ⚠ warning, ✓ fine, ✗ failed, ⚡ battery, ◷ wait. Only symbols in common monospace/system fonts; no colour emoji.
+- **Position** is a white pill in the status bar; the tyre tile puts temperature and state (`103° OK`) on one line.
+- **Responsive.**
+
+| Viewport | Layout |
+|---|---|
+| ≥ 861 px tall, landscape | Fixed grid, no scroll |
+| 501–860 px tall, landscape (1366×768, 1024×768) | Same grid; zones keep a minimum height; page scrolls under pinned status + banner |
+| ≤ 1100 px wide, landscape | Status bar wraps |
+| ≤ 900 px wide, portrait (phones, tablets) | One column: status, banner, strategy, battle, tyres, fuel, log |
+| ≤ 500 px tall, landscape | Compact scroll, one-line banner |
