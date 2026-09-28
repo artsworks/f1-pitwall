@@ -607,6 +607,19 @@ async def _state_broadcast(
         await base.clock.sleep(period)
 
 
+def _handle_https_disconnect(loop: asyncio.AbstractEventLoop, context: dict[str, object]) -> None:
+    message = context.get("message")
+    if (
+        isinstance(context.get("exception"), ConnectionResetError)
+        and isinstance(message, str)
+        and message.startswith(
+            "Exception in callback _ProactorBasePipeTransport._call_connection_lost("
+        )
+    ):
+        return
+    loop.default_exception_handler(context)
+
+
 async def _serve(
     engine: Engine,
     hub: Hub,
@@ -619,6 +632,8 @@ async def _serve(
     from pitwall.server.app import create_app
 
     settings = store.current()
+    if sys.platform == "win32" and settings.connection.https_cert and settings.connection.https_key:
+        asyncio.get_running_loop().set_exception_handler(_handle_https_disconnect)
 
     def active() -> Engine:
         """Review mode rebuilds the engine on play/seek; follow the current one."""
