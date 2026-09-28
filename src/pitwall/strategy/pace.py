@@ -30,5 +30,5 @@ def pace_words(delta_s: float, same_band_s: float = 0.03) -> str:
     if not math.isfinite(delta_s):
         return ""
     if abs(delta_s) < same_band_s:
-        return "same pace"
+        return "on the same pace"
     return f"{amount_words(delta_s)} {'faster' if delta_s > 0 else 'slower'}"

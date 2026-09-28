@@ -127,6 +127,69 @@ def test_defend_episode_held_and_lost() -> None:
     assert [e.result for e in tr.drain()] == ["lost"]
 
 
+def _pos(**by_idx: int) -> tuple[int, ...]:
+    out = [0] * 6
+    for k, v in by_idx.items():
+        out[int(k[1:])] = v
+    return tuple(out)
+
+
+def test_pass_while_defending_names_the_car_passed() -> None:
+    tr, rates = BattleTracker(), BattleRates()
+    th = {"battle_result_confirm_s": 3.0}
+    # car 1 ahead within attack range, car 2 behind within defend range
+    tr.update(
+        _inp(now=0.0, gap_ahead_s=0.5, gap_behind_s=0.8, positions=_pos(c1=4, c2=6)), th, rates
+    )
+    passed = _inp(
+        now=10.0,
+        position=4,
+        ahead_idx=3,
+        behind_idx=1,
+        gap_ahead_s=4.0,
+        gap_behind_s=0.4,
+        positions=_pos(c1=5, c2=6, c3=3),
+    )
+    assert tr.update(passed, th, rates).result == ""  # not confirmed yet
+    b = tr.update(dataclasses.replace(passed, now=13.5), th, rates)
+    assert (b.result, b.result_rival_idx) == ("passed", 1)
+    # car 2 is still behind but no longer the car behind: no "held off" for him
+    assert [(e.kind, e.rival_idx, e.result) for e in tr.drain()] == [
+        ("defend", 2, "held"),
+        ("attack", 1, "passed"),
+    ]
+
+
+def test_pass_swapped_straight_back_is_not_called() -> None:
+    tr, rates = BattleTracker(), BattleRates()
+    th = {"battle_result_confirm_s": 3.0}
+    tr.update(_inp(now=0.0, gap_ahead_s=0.5, positions=_pos(c1=4)), th, rates)
+    tr.update(
+        _inp(
+            now=5.0,
+            position=4,
+            ahead_idx=3,
+            behind_idx=1,
+            gap_ahead_s=3.0,
+            gap_behind_s=0.2,
+            positions=_pos(c1=5, c3=3),
+        ),
+        th,
+        rates,
+    )
+    back = _inp(now=6.0, position=5, ahead_idx=1, gap_ahead_s=0.2, positions=_pos(c1=4))
+    tr.update(back, th, rates)
+    b = tr.update(dataclasses.replace(back, now=12.0), th, rates)
+    assert b.result == "" and tr.drain() == []
+
+
+def test_rival_pitting_is_not_a_result() -> None:
+    tr, rates = BattleTracker(), BattleRates()
+    tr.update(_inp(now=0.0, gap_behind_s=0.6), TH, rates)
+    b = tr.update(_inp(now=30.0, behind_idx=4, gap_behind_s=6.0, pitting=frozenset({2})), TH, rates)
+    assert b.result == "" and tr.drain() == []
+
+
 def test_short_failed_attack_not_learned() -> None:
     tr = BattleTracker()
     tr.update(_inp(now=0.0, gap_ahead_s=0.9), TH, BattleRates())
@@ -225,3 +288,25 @@ def test_replay_defend_call(battle_runs) -> None:
 def test_replay_free_air_is_quiet(battle_runs) -> None:
     calls, _ = battle_runs["free"]
     assert not {i for i in _ids(calls) if i and i.startswith("battle_")}
+
+
+def test_repeated_swaps_become_one_fight_call() -> None:
+    tr = BattleTracker()
+    th = {"battle_swap_window_s": 120.0, "battle_swap_count": 3, "battle_scrap_count": 4}
+    for t, res in ((0.0, "passed"), (20.0, "lost")):
+        tr._announce(Episode("attack", 7, 10, 10, True, res), t, th)
+        assert tr.result == res
+    tr._announce(Episode("attack", 7, 11, 11, True, "passed"), 40.0, th)
+    assert (tr.result, tr.result_rival) == ("swap_ahead", 7)
+    tr._announce(Episode("defend", 7, 11, 11, True, "lost"), 60.0, th)
+    assert tr.result == "swap_behind"
+    tr._announce(Episode("attack", 7, 20, 20, True, "passed"), 500.0, th)
+    assert tr.result == "passed"  # old swaps aged out
+
+
+def test_swaps_with_several_cars_are_a_scrap() -> None:
+    tr = BattleTracker()
+    th = {"battle_swap_window_s": 120.0, "battle_swap_count": 3, "battle_scrap_count": 4}
+    for t, (rival, res) in enumerate(((3, "passed"), (4, "lost"), (3, "lost"), (5, "passed"))):
+        tr._announce(Episode("attack", rival, 10, 10, False, res), t * 10.0, th)
+    assert tr.result == "scrap"

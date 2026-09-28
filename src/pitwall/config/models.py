@@ -180,6 +180,10 @@ class MenuItemModel(BaseModel):
     answer: str = ""
     action: MenuAction | None = None
     topic: str = ""  # opinions: items sharing a topic replace each other (e.g. "balance")
+    # Rule-style expressions on the snapshot at menu open: hide unless
+    # `show_when`, float to the top while `rank_when` (YAML order otherwise).
+    show_when: str = ""
+    rank_when: str = ""
     # case -> reply templates (variants rotate). Opinions and actions use "default".
     replies: dict[str, list[str]] = Field(default_factory=dict)
 
@@ -244,6 +248,15 @@ class EscalationModel(BaseModel):
     say: list[str]
 
 
+class SeverityModel(BaseModel):
+    """Phrases (and optionally a more urgent priority) used while `when` holds;
+    the first matching tier wins over the base `say` pool."""
+
+    when: str
+    say: list[str]
+    priority: Literal[1, 2, 3] | None = None
+
+
 class RuleDefModel(BaseModel):
     """Validated rule definition (rules.RuleDef mirrors this at runtime)."""
 
@@ -260,6 +273,7 @@ class RuleDefModel(BaseModel):
     requires: list[str] = Field(default_factory=list)
     say: str | list[str] = ""
     escalate: list[EscalationModel] = Field(default_factory=list)
+    severity: list[SeverityModel] = Field(default_factory=list)
     repeat_window_s: float = 600.0
     screen_only: bool = False
     tags: list[str] = Field(default_factory=list)

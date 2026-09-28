@@ -52,6 +52,8 @@ class BattleInputs:
     behind_age: int
     drs_available: bool
     attack_gap_s: float  # mindset attack_window_s
+    positions: tuple[int, ...] = ()  # car_position per car idx (0 = unknown)
+    pitting: frozenset[int] = frozenset()  # car idxs in the pit lane
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,24 +152,48 @@ def defend_result(start_pos: int, pos: int, rival: int, ahead_idx: int) -> str:
 
 
 @dataclass
+class _Open:
+    kind: str  # attack | defend
+    rival: int
+    start_lap: int
+    start_pos: int
+    start_t: float
+    drs: bool = False
+
+
+@dataclass
+class _Pending:
+    episode: Episode
+    t: float
+
+
+@dataclass
 class BattleTracker:
-    """Mode with hysteresis plus attack / defend episode bookkeeping."""
+    """Mode with hysteresis plus independent attack (car ahead) and defend
+    (car behind) episodes. A pass or a lost place is only reported once it
+    has stuck for battle_result_confirm_s, and always names the car of the
+    episode that produced it."""
 
     mode: str = FREE
     since_lap: int = 0
-    kind: str = ""
-    rival: int = -1
-    start_lap: int = 0
-    start_pos: int = 0
-    start_t: float = 0.0
-    drs: bool = False
+    attack: _Open | None = None
+    defend: _Open | None = None
+    pending: list[_Pending] = field(default_factory=list)
+    undone_t: dict[int, float] = field(default_factory=dict)  # rival -> swap-back time
+    swaps: list[tuple[float, int]] = field(default_factory=list)  # (t, rival) per place change
+    scrap_t: float = -math.inf
     result: str = ""
     result_t: float = -math.inf
     result_rival: int = -1
     episodes: list[Episode] = field(default_factory=list)
 
     def reset(self) -> None:
-        self.mode, self.since_lap, self.kind, self.rival = FREE, 0, "", -1
+        self.mode, self.since_lap = FREE, 0
+        self.attack = self.defend = None
+        self.pending.clear()
+        self.undone_t.clear()
+        self.swaps.clear()
+        self.scrap_t = -math.inf
         self.result, self.result_t, self.result_rival = "", -math.inf, -1
         self.episodes.clear()
 
@@ -175,34 +201,127 @@ class BattleTracker:
         out, self.episodes = self.episodes, []
         return out
 
-    def _close(self, inp: BattleInputs, th: Mapping[str, object]) -> None:
-        if not self.kind:
+    @staticmethod
+    def _rival_pos(inp: BattleInputs, rival: int) -> int:
+        return inp.positions[rival] if 0 <= rival < len(inp.positions) else 0
+
+    def _outcome(self, ep: _Open, inp: BattleInputs) -> str:
+        rp = self._rival_pos(inp, ep.rival)
+        if ep.kind == "attack":
+            if rp and inp.position:
+                return "passed" if rp > inp.position else "failed"
+            return attack_result(
+                ep.start_pos, inp.position, ep.rival, inp.ahead_idx, inp.behind_idx
+            )
+        if rp and inp.position:
+            return "lost" if rp < inp.position else "held"
+        return defend_result(ep.start_pos, inp.position, ep.rival, inp.ahead_idx)
+
+    def _announce(
+        self,
+        ep: Episode,
+        now: float,
+        th: Mapping[str, object] | None = None,
+        last_lap: bool = False,
+    ) -> None:
+        res = ep.result
+        if res in ("passed", "lost") and th is not None:
+            window = _th(th, "battle_swap_window_s", 120.0)
+            self.swaps = [(t, r) for t, r in self.swaps if now - t <= window]
+            self.swaps.append((now, ep.rival_idx))
+            same = sum(1 for _, r in self.swaps if r == ep.rival_idx)
+            rivals = {r for _, r in self.swaps}
+            if same >= _th(th, "battle_swap_count", 3):
+                res = "swap_ahead" if res == "passed" else "swap_behind"
+            elif (
+                len(rivals) >= 2
+                and len(self.swaps) >= _th(th, "battle_scrap_count", 4)
+                and now - self.scrap_t > window
+            ):
+                res, self.scrap_t = "scrap", now
+            if last_lap:
+                res = ep.result
+        self.result, self.result_t, self.result_rival = res, now, ep.rival_idx
+
+    def _close(self, ep: _Open, inp: BattleInputs, th: Mapping[str, object]) -> None:
+        if ep.rival in inp.pitting:
+            return  # he boxed: neither a pass nor a hold
+        res = self._outcome(ep, inp)
+        done = Episode(ep.kind, ep.rival, ep.start_lap, inp.lap_num, ep.drs, res)
+        if res in ("passed", "lost"):
+            wait = _th(th, "battle_result_confirm_s", 0.0)
+            if inp.now - self.undone_t.get(ep.rival, -math.inf) > wait:
+                self.pending.append(_Pending(done, inp.now))
             return
-        if self.kind == "attack":
-            res = attack_result(
-                self.start_pos, inp.position, self.rival, inp.ahead_idx, inp.behind_idx
-            )
-        else:
-            res = defend_result(self.start_pos, inp.position, self.rival, inp.ahead_idx)
-        long_enough = inp.now - self.start_t >= _th(th, "battle_min_episode_s", 5.0)
-        if long_enough or res in ("passed", "lost"):
-            self.episodes.append(
-                Episode(self.kind, self.rival, self.start_lap, inp.lap_num, self.drs, res)
-            )
-            self.result, self.result_t, self.result_rival = res, inp.now, self.rival
-        self.kind, self.rival, self.drs = "", -1, False
+        if inp.now - ep.start_t < _th(th, "battle_min_episode_s", 5.0):
+            return
+        self.episodes.append(done)
+        # "Held" only when he dropped out of range still directly behind us,
+        # not when a place change elsewhere swapped the car behind.
+        if res == "held" and inp.behind_idx == ep.rival:
+            self._announce(done, inp.now)
+
+    def _undone(self, ep: Episode, inp: BattleInputs) -> bool:
+        rp = self._rival_pos(inp, ep.rival_idx)
+        if not (rp and inp.position):
+            return False
+        return (ep.result == "passed" and rp < inp.position) or (
+            ep.result == "lost" and rp > inp.position
+        )
+
+    def _confirm(self, inp: BattleInputs, th: Mapping[str, object]) -> None:
+        wait = _th(th, "battle_result_confirm_s", 0.0)
+        # swapped straight back: that rival's pending results are noise
+        undone = {p.episode.rival_idx for p in self.pending if self._undone(p.episode, inp)}
+        for r in undone:
+            self.undone_t[r] = inp.now
+        keep: list[_Pending] = []
+        for p in self.pending:
+            if p.episode.rival_idx in undone:
+                continue
+            if inp.now - p.t >= wait:
+                self.episodes.append(p.episode)
+                self._announce(p.episode, inp.now, th, inp.laps_remaining <= 1)
+            else:
+                keep.append(p)
+        self.pending = keep
+
+    def _track(
+        self,
+        cur: _Open | None,
+        kind: str,
+        rival: int,
+        inp: BattleInputs,
+        th: Mapping[str, object],
+    ) -> _Open | None:
+        if cur is not None and cur.rival != rival:
+            self._close(cur, inp, th)
+            cur = None
+        if cur is None and rival >= 0:
+            cur = _Open(kind, rival, inp.lap_num, inp.position, inp.now)
+        return cur
 
     def update(self, inp: BattleInputs, th: Mapping[str, object], rates: BattleRates) -> Battle:
         mode = classify(inp, th, self.mode)
-        target = inp.ahead_idx if mode == ATTACKING else inp.behind_idx if mode == DEFENDING else -1
-        kind = "attack" if mode == ATTACKING else "defend" if mode == DEFENDING else ""
-        if self.kind and (kind != self.kind or target != self.rival):
-            self._close(inp, th)
-        if kind and not self.kind:
-            self.kind, self.rival, self.start_lap = kind, target, inp.lap_num
-            self.start_pos, self.start_t = inp.position, inp.now
-        if self.kind == "attack" and inp.drs_available:
-            self.drs = True
+        hyst = _th(th, "gap_hysteresis_s", 0.3)
+        a_gap = inp.attack_gap_s + (hyst if self.attack is not None else 0.0)
+        d_gap = _th(th, "battle_defend_gap_s", 1.0) + (hyst if self.defend is not None else 0.0)
+        a_rival = (
+            inp.ahead_idx
+            if inp.ahead_idx >= 0 and _finite(inp.gap_ahead_s) and inp.gap_ahead_s <= a_gap
+            else -1
+        )
+        d_rival = (
+            inp.behind_idx
+            if inp.behind_idx >= 0 and _finite(inp.gap_behind_s) and inp.gap_behind_s <= d_gap
+            else -1
+        )
+        self._confirm(inp, th)
+        self.attack = self._track(self.attack, "attack", a_rival, inp, th)
+        self.defend = self._track(self.defend, "defend", d_rival, inp, th)
+        if self.attack is not None and inp.drs_available:
+            self.attack.drs = True
+        self._confirm(inp, th)
         if mode != self.mode:
             self.mode, self.since_lap = mode, inp.lap_num
 

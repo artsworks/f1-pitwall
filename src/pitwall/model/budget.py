@@ -34,12 +34,15 @@ def fuel_budget(
     fuel_in_tank_kg: float,
     per_lap_kg: float,
     source: str,
+    lap_done: float = 0.0,
 ) -> FuelBudget:
+    """`lap_done` is the fraction of the current lap already driven (0..1)."""
     fuel_laps = fuel_in_tank_kg / per_lap_kg if per_lap_kg > 0 else math.inf
+    to_go = max(0.0, laps_remaining - min(1.0, max(0.0, lap_done))) if laps_remaining else 0.0
     return FuelBudget(
         laps_remaining=laps_remaining,
         fuel_laps=fuel_laps,
-        margin_laps=fuel_laps - laps_remaining,
+        margin_laps=fuel_laps - to_go,
         per_lap_kg=per_lap_kg,
         source=source,
     )

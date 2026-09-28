@@ -368,3 +368,27 @@ def test_shortcut_validation() -> None:
     inp = InputSettings(shortcuts=[{"bit": 1, "item": "nope"}])
     menu = MenuSettings(items=[MenuItemModel(id="pit", label="Pit now?")])
     assert validate_shortcuts(inp, menu) == ["input.shortcuts: unknown menu item 'nope'"]
+
+
+def test_menu_is_situational() -> None:
+    items = [
+        MenuItemModel(id="pit", label="Pit", show_when="session_kind == 'race'"),
+        MenuItemModel(
+            id="fight",
+            label="Fight",
+            show_when="session_kind == 'race'",
+            rank_when="battle_mode == 'defending'",
+        ),
+        MenuItemModel(id="cool", label="Cool", show_when="session_kind != 'race'"),
+        MenuItemModel(id="silent", label="Silent"),
+    ]
+    settings = MenuSettings(items=items)
+    menu = DriverMenu()
+    menu.step(settings, 1, 0.0, {"session_kind": "race", "battle_mode": "defending"})
+    assert menu.payload(settings, 0.0)["items"] == ["Fight", "Pit", "Silent"]
+    # frozen while open even if the situation changes
+    item = menu.step(settings, 1, 0.5, {"session_kind": "practice", "battle_mode": ""})
+    assert item is not None and item.id == "pit"
+    menu.close()
+    menu.step(settings, 1, 1.0, {"session_kind": "practice", "battle_mode": ""})
+    assert menu.payload(settings, 1.0)["items"] == ["Cool", "Silent"]

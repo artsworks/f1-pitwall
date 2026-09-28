@@ -8,7 +8,7 @@ from pitwall.strategy.pace import pace_words
 @pytest.mark.parametrize(
     ("d", "words"),
     [
-        (0.01, "same pace"),
+        (0.01, "on the same pace"),
         (0.04, "4 hundredths faster"),
         (0.12, "a tenth faster"),
         (-0.31, "three tenths slower"),

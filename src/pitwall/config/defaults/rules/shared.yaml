@@ -249,6 +249,32 @@ rules:
       - "Car coming, {traffic_behind_s:.1f} seconds. Hold it there, let it through."
       - "Wait, wait. Traffic behind, {traffic_behind_s:.1f} seconds. Stay put."
       - "Hold the car. One coming through, {traffic_behind_s:.1f} seconds."
+  # A slide the driver caught without spinning.
+  - id: saved_moment
+    sessions: [practice, qualifying, race]
+    priority: 3
+    when: "saved and phase != 'finished'"
+    clear_when: "not saved"
+    requires: [motion_ex]
+    cooldown_s: 30
+    cooldown_group: incident
+    say:
+      - "Oh, nearly lost it there. Good catch"
+      - "Ooh, that was a moment. Nicely saved"
+      - "Big slide, well caught. Stay calm"
+      - "Whoa, twitchy there. Good hands"
+      - "Rear stepped out, you caught it. Keep going"
+    severity:
+      - when: "save_peak_deg >= 25"
+        say:
+          - "Wow, that was nearly around. Brilliant save"
+          - "How did you keep that? Massive save. Breathe, reset"
+          - "That was so close to a spin. Great reactions, ease the rears for a bit"
+    escalate:
+      - after: 3
+        say:
+          - "Another moment, that's {saves} now. Rears are on the edge, smoother on the throttle"
+          - "Caught it again, but that's {saves}. Short-shift out of the slow corners"
   - id: spun_rejoin
     sessions: [practice, qualifying, race]
     priority: 1

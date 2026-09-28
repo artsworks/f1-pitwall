@@ -11,9 +11,33 @@ import string
 from collections.abc import Callable, Mapping
 
 from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
+from pitwall.rules.expr import ExprError, Predicate
 from pitwall.state.session import Snapshot
 
 Answer = tuple[str, dict[str, str]]  # (case, template values)
+
+
+_PREDICATES: dict[str, Predicate] = {}
+
+
+def _holds(source: str, ns: Mapping[str, object]) -> bool:
+    pred = _PREDICATES.get(source)
+    if pred is None:
+        pred = _PREDICATES[source] = Predicate(source)
+    try:
+        return bool(pred(ns))
+    except Exception:
+        return False
+
+
+def situational(items: list[MenuItemModel], ns: Mapping[str, object] | None) -> list[MenuItemModel]:
+    """Items relevant to the situation in `ns` (a rule namespace), most
+    relevant first. Everything, in YAML order, when `ns` is None."""
+    if ns is None:
+        return list(items)
+    shown = [i for i in items if not i.show_when or _holds(i.show_when, ns)]
+    top = [i for i in shown if i.rank_when and _holds(i.rank_when, ns)]
+    return top + [i for i in shown if i not in top] or list(items)
 
 
 class DriverMenu:
@@ -21,12 +45,22 @@ class DriverMenu:
         self.open = False
         self.index = 0
         self.last_t = 0.0
+        self.items: list[MenuItemModel] = []
 
-    def step(self, settings: MenuSettings, delta: int, t: float) -> MenuItemModel | None:
-        """Open (Down -> first item, Up -> last) or move the highlight."""
-        items = settings.items
-        if not settings.enabled or not items:
+    def step(
+        self,
+        settings: MenuSettings,
+        delta: int,
+        t: float,
+        ns: Mapping[str, object] | None = None,
+    ) -> MenuItemModel | None:
+        """Open (Down -> first item, Up -> last) or move the highlight. The
+        item list is picked from `ns` on open and frozen while open."""
+        if not settings.enabled or not settings.items:
             return None
+        if not self.open:
+            self.items = situational(settings.items, ns)
+        items = self.items
         n = len(items)
         if not self.open:
             self.open = True
@@ -39,9 +73,9 @@ class DriverMenu:
         return items[self.index]
 
     def selected(self, settings: MenuSettings) -> MenuItemModel | None:
-        if not self.open or not settings.items:
+        if not self.open or not self.items:
             return None
-        return settings.items[min(self.index, len(settings.items) - 1)]
+        return self.items[min(self.index, len(self.items) - 1)]
 
     def close(self) -> None:
         self.open = False
@@ -50,13 +84,13 @@ class DriverMenu:
         return self.open and settings.timeout_s > 0 and now - self.last_t >= settings.timeout_s
 
     def payload(self, settings: MenuSettings, now: float) -> dict[str, object]:
-        if not self.open or not settings.items:
+        if not self.open or not self.items:
             return {"open": False}
         left = settings.timeout_s - (now - self.last_t) if settings.timeout_s > 0 else None
         return {
             "open": True,
-            "index": min(self.index, len(settings.items) - 1),
-            "items": [i.label for i in settings.items],
+            "index": min(self.index, len(self.items) - 1),
+            "items": [i.label for i in self.items],
             "left_s": max(0.0, round(left, 1)) if left is not None else None,
             "timeout_s": settings.timeout_s,
         }
@@ -378,6 +412,12 @@ def validate(settings: MenuSettings) -> list[str]:
         if item.kind != "action" and (item.answer or item.id) not in ANSWERS:
             if not item.replies.get("default"):
                 errors.append(f"{where}: no answer handler and no default reply")
+        for src in (item.show_when, item.rank_when):
+            if src:
+                try:
+                    Predicate(src)
+                except ExprError as e:
+                    errors.append(f"{where}: {e}")
         if item.kind == "opinion" and not item.topic:
             errors.append(f"{where}: opinion needs a `topic`")
         for case, pool in item.replies.items():

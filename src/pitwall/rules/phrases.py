@@ -2,9 +2,11 @@
 
 A rule's `say` can be one template or a pool of variants, and `escalate` tiers
 swap in a different pool once the same call has triggered N times inside
-`repeat_window_s`. The first call of a pool is always its first variant (the
-plain one); after that a shuffle bag walks every variant before any repeats and
-never says the same line twice in a row. The bag is seeded by rule id, so a
+`repeat_window_s`. `severity` tiers (first matching `when`) replace the
+pool while the situation is worse than the plain call. The first call of a
+pool is always its first variant (the plain one); after that a shuffle bag
+walks every variant before any repeats and never says the same line twice in
+a row. The bag is seeded by rule id, so a
 replay picks the same words as the live session did.
 """
 
@@ -33,15 +35,17 @@ class PhraseBook:
             self._triggers.popleft()
         return len(self._triggers)
 
-    def pool(self, repeat: int) -> tuple[int, Sequence[str]]:
+    def pool(self, repeat: int, severity: int = 0) -> tuple[int, Sequence[str]]:
+        if 0 < severity <= len(self.defn.severity):
+            return -severity, self.defn.severity[severity - 1].say
         tier, pool = 0, self.defn.say_pool()
         for i, esc in enumerate(sorted(self.defn.escalate, key=lambda e: e.after), start=1):
             if repeat >= esc.after and esc.say:
                 tier, pool = i, esc.say
         return tier, pool
 
-    def pick(self, repeat: int) -> str:
-        tier, pool = self.pool(repeat)
+    def pick(self, repeat: int, severity: int = 0) -> str:
+        tier, pool = self.pool(repeat, severity)
         if not pool:
             return ""
         if len(pool) == 1:

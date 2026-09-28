@@ -185,6 +185,11 @@ or `id`) picks the case from the current snapshot and fills the placeholders; va
 rotate per item and case. No language model is involved (ADR 0008). `pitwall rules
 check` validates ids, handlers and placeholders.
 
+Items may also carry `show_when` / `rank_when` rule expressions evaluated against the
+snapshot when the menu opens: items whose `show_when` fails are hidden, items whose
+`rank_when` holds move to the top, and the list stays frozen while the menu is open.
+There is no "Next page" item: wheel-right (UDP Action 4) cycles dashboard pages.
+
 | Item | Kind | Cases (from the snapshot) | Example reply |
 |---|---|---|---|
 | Tyres gone? | question | gone / fading / ok / unknown (`laps_of_pace`, `wear_mean_pct`) | "Fading. About 3 laps of pace left." |
@@ -194,7 +199,7 @@ check` validates ids, handlers and placeholders.
 | Fuel OK? | question | short / tight / ok / spare / unknown (`fuel_margin_laps`) | "Short by 0.4 laps. Lift and coast." |
 | Plan? | question | box_now / stop / to_end / unknown | "Box lap 26. Window open soon." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / attack / push | "Push. 0.8 to the car ahead." |
-| Rain coming? | question | crossover / coming / chance / dry (`rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent in ten." |
+| Rain coming? | question | crossover / coming / chance / dry (forecast rain *chance*, `rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent chance in ten." |
 | Race stat | question | fuel_short / tyres_gone / energy / box_now / pit_soon / position / unknown (first that applies) | "P4, 12 to go. Best lap 1:32.4." |
 | Fight | question | both / ahead / behind / none (gap, gap trend, laps to catch, model pace) | "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7. Russell 0.9 behind, pulling away 0.2 a lap." |
 | Radio calls | action | default (`budget`) | cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (4 / 8 / 12 / 20), overriding the mindset's `call_budget_per_lap`: "Copy, up to 20 calls a lap." |
@@ -202,7 +207,7 @@ check` validates ids, handlers and placeholders.
 | Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
 | Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |
 | Radio silent | action | — | the usual silent on/off confirmation |
-| Next page | action | — | none (the page changes) |
+| Cooldown lap | action | — | marks this lap as a cooldown lap (one lap; auto-detection still runs) |
 
 ### Opinions and records
 

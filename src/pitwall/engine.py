@@ -13,6 +13,7 @@ import dataclasses
 import math
 import time
 import traceback
+from collections.abc import Mapping
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -30,7 +31,8 @@ from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_b
 from pitwall.model.deg import DegFit, Prior, fit_stint, laps_of_pace, resolve_prior
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
-from pitwall.rules.engine import RuleEngine
+from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
+from pitwall.rules.expr import namespace_data
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
@@ -113,6 +115,19 @@ def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
 _NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
 
 
+def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
+    """Pace words for a rival (+ = he is faster): last lap against ours when
+    both are representative, else the measured closing rate."""
+    if not 0 <= idx < len(snap.cars):
+        return ""
+    his = snap.cars[idx].last_lap_time_ms
+    if his and snap.player_last_lap_ms:
+        delta_s = (snap.player_last_lap_ms - his) / 1000.0
+        if abs(delta_s) <= 1.5:  # beyond that one of the laps was a pit or incident lap
+            return pace_words(delta_s)
+    return pace_words(closing_s)
+
+
 class Engine:
     def __init__(
         self,
@@ -180,7 +195,7 @@ class Engine:
         self._sc_pit_loss_s = 0.0
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
-        self._plan_key: tuple[int, int, bool, bool, int] | None = None
+        self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
         self._stops_done = 0
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
@@ -358,7 +373,9 @@ class Engine:
                 kind = f"menu_{op}"
         if kind in ("menu_up", "menu_down"):
             was_open = self.menu.open
-            item = self.menu.step(settings, -1 if kind == "menu_up" else 1, p.t)
+            item = self.menu.step(
+                settings, -1 if kind == "menu_up" else 1, p.t, self._menu_ns(snapshot)
+            )
             if item is None:
                 return True
             if not was_open:
@@ -378,6 +395,25 @@ class Engine:
             self._menu_close(p.t, snapshot, "cancel")
             return True
         return False
+
+    def _plan_thresholds(self, snap: Snapshot) -> Mapping[str, object]:
+        th = self.store.current().thresholds
+        if not snap.is_sprint:
+            return th
+        return {**th, "plan_two_compound_rule": 0}  # no mandatory stop in a sprint
+
+    def _menu_ns(self, snapshot: Snapshot) -> dict[str, Any]:
+        cfg = self.store.current()
+        limits = cfg.engine.staleness_s
+        ns = namespace_data(
+            snapshot,
+            thresholds=cfg.thresholds,
+            mode=cfg.resolved_mindset(),
+            staleness_age=snapshot.age,
+            staleness_limit=lambda n: limits.get(n, STALENESS_DEFAULT_S),
+        )
+        ns["manual_cooldown"] = self._manual_cooldown
+        return ns
 
     def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
         if not self.menu.open:
@@ -800,6 +836,9 @@ class Engine:
             fuel_in_tank_kg=state.fuel_in_tank,
             per_lap_kg=per_lap_kg,
             source=fuel_source,
+            lap_done=(
+                state.lap_distance / state.track_length_m if state.track_length_m > 0 else 0.0
+            ),
         )
         self.energy_budget = energy_budget(
             store_j=state.ers_store_energy_j,
@@ -987,8 +1026,10 @@ class Engine:
             self._used_compounds.add(snap.tyre_visual)
             neutral = phase in ("sc", "vsc")
             cheap = pit.plan == "cheap_stop"
-            key = (snap.lap_num, self._stops_done, neutral, cheap, snap.tyre_visual)
+            key = (snap.lap_num, self._stops_done, neutral, cheap, snap.tyre_visual, snap.is_sprint)
             if key != self._plan_key:
+                if self._plan_key is not None and self._plan_key[-1] != snap.is_sprint:
+                    tracker.reset()  # the weekend format arrived: a fresh plan, not a switch
                 self._plan_key = key
                 lop = snap.laps_of_pace
                 cliff = self._th("tyre_cliff_ms", 1500)
@@ -1010,7 +1051,7 @@ class Engine:
                         green_loss_s=self._green_pit_loss_s or snap.pit_loss_s,
                         sc_loss_s=self._sc_pit_loss_s or snap.pit_loss_s,
                     ),
-                    self.store.current().thresholds,
+                    self._plan_thresholds(snap),
                     stops_done=self._stops_done,
                     neutralised=neutral,
                     cheap_stop=cheap,
@@ -1091,6 +1132,8 @@ class Engine:
             behind_age=snap.rival_behind_age,
             drs_available=snap.drs_available,
             attack_gap_s=float(attack) if isinstance(attack, int | float) else 1.0,
+            positions=tuple(c.car_position for c in snap.cars),
+            pitting=frozenset(i for i, c in enumerate(snap.cars) if c.pit_status != 0),
         )
         tracker = self.battle_tracker
         b: Battle = tracker.update(
@@ -1116,8 +1159,8 @@ class Engine:
             battle_result=b.result,
             battle_result_recent=b.result_recent,
             battle_result_name=name,
-            battle_pace_ahead=pace_words(-b.closing_ahead_s) if snap.rival_ahead_idx >= 0 else "",
-            battle_pace_behind=pace_words(b.closing_behind_s) if snap.rival_behind_idx >= 0 else "",
+            battle_pace_ahead=_rival_pace(snap, snap.rival_ahead_idx, -b.closing_ahead_s),
+            battle_pace_behind=_rival_pace(snap, snap.rival_behind_idx, b.closing_behind_s),
         )
 
     def _persist_episode(self, snap: Snapshot, ep: Episode) -> None:

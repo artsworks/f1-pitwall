@@ -35,6 +35,8 @@ from pitwall.state.driving import (
     WHEEL_NAMES,
     BoostTimer,
     LockupDetector,
+    OffTrackTracker,
+    SaveDetector,
     SpinDetector,
     YellowTracker,
 )
@@ -237,6 +239,12 @@ class Snapshot:
     lockup_spot_laps: int = 0  # earlier laps that locked up in this same braking zone
     spun: bool = False  # for a few seconds after the car spins
     spins: int = 0  # this session
+    saved: bool = False  # for a few seconds after a slide the driver caught
+    saves: int = 0  # this session
+    save_peak_deg: float = 0.0  # sideslip at the worst of the last save
+    off_track_lost: int = 0  # places lost to the last trip off track, for a few seconds
+    off_track_recovered: bool = False  # those places came back on the same lap
+    is_sprint: bool = False  # race session with another race later in the weekend
     yellow_here: bool = False
     yellow_ahead_m: float = math.inf
     yellow_ahead_sector: int = 0
@@ -578,6 +586,7 @@ class SessionState:
         self.session_type = 0
         self.track_id = -1
         self.total_laps = 0
+        self.weekend_structure: tuple[int, ...] = ()
         self.safety_car_status = 0
         self.session_time_left = 0.0
         self.session_duration = 0.0
@@ -640,6 +649,8 @@ class SessionState:
 
         self.lockups = LockupDetector()
         self.spins = SpinDetector()
+        self.saves = SaveDetector()
+        self.off_track = OffTrackTracker()
         self.boost = BoostTimer()
         self.yellows = YellowTracker()
 
@@ -813,6 +824,7 @@ class SessionState:
                 st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num, dist
             )
             self.spins.update(st, pkt.local_velocity)
+            self.saves.update(st, pkt.local_velocity)
 
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
@@ -828,6 +840,8 @@ class SessionState:
             ema.reset()
         self.lockups.reset()
         self.spins.reset()
+        self.saves.reset()
+        self.off_track.reset()
         self.boost.reset()
         self.lap_acc.note_flashback()
         self.run.note_rewind()
@@ -844,6 +858,7 @@ class SessionState:
         self.session_type = pkt.session_type
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
+        self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
         self.safety_car_status = pkt.safety_car_status
         self.session_time_left = float(pkt.session_time_left)
         self.session_duration = float(pkt.session_duration)
@@ -887,6 +902,9 @@ class SessionState:
             self.s3_entry_coldest_c = min(self._ema_or_zero(self.tyre_inner_fast).as_tuple())
         self.sector = car.sector
         self.position = car.car_position
+        self.off_track.update_position(
+            car.car_position, car.current_lap_num, car.pit_status != PitStatus.NONE
+        )
         if car.driver_status == DriverStatus.OUT_LAP and self.driver_status != DriverStatus.OUT_LAP:
             self.run_temps.reset()
             self._pressure_base = None
@@ -975,6 +993,12 @@ class SessionState:
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
             )
+
+    def _is_sprint(self) -> bool:
+        if self._kind() != "race" or self.session_type not in self.weekend_structure:
+            return False
+        later = self.weekend_structure[self.weekend_structure.index(self.session_type) + 1 :]
+        return any(15 <= t <= 17 for t in later)
 
     def _kind(self) -> str:
         try:
@@ -1346,6 +1370,7 @@ class SessionState:
         self.tyre_inner = car.tyres_inner_temperature
         self.brake_temp = car.brakes_temperature
         self.speed_kmh = float(car.speed)
+        self.off_track.update_surface(st, car.surface_type.as_tuple())
         self.throttle = car.throttle
         self.brake = car.brake
         if car.throttle >= 0.95 and car.brake == 0:
@@ -1738,6 +1763,12 @@ class SessionState:
             lockup_spot_laps=self.lockups.spot_laps,
             spun=self.spins.recent(st),
             spins=self.spins.count,
+            saved=self.saves.recent(st) and not self.spins.recent(st),
+            saves=self.saves.count,
+            save_peak_deg=round(self.saves.peak_deg),
+            off_track_lost=self.off_track.lost_recent(st),
+            off_track_recovered=self.off_track.recovered_recent(st),
+            is_sprint=self._is_sprint(),
             yellow_here=yellow.here,
             yellow_ahead_m=_round50(yellow.ahead_m),
             yellow_ahead_sector=yellow.ahead_sector,

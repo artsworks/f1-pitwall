@@ -159,6 +159,12 @@ thresholds:
   battle_closing_min_s: 0.2     # closing rate (s/lap) that counts as a trend
   battle_min_episode_s: 5.0     # shorter attack/defend spells don't train the pass model
   battle_result_hold_s: 20.0    # "passed / held / lost" stays reportable this long
+  battle_result_confirm_s: 3.0  # a pass / lost place must stick this long before it's called
+  plan_announce_after_m: 300.0  # first plan call once the weekend format and grid order are known
+  fuel_final_call_m: 1500.0     # no fuel calls on the last lap inside this distance to the flag
+  battle_swap_window_s: 120.0   # place changes inside this window count towards a swap fight
+  battle_swap_count: 3          # this many with one rival: "trading places", not pass/lost calls
+  battle_scrap_count: 4         # this many across 2+ rivals: multi-car scrap
   battle_prior_weight: 4.0      # pseudo-episodes behind the pass/hold priors
   battle_pass_drs_prior: 0.35
   battle_pass_nodrs_prior: 0.15

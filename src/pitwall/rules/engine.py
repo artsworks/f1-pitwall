@@ -78,6 +78,7 @@ class Rule:
         self.armed = True
         self.fires_this_stint = 0
         self.phrases = PhraseBook(defn)
+        self.severity = [Predicate(t.when) for t in defn.severity]
 
     def still_true(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         if self._still_true is None:
@@ -160,7 +161,17 @@ class RuleEngine:
                 result.suppressed.append(Suppressed(rule, "max_per_stint"))
                 continue
             repeat = rule.phrases.trigger(snapshot.now)
-            template = rule.phrases.pick(repeat)
+            severity = 0
+            for i, pred in enumerate(rule.severity, start=1):
+                try:
+                    if pred(ns):
+                        severity = i
+                        break
+                except Exception:
+                    continue
+            template = rule.phrases.pick(repeat, severity)
+            tier_priority = d.severity[severity - 1].priority if severity else None
+            priority = tier_priority or d.priority
             try:
                 text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
@@ -181,7 +192,7 @@ class RuleEngine:
                 Candidate(
                     rule=rule,
                     text=text,
-                    priority=d.priority,
+                    priority=priority,
                     tags=list(d.tags),
                     still_true=still_true,
                     inputs=inputs,

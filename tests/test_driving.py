@@ -9,7 +9,14 @@ from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
-from pitwall.state.driving import BoostTimer, LockupDetector, SpinDetector, YellowTracker
+from pitwall.state.driving import (
+    BoostTimer,
+    LockupDetector,
+    OffTrackTracker,
+    SaveDetector,
+    SpinDetector,
+    YellowTracker,
+)
 from pitwall.state.session import SessionState, Snapshot
 
 from .synth import pack_packet
@@ -476,3 +483,56 @@ def test_blue_flag_silent_under_red_flag_and_sc() -> None:
 def test_yellow_behind_silent_under_neutralisation() -> None:
     assert "yellow_behind" in _texts(_engine(), phase="racing", yellow_behind_m=100.0)
     assert "yellow_behind" not in _texts(_engine(), phase="sc", yellow_behind_m=100.0)
+
+
+def test_save_reported_for_caught_slide_not_for_spin() -> None:
+    det = SaveDetector()
+    t = _spin_run(det, 2.0, 150.0, 0.0, 1.0)
+    t = _spin_run(det, 18.0, 110.0, t, 0.4)
+    t = _spin_run(det, 2.0, 105.0, t, 0.5)
+    assert det.recent(t) and det.count == 1 and round(det.peak_deg) == 18
+    t = _spin_run(det, 2.0, 150.0, t, 6.0)
+    assert not det.recent(t)
+    t = _spin_run(det, 20.0, 120.0, t, 0.2)
+    t = _spin_run(det, 90.0, 60.0, t, 0.5)  # went round
+    t = _spin_run(det, 2.0, 40.0, t, 1.0)
+    assert not det.recent(t) and det.count == 1
+    t = _spin_run(det, 8.0, 150.0, t, 1.0)  # normal cornering
+    assert det.count == 1
+
+
+def _off_run(tr: OffTrackTracker, t: float, s: float, surfaces: tuple[int, ...]) -> float:
+    end = t + s
+    while t < end:
+        tr.update_surface(t, surfaces)
+        t += 0.1
+    return t
+
+
+def test_off_track_places_lost_then_recovered_same_lap() -> None:
+    tr = OffTrackTracker()
+    tr.update_position(6, 3, False)
+    t = _off_run(tr, 0.0, 1.0, (0, 0, 0, 0))
+    t = _off_run(tr, t, 1.0, (0, 0, 7, 7))
+    tr.update_position(9, 3, False)
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 3 and not tr.recovered_recent(t)
+    tr.update_position(6, 3, False)
+    t = _off_run(tr, t, 0.5, (0, 0, 0, 0))
+    assert tr.recovered_recent(t)
+
+
+def test_off_track_no_call_without_place_loss_or_after_lap_ends() -> None:
+    tr = OffTrackTracker()
+    tr.update_position(4, 2, False)
+    t = _off_run(tr, 0.0, 1.0, (4, 4, 0, 0))
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 0
+    t = _off_run(tr, t, 1.0, (4, 4, 0, 0))
+    tr.update_position(5, 2, False)
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 1
+    tr.update_position(5, 3, False)
+    tr.update_position(4, 3, False)
+    t = _off_run(tr, t, 1.0, (0, 0, 0, 0))
+    assert not tr.recovered_recent(t)
