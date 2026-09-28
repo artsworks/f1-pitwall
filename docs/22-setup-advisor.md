@@ -227,7 +227,7 @@ tracks. Pace enters only at matched fuel and tyre age (§6.3).
 | Mode | When | Output | Change budget | Params in scope |
 |------|------|--------|---------------|-----------------|
 | **Debrief** | after a practice session (1–4), before the next; also after quali when parc fermé is off | ranked setup deltas in the debrief (§07 action rules of `16-debrief-design.md`) and `pitwall setup` CLI | one *primary* change per next run, up to two alternatives listed; linked pairs (e.g. front+rear springs) count as one | all with conf ≥ medium; low-confidence ones as "experiment" |
-| **Garage** | `driver_status == IN_GARAGE` in 1–9 (and 10–14) | one dashboard card + optional single radio line on entering the garage | exactly one parameter | practice: all ≥ medium; quali: parc fermé matrix only (front wing, on-throttle, bias, pressures) |
+| **Garage** | `driver_status == IN_GARAGE` in 1–9 (and 10–14) | one row in the pit board `SETUP` block + optional single radio line on entering the garage | exactly one parameter | practice: all ≥ medium; quali: parc fermé matrix only (front wing, on-throttle, bias, pressures) |
 | **Race** | on track, 15–17 | radio + dashboard calls through the existing dispatcher, P3 | one per call, rate-limited by rule cooldown and per-lap budget | brake bias, on-throttle diff; front wing only as a pit-stop request when a stop is already planned |
 
 **Debrief.** Built from SQLite only, after the session, so it can use whole stints:
@@ -253,6 +253,19 @@ matrix and by `parc_ferme_rules`. The card shows current value → proposed valu
 triggering evidence, the expected trade-off, and "locked by parc fermé" for anything the
 rules would otherwise have suggested (so the driver knows why it's missing). Pressure
 advice from `state/pressure.py` becomes one rule family here rather than a separate path.
+
+**Where it renders: the garage pit board, not its own screen.** The dashboard does not have a
+separate car-setup page; it was dropped while the dashboard was slimmed down (M4), because
+nothing yet produces full-setup advice to put on it. The pit board already
+shows the current setup in game-menu order in its `SETUP` block (`web/app.js`
+`SETUP_GROUPS`/`renderSetup`, `docs/15-dashboard-design.md` §10). Its rows already carry
+`todo`/`done`/`no change` states for the pressure target. Garage-mode cards reuse that
+block: the recommended parameter's row shows `current → proposed` plus a one-line reason, and
+parc-fermé-locked rows get a `locked` tag. The full evidence payload goes in the debrief,
+not on the board. The layout constraint is to fit into the existing pit-board grid (release
+light, per-corner pressure, next run, setup) without adding a page or pushing those zones
+off a 1080p/tablet screen. The ADR 0009 second opinion, when enabled, is a single labelled
+row in the same block.
 
 **Race.** Extends the v1 sketches and the existing lock-up lines; nothing garage-only is
 ever spoken. Calls quote the live value (Car Status bias, Car Setups diff) and are
@@ -564,7 +577,7 @@ tables and the model improve from the same outcomes.
 |-------|-------|------|
 | A1 | Store `parc_ferme_rules`, `next_front_wing_value`; `setup_states` / `setup_changes` / `stints.setup_state_id` migration; traction detector and `slip_balance` accumulator in `state/` | a recorded practice session produces runs keyed by setup state; replay test pins both detectors |
 | A2 | `setup_rules.yaml` + pure evaluator; `pitwall setup <session>` CLI prints recs with evidence; pressure advice moved in as one family | golden-output tests on recorded sessions; one fixture per rule |
-| A3 | Debrief §07 integration (practice), garage dashboard card, race-mode bias/on-throttle/front-wing-at-stop calls through the dispatcher | first weekend (FP → Q → R) driven with it; parc fermé matrix confirmed or corrected |
+| A3 | Debrief §07 integration (practice), garage advice in the pit board's `SETUP` block (no separate setup page), race-mode bias/on-throttle/front-wing-at-stop calls through the dispatcher | first weekend (FP → Q → R) driven with it; parc fermé matrix confirmed or corrected |
 | A4 | Grading into `outcomes`, `fold_param` gains and baselines, `pitwall tune` / digest `setup` block | a second visit to a track re-ranks candidates from the first |
 | A5 (optional) | ADR 0009 chooser for `setup.debrief` / `setup.garage` in shadow; `llm_choices` log and replay; LLM narration in debrief §08 | behind the key, off by default; shadow picks graded next to the table's for ≥ `llm_promote_min_graded` decisions before any promotion |
 
