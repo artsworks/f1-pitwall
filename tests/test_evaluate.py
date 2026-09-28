@@ -34,11 +34,13 @@ def test_evaluation_separates_modes_tracks_and_invalid_laps(tmp_path) -> None:
         },
     )
     db.grade_call(11, "c1", "box_now", "wrong")
+    db.insert_lap(13, 0, LapSummary(2, 180_000, 60_000, 60_000, 7, 2, 5.0, False, ["red_flag"]))
     result = evaluate_corpus(db)
     assert result["tracks"][0]["comparable"]
     assert result["tracks"][0]["on"]["lap_time_s"]["p50"] == 90.0
     assert result["tracks"][0]["off"]["lap_time_s"]["p50"] == 95.0
     assert result["tracks"][0]["off"]["mistake_rate"] == 0.5
+    assert result["tracks"][0]["off"]["invalid_laps"] == 2
     assert result["tracks"][0]["on"]["negative_call_grades"] == 1
     assert not result["tracks"][1]["comparable"]
     assert len(evaluate_corpus(db, 8)["tracks"]) == 1

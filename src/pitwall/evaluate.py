@@ -13,6 +13,8 @@ class _SessionResult(TypedDict):
     uid: int
     clean: list[float]
     laps: int
+    eligible_laps: int
+    invalid_laps: int
     mistakes: int
     negative_call_grades: int
     calls: int
@@ -75,7 +77,9 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
         if not laps:
             continue
         clean = [lap.lap_time_ms / 1000 for lap in laps if lap.valid and lap.sc_status == 0]
-        mistakes = sum(not lap.valid for lap in laps)
+        neutral_reasons = {"first_lap", "pitted", "after_in_lap", "safety_car", "red_flag"}
+        eligible = [lap for lap in laps if not neutral_reasons.intersection(lap.invalid_reasons)]
+        mistakes = sum(not lap.valid for lap in eligible)
         grade_count = sum(
             grade["grade"] in ("noise", "wrong", "too_late") for grade in db.grades_for_session(uid)
         )
@@ -84,6 +88,8 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
                 "uid": uid,
                 "clean": clean,
                 "laps": len(laps),
+                "eligible_laps": len(eligible),
+                "invalid_laps": sum(not lap.valid for lap in laps),
                 "mistakes": mistakes,
                 "negative_call_grades": grade_count,
                 "calls": sum(call["outcome"] == "fired" for call in db.calls_for_session(uid)),
@@ -96,7 +102,9 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
             sessions = modes[mode]
             times = [value for session in sessions for value in session["clean"]]
             lap_count = sum(session["laps"] for session in sessions)
+            eligible_laps = sum(session["eligible_laps"] for session in sessions)
             mistakes = sum(session["mistakes"] for session in sessions)
+            invalid_laps = sum(session["invalid_laps"] for session in sessions)
             calls = sum(session["calls"] for session in sessions)
             by_mode[mode] = {
                 "session_uids": [session["uid"] for session in sessions],
@@ -109,8 +117,8 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
                     "p75": _percentile(times, 0.75),
                     "mean": round(statistics.fmean(times), 3) if times else None,
                 },
-                "invalid_laps": mistakes,
-                "mistake_rate": round(mistakes / lap_count, 4) if lap_count else None,
+                "invalid_laps": invalid_laps,
+                "mistake_rate": round(mistakes / eligible_laps, 4) if eligible_laps else None,
                 "fired_calls": calls,
                 "negative_call_grades": sum(
                     session["negative_call_grades"] for session in sessions
@@ -129,7 +137,8 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
         "unknown_mode_sessions": unknown,
         "note": (
             "Descriptive only: different sessions, weather, drivers and strategy can "
-            "explain differences. Mistakes are invalid completed laps; negative call "
-            "grades are reported separately. Compare within track, not across tracks."
+            "explain differences. Mistake rate counts invalid laps outside first, pit, "
+            "safety-car and red-flag laps; all invalid laps are reported separately. "
+            "Negative call grades are reported separately. Compare within track, not across tracks."
         ),
     }

@@ -153,7 +153,7 @@ def _energy_map(
         for session, laps in sessions
         if _is_race(int(session.get("session_type") or 0))
         for lap in laps
-        if lap.compound == 0 and _green(lap) and lap.ers_deployed_j > 0
+        if _green(lap) and lap.ers_deployed_j > 0
     ]
     if not values:
         return None

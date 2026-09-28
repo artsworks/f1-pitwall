@@ -1,6 +1,6 @@
 """Lap accumulator and LapSummary. Validity per docs/03 "Lap validity":
 not lap 1; pit_status == 0 throughout; not the lap after an in-lap;
-safety_car_status == 0 throughout; current_lap_invalid == 0; no flashback.
+safety_car_status == 0 throughout; no red flag; current_lap_invalid == 0; no flashback.
 (The docs' "no weather transition" needs Session weather tracking — deferred,
 recorded but not yet an invalidator.)
 """
@@ -39,6 +39,7 @@ class LapAccumulator:
         self._prev_was_in_lap = False
         self._saw_pit = False
         self._saw_sc = False
+        self._saw_red_flag = False
         self._saw_flashback = False
         self._saw_invalid = False
         self._sc_max = 0
@@ -50,8 +51,12 @@ class LapAccumulator:
     def note_flashback(self) -> None:
         self._saw_flashback = True
 
+    def note_red_flag(self) -> None:
+        self._saw_red_flag = True
+
     def reset_stint_flags(self) -> None:
-        self._saw_pit = self._saw_sc = self._saw_flashback = self._saw_invalid = False
+        self._saw_pit = self._saw_sc = self._saw_red_flag = False
+        self._saw_flashback = self._saw_invalid = False
         self._sc_max = 0
 
     def note_tyre_temperatures(
@@ -95,6 +100,7 @@ class LapAccumulator:
         prev_flags = (
             self._saw_pit,
             self._saw_sc,
+            self._saw_red_flag,
             self._saw_flashback,
             self._saw_invalid,
             self._prev_was_in_lap,
@@ -112,7 +118,7 @@ class LapAccumulator:
 
         if finished == 0:
             return None  # first observation; nothing completed
-        saw_pit, saw_sc, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
+        saw_pit, saw_sc, saw_red_flag, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
         reasons: list[str] = []
         if finished == 1:
             reasons.append("first_lap")
@@ -122,6 +128,8 @@ class LapAccumulator:
             reasons.append("after_in_lap")
         if saw_sc:
             reasons.append("safety_car")
+        if saw_red_flag:
+            reasons.append("red_flag")
         if saw_inv:
             reasons.append("invalid")
         if saw_fb:

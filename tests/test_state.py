@@ -7,7 +7,7 @@ from pitwall.protocol.header import PacketId
 from pitwall.state.ema import Ema
 from pitwall.state.session import Damage, SessionState, Snapshot, pressure_window, thermal_window
 
-from .synth import pack_packet
+from .synth import make_event_packet, pack_packet
 
 
 def _state() -> tuple[Ingest, SessionState]:
@@ -398,6 +398,43 @@ def test_red_flag_set_and_cleared() -> None:
     # SEND marks the session ended
     _send(ingest, make_event_packet(b"SEND", session_time=3.0), 0.2)
     assert state.snapshot(0.2).session_ended
+
+
+def test_red_flag_invalidates_interrupted_lap() -> None:
+    ingest, state = _state()
+    for lap, t in ((8, 1.0), (8, 2.0)):
+        _send(
+            ingest,
+            pack_packet(
+                PacketId.LAP_DATA,
+                {"cars": {0: {"current_lap_num": lap, "driver_status": 4}}},
+                session_time=t,
+            ),
+            t,
+        )
+    _send(ingest, make_event_packet(b"RDFL", session_time=3.0), 3.0)
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {0: {"current_lap_num": 11, "driver_status": 4, "last_lap_time_ms": 236_000}}},
+            session_time=4.0,
+        ),
+        4.0,
+    )
+    assert state.laps[-1].lap_num == 8
+    assert state.laps[-1].invalid_reasons == ["red_flag"]
+    _send(ingest, make_event_packet(b"LGOT", session_time=5.0), 5.0)
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {0: {"current_lap_num": 12, "driver_status": 4, "last_lap_time_ms": 94_000}}},
+            session_time=6.0,
+        ),
+        6.0,
+    )
+    assert state.laps[-1].valid
 
 
 def test_session_uid_change_resets_state() -> None:

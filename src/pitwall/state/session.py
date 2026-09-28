@@ -1165,6 +1165,7 @@ class SessionState:
             self._handle_rewind(pkt.header.session_time)
         elif pkt.code == "RDFL":
             self.red_flag = True
+            self.lap_acc.note_red_flag()
         elif pkt.code == "SSTA":
             self.red_flag = False
         elif pkt.code == "SEND":

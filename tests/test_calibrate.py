@@ -113,6 +113,7 @@ def test_calibration_fits_intermediate_window_and_fuel_without_compound_zero(tmp
         tyre_inner_profile=(55.0, 70.0, 70.0, 70.0, 90.0) * 4,
         thermal_window_c=(60.0, 85.0),
         thermal_penalty_ms=800,
+        ers_deployed_j_per_lap=500_000.0,
         dt=1.0,
         send_session_end=True,
     )
@@ -123,6 +124,7 @@ def test_calibration_fits_intermediate_window_and_fuel_without_compound_zero(tmp
     track = calibrate(db, settings, track_id=7)["tracks"][0]
     assert track["fuel_burn_n"] > 0
     assert track["compounds"][7]["thermal"] is not None
+    assert track["energy"]["energy_deployed_j_p50"] == pytest.approx(500_000.0)
     overlay_dir = tmp_path / "overlays"
     write_overlays({"tracks": [track]}, settings, overlay_dir)
     overlay = yaml.safe_load((overlay_dir / "7.yaml").read_text())
