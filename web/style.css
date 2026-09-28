@@ -87,13 +87,14 @@ body.sc .status { background: color-mix(in srgb, var(--warn) 30%, var(--panel));
 .tyres { grid-area: tyres; display: flex; flex-direction: column; overflow: hidden; }
 .tyres .chip { display: flex; gap: 1rem; align-items: baseline; margin-bottom: .5rem;
   font-size: 1.45rem; }
-.tyres .comp { border: 2px solid var(--dim); color: var(--dim); padding: 0 .5rem;
-  border-radius: .3rem; font-weight: bold; }
+.tyres .comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; }
+.comp { border: 2px solid var(--dim); color: var(--dim); }
 .comp.soft { border-color: var(--crit); color: var(--crit); }
 .comp.medium { border-color: var(--warn); color: var(--warn); }
 .comp.hard { border-color: var(--fg); color: var(--fg); }
 .comp.inter { border-color: var(--ok); color: var(--ok); }
 .comp.wet { border-color: var(--cold); color: var(--cold); }
+.comp.slick { border-color: var(--fg); color: var(--fg); }
 .car { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
   gap: .4rem; position: relative; min-height: 0; }
 .car::before { content: ""; position: absolute; left: 50%; top: -.3rem; bottom: -.3rem; width: 2px;
@@ -300,8 +301,18 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
   overflow: hidden; text-overflow: ellipsis; }
 .s-window.box { color: var(--crit); }
 .s-window.soon { color: var(--warn); }
-.s-row { font-size: 1.25rem; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.s-row .lbl { color: var(--dim); display: inline-block; width: 5.2rem; }
+.s-row { font-size: 1.15rem; line-height: 1.5; white-space: nowrap; display: flex; align-items: baseline;
+  gap: .7rem; min-width: 0; min-height: 1.9rem; }
+.s-row .lbl { color: var(--dim); flex: none; width: 4.8rem; letter-spacing: .1em; font-size: 1.1rem; }
+.s-row .name { flex: none; font-weight: bold; }
+.s-row .gap { flex: none; font-weight: bold; min-width: 4.5ch; }
+.s-row .cb { flex: none; }
+.s-row .cb .comp { font-size: 1.05rem; padding: 0 .35rem; }
+.s-row .cb .age { display: none; }
+.s-row .words { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  font-weight: bold; }
+.s-row .flags { flex: none; display: flex; gap: .3rem; }
+.s-row .badge { font-size: .95rem; line-height: 1.3rem; padding: 0 .35rem; }
 .s-row .warn, .b-card .warn { color: var(--warn); font-weight: bold; }
 .s-row .crit, .b-card .crit { color: var(--crit); font-weight: bold; }
 .s-row .ok, .b-card .ok { color: var(--ok); }
@@ -316,15 +327,59 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 /* pages (docs/15 §10): alternate layouts over the same zones. Status bar,
    banner and footer never move; pit board / cool-down still take over. */
 .battle, .carpage, .trackpage, .setuppage { display: none; font-size: 1.3rem; overflow: hidden; }
-.battle { grid-area: battle; flex-direction: column; gap: .4rem; font-size: 1.15rem; }
+.battle { grid-area: battle; flex-direction: column; gap: .5rem; font-size: 1.15rem; }
+/* rival card: fixed row structure (head / rail / pace+tyre / last lap / badges)
+   so the card never changes height as values come and go. */
 .b-card { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
-  padding: .3rem .7rem; display: grid; grid-template-columns: 6rem 1fr; gap: .05rem 1rem; }
-.b-card .b-head { grid-column: 1 / -1; font-size: 1.6rem; font-weight: bold; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; }
-.b-card.threat { border-color: var(--warn); }
-.b-card.drs { border-color: var(--crit); }
+  padding: .35rem .8rem .45rem; display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.b-card .b-head { display: flex; align-items: baseline; gap: .6rem; font-size: 1.6rem;
+  font-weight: bold; white-space: nowrap; min-width: 0; }
+.b-card .b-head .side { color: var(--dim); font-size: 1.05rem; letter-spacing: .14em;
+  font-weight: normal; width: 5.2rem; flex: none; }
+.b-card .b-head .pos { color: var(--dim); font-weight: normal; flex: none; }
+.b-card .b-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.b-card .b-head .gap { font-size: 2rem; flex: none; min-width: 5ch; text-align: right; }
+.b-card .b-pace { display: flex; align-items: center; gap: 1rem; white-space: nowrap; min-width: 0; }
+.b-card .b-pace .words { flex: 1; font-size: 1.75rem; font-weight: bold; text-transform: uppercase;
+  letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; }
+.b-card .b-pace .words.dim { font-weight: normal; text-transform: none; }
+.cb { display: inline-flex; align-items: baseline; gap: .45rem; flex: none; }
+.cb .comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; font-size: 1.2rem; letter-spacing: .06em; }
+.cb .age { color: var(--fg); font-size: 1.3rem; font-weight: bold; min-width: 3ch; }
+.b-card .b-lap { display: flex; align-items: baseline; gap: .6rem; white-space: nowrap; min-width: 0;
+  font-size: 1.25rem; min-height: 1.6rem; }
+.b-card .b-lap .k { color: var(--dim); font-size: 1.05rem; letter-spacing: .14em; width: 5.2rem; flex: none; }
+.b-card .b-lap .t { font-size: 1.45rem; font-weight: bold; flex: none; }
+.b-card .b-lap .d { flex: none; min-width: 13ch; }
+.b-card .b-lap .tr { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; }
+.b-card .b-badges { display: flex; flex-wrap: nowrap; gap: .4rem; min-height: 1.75rem; margin-top: .2rem;
+  overflow: hidden; min-width: 0; }
+.badge { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem; padding: 0 .45rem;
+  font-size: 1.05rem; letter-spacing: .1em; font-weight: bold; white-space: nowrap; line-height: 1.45rem; }
+.badge.ok { border-color: var(--ok); color: var(--ok); }
+.badge.warn { border-color: var(--warn); color: var(--warn); }
+.badge.crit { border-color: var(--crit); color: #fff; background: var(--crit); }
+.badge.pen { border-color: var(--ok); color: var(--ok); }
+.badge.inf { border-color: var(--faint); color: var(--dim); }
+.b-card.threat { border-color: var(--crit);
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--crit) 35%, transparent); }
+.b-card.edge { border-color: var(--ok); }
 .b-card .k { color: var(--dim); }
-.b-foot { font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b-state { display: flex; align-items: baseline; gap: .8rem; white-space: nowrap; overflow: hidden;
+  min-height: 2rem; }
+.b-state .mode { font-size: 1.6rem; font-weight: bold; letter-spacing: .06em; flex: none; }
+.b-state .mode.ok { color: var(--ok); }
+.b-state .mode.warn { color: var(--warn); }
+.b-state .mode.crit { color: var(--crit); }
+.b-state .detail { color: var(--dim); font-size: 1.15rem; overflow: hidden; text-overflow: ellipsis; }
+.b-foot { font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; gap: .6rem; align-items: baseline; }
+.b-foot > * { flex: none; }
+.b-foot > :last-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.b-foot .k { color: var(--dim); letter-spacing: .12em; font-size: 1.05rem; }
+.b-foot .ok { color: var(--ok); font-weight: bold; }
+.b-foot .warn { color: var(--warn); font-weight: bold; }
+.b-foot.dim { display: block; }
 .carpage { grid-area: carpage; flex-direction: column; gap: .8rem; }
 /* race page right column: ahead/behind duel cards above a 3-row radio log */
 .duel { grid-area: duel; display: none; flex-direction: column; gap: .5rem; overflow: hidden; }
@@ -339,20 +394,41 @@ body.stale .duel > * { filter: grayscale(1); opacity: .4; }
 .cp-grid { display: grid; grid-template-columns: 1fr; gap: .7rem; }
 .cp-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
   padding: .5rem .8rem; }
-.cp-flags { font-size: 1.3rem; }
+.cp-tile .big { font-size: 3rem; }
+.cp-flags { font-size: 1.3rem; font-weight: bold; }
+.cp-flags.ok { color: var(--ok); font-weight: normal; }
+.cp-flags.warn { color: var(--warn); }
 .trackpage { grid-area: trackpage; flex-direction: column; gap: .8rem; }
 .tp-status { font-size: 2.6rem; font-weight: bold; padding: .4rem .6rem; border-radius: 6px;
-  border: 2px solid var(--line); text-align: center; }
+  border: 2px solid var(--line); text-align: center; letter-spacing: .06em; }
 .tp-status.sc { background: var(--warn); color: #000; }
 .tp-status.red { background: var(--crit); color: #fff; }
-.tp-row { font-size: 1.5rem; padding: .3rem .5rem; border-left: 4px solid var(--line); }
-.tp-row.warn { border-color: var(--warn); color: var(--warn); }
-.tp-row.crit { border-color: var(--crit); color: var(--crit); }
+.tp-wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+.tp-wxt { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: .4rem .7rem;
+  display: grid; grid-template-rows: auto auto auto auto; min-width: 0; }
+.tp-wxt .k { color: var(--dim); font-size: 1.05rem; letter-spacing: .14em; white-space: nowrap; }
+.tp-wxt .sky { font-size: 1.5rem; font-weight: bold; text-transform: uppercase; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-height: 1.9rem; margin-bottom: .3rem; }
+.tp-wxt .pct { font-size: 2.6rem; font-weight: bold; line-height: 1.1; }
+.tp-wxt.dry .pct { color: var(--fg); }
+.tp-wxt.maybe .pct { color: var(--warn); }
+.tp-wxt.wet .pct, .tp-wxt.wet .sky { color: var(--cold); }
+.tp-wxt.wet { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 10%, var(--panel)); }
+.tp-rows { display: flex; flex-direction: column; gap: .4rem; }
+.tp-row { font-size: 1.5rem; padding: .3rem .6rem; border-left: 4px solid var(--line); display: flex;
+  align-items: baseline; gap: .8rem; white-space: nowrap; min-width: 0; min-height: 2.4rem; }
+.tp-row .k { color: var(--dim); font-size: 1.05rem; letter-spacing: .14em; width: 8rem; flex: none; }
+.tp-row .v { flex: 1; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
+.tp-row.warn { border-color: var(--warn); } .tp-row.warn .v { color: var(--warn); }
+.tp-row.crit { border-color: var(--crit); } .tp-row.crit .v { color: var(--crit); }
+.tp-row.cold { border-color: var(--cold); } .tp-row.cold .v { color: var(--cold); }
+.tp-row.ok { border-color: var(--ok); } .tp-row.ok .v { color: var(--ok); }
 .setuppage { grid-area: setuppage; }
 .setuppage ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 2rem; }
-.setuppage li { display: flex; justify-content: space-between; padding: .3rem 0;
-  border-bottom: 1px solid var(--line); break-inside: avoid; }
+.setuppage li { display: flex; justify-content: space-between; align-items: baseline; padding: .3rem 0;
+  border-bottom: 1px solid var(--line); break-inside: avoid; font-size: 1.35rem; }
 .setuppage li .k { color: var(--dim); }
+.setuppage li .v { font-weight: bold; font-size: 1.5rem; }
 
 body.dash.page-battle:not(.pit):not(.cool) { grid-template-areas:
     "status status" "banner banner" "battle log" "battle log" "strat log" "footer footer"; }
@@ -413,6 +489,16 @@ body.stale .setuppage > * { filter: grayscale(1); opacity: .4; }
   body.dash .footer { flex-wrap: wrap; white-space: normal; gap: .6rem; padding: .3rem .6rem; }
   body.dash .fuel { grid-template-columns: 1fr 1fr; }
   .setuppage ol { columns: 1; }
+  .b-card .b-pace .words { font-size: 1.4rem; }
+  .b-card .b-lap { flex-wrap: wrap; row-gap: 0; }
+  .b-card .b-lap .tr { flex-basis: 100%; text-align: left; padding-left: 5rem; }
+  .b-card .b-head .side, .b-card .b-lap .k { width: 4.4rem; }
+  body.dash .b-foot { flex-wrap: wrap; }
+  .b-card .b-badges { gap: .25rem; }
+  .b-card .badge { font-size: .9rem; padding: 0 .3rem; letter-spacing: .05em; }
+  .tp-wxt .pct { font-size: 2rem; }
+  .tp-wxt .sky { font-size: 1.15rem; }
+  .s-row .words { display: none; }
   body.radio .status { flex-wrap: wrap; white-space: normal; gap: .3rem .8rem;
     padding: .4rem .6rem; }
   body.dash.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
@@ -537,7 +623,7 @@ body.swap .strat { animation-delay: 80ms; }
 @keyframes page-in { from { opacity: 0; transform: translateX(var(--swap-dx, 1.6rem)); } }
 
 /* battle: gap rail. 0–3 s scale, DRS zone shaded; the rival marker glides */
-.rail { grid-column: 1 / -1; position: relative; height: .9rem; margin: .25rem 0 .35rem;
+.rail { position: relative; height: .9rem; margin: .3rem 0 .45rem; flex: none;
   border-radius: .45rem; background: var(--line); }
 .rail .rz { position: absolute; left: 0; top: 0; bottom: 0; width: 33.33%;
   border-radius: .45rem 0 0 .45rem; font-size: .7rem; line-height: .9rem; padding-left: .4rem;
@@ -550,7 +636,6 @@ body.swap .strat { animation-delay: 80ms; }
 .rail.behind.in .rc { background: var(--crit); }
 .rail.ahead.in .rc { background: var(--ok); }
 .rail.in .rz { color: var(--fg); }
-.b-card.drs { box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--crit) 35%, transparent); }
 
 /* car page meters (ERS store, tyre life vs laps to go) */
 .meter { position: relative; height: .6rem; margin-top: .4rem; border-radius: .3rem;
@@ -559,6 +644,7 @@ body.swap .strat { animation-delay: 80ms; }
   transform: scaleX(var(--f, 0)); background: var(--ok);
   transition: transform var(--t-slow) var(--ease-out), background-color var(--t-med) ease; }
 .meter i.short { background: var(--warn); }
+.meter i.crit { background: var(--crit); }
 
 /* overhead monitor at 1440p+: more air, the same composition */
 @media (min-width: 2400px) {
