@@ -219,12 +219,12 @@
   function gapText(g) { return g === null || g === undefined ? "--" : (g >= 0 ? "+" : "") + fmt(g, 1); }
   function trendText(t, side) {
     // t = gap shrinking per lap (s). Ahead shrinking = we're closing;
-    // behind shrinking = we're being caught. Colour always paired with a word.
+    // behind shrinking = we're being caught. Word only; the rate is the pace line.
     if (!t) return null;
     var closing = t > 0;
     var word = side === "ahead" ? (closing ? "closing" : "dropping") : (closing ? "being caught" : "pulling away");
     var cls = side === "behind" && closing ? "crit" : side === "ahead" && closing ? "ok" : "";
-    return { text: (closing ? "▲ +" : "▼ ") + fmt(t, 1) + "/lap " + word, cls: cls };
+    return { text: (closing ? "▲ " : "▼ ") + word, cls: cls };
   }
   function span(txt, cls) {
     var n = document.createElement("span");
