@@ -99,6 +99,10 @@ class DriverMenu:
 # -- answers -------------------------------------------------------------------
 
 
+PIT_LOSS_FALLBACK_S = 22.0
+PIT_FIGHT_MARGIN_S = 2.0  # fresh-tyre time back beyond the stop cost worth a fight
+
+
 def _n(x: float, digits: int = 1) -> str:
     return f"{x:.{digits}f}" if math.isfinite(x) else "?"
 
@@ -136,12 +140,22 @@ def _tyres(snap: Snapshot) -> Answer:
 
 
 def _pit(snap: Snapshot) -> Answer:
+    """Plan call first; otherwise judge the tyres: box if they won't make the
+    end, box to fight if fresh tyres win back more than the stop costs, else
+    stay out and hold the position."""
     plan = snap.pit_plan
+    left = snap.laps_remaining
+    loss = snap.pit_loss_s if snap.pit_loss_s > 0 else PIT_LOSS_FALLBACK_S
+    gain = snap.deg_ms_per_lap * snap.tyre_age_laps * left / 1000.0
     v = {
         "plan_lap": str(snap.pit_plan_lap),
         "in_laps": str(max(0, snap.pit_plan_lap - snap.lap_num)),
         "reason": snap.pit_plan_reason,
-        "gain": _n(snap.pit_plan_gain_s),
+        "gain": _n(gain),
+        "loss": _n(loss, 0),
+        "wear": _n(snap.wear_max_pct, 0),
+        "pace_laps": _laps(snap.laps_of_pace),
+        "pos": str(snap.position),
         "window": f"{snap.pit_window_start} to {snap.pit_window_end}"
         if snap.pit_window_start
         else "",
@@ -150,11 +164,17 @@ def _pit(snap: Snapshot) -> Answer:
         return "box_now", v
     if plan == "box_in_n":
         return "soon", v
-    if plan == "no_stop":
-        return "no_stop", v
-    if plan in ("stay", "overcut"):
-        return "stay_out", v
-    return "unknown", v
+    if (snap.wear_max_pct <= 0 and snap.tyre_age_laps == 0) or left <= 0:
+        if plan == "no_stop":
+            return "no_stop", v
+        if plan in ("stay", "overcut"):
+            return "stay_out", v
+        return "unknown", v
+    if snap.laps_of_pace < left:
+        return "tyres_short", v
+    if left >= 3 and gain >= loss + PIT_FIGHT_MARGIN_S:
+        return "box_fight", v
+    return "hold", v
 
 
 def _gap(snap: Snapshot) -> Answer:
@@ -352,7 +372,7 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
 
 TEMPLATE_KEYS = frozenset(
     {"lap", "laps_left", "mindset", "wear", "age", "pace_laps", "plan_lap", "in_laps"}
-    | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets"}
+    | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets", "loss"}
     | {
         "in10",
         "in30",

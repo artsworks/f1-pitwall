@@ -145,6 +145,7 @@ thresholds:
   wear_corner_hysteresis: 0.15   # ratio drop before an abnormal-wear flag clears
   wear_corner_min_delta_pct: 0.6 # and at least this many % per lap more than the rest
   fuel_hysteresis_laps: 0.1
+  fuel_tight_laps: 0.1          # fuel margin at or below this = 'fuel is tight'
   fuel_spare_laps: 1.0
   gap_hysteresis_s: 0.3
   warnings_warn: 3

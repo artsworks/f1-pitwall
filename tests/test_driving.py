@@ -592,3 +592,14 @@ def test_teammate_fight_rule() -> None:
     t = _texts(e, phase="racing", teammate_fight=True, teammate_name="LAWSON", teammate_gap_s=0.6)
     assert "teammate_fight" in t
     assert "teammate_fight" not in _texts(_engine(), phase="racing", teammate_name="LAWSON")
+
+
+def test_fuel_tight_only_at_or_below_tenth_and_urgent_late() -> None:
+    fuel = dict(phase="racing", fuel_per_lap_kg=1.5, laps_remaining=10, total_laps=20)
+    assert "fuel_marginal" not in _texts(_engine(), fuel_margin_laps=0.2, lap_num=5, **fuel)
+    t = _texts(_engine(), fuel_margin_laps=0.1, lap_num=5, **fuel)
+    assert "fuel_marginal" in t
+    early = _texts(_engine(), fuel_margin_laps=-0.1, lap_num=5, **fuel)["fuel_marginal"]
+    late = _texts(_engine(), fuel_margin_laps=-0.1, lap_num=12, **fuel)["fuel_marginal"]
+    assert early != late and ("Early days" in early or "Long way" in early)
+    assert "now" in late

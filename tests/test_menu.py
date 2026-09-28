@@ -417,3 +417,19 @@ def test_wet_tyre_and_rain_answers() -> None:
     case, values = answer(rain, drying, "b")
     assert case == "switch" and values["to"] == "slicks"
     assert answer(tyres, dataclasses.replace(worn, tyre_switch_to="slicks"), "b")[0] == "switch"
+
+
+def test_pit_answer_judges_tyres_to_the_end() -> None:
+    pit = MenuItemModel(id="pit", label="Pit now?")
+    base = dict(now=0.0, laps_remaining=10, wear_max_pct=40.0, tyre_age_laps=15, position=5)
+    short = Snapshot(**base, laps_of_pace=6.0)  # type: ignore[arg-type]
+    assert answer(pit, short, "b")[0] == "tyres_short"
+    fight = Snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=200.0, pit_loss_s=20.0)  # type: ignore[arg-type]
+    case, v = answer(pit, fight, "b")
+    assert case == "box_fight" and v["gain"] == "30.0" and v["loss"] == "20"
+    hold = Snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=50.0, pit_loss_s=20.0)  # type: ignore[arg-type]
+    case, v = answer(pit, hold, "b")
+    assert case == "hold" and v["pos"] == "5"
+    planned = Snapshot(**base, laps_of_pace=6.0, pit_plan="box_now")  # type: ignore[arg-type]
+    assert answer(pit, planned, "b")[0] == "box_now"
+    assert answer(pit, Snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"

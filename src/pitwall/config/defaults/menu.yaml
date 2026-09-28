@@ -34,6 +34,9 @@ menu:
         soon: ["Not yet. Box in {in_laps}, lap {plan_lap}.", "Stay out, box lap {plan_lap}."]
         stay_out: ["No, stay out. {reason}.", "Negative, stay out."]
         no_stop: ["No stop. Tyres make the end.", "Stay out to the end."]
+        tyres_short: ["Yes, box. Tyres won't make it, {pace_laps} laps left in them, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, they won't last {laps_left} laps."]
+        box_fight: ["Box for fresh tyres. Stop costs {loss}, we get about {gain} back over {laps_left} laps. Good for the fight at the end.", "Yes, box. Fresh tyres are worth {gain} over {laps_left} laps against {loss} in the pits. Come out and attack."]
+        hold: ["Stay out. Tyres make the end, worst one {wear} percent. A stop costs {loss}, only {gain} back. Hold P{pos}.", "Negative, stay out and hold P{pos}. Tyres have {pace_laps} laps left, {laps_left} to go."]
         unknown: ["No plan yet. Stay out.", "Still working on it. Stay out."]
     - id: gap
       label: "Gap ahead?"

@@ -255,11 +255,17 @@ rules:
       - "Fuel is short, {fuel_short_laps:.1f} laps down. Lift and coast into the big stops"
       - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
       - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast now"
+    severity:
+      - when: "lap_num * 2 < total_laps"
+        priority: 2
+        say:
+          - "We're {fuel_short_laps:.1f} laps short on fuel. Long way to go, start some lift and coast"
+          - "Fuel is {fuel_short_laps:.1f} laps short. Plenty of time to save it, lift into the big stops"
   - id: fuel_marginal
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps < mode.fuel_margin_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
-    clear_when: "fuel_margin_laps >= mode.fuel_margin_laps + th.fuel_hysteresis_laps"
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps <= th.fuel_tight_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
+    clear_when: "fuel_margin_laps > th.fuel_tight_laps + th.fuel_hysteresis_laps"
     cooldown_s: 180
     cooldown_group: fuel
     requires: [car_status]
@@ -267,6 +273,16 @@ rules:
       - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
       - "Fuel's on the edge, {fuel_margin_r:+.1f} laps. Save where you can"
       - "Fuel margin is {fuel_margin_r:+.1f} laps. A bit of lift and coast where it's cheap"
+    severity:
+      - when: "fuel_margin_laps < 0 and lap_num * 2 >= total_laps"
+        priority: 1
+        say:
+          - "Fuel is short now, {fuel_margin_r:+.1f} laps. Lift and coast, every straight"
+          - "We're under on fuel, {fuel_margin_r:+.1f} laps. Start saving now, lift before the big stops"
+      - when: "fuel_margin_laps < 0"
+        say:
+          - "Fuel slightly under, {fuel_margin_r:+.1f} laps. Early days, save a bit where it's cheap"
+          - "Fuel's a touch short, {fuel_margin_r:+.1f}. Long way to go, a little lift and coast"
   - id: fuel_spare
     sessions: [race]
     priority: 3
