@@ -510,32 +510,44 @@ corpus A/B must not lose must-fire calls.
 
 ## 7. LLM decision (ADR-style)
 
-**Status:** proposed, extends ADR 0008.
+**Status:** accepted as [ADR 0009](adr/0009-llm-chooser-with-rule-veto.md), which replaces the
+decision part of ADR 0008. This section applies it to setup advice.
 
-**Context.** ADR 0008 keeps every live decision deterministic, YAML-configured and
-replayable; an LLM was rejected for latency, network/GPU dependency, cost and
-non-reproducibility. Setup advice raises the stakes: most thermal/wear effects in §1.2 are
-low or medium confidence even among human experts, and sources contradict each other
-(on-throttle diff sign, ARBs, pressure direction across game versions). A model trained on
-that corpus will state the contested claims fluently. A wrong "−3 rear wing" is worse than
-silence: it costs a run in practice and cannot be undone after qualifying.
+**Context.** ADR 0008 kept every live decision deterministic, YAML-configured and
+replayable. Setup advice is where a free-form model is most dangerous. Most thermal and wear
+effects in §1.2 are low or medium confidence even among human experts, and the sources
+contradict each other (on-throttle diff sign, ARBs, pressure direction across game
+versions). A model trained on that corpus will state the contested claims fluently. A
+hallucinated "−3 rear wing" is worse than silence: it wastes a practice run, and after
+qualifying it can't be undone. It is also where judgment matters: picking *which one*
+change to try from several plausible symptoms is what the fixed candidate order in §4 does
+least well.
 
 **Options.**
 
 | Role | Verdict | Why |
 |------|---------|-----|
-| Live decision (garage card, race radio) | **Rejected** | Fails ADR 0008 on determinism, replay and latency. Cheap fast models (Flash-tier) fix cost and speed, not the blocker, which is correctness and reproducibility |
-| Debrief decision (choose the delta) | **Rejected** | Same: grades and `fold_param` need the recommendation to be reproducible from the DB |
-| (a) Offline table synthesis | **Accepted** | A model summarises guides and past digests into *candidate* rows (symptom → param → direction, with the sources it used); a human reviews them into `setup_rules.yaml` through the normal PR + fixture + promotion gate. Nothing it writes is live until merged |
-| (b) Debrief narration | **Accepted, after the core ships** | Narrates the deterministic records in §4 (evidence, alternatives, suppressed-by-parc-fermé) in plain language, inside the §08 generated section of `16-debrief-design.md` with its rules: labelled, anchored, hideable, absent without a key. May not introduce a number that isn't in the record |
-| (c) Post-session Q&A | **Accepted, opt-in** | The item-21 ask box over `setup_states`, `setup_recs`, `outcomes` and stints, behind the optional API key. Advisory only; never writes grades or config |
+| Free-form decision (the model proposes any param or delta) | **Rejected** | Could invent illegal or out-of-range changes; can't be graded against the tables |
+| Chooser among §4 candidates, rules veto | **Accepted under ADR 0009** | The model picks the primary change from the candidates that survived the mode, parc fermé, range and contraindication filters (the `alternatives` in the §4 record). Anything invalid or late falls back to the table order. Starts in shadow; promoted per decision type through the gate |
+| (a) Offline table synthesis | **Accepted** | Summarises guides and past digests into *candidate* rows for a human to review into `setup_rules.yaml` via PR + fixture + gate |
+| (b) Debrief narration | **Accepted, after the core ships** | Narrates the §4 records in the labelled §08 generated section of `16-debrief-design.md`; no number that isn't in the record |
+| (c) Post-session Q&A | **Accepted, opt-in** | The item-21 ask box over `setup_states`, `setup_recs`, `outcomes`, stints |
+| Spoken phrasing | **Unchanged** | Garage and race lines stay YAML `say` pools (ADR 0008); the model's `reason` shows only on the dashboard |
 
-**Decision.** Build the advisor with no LLM. Revisit (b) after A1–A4 (§8) ship; (a) may be
-used at any time as an authoring aid; (c) rides on item 21.
+**Decision.** Build the deterministic advisor first (A1–A4). Then add the chooser for
+`setup.debrief` and `setup.garage` in **shadow** (A5). The model's pick goes into
+`setup_recs` as an extra field (`llm_choice`, `llm_reason`, `llm_log_id`), and the debrief
+shows it beside the table's primary, labelled. Promotion to chooser follows ADR 0009 §5:
+the table and the model are graded by the same §6 loop. A shadow pick counts only when the
+driver actually ran it, because the debrief lists every candidate and the driver picks.
+With `rule_id = "llm:setup.debrief"` in `outcomes`, `pitwall digest` / `tune` compare the
+two directly.
 
-**Consequences.** Recommendations are replay-testable and gradeable; the tables start
-conservative and improve only by measured outcomes; no network, key or GPU is needed on
-race day.
+**Consequences.** The model can only ever suggest a change the tables already allow, so the
+worst case is a worse legal choice, which §6 measures. Replay reproduces advice from the
+logged replies. Without a key the advisor behaves exactly as without the model. Because
+learning (`fold_param` gains) is keyed by symptom and param, not by who chose, both the
+tables and the model improve from the same outcomes.
 
 ## 8. Implementation plan (if approved)
 
@@ -545,7 +557,7 @@ race day.
 | A2 | `setup_rules.yaml` + pure evaluator; `pitwall setup <session>` CLI prints recs with evidence; pressure advice moved in as one family | golden-output tests on recorded sessions; one fixture per rule |
 | A3 | Debrief §07 integration (practice), garage dashboard card, race-mode bias/on-throttle/front-wing-at-stop calls through the dispatcher | first weekend (FP → Q → R) driven with it; parc fermé matrix confirmed or corrected |
 | A4 | Grading into `outcomes`, `fold_param` gains and baselines, `pitwall tune` / digest `setup` block | a second visit to a track re-ranks candidates from the first |
-| A5 (optional) | LLM narration in debrief §08 | behind the key; off by default |
+| A5 (optional) | ADR 0009 chooser for `setup.debrief` / `setup.garage` in shadow; `llm_choices` log and replay; LLM narration in debrief §08 | behind the key, off by default; shadow picks graded next to the table's for ≥ `llm_promote_min_graded` decisions before any promotion |
 
 ## 9. Open questions
 

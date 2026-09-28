@@ -7,7 +7,8 @@ Implements `docs/05-roadmap.md` M3 on top of the M2 pipeline. Governing constrai
   In-memory state is a cache of the database, never the source of truth.
 - **Two clock domains** (ADR 0002): all model maths uses session time; freshness and
   cooldowns use the tick clock.
-- **No LLM** (ADR 0008): every call is a YAML rule over snapshot fields. Predictions the
+- **No LLM in the rules** (ADR 0008, 0009): every call is a YAML rule over snapshot fields;
+  under ADR 0009 an optional model may only pick among a rule's candidates. Predictions the
   rule speaks are snapshot fields too, so they land in `calls.inputs` for grading.
 - **Thresholds live in YAML**; module code takes them as arguments.
 
