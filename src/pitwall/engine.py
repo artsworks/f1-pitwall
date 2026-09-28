@@ -29,11 +29,13 @@ from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
 from pitwall.model.deg import (
+    DEG_FUEL_REF,
     DegFit,
     Prior,
     corner_wear_life,
     fit_is_clean,
     fit_stint,
+    fuel_adjusted_deg,
     laps_of_pace,
     planning_fit,
     resolve_prior,
@@ -621,7 +623,7 @@ class Engine:
 
         if tail:
             self._stint_laps = tail
-            self._stint_fuel_ref = max((r.fuel_remaining_laps for r in tail), default=0.0)
+            self._stint_fuel_ref = max((r.fuel_kg for r in tail), default=0.0)
             compound = tail[0].compound
             prior = self._deg_prior(track_id, compound, settings)
             fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
@@ -750,6 +752,15 @@ class Engine:
         overlay = settings.track
         min_w = self._th("prior_min_weight", 2)
         uid = self.state.session_uid
+        fuel_p = resolve_prior(
+            self.db,
+            track_id,
+            compound,
+            self._learned_name(track_id, compound, "fuel_ms_per_lap"),
+            overlay_value=None,
+            default=self._th("fuel_ms_per_lap_default", 30),
+            min_weight=min_w,
+        )
         deg_p: Prior | None = None
         if self.db is not None and uid is not None:
             cache_key = (uid, compound)
@@ -758,7 +769,16 @@ class Engine:
                 stints = self.db.weekend_stints(uid, track_id, compound)
                 n = sum(stint.n_valid_laps for stint in stints)
                 if n:
-                    value = sum(stint.deg_ms_per_lap * stint.n_valid_laps for stint in stints) / n
+                    value = (
+                        sum(
+                            fuel_adjusted_deg(
+                                stint.deg_ms_per_lap, stint.fuel_ms_per_lap, fuel_p.value
+                            )
+                            * stint.n_valid_laps
+                            for stint in stints
+                        )
+                        / n
+                    )
                 else:
                     value = 0.0
                 weekend = (value, n)
@@ -790,18 +810,17 @@ class Engine:
             default=self._th("release_fallback_lap_s", 95.0) * 1000.0,
             min_weight=min_w,
         )
-        fuel_p = resolve_prior(
-            self.db,
-            track_id,
-            compound,
-            self._learned_name(track_id, compound, "fuel_ms_per_lap"),
-            overlay_value=None,
-            default=self._th("fuel_ms_per_lap_default", 30),
-            min_weight=min_w,
-        )
+        deg = deg_p.value
+        if deg_p.source == "learned" and self.db is not None:
+            deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap")
+            suffix = deg_name.removeprefix("deg_ms_per_lap")
+            ref = self.db.get_param(track_id, compound, DEG_FUEL_REF + suffix)
+            deg = fuel_adjusted_deg(
+                deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
+            )
         return DegFit(
             base_ms=base_p.value,
-            deg_ms_per_lap=deg_p.value,
+            deg_ms_per_lap=deg,
             fuel_ms_per_lap=fuel_p.value,
             n=0,
             rmse_ms=0.0,
@@ -853,11 +872,14 @@ class Engine:
         ):
             return
         race_laps = self._race_laps()
-        for name, value in (
+        params = [
             ("deg_ms_per_lap", fit.deg_ms_per_lap),
+            (DEG_FUEL_REF, fit.fuel_ms_per_lap),
             ("base_ms", fit.base_ms),
-            ("fuel_ms_per_lap", fit.fuel_ms_per_lap),
-        ):
+        ]
+        if fit.fuel_fitted:
+            params.append(("fuel_ms_per_lap", fit.fuel_ms_per_lap))
+        for name, value in params:
             self.db.fold_param(
                 track_id,
                 compound,
@@ -1004,11 +1026,16 @@ class Engine:
                     wear_per_lap=0.0,
                 ),
             )
-            burned = self._stint_fuel_ref - state.fuel_remaining_laps
+            per_lap = self.fuel_budget.per_lap_kg if self.fuel_budget is not None else 0.0
+            burned = (
+                max(0.0, self._stint_fuel_ref - state.fuel_in_tank) / per_lap
+                if per_lap > 0 and self._stint_fuel_ref > 0
+                else 0.0
+            )
             predicted = int(
                 fit.base_ms
                 + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
-                + fit.fuel_ms_per_lap * (burned + 1)
+                - fit.fuel_ms_per_lap * (burned + 1)
             )
         eb = self.energy_budget
         fb = self.fuel_budget
@@ -1350,7 +1377,7 @@ class Engine:
                 run_lap_kind="cool",
                 run_plan="manual_cool",
                 run_plan_reason="driver",
-                run_plan_why="Driver requested a cooldown",
+                run_plan_why="Your call",
             )
         if (
             snapshot.session_ended

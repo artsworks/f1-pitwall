@@ -331,6 +331,7 @@ class WeekendStint:
     started_at: float
     n_valid_laps: int
     deg_ms_per_lap: float
+    fuel_ms_per_lap: float | None = None  # prior fuel slope the fit assumed; None if fitted
 
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
@@ -710,6 +711,7 @@ class Database:
                 "rmse_ms": fit.rmse_ms,
                 "confidence": fit.confidence,
                 "source": fit.source,
+                "fuel_fitted": fit.fuel_fitted,
             }
         )
         with self._conn:
@@ -827,6 +829,11 @@ class Database:
                     started_at=float(row["started_at"] or 0.0),
                     n_valid_laps=int(row["n_valid_laps"] or 0),
                     deg_ms_per_lap=float(params.get("deg_ms_per_lap", 0.0)),
+                    fuel_ms_per_lap=(
+                        float(params["fuel_ms_per_lap"])
+                        if "fuel_ms_per_lap" in params and not params.get("fuel_fitted")
+                        else None
+                    ),
                 )
             )
         return result
@@ -1004,8 +1011,9 @@ class Database:
         """Player stints with their session's track, type and race distance,
         oldest first: the source every stint-derived prior is rebuilt from."""
         return self._rows(
-            "SELECT se.track_id, se.session_type, se.total_laps, st.compound,"
-            " st.n_valid_laps, st.deg_params FROM stints st"
+            "SELECT se.track_id, se.session_type, se.total_laps, st.session_uid,"
+            " st.compound, st.start_lap, st.end_lap, st.n_valid_laps, st.deg_params"
+            " FROM stints st"
             " JOIN sessions se ON se.uid=st.session_uid WHERE st.car_idx=0"
             " ORDER BY se.started_at, se.uid, st.start_lap",
             (),

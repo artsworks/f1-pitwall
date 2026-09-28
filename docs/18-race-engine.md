@@ -155,7 +155,12 @@ def fit_stint(laps: Sequence[LapRow], prior: DegFit, *, min_laps: int, fuel_coef
 ```
 
 Fit: ordinary least squares on valid laps only (`valid == 1`, plus `sc_status == 0`) of
-`lap_time_ms = base + deg * tyre_age_laps + fuel * (fuel_ref - fuel_remaining_laps_at_end)`.
+`lap_time_ms = base + deg * tyre_age_laps - fuel * laps_of_fuel_burned`, where laps of fuel burned
+come from the recorded `fuel_kg` drop since the stint's heaviest lap (the game's
+`fuel_remaining_laps` is its spare-at-flag margin, not a load, and is only a fallback).
+When fuel burn tracks tyre age too closely to separate, fuel is fixed to the prior and the fit
+stores that prior as `deg_fuel_ref_ms_per_lap`; learned deg is re-split with the current fuel
+prior (`deg + fuel_now - deg_fuel_ref`). Only fits that estimated fuel update `fuel_ms_per_lap`.
 With `n < min_laps` (default `th.deg_min_laps = 3`) return the prior with `source='prior'`.
 With `min_laps <= n < 2*min_laps` blend: `w = (n - min_laps + 1) / (min_laps + 1)`,
 `fit = w*ols + (1-w)*prior`, `source='blend'`. Fuel slope is fixed to `fuel_coeff_fixed`

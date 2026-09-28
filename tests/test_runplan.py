@@ -196,8 +196,8 @@ def test_cool_lap_coaching_rules() -> None:
     )
     assert {"cool_status", "cool_vs_pole", "cool_mistakes"} <= set(ids)
     assert ids["cool_vs_pole"] in (
-        "Pole is 2.2 up. Most of it is sector 2, 1.9",
-        "2.2 to pole, 1.9 of that in sector 2",
+        "2.2 to pole. Most in sector 2, 1.9",
+        "2.2 to pole. Sector 2, 1.9",
     )
     ids = _ids(
         _qsnap(
@@ -211,8 +211,8 @@ def test_cool_lap_coaching_rules() -> None:
     )
     assert "cool_vs_pole" not in ids
     assert ids["cool_vs_pole_split"] in (
-        "Pole is 0.4 up. Sector 2 costs 1.0, you gain some back elsewhere",
-        "0.4 to pole. We lose 1.0 in sector 2 and win some of it back",
+        "0.4 to pole. Sector 2 costs 1.0, you gain elsewhere",
+        "0.4 to pole. Lose 1.0 in sector 2, gain some back",
     )
     assert "cool_car_behind" in _ids(_qsnap(hot_car_behind_s=2.0, **cool))
     assert "cool_car_behind" not in _ids(_qsnap(hot_car_behind_s=math.inf, **cool))

@@ -4,6 +4,8 @@ import asyncio
 import io
 from datetime import UTC, datetime
 
+import pytest
+
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine, run_replay
@@ -49,6 +51,8 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
                 weekend_link=0x26000002,
                 session_uid=practice_uid,
                 deg_ms=140,
+                fuel_kg_per_lap=2.0,
+                fuel_ms_per_kg=15.0,  # 30 ms/lap, the default fuel prior
                 compound=17,
                 dt=1.0,
                 send_session_end=True,
@@ -92,7 +96,7 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
     prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
 
     assert prior.source == "weekend"
-    assert prior.deg_ms_per_lap == 140.0
+    assert prior.deg_ms_per_lap == pytest.approx(140.0, abs=0.01)  # float32 fuel kg
 
     asyncio.run(run_replay(race, engine))
     engine.fold_open_stint()

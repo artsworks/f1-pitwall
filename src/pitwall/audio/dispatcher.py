@@ -461,7 +461,7 @@ class Dispatcher:
                 self._log_press(now, snapshot, "quiet_until", None, None)
                 mins = f"{self.input.quiet_minutes:g}"
                 self._reply(
-                    [f"Copy, going quiet for {mins} minutes. One click brings me back."],
+                    [f"Copy, going quiet for {mins} minutes. Click to undo."],
                     snapshot,
                 )
             self._broadcast_press(payload)

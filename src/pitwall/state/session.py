@@ -2008,10 +2008,10 @@ class SessionState:
         hot_i = max(range(4), key=lambda i: temps[i])
         low_c, high_c = pressure_window(self._thresholds, self.tyre_compound)
         if temps[hot_i] > high_c:
-            hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, keep it off the kerbs"
+            hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, off the kerbs"
         elif min(temps) < low_c:
             cold_i = min(range(4), key=lambda i: temps[i])
-            hint = f"{WHEEL_NAMES[cold_i]} down to {temps[cold_i]:.0f}, keep some heat in it"
+            hint = f"{WHEEL_NAMES[cold_i]} {temps[cold_i]:.0f}, keep heat in it"
         else:
             hint = (
                 f"tyres in the window, fronts {(inner.fl + inner.fr) / 2:.0f}, "

@@ -4,8 +4,9 @@ session: nobody should need `pitwall digest` or SQLite to keep priors sane.
 - quarantine: model_params rows that fail a sanity check (unknown track,
   slope at the fit clamp, implausible lap time) move to
   model_params_quarantine and stop feeding priors;
-- rebuild (once per LEARN_VERSION): stint-derived priors are recomputed from
-  the stints table with today's gate and race-distance scoping;
+- rebuild (once per LEARN_VERSION): each stored stint is refit from its laps
+  with today's model, then stint-derived priors are recomputed with today's
+  gate and race-distance scoping;
 - grade: sessions without hindsight outcomes are graded.
 
 Deterministic and idempotent: a second run changes nothing."""
@@ -17,12 +18,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from pitwall.hindsight import grade_and_store
-from pitwall.model.deg import DegFit, fit_is_clean, scoped
+from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, ModelParam
 
-LEARN_VERSION = 1
-STINT_PARAMS = ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap")
+LEARN_VERSION = 2
+STINT_PARAMS = ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap", DEG_FUEL_REF)
 
 
 @dataclass
@@ -118,7 +119,23 @@ def rebuild_stint_params(db: Database, th: Mapping[str, object]) -> tuple[int, l
             rmse_ms=float(params.get("rmse_ms", 0.0)),
             confidence=float(params.get("confidence", 0.0)),
             source=str(params.get("source", "")),
+            fuel_fitted=bool(params.get("fuel_fitted", False)),
         )
+        uid = int(row["session_uid"])
+        start, end = int(row["start_lap"]), int(row["end_lap"])
+        compound = int(row["compound"] or 0)
+        laps = [lap for lap in db.laps_for(uid) if start <= lap.lap_num <= end]
+        if laps:
+            fit = fit_stint(
+                laps,
+                fit,
+                min_laps=int(_th(th, "deg_min_laps", 3)),
+                fuel_coeff_fixed=None,
+                deg_max_ms_per_lap=_th(th, "deg_max_ms_per_lap", 600),
+                deg_rmse_bad_ms=_th(th, "deg_rmse_bad_ms", 800),
+            )
+            n = fit.n
+            db.upsert_stint(uid, 0, compound, start, end, fit)
         if n <= 0 or not fit_is_clean(
             fit,
             deg_max_ms_per_lap=_th(th, "deg_max_ms_per_lap", 600),
@@ -128,10 +145,13 @@ def rebuild_stint_params(db: Database, th: Mapping[str, object]) -> tuple[int, l
         ):
             continue
         race_laps = _race_laps(int(row["session_type"] or 0), int(row["total_laps"] or 0))
-        compound = int(row["compound"] or 0)
         for name, value in zip(
-            STINT_PARAMS, (fit.deg_ms_per_lap, fit.base_ms, fit.fuel_ms_per_lap), strict=True
+            STINT_PARAMS,
+            (fit.deg_ms_per_lap, fit.base_ms, fit.fuel_ms_per_lap, fit.fuel_ms_per_lap),
+            strict=True,
         ):
+            if name == "fuel_ms_per_lap" and not fit.fuel_fitted:
+                continue
             key = scoped(name, race_laps)
             db.fold_param(track_id, compound, key, value, weight=float(n), param_weight_cap=cap)
             names.add((track_id, compound, key))

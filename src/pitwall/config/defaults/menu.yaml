@@ -34,11 +34,11 @@ menu:
         soon: ["Not yet. Box in {in_laps}, lap {plan_lap}.", "Stay out, box lap {plan_lap}."]
         stay_out: ["No, stay out. {reason}.", "Negative, stay out."]
         no_stop: ["No stop. Tyres make the end.", "Stay out to the end."]
-        tyres_short: ["Yes, box. Tyres won't make it, {pace_laps} laps left in them, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, they won't last {laps_left} laps."]
-        box_fight: ["Box for fresh tyres. Stop costs {loss}, we get about {gain} back over {laps_left} laps. Good for the fight at the end.", "Yes, box. Fresh tyres are worth {gain} over {laps_left} laps against {loss} in the pits. Come out and attack."]
-        damage_review: ["Front wing {wing} percent. Tyres may last, but box for repairs if handling is compromised.", "Wing {wing} percent. Tyre strategy says stay out; consider repairs if the car won't turn."]
-        damage_nurse: ["Wing {wing} percent. Too late for a stop; nurse it home.", "Front wing {wing} percent. Stay out and protect the car to the finish."]
-        hold: ["Stay out. Tyres make the end, worst one {wear} percent. A stop costs {loss}, only {gain} back. Hold P{pos}.", "Negative, stay out and hold P{pos}. Tyres have {pace_laps} laps left, {laps_left} to go."]
+        tyres_short: ["Yes, box. Tyres have {pace_laps} laps, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, won't last."]
+        box_fight: ["Box. Stop costs {loss}, fresh tyres gain {gain}.", "Yes, box. {gain} back for {loss}. Then attack."]
+        damage_review: ["Wing {wing} percent. Box if it won't turn.", "Wing {wing} percent. Stay out unless it won't turn."]
+        damage_nurse: ["Wing {wing} percent. Too late to stop, nurse it.", "Wing {wing} percent. Stay out, protect the car."]
+        hold: ["Stay out. Stop costs {loss}, only {gain} back. Hold P{pos}.", "Negative, hold P{pos}. Tyres make the end."]
         unknown: ["No plan yet. Stay out.", "Still working on it. Stay out."]
     - id: gap
       label: "Gap ahead?"
@@ -91,19 +91,19 @@ menu:
       replies:
         switch: ["Box for {to}. The field's quicker on them.", "{to} are the tyre now. Box this lap."]
         right_tyre: ["You're on the right tyre. Stay out.", "{tyre} are right. Stay out, we'll call it."]
-        crossover: ["Forecast says {to}. Not yet, we'll call the lap.", "{to} coming. Stay out for now."]
+        crossover: ["{to} coming. Not yet, we'll call it.", "{to} coming. Stay out for now."]
         coming: ["Rain coming. {in10} percent in ten.", "Yes, {in30} percent in thirty."]
         chance: ["Maybe. {in10} percent in ten.", "Small chance, {in30} percent."]
         dry: ["No, staying dry.", "Dry. No rain expected."]
     - id: race_stat
       label: "Race stat"
       replies:
-        fuel_short: ["Fuel's the story. Short {margin} laps, lift and coast.", "Fuel first. Short {margin}, save."]
-        tyres_gone: ["Tyres are the story. {wear} percent, they're done.", "Tyres gone, {wear} percent worn."]
-        energy: ["Battery's the story. Over budget, harvest.", "Energy over, save battery."]
+        fuel_short: ["Fuel short {margin} laps. Lift and coast.", "Fuel first. Short {margin}, save."]
+        tyres_gone: ["Tyres done, {wear} percent.", "Tyres gone, {wear} percent worn."]
+        energy: ["Battery over budget. Harvest.", "Energy over, save battery."]
         box_now: ["Box this lap. {reason}.", "It's box now. {reason}."]
         pit_soon: ["P{pos}, box lap {plan_lap}. {laps_left} to go.", "Box in {in_laps}. P{pos}, {laps_left} left."]
-        position: ["P{pos}, {laps_left} to go. Best lap {best}.", "Running P{pos}. {laps_left} laps left, best {best}."]
+        position: ["P{pos}, {laps_left} to go. Best lap {best}.", "P{pos}. {laps_left} left, best {best}."]
         practice: ["P{pos} on the times. Best lap {best}.", "Best lap {best}, that's P{pos}."]
         practice_no_best: ["No clean lap on the board yet.", "No valid lap yet. Get one in."]
         unknown: ["No race read yet.", "Not enough data yet."]
@@ -127,14 +127,14 @@ menu:
       kind: opinion
       topic: balance
       replies:
-        default: ["Copy, understeer. Bias back one, to {bias_to}.", "Understeer noted. Try bias {bias_to}, diff on entry lower."]
+        default: ["Copy, understeer. Bias back one, to {bias_to}.", "Understeer. Try bias {bias_to}, lower entry diff."]
         no_bias: ["Copy, understeer. Try bias back one.", "Understeer noted."]
     - id: oversteer
       label: "Oversteer"
       kind: opinion
       topic: balance
       replies:
-        default: ["Copy, oversteer. Bias forward one, to {bias_to}.", "Oversteer noted. Try bias {bias_to}, ease the diff."]
+        default: ["Copy, oversteer. Bias forward one, to {bias_to}.", "Oversteer. Try bias {bias_to}, ease the diff."]
         no_bias: ["Copy, oversteer. Try bias forward one.", "Oversteer noted."]
     - id: mindset
       label: "Mindset"
@@ -150,5 +150,5 @@ menu:
       kind: action
       action: cooldown
       replies:
-        "on": ["Copy, cooldown lap. I'll stop hot-lap coaching.", "Understood. Cooling this lap, recharge and reset."]
+        "on": ["Copy, cooldown lap.", "Cool lap. Recharge, reset."]
         "off": ["Copy, back to hot-lap mode.", "Understood. Hot-lap coaching is back."]

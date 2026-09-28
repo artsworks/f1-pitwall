@@ -1,6 +1,6 @@
 """Pace + degradation model (docs/18). Ordinary least squares on valid,
-non-SC laps of `lap_time_ms = base + deg*tyre_age + fuel*(fuel_ref -
-fuel_remaining)`; normal equations solved by hand (no numpy dep)."""
+non-SC laps of `lap_time_ms = base + deg*tyre_age - fuel*fuel_burned_laps`;
+normal equations solved by hand (no numpy dep)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 
 _FUEL_SPAN_MIN_LAPS = 0.5
+_FUEL_AGE_COLLINEAR_R = 0.98
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,7 @@ class DegFit:
     rmse_ms: float
     confidence: float  # 0..1
     source: str  # 'fit' | 'prior' | 'blend'
+    fuel_fitted: bool = False  # fuel slope estimated from this data, not the prior
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,18 @@ class Prior:
     value: float
     weight: float
     source: str  # 'learned' | 'overlay' | 'default' | 'session'
+
+
+DEG_FUEL_REF = "deg_fuel_ref_ms_per_lap"
+
+
+def fuel_adjusted_deg(deg: float, deg_fuel_ref: float | None, fuel_now: float) -> float:
+    """Learned deg re-split with today's fuel slope. A stint fit only sees the
+    lap-time slope (deg - fuel), so its deg is tied to the fuel slope it
+    assumed; `deg_fuel_ref` stores that assumption."""
+    if deg_fuel_ref is None:
+        return deg
+    return max(0.0, deg + fuel_now - deg_fuel_ref)
 
 
 def resolve_prior(
@@ -87,6 +101,36 @@ def _ols(rows: list[list[float]], ys: list[float]) -> list[float] | None:
     return _solve(ata, aty)
 
 
+def fuel_burned_laps(laps: Sequence[LapRow]) -> list[float]:
+    """Laps' worth of fuel burned since the stint's heaviest lap, one per lap.
+
+    Uses the recorded fuel kg scaled by the stint's own burn per lap. The
+    game's `fuel_remaining_laps` is the MFD margin at the flag (flat over a
+    stint), so it is only a fallback for rows without kg."""
+    if not laps:
+        return []
+    if all(lap.fuel_kg > 0 for lap in laps):
+        hi = max(laps, key=lambda lap: lap.fuel_kg)
+        lo = min(laps, key=lambda lap: lap.fuel_kg)
+        span = lo.lap_num - hi.lap_num
+        if span <= 0 or hi.fuel_kg <= lo.fuel_kg:
+            return [0.0] * len(laps)
+        per_lap = (hi.fuel_kg - lo.fuel_kg) / span
+        return [(hi.fuel_kg - lap.fuel_kg) / per_lap for lap in laps]
+    ref = max(lap.fuel_remaining_laps for lap in laps)
+    return [ref - lap.fuel_remaining_laps for lap in laps]
+
+
+def _correlation(xs: Sequence[float], ys: Sequence[float]) -> float:
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    syy = sum((y - my) ** 2 for y in ys)
+    if sxx <= 1e-12 or syy <= 1e-12:
+        return 0.0
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / math.sqrt(sxx * syy)
+
+
 def fit_stint(
     laps: Sequence[LapRow],
     prior: DegFit,
@@ -110,23 +154,24 @@ def fit_stint(
             "prior",
         )
 
-    # fuel term: laps' worth of fuel burned relative to the stint's first
-    # observed fuel level (fuel_ref).
-    fuel_ref = max(lap.fuel_remaining_laps for lap in usable)
-    if fuel_ref - min(lap.fuel_remaining_laps for lap in usable) < _FUEL_SPAN_MIN_LAPS:
+    # Fuel and tyre age both rise one per lap in a stint; when they are
+    # collinear the fuel slope comes from the prior, not the fit.
+    burned = fuel_burned_laps(usable)
+    ages = [float(lap.tyre_age_laps) for lap in usable]
+    if max(burned) < _FUEL_SPAN_MIN_LAPS or abs(_correlation(ages, burned)) > _FUEL_AGE_COLLINEAR_R:
         fuel_coeff_fixed = prior.fuel_ms_per_lap if fuel_coeff_fixed is None else fuel_coeff_fixed
     rows: list[list[float]] = []
     ys: list[float] = []
-    for lap in usable:
-        burned = fuel_ref - lap.fuel_remaining_laps
+    for lap, b in zip(usable, burned, strict=True):
         if fuel_coeff_fixed is not None:
             rows.append([1.0, float(lap.tyre_age_laps)])
-            ys.append(lap.lap_time_ms - fuel_coeff_fixed * burned)
+            ys.append(lap.lap_time_ms + fuel_coeff_fixed * b)
         else:
-            rows.append([1.0, float(lap.tyre_age_laps), burned])
+            rows.append([1.0, float(lap.tyre_age_laps), -b])
             ys.append(float(lap.lap_time_ms))
 
     coeff = _ols(rows, ys)
+    fuel_fitted = coeff is not None and fuel_coeff_fixed is None
     if coeff is None:
         # Collinear (e.g. all tyre_age equal): fall back to deg-only fit.
         mean_y = sum(ys) / len(ys)
@@ -134,7 +179,7 @@ def fit_stint(
         var = sum((lap.tyre_age_laps - mean_a) ** 2 for lap in usable)
         if var < 1e-9:
             return DegFit(mean_y, 0.0, prior.fuel_ms_per_lap, n, 0.0, 0.5, "fit")
-        deg = sum((lap.tyre_age_laps - mean_a) * (lap.lap_time_ms - mean_y) for lap in usable) / var
+        deg = sum((a - mean_a) * (y - mean_y) for a, y in zip(ages, ys, strict=True)) / var
         coeff = [mean_y - deg * mean_a, deg] + ([] if fuel_coeff_fixed is not None else [0.0])
 
     base = coeff[0]
@@ -147,12 +192,8 @@ def fit_stint(
 
     rmse = math.sqrt(
         sum(
-            (
-                lap.lap_time_ms
-                - (base + deg * lap.tyre_age_laps + fuel * (fuel_ref - lap.fuel_remaining_laps))
-            )
-            ** 2
-            for lap in usable
+            (lap.lap_time_ms - (base + deg * lap.tyre_age_laps - fuel * b)) ** 2
+            for lap, b in zip(usable, burned, strict=True)
         )
         / n
     )
@@ -166,7 +207,7 @@ def fit_stint(
     confidence = min(max(n / (2 * min_laps), 0.0), 1.0) * min(
         max(1.0 - rmse / deg_rmse_bad_ms, 0.2), 1.0
     )
-    return DegFit(base, deg, fuel, n, rmse, confidence, source)
+    return DegFit(base, deg, fuel, n, rmse, confidence, source, fuel_fitted)
 
 
 def laps_of_pace(

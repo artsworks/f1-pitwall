@@ -135,7 +135,7 @@ class InputSettings(BaseModel):
     silent_off_replies: list[str] = Field(
         default_factory=lambda: [
             "Back with you. Feeding you info again.",
-            "Radio's back on. I'll keep you posted.",
+            "Radio's back on.",
             "Back on the radio.",
         ]
     )

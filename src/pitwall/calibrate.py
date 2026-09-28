@@ -14,6 +14,7 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.hindsight import linear_deg, stints, stop_laps
+from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, LapRow
 
@@ -113,13 +114,10 @@ def _thermal_window(
             if fit is None:
                 continue
             base_ms, deg_ms, _ = fit
-            max_fuel_laps = max(lap.fuel_remaining_laps for lap in green)
-            for lap in green:
+            for lap, burned in zip(green, fuel_burned_laps(green), strict=True):
                 if lap.tyre_inner_c == 0:
                     continue
-                corrected = lap.lap_time_ms + fuel_ms_per_lap * max(
-                    0.0, max_fuel_laps - lap.fuel_remaining_laps
-                )
+                corrected = lap.lap_time_ms + fuel_ms_per_lap * max(0.0, burned)
                 residual = corrected - (base_ms + deg_ms * lap.tyre_age_laps)
                 bins[math.floor(lap.tyre_inner_c / bin_width)].append(residual)
     means = {
@@ -391,6 +389,12 @@ def calibrate_track(
                     ),
                 )
             )
+    fuel_by_compound = {c: v for c, name, v, _ in writes if name == "fuel_ms_per_lap"}
+    writes += [
+        (c, DEG_FUEL_REF, fuel_by_compound[c], w)
+        for c, name, _, w in list(writes)
+        if name == "deg_ms_per_lap" and c in fuel_by_compound
+    ]
     if not dry_run:
         for compound, name, value, weight in writes:
             db.set_param(track_id, compound, name, value, weight)
