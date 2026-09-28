@@ -47,7 +47,18 @@ class _WithRepeat(dict[str, Any]):
         self._ns = ns
 
     def __missing__(self, key: str) -> Any:
-        return self._ns[key]
+        value = self._ns[key]
+        return _OneDecimal(value) if type(value) is float else value
+
+
+class _OneDecimal(float):
+    """Float that renders to one decimal when a template gives no format spec."""
+
+    def __format__(self, spec: str) -> str:
+        if spec:
+            return format(float(self), spec)
+        text = f"{float(self):.1f}"
+        return text[:-2] if text.endswith(".0") else text
 
 
 @dataclass(slots=True)

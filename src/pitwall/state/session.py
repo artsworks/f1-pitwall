@@ -81,8 +81,8 @@ def pressure_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float
 def spoken_lap_time(ms: float) -> str:
     if ms <= 0 or not math.isfinite(ms):
         return "?"
-    minutes, seconds = divmod(ms / 1000, 60)
-    seconds_text = f"{seconds:.3f}".rstrip("0").rstrip(".")
+    minutes, seconds = divmod(round(ms / 100) / 10, 60)
+    seconds_text = f"{seconds:.1f}".removesuffix(".0")
     if minutes == 0:
         return f"{seconds_text} seconds"
     unit = "minute" if minutes == 1 else "minutes"
@@ -2132,12 +2132,12 @@ class SessionState:
         name = self.participants[idx].name if 0 <= idx < len(self.participants) else ""
         mine = idx == self._player_idx
         best = field_best[self._player_idx] if 0 <= self._player_idx < len(field_best) else 0
-        secs = ms / 1000.0
+        secs = round(ms / 100) / 10
         return dict(
             fastest_lap_ms=ms,
             fastest_lap_mine=mine,
             fastest_lap_name=name,
-            fastest_lap_time=f"{int(secs // 60)}:{secs % 60:06.3f}",
+            fastest_lap_time=f"{int(secs // 60)}:{secs % 60:04.1f}",
             fastest_lap_spoken=spoken_lap_time(ms),
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,

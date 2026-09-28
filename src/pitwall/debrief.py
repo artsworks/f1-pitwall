@@ -20,6 +20,8 @@ def _esc(value: object) -> str:
 
 
 def _cell(value: object) -> str:
+    if isinstance(value, float):
+        value = f"{value:.1f}"
     return f"<td>{_esc(value)}</td>"
 
 
@@ -63,7 +65,7 @@ def _plot(laps: list[LapRow], stints: list[StintRow]) -> str:
         color = "#3fbf9c" if lap.valid and lap.sc_status == 0 else "#b5b9c3"
         marks.append(
             f"<circle cx='{x:.1f}' cy='{y:.1f}' r='4' fill='{color}'>"
-            f"<title>Lap {lap.lap_num}: {lap.lap_time_ms / 1000:.3f}s, "
+            f"<title>Lap {lap.lap_num}: {lap.lap_time_ms / 1000:.1f}s, "
             f"{'valid' if lap.valid else 'invalid'}</title></circle>"
         )
     return (
@@ -100,8 +102,8 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     judged = Counter(
         str(grades.get(str(call["call_id"]), {}).get("grade") or "ungraded") for call in fired
     )
-    mean = f"{statistics.fmean(lap.lap_time_ms for lap in valid) / 1000:.3f}s" if valid else "—"
-    spread = f"{statistics.pstdev(lap.lap_time_ms for lap in valid) / 1000:.3f}s" if valid else "—"
+    mean = f"{statistics.fmean(lap.lap_time_ms for lap in valid) / 1000:.1f}s" if valid else "—"
+    spread = f"{statistics.pstdev(lap.lap_time_ms for lap in valid) / 1000:.1f}s" if valid else "—"
     summary = (
         f"<p>{len(laps)} laps · {len(valid)} clean green laps · {len(pits)} stops · "
         f"{len(fired)} calls · {judged['good']} graded good · {judged['wrong']} graded wrong. "
@@ -130,10 +132,10 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
                 [
                     (
                         lap.lap_num,
-                        f"{lap.lap_time_ms / 1000:.3f}",
+                        f"{lap.lap_time_ms / 1000:.1f}",
                         lap.compound,
                         lap.tyre_age_laps,
-                        f"{lap.fuel_kg:.2f}",
+                        f"{lap.fuel_kg:.1f}",
                         "valid"
                         if lap.valid and not lap.sc_status
                         else ", ".join(lap.invalid_reasons) or "SC",
@@ -161,7 +163,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     sectors = [
         (
             label,
-            f"{statistics.fmean(values) / 1000:.3f}" if values else "—",
+            f"{statistics.fmean(values) / 1000:.1f}" if values else "—",
             len(values),
         )
         for label, values in (
@@ -279,7 +281,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
             )
             + _table(
                 ("Pit lap", "Loss (s)", "Neutralised"),
-                [(pit.lap_num, f"{pit.loss_ms / 1000:.2f}", bool(pit.neutralised)) for pit in pits],
+                [(pit.lap_num, f"{pit.loss_ms / 1000:.1f}", bool(pit.neutralised)) for pit in pits],
                 "pit_events",
             ),
         )
@@ -303,7 +305,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
             _table(
                 ("Lap", "ERS deployed (J)", "Fuel (kg)", "SC status"),
                 [
-                    (lap.lap_num, f"{lap.ers_deployed_j:.0f}", f"{lap.fuel_kg:.2f}", lap.sc_status)
+                    (lap.lap_num, f"{lap.ers_deployed_j:.0f}", f"{lap.fuel_kg:.1f}", lap.sc_status)
                     for lap in laps
                 ],
                 "laps; raw event details require the recording index",

@@ -526,8 +526,8 @@
   function renderCarPage(p, s) {
     var e = s ? s.energy : null;
     if (e && e.per_lap_mj) {
-      setText("cp-energy", (e.lap_delta_mj >= 0 ? "+" : "") + fmt(e.lap_delta_mj, 2) + " MJ");
-      setText("cp-energy-sub", fmt(e.per_lap_mj, 2) + " MJ/lap target" +
+      setText("cp-energy", (e.lap_delta_mj >= 0 ? "+" : "") + fmt(e.lap_delta_mj, 1) + " MJ");
+      setText("cp-energy-sub", fmt(e.per_lap_mj, 1) + " MJ/lap target" +
         (e.laps_to_floor !== null ? " · floor in " + fmt(e.laps_to_floor, 1) + " laps" : "") +
         (e.mode ? " · " + e.mode : ""));
     } else {
@@ -669,12 +669,12 @@
   }
   function lapTime(ms) {
     if (!ms) return "--";
-    var s = ms / 1000, m = Math.floor(s / 60);
-    return m + ":" + ("0" + (s - m * 60).toFixed(3)).slice(-6);
+    var s = Math.round(ms / 100) / 10, m = Math.floor(s / 60);
+    return m + ":" + ("0" + (s - m * 60).toFixed(1)).slice(-4);
   }
   function signed(ms) {
     if (ms === null || ms === undefined) return "--";
-    return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(3);
+    return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(1);
   }
 
   // Zone F in qualifying (docs/15 §8): release window in the garage, lap vs cut-off
@@ -926,7 +926,7 @@
       var top = gaps.indexOf(Math.max.apply(null, gaps));
       Array.prototype.forEach.call(secs.children, function (box, i) {
         var ms = gaps[i];
-        box.querySelector(".t").textContent = mine[i] ? (mine[i] / 1000).toFixed(3) : "--";
+        box.querySelector(".t").textContent = mine[i] ? (mine[i] / 1000).toFixed(1) : "--";
         box.querySelector(".d").textContent = ms ? signed(ms) : "";
         box.className = "c-sec" + (i === top && ms > 0 ? " worst" : ms < 0 ? " gain" : "");
       });

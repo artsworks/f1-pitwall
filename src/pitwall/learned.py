@@ -256,10 +256,10 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
 def format_learned(state: Mapping[str, Any]) -> str:
     def prior_text(value: Mapping[str, Any]) -> str:
         overlay = value["overlay"]
-        overlay_text = "none" if overlay is None else f"{float(overlay):.2f}"
+        overlay_text = "none" if overlay is None else f"{float(overlay):.1f}"
         return (
-            f"{float(value['value']):.2f} ({value['source']}, w={float(value['weight']):.1f}; "
-            f"default={float(value['default']):.2f}, overlay={overlay_text}, "
+            f"{float(value['value']):.1f} ({value['source']}, w={float(value['weight']):.1f}; "
+            f"default={float(value['default']):.1f}, overlay={overlay_text}, "
             f"delta={float(value['delta_to_default']):+.2f})"
         )
 
@@ -301,6 +301,6 @@ def format_learned(state: Mapping[str, Any]) -> str:
     lines.append(f"Tuned cooldown rules: {len(tuned)}")
     for item in tuned:
         lines.append(
-            f"  {item['rule_id']}: x{item['multiplier']:.3f}, grades={item['grade_count']}"
+            f"  {item['rule_id']}: x{item['multiplier']:.1f}, grades={item['grade_count']}"
         )
     return "\n".join(lines)

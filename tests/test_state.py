@@ -492,8 +492,8 @@ def test_fastest_lap_event_in_snapshot() -> None:
     _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=104.0), 0.1)
     snap = state.snapshot(0.1)
     assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
-    assert snap.fastest_lap_time == "1:19.195"
-    assert snap.fastest_lap_spoken == "1 minute 19.195 seconds"
+    assert snap.fastest_lap_time == "1:19.2"
+    assert snap.fastest_lap_spoken == "1 minute 19.2 seconds"
     assert 3.9 < snap.fastest_lap_age_s < 4.1
 
 

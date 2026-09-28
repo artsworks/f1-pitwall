@@ -534,7 +534,7 @@ def format_calibration(report: Mapping[str, Any]) -> str:
         lines.append("prefix | fitted values")
         for entry in track["history"]:
             values = ", ".join(
-                f"{name}={value:.3f}" for name, value in sorted(entry["values"].items())
+                f"{name}={value:.1f}" for name, value in sorted(entry["values"].items())
             )
             lines.append(f"{entry['sessions']:>6} | {values}")
         if not track["k_identifiable"]:
@@ -542,6 +542,6 @@ def format_calibration(report: Mapping[str, Any]) -> str:
         for compound, values in sorted(track["compounds"].items()):
             lines.append(
                 f"  compound {compound}: {values['status']}; "
-                f"deg={values['deg_ms_per_lap']:.2f} ms/lap"
+                f"deg={values['deg_ms_per_lap']:.1f} ms/lap"
             )
     return "\n".join(lines)
