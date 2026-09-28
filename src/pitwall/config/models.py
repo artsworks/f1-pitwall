@@ -71,7 +71,7 @@ class PolicySettings(BaseModel):
 
 class UiSettings(BaseModel):
     state_hz: int = 5
-    pages: list[str] = Field(default_factory=lambda: ["race", "battle", "car", "track", "setup"])
+    pages: list[str] = Field(default_factory=lambda: ["race", "battle", "car", "track"])
     auto_page: bool = False  # contextual page switching (battle / track); driver press wins
     auto_page_manual_hold_s: float = 60.0  # no auto switch this long after a manual choice
     auto_page_battle_gap_s: float = 1.0  # rival ahead/behind inside this = battle page

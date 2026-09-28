@@ -190,7 +190,7 @@ thresholds:
   digest_max_findings: 5
 ui:
   state_hz: 5
-  pages: [race, battle, car, track, setup]  # UDP Action 4 cycles in this order
+  pages: [race, battle, car, track]  # UDP Action 4 cycles in this order
   auto_page: false              # true: battle page in a fight, track page under SC/VSC/formation
   auto_page_manual_hold_s: 60   # a manual page choice holds this long before auto may switch
   auto_page_battle_gap_s: 1.0

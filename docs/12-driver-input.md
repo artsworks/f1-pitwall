@@ -12,7 +12,7 @@ than any threshold tuning.
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now"; closes the menu while open |
 | Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off (`input.long_press: bookmark` makes it a marker instead) |
 | Menu up / down | UDP Action 2 / 3 (stick up / down) | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
-| Dashboard page cycle | UDP Action 4 (stick right) | `P` / click the page pill | race → battle → car → track → setup → race; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
+| Dashboard page cycle | UDP Action 4 (stick right) | `P` / click the page pill | race → battle → car → track → race; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
 | Mindset toggle | UDP Action 5 (stick left) | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item. **Close** while the menu is open |
 | Shortcuts | UDP Action 6 / 7 / 8 (Stream Deck) | — | ask "Pit now?" / "Race stat" / "Fight" directly |
 | Menu close | — | `Esc` | close the menu without answering |

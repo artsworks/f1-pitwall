@@ -154,7 +154,6 @@
     renderDuel(p.strategy, p.quali);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
-    renderSetupPage(p.setup);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -219,12 +218,12 @@
   function gapText(g) { return g === null || g === undefined ? "--" : (g >= 0 ? "+" : "") + fmt(g, 1); }
   function trendText(t, side) {
     // t = gap shrinking per lap (s). Ahead shrinking = we're closing;
-    // behind shrinking = we're being caught. Colour always paired with a word.
+    // behind shrinking = we're being caught. Word only; the rate is the pace line.
     if (!t) return null;
     var closing = t > 0;
     var word = side === "ahead" ? (closing ? "closing" : "dropping") : (closing ? "being caught" : "pulling away");
     var cls = side === "behind" && closing ? "crit" : side === "ahead" && closing ? "ok" : "";
-    return { text: (closing ? "▲ +" : "▼ ") + fmt(t, 1) + "/lap " + word, cls: cls };
+    return { text: (closing ? "▲ " : "▼ ") + word, cls: cls };
   }
   function span(txt, cls) {
     var n = document.createElement("span");
@@ -242,8 +241,7 @@
     n.appendChild(span((r.pos ? "P" + r.pos + " " : "") + String(r.name || "--").toUpperCase(), "name"));
     n.appendChild(span(gapText(gap), "gap"));
     n.appendChild(compoundBadge(r.compound, r.tyre_age));
-    var pw = paceWords(r);
-    n.appendChild(span(pw || "", "words " + wordsClass(pw, r.pace_delta_s, side)));
+    n.appendChild(span(paceText(r), "words " + paceClass(r.pace_delta_s, side)));
     var flags = [];
     if (r.drs) flags.push(span("DRS", "badge " + (side === "behind" ? "crit" : "ok")));
     if (side === "ahead" && s.undercut_s > 0) flags.push(span("UC", "badge ok"));
@@ -263,48 +261,76 @@
     setText("strat-title", "STRATEGY");
     var w = el("s-window");
     var ap = activePlan(s);
+    w.innerHTML = "";
+    w.className = "s-window";
+    var lapNow = lastState ? lastState.lap_num : 0;
     if (ap) {
-      var lapNow = lastState ? lastState.lap_num : 0, win = ap.window;
-      w.textContent = "PLAN " + ap.id + " · " + (s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN") +
-        (win ? " · BOX L" + win[0] + "–" + win[1] : " · NO STOP");
-      w.className = "s-window" + (s.on_plan === false ? " soon" : win && lapNow >= win[0] ? " box" :
-        win && lapNow >= win[0] - 2 ? " soon" : "");
+      var win = ap.window;
+      w.appendChild(span("PLAN " + ap.id, ""));
+      w.appendChild(span(s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN",
+        s.on_plan === false ? "warn" : "ok"));
+      w.appendChild(boxWord(win ? win[0] : null, win ? win[1] : null, lapNow));
     } else if (s.pit_window) {
-      var lap = lastState ? lastState.lap_num : 0;
-      w.textContent = "PIT WINDOW L" + s.pit_window.start + "–" + s.pit_window.end +
-        (s.plan ? " · " + String(s.plan.kind).toUpperCase().replace("_", " ") : "");
-      w.className = "s-window" + (lap >= s.pit_window.start ? " box" :
-        lap >= s.pit_window.start - 2 ? " soon" : "");
+      w.appendChild(boxWord(s.pit_window.start, s.pit_window.end, lapNow));
+      if (s.plan) w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " "), ""));
     } else if (s.plan && s.plan.kind) {
-      w.textContent = String(s.plan.kind).toUpperCase().replace("_", " ") +
-        (s.plan.lap ? " L" + s.plan.lap : "");
-      w.className = "s-window";
+      w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
+        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
     } else {
-      w.textContent = s.laps_remaining ? "NO STOP · " + s.laps_remaining + " to go" : "NO STOP";
-      w.className = "s-window";
+      w.appendChild(span("NO STOP", ""));
+      if (s.laps_remaining) w.appendChild(span(s.laps_remaining + " to go", "dim"));
     }
     rivalRow("s-ahead", s.ahead, "ahead", s);
     rivalRow("s-behind", s.behind, "behind", s);
-    setText("s-stint", (ap ? planText(ap) + alternates(s) : s.stint_plan) +
-      (s.restricted ? " · rival data restricted" : ""));
+    renderStint(el("s-stint"), s, ap);
+  }
+
+  // BOX L33–35: white while far off, amber inside two laps, red once open.
+  function boxWord(a, b, lapNow) {
+    if (a === null || a === undefined) return span("NO STOP", "");
+    var st = lapNow >= a ? "box" : lapNow >= a - 2 ? "soon" : "";
+    return span((st === "box" ? "BOX NOW " : "BOX ") + "L" + a + "–" + b, st);
+  }
+
+  // Plan line: active plan as compound chips + stop count, then each alternative
+  // as a lettered chip with its race-time delta (negative = faster = green).
+  function renderStint(n, s, ap) {
+    if (!n) return;
+    n.innerHTML = "";
+    if (!ap) { n.appendChild(span(s.stint_plan || "", "dim")); return; }
+    var act = span("", "plan act");
+    act.appendChild(span(ap.id, "pid"));
+    act.appendChild(compoundSeq(ap.compounds));
+    act.appendChild(span(ap.stops === 0 ? "no stop" : ap.stops + (ap.stops === 1 ? " stop" : " stops"), "dim"));
+    n.appendChild(act);
+    (s.plans || []).filter(function (p) { return !p.active; }).forEach(function (p) {
+      var c = span("", "plan alt" + (p.kind === "reactive" ? " sc" : ""));
+      c.appendChild(span(p.id, "pid"));
+      if (p.kind === "reactive") c.appendChild(span("SC", "tag"));
+      c.appendChild(compoundSeq(p.compounds));
+      var d = p.delta_s;
+      if (d === null || d === undefined) c.appendChild(span(p.kind === "reactive" ? "SC box now" : p.kind, "dim"));
+      else if (Math.abs(d) < 0.05) c.appendChild(span("same time", "dim"));
+      else c.appendChild(span((d < 0 ? "−" : "+") + fmt(Math.abs(d), 1) + " s " + (d < 0 ? "faster" : "slower"),
+        d < 0 ? "ok" : "warn"));
+      n.appendChild(c);
+    });
+    if (s.restricted) n.appendChild(span("rival data restricted", "dim"));
+  }
+
+  function compoundSeq(cs) {
+    var q = span("", "cseq");
+    (cs || []).forEach(function (c, i) {
+      if (i) q.appendChild(span("›", "arr"));
+      q.appendChild(span(String(c || "?").charAt(0).toUpperCase(), "comp " + compoundClass(c)));
+    });
+    return q;
   }
 
   function activePlan(s) {
     var ps = s && s.plans ? s.plans : [];
     for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
     return null;
-  }
-
-  function planText(p) {
-    return (p.compounds || []).map(function (c) { return String(c || "?").charAt(0).toUpperCase(); })
-      .join("→") + " · " + p.stops + (p.stops === 1 ? " stop" : " stops");
-  }
-
-  function alternates(s) {
-    return (s.plans || []).filter(function (p) { return !p.active; }).map(function (p) {
-      return " · " + p.id + " " + (p.delta_s !== null && p.delta_s !== undefined ?
-        (p.delta_s >= 0 ? "+" : "") + fmt(p.delta_s, 1) + "s" : p.kind);
-    }).join("");
   }
 
   // Rival vs us. pace_delta_s + = he is slower than our pace; last_lap_delta_s
@@ -315,18 +341,12 @@
     if (delta > 0) return "ok";
     return side === "behind" ? "crit" : "warn";
   }
-  function wordsClass(words, delta, side) {
-    var w = String(words || "");
-    if (/faster/.test(w)) return side === "behind" ? "crit" : "warn";
-    if (/slower/.test(w)) return "ok";
-    return w ? "" : paceClass(delta, side);
-  }
-  function paceWords(r) {
-    if (r.pace_words) return r.pace_words;
+  function paceText(r) {
+    // Numeric pace line: how much the rival gains or loses on us per lap.
     var d = r.pace_delta_s;
     if (d === null || d === undefined) return "";
-    if (Math.abs(d) < 0.03) return "same pace";
-    return fmt(Math.abs(d), 2) + " s " + (d > 0 ? "slower" : "faster");
+    if (Math.abs(d) < 0.03) return "= same pace";
+    return (d < 0 ? "▲ " : "▼ ") + fmt(Math.abs(d), 2) + "/lap " + (d < 0 ? "faster" : "slower");
   }
   function compoundClass(c) {
     var w = String(c || "").toLowerCase();
@@ -382,10 +402,10 @@
       rail.className = "rail " + side + (inDrs ? " in" : "");
     }
 
-    // Row 1: pace in words (the call the engineer would make) + tyre badge.
+    // Row 1: pace per lap + tyre badge.
     var pace = span("", "b-pace");
-    var pw = paceWords(r);
-    pace.appendChild(span(pw || "pace unknown", "words " + (pw ? wordsClass(pw, r.pace_delta_s, side) : "dim")));
+    var pw = paceText(r);
+    pace.appendChild(span(pw || "pace unknown", "words " + (pw ? paceClass(r.pace_delta_s, side) : "dim")));
     pace.appendChild(compoundBadge(r.compound, r.tyre_age));
     n.appendChild(pace);
 
@@ -411,9 +431,10 @@
     infringementBadges(r.infringements).forEach(function (b) { bad.appendChild(b); });
     n.appendChild(bad);
 
-    var threat = side === "behind" && (r.drs || inDrs || wordsClass(pw, r.pace_delta_s, side) === "crit");
+    var closing = r.gap_trend_s > 0;
+    var threat = side === "behind" && (r.drs || inDrs || closing || paceClass(r.pace_delta_s, side) === "crit");
     var edge = side === "ahead" && (r.drs || inDrs);
-    n.className = "b-card " + side + (threat ? " threat" : edge ? " edge" : "");
+    n.className = "b-card " + side + (threat ? " threat" : side === "behind" ? " calm" : edge ? " edge" : "");
   }
 
   var BATTLE_WORDS = { free_air: "FREE AIR", catching: "CATCHING", attacking: "ATTACKING",
@@ -433,8 +454,9 @@
     n.appendChild(span(res ? (RESULT_WORDS[res] || String(res).toUpperCase()) :
       (BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase()),
       "mode " + (res ? RESULT_CLS[res] || "" : BATTLE_CLS[mode] || "")));
+    if (res) n.appendChild(span(BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase(),
+      "sub " + (BATTLE_CLS[mode] || "")));
     var bits = [];
-    if (res) bits.push(BATTLE_WORDS[mode] || mode);
     if (b.mode_laps) bits.push(b.mode_laps + (b.mode_laps === 1 ? " lap" : " laps"));
     if ((mode === "catching" || mode === "attacking") && b.catch_laps !== null && b.catch_laps !== undefined)
       bits.push("catch in " + fmt(b.catch_laps, 1) + " laps");
@@ -476,14 +498,20 @@
     renderBattleState("d-state", s.battle, s);
     battleCard("d-ahead", s.ahead, "ahead", s);
     battleCard("d-behind", s.behind, "behind", s);
-    var pe = s.pit_exit || {}, bits = [];
+    var pe = s.pit_exit || {}, f = el("d-plan");
+    if (!f) return;
+    f.innerHTML = "";
     var ap = activePlan(s);
-    if (ap) bits.push("PLAN " + ap.id + (s.plan_target_lap ? " TARGET L" + s.plan_target_lap : ""));
-    else if (s.plan && s.plan.kind) bits.push(String(s.plan.kind).toUpperCase().replace("_", " ") +
-      (s.plan.lap ? " L" + s.plan.lap : ""));
-    bits.push("PIT EXIT " + (pe.clean ? "CLEAR" : "TRAFFIC") +
-      (pe.rival ? " " + String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : ""));
-    setText("d-plan", bits.join(" · "));
+    if (ap) {
+      f.appendChild(span("PLAN " + ap.id, "k"));
+      if (s.plan_target_lap) f.appendChild(span("target L" + s.plan_target_lap, ""));
+    } else if (s.plan && s.plan.kind) {
+      f.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
+        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
+    }
+    f.appendChild(span("PIT EXIT", "k"));
+    f.appendChild(span(pe.clean ? "CLEAR AIR" : "TRAFFIC", pe.clean ? "ok" : "warn"));
+    f.appendChild(span(pe.rival ? String(pe.rival.name || "").toUpperCase() + " " + gapText(pe.rival.gap_s) : "", "dim"));
   }
 
   function renderCarPage(p, s) {
@@ -521,7 +549,7 @@
       fd < 0 ? "crit" : fd < 0.5 ? "short" : "");
     var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
     meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
-      lop !== null && lop !== undefined && togo && lop < togo ? "short" : "");
+      lop !== null && lop !== undefined && togo && lop < togo ? (lop < togo - 3 ? "crit" : "short") : "");
     setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " ok"));
   }
 
@@ -535,6 +563,7 @@
   }
 
   var WEATHER_WORDS = { 0: "clear", 1: "light cloud", 2: "overcast", 3: "light rain", 4: "heavy rain", 5: "storm" };
+  var WEATHER_ICONS = { 0: "☀", 1: "☀☁", 2: "☁", 3: "☂", 4: "☔", 5: "⚡" };
   function tpRow(id, k, v, cls) {
     var n = el(id);
     if (!n) return;
@@ -548,9 +577,27 @@
     var n = el("tp-wx-" + i);
     if (!n) return;
     var known = w !== null && w !== undefined && w >= 0;
+    n.querySelector(".ico").textContent = known ? WEATHER_ICONS[w] || "·" : "·";
     n.querySelector(".sky").textContent = known ? WEATHER_WORDS[w] || "--" : "--";
     n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
-    n.className = "tp-wxt" + (!known ? "" : w >= 3 || pct >= 50 ? " wet" : pct >= 20 ? " maybe" : " dry");
+    // Neutral unless rain is actually coming: blue = wet/likely, red = heavy rain / storm.
+    n.className = "tp-wxt" + (!known ? "" : w >= 4 ? " storm" : w >= 3 || pct >= 40 ? " wet" : " dry");
+  }
+  function crossRow(c) {
+    var n = el("tp-cross");
+    if (!n) return;
+    n.innerHTML = "";
+    n.appendChild(span("☂ CROSSOVER", "k"));
+    var v = span("", "v");
+    if (c) {
+      v.appendChild(span("to", "dim"));
+      var cb = span("", "cb");
+      cb.appendChild(span(String(c).toUpperCase(), "comp " + compoundClass(c)));
+      v.appendChild(cb);
+      v.appendChild(span("likely inside the race", ""));
+    } else v.appendChild(span("none forecast", "dim"));
+    n.appendChild(v);
+    n.className = "tp-row" + (c ? " cold" : "");
   }
   function renderTrackPage(t) {
     if (!t) return;
@@ -563,38 +610,17 @@
     var r = t.rain_chance_pct || [null, null, null];
     var wf = t.weather_forecast || [t.weather, -1, -1];
     for (var i = 0; i < 3; i++) wxTile(i, wf[i], r[i]);
-    tpRow("tp-cross", "CROSSOVER", t.weather_crossover ? "to " + String(t.weather_crossover).toUpperCase() +
-      " likely inside the race" : "none forecast", t.weather_crossover ? "warn" : "");
-    tpRow("tp-flags", "FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
+    crossRow(t.weather_crossover);
+    tpRow("tp-flags", "⚑ FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
     var pens = [];
     if (t.penalty_s) pens.push("+" + t.penalty_s + " s");
     if (t.unserved) pens.push(t.unserved + " UNSERVED");
     if (t.warnings) pens.push(t.warnings + (t.warnings === 1 ? " warning" : " warnings"));
     if (t.corner_cut_warnings) pens.push(t.corner_cut_warnings + (t.corner_cut_warnings === 1 ? " cut" : " cuts"));
-    tpRow("tp-pens", "PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
+    tpRow("tp-pens", "⚠ PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
     tpRow("tp-traffic", "GAPS", "ahead " + gapText(t.gap_ahead_s) + " · behind " +
       gapText(t.gap_behind_s === null || t.gap_behind_s === undefined ? null : -t.gap_behind_s), "");
     tpRow("tp-exit", "PIT EXIT", t.pit_exit_clean ? "CLEAR AIR" : "TRAFFIC", t.pit_exit_clean ? "ok" : "warn");
-  }
-
-  function renderSetupPage(su) {
-    var ol = el("sp-list");
-    if (!ol) return;
-    ol.innerHTML = "";
-    if (!su) { var d = document.createElement("li"); d.className = "dim"; d.textContent = "no setup packet yet"; ol.appendChild(d); return; }
-    Object.keys(su.values).forEach(function (k) {
-      var li = document.createElement("li");
-      li.appendChild(span(k.replace(/_/g, " "), "k"));
-      li.appendChild(span(fmt(su.values[k], /camber|toe|fuel|pressure/.test(k) ? 2 : 0), "v"));
-      ol.appendChild(li);
-    });
-    ["fl", "fr", "rl", "rr"].forEach(function (k) {
-      if (!su.pressures[k]) return;
-      var li = document.createElement("li");
-      li.appendChild(span(k.toUpperCase() + " pressure", "k"));
-      li.appendChild(span(fmt(su.pressures[k], 1) + " psi", "v"));
-      ol.appendChild(li);
-    });
   }
 
   function renderPage(p) {
