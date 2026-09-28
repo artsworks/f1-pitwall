@@ -89,7 +89,7 @@ rules:
   - id: plan_window_open
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and plan_window_open and on_plan and plan_target_lap > lap_num"
+    when: "phase == 'racing' and plan_window_open and on_plan and plan_target_lap > lap_num and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
     clear_when: "not plan_window_open"
     cooldown_s: 60
     cooldown_group: plan
