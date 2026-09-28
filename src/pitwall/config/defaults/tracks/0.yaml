@@ -1,0 +1,9 @@
+track_id: 0
+name: melbourne
+pit_loss_s: {green: 21.0, vsc: 11.5, sc: 8.0}
+pit_exit_m: 300.0
+pit_entry_m: 5000.0
+fuel_kg_per_lap: 1.7
+deg_ms_per_lap: {16: 115, 17: 75, 18: 48}
+base_pace_ms: 0
+thresholds: {}

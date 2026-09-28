@@ -68,6 +68,7 @@ class ConfigStore:
         self._overrides = overrides or {}
         self._rules_dir = rules_dir
         self._profile = profile_path()
+        self._track_id: int | None = None
         self._mtimes: dict[Path, float] = {}
         self._last_poll = 0.0
         self.last_error: str | None = None
@@ -94,8 +95,50 @@ class ConfigStore:
                 merged["rules"] = custom_rules
         if self._profile is not None and self._profile.exists():
             merged = _deep_merge(merged, yaml.safe_load(self._profile.read_text()) or {})
+        overlay = self._load_track_overlay()
+        if overlay is not None:
+            th = overlay.get("thresholds")
+            if isinstance(th, dict) and th:
+                merged["thresholds"] = _deep_merge(merged.get("thresholds", {}), th)
+            merged["track"] = overlay
         merged = _deep_merge(merged, self._overrides)
         return Settings.model_validate(merged)
+
+    def _load_track_overlay(self) -> dict[str, Any] | None:
+        """Packaged defaults/tracks/<id>.yaml deep-merged under
+        ~/.pitwall/tracks/<id>.yaml (user wins). None when absent."""
+        if self._track_id is None:
+            return None
+        overlay: dict[str, Any] = {}
+        for path in (
+            DEFAULTS_DIR / "tracks" / f"{self._track_id}.yaml",
+            Path.home() / ".pitwall" / "tracks" / f"{self._track_id}.yaml",
+        ):
+            if path.is_file():
+                overlay = _deep_merge(overlay, yaml.safe_load(path.read_text()) or {})
+        if not overlay:
+            return None
+        overlay.setdefault("track_id", self._track_id)
+        return overlay
+
+    def set_track(self, track_id: int | None) -> bool:
+        """Select the track overlay and reload. Returns True when settings changed."""
+        if track_id == self._track_id:
+            return False
+        self._track_id = track_id
+        return self.reload()
+
+    def set_override(self, path: tuple[str, ...], value: object) -> bool:
+        """Set a nested key in the live-overrides layer and reload."""
+        node: dict[str, Any] = self._overrides
+        for key in path[:-1]:
+            nxt = node.get(key)
+            if not isinstance(nxt, dict):
+                nxt = {}
+                node[key] = nxt
+            node = nxt
+        node[path[-1]] = value
+        return self.reload()
 
     def reload(self) -> bool:
         """Re-read all sources. Returns True if the config changed."""

@@ -9,7 +9,15 @@ from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
-from pitwall.state.driving import BoostTimer, LockupDetector, SpinDetector, YellowTracker
+from pitwall.state.driving import (
+    BoostTimer,
+    ContactTracker,
+    LockupDetector,
+    OffTrackTracker,
+    SaveDetector,
+    SpinDetector,
+    YellowTracker,
+)
 from pitwall.state.session import SessionState, Snapshot
 
 from .synth import pack_packet
@@ -111,7 +119,15 @@ def test_own_yellow_ignored() -> None:
 
 AGES = {
     n: 0.1
-    for n in ("session", "lap_data", "car_telemetry", "car_status", "car_damage", "motion_ex")
+    for n in (
+        "session",
+        "lap_data",
+        "car_telemetry",
+        "car_status",
+        "car_damage",
+        "motion_ex",
+        "participants",
+    )
 }
 
 
@@ -420,3 +436,170 @@ def test_cool_lap_extends_when_battery_short() -> None:
     assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]
     t = _texts(_engine(), **base, cool_extend=False)
     assert "cool_hot_mode" in t and "cool_extend" not in t
+
+
+def test_spin_calls_capped_per_stint_but_traffic_hold_is_not() -> None:
+    rules = {r.id: r for r in ConfigStore().current().rules}
+    assert rules["spun_rejoin"].max_per_stint == 5
+    assert rules["spun_rejoin_traffic"].max_per_stint is None
+
+
+def test_practice_invalid_lap_gets_one_reset_call() -> None:
+    e = _engine()
+    base: dict[str, object] = {"session_kind": "practice", "current_lap_invalid": True}
+    t = _texts(e, **base)
+    assert "practice_lap_invalid" in t and "next" in t["practice_lap_invalid"].lower()
+    assert "practice_lap_invalid" not in _texts(e, now=5.0, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), cool_lap=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), phase="out_lap", **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), driving_wrong_way=True, **base)
+    assert "practice_lap_invalid" not in _texts(_engine(), current_lap_invalid=True)
+
+
+def test_fastest_lap_calls() -> None:
+    mine = _texts(
+        _engine(),
+        phase="racing",
+        fastest_lap_mine=True,
+        fastest_lap_time="1:19.195",
+        fastest_lap_age_s=1.0,
+    )
+    assert "fastest_lap_mine" in mine and "1:19.195" in mine["fastest_lap_mine"]
+    rival: dict[str, object] = {
+        "phase": "racing",
+        "fastest_lap_name": "LECLERC",
+        "fastest_lap_time": "1:18.900",
+        "fastest_lap_age_s": 3.0,
+        "fastest_lap_gap_s": 0.3,
+        "laps_remaining": 3,
+    }
+    t = _texts(_engine(), **rival)
+    assert "fastest_lap_taken" in t and "LECLERC" in t["fastest_lap_taken"]
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "fastest_lap_age_s": 0.5})
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "laps_remaining": 12})
+    assert "fastest_lap_taken" not in _texts(_engine(), **{**rival, "fastest_lap_gap_s": 2.0})
+    assert "fastest_lap_mine" not in _texts(
+        _engine(), phase="racing", fastest_lap_mine=True, fastest_lap_age_s=30.0
+    )
+
+
+def test_blue_flag_silent_under_red_flag_and_sc() -> None:
+    assert "blue_flag" in _texts(_engine(), phase="racing", blue_flag=True)
+    for phase in ("red_flag", "sc", "vsc"):
+        assert "blue_flag" not in _texts(_engine(), phase=phase, blue_flag=True)
+
+
+def test_yellow_behind_silent_under_neutralisation() -> None:
+    assert "yellow_behind" in _texts(_engine(), phase="racing", yellow_behind_m=100.0)
+    assert "yellow_behind" not in _texts(_engine(), phase="sc", yellow_behind_m=100.0)
+
+
+def test_save_reported_for_caught_slide_not_for_spin() -> None:
+    det = SaveDetector()
+    t = _spin_run(det, 2.0, 150.0, 0.0, 1.0)
+    t = _spin_run(det, 18.0, 110.0, t, 0.4)
+    t = _spin_run(det, 2.0, 105.0, t, 0.5)
+    assert det.recent(t) and det.count == 1 and round(det.peak_deg) == 18
+    t = _spin_run(det, 2.0, 150.0, t, 6.0)
+    assert not det.recent(t)
+    t = _spin_run(det, 20.0, 120.0, t, 0.2)
+    t = _spin_run(det, 90.0, 60.0, t, 0.5)  # went round
+    t = _spin_run(det, 2.0, 40.0, t, 1.0)
+    assert not det.recent(t) and det.count == 1
+    t = _spin_run(det, 8.0, 150.0, t, 1.0)  # normal cornering
+    assert det.count == 1
+
+
+def _off_run(tr: OffTrackTracker, t: float, s: float, surfaces: tuple[int, ...]) -> float:
+    end = t + s
+    while t < end:
+        tr.update_surface(t, surfaces)
+        t += 0.1
+    return t
+
+
+def test_off_track_places_lost_then_recovered_same_lap() -> None:
+    tr = OffTrackTracker()
+    tr.update_position(6, 3, False)
+    t = _off_run(tr, 0.0, 1.0, (0, 0, 0, 0))
+    t = _off_run(tr, t, 1.0, (0, 0, 7, 7))
+    tr.update_position(9, 3, False)
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 3 and not tr.recovered_recent(t)
+    tr.update_position(6, 3, False)
+    t = _off_run(tr, t, 0.5, (0, 0, 0, 0))
+    assert tr.recovered_recent(t)
+
+
+def test_off_track_no_call_without_place_loss_or_after_lap_ends() -> None:
+    tr = OffTrackTracker()
+    tr.update_position(4, 2, False)
+    t = _off_run(tr, 0.0, 1.0, (4, 4, 0, 0))
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 0
+    t = _off_run(tr, t, 1.0, (4, 4, 0, 0))
+    tr.update_position(5, 2, False)
+    t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.lost_recent(t) == 1
+    tr.update_position(5, 3, False)
+    tr.update_position(4, 3, False)
+    t = _off_run(tr, t, 1.0, (0, 0, 0, 0))
+    assert not tr.recovered_recent(t)
+
+
+def test_contact_tracker_debounces_and_reports_new_damage() -> None:
+    c = ContactTracker(merge_s=8.0)
+    clean = {"front left wing": 0, "floor": 5}
+    c.hit(100.0, 3, 1, clean)
+    c.hit(103.0, 3, 2, {"front left wing": 4, "floor": 5})  # same episode
+    assert (c.episodes, c.hits, c.severity) == (1, 2, 2)
+    assert c.phase(105.0, 4.0, 10.0) == "checking"
+    assert c.phase(108.0, 4.0, 10.0) == "report"
+    assert c.phase(118.0, 4.0, 10.0) == ""
+    assert c.worst_new({"front left wing": 9, "floor": 6}, 3) == ("front left wing", 9)
+    assert c.worst_new({"front left wing": 2, "floor": 6}, 3) == ("", 0)
+    c.hit(130.0, 5, 0, clean)  # past the merge window: new episode
+    assert (c.episodes, c.hits, c.other) == (2, 1, 5)
+
+
+def test_contact_rules_check_then_report() -> None:
+    e = _engine()
+    t = _texts(e, contact_phase="checking", contact_name="NORRIS")
+    assert "contact_check" in t and "contact_check_teammate" not in t
+    t = _texts(e, now=5.0, contact_phase="report", contact_name="NORRIS")
+    assert "contact_ok" in t and "contact_damage_report" not in t
+    t = _texts(
+        _engine(),
+        contact_phase="report",
+        contact_damage="front left wing",
+        contact_damage_pct=9,
+    )
+    assert "front left wing" in t["contact_damage_report"] and "contact_ok" not in t
+    major = _texts(
+        _engine(),
+        contact_phase="report",
+        contact_damage="front left wing",
+        contact_damage_pct=40,
+        contact_damage_major=True,
+    )
+    assert "contact_damage_report" not in major and "contact_ok" not in major
+    t = _texts(_engine(), contact_phase="checking", contact_teammate=True, contact_name="LAWSON")
+    assert "contact_check_teammate" in t and "contact_check" not in t
+
+
+def test_teammate_fight_rule() -> None:
+    e = _engine()
+    t = _texts(e, phase="racing", teammate_fight=True, teammate_name="LAWSON", teammate_gap_s=0.6)
+    assert "teammate_fight" in t
+    assert "teammate_fight" not in _texts(_engine(), phase="racing", teammate_name="LAWSON")
+
+
+def test_fuel_tight_only_at_or_below_tenth_and_urgent_late() -> None:
+    fuel = dict(phase="racing", fuel_per_lap_kg=1.5, laps_remaining=10, total_laps=20)
+    assert "fuel_marginal" not in _texts(_engine(), fuel_margin_laps=0.2, lap_num=5, **fuel)
+    t = _texts(_engine(), fuel_margin_laps=0.1, lap_num=5, **fuel)
+    assert "fuel_marginal" in t
+    early = _texts(_engine(), fuel_margin_laps=-0.1, lap_num=5, **fuel)["fuel_marginal"]
+    late = _texts(_engine(), fuel_margin_laps=-0.1, lap_num=12, **fuel)["fuel_marginal"]
+    assert early != late and ("Early days" in early or "Long way" in early)
+    assert "now" in late

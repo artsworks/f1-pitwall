@@ -57,6 +57,7 @@ class Call:
     still_true: Any = None
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
+    not_before: float = 0.0  # held in the queue until this time (min-gap spacing)
 
 
 @dataclass(order=True)
@@ -115,9 +116,15 @@ class Dispatcher:
         self._negatives: dict[str, int] = {}
         self._neg_mute_until: dict[str, int] = {}  # rule_id -> lap
         self._cooldown_mult: dict[str, float] = {}
+        # Persisted per-rule cooldown multipliers from graded review (pitwall tune).
+        self.tuned_cooldown: dict[str, float] = {}
         self._acked: dict[str, int] = {}  # rule_id -> lap acknowledged on
         self._defs: dict[str, RuleDefModel] = {}
         self._reply_n: dict[str, int] = {}
+
+    @property
+    def last_call_t(self) -> float | None:
+        return self._last_call_t
 
     # -- submission ----------------------------------------------------------
 
@@ -130,6 +137,11 @@ class Dispatcher:
         for cand in candidates:
             self._defs[cand.rule.id] = cand.rule.defn
             suppressed = self._suppression_reason(cand, snapshot, now, allowed_p)
+            not_before = now
+            if suppressed == "min_gap":
+                assert self._last_call_t is not None
+                not_before = self._last_call_t + self.policy.min_gap_s
+                suppressed = None if not_before - now <= self.policy.min_gap_defer_s else "budget"
             if suppressed is not None:
                 self._log(cand, snapshot, now, "suppressed", suppressed)
                 continue
@@ -146,8 +158,9 @@ class Dispatcher:
                 trigger_t=cand.trigger_t,
                 still_true=cand.still_true,
                 inputs=cand.inputs,
+                not_before=not_before,
             )
-            self._book_call(call, cand, now)
+            self._book_call(call, cand, not_before)
             heapq.heappush(self._queue, _Queued((cand.priority, now), call))
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
 
@@ -173,7 +186,11 @@ class Dispatcher:
             return "negative_backoff"
         cd_key = d.cooldown_group or cand.rule.id
         last = self._last_fired.get(cd_key)
-        cooldown = d.cooldown_s * self._cooldown_mult.get(cd_key, 1.0)
+        cooldown = (
+            d.cooldown_s
+            * self._cooldown_mult.get(cd_key, 1.0)
+            * self.tuned_cooldown.get(cand.rule.id, 1.0)
+        )
         if cooldown and last is not None and now - last < cooldown:
             return "cooldown"
         if d.max_per_stint is not None:
@@ -205,7 +222,7 @@ class Dispatcher:
             if self._calls_this_lap >= budget:
                 return "budget"
             if self._last_call_t is not None and now - self._last_call_t < self.policy.min_gap_s:
-                return "budget"
+                return "min_gap"
         return None
 
     def _book_call(self, call: Call, cand: Candidate, now: float) -> None:
@@ -229,10 +246,16 @@ class Dispatcher:
         while self._queue:
             q = heapq.heappop(self._queue)
             call = q.call
-            if (now - call.t) * 1000 > call.deadline_ms:
-                self._log_call(call, "suppressed", "deadline")
+            prompt = "menu" in call.tags
+            waits_for_straight = call.priority == 3 and self.policy.p3_straight_only
+            deadline_ms = call.deadline_ms
+            if waits_for_straight:
+                deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
+            if (now - max(call.t, call.not_before)) * 1000 > deadline_ms:
+                if not prompt:
+                    self._log_call(call, "suppressed", "deadline")
                 continue
-            if call.priority == 3 and self.policy.p3_straight_only and not on_straight:
+            if now < call.not_before or (waits_for_straight and not on_straight):
                 held.append(q)
                 continue
             if call.still_true is not None and self.latest_snapshot is not None:
@@ -249,11 +272,15 @@ class Dispatcher:
             spoken_t = self.clock.now()
             muted = call.screen_only or self._silenced(call)
             for sink in self.sinks:
+                if prompt and not sink.speaks_audio:
+                    continue
                 if muted and sink.speaks_audio:
                     continue
                 sink.speak(call)
-            self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
             self._current = call
+            if prompt:
+                continue  # menu item names: audio only, not logged or repeatable
+            self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
             self._spoken_calls.append((call, now + len(call.text) / _CHARS_PER_SECOND))
             self._spoken_calls = self._spoken_calls[-16:]
             self._log_call(call, "fired", None)
@@ -277,6 +304,52 @@ class Dispatcher:
         self._broadcast_press(
             {"kind": "silent" if self.silent else "unsilent", "lap": snapshot.lap_num, "text": ""}
         )
+
+    def announce_mindset(self, name: str, snapshot: Snapshot) -> None:
+        """Log + voice-confirm a live mindset switch (docs/12)."""
+        self.log.mindset = name
+        self._log_press(snapshot.now, snapshot, f"mindset_{name}", None, None)
+        reply = self.input.mindset_replies.get(name)
+        self._reply([reply] if reply else [f"Copy, {name}."], snapshot)
+        self._broadcast_press({"kind": "mindset", "lap": snapshot.lap_num, "text": name})
+
+    # -- driver menu (docs/12) -------------------------------------------------
+
+    def menu_prompt(self, text: str, snapshot: Snapshot) -> None:
+        """Speak a highlighted menu item: short, replaces any earlier prompt."""
+        self.cancel_menu_prompt()
+        self._push_reply(text, "menu", ["reply", "menu"], 1500, snapshot)
+
+    def menu_reply(self, text: str, rule_id: str, snapshot: Snapshot) -> None:
+        """Pit-wall answer to a menu pick: P1 reply, bypasses budget and silence."""
+        self._push_reply(text, rule_id, ["reply", "menu_answer"], 4000, snapshot)
+
+    def cancel_menu_prompt(self) -> None:
+        kept = [q for q in self._queue if "menu" not in q.call.tags]
+        if len(kept) != len(self._queue):
+            self._queue = kept
+            heapq.heapify(self._queue)
+        if self._current is not None and "menu" in self._current.tags:
+            for sink in self.sinks:
+                sink.cancel(self._current.id)
+            self._current = None
+
+    def _push_reply(
+        self, text: str, rule_id: str, tags: list[str], deadline_ms: int, snapshot: Snapshot
+    ) -> None:
+        now = snapshot.now
+        call = Call(
+            id=f"c-{next(self._counter)}",
+            rule_id=rule_id,
+            priority=1,
+            text=text,
+            tags=tags,
+            deadline_ms=deadline_ms,
+            lap=snapshot.lap_num,
+            t=now,
+            trigger_t=now,
+        )
+        heapq.heappush(self._queue, _Queued((1, now), call))
 
     def purge(self, reason: str, now: float | None = None) -> int:
         """Drop every queued (not yet spoken) call, logging each as suppressed."""
@@ -483,6 +556,8 @@ class Dispatcher:
                 "suppressed_by": by,
                 "inputs": cand.inputs,
                 "text": cand.text,
+                "active_plan": snap.active_plan,
+                "on_plan": snap.on_plan if snap.active_plan else None,
             }
         )
 
@@ -501,5 +576,7 @@ class Dispatcher:
                 "suppressed_by": by,
                 "inputs": call.inputs,
                 "text": call.text,
+                "active_plan": snap.active_plan if snap else "",
+                "on_plan": snap.on_plan if snap and snap.active_plan else None,
             }
         )

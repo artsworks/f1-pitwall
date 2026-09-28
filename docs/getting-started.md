@@ -49,7 +49,10 @@ uv run pitwall speak --engine sapi            # compare with the old voice
 
 Pick the default in `speech.piper_voice` and the pace in `speech.piper_speed`
 (1.3 default; try `speak --speed 1.4`). `speech.rate` and `speech.volume`
-apply to both engines.
+apply to both engines. Piper also reads each call in a tone set by its priority:
+P1 urgent (`speech.tone_urgent_speed` / `tone_urgent_expression`), P2 normal and P3 calm
+(`tone_calm_*`). Expression scales Piper's pitch and energy variation (1.0 is the voice's
+default).
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.

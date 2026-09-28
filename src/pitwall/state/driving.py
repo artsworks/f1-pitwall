@@ -275,3 +275,195 @@ class YellowTracker:
             elif z.behind_at_onset and back < behind_m:
                 behind_m, behind_sector = back, self._sector(z.start_m)
         return YellowView(ahead_m, ahead_sector, behind_m, behind_sector, here)
+
+
+class SaveDetector:
+    """A moment the driver caught: sideslip of at least `save_deg` above
+    `min_speed_kmh` that straightens out again (below `straight_deg` for
+    `settle_s`) without ever reaching `spin_deg`. Reported for `hold_s`,
+    with the peak angle so rules can scale the reaction."""
+
+    def __init__(
+        self,
+        *,
+        save_deg: float = 12.0,
+        spin_deg: float = 40.0,
+        min_speed_kmh: float = 60.0,
+        min_s: float = 0.1,
+        straight_deg: float = 5.0,
+        settle_s: float = 0.3,
+        hold_s: float = 4.0,
+    ) -> None:
+        self.save_deg = save_deg
+        self.spin_deg = spin_deg
+        self.min_speed_kmh = min_speed_kmh
+        self.min_s = min_s
+        self.straight_deg = straight_deg
+        self.settle_s = settle_s
+        self.hold_s = hold_s
+        self.count = 0
+        self.peak_deg = 0.0
+        self.reset()
+
+    def reset(self) -> None:
+        self._start: float | None = None
+        self._peak = 0.0
+        self._spun = False
+        self._straight: float | None = None
+        self._at: float | None = None
+
+    def update(self, t: float, local_velocity: tuple[float, float, float]) -> None:
+        vx, _, vz = local_velocity
+        speed_kmh = math.hypot(vx, vz) * 3.6
+        slip_deg = math.degrees(math.atan2(abs(vx), vz)) if speed_kmh > 5 else 0.0
+        if self._start is None:
+            if speed_kmh >= self.min_speed_kmh and slip_deg >= self.save_deg:
+                self._start, self._peak, self._spun, self._straight = t, slip_deg, False, None
+            return
+        self._peak = max(self._peak, slip_deg)
+        if slip_deg >= self.spin_deg or speed_kmh < 5:
+            self._spun = True
+        if slip_deg >= self.straight_deg:
+            self._straight = None
+            return
+        if self._straight is None:
+            self._straight = t
+        if t - self._straight < self.settle_s:
+            return
+        caught = not self._spun and self._straight - self._start >= self.min_s
+        if caught and speed_kmh >= self.min_speed_kmh / 2:
+            self._at = t
+            self.count += 1
+            self.peak_deg = self._peak
+        self._start = None
+
+    def recent(self, t: float) -> bool:
+        return self._at is not None and 0 <= t - self._at <= self.hold_s
+
+
+OFF_SURFACES = frozenset(range(2, 11))  # concrete run-off, rock, gravel, mud, sand, grass, ...
+
+
+class OffTrackTracker:
+    """Places lost to a trip off the track, and whether they came back on the
+    same lap. An excursion is at least `min_wheels` wheels on an off surface
+    for `min_s`; once back on track for `settle_s` the position is compared
+    with the one before the excursion. `lost` (places) is reported for
+    `hold_s`; regaining them before the lap ends reports `recovered`."""
+
+    def __init__(
+        self,
+        *,
+        min_wheels: int = 2,
+        min_s: float = 0.3,
+        settle_s: float = 5.0,
+        hold_s: float = 6.0,
+    ) -> None:
+        self.min_wheels = min_wheels
+        self.min_s = min_s
+        self.settle_s = settle_s
+        self.hold_s = hold_s
+        self.reset()
+
+    def reset(self) -> None:
+        self._off_since: float | None = None
+        self._before = 0
+        self._lap = 0
+        self._back_at: float | None = None
+        self._owed = 0  # places lost and not yet regained this lap
+        self._owed_pos = 0
+        self.places = 0
+        self._lost_at: float | None = None
+        self._recovered_at: float | None = None
+        self._position = 0
+        self._cur_lap = 0
+
+    def update_position(self, position: int, lap: int, in_pit: bool) -> None:
+        if in_pit or lap != self._lap:
+            self._owed = 0
+        self._position, self._cur_lap = position, lap
+
+    def update_surface(self, t: float, surfaces: tuple[int, ...]) -> None:
+        off = sum(1 for s in surfaces if s in OFF_SURFACES) >= self.min_wheels
+        if off:
+            if self._off_since is None:
+                self._off_since = t
+                if self._back_at is None:
+                    self._before, self._lap = self._position, self._cur_lap
+            self._back_at = None
+            return
+        if self._off_since is not None:
+            went_off = t - self._off_since >= self.min_s
+            self._off_since = None
+            if went_off:
+                self._back_at = t
+            return
+        if self._back_at is not None and t - self._back_at >= self.settle_s:
+            self._back_at = None
+            lost = self._position - self._before if self._before and self._position else 0
+            if lost > 0 and self._cur_lap == self._lap:
+                self.places, self._lost_at = lost, t
+                self._owed, self._owed_pos = lost, self._before
+        if self._owed and self._position and self._position <= self._owed_pos:
+            if self._cur_lap == self._lap:
+                self._recovered_at = t
+            self._owed = 0
+
+    def lost_recent(self, t: float) -> int:
+        if self._lost_at is None or not 0 <= t - self._lost_at <= self.hold_s:
+            return 0
+        return self.places
+
+    def recovered_recent(self, t: float) -> bool:
+        return self._recovered_at is not None and 0 <= t - self._recovered_at <= self.hold_s
+
+
+class ContactTracker:
+    """Player collisions (COLL events) grouped into episodes: hits within
+    `merge_s` of the last one extend the episode instead of starting a new
+    check. The damage readings at the first hit are the baseline the
+    post-contact report is measured against."""
+
+    def __init__(self, *, merge_s: float = 8.0) -> None:
+        self.merge_s = merge_s
+        self.episodes = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self.start: float | None = None
+        self.last = 0.0
+        self.other = -1
+        self.severity = 0
+        self.hits = 0
+        self.baseline: dict[str, int] = {}
+
+    def hit(self, t: float, other: int, severity: int, damage: dict[str, int]) -> None:
+        if self.start is None or t - self.last > self.merge_s or t < self.start:
+            self.start, self.other, self.severity, self.hits = t, other, severity, 0
+            self.baseline = dict(damage)
+            self.episodes += 1
+        self.last = t
+        self.hits += 1
+        self.severity = max(self.severity, severity)
+
+    def phase(self, t: float, check_s: float, report_s: float) -> str:
+        """'checking' right after the hit, 'report' once the damage data has
+        settled, '' when there is no recent contact."""
+        if self.start is None:
+            return ""
+        age = t - self.last
+        if 0 <= t - self.start and age < check_s:
+            return "checking"
+        if check_s <= age < check_s + report_s:
+            return "report"
+        return ""
+
+    def worst_new(self, damage: dict[str, int], min_pct: int) -> tuple[str, int]:
+        """(part, percent now) with the biggest rise since the first hit, if
+        the rise is at least `min_pct`."""
+        part, rise = "", 0
+        for name, now in damage.items():
+            d = now - self.baseline.get(name, 0)
+            if d >= min_pct and d > rise:
+                part, rise = name, d
+        return part, damage.get(part, 0)

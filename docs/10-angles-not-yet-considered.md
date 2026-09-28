@@ -42,7 +42,8 @@ If the backend dies on lap 30 of a 50-lap race, what happens? Currently: undefin
 should restart under a watchdog, reload session state from SQLite plus the last minutes
 of the recording, and rejoin with a spoken "back with you". The recorder should be the
 last thing to die and the first to start. Recommend: M3, when races get long enough to
-care.
+care. **Resolved:** M3. `pitwall start` is the recorder plus a watchdog, and it runs the
+engine as a child process that is restarted when it crashes or hangs (`18-race-engine.md`, Recovery).
 
 ## Real, but later
 

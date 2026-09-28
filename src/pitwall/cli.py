@@ -19,8 +19,10 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
+from pitwall.engine import Engine, action_bits, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
+from pitwall.input.menu import validate as validate_menu
+from pitwall.input.menu import validate_shortcuts
 from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
@@ -36,6 +38,7 @@ from pitwall.net.udp import listen
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
+from pitwall.supervisor import ALIVE_FILE, Supervisor, read_recording_pointer, runtime_dir
 
 
 def _parse_speed(value: str) -> float | None:
@@ -81,6 +84,7 @@ def _lap_seek_us(path: Path, lap: int) -> int | None:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
+    from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
 
     speed = _parse_speed(args.speed)
@@ -111,11 +115,14 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 pass
 
         def _engine_factory(clk: Clock) -> Engine:
-            return build_engine(
+            eng = build_engine(
                 clock=clk,
                 sinks=[hub, LogSink(), _ReplaySpokenSink()],
                 db=seed_db,
             )
+            if args.mask_restricted:
+                eng.ingest.transform = mask_restricted
+            return eng
 
         live_speed = speed or 1.0  # paced replay drives the dashboard
         review = ReviewController(
@@ -124,6 +131,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
             hub,
             speed=live_speed,
             db=seed_db,
+            thresholds=ConfigStore().current().thresholds,
         )
         engine = _engine_factory(clock)
         review.engine = engine
@@ -131,14 +139,24 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         async def _replay_coro() -> None:
             await review.play()
-            if review._task is not None:  # noqa: SLF001
-                await review._task
+            # A seek cancels the running task and starts a new one: follow it.
+            while (task := review._task) is not None:  # noqa: SLF001
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    if review._task is task:  # noqa: SLF001
+                        raise
+                    continue
+                if review._task is task:  # noqa: SLF001
+                    break
 
         store = ConfigStore()
         asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
     engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
+    if args.mask_restricted:
+        engine.ingest.transform = mask_restricted
     replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
@@ -170,6 +188,64 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2, default=str))
     else:
         print(format_diff(result))
+    if args.record:
+        from pitwall.store.db import open_configured
+        from pitwall.tune import record_diff
+
+        db = open_configured(ConfigStore().current())
+        if db is not None:
+            n = record_diff(
+                db,
+                result,
+                a_dir=str(args.a or ""),
+                b_dir=str(args.b),
+                a_mindset=str(args.a_mindset or ""),
+                b_mindset=str(args.b_mindset or ""),
+            )
+            print(f"diff: recorded {n} A/B rows")
+    return 0
+
+
+def cmd_tune(args: argparse.Namespace) -> int:
+    """Fold graded calls + A/B results from SQLite into persisted rule tuning."""
+    from pitwall.store.db import Database, open_configured
+    from pitwall.tune import format_tune, tune_from_db
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("tune: persistence disabled")
+        return 1
+    print(format_tune(tune_from_db(db, settings.thresholds)))
+    return 0
+
+
+def cmd_digest(args: argparse.Namespace) -> int:
+    """Grade a session in hindsight and write its compact JSON digest."""
+    from pitwall.digest import build_digest, format_digest
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("digest: persistence disabled")
+        return 1
+    uid = db.latest_session_uid() if args.session in (None, "latest") else int(args.session)
+    if uid is None:
+        print("digest: no sessions in the database")
+        return 1
+    digest = build_digest(db, uid, settings.thresholds)
+    if args.json:
+        print(json.dumps(digest, indent=2, default=str))
+    else:
+        print(format_digest(digest))
+    if args.out != "-":
+        default = Path(settings.persistence.path).expanduser().parent / "digests"
+        out_dir = Path(args.out) if args.out else default
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{uid}.json"
+        path.write_text(json.dumps(digest, indent=2, default=str))
+        print(f"digest: {path}")
     return 0
 
 
@@ -248,6 +324,11 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
         mode=store.current().resolved_mindset(),
         staleness_s=settings.engine.staleness_s,
     )
+    menu_errors = validate_menu(settings.menu) + validate_shortcuts(settings.input, settings.menu)
+    for err in menu_errors:
+        print(f"rules check FAILED: {err}")
+    if menu_errors:
+        return 1
     snap = SessionState().snapshot(0.0)
     try:
         result = engine.evaluate(snap)
@@ -373,6 +454,9 @@ async def _state_broadcast(
             quiet=store.current().policy.quiet,
             quiet_left_s=_quiet_left_s(engine, now),
             silent=engine.dispatcher.silent,
+            mindset=engine.mindset,
+            page=engine.page,
+            menu=engine.menu_payload(now),
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
@@ -411,6 +495,7 @@ async def _serve(
         speaker_name=getattr(engine, "speaker_name", "null"),
         latest_snapshot=_latest,
         on_client_press=lambda down: active().client_press(down),
+        on_client_message=lambda msg: active().client_message(msg),
         review=review,
     )
 
@@ -446,14 +531,18 @@ def cmd_start(args: argparse.Namespace) -> int:
     from pitwall.server.hub import Hub
 
     set_below_normal_priority()
-    hub = Hub()
     store = ConfigStore()
     settings = store.current()
+    child = bool(args.child)
+    if settings.engine.watchdog and not child and not args.no_watchdog:
+        return _start_supervised(args, store)
+    hub = Hub()
     clock = WallClock()
+    rt_dir = runtime_dir(Path(settings.recording.directory))
 
     profile = args.record or settings.recording.profile
     recorder = None
-    if settings.recording.enabled and profile != "off":
+    if settings.recording.enabled and profile != "off" and not child:
         recorder = RecordingRotator(
             Path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
@@ -468,6 +557,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         straight_hold_s=settings.engine.straight_hold_s,
         press_bit=settings.input.udp_action_bit,
         toggle_bit=settings.input.silent_toggle_bit,
+        action_bits=action_bits(settings.input),
         thresholds=settings.thresholds,
     )
     state.register(ingest)
@@ -503,11 +593,20 @@ def cmd_start(args: argparse.Namespace) -> int:
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    if recorder is not None:
+        engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
+    elif child:
+        engine.recording_path_source = lambda: read_recording_pointer(rt_dir)
+        engine.alive_path = rt_dir / ALIVE_FILE
+    recovered = engine.recover()
+    if recovered is not None:
+        print(f"watchdog: {recovered}; radio: {engine.rejoin_text()}", flush=True)
+    udp_host, udp_port = settings.connection.udp_host, settings.connection.udp_port
+    if child:
+        udp_host, udp_port = "127.0.0.1", settings.engine.engine_port
 
     async def live() -> None:
-        transport = await udp_listen(
-            settings.connection.udp_host, settings.connection.udp_port, ingest, clock
-        )
+        transport = await udp_listen(udp_host, udp_port, ingest, clock)
         try:
             await engine.run_live()
         finally:
@@ -518,14 +617,23 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     engine.speaker_name = speaker.name
     engine.recording_desc = (
-        f"{profile} -> {settings.recording.directory}/" if recorder is not None else "off"
+        f"{profile} -> {settings.recording.directory}/"
+        if recorder is not None
+        else "supervisor"
+        if child and settings.recording.enabled
+        else "off"
     )
     if settings.speech.enabled:
         t0 = clock.now()
-        for call_id, text in (
-            ("startup", "Pit wall online."),
-            ("startup-radio-check", "Radio check, radio check."),
-        ):
+        lines = (
+            (("rejoin", engine.rejoin_text()),)
+            if recovered is not None
+            else (
+                ("startup", "Pit wall online."),
+                ("startup-radio-check", "Radio check, radio check."),
+            )
+        )
+        for call_id, text in lines:
             speaker.speak(
                 Call(
                     id=call_id,
@@ -539,11 +647,14 @@ def cmd_start(args: argparse.Namespace) -> int:
                     trigger_t=t0,
                 )
             )
+    clean = False
     try:
         asyncio.run(_serve(engine, hub, store, live()))
     except KeyboardInterrupt:
-        pass
+        clean = True
     finally:
+        if clean and db is not None:
+            db.clear_heartbeat()  # a later start is a fresh session, not a crash
         speaker.close()
         if recorder is not None:
             if settings.recording.compress_on_close:
@@ -552,6 +663,43 @@ def cmd_start(args: argparse.Namespace) -> int:
             if recorder.last_path is not None:
                 print(f"recording: saved {recorder.last_path}")
         dlog.close()
+    return 0
+
+
+def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
+    """Recorder + watchdog in this process; the engine runs as a restartable child."""
+    settings = store.current()
+    profile = args.record or settings.recording.profile
+    rec_dir = Path(settings.recording.directory)
+    recorder = None
+    if settings.recording.enabled and profile != "off":
+        recorder = RecordingRotator(
+            rec_dir,
+            config_hash=int(store.hash, 16) % (2**32),
+            metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
+            profile=profile,
+            compress=settings.recording.compress_on_close,
+        )
+    cmd = [sys.executable, "-m", "pitwall", "start", "--child"]
+    if args.record:
+        cmd += ["--record", args.record]
+    host, port = settings.connection.udp_host, settings.connection.udp_port
+    sup = Supervisor(
+        settings.engine,
+        recorder,
+        cmd,
+        runtime_dir(rec_dir),
+        udp_host=host,
+        udp_port=port,
+        log=lambda m: print(m, flush=True),
+    )
+    print(
+        f"watchdog: recorder on {host}:{port}, engine on 127.0.0.1:{settings.engine.engine_port}",
+        flush=True,
+    )
+    sup.run()
+    if recorder is not None and recorder.last_path is not None:
+        print(f"recording: saved {recorder.last_path}")
     return 0
 
 
@@ -636,6 +784,53 @@ def cmd_voices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_voice(args: argparse.Namespace) -> int:
+    """Voice channel tooling (docs/21): grammar, devices, spike."""
+    from pitwall.voice.grammar import VoiceGrammar
+
+    settings = ConfigStore().current()
+    voice = settings.voice
+    if args.action == "grammar":
+        print(VoiceGrammar.from_mapping(voice.intents).to_srgs(args.lang), end="")
+        return 0
+    if sys.platform != "win32":
+        print("voice devices/spike need Windows SAPI (pywin32)")
+        return 1
+    if args.action == "devices":
+        from pitwall.voice.sapi import list_inputs
+
+        recs, ins = list_inputs()
+        print("recognisers (voice.recognizer matches a substring):")
+        for r in recs:
+            print(f"  {r}")
+        print("audio inputs (voice.device):")
+        for i, name in enumerate(ins):
+            print(f"  {i}: {name}")
+        return 0
+    from pitwall.voice.spike import run_spike
+
+    update: dict[str, object] = {}
+    if args.device is not None:
+        update["device"] = args.device
+    if args.recognizer is not None:
+        update["recognizer"] = args.recognizer
+    if args.confidence is not None:
+        update["confidence_min"] = args.confidence
+    if args.affinity is not None:
+        update["affinity_mask"] = int(args.affinity, 0)
+    voice = voice.model_copy(update=update)
+    log = Path(args.log or f"recordings/voice-spike-{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
+    return run_spike(
+        voice,
+        settings.input,
+        host=settings.connection.udp_host,
+        port=None if args.no_udp else (args.port or settings.connection.udp_port),
+        log_path=log,
+        grammar_mode=args.grammar,
+        say=args.say,
+    )
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from pitwall.doctor import run_doctor
 
@@ -669,6 +864,11 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--to-us", type=int, default=None)
     rep.add_argument("--serve", action="store_true", help="run dashboard while replaying")
     rep.add_argument(
+        "--mask-restricted",
+        action="store_true",
+        help="zero rival fuel/ERS/tyre-wear fields, as an online lobby with restricted telemetry",
+    )
+    rep.add_argument(
         "--seed-db",
         default=":memory:",
         help="SQLite db for replay persistence (default :memory:; never the real DB)",
@@ -683,7 +883,21 @@ def build_parser() -> argparse.ArgumentParser:
     dif.add_argument("--b-mindset", default=None)
     dif.add_argument("--corpus", default=None, help="glob of extra recordings to aggregate")
     dif.add_argument("--json", action="store_true")
+    dif.add_argument(
+        "--record", action="store_true", help="store per-rule A/B counts in SQLite for tune"
+    )
     dif.set_defaults(func=cmd_diff)
+
+    tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
+    tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    tun.set_defaults(func=cmd_tune)
+
+    dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
+    dg.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    dg.add_argument("--session", default=None, help="session uid (default: latest)")
+    dg.add_argument("--out", default=None, help="digest dir (default: ~/.pitwall/digests, - none)")
+    dg.add_argument("--json", action="store_true")
+    dg.set_defaults(func=cmd_digest)
 
     rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
     rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")
@@ -713,6 +927,20 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("file")
     st.set_defaults(func=cmd_stats)
 
+    vc = sub.add_parser("voice", help="voice channel: SRGS grammar, SAPI devices, Phase 0 spike")
+    vc.add_argument("action", choices=["spike", "devices", "grammar"])
+    vc.add_argument("--port", type=int, default=None, help="UDP port for Action 1 taps")
+    vc.add_argument("--no-udp", action="store_true", help="Enter key only; don't bind UDP")
+    vc.add_argument("--device", type=int, default=None, help="audio input index")
+    vc.add_argument("--recognizer", default=None, help="recogniser description substring")
+    vc.add_argument("--confidence", type=float, default=None, help="confidence_min override")
+    vc.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
+    vc.add_argument("--grammar", choices=["srgs", "api"], default="srgs")
+    vc.add_argument("--lang", default="en-US", help="xml:lang for `grammar`")
+    vc.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
+    vc.add_argument("--log", default=None, help="JSONL log path")
+    vc.set_defaults(func=cmd_voice)
+
     doc = sub.add_parser("doctor", help="bind-test the port and report observed telemetry")
     doc.add_argument("--host", default="0.0.0.0")
     doc.add_argument("--port", type=int, default=20777)
@@ -731,6 +959,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="recording profile (default: settings recording.profile = lite); "
         "full = every packet at native rate, for debugging/tuning",
     )
+    st2.add_argument(
+        "--no-watchdog",
+        action="store_true",
+        help="run recorder and engine in one process (no crash restart)",
+    )
+    st2.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     st2.set_defaults(func=cmd_start)
 
     sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")

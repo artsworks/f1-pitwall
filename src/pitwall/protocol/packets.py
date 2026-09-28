@@ -12,7 +12,7 @@ fails loudly here rather than mis-parsing later.
 from __future__ import annotations
 
 import struct
-from collections.abc import Iterator
+from collections.abc import Callable
 from dataclasses import field as dc_field
 from dataclasses import make_dataclass
 from typing import Any
@@ -157,46 +157,127 @@ def _compiled(layout: tuple[Item, ...]) -> CompiledLayout:
     return _COMPILED[layout]
 
 
-def _consume(item: Item, values: Iterator[Any]) -> Any:
-    if isinstance(item, Field):
-        if item.count == 1:
-            return next(values)
-        v = tuple(next(values) for _ in range(item.count))
-        return Corners(*v) if item.corners else v
-    cls = _SUB_CLASSES[item.layout]
-    return tuple(_fill(cls, item.layout, values) for _ in range(item.n))
+_Decoder = Callable[[tuple[Any, ...], int], tuple[Any, int]]
+_DECODERS: dict[tuple[Item, ...], _Decoder] = {}
 
 
-def _fill(cls: Any, layout: tuple[Item, ...], values: Iterator[Any]) -> Any:
-    kwargs = {item.name: _consume(item, values) for item in layout}
-    obj: Any = cls(**kwargs)
-    _post_decode(obj)
-    return obj
+def _decoder(cls: Any, layout: tuple[Item, ...]) -> _Decoder:
+    """Build a positional decoder for `layout`: (flat values, index) -> (obj, next index).
+
+    Steps are precomputed once per layout so decoding a packet is index arithmetic
+    and one positional constructor call per object."""
+    cached = _DECODERS.get(layout)
+    if cached is not None:
+        return cached
+    post = _POST_DECODE.get(cls)
+    if all(isinstance(it, Field) and it.count == 1 for it in layout):
+        width = len(layout)
+
+        def flat(vals: tuple[Any, ...], i: int) -> tuple[Any, int]:
+            obj = cls(*vals[i : i + width])
+            if post is not None:
+                post(obj)
+            return obj, i + width
+
+        _DECODERS[layout] = flat
+        return flat
+
+    steps = _steps(layout)
+
+    def nested(vals: tuple[Any, ...], i: int) -> tuple[Any, int]:
+        args: list[Any] = []
+        i = _run_steps(steps, vals, i, args)
+        obj = cls(*args)
+        if post is not None:
+            post(obj)
+        return obj, i
+
+    _DECODERS[layout] = nested
+    return nested
+
+
+_Step = tuple[int, int, _Decoder | None]
+
+
+def _steps(layout: tuple[Item, ...]) -> tuple[_Step, ...]:
+    steps: list[_Step] = []
+    for it in layout:
+        if isinstance(it, Field):
+            if it.count == 1:
+                steps.append((0, 1, None))
+            else:
+                steps.append((2 if it.corners else 1, it.count, None))
+        else:
+            steps.append((3, it.n, _decoder(_SUB_CLASSES[it.layout], it.layout)))
+    return tuple(steps)
+
+
+def _run_steps(steps: tuple[_Step, ...], vals: tuple[Any, ...], i: int, args: list[Any]) -> int:
+    for kind, n, sub in steps:
+        if kind == 0:
+            args.append(vals[i])
+            i += 1
+        elif kind == 1:
+            args.append(vals[i : i + n])
+            i += n
+        elif kind == 2:
+            args.append(Corners(*vals[i : i + n]))
+            i += n
+        else:
+            assert sub is not None
+            items = []
+            for _ in range(n):
+                o, i = sub(vals, i)
+                items.append(o)
+            args.append(tuple(items))
+    return i
+
+
+def _post_lap_car(obj: Any) -> None:
+    # Split ms/minutes pairs decoded to plain milliseconds.
+    obj.sector1_ms = obj.sector1_time_minutes_part * 60000 + obj.sector1_time_ms_part
+    obj.sector2_ms = obj.sector2_time_minutes_part * 60000 + obj.sector2_time_ms_part
+    obj.delta_to_car_in_front_ms = (
+        obj.delta_to_car_in_front_minutes_part * 60000 + obj.delta_to_car_in_front_ms_part
+    )
+    obj.delta_to_race_leader_ms = (
+        obj.delta_to_race_leader_minutes_part * 60000 + obj.delta_to_race_leader_ms_part
+    )
+
+
+def _post_lap_history(obj: Any) -> None:
+    obj.sector1_ms = obj.sector1_minutes * 60000 + obj.sector1_ms_part
+    obj.sector2_ms = obj.sector2_minutes * 60000 + obj.sector2_ms_part
+    obj.sector3_ms = obj.sector3_minutes * 60000 + obj.sector3_ms_part
+
+
+def _post_participant(obj: Any) -> None:
+    raw_name: bytes = obj.name
+    obj.name = raw_name.split(b"\0", 1)[0].decode("utf-8", errors="replace")
+
+
+def _post_event(obj: Any) -> None:
+    raw: bytes = obj.event_string_code
+    obj.code = raw.decode("ascii", errors="replace")
+    obj.detail = decode_event_detail(obj.code, obj.event_data)
+
+
+_POST_DECODE: dict[Any, Callable[[Any], None]] = {
+    LapDataCar: _post_lap_car,
+    LapHistory: _post_lap_history,
+    Participant: _post_participant,
+    EventPacket: _post_event,
+}
 
 
 def _post_decode(obj: Any) -> None:
     """Decoded conveniences applied at the parser boundary."""
-    if isinstance(obj, LapDataCar):
-        # Split ms/minutes pairs decoded to plain milliseconds.
-        obj.sector1_ms = obj.sector1_time_minutes_part * 60000 + obj.sector1_time_ms_part
-        obj.sector2_ms = obj.sector2_time_minutes_part * 60000 + obj.sector2_time_ms_part
-        obj.delta_to_car_in_front_ms = (
-            obj.delta_to_car_in_front_minutes_part * 60000 + obj.delta_to_car_in_front_ms_part
-        )
-        obj.delta_to_race_leader_ms = (
-            obj.delta_to_race_leader_minutes_part * 60000 + obj.delta_to_race_leader_ms_part
-        )
-    elif isinstance(obj, LapHistory):
-        obj.sector1_ms = obj.sector1_minutes * 60000 + obj.sector1_ms_part
-        obj.sector2_ms = obj.sector2_minutes * 60000 + obj.sector2_ms_part
-        obj.sector3_ms = obj.sector3_minutes * 60000 + obj.sector3_ms_part
-    elif isinstance(obj, Participant):
-        raw_name: bytes = obj.name
-        obj.name = raw_name.split(b"\0", 1)[0].decode("utf-8", errors="replace")
-    elif isinstance(obj, EventPacket):
-        raw: bytes = obj.event_string_code
-        obj.code = raw.decode("ascii", errors="replace")
-        obj.detail = decode_event_detail(obj.code, obj.event_data)
+    post = _POST_DECODE.get(type(obj))
+    if post is not None:
+        post(obj)
+
+
+_PACKET_PLANS: dict[int, tuple[struct.Struct, tuple[_Step, ...]]] = {}
 
 
 def parse(packet_id: int, payload: bytes, header: PacketHeader | None = None) -> Any:
@@ -204,10 +285,14 @@ def parse(packet_id: int, payload: bytes, header: PacketHeader | None = None) ->
     if header is None:
         header = parse_header(payload)
     cls, layout = _PACKET_CLASSES[packet_id]
-    compiled = _compiled(layout)
-    values = iter(compiled.struct.unpack_from(payload, HEADER_SIZE))
-    kwargs = {item.name: _consume(item, values) for item in layout}
-    obj: Any = cls(header=header, **kwargs)
+    plan = _PACKET_PLANS.get(packet_id)
+    if plan is None:
+        plan = _PACKET_PLANS[packet_id] = (_compiled(layout).struct, _steps(layout))
+    unpacker, steps = plan
+    values = unpacker.unpack_from(payload, HEADER_SIZE)
+    args: list[Any] = [header]
+    _run_steps(steps, values, 0, args)
+    obj: Any = cls(*args)
     _post_decode(obj)
     return obj
 

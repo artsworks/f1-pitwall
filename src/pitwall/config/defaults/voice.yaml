@@ -1,0 +1,37 @@
+# Driver -> pit wall voice channel (docs/21). Closed grammar: the recogniser only
+# chooses among these phrases, so accuracy comes from the list being small.
+# Intent ids are driver-menu item ids (menu.yaml) or input actions.
+# Tap UDP Action 1 once to open the channel; it closes on a recognised phrase,
+# on silence, on a second tap, or at max_open_s.
+voice:
+  enabled: false
+  engine: sapi
+  recognizer: ""          # "" = first installed SAPI recogniser (see `pitwall voice devices`)
+  device: 0
+  early_close_ms: 300
+  close_silence_ms: 1000
+  max_open_s: 6.0
+  open_warn_s: 3.0
+  confidence_min: 0.7
+  priority: below_normal
+  affinity_mask: 0
+  intents:
+    tyres: ["tyres", "how are the tyres", "tyres gone", "are the tyres gone", "tyre wear"]
+    pit: ["pit now", "should I pit", "box now", "do we box", "should I box"]
+    gap: ["gap ahead", "gap in front", "what's the gap", "gap to the car ahead"]
+    gap_behind: ["gap behind", "who's behind", "gap to the car behind"]
+    fuel: ["fuel", "fuel check", "how's the fuel", "fuel okay"]
+    plan: ["plan", "what's the plan", "strategy", "what's the strategy"]
+    push: ["push or save", "can I push", "should I save"]
+    rain: ["rain", "is rain coming", "weather", "how's the weather"]
+    race_stat: ["race stat", "status", "how are we doing"]
+    fight: ["fight", "fight briefing", "battle", "who am I fighting"]
+    understeer: ["understeer", "car is understeering", "I have understeer"]
+    oversteer: ["oversteer", "car is oversteering", "I have oversteer"]
+    ack: ["copy", "copy that", "understood", "got it"]
+    neg: ["negative", "no way"]
+    say_again: ["say again", "repeat that"]
+    silent: ["radio silent", "radio silence", "quiet please"]
+    mindset_aggressive: ["go aggressive", "attack mode"]
+    mindset_balanced: ["go balanced", "calm down"]
+    page: ["next page", "change page"]

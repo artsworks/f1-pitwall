@@ -76,6 +76,8 @@ afterwards for false positives. Tune from the recording, not from another run.
 - 2026 energy management as a modelled per-lap budget rather than a threshold rule.
 - Watchdog and mid-race crash recovery from SQLite plus the tail of the recording.
 - First friends-league race (3 humans + AI grid) recorded and reviewed.
+- Backlog before merge: driver cheatsheet (UDP action map, and what pitwall does for the
+  driver in practice, qualifying and race).
 
 **Exit:** a 25% and a 100% race where the pit recommendation is defensible in review and
 the call count per lap stays inside budget.

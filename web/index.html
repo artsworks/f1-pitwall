@@ -2,9 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body class="dash connecting">
   <header class="status">
@@ -18,12 +22,14 @@
     <span id="session">--</span>
     <span id="lap">LAP --</span>
     <span id="position">P--</span>
-    <span id="mindset" class="pill">--</span>
+    <span id="page" class="pill page" title="page (UDP Action 4 / P)">RACE</span>
+    <span id="mindset" class="pill" title="mindset (UDP Action 2 / M)">--</span>
     <span id="verbosity" class="dim"></span>
   </header>
 
   <section id="banner" class="banner idle">
     <div class="bar"></div>
+    <div id="call-life" class="life"></div>
     <div class="body">
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>
@@ -72,7 +78,13 @@
 
   <section class="zone strat">
     <h2 id="strat-title">STRATEGY</h2>
-    <div id="strat-ph" class="ph">pit window · gaps · undercut (M3)</div>
+    <div id="strat-ph" class="ph">pit window · gaps · undercut — waiting for race data</div>
+    <div id="strategy" class="strategy" hidden>
+      <div id="s-window" class="s-window">--</div>
+      <div id="s-ahead" class="s-row">--</div>
+      <div id="s-behind" class="s-row">--</div>
+      <div id="s-stint" class="s-stint dim">--</div>
+    </div>
     <div id="quali" class="quali" hidden>
       <div id="q-main" class="qmain">--</div>
       <div id="q-sub" class="sub">--</div>
@@ -135,12 +147,51 @@
     </div>
   </section>
 
+  <section id="carpage" class="zone carpage">
+    <h2>ENERGY · FUEL · TYRE LIFE</h2>
+    <div class="cp-grid">
+      <div class="cp-tile"><h2>ENERGY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
+      <div class="cp-tile"><h2>FUEL VS FLAG</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
+      <div class="cp-tile"><h2>TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div><div class="meter"><i id="cp-life-bar"></i><b id="cp-life-flag"></b></div></div>
+    </div>
+    <div id="cp-flags" class="cp-flags dim">--</div>
+  </section>
+
+  <section id="trackpage" class="zone trackpage">
+    <h2>TRACK</h2>
+    <div id="tp-status" class="tp-status">--</div>
+    <div class="tp-wx">
+      <div class="tp-wxt" id="tp-wx-0"><div class="k">NOW</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
+      <div class="tp-wxt" id="tp-wx-1"><div class="k">IN 10 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
+      <div class="tp-wxt" id="tp-wx-2"><div class="k">IN 30 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">rain chance</div><div class="pct">--</div></div>
+    </div>
+    <div class="tp-rows">
+      <div id="tp-cross" class="tp-row">--</div>
+      <div id="tp-flags" class="tp-row">--</div>
+      <div id="tp-pens" class="tp-row">--</div>
+      <div id="tp-traffic" class="tp-row">--</div>
+      <div id="tp-exit" class="tp-row">--</div>
+    </div>
+  </section>
+
+  <section id="duel" class="zone duel">
+    <div id="d-state" class="b-state" hidden></div>
+    <div id="d-ph" class="ph">no rival in scope</div>
+    <div id="d-ahead" class="b-card" hidden></div>
+    <div id="d-behind" class="b-card" hidden></div>
+    <div id="d-plan" class="b-foot">--</div>
+  </section>
+
   <section class="log"><ol id="log"></ol></section>
 
   <footer class="footer">
     <span id="ers">ERS --</span><span id="sc">SC --</span><span id="latency"></span>
   </footer>
-  <script src="/static/app.js"></script>
-  <script src="/static/review.js"></script>
+  <aside id="drvmenu" class="drvmenu" hidden aria-live="polite">
+    <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
+    <ol id="drvmenu-list"></ol>
+  </aside>
+  <script src="/static/app.js?v=4"></script>
+  <script src="/static/review.js?v=4"></script>
 </body>
 </html>

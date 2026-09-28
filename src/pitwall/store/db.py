@@ -10,8 +10,13 @@ import json
 import sqlite3
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pitwall.model.deg import DegFit
+    from pitwall.state.lap import LapSummary
 
 MIGRATIONS: list[str] = [
     """
@@ -99,8 +104,188 @@ MIGRATIONS: list[str] = [
         base_pace_ms INT,
         updated_at REAL
     );
+    """,
+    # Migration 2: M3 race engine (docs/18). All new columns nullable.
     """
+    ALTER TABLE sessions ADD COLUMN game_mode INT;
+    ALTER TABLE sessions ADD COLUMN ended_at REAL;
+    ALTER TABLE laps ADD COLUMN wear_pct REAL;
+    ALTER TABLE laps ADD COLUMN fuel_kg REAL;
+    ALTER TABLE laps ADD COLUMN ers_deployed_j REAL;
+    ALTER TABLE laps ADD COLUMN sc_status INT;
+    ALTER TABLE laps ADD COLUMN weather INT;
+    ALTER TABLE stints ADD COLUMN n_valid_laps INT;
+    ALTER TABLE stints ADD COLUMN base_ms REAL;
+    ALTER TABLE stints ADD COLUMN deg_ms_per_lap REAL;
+    ALTER TABLE stints ADD COLUMN fuel_ms_per_lap REAL;
+    ALTER TABLE stints ADD COLUMN rmse_ms REAL;
+    ALTER TABLE stints ADD COLUMN updated_at REAL;
+    ALTER TABLE pit_events ADD COLUMN lane_ms INT;
+    ALTER TABLE pit_events ADD COLUMN in_lap_ms INT;
+    ALTER TABLE pit_events ADD COLUMN out_lap_ms INT;
+    ALTER TABLE pit_events ADD COLUMN ref_pace_ms INT;
+    ALTER TABLE pit_events ADD COLUMN car_idx INT;
+    CREATE TABLE model_params (
+        track_id INT NOT NULL,
+        compound INT NOT NULL,
+        name TEXT NOT NULL,
+        value REAL NOT NULL,
+        weight REAL NOT NULL,
+        updated_at REAL,
+        PRIMARY KEY (track_id, compound, name)
+    );
+    CREATE TABLE ab_results (
+        id INTEGER PRIMARY KEY,
+        recorded_at REAL,
+        recording TEXT,
+        a_dir TEXT, b_dir TEXT, a_mindset TEXT, b_mindset TEXT,
+        rule_id TEXT,
+        only_a INT, only_b INT, both INT
+    );
+    CREATE TABLE runtime (
+        key TEXT PRIMARY KEY,
+        session_uid INT,
+        session_t REAL,
+        wall_t REAL,
+        recording_path TEXT,
+        lap_num INT
+    );
+    """,
+    # 3: driver menu picks (docs/12): questions, opinions, actions
+    """
+    CREATE TABLE driver_inputs (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        t REAL,
+        session_time REAL,
+        lap INT,
+        lap_distance REAL,
+        item_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        topic TEXT,
+        label TEXT,
+        reply TEXT,
+        inputs TEXT,
+        mindset TEXT
+    );
+    CREATE INDEX driver_inputs_session ON driver_inputs(session_uid, t);
+    """,
+    # 4: named strategy plans (docs/03, docs/18): active plan on every call and
+    # the set/switch/off-plan history, for review grading of plan calls.
+    """
+    ALTER TABLE calls ADD COLUMN active_plan TEXT;
+    ALTER TABLE calls ADD COLUMN on_plan INT;
+    CREATE TABLE plan_events (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        t REAL,
+        session_time REAL,
+        lap INT,
+        kind TEXT,
+        from_plan TEXT,
+        to_plan TEXT,
+        reason TEXT,
+        delta_s REAL,
+        sequence TEXT,
+        plans TEXT
+    );
+    CREATE INDEX plan_events_session ON plan_events(session_uid, t);
+    """,
+    # 6: hindsight outcomes (pitwall digest): automatic labels for fired calls
+    # and plan events against what actually happened; recomputed per session.
+    """
+    CREATE TABLE outcomes (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        call_id TEXT,
+        rule_id TEXT,
+        lap INT,
+        metric TEXT,
+        predicted REAL,
+        actual REAL,
+        error REAL,
+        label TEXT,
+        detail TEXT
+    );
+    CREATE INDEX outcomes_session ON outcomes(session_uid, lap);
+    """,
+    # 7: race distance, so the hindsight grader can tell a finished session
+    # from a partial / aborted / retired one (censored labels).
+    """
+    ALTER TABLE sessions ADD COLUMN total_laps INT NOT NULL DEFAULT 0;
+    """,
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class LapRow:
+    id: int
+    session_uid: int
+    car_idx: int
+    lap_num: int
+    lap_time_ms: int
+    s1_ms: int
+    s2_ms: int
+    compound: int
+    tyre_age_laps: int
+    fuel_remaining_laps: float
+    valid: int
+    invalid_reasons: tuple[str, ...]
+    wear_pct: float
+    fuel_kg: float
+    ers_deployed_j: float
+    sc_status: int
+    weather: int
+
+
+@dataclass(frozen=True, slots=True)
+class StintRow:
+    id: int
+    session_uid: int
+    car_idx: int
+    compound: int
+    start_lap: int
+    end_lap: int
+    n_valid_laps: int
+    base_ms: float
+    deg_ms_per_lap: float
+    fuel_ms_per_lap: float
+    rmse_ms: float
+    updated_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class PitEventRow:
+    id: int
+    session_uid: int
+    car_idx: int
+    lap_num: int
+    loss_ms: int
+    neutralised: int
+    lane_ms: int
+    in_lap_ms: int
+    out_lap_ms: int
+    ref_pace_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class ModelParam:
+    track_id: int
+    compound: int
+    name: str
+    value: float
+    weight: float
+    updated_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class Heartbeat:
+    session_uid: int
+    session_t: float
+    wall_t: float
+    recording_path: str
+    lap_num: int
+
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
 # `bookmarks`, everything else (paused/resumed/session_reset) stays JSONL-only.
@@ -115,6 +300,10 @@ _UID_COLUMNS = ("uid", "session_uid")
 def _uid_to_sql(uid: int) -> int:
     """Store the game's uint64 session UID in SQLite's signed 64-bit INTEGER."""
     return uid - _U64 if uid > _I64_MAX else uid
+
+
+def _bool_to_sql(value: object) -> int | None:
+    return int(value) if isinstance(value, bool) else None
 
 
 def _uid_from_sql(value: int) -> int:
@@ -167,17 +356,19 @@ class Database:
         config_hash: str = "",
         weather: int = 0,
         recording_path: str = "",
+        game_mode: int = 0,
     ) -> None:
         with self._conn:
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
-                " game_version, config_hash, weather, recording_path)"
-                " VALUES(?,?,?,?,?,?,?,?)"
+                " game_version, config_hash, weather, recording_path, game_mode)"
+                " VALUES(?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
                 " config_hash=excluded.config_hash, weather=excluded.weather,"
-                " recording_path=excluded.recording_path",
+                " recording_path=excluded.recording_path,"
+                " game_mode=excluded.game_mode",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -187,16 +378,18 @@ class Database:
                     config_hash,
                     weather,
                     recording_path,
+                    game_mode,
                 ),
             )
 
-    def insert_lap(self, session_uid: int, car_idx: int, lap: Any) -> None:
+    def insert_lap(self, session_uid: int, car_idx: int, lap: LapSummary) -> None:
         """Persist a state.lap.LapSummary (attribute access keeps it duck-typed)."""
         with self._conn:
             self._conn.execute(
                 "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms,"
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
-                " valid, invalid_reasons) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                " valid, invalid_reasons, wear_pct, fuel_kg, ers_deployed_j,"
+                " sc_status, weather) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -209,6 +402,11 @@ class Database:
                     lap.fuel_remaining_laps_at_end,
                     int(bool(lap.valid)),
                     json.dumps(list(lap.invalid_reasons)),
+                    lap.wear_pct,
+                    lap.fuel_kg,
+                    lap.ers_deployed_j,
+                    lap.sc_status,
+                    lap.weather,
                 ),
             )
 
@@ -230,6 +428,9 @@ class Database:
                     ),
                 )
             return
+        if outcome == "driver_input":
+            self._insert_driver_input(session_uid, record)
+            return
         if outcome not in _CALL_OUTCOMES:
             return
         inputs = record.get("inputs")
@@ -237,8 +438,8 @@ class Database:
             self._conn.execute(
                 "INSERT INTO calls(session_uid, call_id, t, session_time, lap,"
                 " lap_distance, rule_id, priority, outcome, suppressed_by,"
-                " text, inputs, config_hash, mindset)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " text, inputs, config_hash, mindset, active_plan, on_plan)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     record.get("call_id"),
@@ -253,6 +454,53 @@ class Database:
                     record.get("text"),
                     json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("config_hash"),
+                    record.get("mindset"),
+                    record.get("active_plan") or None,
+                    _bool_to_sql(record.get("on_plan")),
+                ),
+            )
+
+    def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
+        """A named-plan set / switch / off / on event (engine plan tracker)."""
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO plan_events(session_uid, t, session_time, lap, kind,"
+                " from_plan, to_plan, reason, delta_s, sequence, plans)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    record.get("t"),
+                    record.get("session_time"),
+                    record.get("lap"),
+                    record.get("kind"),
+                    record.get("from_plan"),
+                    record.get("to_plan"),
+                    record.get("reason"),
+                    record.get("delta_s"),
+                    record.get("sequence"),
+                    json.dumps(record.get("plans", []), default=str),
+                ),
+            )
+
+    def _insert_driver_input(self, session_uid: int, record: dict[str, Any]) -> None:
+        inputs = record.get("inputs")
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO driver_inputs(session_uid, t, session_time, lap, lap_distance,"
+                " item_id, kind, topic, label, reply, inputs, mindset)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    record.get("t"),
+                    record.get("session_time"),
+                    record.get("lap"),
+                    record.get("lap_distance"),
+                    record.get("item_id"),
+                    record.get("kind"),
+                    record.get("topic") or None,
+                    record.get("label"),
+                    record.get("text"),
+                    json.dumps(inputs, default=str) if inputs is not None else None,
                     record.get("mindset"),
                 ),
             )
@@ -289,6 +537,54 @@ class Database:
     def calls_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM calls WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),))
 
+    def plan_events_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM plan_events WHERE session_uid=? ORDER BY id", (_uid_to_sql(uid),)
+        )
+
+    def replace_outcomes(self, session_uid: int, rows: list[dict[str, Any]]) -> None:
+        """Replace a session's hindsight outcomes (recomputed as a whole)."""
+        uid = _uid_to_sql(session_uid)
+        with self._conn:
+            self._conn.execute("DELETE FROM outcomes WHERE session_uid=?", (uid,))
+            self._conn.executemany(
+                "INSERT INTO outcomes(session_uid, call_id, rule_id, lap, metric,"
+                " predicted, actual, error, label, detail) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        uid,
+                        r.get("call_id"),
+                        r.get("rule_id"),
+                        r.get("lap"),
+                        r.get("metric"),
+                        r.get("predicted"),
+                        r.get("actual"),
+                        r.get("error"),
+                        r.get("label"),
+                        r.get("detail", ""),
+                    )
+                    for r in rows
+                ],
+            )
+
+    def outcomes_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM outcomes WHERE session_uid=? ORDER BY lap, id", (_uid_to_sql(uid),)
+        )
+
+    def all_outcomes(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM outcomes ORDER BY session_uid, lap, id", ())
+
+    def session_row(self, uid: int) -> dict[str, Any] | None:
+        rows = self._rows("SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),))
+        return rows[0] if rows else None
+
+    def set_session_total_laps(self, uid: int, total_laps: int) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
+            )
+
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
@@ -297,11 +593,344 @@ class Database:
             "SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
         )
 
+    def driver_inputs_for_session(self, uid: int) -> list[dict[str, Any]]:
+        return self._rows(
+            "SELECT * FROM driver_inputs WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
+        )
+
     def latest_session_uid(self) -> int | None:
         row = self._conn.execute(
             "SELECT uid FROM sessions ORDER BY started_at DESC LIMIT 1"
         ).fetchone()
         return _uid_from_sql(int(row[0])) if row else None
+
+    # -- M3: laps / stints / pit events / model params (docs/18) --------------
+
+    def laps_for(self, session_uid: int, car_idx: int = 0) -> list[LapRow]:
+        rows = self._conn.execute(
+            "SELECT * FROM laps WHERE session_uid=? AND car_idx=? ORDER BY lap_num, id",
+            (_uid_to_sql(session_uid), car_idx),
+        ).fetchall()
+        return [self._lap_row(r) for r in rows]
+
+    def _lap_row(self, r: sqlite3.Row) -> LapRow:
+        return LapRow(
+            id=int(r["id"]),
+            session_uid=_uid_from_sql(int(r["session_uid"])),
+            car_idx=int(r["car_idx"]),
+            lap_num=int(r["lap_num"]),
+            lap_time_ms=int(r["lap_time_ms"]),
+            s1_ms=int(r["s1_ms"] or 0),
+            s2_ms=int(r["s2_ms"] or 0),
+            compound=int(r["compound"] or 0),
+            tyre_age_laps=int(r["tyre_age_laps"] or 0),
+            fuel_remaining_laps=float(r["fuel_remaining_laps"] or 0.0),
+            valid=int(r["valid"] or 0),
+            invalid_reasons=tuple(json.loads(r["invalid_reasons"] or "[]")),
+            wear_pct=float(r["wear_pct"] or 0.0),
+            fuel_kg=float(r["fuel_kg"] or 0.0),
+            ers_deployed_j=float(r["ers_deployed_j"] or 0.0),
+            sc_status=int(r["sc_status"] or 0),
+            weather=int(r["weather"] or 0),
+        )
+
+    def upsert_stint(
+        self,
+        session_uid: int,
+        car_idx: int,
+        compound: int,
+        start_lap: int,
+        end_lap: int,
+        fit: DegFit,
+    ) -> None:
+        """Insert or refresh the stint row keyed on (session, car, start_lap)."""
+        uid = _uid_to_sql(session_uid)
+        params = json.dumps(
+            {
+                "base_ms": fit.base_ms,
+                "deg_ms_per_lap": fit.deg_ms_per_lap,
+                "fuel_ms_per_lap": fit.fuel_ms_per_lap,
+                "rmse_ms": fit.rmse_ms,
+                "confidence": fit.confidence,
+                "source": fit.source,
+            }
+        )
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE stints SET compound=?, end_lap=?, deg_params=?,"
+                " n_valid_laps=?, base_ms=?, deg_ms_per_lap=?, fuel_ms_per_lap=?,"
+                " rmse_ms=?, updated_at=?"
+                " WHERE session_uid=? AND car_idx=? AND start_lap=?",
+                (
+                    compound,
+                    end_lap,
+                    params,
+                    fit.n,
+                    fit.base_ms,
+                    fit.deg_ms_per_lap,
+                    fit.fuel_ms_per_lap,
+                    fit.rmse_ms,
+                    time.time(),
+                    uid,
+                    car_idx,
+                    start_lap,
+                ),
+            )
+            if cur.rowcount == 0:
+                self._conn.execute(
+                    "INSERT INTO stints(session_uid, car_idx, compound, start_lap,"
+                    " end_lap, deg_params, n_valid_laps, base_ms, deg_ms_per_lap,"
+                    " fuel_ms_per_lap, rmse_ms, updated_at)"
+                    " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        uid,
+                        car_idx,
+                        compound,
+                        start_lap,
+                        end_lap,
+                        params,
+                        fit.n,
+                        fit.base_ms,
+                        fit.deg_ms_per_lap,
+                        fit.fuel_ms_per_lap,
+                        fit.rmse_ms,
+                        time.time(),
+                    ),
+                )
+
+    def _stint_row(self, r: sqlite3.Row) -> StintRow:
+        return StintRow(
+            id=int(r["id"]),
+            session_uid=_uid_from_sql(int(r["session_uid"])),
+            car_idx=int(r["car_idx"]),
+            compound=int(r["compound"]),
+            start_lap=int(r["start_lap"]),
+            end_lap=int(r["end_lap"] or 0),
+            n_valid_laps=int(r["n_valid_laps"] or 0),
+            base_ms=float(r["base_ms"] or 0.0),
+            deg_ms_per_lap=float(r["deg_ms_per_lap"] or 0.0),
+            fuel_ms_per_lap=float(r["fuel_ms_per_lap"] or 0.0),
+            rmse_ms=float(r["rmse_ms"] or 0.0),
+            updated_at=float(r["updated_at"] or 0.0),
+        )
+
+    def stints_for_track(self, track_id: int, compound: int, limit: int = 20) -> list[StintRow]:
+        """Newest-first stints on this track/compound across all sessions."""
+        rows = self._conn.execute(
+            "SELECT st.* FROM stints st JOIN sessions se ON st.session_uid = se.uid"
+            " WHERE se.track_id=? AND st.compound=? ORDER BY st.id DESC LIMIT ?",
+            (track_id, compound, limit),
+        ).fetchall()
+        return [self._stint_row(r) for r in rows]
+
+    def insert_pit_event(
+        self,
+        session_uid: int,
+        car_idx: int,
+        lap_num: int,
+        loss_ms: int,
+        neutralised: int,
+        lane_ms: int,
+        in_lap_ms: int,
+        out_lap_ms: int,
+        ref_pace_ms: int,
+    ) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO pit_events(session_uid, lap_num, loss_ms, neutralised,"
+                " lane_ms, in_lap_ms, out_lap_ms, ref_pace_ms, car_idx)"
+                " VALUES(?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    lap_num,
+                    loss_ms,
+                    neutralised,
+                    lane_ms,
+                    in_lap_ms,
+                    out_lap_ms,
+                    ref_pace_ms,
+                    car_idx,
+                ),
+            )
+
+    def _pit_row(self, r: sqlite3.Row) -> PitEventRow:
+        return PitEventRow(
+            id=int(r["id"]),
+            session_uid=_uid_from_sql(int(r["session_uid"])),
+            car_idx=int(r["car_idx"] or 0),
+            lap_num=int(r["lap_num"] or 0),
+            loss_ms=int(r["loss_ms"] or 0),
+            neutralised=int(r["neutralised"] or 0),
+            lane_ms=int(r["lane_ms"] or 0),
+            in_lap_ms=int(r["in_lap_ms"] or 0),
+            out_lap_ms=int(r["out_lap_ms"] or 0),
+            ref_pace_ms=int(r["ref_pace_ms"] or 0),
+        )
+
+    def pit_events_for_track(
+        self, track_id: int, neutralised: int, limit: int = 20
+    ) -> list[PitEventRow]:
+        rows = self._conn.execute(
+            "SELECT pe.* FROM pit_events pe JOIN sessions se ON pe.session_uid = se.uid"
+            " WHERE se.track_id=? AND pe.neutralised=? ORDER BY pe.id DESC LIMIT ?",
+            (track_id, neutralised, limit),
+        ).fetchall()
+        return [self._pit_row(r) for r in rows]
+
+    def pit_events_for_session(self, session_uid: int) -> list[PitEventRow]:
+        rows = self._conn.execute(
+            "SELECT * FROM pit_events WHERE session_uid=? ORDER BY id",
+            (_uid_to_sql(session_uid),),
+        ).fetchall()
+        return [self._pit_row(r) for r in rows]
+
+    def get_param(self, track_id: int, compound: int, name: str) -> ModelParam | None:
+        r = self._conn.execute(
+            "SELECT * FROM model_params WHERE track_id=? AND compound=? AND name=?",
+            (track_id, compound, name),
+        ).fetchone()
+        return self._param_row(r) if r is not None else None
+
+    def fold_param(
+        self,
+        track_id: int,
+        compound: int,
+        name: str,
+        value: float,
+        weight: float = 1.0,
+        *,
+        param_weight_cap: float = 50.0,
+    ) -> ModelParam:
+        """Weighted running mean in model_params; weight capped at the cap."""
+        old = self.get_param(track_id, compound, name)
+        old_w = old.weight if old is not None else 0.0
+        old_v = old.value if old is not None else 0.0
+        total_w = old_w + weight
+        new_v = (old_v * old_w + value * weight) / total_w if total_w > 0 else value
+        new_w = min(total_w, param_weight_cap)
+        now = time.time()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO model_params(track_id, compound, name, value, weight,"
+                " updated_at) VALUES(?,?,?,?,?,?)"
+                " ON CONFLICT(track_id, compound, name) DO UPDATE SET"
+                " value=excluded.value, weight=excluded.weight,"
+                " updated_at=excluded.updated_at",
+                (track_id, compound, name, new_v, new_w, now),
+            )
+        return ModelParam(track_id, compound, name, new_v, new_w, now)
+
+    def _param_row(self, r: sqlite3.Row) -> ModelParam:
+        return ModelParam(
+            track_id=int(r["track_id"]),
+            compound=int(r["compound"]),
+            name=str(r["name"]),
+            value=float(r["value"]),
+            weight=float(r["weight"]),
+            updated_at=float(r["updated_at"] or 0.0),
+        )
+
+    def set_param(
+        self, track_id: int, compound: int, name: str, value: float, weight: float
+    ) -> ModelParam:
+        """Overwrite a model_params row (recomputed values, e.g. pitwall tune)."""
+        now = time.time()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO model_params(track_id, compound, name, value, weight,"
+                " updated_at) VALUES(?,?,?,?,?,?)"
+                " ON CONFLICT(track_id, compound, name) DO UPDATE SET"
+                " value=excluded.value, weight=excluded.weight,"
+                " updated_at=excluded.updated_at",
+                (track_id, compound, name, value, weight, now),
+            )
+        return ModelParam(track_id, compound, name, value, weight, now)
+
+    def all_grades(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM call_grades ORDER BY graded_at", ())
+
+    def ab_results(self) -> list[dict[str, Any]]:
+        return self._rows("SELECT * FROM ab_results ORDER BY recorded_at", ())
+
+    def params_for_track(self, track_id: int) -> list[ModelParam]:
+        rows = self._conn.execute(
+            "SELECT * FROM model_params WHERE track_id=? ORDER BY compound, name",
+            (track_id,),
+        ).fetchall()
+        return [self._param_row(r) for r in rows]
+
+    def record_ab(
+        self,
+        *,
+        recording: str = "",
+        a_dir: str = "",
+        b_dir: str = "",
+        a_mindset: str = "",
+        b_mindset: str = "",
+        rule_id: str = "",
+        only_a: int = 0,
+        only_b: int = 0,
+        both: int = 0,
+    ) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO ab_results(recorded_at, recording, a_dir, b_dir,"
+                " a_mindset, b_mindset, rule_id, only_a, only_b, both)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (
+                    time.time(),
+                    recording,
+                    a_dir,
+                    b_dir,
+                    a_mindset,
+                    b_mindset,
+                    rule_id,
+                    only_a,
+                    only_b,
+                    both,
+                ),
+            )
+
+    def write_heartbeat(
+        self,
+        session_uid: int,
+        session_t: float,
+        wall_t: float,
+        recording_path: str,
+        lap_num: int,
+    ) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO runtime(key, session_uid, session_t, wall_t,"
+                " recording_path, lap_num) VALUES('heartbeat',?,?,?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET"
+                " session_uid=excluded.session_uid, session_t=excluded.session_t,"
+                " wall_t=excluded.wall_t, recording_path=excluded.recording_path,"
+                " lap_num=excluded.lap_num",
+                (_uid_to_sql(session_uid), session_t, wall_t, recording_path, lap_num),
+            )
+
+    def clear_heartbeat(self) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM runtime WHERE key='heartbeat'")
+
+    def read_heartbeat(self) -> Heartbeat | None:
+        r = self._conn.execute("SELECT * FROM runtime WHERE key='heartbeat'").fetchone()
+        if r is None:
+            return None
+        return Heartbeat(
+            session_uid=_uid_from_sql(int(r["session_uid"] or 0)),
+            session_t=float(r["session_t"] or 0.0),
+            wall_t=float(r["wall_t"] or 0.0),
+            recording_path=str(r["recording_path"] or ""),
+            lap_num=int(r["lap_num"] or 0),
+        )
+
+    def end_session(self, uid: int, ended_at: float) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE sessions SET ended_at=? WHERE uid=?", (ended_at, _uid_to_sql(uid))
+            )
 
 
 def open_configured(settings: Any) -> Database | None:

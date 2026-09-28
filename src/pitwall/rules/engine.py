@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pitwall.config.models import RuleDefModel
-from pitwall.rules.expr import Predicate, make_namespace
+from pitwall.rules.expr import (
+    Predicate,
+    TrackedNamespace,
+    make_namespace,
+    namespace_data,
+    public_names,
+)
 from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
 
@@ -72,6 +78,7 @@ class Rule:
         self.armed = True
         self.fires_this_stint = 0
         self.phrases = PhraseBook(defn)
+        self.severity = [Predicate(t.when) for t in defn.severity]
 
     def still_true(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         if self._still_true is None:
@@ -120,6 +127,8 @@ class RuleEngine:
     def evaluate(self, snapshot: Snapshot) -> EvalResult:
         self._snapshot = snapshot
         result = EvalResult()
+        data = namespace_data(snapshot, **self._ns_kwargs())
+        snap_attrs = frozenset(public_names(snapshot))
         for rule in self.rules:
             d = rule.defn
             if d.sessions and snapshot.session_kind not in d.sessions:
@@ -131,7 +140,7 @@ class RuleEngine:
             if stale:
                 result.suppressed.append(Suppressed(rule, "stale"))
                 continue
-            ns = make_namespace(snapshot, **self._ns_kwargs())
+            ns = TrackedNamespace(data)
             try:
                 fired = bool(rule.when(ns))
             except Exception:
@@ -152,12 +161,21 @@ class RuleEngine:
                 result.suppressed.append(Suppressed(rule, "max_per_stint"))
                 continue
             repeat = rule.phrases.trigger(snapshot.now)
-            template = rule.phrases.pick(repeat)
+            severity = 0
+            for i, pred in enumerate(rule.severity, start=1):
+                try:
+                    if pred(ns):
+                        severity = i
+                        break
+                except Exception:
+                    continue
+            template = rule.phrases.pick(repeat, severity)
+            tier_priority = d.severity[severity - 1].priority if severity else None
+            priority = tier_priority or d.priority
             try:
                 text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
                 text = template
-            snap_attrs = {name for name in dir(snapshot) if not name.startswith("_")}
             inputs = {
                 name: _jsonable(ns.get(name))
                 for name in dict.fromkeys(ns.accessed)
@@ -174,7 +192,7 @@ class RuleEngine:
                 Candidate(
                     rule=rule,
                     text=text,
-                    priority=d.priority,
+                    priority=priority,
                     tags=list(d.tags),
                     still_true=still_true,
                     inputs=inputs,

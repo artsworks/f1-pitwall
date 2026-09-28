@@ -1,0 +1,9 @@
+track_id: 11
+name: monza
+pit_loss_s: {green: 24.0, vsc: 13.0, sc: 9.0}
+pit_exit_m: 290.0
+pit_entry_m: 5500.0
+fuel_kg_per_lap: 1.6
+deg_ms_per_lap: {16: 100, 17: 65, 18: 40}
+base_pace_ms: 0
+thresholds: {}

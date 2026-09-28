@@ -1,0 +1,1049 @@
+rules:
+  # Named strategy plans A/B/C (docs/03 "Strategy plans"). The engine's plan
+  # tracker owns the plan state; these rules only phrase it. plan_sc_box sits
+  # after box_now in the pit group: it speaks only when box_now is gated out.
+  - id: plan_switch
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'pace' and plan_switch_lap == lap_num and plan_stops_left > 0"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "Switching to Plan {active_plan}. {plan_spoken}, target lap {plan_target_lap}"
+      - "We're going Plan {active_plan} now, {plan_spoken}. Target lap {plan_target_lap}"
+      - "Change of plan. Plan {active_plan}, {plan_spoken}. Lap {plan_target_lap} is the target"
+  - id: plan_switch_no_stop
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'pace' and plan_switch_lap == lap_num and plan_stops_left == 0"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "Switching to Plan {active_plan}, {plan_spoken}. No more stops, make the tyres last"
+      - "Change of plan, we're not stopping. {plan_spoken}"
+      - "Plan {active_plan} now, {plan_spoken}. Tyres go to the flag"
+  - id: plan_invalid
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'invalid' and plan_switch_lap == lap_num"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "We're off Plan {plan_switched_from}. New plan is {active_plan}, {plan_spoken}"
+      - "Plan {plan_switched_from} is gone. Plan {active_plan} now, {plan_spoken}"
+      - "Plan {plan_switched_from} is off the table. Going Plan {active_plan}, {plan_spoken}"
+  - id: plan_off
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan != '' and not on_plan and plan_off_s >= th.plan_off_s"
+    clear_when: "on_plan"
+    cooldown_s: 90
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "Heads up, we're off Plan {active_plan}. Losing {plan_off_s:.0f} seconds on it, reviewing"
+      - "Plan {active_plan} is costing us {plan_off_s:.0f} seconds now. Stand by for a new plan"
+      - "We're drifting off Plan {active_plan}, about {plan_off_s:.0f} seconds. Looking at options"
+  - id: plan_announce
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left > 0 and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
+    clear_when: "active_plan == ''"
+    cooldown_s: 30
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "We're on Plan A, {plan_spoken}. Window laps {plan_window_start} to {plan_window_end}. Plan B is {plan_b_spoken}"
+      - "Plan A is {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
+      - "Strategy is Plan A, {plan_spoken}. Window {plan_window_start} to {plan_window_end}, Plan B {plan_b_spoken}"
+  - id: plan_announce_no_stop
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left == 0 and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
+    clear_when: "active_plan == ''"
+    cooldown_s: 30
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "We're on Plan A, {plan_spoken}. We're going long"
+      - "Plan A, {plan_spoken}. Look after the tyres"
+      - "Plan A is {plan_spoken}. Tyres have to go the distance, so manage them"
+  - id: plan_status
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and active_plan != '' and on_plan and plan_stops_left > 0 and sector == 1 and lap_num >= 2 and lap_num % th.plan_status_every_laps == 0 and lap_num < plan_window_start"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "Still on Plan {active_plan}, window laps {plan_window_start} to {plan_window_end}"
+      - "We're on Plan {active_plan}. Target lap {plan_target_lap}"
+      - "Plan {active_plan} still good, window {plan_window_start} to {plan_window_end}"
+  - id: plan_window_open
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_window_open and on_plan and plan_target_lap > lap_num and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
+    clear_when: "not plan_window_open"
+    cooldown_s: 60
+    cooldown_group: plan
+    requires: [lap_data]
+    say:
+      - "Pit window is open. Plan {active_plan}, target lap {plan_target_lap}"
+      - "Window open. We're targeting lap {plan_target_lap}, Plan {active_plan}"
+      - "Okay, window's open. Plan {active_plan}, we're looking at lap {plan_target_lap}"
+  - id: plan_target_lap
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and on_plan and plan_stops_left > 0 and plan_target_lap == lap_num and laps_remaining > th.pit_min_laps_left"
+    clear_when: "plan_target_lap != lap_num"
+    still_true: "phase == 'racing' and plan_target_lap == lap_num"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Target lap. Plan {active_plan}, box box, {plan_next_compound}s"
+      - "This is the target lap. Box this lap, {plan_next_compound}s on, Plan {active_plan}"
+      - "Box box, box box. Plan {active_plan}, {plan_next_compound}s"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, extend. We'll look again next lap"
+  # Pit calls read the optimiser's plan (docs/18). The gate fields sit in
+  # `when` so the prediction and its confidence land in the decision log.
+  - id: box_now
+    sessions: [race]
+    priority: 1
+    when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
+    still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data, car_status]
+    say:
+      - "Box, box. Plan {active_plan}. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds in it"
+      - "Plan {active_plan}, box this lap. {pit_plan_reason}"
+      - "Box this lap, box this lap. Plan {active_plan}, {pit_plan_reason}"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, staying out. Window is laps {pit_window_start} to {pit_window_end}"
+  - id: plan_sc_box
+    sessions: [race]
+    priority: 1
+    when: "phase in ('sc', 'vsc') and active_plan == 'C' and plan_switch_reason == 'sc' and plan_switch_lap == lap_num and laps_remaining > th.pit_min_laps_left"
+    clear_when: "active_plan != 'C' or plan_switch_lap != lap_num"
+    still_true: "phase in ('sc', 'vsc') and active_plan == 'C'"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Plan C, box box. {plan_next_compound}s, cheap stop"
+      - "Plan C, Plan C. Box this lap for {plan_next_compound}s"
+      - "Box box, Plan C. Cheap stop, {plan_next_compound}s"
+    on_ack:
+      - "Copy, Plan C, box this lap"
+    on_neg:
+      - "Understood, staying out. Plan {plan_switched_from} stays open"
+  - id: box_in_n
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and pit_plan == 'box_in_n' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_gain_s >= mode.pit_gain_min_s"
+    clear_when: "pit_plan != 'box_in_n'"
+    still_true: "pit_plan == 'box_in_n'"
+    cooldown_s: 60
+    cooldown_group: pit
+    requires: [lap_data, car_status]
+    say:
+      - "Plan is box lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
+      - "We're looking at lap {pit_plan_lap} for the stop"
+      - "Stop is lap {pit_plan_lap}. Window runs {pit_window_start} to {pit_window_end}"
+  - id: overcut_stay_out
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and pit_plan == 'overcut' and pit_plan_confidence >= mode.pit_confidence_min"
+    clear_when: "pit_plan != 'overcut'"
+    cooldown_s: 60
+    cooldown_group: pit
+    requires: [lap_data, session_history]
+    say:
+      - "{pit_plan_rival_name} has boxed. Stay out and push, overcut is on"
+      - "{pit_plan_rival_name} pitted. Push now, we go long"
+      - "{pit_plan_rival_name}'s in. Stay out, give me some quick laps"
+  - id: tyre_life
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and laps_of_pace >= 1 and laps_of_pace < laps_remaining and laps_of_pace < th.tyre_life_speak_laps and lap_num % mode.rival_info_every_n_laps == 0"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    requires: [lap_data, car_damage]
+    say:
+      - "These tyres have about {laps_of_pace:.0f} laps of pace left"
+      - "Tyre check, roughly {laps_of_pace:.0f} laps of pace in them"
+      - "About {laps_of_pace:.0f} laps of pace left in this set"
+  - id: tyre_overheat
+    sessions: [race]
+    priority: 2
+    when: "overheat and tyre_compound not in (7, 8)"
+    clear_when: "not overheat"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are running hot. Ease the slides"
+      - "Temps are high, look after the rears"
+      - "Tyre temps are climbing. Smooth on the throttle, fewer slides"
+  - id: tyre_overheat_wet
+    sessions: [race]
+    priority: 2
+    when: "overheat and tyre_compound in (7, 8)"
+    clear_when: "not overheat"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are cooking, track's drying. Find the wet patches on the straights"
+      - "Tyres overheating, it's drying out. Cool them in the damp, off the dry line"
+      - "Temps are high on these tyres. Use the wet bits to cool them"
+  - id: tyre_switch
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and tyre_switch_to != '' and laps_remaining > 1"
+    clear_when: "tyre_switch_to == ''"
+    cooldown_s: 60
+    requires: [lap_data]
+    say:
+      - "Box, box. {tyre_switch_to}. The field's quicker on them"
+      - "Crossover. {tyre_switch_to} are the tyre, box this lap"
+      - "Box this lap for {tyre_switch_to}. Confirm"
+      - "We're in the crossover. {tyre_switch_to} are quicker, box, box"
+  - id: tyre_graining
+    sessions: [race]
+    priority: 2
+    when: "graining"
+    clear_when: "not graining"
+    cooldown_s: 90
+    requires: [car_telemetry]
+    say:
+      - "Tyres are cold and graining. Work them, lean on the fronts"
+      - "We're seeing graining. Get some load into the fronts, it'll clean up"
+      - "Graining on the tyres. Keep working them, it should come back"
+  - id: tyre_blister
+    sessions: [race]
+    priority: 2
+    when: "blister_max_pct >= th.blister_warn_pct"
+    clear_when: "blister_max_pct < th.blister_warn_pct - th.blister_hysteresis_pct"
+    cooldown_s: 120
+    requires: [car_damage]
+    say:
+      - "Blistering at {blister_max_pct} percent. Manage the tyres"
+      - "Blisters starting, {blister_max_pct} percent. Look after them"
+      - "{blister_max_pct} percent blistering. Easy on the traction zones"
+  - id: fuel_short
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps < -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
+    clear_when: "fuel_margin_laps >= 0"
+    cooldown_s: 120
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is short, {fuel_short_laps:.1f} laps down. Lift and coast into the big stops"
+      - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
+      - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast now"
+    severity:
+      - when: "lap_num * 2 < total_laps"
+        priority: 2
+        say:
+          - "We're {fuel_short_laps:.1f} laps short on fuel. Long way to go, start some lift and coast"
+          - "Fuel is {fuel_short_laps:.1f} laps short. Plenty of time to save it, lift into the big stops"
+  - id: fuel_marginal
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps <= th.fuel_tight_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
+    clear_when: "fuel_margin_laps > th.fuel_tight_laps + th.fuel_hysteresis_laps"
+    cooldown_s: 180
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
+      - "Fuel's on the edge, {fuel_margin_r:+.1f} laps. Save where you can"
+      - "Fuel margin is {fuel_margin_r:+.1f} laps. A bit of lift and coast where it's cheap"
+    severity:
+      - when: "fuel_margin_laps < 0 and lap_num * 2 >= total_laps"
+        priority: 1
+        say:
+          - "Fuel is short now, {fuel_margin_r:+.1f} laps. Lift and coast, every straight"
+          - "We're under on fuel, {fuel_margin_r:+.1f} laps. Start saving now, lift before the big stops"
+      - when: "fuel_margin_laps < 0"
+        say:
+          - "Fuel slightly under, {fuel_margin_r:+.1f} laps. Early days, save a bit where it's cheap"
+          - "Fuel's a touch short, {fuel_margin_r:+.1f}. Long way to go, a little lift and coast"
+  - id: fuel_spare
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps > th.fuel_spare_laps and sector == 1"
+    clear_when: "fuel_margin_laps <= th.fuel_spare_laps"
+    cooldown_s: 600
+    cooldown_group: fuel
+    requires: [car_status]
+    say:
+      - "Fuel is good, {fuel_margin_laps:.1f} laps spare. Use it"
+      - "Plenty of fuel, {fuel_margin_laps:.1f} laps in hand. No saving needed"
+      - "Fuel's fine, {fuel_margin_laps:.1f} laps spare. Push"
+  - id: energy_over
+    sessions: [race]
+    min_lap: 3  # lap 1-2 spend the full launch charge
+    priority: 2
+    when: "phase == 'racing' and energy_mode == 'over' and sector == 2"
+    clear_when: "energy_mode != 'over'"
+    cooldown_s: 120
+    cooldown_group: energy
+    requires: [car_status]
+    say:
+      - "Over the energy budget, {energy_lap_delta_mj:+.1f} megajoules on the lap. Harvest more"
+      - "We're {energy_lap_delta_mj:+.1f} megajoules over this lap. More harvest please"
+      - "Energy's running ahead of budget, {energy_lap_delta_mj:+.1f} on the lap. Harvest"
+  - id: energy_under
+    sessions: [race]
+    min_lap: 3  # lap 1-2 spend the full launch charge
+    priority: 3
+    when: "phase == 'racing' and energy_mode == 'under' and sector == 2"
+    clear_when: "energy_mode != 'under'"
+    cooldown_s: 180
+    cooldown_group: energy
+    requires: [car_status]
+    say:
+      - "Energy in hand, {energy_under_mj:.1f} megajoules unused on the lap. You can deploy more"
+      - "{energy_under_mj:.1f} megajoules left on the table that lap. Use it"
+      - "Plenty of battery, {energy_under_mj:.1f} megajoules unused. Deploy more"
+  - id: overtake_mode
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and energy_mode == 'attack_ok' and gap_ahead_s <= mode.overtake_call_gap_s and drs_zone_ahead"
+    clear_when: "gap_ahead_s > mode.overtake_call_gap_s + th.gap_hysteresis_s"
+    cooldown_s: 60
+    requires: [car_status, lap_data]
+    say:
+      - "Overtake mode is yours on {rival_ahead_name}. Use it"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Energy is there, go"
+      - "{rival_ahead_name}, {gap_ahead_s:.1f} ahead. Overtake mode, use it"
+  - id: drs_attack
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and drs_available and drs_zone_ahead"
+    clear_when: "not drs_available"
+    cooldown_s: 90
+    requires: [car_status, lap_data]
+    say:
+      - "DRS on {rival_ahead_name}. {gap_ahead_s:.1f} seconds"
+      - "DRS, {gap_ahead_s:.1f} to {rival_ahead_name}. Go get him"
+      - "You've got DRS on {rival_ahead_name}, {gap_ahead_s:.1f}"
+  # Battle coaching (docs/20 L3): push / attack / defend / manage / encourage,
+  # driven by battle_mode (pitwall.strategy.battle) and the learned pass model.
+  # Mode calls re-arm every lap (sector gate) so a budget-suppressed call is
+  # retried; the shared `battle` cooldown group keeps them sparse.
+  - id: battle_catching
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
+    clear_when: "sector != 1"
+    cooldown_s: 90
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{rival_ahead_name} ahead, {battle_pace_ahead}. {gap_ahead_s:.1f} to him"
+      - "Car ahead is {battle_pace_ahead}. {gap_ahead_s:.1f}, keep pushing"
+      - "{rival_ahead_name} is {battle_pace_ahead}. Reel him in"
+    severity:
+      - when: "battle_catch_laps <= 2"
+        say:
+          - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.0f} laps, get ready"
+          - "Closing fast on {rival_ahead_name}. {battle_pace_ahead}, you'll be in DRS soon"
+  - id: battle_attack
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
+    clear_when: "sector != 1"
+    cooldown_s: 60
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "You're in range of {rival_ahead_name}. Hammer time"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Go for it, this is the chance"
+      - "{rival_ahead_name} is {battle_pace_ahead}. Have a look"
+    severity:
+      - when: "laps_remaining <= 3"
+        priority: 2
+        say:
+          - "{laps_remaining} to go. It's now or never on {rival_ahead_name}"
+          - "Last chance at {rival_ahead_name}. Everything you've got"
+  - id: battle_patience
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
+    clear_when: "sector != 1"
+    cooldown_s: 180
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "Hard to pass here. Stay with {rival_ahead_name}, look after the tyres, we'll do it on strategy"
+      - "Patience with {rival_ahead_name}. Out of the dirty air when you can, save the rears"
+      - "No rush on {rival_ahead_name}. Keep him honest, pick your moment"
+  - id: battle_defend
+    sessions: [race]
+    min_lap: 2
+    priority: 2
+    when: "phase == 'racing' and battle_mode == 'defending' and sector != 2"
+    clear_when: "sector == 2 or battle_mode != 'defending'"
+    cooldown_s: 60
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} behind, {battle_pace_behind}. Cover the inside"
+      - "Car behind is {battle_pace_behind}. Keep the battery for the straight"
+      - "{rival_behind_name} in DRS, {battle_pace_behind}. One move only"
+    severity:
+      - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5"
+        priority: 1
+        say:
+          - "{rival_behind_name} right on you, {battle_pace_behind}. Defend now"
+          - "He's all over you, {battle_pace_behind}. Inside line, battery for the straight"
+  - id: battle_under_threat
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
+    clear_when: "sector != 1"
+    cooldown_s: 120
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} behind, {battle_pace_behind}. {gap_behind_s:.1f} gap"
+      - "Car behind is {battle_pace_behind}. Need a bit more pace"
+      - "{rival_behind_name} coming, {battle_pace_behind}. Pick it up"
+    severity:
+      - when: "battle_threat_laps <= 2"
+        priority: 2
+        say:
+          - "{rival_behind_name}, {battle_pace_behind}. He's in DRS in {battle_threat_laps:.0f} laps, push now"
+          - "Gap behind {gap_behind_s:.1f} and going fast. {battle_pace_behind}, give me everything"
+  - id: battle_manage
+    sessions: [race]
+    min_lap: 3
+    priority: 3
+    when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
+    cooldown_s: 240
+    cooldown_group: battle
+    requires: [lap_data]
+    say:
+      - "Gaps are stable. Manage the tyres, we're in good shape"
+      - "All under control. Look after the tyres, no need to push"
+      - "Gaps holding. Nice and tidy, save the tyres"
+  - id: battle_passed
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'passed' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "Great move on {battle_result_name}. P{position}, now build the gap"
+      - "Nicely done, {battle_result_name} is behind. P{position}, get out of his DRS"
+      - "Past {battle_result_name}. P{position}, lovely"
+    severity:
+      - when: "position == 1"
+        say:
+          - "Get in! Past {battle_result_name}, you're leading this race"
+          - "That's the lead! {battle_result_name} is behind, P1. Clean air now, go"
+      - when: "position <= 3"
+        say:
+          - "Great move on {battle_result_name}! P{position}, that's a podium place"
+          - "Get in! Past {battle_result_name}, P{position}"
+  - id: battle_held
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'held' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "Good defending. Held off {battle_result_name}"
+      - "Well held, {battle_result_name} has dropped back. Keep it tidy"
+      - "{battle_result_name} is out of DRS. Nice work"
+  - id: battle_lost
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'lost' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    requires: [lap_data]
+    say:
+      - "{battle_result_name}'s through. Stay with him, you'll have DRS"
+      - "Lost it to {battle_result_name}. Reset, stay close, the tyres will come to us"
+      - "{battle_result_name} got you. Head down, go again"
+  # Place changes going back and forth with one car (or several): one call
+  # about the fight instead of a pass / lost call every time.
+  # Off the track and lost places; then got them back on the same lap.
+  - id: off_track_lost
+    sessions: [race]
+    priority: 2
+    when: "off_track_lost > 0 and phase == 'racing'"
+    clear_when: "off_track_lost == 0"
+    requires: [lap_data]
+    cooldown_s: 20
+    cooldown_group: incident
+    say:
+      - "Lost {off_track_lost} there, P{position}. Reset, they're still in reach"
+      - "That cost {off_track_lost}, we're P{position}. Head down, get them back"
+      - "P{position}, {off_track_lost} lost on that one. Clean laps now, it'll come"
+    severity:
+      - when: "off_track_lost >= 3"
+        say:
+          - "Ouch, {off_track_lost} places gone, P{position}. Deep breath, long race"
+          - "That's {off_track_lost} lost, P{position}. Forget it, one car at a time"
+  - id: off_track_recovered
+    sessions: [race]
+    priority: 3
+    when: "off_track_recovered and phase == 'racing'"
+    clear_when: "not off_track_recovered"
+    requires: [lap_data]
+    cooldown_s: 20
+    say:
+      - "And they're back. Good recovery, P{position}"
+      - "All back already, P{position}. Great response"
+      - "That's the places back, P{position}. Lovely recovery"
+      - "Undone in one lap. P{position}, well fought"
+  - id: battle_swap_ahead
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'swap_ahead' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    cooldown_s: 60
+    cooldown_group: battle_swap
+    requires: [lap_data]
+    say:
+      - "You and {battle_result_name} keep swapping. You're ahead now, nail the exit and don't give him DRS"
+      - "Back ahead of {battle_result_name}. He keeps coming back, cover the braking zone after the DRS"
+      - "Ahead again. {battle_result_name} will try the same move, defend that spot early"
+  - id: battle_swap_behind
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'swap_behind' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    cooldown_s: 60
+    cooldown_group: battle_swap
+    requires: [lap_data]
+    say:
+      - "{battle_result_name} back ahead. Stop swapping, set it up for one clean move he can't answer"
+      - "He's got you back. Wait for the exit, pass him where there's no DRS back to him"
+      - "Trading places with {battle_result_name}, that just costs you both. Be patient, pick the pass that sticks"
+  - id: battle_scrap
+    sessions: [race]
+    priority: 3
+    when: "battle_result == 'scrap' and battle_result_recent"
+    clear_when: "not battle_result_recent"
+    cooldown_s: 90
+    cooldown_group: battle_swap
+    requires: [lap_data]
+    say:
+      - "Busy fight around you. P{position} now, keep it clean and look after the tyres"
+      - "It's a scrap. P{position}. Pick your battles, don't spend the battery on every car"
+      - "Lots of places changing. P{position} for now, stay out of trouble and wait for them to trip up"
+  - id: penalty
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement != 21"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
+      - "We've been given {penalty_time_s} seconds. {penalty_s} total"
+      - "{penalty_time_s} second penalty. {penalty_s} total now"
+  - id: penalty_pit
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent and penalty_kind in ('drive_through', 'stop_go')"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "We've got a {penalty_kind_text}. Serve it within three laps"
+      - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
+      - "{penalty_kind_text}. Three laps to serve it, we'll call it"
+  - id: serve_penalty
+    sessions: [race]
+    priority: 2
+    when: "unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now', 'box_in_n', 'cheap_stop')"
+    clear_when: "unserved_drive_through + unserved_stop_go == 0"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Unserved penalty on the car. We serve it at the stop"
+      - "We'll take the penalty at the stop, it's still on the car"
+      - "Reminder, penalty's unserved. It comes off at the stop"
+  - id: penalty_track_limits
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement == 21"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "And there it is. {penalty_time_s} seconds for track limits. {penalty_s} total"
+      - "{penalty_time_s} second penalty, track limits. The white lines were a suggestion, apparently. {penalty_s} total"
+      - "Stewards have had enough. {penalty_time_s} seconds for track limits, {penalty_s} total on the car"
+      - "{penalty_time_s} seconds, track limits. We did warn you. {penalty_s} total"
+  - id: track_limit_warning
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn != th.warnings_warn - 1 and corner_cut_warnings % th.warnings_warn != 0"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Track limits. The track's the grey bit, mate"
+      - "That's a warning for track limits. The kerb isn't a suggestion"
+      - "Track limits warning. Lovely bit of grass you found there"
+      - "Warning for track limits. Stewards noticed, so did we"
+    escalate:
+      - after: 2
+        say:
+          - "Track limits again. Are we racing or sightseeing?"
+          - "Another one. The white line is not the racing line"
+  - id: track_limit_last_warning
+    sessions: [race]
+    priority: 1
+    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn == th.warnings_warn - 1"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "That's {corner_cut_warnings} for track limits. One more and it's a penalty, so keep it on the tarmac"
+      - "Track limits, {corner_cut_warnings} now. Next one costs time. Tidy it up"
+      - "{corner_cut_warnings} track limit warnings. One more and the stewards hand us a penalty. Your call"
+  - id: track_limit_overtake
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind == 'overtake'"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Warning for passing off track. Nice move, wrong postcode"
+      - "That pass was off the circuit. Warning logged, next time do it on the tarmac"
+      - "Stewards saw that pass off track. Warning. Keep it on the circuit"
+  - id: blue_flag
+    sessions: [race]
+    priority: 1
+    when: "blue_flag and phase not in ('red_flag', 'sc', 'vsc')"
+    clear_when: "not blue_flag or phase in ('red_flag', 'sc', 'vsc')"
+    cooldown_s: 20
+    requires: [car_status]
+    say:
+      - "Blue flag. Let him by"
+      - "Blues, leader behind. Give him the room"
+      - "Blue flags. Let him through, cleanly"
+  - id: rival_ahead_pitted
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and rival_ahead_pitted and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s"
+    clear_when: "not rival_ahead_pitted"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    requires: [lap_data]
+    say:
+      - "{rival_ahead_name} ahead has boxed, he was {gap_ahead_s:.1f} up the road"
+      - "{rival_ahead_name} is in the pits. That was the car {gap_ahead_s:.1f} ahead"
+      - "Car ahead's boxing, {rival_ahead_name}. He was {gap_ahead_s:.1f} up"
+  - id: rival_behind_pitted
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and rival_behind_pitted and tyre_age_laps >= 2"
+    clear_when: "not rival_behind_pitted"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} behind has boxed. Watch the undercut"
+      - "{rival_behind_name} has pitted behind. Undercut threat, push this lap"
+      - "Car behind's in, {rival_behind_name}. Give me a good lap, cover the undercut"
+  - id: weather_to_inter
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_inter' and tyre_compound not in (0, 7)"
+    clear_when: "weather_crossover != 'to_inter'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters will be the tyre"
+      - "Rain's coming, {weather_crossover_pct} percent chance in {weather_crossover_min}. Inters are the likely call"
+      - "Heads up, {weather_crossover_pct} percent chance of rain in {weather_crossover_min} minutes. Thinking inters"
+  - id: weather_to_wet
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_wet' and tyre_compound not in (0, 8)"
+    clear_when: "weather_crossover != 'to_wet'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes. Full wets will be the tyre"
+      - "Heavy rain likely, {weather_crossover_pct} percent in {weather_crossover_min}. Full wets likely"
+      - "Big rain on the way, {weather_crossover_pct} percent chance in {weather_crossover_min}. Prepare for wets"
+  - id: weather_to_dry
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_dry'"
+    clear_when: "weather_crossover != 'to_dry'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Track is drying, rain chance down to {weather_crossover_pct} percent. Slicks soon"
+      - "Track's drying, only {weather_crossover_pct} percent chance of more rain. Slicks soon"
+      - "It's drying out. Rain chance {weather_crossover_pct} percent, slicks are coming"
+  - id: sc_deployed
+    sessions: [race]
+    priority: 1
+    when: "phase == 'sc'"
+    clear_when: "phase != 'sc'"
+    requires: [session]
+    say:
+      - "Safety car, safety car. Delta positive, stay above it"
+      - "Safety car deployed. Keep the delta positive"
+      - "Safety car, safety car. Watch the delta"
+  - id: vsc_deployed
+    sessions: [race]
+    priority: 1
+    when: "phase == 'vsc'"
+    clear_when: "phase != 'vsc'"
+    requires: [session]
+    say:
+      - "Virtual safety car. Stick to the delta"
+      - "VSC, VSC. Stay on the delta"
+      - "Virtual safety car deployed. Delta, keep it positive"
+  - id: sc_ending
+    sessions: [race]
+    priority: 1
+    when: "phase == 'sc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "Safety car in this lap. Heat in the tyres and brakes, be ready for the restart"
+      - "Safety car's coming in. Get the tyres warm, restart's coming"
+      - "SC in this lap, SC in this lap. Stay close, be ready to go"
+  - id: vsc_ending
+    sessions: [race]
+    priority: 1
+    when: "phase == 'vsc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "VSC ending, VSC ending. Be ready to go"
+      - "VSC ending. Stay on the delta until it goes green"
+  - id: sc_restart
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and neutral_ended_kind == 'sc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green flag, green flag. Racing again, push now"
+      - "Green, green. We're racing, full attack"
+      - "Safety car's in, green flag. Go"
+  - id: vsc_restart
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and neutral_ended_kind == 'vsc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green, green. VSC's over, full power"
+      - "VSC over, go, go, go"
+  # End of lap 1: report against the grid slot.
+  - id: lap1_gained
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained > 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Great start. P{position}, up {positions_gained} from the grid. {laps_remaining} to go"
+      - "Lap one done, P{position}. That's {positions_gained} gained, now settle in"
+      - "Mega start, P{position}. {positions_gained} places up, fuel margin {fuel_margin_r:+.1f}"
+  - id: lap1_lost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_lost > 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one done, P{position}. Lost {positions_lost}, plenty of race left. {laps_remaining} to go"
+      - "P{position} after lap one, {positions_lost} down on the grid. Stay calm, they'll come back"
+  - id: lap1_held
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained == 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one done, holding P{position}. {laps_remaining} to go, fuel margin {fuel_margin_r:+.1f} laps"
+      - "Clean first lap, P{position}. {laps_remaining} to go, let's settle in"
+  - id: three_to_go
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and total_laps >= 6 and laps_remaining == 3 and sector == 0"
+    clear_when: "laps_remaining != 3"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Three laps to go. P{position}, keep it tidy"
+      - "Three to go, P{position}. No mistakes now"
+  - id: last_lap_defend
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. {rival_behind_name} is {gap_behind_s:.1f} behind. Defend, cover the inside"
+      - "Final lap, {rival_behind_name} right there, {gap_behind_s:.1f}. Hold him off, no mistakes"
+  - id: last_lap_attack
+    sessions: [race]
+    priority: 1
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_ahead_s < th.last_lap_fight_s and not gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. {rival_ahead_name} {gap_ahead_s:.1f} ahead. Everything you've got"
+      - "Final lap, {gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
+  - id: last_lap
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and not gap_behind_s < th.last_lap_fight_s and not gap_ahead_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. P{position}, bring it home"
+      - "Final lap, P{position}. Nice and clean to the flag"
+  # Fastest lap (FTLP event). The player's is always worth a word; a rival's
+  # only late on, when the player's best is close enough to take it back.
+  - id: fastest_lap_mine
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and fastest_lap_mine and fastest_lap_age_s < th.fastest_lap_fresh_s"
+    clear_when: "not fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "fastest_lap_mine"
+    cooldown_s: 30
+    requires: [lap_data]
+    say:
+      - "Fastest lap! {fastest_lap_time}, that's purple."
+      - "Purple lap. {fastest_lap_time}, fastest of anyone."
+      - "That's the fastest lap of the race, {fastest_lap_time}. Lovely."
+  - id: fastest_lap_taken
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and not fastest_lap_mine and fastest_lap_age_s >= th.fastest_lap_settle_s and fastest_lap_age_s < th.fastest_lap_fresh_s and laps_remaining <= th.fastest_lap_chase_laps and fastest_lap_gap_s <= th.fastest_lap_chase_s"
+    clear_when: "fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "not fastest_lap_mine"
+    cooldown_s: 60
+    requires: [lap_data]
+    say:
+      - "{fastest_lap_name} has fastest lap, {fastest_lap_time}. You're {fastest_lap_gap_s:.1f} off it."
+      - "Fastest lap to {fastest_lap_name}, {fastest_lap_time}. {fastest_lap_gap_s:.1f} to find if you want it back."
+  # Time penalties decide the classified result: say where we really are.
+  - id: penalty_cost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and penalty_s > 0 and penalty_places > 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places == 0"
+    cooldown_s: 120
+    cooldown_group: penalty_standing
+    requires: [lap_data]
+    say:
+      - "Remember the {penalty_s} seconds. P{position} on the road is P{penalty_position} after it. Need {penalty_need_s:.1f} more on {penalty_threat_name}"
+      - "With the penalty we're P{penalty_position}, not P{position}. {penalty_need_s:.1f} more to {penalty_threat_name} to fix that"
+      - "{penalty_s} seconds still to come off. That's P{penalty_position} right now, find {penalty_need_s:.1f} on {penalty_threat_name}"
+    severity:
+      - when: "penalty_places >= 3"
+        say:
+          - "Big one, the {penalty_s} seconds drops us from P{position} to P{penalty_position}. Every tenth counts, {penalty_need_s:.1f} to {penalty_threat_name}"
+          - "Penalty costs {penalty_places} places as it stands, P{penalty_position}. Flat out, {penalty_need_s:.1f} needed on {penalty_threat_name}"
+  - id: penalty_covered
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and penalty_s > 0 and penalty_position > 0 and penalty_places == 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places > 0"
+    cooldown_s: 120
+    cooldown_group: penalty_standing
+    requires: [lap_data]
+    say:
+      - "Gap covers the {penalty_s} seconds. P{position} stays P{position}, keep it that way"
+      - "We're clear of the penalty, {penalty_margin_s:.1f} in hand. Hold the gap"
+      - "P{position} even with the {penalty_s} seconds. {penalty_margin_s:.1f} margin, don't give it back"
+  - id: finish_penalty
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and penalty_places > 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position} on the road, but the {penalty_s} seconds makes it P{penalty_position}. Strong drive, we'll clean up the penalties"
+      - "That's the flag. P{position} on track, P{penalty_position} after the {penalty_s} seconds. Pace was there, the penalty cost us"
+      - "Flag. Crossed the line P{position}, classified P{penalty_position} with the penalty. Plenty to take from that"
+  - id: finish_gained
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_gained > 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, up {positions_gained} from P{grid_position}. Great drive"
+      - "That's the flag. P{position}, {positions_gained} places gained. Brilliant job"
+  - id: finish_lost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_lost > 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, from P{grid_position}. We'll go through it in the debrief"
+      - "That's the flag, P{position}. Tough one, we'll find the time in the debrief"
+  - id: finish_held
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and grid_position > 0 and positions_gained == 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position}, same as the grid. Solid job"
+      - "That's the flag, P{position}. Held the grid slot, good work"
+  - id: finish_win
+    sessions: [race]
+    priority: 1
+    when: "phase == 'finished' and position == 1 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Yes! Yes! That's it, you've done it! You've won the race!"
+      - "Get in there! P1! You are the winner, mate. Get in!"
+      - "That's the win! Simply lovely. What a drive"
+      - "Race winner! Oh, you beauty! Superb, absolutely superb"
+      - "Chequered flag, P1! Get in there! Wow, what a job"
+      - "Get in there, mate! What a way to do it. P1!"
+  - id: finish_podium
+    sessions: [race]
+    priority: 1
+    when: "phase == 'finished' and position in (2, 3) and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "That's it, you've done it! P{position}, on the podium!"
+      - "P{position}! Podium! Get in there, brilliant job"
+      - "Chequered flag, P{position}. That's a podium, mate. Well driven"
+      - "Yes! P{position}, trophy time. Great stuff"
+  - id: pit_exit_traffic_race
+    sessions: [race]
+    priority: 2
+    when: "phase == 'out_lap' and rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s"
+    clear_when: "phase != 'out_lap'"
+    requires: [lap_data]
+    say:
+      - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
+      - "Careful at the exit, {rival_pit_exit_name} is right there"
+      - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
+  # Team fight: free to race, keep it clean.
+  - id: teammate_fight
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and teammate_fight"
+    clear_when: "not teammate_fight"
+    cooldown_s: 300
+    requires: [lap_data, participants]
+    say:
+      - "It's {teammate_name}. You're free to race, but keep it clean"
+      - "Team-mate fight with {teammate_name}. Free to fight, give each other room"
+      - "{teammate_name}, {teammate_gap_s:.1f}. You can race him, no contact please"
+      - "Fighting your team-mate. Race hard, race clean"
+    escalate:
+      - after: 2
+        say:
+          - "Still you and {teammate_name}. Fine to race, just keep it clean"
+          - "{teammate_name} again. Careful, both cars home please"
+          - "Reminder, it's the team-mate. Plenty of room, no risks"
+  # Contact (COLL): check the car, then report once the damage data settles.
+  # Repeat hits inside th.contact_merge_s are one contact.
+  - id: contact_check_teammate
+    sessions: [race]
+    priority: 1
+    when: "phase != 'garage' and contact_phase == 'checking' and contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    requires: [participants]
+    say:
+      - "Contact with {contact_name}. We're checking the car. Give each other room"
+      - "That's your team-mate! Checking the car, keep it clean"
+      - "Touch with {contact_name}. Checking for damage. Careful, same team"
+  - id: contact_check
+    sessions: [race]
+    priority: 1
+    when: "phase != 'garage' and contact_phase == 'checking' and not contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    say:
+      - "Contact there. Checking the car"
+      - "We saw the contact. Checking for damage, stand by"
+      - "Touch with {contact_name}. Give us a second, checking the car"
+      - "Contact. Checking the data"
+    escalate:
+      - after: 2
+        say:
+          - "Another hit. Checking the car again"
+          - "More contact. Stand by, checking"
+          - "Again with the contact. Checking the car"
+  - id: contact_damage_report
+    sessions: [race]
+    priority: 2
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage != '' and not contact_damage_major"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    requires: [car_damage]
+    say:
+      - "Car check done. Some {contact_damage} damage, {contact_damage_pct} percent. Nothing major, keep going"
+      - "We've got {contact_damage_pct} percent on the {contact_damage}. Small loss, carry on"
+      - "Bit of {contact_damage} damage from that, {contact_damage_pct} percent. Car's driveable"
+  - id: contact_ok
+    sessions: [race]
+    priority: 3
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage == ''"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    requires: [car_damage]
+    say:
+      - "Car looks OK. No damage"
+      - "Checked the car, all good. Carry on"
+      - "No damage from that. Car's fine"
+      - "Data looks clean, no damage. Keep pushing"
+    escalate:
+      - after: 2
+        say:
+          - "Car's still OK. Lucky, keep it clean"
+          - "No damage again, but let's not push our luck"
+          - "Still clean on the data. Careful with the contact"

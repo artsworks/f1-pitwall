@@ -431,3 +431,76 @@ def test_session_uid_change_resets_state() -> None:
     assert not snap.red_flag
     assert not snap.session_ended
     assert snap.rewinds == 0
+
+
+def test_red_flag_cleared_by_restart_lights_out() -> None:
+    from .synth import make_event_packet
+
+    ingest, state = _state()
+    _send(ingest, make_event_packet(b"RDFL", session_time=1.0), 0.0)
+    assert state.snapshot(0.0).red_flag
+    _send(ingest, make_event_packet(b"LGOT", session_time=900.0), 0.1)
+    snap = state.snapshot(0.1)
+    assert not snap.red_flag and snap.phase != "red_flag" and snap.safety_car_status == 0
+
+
+def test_fastest_lap_event_in_snapshot() -> None:
+    import struct
+
+    from .synth import make_packet
+
+    ingest, state = _state()
+    body = b"FTLP" + struct.pack("<Bf", 0, 79.195)
+    _send(ingest, make_packet(PacketId.EVENT, body=body, session_time=100.0), 0.0)
+    _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=104.0), 0.1)
+    snap = state.snapshot(0.1)
+    assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
+    assert snap.fastest_lap_time == "1:19.195"
+    assert 3.9 < snap.fastest_lap_age_s < 4.1
+
+
+def test_tyre_switch_from_field_compound_gap() -> None:
+    state = SessionState()
+    state.tyre_compound = 7
+    assert state._tyre_switch(1.5, 0.0) == "slicks"
+    assert state._tyre_switch(0.4, 0.0) == ""
+    assert state._tyre_switch(0.0, -1.2) == "wets"
+    state.tyre_compound = 8
+    assert state._tyre_switch(0.0, 1.2) == "inters"
+    state.tyre_compound = 17
+    assert state._tyre_switch(-2.0, 0.0) == "inters"
+    assert state._tyre_switch(2.0, 0.0) == ""
+
+
+def test_collision_event_starts_contact_check_and_reports() -> None:
+    import struct
+
+    from pitwall.state.session import Damage, Participant
+
+    from .synth import make_packet
+
+    ingest, state = _state()
+    state.participants = (
+        Participant(name="ME", team_id=4),
+        Participant(name="OTHER", team_id=7),
+        Participant(name="MATE", team_id=4),
+    )
+
+    def coll(a: int, b: int, t: float) -> None:
+        body = b"COLL" + struct.pack("<BBB", a, b, 1)
+        _send(ingest, make_packet(PacketId.EVENT, body=body, session_time=t), t)
+
+    coll(1, 2, 10.0)  # not us
+    assert state.contacts.episodes == 0
+    coll(2, 0, 10.0)
+    coll(0, 2, 12.0)  # same contact
+    snap = state.snapshot(12.5)
+    assert snap.contact_phase == "checking" and snap.contact_teammate
+    assert snap.contact_name == "MATE" and snap.contact_hits == 2 and snap.contact_episodes == 1
+    state.damage = Damage(front_left_wing=8)
+    _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=17.0), 17.0)
+    snap = state.snapshot(17.0)
+    assert snap.contact_phase == "report"
+    assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 8)
+    assert not snap.contact_damage_major
+    assert state._teammate() == 2

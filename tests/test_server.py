@@ -474,3 +474,109 @@ def test_pit_board_payload() -> None:
     }
     assert board["setup"] == {"front_wing": 12}
     assert board["fuel_need_laps"] == 0.9 and board["has_advice"]
+
+
+def test_strategy_payload_race_contract() -> None:
+    """Zone F contract: pit window, immediate neighbours only, stint plan,
+    backend-owned fuel delta; absent outside races."""
+    import dataclasses
+
+    from pitwall.server.app import state_payload, strategy_payload
+    from pitwall.state.session import Snapshot
+
+    store = ConfigStore()
+    store.poll(0.0)
+    settings = store.current()
+    assert strategy_payload(Snapshot(now=0.0)) is None
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=20,
+        laps_remaining=38,
+        tyre_visual=17,
+        pit_window_start=26,
+        pit_window_end=28,
+        pit_plan="undercut",
+        pit_plan_lap=26,
+        rival_ahead_idx=3,
+        rival_ahead_pos=4,
+        rival_ahead_name="Norris",
+        rival_ahead_compound=18,
+        rival_ahead_pace_ms=91_200,
+        predicted_lap_ms=91_000,
+        gap_ahead_s=1.4,
+        gap_trend_ahead_s=0.3,
+        rival_behind_idx=5,
+        rival_behind_pos=6,
+        rival_behind_name="Leclerc",
+        gap_behind_s=0.8,
+        undercut_s=1.2,
+        fuel_margin_laps=0.4,
+        fuel_source="fit",
+    )
+    s = strategy_payload(snap, settings.thresholds)
+    assert s is not None
+    assert s["pit_window"] == {"start": 26, "end": 28}
+    assert s["ahead"]["pos"] == 4 and s["ahead"]["compound"] == "HARD"
+    assert s["ahead"]["pace_delta_s"] == 0.2 and s["ahead"]["gap_trend_s"] == 0.3
+    assert s["behind"]["drs"] is True and s["ahead"]["drs"] is False
+    assert s["undercut_s"] == 1.2 and s["fuel_delta_laps"] == 0.4
+    assert "L26–28" in s["stint_plan"]
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="car")
+    assert body["strategy"]["ahead"]["name"] == "Norris"
+    assert body["page"] == "car" and "car" in body["pages"]
+    assert body["track_info"]["gap_ahead_s"] == 1.4
+    assert body["setup"] is None
+
+
+def test_strategy_payload_named_plans() -> None:
+    """Named plans A/B/C, active plan and on-plan state (docs/15 zone F)."""
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+    from pitwall.strategy.plans import StrategyPlan
+
+    base = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=20,
+        laps_remaining=38,
+        tyre_visual=17,
+    )
+    s = strategy_payload(base)
+    assert s is not None
+    assert s["plans"] == [] and s["active_plan"] is None and s["on_plan"] is None
+    assert s["plan_switch"] is None
+    plans = (
+        StrategyPlan("A", "primary", (17, 18), (27,), (26, 28), 5000.0, 0.0),
+        StrategyPlan("B", "alternative", (17, 18, 16), (18, 40), (17, 19), 5004.2, 4.2),
+        StrategyPlan("C", "reactive", (17, 18), (20,), (20, 20), 4990.0, -10.0),
+    )
+    snap = dataclasses.replace(
+        base,
+        plans=plans,
+        active_plan="B",
+        on_plan=False,
+        plan_off_s=4.2,
+        plan_target_lap=18,
+        plan_switch_count=1,
+        plan_switched_from="A",
+        plan_switch_reason="pace",
+        plan_switch_lap=15,
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    assert [p["id"] for p in s["plans"]] == ["A", "B", "C"]
+    a, b, c = s["plans"]
+    assert a["label"] == "1-stop M-H" and a["stops"] == 1 and a["window"] == [26, 28]
+    assert a["compounds"] == ["MEDIUM", "HARD"] and a["stop_laps"] == [27]
+    assert b["active"] and not a["active"] and b["delta_s"] == 4.2 and b["stops"] == 2
+    assert c["kind"] == "reactive" and c["delta_s"] == -10.0
+    assert s["active_plan"] == "B" and s["on_plan"] is False and s["plan_off_s"] == 4.2
+    assert s["plan_target_lap"] == 18
+    assert s["plan_switch"] == {"from": "A", "reason": "pace", "lap": 15}
