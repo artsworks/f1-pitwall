@@ -238,12 +238,18 @@ def fit_is_clean(
     )
 
 
-def rival_pace_ms(history: SessionHistoryPacket, window: int) -> int:
-    """Median of the last `window` valid laps in a Session History packet."""
+def rival_pace_ms(history: SessionHistoryPacket, window: int, outlier_ratio: float = 0.0) -> int:
+    """Median of the last `window` valid laps in a Session History packet.
+
+    With `outlier_ratio` > 0, laps slower than ratio x the car's best valid lap
+    (red-flag, safety-car, pit and formation laps) are left out."""
     laps = history.laps[: history.num_laps]
     times = [
         lap.lap_time_ms for lap in laps if lap.lap_valid_bit_flags & 0x01 and lap.lap_time_ms > 0
     ]
+    if times and outlier_ratio > 0:
+        limit = min(times) * outlier_ratio
+        times = [t for t in times if t <= limit]
     if not times:
         return 0
     return int(median(times[-window:]))

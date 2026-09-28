@@ -2248,9 +2248,11 @@ class SessionState:
             h = self._histories.get(i)
             if h is None:
                 return self._best_laps.get(i, 0)
-            return rival_pace_ms(h, int(self._th("rival_pace_window", 3.0))) or self._best_laps.get(
-                i, 0
-            )
+            return rival_pace_ms(
+                h,
+                int(self._th("rival_pace_window", 3.0)),
+                self._th("rival_pace_outlier_ratio", 1.07),
+            ) or self._best_laps.get(i, 0)
 
         def name_of(i: int) -> str:
             return self.participants[i].name if 0 <= i < len(self.participants) else ""

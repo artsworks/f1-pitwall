@@ -218,10 +218,11 @@
       setClass("fuel", "big" + (fdl < 0 ? " delta-crit" : fdl < 0.5 ? " delta-warn" : " delta-ok"));
       setText("fuel-sub", fdl >= 0 ? "spare at finish" : "SHORT · lift & coast");
     } else {
-      setText("fuel", fmt(p.fuel_remaining_laps, 1) + " laps");
+      // Game MFD value: laps of fuel to spare (+) or short (−) at the flag.
+      var mfd = p.fuel_remaining_laps;
+      setText("fuel", (mfd >= 0 ? "+" : "") + fmt(mfd, 1) + " laps");
       setClass("fuel", "big");
-      setText("fuel-sub", toGo !== null && (p.session_kind === "race")
-        ? "in tank · " + toGo + " to go" : "in tank");
+      setText("fuel-sub", mfd >= 0 ? "spare at finish · game" : "SHORT · game");
     }
 
     renderDamage(p.damage);
@@ -534,10 +535,11 @@
       setText("cp-energy-sub", "no energy budget yet");
     }
     var fd = s ? s.fuel_delta_laps : null;
-    setText("cp-fuel", fd === null || fd === undefined ? fmt(p.fuel_remaining_laps, 1) + " laps" :
+    setText("cp-fuel", fd === null || fd === undefined ?
+      (p.fuel_remaining_laps >= 0 ? "+" : "") + fmt(p.fuel_remaining_laps, 1) + " laps" :
       (fd >= 0 ? "+" : "") + fmt(fd, 1) + " laps");
     setClass("cp-fuel", "big" + (fd === null || fd === undefined ? "" : fd < 0 ? " delta-crit" : fd < 0.5 ? " delta-warn" : " delta-ok"));
-    setText("cp-fuel-sub", fd === null || fd === undefined ? "laps of fuel left" :
+    setText("cp-fuel-sub", fd === null || fd === undefined ? "spare at finish · game" :
       (fd >= 0 ? "spare at finish" : "SHORT · lift & coast"));
     setText("cp-life", s && s.laps_of_pace !== null ? fmt(s.laps_of_pace, 0) + " laps" : "--");
     setClass("cp-life", "big" + (s && s.laps_of_pace !== null && s.laps_remaining && s.laps_of_pace < s.laps_remaining ?

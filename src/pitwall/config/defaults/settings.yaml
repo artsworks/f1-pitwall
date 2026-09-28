@@ -88,6 +88,7 @@ thresholds:
   wear_cliff_pct: 70           # worst-corner wear % that counts as the wear cliff
   wear_per_lap_default_pct: 2.5  # wear %/lap when not measured this stint
   rival_pace_window: 3         # laps in the rival-pace median
+  rival_pace_outlier_ratio: 1.07  # drop rival laps slower than this x their best (red flag, SC, pit)
   pit_loss_default_s: 22       # green-flag pit loss when nothing is known
   pit_loss_vsc_default_s: 12
   pit_loss_sc_default_s: 8

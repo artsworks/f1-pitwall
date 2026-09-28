@@ -119,3 +119,9 @@ def test_rival_pace_median() -> None:
     h = _history([(90_000, 1), (91_000, 1), (95_000, 1), (99_000, 1), (120_000, 0)])
     assert rival_pace_ms(h, 3) == 95_000  # last 3 valid: 91000, 95000, 99000
     assert rival_pace_ms(_history([(90_000, 0)]), 3) == 0
+
+
+def test_rival_pace_drops_red_flag_laps() -> None:
+    h = _history([(95_000, 1), (233_000, 1), (236_000, 1)])
+    assert rival_pace_ms(h, 3) == 233_000
+    assert rival_pace_ms(h, 3, outlier_ratio=1.07) == 95_000
