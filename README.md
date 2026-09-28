@@ -156,6 +156,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/12-driver-input.md`](docs/12-driver-input.md) | Wheel button and spacebar: acknowledge / negative |
 | [`docs/13-league-multiplayer.md`](docs/13-league-multiplayer.md) | Friends-league target: restricted telemetry, league preset |
 | [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard design (implemented in `web/`) |
+| [`docs/22-setup-advisor.md`](docs/22-setup-advisor.md) | Setup advisor proposal: parameter effects, parc fermé matrix, balance signals, rule tables, learning loop |
 
 **Decisions and reference**
 
