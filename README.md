@@ -165,6 +165,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/17-quali-run-plan.md`](docs/17-quali-run-plan.md) | Qualifying run plan and coaching |
 | [`docs/18-race-engine.md`](docs/18-race-engine.md) | Race engine, tyre life, degradation priors and persistence |
 | [`docs/21-voice-command.md`](docs/21-voice-command.md) | Voice-command design and implementation status |
+| [`docs/22-setup-advisor.md`](docs/22-setup-advisor.md) | Setup advisor proposal: parameter effects, parc fermé matrix, balance signals, rule tables, learning loop |
 
 **Decisions and reference**
 
