@@ -242,8 +242,7 @@
     n.appendChild(span((r.pos ? "P" + r.pos + " " : "") + String(r.name || "--").toUpperCase(), "name"));
     n.appendChild(span(gapText(gap), "gap"));
     n.appendChild(compoundBadge(r.compound, r.tyre_age));
-    var pw = paceWords(r);
-    n.appendChild(span(pw || "", "words " + wordsClass(pw, r.pace_delta_s, side)));
+    n.appendChild(span(paceText(r), "words " + paceClass(r.pace_delta_s, side)));
     var flags = [];
     if (r.drs) flags.push(span("DRS", "badge " + (side === "behind" ? "crit" : "ok")));
     if (side === "ahead" && s.undercut_s > 0) flags.push(span("UC", "badge ok"));
@@ -315,18 +314,12 @@
     if (delta > 0) return "ok";
     return side === "behind" ? "crit" : "warn";
   }
-  function wordsClass(words, delta, side) {
-    var w = String(words || "");
-    if (/faster/.test(w)) return side === "behind" ? "crit" : "warn";
-    if (/slower/.test(w)) return "ok";
-    return w ? "" : paceClass(delta, side);
-  }
-  function paceWords(r) {
-    if (r.pace_words) return r.pace_words;
+  function paceText(r) {
+    // Numeric pace line: how much the rival gains or loses on us per lap.
     var d = r.pace_delta_s;
     if (d === null || d === undefined) return "";
-    if (Math.abs(d) < 0.03) return "same pace";
-    return fmt(Math.abs(d), 2) + " s " + (d > 0 ? "slower" : "faster");
+    if (Math.abs(d) < 0.03) return "= same pace";
+    return (d < 0 ? "▲ " : "▼ ") + fmt(Math.abs(d), 2) + "/lap " + (d < 0 ? "faster" : "slower");
   }
   function compoundClass(c) {
     var w = String(c || "").toLowerCase();
@@ -382,10 +375,10 @@
       rail.className = "rail " + side + (inDrs ? " in" : "");
     }
 
-    // Row 1: pace in words (the call the engineer would make) + tyre badge.
+    // Row 1: pace per lap + tyre badge.
     var pace = span("", "b-pace");
-    var pw = paceWords(r);
-    pace.appendChild(span(pw || "pace unknown", "words " + (pw ? wordsClass(pw, r.pace_delta_s, side) : "dim")));
+    var pw = paceText(r);
+    pace.appendChild(span(pw || "pace unknown", "words " + (pw ? paceClass(r.pace_delta_s, side) : "dim")));
     pace.appendChild(compoundBadge(r.compound, r.tyre_age));
     n.appendChild(pace);
 
@@ -411,7 +404,7 @@
     infringementBadges(r.infringements).forEach(function (b) { bad.appendChild(b); });
     n.appendChild(bad);
 
-    var threat = side === "behind" && (r.drs || inDrs || wordsClass(pw, r.pace_delta_s, side) === "crit");
+    var threat = side === "behind" && (r.drs || inDrs || paceClass(r.pace_delta_s, side) === "crit");
     var edge = side === "ahead" && (r.drs || inDrs);
     n.className = "b-card " + side + (threat ? " threat" : edge ? " edge" : "");
   }
