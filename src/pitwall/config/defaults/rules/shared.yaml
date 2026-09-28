@@ -253,7 +253,7 @@ rules:
   - id: saved_moment
     sessions: [practice, qualifying, race]
     priority: 3
-    when: "saved and phase != 'finished'"
+    when: "saved and phase not in ('finished', 'red_flag', 'sc', 'vsc')"
     clear_when: "not saved"
     requires: [motion_ex]
     cooldown_s: 30

@@ -182,3 +182,47 @@ def relevant_rivals(
                 best = fwd
                 pit_exit = i
     return ahead, behind, pit_exit
+
+
+def penalty_standing(
+    cars: Sequence[Any], player_idx: int, track_m: float
+) -> tuple[int, float, int]:
+    """(position once time penalties are applied, margin in seconds over the
+    first car on the road behind that the penalties bring closest, its index).
+
+    Race time is each car's own delta_to_race_leader plus its penalty
+    seconds, so one car's glitched timing cannot shift everyone behind it.
+    A car a full lap (track_m) or more behind on total distance is lapped
+    and cannot take a place on time.
+    A negative margin means that car finishes ahead of the player.
+    """
+    if not (0 <= player_idx < len(cars)):
+        return 0, math.inf, -1
+    me = cars[player_idx]
+    pos = getattr(me, "car_position", 0)
+    if pos <= 0:
+        return 0, math.inf, -1
+    road = sorted(
+        (
+            (c.car_position, i)
+            for i, c in enumerate(cars)
+            if getattr(c, "car_position", 0) > 0 and getattr(c, "result_status", 0) in (2, 3)
+        )
+    )
+    total: dict[int, float] = {}
+    for p, i in road:
+        c = cars[i]
+        if p > pos and me.total_distance - c.total_distance >= track_m:
+            break
+        total[i] = (max(0, c.delta_to_race_leader_ms) / 1000.0 if p > 1 else 0.0) + c.penalties
+    if player_idx not in total or not any(cars[i].penalties for i in total):
+        return pos, math.inf, -1
+    mine = (total[player_idx], pos)
+    adj = 1 + sum(
+        1 for i, t in total.items() if i != player_idx and (t, cars[i].car_position) < mine
+    )
+    margin, threat = math.inf, -1
+    for i, t in total.items():
+        if cars[i].car_position > pos and t - mine[0] < margin:
+            margin, threat = t - mine[0], i
+    return adj, margin, threat

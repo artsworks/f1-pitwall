@@ -108,6 +108,7 @@ thresholds:
   tyre_graining_c: 75          # coldest inner at or below this = graining band
   drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
   drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
+  penalty_standing_laps: 3     # time penalty vs position calls from this many laps to go
   penalty_recent_s: 10         # session seconds a PENA stays "recent"
   rain_inter_pct: 60           # forecast rain -> crossover bands
   rain_wet_pct: 85

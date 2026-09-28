@@ -825,10 +825,50 @@ rules:
     say:
       - "{fastest_lap_name} has fastest lap, {fastest_lap_time}. You're {fastest_lap_gap_s:.1f} off it."
       - "Fastest lap to {fastest_lap_name}, {fastest_lap_time}. {fastest_lap_gap_s:.1f} to find if you want it back."
+  # Time penalties decide the classified result: say where we really are.
+  - id: penalty_cost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and penalty_s > 0 and penalty_places > 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places == 0"
+    cooldown_s: 120
+    cooldown_group: penalty_standing
+    requires: [lap_data]
+    say:
+      - "Remember the {penalty_s} seconds. P{position} on the road is P{penalty_position} after it. Need {penalty_need_s:.1f} more on {penalty_threat_name}"
+      - "With the penalty we're P{penalty_position}, not P{position}. {penalty_need_s:.1f} more to {penalty_threat_name} to fix that"
+      - "{penalty_s} seconds still to come off. That's P{penalty_position} right now, find {penalty_need_s:.1f} on {penalty_threat_name}"
+    severity:
+      - when: "penalty_places >= 3"
+        say:
+          - "Big one, the {penalty_s} seconds drops us from P{position} to P{penalty_position}. Every tenth counts, {penalty_need_s:.1f} to {penalty_threat_name}"
+          - "Penalty costs {penalty_places} places as it stands, P{penalty_position}. Flat out, {penalty_need_s:.1f} needed on {penalty_threat_name}"
+  - id: penalty_covered
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and penalty_s > 0 and penalty_position > 0 and penalty_places == 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places > 0"
+    cooldown_s: 120
+    cooldown_group: penalty_standing
+    requires: [lap_data]
+    say:
+      - "Gap covers the {penalty_s} seconds. P{position} stays P{position}, keep it that way"
+      - "We're clear of the penalty, {penalty_margin_s:.1f} in hand. Hold the gap"
+      - "P{position} even with the {penalty_s} seconds. {penalty_margin_s:.1f} margin, don't give it back"
+  - id: finish_penalty
+    sessions: [race]
+    priority: 2
+    when: "phase == 'finished' and penalty_places > 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{position} on the road, but the {penalty_s} seconds makes it P{penalty_position}. Strong drive, we'll clean up the penalties"
+      - "That's the flag. P{position} on track, P{penalty_position} after the {penalty_s} seconds. Pace was there, the penalty cost us"
+      - "Flag. Crossed the line P{position}, classified P{penalty_position} with the penalty. Plenty to take from that"
   - id: finish_gained
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_gained > 0"
+    when: "phase == 'finished' and grid_position > 0 and positions_gained > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
@@ -837,7 +877,7 @@ rules:
   - id: finish_lost
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_lost > 0"
+    when: "phase == 'finished' and grid_position > 0 and positions_lost > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
@@ -846,7 +886,7 @@ rules:
   - id: finish_held
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_gained == 0"
+    when: "phase == 'finished' and grid_position > 0 and positions_gained == 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:

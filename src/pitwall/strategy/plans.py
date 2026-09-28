@@ -347,11 +347,12 @@ class PlanTracker:
             valid = [(e.race_time_s, pid) for pid, e in evals.items() if e is not None]
             if valid:
                 to = min(valid)[1]
-            else:
+                self._switch(to, "invalid", lap, 0.0, evals[to])
+            elif not neutralised:
                 to = "B" if self.active != "B" else "A"
                 self._set(to, "alternative", stops_done, best)
                 evals[to] = best
-            self._switch(to, "invalid", lap, 0.0, evals[to])
+                self._switch(to, "invalid", lap, 0.0, evals[to])
         elif not neutralised:
             gap = cur.race_time_s - best.race_time_s
             if gap > off_s:

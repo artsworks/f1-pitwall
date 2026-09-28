@@ -52,7 +52,7 @@ from pitwall.state.quali import (
     quali_margin_ms,
     release_window,
 )
-from pitwall.state.race import RacePhase, relevant_rivals
+from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
 
@@ -120,6 +120,7 @@ class CarLap:
     """Per-car lap data for one tick (all 24 cars)."""
 
     lap_distance: float = 0.0
+    total_distance: float = 0.0
     current_lap_time_ms: int = 0
     last_lap_time_ms: int = 0
     sector: int = 0
@@ -131,6 +132,7 @@ class CarLap:
     result_status: int = 0
     current_lap_num: int = 0
     delta_to_car_in_front_ms: int = 0
+    delta_to_race_leader_ms: int = 0
     num_pit_stops: int = 0
     penalties: int = 0
     total_warnings: int = 0
@@ -345,6 +347,11 @@ class Snapshot:
     warnings: int = 0
     corner_cut_warnings: int = 0
     penalty_recent: bool = False
+    penalty_position: int = 0  # race position once every car's time penalties apply
+    penalty_margin_s: float = (
+        math.inf
+    )  # over the closest car behind after penalties (<0 = he's ahead)
+    penalty_threat_name: str = ""
     track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
     track_warning_recent: bool = False
     blue_flag: bool = False
@@ -520,6 +527,14 @@ class Snapshot:
     @property
     def positions_lost(self) -> int:
         return max(0, -self.positions_gained)
+
+    @property
+    def penalty_places(self) -> int:
+        return max(0, self.penalty_position - self.position) if self.penalty_position else 0
+
+    @property
+    def penalty_need_s(self) -> float:
+        return max(0.0, -self.penalty_margin_s) if math.isfinite(self.penalty_margin_s) else 0.0
 
     @property
     def fuel_short_laps(self) -> float:
@@ -1459,6 +1474,7 @@ class SessionState:
             tuple(
                 CarLap(
                     lap_distance=c.lap_distance,
+                    total_distance=c.total_distance,
                     current_lap_time_ms=c.current_lap_time_ms,
                     last_lap_time_ms=c.last_lap_time_ms,
                     sector=c.sector,
@@ -1470,6 +1486,7 @@ class SessionState:
                     result_status=c.result_status,
                     current_lap_num=c.current_lap_num,
                     delta_to_car_in_front_ms=c.delta_to_car_in_front_ms,
+                    delta_to_race_leader_ms=c.delta_to_race_leader_ms,
                     num_pit_stops=c.num_pit_stops,
                     penalties=c.penalties,
                     total_warnings=c.total_warnings,
@@ -2037,6 +2054,7 @@ class SessionState:
         pace_ms = int(median(own[-3:])) if own else self._best_laps.get(self._player_idx, 0)
         pit_s = model.pit_loss_s if model.pit_loss_s > 0 else self._th("pit_loss_default_s", 22.0)
         metres_lost = self.track_length_m * pit_s / (pace_ms / 1000.0) if pace_ms > 0 else math.inf
+        pen_pos, pen_margin, pen_i = penalty_standing(cars, self._player_idx, self.track_length_m)
         ahead_i, behind_i, exit_i = relevant_rivals(
             cars,
             self._player_idx,
@@ -2125,6 +2143,9 @@ class SessionState:
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             pit_exit_rival_gap_s=exit_gap,
+            penalty_position=pen_pos,
+            penalty_margin_s=pen_margin,
+            penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
             pit_exit_clean=release.clean,
             drs_available=(
                 bool(self.drs_allowed)

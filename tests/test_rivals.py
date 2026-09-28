@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+
+import pytest
 
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
-from pitwall.state.race import relevant_rivals
+from pitwall.state.race import penalty_standing, relevant_rivals
 from pitwall.state.session import SessionState
 
 from .synth import pack_packet
@@ -91,3 +94,41 @@ def test_restricted_detection_flips_and_clears() -> None:
     assert state.snapshot(3.0).rival_data_restricted
     _lap_boundary(ingest, 4, 4.0, zero=False)
     assert not state.snapshot(4.0).rival_data_restricted
+
+
+@dataclass
+class _Timed:
+    car_position: int
+    delta_to_race_leader_ms: int
+    penalties: int = 0
+    total_distance: float = 50000.0
+    result_status: int = 2
+
+
+def test_penalty_standing_drops_player_behind_cars_within_penalty() -> None:
+    # Race 2 finish: P2 on the road with 8 s; cars behind at +1.4, +4.5, +7.2, +7.7, +15.9.
+    cars = [
+        _Timed(1, 0),
+        _Timed(2, 850, penalties=8),
+        _Timed(3, 2250),
+        _Timed(4, 5350),
+        _Timed(5, 8050),
+        _Timed(6, 8550),
+        _Timed(7, 16750),
+    ]
+    pos, margin, threat = penalty_standing(cars, 1, 5000.0)
+    assert pos == 6
+    assert threat == 2 and margin == pytest.approx(-6.6)
+
+
+def test_penalty_standing_ignores_lapped_cars_and_clean_races() -> None:
+    cars = [_Timed(1, 0), _Timed(2, 900, penalties=5), _Timed(3, 1100, total_distance=44000.0)]
+    assert penalty_standing(cars, 1, 5000.0)[:2] == (2, math.inf)
+    # Crossing the line: the car just behind is still on the previous lap.
+    line = [_Timed(1, 0), _Timed(2, 900, penalties=5), _Timed(3, 1300, total_distance=49990.0)]
+    assert penalty_standing(line, 1, 5000.0)[0] == 3
+    clean = [_Timed(1, 0), _Timed(2, 900), _Timed(3, 1100)]
+    assert penalty_standing(clean, 1, 5000.0) == (2, math.inf, -1)
+    covered = [_Timed(1, 0), _Timed(2, 900, penalties=5), _Timed(3, 6900)]
+    pos, margin, _ = penalty_standing(covered, 1, 5000.0)
+    assert pos == 2 and margin == pytest.approx(1.0)
