@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import struct
 from pathlib import Path
 
 from pitwall.clock import VirtualClock
@@ -94,6 +95,113 @@ def test_red_flag_call_fires_once(tmp_path: Path) -> None:
     fired = [r for r in rows if r["outcome"] == "fired"]
     assert [r["rule_id"] for r in fired] == ["red_flag"]
     assert "Red flag" in fired[0]["text"]
+
+
+def test_two_red_flags_within_a_minute_both_get_calls(tmp_path: Path) -> None:
+    packets = _red_flag_stream()
+    for t, code in ((15.0, b"LGOT"), (55.0, b"RDFL")):
+        packets.append((t, pack_packet(PacketId.SESSION, {"session_type": 15}, session_time=t)))
+        packets.append(
+            (
+                t,
+                pack_packet(
+                    PacketId.LAP_DATA,
+                    {"cars": {0: {"driver_status": 4, "current_lap_num": 3}}},
+                    session_time=t,
+                ),
+            )
+        )
+        packets.append((t, make_event_packet(code, session_time=t)))
+        packets.append(
+            (
+                t + 0.1,
+                pack_packet(
+                    PacketId.LAP_DATA,
+                    {"cars": {0: {"driver_status": 4, "current_lap_num": 3}}},
+                    session_time=t + 0.1,
+                ),
+            )
+        )
+    packets.sort(key=lambda row: row[0])
+    rec = write_packet_stream(tmp_path / "two-flags.f1bin", packets)
+    log_path = tmp_path / "two-flags.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    asyncio.run(run_replay(rec, engine, None))
+    engine.dispatcher.log.flush()
+    rows = _read_log(log_path)
+    flags = [row for row in rows if row["outcome"] == "fired" and row["rule_id"] == "red_flag"]
+    assert len(flags) == 2
+
+
+def test_contact_replay_does_not_downgrade_major_existing_damage(tmp_path: Path) -> None:
+    packets: list[tuple[float, bytes]] = []
+    for t, wing in ((0.0, 39), (1.0, 39), (6.0, 76), (10.0, 76), (15.0, 76)):
+        packets.extend(
+            [
+                (
+                    t,
+                    pack_packet(
+                        PacketId.SESSION, {"session_type": 15, "total_laps": 18}, session_time=t
+                    ),
+                ),
+                (
+                    t,
+                    pack_packet(
+                        PacketId.LAP_DATA,
+                        {"cars": {0: {"driver_status": 4, "current_lap_num": 15}}},
+                        session_time=t,
+                    ),
+                ),
+                (
+                    t,
+                    pack_packet(
+                        PacketId.CAR_DAMAGE,
+                        {"cars": {0: {"front_left_wing_damage": wing}}},
+                        session_time=t,
+                    ),
+                ),
+            ]
+        )
+        if t in (1.0, 10.0):
+            packets.append(
+                (
+                    t,
+                    pack_packet(
+                        PacketId.EVENT,
+                        {
+                            "event_string_code": b"COLL",
+                            "event_data": struct.pack("<BBB", 0, 1, 1),
+                        },
+                        session_time=t,
+                    ),
+                )
+            )
+        packets.append(
+            (
+                t + 0.2,
+                pack_packet(
+                    PacketId.LAP_DATA,
+                    {"cars": {0: {"driver_status": 4, "current_lap_num": 15}}},
+                    session_time=t + 0.2,
+                ),
+            )
+        )
+    packets.sort(key=lambda row: row[0])
+    rec = write_packet_stream(tmp_path / "wing-contact.f1bin", packets)
+    log_path = tmp_path / "wing-contact.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    asyncio.run(run_replay(rec, engine, None))
+    engine.dispatcher.log.flush()
+    rows = _read_log(log_path)
+    fired = [row for row in rows if row["outcome"] == "fired"]
+    assert any(row["rule_id"] == "front_wing_lost_box" for row in fired)
+    assert not any(row["rule_id"] == "contact_damage_report" for row in fired)
+    assert any(
+        row["rule_id"] == "contact_ok"
+        and row["outcome"] == "queued"
+        and "No new damage" in row["text"]
+        for row in rows
+    )
 
 
 def test_replay_deterministic_across_speeds(tmp_path: Path) -> None:

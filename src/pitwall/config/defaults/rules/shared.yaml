@@ -400,7 +400,6 @@ rules:
     priority: 1
     when: "red_flag"
     clear_when: "not red_flag"
-    cooldown_s: 60
     say:
       - "Red flag. Red flag. Slow down and return to the pits"
       - "Red flag, red flag. Back to the pits, careful on the way in"

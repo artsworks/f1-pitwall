@@ -36,6 +36,8 @@ menu:
         no_stop: ["No stop. Tyres make the end.", "Stay out to the end."]
         tyres_short: ["Yes, box. Tyres won't make it, {pace_laps} laps left in them, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, they won't last {laps_left} laps."]
         box_fight: ["Box for fresh tyres. Stop costs {loss}, we get about {gain} back over {laps_left} laps. Good for the fight at the end.", "Yes, box. Fresh tyres are worth {gain} over {laps_left} laps against {loss} in the pits. Come out and attack."]
+        damage_review: ["Front wing {wing} percent. Tyres may last, but box for repairs if handling is compromised.", "Wing {wing} percent. Tyre strategy says stay out; consider repairs if the car won't turn."]
+        damage_nurse: ["Wing {wing} percent. Too late for a stop; nurse it home.", "Front wing {wing} percent. Stay out and protect the car to the finish."]
         hold: ["Stay out. Tyres make the end, worst one {wear} percent. A stop costs {loss}, only {gain} back. Hold P{pos}.", "Negative, stay out and hold P{pos}. Tyres have {pace_laps} laps left, {laps_left} to go."]
         unknown: ["No plan yet. Stay out.", "Still working on it. Stay out."]
     - id: gap

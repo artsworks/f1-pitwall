@@ -1037,13 +1037,13 @@ rules:
     cooldown_group: contact_report
     requires: [car_damage]
     say:
-      - "Car looks OK. No damage"
-      - "Checked the car, all good. Carry on"
-      - "No damage from that. Car's fine"
-      - "Data looks clean, no damage. Keep pushing"
+      - "No new damage from that contact"
+      - "Checked the car. No additional damage from that"
+      - "No new damage from that hit"
+      - "Damage readings are unchanged after that contact"
     escalate:
       - after: 2
         say:
-          - "Car's still OK. Lucky, keep it clean"
-          - "No damage again, but let's not push our luck"
-          - "Still clean on the data. Careful with the contact"
+          - "No further damage. Keep it clean"
+          - "No additional damage this time"
+          - "Readings unchanged. Careful with the contact"

@@ -258,6 +258,7 @@ class Snapshot:
     drs_allowed: int = 0
     tyres_wear: Corners = _ZERO_CORNERS
     damage: Damage = _ZERO_DAMAGE
+    front_wing_pit_status: str = ""
     speed_kmh: float = 0.0
     throttle: float = 0.0
     brake: float = 0.0
@@ -330,7 +331,7 @@ class Snapshot:
     contact_episodes: int = 0  # contact episodes this session
     contact_damage: str = ""  # part with the biggest new damage, e.g. "front left wing"
     contact_damage_pct: int = 0
-    contact_damage_major: bool = False  # crossed its warn threshold: the damage rules speak
+    contact_damage_major: bool = False
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
@@ -1592,7 +1593,7 @@ class SessionState:
             contact_episodes=c.episodes,
             contact_damage=part,
             contact_damage_pct=pct,
-            contact_damage_major=pct >= warn and c.baseline.get(part, 0) < warn,
+            contact_damage_major=pct >= warn,
         )
 
     def _teammate(self) -> int:
@@ -1771,6 +1772,7 @@ class SessionState:
         )
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)
+        laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
         return Snapshot(
             now=now,
             session_time=st,
@@ -1801,9 +1803,7 @@ class SessionState:
             rewinds=self.rewinds,
             weather=self.weather,
             game_mode=self.game_mode,
-            laps_remaining=(
-                max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
-            ),
+            laps_remaining=laps_remaining,
             lights_out=self.lights_out,
             chequered=self.chequered,
             gap_ahead_s=self.delta_to_car_in_front_ms / 1000.0
@@ -1913,6 +1913,19 @@ class SessionState:
             drs_allowed=self.drs_allowed,
             tyres_wear=self.tyres_wear,
             damage=self.damage,
+            front_wing_pit_status=(
+                "box"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_lost_pct", 50.0)
+                and laps_remaining > self._th("pit_min_laps_left", 2.0)
+                else "nurse"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_lost_pct", 50.0)
+                else "review"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_damage_warn_pct", 15.0)
+                else ""
+            ),
             speed_kmh=self.speed_kmh,
             throttle=self.throttle,
             brake=self.brake,

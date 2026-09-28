@@ -5,7 +5,7 @@ import pytest
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.state.ema import Ema
-from pitwall.state.session import SessionState, Snapshot, pressure_window, thermal_window
+from pitwall.state.session import Damage, SessionState, Snapshot, pressure_window, thermal_window
 
 from .synth import pack_packet
 
@@ -532,3 +532,18 @@ def test_collision_event_starts_contact_check_and_reports() -> None:
     assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 8)
     assert not snap.contact_damage_major
     assert state._teammate() == 2
+
+
+def test_contact_increment_on_damaged_wing_remains_major() -> None:
+    ingest, state = _state()
+    state.damage = Damage(front_left_wing=39)
+    state.contacts.hit(10.0, 1, 1, state._damage_parts())
+    state.damage = Damage(front_left_wing=76)
+    _send(
+        ingest,
+        pack_packet(PacketId.EVENT, {"event_string_code": b"SPTP"}, session_time=15.0),
+        15.0,
+    )
+    snap = state.snapshot(15.0)
+    assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 76)
+    assert snap.contact_damage_major
