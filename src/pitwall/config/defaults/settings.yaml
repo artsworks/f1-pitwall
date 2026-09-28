@@ -4,6 +4,8 @@ connection:
   send_rate_hz: 30
   http_host: "0.0.0.0"
   http_port: 8000
+  https_cert: ""  # optional mkcert PEM path for LAN phone access
+  https_key: ""
 recording:
   enabled: true
   directory: recordings
@@ -111,9 +113,7 @@ thresholds:
   pit_exit_clean_gap_s: 2.0    # clean air both ways at pit exit (race threshold)
   thermal_hysteresis_c: 4      # overheat/graining latch hysteresis
   tyre_graining_c: 75          # coldest inner at or below this = graining band
-  tyre_inner_hot_inter_c: 95   # inters run cooler: carcass amber from ~95 C
   tyre_graining_inter_c: 55
-  tyre_inner_hot_wet_c: 90
   tyre_graining_wet_c: 50
   compound_gain_min_cars: 2    # cars needed per compound group for a lap-time crossover
   compound_crossover_s: 1.0    # drier compound this much a lap quicker = switch
@@ -200,6 +200,19 @@ thresholds:
   hind_laps_tol: 2              # laps of pace vs the observed cliff
   hind_fuel_tol_laps: 0.5       # predicted vs actual finish fuel margin
   digest_max_findings: 5
+  calib_max_sessions: 20 # sessions included in each track fit
+  calib_fuel_ms_per_kg_max: 80 # upper bound on fitted fuel sensitivity
+  fuel_delta_min_kg: 0 # minimum accepted per-lap fuel burn
+  fuel_delta_max_kg: 10 # maximum accepted per-lap fuel burn
+  calib_thermal_bin_c: 5 # tyre-inner temperature histogram width
+  calib_thermal_min_stint_laps: 3 # green laps required to fit a thermal stint
+  calib_thermal_min_laps_per_bin: 3 # samples required for a thermal bin
+  calib_thermal_tolerance_ms: 150 # residual range included around best bin
+  calib_converge_tol_frac: 0.1 # relative fit delta considered converged
+  calib_converge_window: 3 # stable fit deltas required for convergence
+  weekend_min_laps: 6 # practice laps required for a weekend prior
+  energy_tol_min_j: 100000 # minimum learned energy tolerance
+  energy_tol_max_j: 600000 # maximum learned energy tolerance
 ui:
   state_hz: 5
   pages: [race, car, track]  # UDP Action 4 cycles in this order

@@ -26,6 +26,8 @@ class LapSummary:
     ers_deployed_j: float = 0.0  # ers_deployed_this_lap at lap end
     sc_status: int = 0  # max safety_car_status seen during the lap
     weather: int = 0
+    tyre_inner_c: float = 0.0
+    tyre_surface_c: float = 0.0
 
 
 class LapAccumulator:
@@ -41,6 +43,9 @@ class LapAccumulator:
         self._saw_invalid = False
         self._sc_max = 0
         self._last_driver_status = 0
+        self._tyre_inner_sum = 0.0
+        self._tyre_surface_sum = 0.0
+        self._tyre_samples = 0
 
     def note_flashback(self) -> None:
         self._saw_flashback = True
@@ -48,6 +53,15 @@ class LapAccumulator:
     def reset_stint_flags(self) -> None:
         self._saw_pit = self._saw_sc = self._saw_flashback = self._saw_invalid = False
         self._sc_max = 0
+
+    def note_tyre_temperatures(
+        self,
+        inner_corners: tuple[float, float, float, float],
+        surface_corners: tuple[float, float, float, float],
+    ) -> None:
+        self._tyre_inner_sum += sum(inner_corners) / 4.0
+        self._tyre_surface_sum += sum(surface_corners) / 4.0
+        self._tyre_samples += 1
 
     def update(
         self,
@@ -86,6 +100,11 @@ class LapAccumulator:
             self._prev_was_in_lap,
             self._sc_max,
         )
+        inner_c = self._tyre_inner_sum / self._tyre_samples if self._tyre_samples else 0.0
+        surface_c = self._tyre_surface_sum / self._tyre_samples if self._tyre_samples else 0.0
+        self._tyre_inner_sum = 0.0
+        self._tyre_surface_sum = 0.0
+        self._tyre_samples = 0
         self.reset_stint_flags()
         self._prev_was_in_lap = driver_status == 2  # in lap
         self._accumulate(pit_status, current_lap_invalid, safety_car_status)
@@ -122,6 +141,8 @@ class LapAccumulator:
             ers_deployed_j=ers_deployed_this_lap,
             sc_status=sc_max,
             weather=weather,
+            tyre_inner_c=inner_c,
+            tyre_surface_c=surface_c,
         )
 
     def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:

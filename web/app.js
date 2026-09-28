@@ -7,6 +7,31 @@
   var SC_WORDS = { 1: "SAFETY CAR", 2: "VSC", 3: "FORMATION" };
 
   var ws = null, lastSeq = null, backoff = 500, mismatched = false;
+  var phoneSpeech = false, spokenIds = {};
+  var armRadio = document.getElementById("arm-radio");
+  if (armRadio) {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      armRadio.disabled = true;
+      armRadio.textContent = "PHONE SPEECH UNAVAILABLE";
+    } else {
+      armRadio.addEventListener("click", function () {
+        phoneSpeech = !phoneSpeech;
+        armRadio.setAttribute("aria-pressed", String(phoneSpeech));
+        armRadio.textContent = phoneSpeech ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
+        if (!phoneSpeech) speechSynthesis.cancel();
+        keepAwake();
+      });
+    }
+  }
+  function phoneCall(c) {
+    if (!phoneSpeech || !c || !c.id || spokenIds[c.id]) return;
+    spokenIds[c.id] = true;
+    if (Object.keys(spokenIds).length > 200) spokenIds = {};
+    if (c.priority === 1) speechSynthesis.cancel();
+    var utterance = new SpeechSynthesisUtterance(c.text);
+    utterance.rate = 1.15;
+    speechSynthesis.speak(utterance);
+  }
   var calls = []; // {id, seq, t, priority, text, lap, audio}
   var clockOffset = 0; // server epoch seconds - local epoch seconds
   var startedAt = performance.now(), lastFrameAt = null, lastState = null, lastStateAt = null;
@@ -1127,7 +1152,9 @@
         calls.push(Object.assign({ t: m.t, seq: m.seq, audio: "dispatched" }, p));
         if (calls.length > MAX_CALLS) calls = calls.slice(-MAX_CALLS);
       }
+      phoneCall(p);
     } else if (m.type === "cancel") {
+      if (phoneSpeech && spokenIds[p.id]) speechSynthesis.cancel();
       calls.forEach(function (c) {
         if (c.id === p.id) c.audio = heard(c) ? "interrupted" : "dropped";
       });
@@ -1237,6 +1264,9 @@
   document.addEventListener("visibilitychange", keepAwake);
   document.addEventListener("pointerdown", keepAwake);
   keepAwake();
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("/sw.js").catch(function () {});
+  }
 
   // Sticky banner on phone sits directly under the (wrapping) status bar.
   var statusEl = document.querySelector(".status");

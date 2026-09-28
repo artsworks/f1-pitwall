@@ -161,6 +161,10 @@ body.radio { display: grid; height: 100vh; overflow: hidden; grid-template-colum
   gap: 1px; background: var(--line); font-size: clamp(16px, 1.6vw, 34px); }
 body.radio > * { background: var(--bg); min-width: 0; }
 body.radio .status { min-height: 3rem; }
+body.radio #arm-radio { border: 1px solid var(--ok); border-radius: .4rem; color: var(--ok);
+  background: var(--panel); padding: .6rem; font: inherit; cursor: pointer; }
+body.radio #arm-radio[aria-pressed="true"] { background: var(--ok); color: #0a0a0c; }
+body.radio #arm-radio:disabled { opacity: .6; cursor: default; }
 body.radio .banner { min-height: 9rem; }
 body.radio .banner .text { font-size: 2.6rem; }
 body.radio .log ol { font-size: 1.6rem; }

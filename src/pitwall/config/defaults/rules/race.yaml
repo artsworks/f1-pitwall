@@ -850,9 +850,9 @@ rules:
     cooldown_s: 30
     requires: [lap_data]
     say:
-      - "Fastest lap! {fastest_lap_time}, that's purple."
-      - "Purple lap. {fastest_lap_time}, fastest of anyone."
-      - "That's the fastest lap of the race, {fastest_lap_time}. Lovely."
+      - "Fastest lap! {fastest_lap_spoken}, that's purple."
+      - "Purple lap. {fastest_lap_spoken}, fastest of anyone."
+      - "That's the fastest lap of the race, {fastest_lap_spoken}. Lovely."
   - id: fastest_lap_taken
     sessions: [race]
     priority: 3
@@ -862,8 +862,8 @@ rules:
     cooldown_s: 60
     requires: [lap_data]
     say:
-      - "{fastest_lap_name} has fastest lap, {fastest_lap_time}. You're {fastest_lap_gap_s:.1f} off it."
-      - "Fastest lap to {fastest_lap_name}, {fastest_lap_time}. {fastest_lap_gap_s:.1f} to find if you want it back."
+      - "{fastest_lap_name} has fastest lap, {fastest_lap_spoken}. You're {fastest_lap_gap_s:.1f} off it."
+      - "Fastest lap to {fastest_lap_name}, {fastest_lap_spoken}. {fastest_lap_gap_s:.1f} to find if you want it back."
   # Time penalties decide the classified result: say where we really are.
   - id: penalty_cost
     sessions: [race]

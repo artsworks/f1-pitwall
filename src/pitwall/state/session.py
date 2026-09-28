@@ -57,6 +57,38 @@ from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
 
+
+def thermal_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
+    cold_map = thresholds.get("tyre_inner_cold_by_compound_c", {})
+    hot_map = thresholds.get("tyre_inner_hot_by_compound_c", {})
+    cold = cold_map.get(compound, thresholds.get("tyre_inner_cold_c", 80.0))
+    hot = hot_map.get(compound, thresholds.get("tyre_inner_hot_c", 110.0))
+    return float(cold), float(hot)
+
+
+def pressure_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
+    cold_map = thresholds.get("tyre_inner_cold_by_compound_c", {})
+    if compound not in cold_map:
+        return (
+            float(thresholds.get("pressure_window_low_c", 88.0)),
+            float(thresholds.get("pressure_window_high_c", 102.0)),
+        )
+    inset = float(thresholds.get("pressure_window_inset_c", 5.0))
+    cold, hot = thermal_window(thresholds, compound)
+    return cold + inset, hot - inset
+
+
+def spoken_lap_time(ms: float) -> str:
+    if ms <= 0 or not math.isfinite(ms):
+        return "?"
+    minutes, seconds = divmod(ms / 1000, 60)
+    seconds_text = f"{seconds:.3f}".rstrip("0").rstrip(".")
+    if minutes == 0:
+        return f"{seconds_text} seconds"
+    unit = "minute" if minutes == 1 else "minutes"
+    return f"{int(minutes)} {unit} {seconds_text} seconds"
+
+
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",
@@ -256,6 +288,7 @@ class Snapshot:
     laps: tuple[LapSummary, ...] = ()
     # M2: session context
     session_uid: int = 0
+    weekend_link: int = 0
     session_time_left: float = 0.0
     session_duration: float = 0.0
     track_length_m: float = 0.0
@@ -280,6 +313,7 @@ class Snapshot:
     fastest_lap_mine: bool = False
     fastest_lap_name: str = ""
     fastest_lap_time: str = ""  # "1:19.195"
+    fastest_lap_spoken: str = ""
     fastest_lap_age_s: float = math.inf  # since it was set
     fastest_lap_gap_s: float = math.inf  # player best minus fastest lap
     grid_position: int = 0
@@ -589,10 +623,12 @@ class SessionState:
         self.last_recv_wall: float | None = None
         self._player_idx = 0
         self.session_uid: int | None = None
+        self.weekend_link_identifier = 0
         # Called with session_time on each flashback rewind.
         self.rewind_listeners: list[Callable[[float], None]] = []
         # Called with the new session_uid on each session change.
         self.session_listeners: list[Callable[[int], None]] = []
+        self.session_end_listeners: list[Callable[[], None]] = []
         # Called with (recv_time, down) on each UDP-action button edge.
         self.press_listeners: list[Callable[[float, bool], None]] = []
         # Called with recv_time on each press of the radio-silent toggle button.
@@ -620,6 +656,7 @@ class SessionState:
         # session context
         self.session_type = 0
         self.track_id = -1
+        self.weekend_link_identifier = 0
         self.total_laps = 0
         self.weekend_structure: tuple[int, ...] = ()
         self.safety_car_status = 0
@@ -811,6 +848,8 @@ class SessionState:
         if self.session_uid is None:
             self.session_uid = header.session_uid
         elif header.session_uid != self.session_uid:
+            for end_listener in self.session_end_listeners:
+                end_listener()
             self._reset_session()
             self.session_uid = header.session_uid
             for cb in self.session_listeners:
@@ -896,6 +935,7 @@ class SessionState:
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
+        self.weekend_link_identifier = pkt.weekend_link_identifier
         self.safety_car_status = pkt.safety_car_status
         self.session_time_left = float(pkt.session_time_left)
         self.session_duration = float(pkt.session_duration)
@@ -1070,7 +1110,12 @@ class SessionState:
             ers_pct=self.ers_store_pct,
             ers_min_pct=self._ers_need_pct(),
             hottest_c=max(self._ema_or_zero(self.tyre_inner_fast).as_tuple()),
-            tyre_hot_c=self._th("cool_tyre_hot_c", 104.0),
+            tyre_hot_c=(
+                thermal_window(self._thresholds, self.tyre_compound)[1]
+                - self._th("cool_tyre_hot_margin_c", 1.0)
+                if self.tyre_compound in self._thresholds.get("tyre_inner_hot_by_compound_c", {})
+                else self._th("cool_tyre_hot_c", 104.0)
+            ),
             time_left_s=self.session_time_left,
             cool_lap_s=self._th("cool_lap_factor", 1.3) * lap_s,
             fuel_laps=self.fuel_remaining_laps,
@@ -1429,6 +1474,9 @@ class SessionState:
         car = pkt.cars[self._player_idx]
         self.tyre_surface = car.tyres_surface_temperature
         self.tyre_inner = car.tyres_inner_temperature
+        self.lap_acc.note_tyre_temperatures(
+            car.tyres_inner_temperature.as_tuple(), car.tyres_surface_temperature.as_tuple()
+        )
         self.brake_temp = car.brakes_temperature
         self.speed_kmh = float(car.speed)
         self.off_track.update_surface(st, car.surface_type.as_tuple())
@@ -1704,11 +1752,12 @@ class SessionState:
                 self._pressure_base = self.setup_tyre_pressure
         else:
             self._pressure_base = None
+        pressure_low, pressure_high = pressure_window(self._thresholds, self.tyre_compound)
         pressures = pressure_advice(
             run_avg,
             self._pressure_base or self.setup_tyre_pressure,
-            self._th("pressure_window_low_c", 88.0),
-            self._th("pressure_window_high_c", 102.0),
+            pressure_low,
+            pressure_high,
             hot_sign=self._th("pressure_hot_sign", 1.0),
             medium_c=self._th("pressure_size_medium_c", 5.0),
             large_c=self._th("pressure_size_large_c", 10.0),
@@ -1739,6 +1788,7 @@ class SessionState:
             phase=phase,
             safety_car_status=self.safety_car_status,
             session_uid=self.session_uid or 0,
+            weekend_link=self.weekend_link_identifier,
             session_time_left=self.session_time_left,
             session_duration=self.session_duration,
             track_length_m=self.track_length_m,
@@ -1932,8 +1982,7 @@ class SessionState:
         run = self.run
         temps = inner.as_tuple()
         hot_i = max(range(4), key=lambda i: temps[i])
-        low_c = self._th("pressure_window_low_c", 88.0)
-        high_c = self._th("pressure_window_high_c", 102.0)
+        low_c, high_c = pressure_window(self._thresholds, self.tyre_compound)
         if temps[hot_i] > high_c:
             hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, keep it off the kerbs"
         elif min(temps) < low_c:
@@ -2062,6 +2111,7 @@ class SessionState:
             fastest_lap_mine=mine,
             fastest_lap_name=name,
             fastest_lap_time=f"{int(secs // 60)}:{secs % 60:06.3f}",
+            fastest_lap_spoken=spoken_lap_time(ms),
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
         )
@@ -2333,9 +2383,10 @@ class SessionState:
         temps = self._ema_or_zero(self.tyre_inner_slow).as_tuple()
         hot = max(temps)
         coldest = min(temps)
-        suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
-        hot_c = self._th(f"tyre_inner_hot{suffix}_c", 110.0) + self._thermal_warn_offset_c
+        hot_c = thermal_window(self._thresholds, self.tyre_compound)[1]
+        hot_c += self._thermal_warn_offset_c
         hyst = self._th("thermal_hysteresis_c", 4.0)
+        suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
         grain_c = self._th(f"tyre_graining{suffix}_c", 75.0)
         self._overheat = (self._overheat and hot > hot_c - hyst) or hot >= hot_c
         in_context = self.race_phase == "racing" and self.tyre_age_laps >= 2

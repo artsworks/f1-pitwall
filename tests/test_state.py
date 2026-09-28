@@ -5,7 +5,7 @@ import pytest
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.state.ema import Ema
-from pitwall.state.session import SessionState
+from pitwall.state.session import SessionState, Snapshot, pressure_window, thermal_window
 
 from .synth import pack_packet
 
@@ -456,7 +456,35 @@ def test_fastest_lap_event_in_snapshot() -> None:
     snap = state.snapshot(0.1)
     assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
     assert snap.fastest_lap_time == "1:19.195"
+    assert snap.fastest_lap_spoken == "1 minute 19.195 seconds"
     assert 3.9 < snap.fastest_lap_age_s < 4.1
+
+
+def test_compound_thermal_windows_match_dashboard_and_pressure_targets() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import state_payload
+
+    settings = ConfigStore().current()
+    cases = (
+        (7, 70.0, (60.0, 85.0), (65.0, 80.0)),
+        (8, 60.0, (50.0, 80.0), (55.0, 75.0)),
+        (16, 78.0, (70.0, 90.0), (75.0, 85.0)),
+        (21, 100.0, (90.0, 125.0), (95.0, 120.0)),
+    )
+    for compound, green, expected, pressure in cases:
+        assert thermal_window(settings.thresholds, compound) == expected
+        assert pressure_window(settings.thresholds, compound) == pressure
+        snap = Snapshot(
+            now=0.0,
+            tyre_compound=compound,
+            tyre_inner_ema_fast=Corners(green, green, green, green),
+        )
+        payload = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+        assert {corner["status"] for corner in payload["tyres"].values()} == {"OK"}
+    assert thermal_window(settings.thresholds, 0) == (80, 110)
+    assert pressure_window(settings.thresholds, 0) == (88, 102)
 
 
 def test_tyre_switch_from_field_compound_gap() -> None:

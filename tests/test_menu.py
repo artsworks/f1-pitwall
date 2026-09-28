@@ -329,13 +329,13 @@ def test_race_stat_and_fight_answers() -> None:
     assert answer(stat, short, "b")[0] == "fuel_short"
     plain = Snapshot(now=0.0, position=4, laps_remaining=12, player_best_lap_ms=92_412)
     case, values = answer(stat, plain, "b")
-    assert case == "position" and values["pos"] == "4" and values["best"] == "1:32.4"
+    assert case == "position" and values["pos"] == "4" and values["best"] == "1 minute 32.4 seconds"
     assert answer(stat, Snapshot(now=0.0), "b")[0] == "unknown"
     practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
     assert answer(stat, practice, "b")[0] == "practice_no_best"
     timed = dataclasses.replace(practice, player_best_lap_ms=81_298, tyre_age_laps=5)
     case, values = answer(stat, timed, "b")
-    assert case == "practice" and values["best"] == "1:21.3"
+    assert case == "practice" and values["best"] == "1 minute 21.3 seconds"
     fight = MenuItemModel(id="fight", label="Fight")
     snap = Snapshot(
         now=0.0,

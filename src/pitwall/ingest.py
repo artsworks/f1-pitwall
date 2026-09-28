@@ -6,11 +6,18 @@ recording stays valid even when the parser is wrong.
 
 from __future__ import annotations
 
+import asyncio
+import io
+import json
 import struct
 from collections import defaultdict, deque
-from collections.abc import Callable
-from typing import Any, Protocol
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, Protocol
 
+from pitwall.clock import VirtualClock
+from pitwall.config.models import Settings
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -18,6 +25,7 @@ from pitwall.protocol.header import (
     is_supported,
     parse_header,
 )
+from pitwall.store.db import Database
 
 RATE_WINDOW_S = 5.0
 
@@ -103,3 +111,101 @@ class Ingest:
             "dropped_malformed": self._dropped_malformed,
             "session_uid": self.last_session_uid,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class IngestResult:
+    path: Path
+    session_uid: int
+    status: Literal["ingested", "digest_only", "skipped", "error"]
+    findings: list[str]
+    error: str = ""
+
+
+def expand_paths(paths: Sequence[str]) -> list[Path]:
+    """Expand recordings, recursively searched directories, and glob patterns."""
+    import glob
+
+    found: set[Path] = set()
+    for raw in paths:
+        path = Path(raw).expanduser()
+        if path.is_dir():
+            found.update(item.resolve() for item in path.rglob("*.f1bin") if item.is_file())
+            found.update(item.resolve() for item in path.rglob("*.f1bin.zst") if item.is_file())
+            continue
+        if glob.has_magic(str(path)):
+            found.update(
+                Path(item).resolve()
+                for item in glob.glob(str(path), recursive=True)
+                if Path(item).is_file()
+            )
+        elif path.is_file():
+            found.add(path.resolve())
+    return sorted(found, key=lambda item: str(item))
+
+
+def ingest_recordings(
+    db: Database,
+    paths: Sequence[str],
+    settings: Settings,
+    *,
+    calls_mode: str | None = None,
+    out_dir: Path | None = None,
+) -> list[IngestResult]:
+    """Replay or digest a recording batch, isolating errors to each file."""
+    from pitwall.digest import DIGEST_VERSION, build_digest
+    from pitwall.engine import build_engine, run_replay
+    from pitwall.net.recording import RecordingReader
+
+    digest_dir = out_dir or (Path(settings.persistence.path).expanduser().parent / "digests")
+    digest_dir.mkdir(parents=True, exist_ok=True)
+    results: list[IngestResult] = []
+    for path in expand_paths(paths):
+        uid = 0
+        try:
+            with RecordingReader(path) as reader:
+                header = reader.header
+            uid = header.session_uid
+            if uid and db.is_ingested(uid, DIGEST_VERSION):
+                results.append(IngestResult(path, uid, "skipped", []))
+                continue
+            digest_only = bool(uid and db.session_has_laps(uid))
+            if not digest_only:
+                engine = build_engine(
+                    clock=VirtualClock(),
+                    overrides={"engine": {"heartbeat_s": 0}},
+                    sinks=[],
+                    db=db,
+                    decision_log_fp=io.StringIO(),
+                    session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                )
+                asyncio.run(run_replay(path, engine))
+                engine.fold_open_stint()
+                uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
+            if not uid:
+                raise ValueError("recording did not contain a session UID")
+            session = db.session_row(uid) or {}
+            origin_mode = calls_mode or str(header.metadata.get("calls_mode") or "")
+            if not origin_mode:
+                origin_mode = str(session.get("calls_mode") or "")
+            db.set_session_origin(
+                uid,
+                started_at=header.wall_clock_start_us / 1_000_000.0,
+                recording_path=str(path),
+                calls_mode=origin_mode,
+            )
+            digest = build_digest(db, uid, settings.thresholds)
+            (digest_dir / f"{uid}.json").write_text(json.dumps(digest, indent=2, default=str))
+            db.mark_ingested(uid, DIGEST_VERSION, str(path))
+            findings = [str(item) for item in digest.get("findings", [])]
+            results.append(
+                IngestResult(
+                    path,
+                    uid,
+                    "digest_only" if digest_only else "ingested",
+                    findings,
+                )
+            )
+        except Exception as exc:
+            results.append(IngestResult(path, uid, "error", [], str(exc)))
+    return results

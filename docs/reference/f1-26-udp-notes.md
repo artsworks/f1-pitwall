@@ -116,6 +116,45 @@ and a severity; `FLBK` carries the flashback frame identifier and session time.
 Compounds — actual: 16 = C5, 17 = C4, 18 = C3, 19 = C2, 20 = C1, 21 = C0, 22 = C6,
 7 = inter, 8 = wet. Visual: 16 soft, 17 medium, 18 hard, 7 inter, 8 wet.
 
+### Inner tyre temperature defaults
+
+The dashboard and out-lap/overheat calls use **inner (core/carcass)** telemetry,
+not surface temperature. Default cold/hot boundaries, in °C, are configured in
+`config/defaults/thresholds.yaml` by **actual** compound; track overlays can
+override one compound without changing the rest.
+
+| Actual ID | Compound | Cold below | Hot above |
+| --- | --- | ---: | ---: |
+| 7 | Intermediate | 60 | 85 |
+| 8 | Full wet | 50 | 80 |
+| 16 | C5 | 70 | 90 |
+| 17 | C4 | 75 | 100 |
+| 18 | C3 | 80 | 105 |
+| 19 | C2 | 85 | 115 |
+| 20 | C1 | 90 | 115 |
+| 21 | C0 | 90 | 125 |
+| 22 | C6 | 65 | 85 |
+
+These are conservative **call boundaries**, not verified game MFD colour
+transition values. The [F1 26 compound grip table](https://simracingsetup.com/setups/f1-26-setups-pro/australia/)
+places intermediate peak grip around 65–75°C and wet peak around 65°C; its
+reported grip declines only gradually past those temperatures. It has no C0/C6
+data. The [F1 25 tyre guide](https://simracingsetup.com/ea-sports-f1/f1-25-tyre-guide/)
+places inter at 60/70/80°C, wet at 50/60/70°C, and C6 at 65/75/85°C
+(min/optimum/max). These historical numbers are a cross-check, not proof that
+F1 26 has unchanged thresholds. The user's recorded F1 26 practice had inner
+temperatures of 67–74°C at the coolest wheel on inters (median 71°C), consistent
+with their in-game green indication. The exact MFD transitions need a
+simultaneous in-game MFD/UDP observation to measure; tune the boundaries from
+that evidence rather than interpreting blanket temperatures or real F1 tyre
+operating ranges as game telemetry.
+
+Qualifying pressure advice and cool-lap hints use the same compound window:
+the pressure target is inset by `pressure_window_inset_c` from each edge, and
+the cool-lap hot limit is below the hot edge by `cool_tyre_hot_margin_c`. Those
+offsets are configurable in YAML. Unknown compound IDs keep the existing
+global fallback thresholds.
+
 **Tyre wear is not here.**
 
 ## Car Damage (10 Hz) — where tyre wear lives

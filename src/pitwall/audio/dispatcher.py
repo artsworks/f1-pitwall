@@ -93,7 +93,7 @@ class Dispatcher:
         self.input = input or InputSettings()
         self.clock = clock
         self.log = decision_log or DecisionLog()
-        self.sinks = sinks or [LogSink()]
+        self.sinks = [LogSink()] if sinks is None else sinks
         self.metrics = metrics or Metrics()
         self.budget_override = budget_override
         self._queue: list[_Queued] = []

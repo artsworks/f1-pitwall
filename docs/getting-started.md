@@ -43,6 +43,7 @@ and falls back to SAPI if it cannot load:
 ```powershell
 uv run pitwall voices get                     # default: en_GB-northern_english_male-medium
 uv run pitwall voices get en_US-ryan-high     # try others; samples: https://rhasspy.github.io/piper-samples/
+uv run pitwall voices warm                    # pre-render 50 common fixed phrases
 uv run pitwall speak --engine piper --voice en_US-ryan-high "Box this lap."
 uv run pitwall speak --engine sapi            # compare with the old voice
 ```
@@ -56,6 +57,39 @@ default).
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.
+
+## Phone radio over HTTPS
+
+On the PC that hosts Pitwall, install [mkcert](https://github.com/FiloSottile/mkcert)
+and run `mkcert -install`. Make a certificate for the PC's actual LAN IP:
+
+```powershell
+mkcert -cert-file "$HOME\.pitwall\phone.pem" -key-file "$HOME\.pitwall\phone-key.pem" 192.168.1.20 localhost 127.0.0.1
+```
+
+Replace `192.168.1.20` with the PC's IP. Configure `connection.https_cert` and
+`connection.https_key` with those absolute PEM paths and restart Pitwall. Install
+mkcert's local root CA on the phone (the mkcert README explains the phone-specific
+steps); the phone must trust it for wake lock, service worker, and PWA install.
+Open `https://<PC-LAN-IP>:8000/radio`, choose **ARM PHONE RADIO** once on the
+phone, then install the page from the browser menu if desired. Use phone speech
+when backend speech is off to avoid hearing duplicate calls. Browsers may suspend
+speech in background tabs; keep the page open and visible. The PWA caches only
+static assets; live telemetry still requires a connection to the PC.
+
+## Debrief and calibration
+
+After a recording finishes, `pitwall digest <recording-directory> --db <database>` ingests
+new sessions and skips sessions already processed. `pitwall calibrate --db <database>`
+fits tyre, fuel, and energy parameters from the accumulated laps. `pitwall stats --learned
+--db <database>` prints the current learned values. Export a standalone review with
+`pitwall debrief --db <database> --session latest --out debrief.html`, or open
+`/debrief/<session-uid>` in the dashboard to grade individual calls. `pitwall evaluate
+--db <database>` compares recorded calls-on and calls-off sessions; one mode alone has
+no comparison. `pitwall propose --db <database> --out proposals.yaml` writes review-only
+threshold candidates from converged fits. Supply `--candidate-rules <rules-directory>`
+to also replay every locally available recorded session through `pitwall diff` against
+that candidate ruleset. These proposals never edit the active configuration.
 
 ## Recording
 

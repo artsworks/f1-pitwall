@@ -44,6 +44,17 @@ class RaceSpec:
     finish: bool = False  # chequered flag, then the line
     wear_scale: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)  # RL RR FL FR
     extra: dict[str, object] = field(default_factory=dict)
+    fuel_ms_per_kg: float = 0.0
+    session_type: int = 15
+    weekend_link: int = 0
+    session_uid: int = 0xDEADBEEF
+    compound: int = 17
+    tyre_inner_profile: tuple[float, ...] | None = None
+    tyre_surface_profile: tuple[float, ...] | None = None
+    thermal_window_c: tuple[float, float] | None = None
+    thermal_penalty_ms: int = 0
+    ers_deployed_j_per_lap: float = 0.0
+    send_session_end: bool = False
 
 
 def _rival(
@@ -86,7 +97,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     t = 0.0
 
     def emit(pid: int, data: dict[str, object]) -> None:
-        pkts.append((t, pack_packet(pid, data, session_time=t)))
+        pkts.append((t, pack_packet(pid, data, session_uid=spec.session_uid, session_time=t)))
 
     def event(code: bytes, detail: bytes = b"") -> None:
         emit(PacketId.EVENT, {"event_string_code": code, "event_data": detail.ljust(12, b"\0")})
@@ -105,7 +116,17 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             stint_start = lap
             player_wear0 = 0.0
         age = lap - stint_start
-        lap_ms = spec.base_ms + spec.deg_ms * age
+        fuel = spec.fuel_kg - spec.fuel_kg_per_lap * (lap - 1)
+        lap_ms = int(spec.base_ms + spec.deg_ms * age + spec.fuel_ms_per_kg * fuel)
+        if spec.tyre_inner_profile is not None:
+            tyre_inner = spec.tyre_inner_profile[min(lap - 1, len(spec.tyre_inner_profile) - 1)]
+        else:
+            tyre_inner = 125 if spec.hot_tyres_lap is not None and lap >= spec.hot_tyres_lap else 95
+        if (
+            spec.thermal_window_c is not None
+            and not spec.thermal_window_c[0] <= tyre_inner <= spec.thermal_window_c[1]
+        ):
+            lap_ms += spec.thermal_penalty_ms
         sc = 0
         if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1]:
             sc = 2 if spec.vsc else 1
@@ -113,7 +134,6 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             lap_ms = int(lap_ms * 1.4)
         frames = max(1, int(lap_ms / 1000 / spec.dt))
         wear = player_wear0 + spec.wear_pct_per_lap * age
-        fuel = spec.fuel_kg - spec.fuel_kg_per_lap * (lap - 1)
         for f in range(frames):
             frac = f / frames
             d = frac * TRACK_M
@@ -125,15 +145,28 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     forecast = {
                         "num_weather_forecast_samples": 3,
                         "weather_forecast_samples": {
-                            0: {"session_type": 15, "time_offset": 0, "rain_percentage": 10},
-                            1: {"session_type": 15, "time_offset": 10, "rain_percentage": 70},
-                            2: {"session_type": 15, "time_offset": 30, "rain_percentage": 80},
+                            0: {
+                                "session_type": spec.session_type,
+                                "time_offset": 0,
+                                "rain_percentage": 10,
+                            },
+                            1: {
+                                "session_type": spec.session_type,
+                                "time_offset": 10,
+                                "rain_percentage": 70,
+                            },
+                            2: {
+                                "session_type": spec.session_type,
+                                "time_offset": 30,
+                                "rain_percentage": 80,
+                            },
                         },
                     }
                 emit(
                     PacketId.SESSION,
                     {
-                        "session_type": 15,
+                        "session_type": spec.session_type,
+                        "weekend_link_identifier": spec.weekend_link,
                         "track_id": spec.track_id,
                         "total_laps": spec.laps,
                         "track_length": TRACK_M,
@@ -165,24 +198,19 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     }
                 },
             )
-            emit(
-                PacketId.CAR_STATUS,
-                {
-                    "cars": {
-                        0: {
-                            "fuel_in_tank": fuel - spec.fuel_kg_per_lap * frac,
-                            "fuel_remaining_laps": (fuel - spec.fuel_kg_per_lap * frac)
-                            / spec.fuel_kg_per_lap
-                            - (spec.laps - lap + 1 - frac),
-                            "actual_tyre_compound": 17,
-                            "visual_tyre_compound": 17,
-                            "tyres_age_laps": age,
-                            "vehicle_fia_flags": 4 if spec.blue_flag_lap == lap and f < 5 else 0,
-                            "ers_store_energy": 3_000_000.0,
-                        }
-                    }
-                },
-            )
+            player_status: dict[str, object] = {
+                "fuel_in_tank": fuel - spec.fuel_kg_per_lap * frac,
+                "fuel_remaining_laps": (fuel - spec.fuel_kg_per_lap * frac) / spec.fuel_kg_per_lap
+                - (spec.laps - lap + 1 - frac),
+                "actual_tyre_compound": spec.compound,
+                "visual_tyre_compound": spec.compound,
+                "tyres_age_laps": age,
+                "vehicle_fia_flags": 4 if spec.blue_flag_lap == lap and f < 5 else 0,
+                "ers_store_energy": 3_000_000.0,
+            }
+            if spec.ers_deployed_j_per_lap > 0:
+                player_status["ers_deployed_this_lap"] = spec.ers_deployed_j_per_lap
+            emit(PacketId.CAR_STATUS, {"cars": {0: player_status}})
             damage: dict[str, object] = {
                 "tyres_wear": tuple(wear * k for k in spec.wear_scale),
                 "tyres_damage": tuple(int(wear * k) for k in spec.wear_scale),
@@ -193,19 +221,21 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 damage["tyres_damage"] = (100, int(wear), int(wear), int(wear))
             emit(PacketId.CAR_DAMAGE, {"cars": {0: damage}})
             hot = spec.hot_tyres_lap is not None and lap >= spec.hot_tyres_lap
-            emit(
-                PacketId.CAR_TELEMETRY,
-                {
-                    "cars": {
-                        0: {
-                            "tyres_inner_temperature": ((125 if hot else 95),) * 4,
-                            "speed": 300 if (frac * 3) % 1 < 0.6 else 150,
-                            "throttle": 1.0 if (frac * 3) % 1 < 0.6 else 0.4,
-                            "steer": 0.0 if (frac * 3) % 1 < 0.6 else 0.3,
-                        }
-                    }
-                },
+            inner = tyre_inner if spec.tyre_inner_profile is not None else (125 if hot else 95)
+            surface = (
+                spec.tyre_surface_profile[min(lap - 1, len(spec.tyre_surface_profile) - 1)]
+                if spec.tyre_surface_profile is not None
+                else inner
             )
+            telemetry_car: dict[str, object] = {
+                "tyres_inner_temperature": (int(inner),) * 4,
+                "speed": 300 if (frac * 3) % 1 < 0.6 else 150,
+                "throttle": 1.0 if (frac * 3) % 1 < 0.6 else 0.4,
+                "steer": 0.0 if (frac * 3) % 1 < 0.6 else 0.3,
+            }
+            if spec.tyre_surface_profile is not None:
+                telemetry_car["tyres_surface_temperature"] = (int(surface),) * 4
+            emit(PacketId.CAR_TELEMETRY, {"cars": {0: telemetry_car}})
             if f % int(2 / spec.dt) == 0:
                 for i in (1, 2, 3):
                     if history[i]:
@@ -245,4 +275,6 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 },
             )
             t += spec.dt
+    if spec.send_session_end:
+        event(b"SEND")
     return pkts

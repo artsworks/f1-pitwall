@@ -136,6 +136,7 @@ def out_lap_scenario(
     cold_temp: int = 60,
     rate_hz: float = 30.0,
     laps: int = 2,
+    compound: int | None = None,
 ) -> list[tuple[float, bytes]]:
     """(t, packet) stream: race session, player on an out-lap in sector 3, FL
     inner temp cold for `cold_s` then warm (other tyres warm). Advances
@@ -190,6 +191,17 @@ def out_lap_scenario(
                 ),
             )
         )
+        if compound is not None:
+            packets.append(
+                (
+                    t,
+                    pack_packet(
+                        PacketId.CAR_STATUS,
+                        {"cars": {0: {"actual_tyre_compound": compound}}},
+                        session_time=t,
+                    ),
+                )
+            )
         if i % int(rate_hz / 2) == 0:
             packets.append(
                 (

@@ -11,8 +11,11 @@ import sqlite3
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from pitwall.protocol.enums import SessionType
 
 if TYPE_CHECKING:
     from pitwall.model.deg import DegFit
@@ -214,6 +217,19 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE sessions ADD COLUMN total_laps INT NOT NULL DEFAULT 0;
     """,
+    # 8: M4 learning metadata and tyre temperatures.
+    """
+    ALTER TABLE sessions ADD COLUMN weekend_link INT DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN calls_mode TEXT DEFAULT '';
+    ALTER TABLE laps ADD COLUMN tyre_inner_c REAL DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN tyre_surface_c REAL DEFAULT 0;
+    CREATE TABLE ingested (
+        session_uid INTEGER PRIMARY KEY,
+        path TEXT,
+        digest_version INT,
+        ingested_at REAL
+    );
+    """,
 ]
 
 
@@ -236,6 +252,8 @@ class LapRow:
     ers_deployed_j: float
     sc_status: int
     weather: int
+    tyre_inner_c: float
+    tyre_surface_c: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,6 +303,14 @@ class Heartbeat:
     wall_t: float
     recording_path: str
     lap_num: int
+
+
+@dataclass(frozen=True, slots=True)
+class WeekendStint:
+    session_uid: int
+    started_at: float
+    n_valid_laps: int
+    deg_ms_per_lap: float
 
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
@@ -357,18 +383,22 @@ class Database:
         weather: int = 0,
         recording_path: str = "",
         game_mode: int = 0,
+        weekend_link: int = 0,
+        calls_mode: str = "",
     ) -> None:
         with self._conn:
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
-                " game_version, config_hash, weather, recording_path, game_mode)"
-                " VALUES(?,?,?,?,?,?,?,?,?)"
+                " game_version, config_hash, weather, recording_path, game_mode,"
+                " weekend_link, calls_mode)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
                 " config_hash=excluded.config_hash, weather=excluded.weather,"
                 " recording_path=excluded.recording_path,"
-                " game_mode=excluded.game_mode",
+                " game_mode=excluded.game_mode, weekend_link=excluded.weekend_link,"
+                " calls_mode=excluded.calls_mode",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -379,6 +409,8 @@ class Database:
                     weather,
                     recording_path,
                     game_mode,
+                    weekend_link,
+                    calls_mode,
                 ),
             )
 
@@ -389,7 +421,8 @@ class Database:
                 "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms,"
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
                 " valid, invalid_reasons, wear_pct, fuel_kg, ers_deployed_j,"
-                " sc_status, weather) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " sc_status, weather, tyre_inner_c, tyre_surface_c)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -407,6 +440,8 @@ class Database:
                     lap.ers_deployed_j,
                     lap.sc_status,
                     lap.weather,
+                    lap.tyre_inner_c,
+                    lap.tyre_surface_c,
                 ),
             )
 
@@ -632,6 +667,8 @@ class Database:
             ers_deployed_j=float(r["ers_deployed_j"] or 0.0),
             sc_status=int(r["sc_status"] or 0),
             weather=int(r["weather"] or 0),
+            tyre_inner_c=float(r["tyre_inner_c"] or 0.0),
+            tyre_surface_c=float(r["tyre_surface_c"] or 0.0),
         )
 
     def upsert_stint(
@@ -722,6 +759,57 @@ class Database:
             (track_id, compound, limit),
         ).fetchall()
         return [self._stint_row(r) for r in rows]
+
+    def stints_for_session(self, uid: int) -> list[StintRow]:
+        rows = self._conn.execute(
+            "SELECT * FROM stints WHERE session_uid=? AND car_idx=0 ORDER BY start_lap",
+            (_uid_to_sql(uid),),
+        ).fetchall()
+        return [self._stint_row(row) for row in rows]
+
+    def weekend_stints(self, uid: int, track_id: int, compound: int) -> list[WeekendStint]:
+        """Earlier fitted practice stints in the same track weekend."""
+        current = self.session_row(uid)
+        if current is None:
+            return []
+        started_at = float(current.get("started_at") or 0.0)
+        weekend_link = int(current.get("weekend_link") or 0)
+        started_date = datetime.fromtimestamp(started_at, UTC).date()
+        rows = self._conn.execute(
+            "SELECT se.uid, se.started_at, se.weekend_link, se.session_type,"
+            " st.n_valid_laps, st.deg_params FROM stints st"
+            " JOIN sessions se ON se.uid=st.session_uid"
+            " WHERE se.track_id=? AND st.compound=? AND se.uid<>?"
+            " AND se.started_at<? ORDER BY se.started_at, st.start_lap",
+            (track_id, compound, _uid_to_sql(uid), started_at),
+        ).fetchall()
+        result: list[WeekendStint] = []
+        for row in rows:
+            try:
+                if SessionType(int(row["session_type"])).kind() != "practice":
+                    continue
+            except ValueError:
+                continue
+            prior_link = int(row["weekend_link"] or 0)
+            if weekend_link and prior_link:
+                same_weekend = weekend_link == prior_link
+            else:
+                prior_date = datetime.fromtimestamp(float(row["started_at"] or 0.0), UTC).date()
+                same_weekend = started_date == prior_date
+            if not same_weekend:
+                continue
+            params = json.loads(str(row["deg_params"] or "{}"))
+            if params.get("source") != "fit":
+                continue
+            result.append(
+                WeekendStint(
+                    session_uid=_uid_from_sql(int(row["uid"])),
+                    started_at=float(row["started_at"] or 0.0),
+                    n_valid_laps=int(row["n_valid_laps"] or 0),
+                    deg_ms_per_lap=float(params.get("deg_ms_per_lap", 0.0)),
+                )
+            )
+        return result
 
     def insert_pit_event(
         self,
@@ -845,6 +933,97 @@ class Database:
                 (track_id, compound, name, value, weight, now),
             )
         return ModelParam(track_id, compound, name, value, weight, now)
+
+    def set_session_origin(
+        self,
+        uid: int,
+        *,
+        started_at: float,
+        recording_path: str,
+        calls_mode: str,
+    ) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=? WHERE uid=?",
+                (started_at, recording_path, calls_mode, _uid_to_sql(uid)),
+            )
+
+    def mark_ingested(self, uid: int, digest_version: int, path: str) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO ingested(session_uid,path,digest_version,ingested_at)"
+                " VALUES(?,?,?,?) ON CONFLICT(session_uid) DO UPDATE SET"
+                " path=excluded.path, digest_version=excluded.digest_version,"
+                " ingested_at=excluded.ingested_at",
+                (_uid_to_sql(uid), path, digest_version, time.time()),
+            )
+
+    def is_ingested(self, uid: int, digest_version: int) -> bool:
+        row = self._conn.execute(
+            "SELECT digest_version FROM ingested WHERE session_uid=?", (_uid_to_sql(uid),)
+        ).fetchone()
+        return row is not None and int(row["digest_version"]) == digest_version
+
+    def session_has_laps(self, uid: int) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM laps WHERE session_uid=? LIMIT 1", (_uid_to_sql(uid),)
+        ).fetchone()
+        return row is not None
+
+    def sessions_for_track(self, track_id: int) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT * FROM sessions WHERE track_id=? ORDER BY started_at, uid", (track_id,)
+        )
+        for row in rows:
+            row["uid"] = _uid_from_sql(int(row["uid"]))
+        return rows
+
+    def sessions(self, track_id: int | None = None) -> list[dict[str, Any]]:
+        if track_id is None:
+            rows = self._rows("SELECT * FROM sessions ORDER BY started_at, uid", ())
+            for row in rows:
+                row["uid"] = _uid_from_sql(int(row["uid"]))
+            return rows
+        return self.sessions_for_track(track_id)
+
+    def ingested_count(self, track_id: int | None = None) -> int:
+        if track_id is None:
+            row = self._conn.execute("SELECT count(*) FROM ingested").fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT count(*) FROM ingested i JOIN sessions s ON i.session_uid=s.uid"
+                " WHERE s.track_id=?",
+                (track_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def all_params(self) -> list[ModelParam]:
+        rows = self._conn.execute("SELECT * FROM model_params ORDER BY track_id, compound, name")
+        return [self._param_row(r) for r in rows.fetchall()]
+
+    def driver_input_counts(self, track_id: int) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT di.item_id, di.inputs FROM driver_inputs di"
+            " JOIN sessions se ON se.uid=di.session_uid"
+            " WHERE se.track_id=? ORDER BY di.item_id",
+            (track_id,),
+        ).fetchall()
+        counts: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            item_id = str(row["item_id"])
+            cases = counts.setdefault(item_id, {"rule_id": item_id, "ack_count": 0, "neg_count": 0})
+            try:
+                inputs = json.loads(str(row["inputs"] or "{}"))
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(inputs, dict):
+                continue
+            outcome = inputs.get("case")
+            if outcome == "ack":
+                cases["ack_count"] += 1
+            elif outcome == "neg":
+                cases["neg_count"] += 1
+        return [counts[key] for key in sorted(counts)]
 
     def all_grades(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades ORDER BY graded_at", ())

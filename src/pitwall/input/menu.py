@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 
 from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.rules.expr import ExprError, Predicate
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Snapshot, spoken_lap_time
 
 Answer = tuple[str, dict[str, str]]  # (case, template values)
 
@@ -277,10 +277,7 @@ def _push(snap: Snapshot) -> Answer:
 
 
 def _lap_time(ms: float) -> str:
-    if ms <= 0 or not math.isfinite(ms):
-        return "?"
-    m, sec = divmod(ms / 1000.0, 60.0)
-    return f"{int(m)}:{sec:04.1f}"
+    return spoken_lap_time(round(ms / 100) * 100)
 
 
 def _race_stat(snap: Snapshot) -> Answer:

@@ -16,6 +16,8 @@ class ConnectionSettings(BaseModel):
     send_rate_hz: int = 30
     http_host: str = "0.0.0.0"
     http_port: int = 8000
+    https_cert: str = ""
+    https_key: str = ""
 
 
 class RecordingSettings(BaseModel):
