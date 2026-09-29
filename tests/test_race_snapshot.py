@@ -180,6 +180,43 @@ def test_pena_track_limit_warning_kind() -> None:
     assert not state.snapshot(30.0).track_warning_recent
 
 
+def _pena(ingest: Ingest, t: float, *fields: int) -> None:
+    pena = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"PENA",
+            "event_data": struct.pack("<BBBBBBB", *fields).ljust(12, b"\0"),
+        },
+        session_time=t,
+    )
+    ingest.on_datagram(pena, t)
+
+
+def test_corner_cut_and_track_limit_warnings_count_separately() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
+    snap = state.snapshot(3.0)
+    assert snap.track_warning_kind == "significant" and snap.track_warning_count == 2
+    _pena(ingest, 4.0, 5, 7, 0, 255, 255, 5, 0)
+    snap = state.snapshot(4.0)
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 1
+    _pena(ingest, 5.0, 5, 29, 0, 255, 255, 5, 0)
+    assert state.snapshot(5.0).track_warning_count == 3
+
+
+def test_penalty_total_includes_new_penalty_before_lap_data_catches_up() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, penalties=3)
+    _pena(ingest, 2.0, 4, 7, 0, 255, 10, 5, 0)
+    assert state.snapshot(2.0).penalty_s == 13
+    _lap(ingest, 2.1, penalties=13)
+    assert state.snapshot(2.1).penalty_s == 13
+    _lap(ingest, 60.0, penalties=0)  # served at the stop
+    assert state.snapshot(60.0).penalty_s == 0
+
+
 def test_weather_crossover_ignores_forecast_after_the_flag() -> None:
     ingest, state = _state()
     state._best_laps[0] = 90_000

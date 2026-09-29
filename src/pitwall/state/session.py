@@ -117,6 +117,13 @@ SECTOR3_VALID = 0x08
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
 PENALTY_TYPE_WARNING = 5
+
+
+def _warning_family(kind: str) -> str:
+    """Warnings the game counts together toward a penalty: corner cuts, running wide."""
+    return kind if kind in ("cut", "overtake") else "limits"
+
+
 # PENA infringement_type -> kind of track-limit / corner-cutting warning.
 _TRACK_WARNING_KINDS = {
     7: "cut",
@@ -409,6 +416,7 @@ class Snapshot:
     penalty_threat_name: str = ""
     track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
     track_warning_recent: bool = False
+    track_warning_count: int = 0  # warnings of the latest warning's kind (cut / track limits)
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -793,6 +801,8 @@ class SessionState:
         self._last_penalty_st: float | None = None
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
+        self._track_warnings: dict[str, int] = {}
+        self._penalty_pending_s = 0
         self.lights_out = False
         self.chequered = False
         self._flag_as_leader = False
@@ -1010,6 +1020,8 @@ class SessionState:
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
         self.penalty_s = car.penalties
+        if car.penalties >= self._penalty_pending_s:
+            self._penalty_pending_s = 0
         self.warnings = car.total_warnings
         self.corner_cut_warnings = car.corner_cutting_warnings
         self.unserved_drive_through = car.num_unserved_drive_through_pens
@@ -1212,6 +1224,8 @@ class SessionState:
                 if ptype == PENALTY_TYPE_WARNING and warn_kind:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
+                    family = _warning_family(warn_kind)
+                    self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
                 if kind:
                     # Warnings, lap invalidations and retirements also arrive as PENA
                     # with time_s = 255; only real penalties are announced.
@@ -1221,6 +1235,11 @@ class SessionState:
                     self.penalty_kind = kind
                     self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
                     self.penalty_time_s = time_s if kind == "time" and time_s != 255 else 0
+                    if self.penalty_time_s:
+                        # Lap data carries the new total a few frames after the event.
+                        self._penalty_pending_s = (
+                            max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
+                        )
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -1831,7 +1850,7 @@ class SessionState:
             unserved_stop_go=self.unserved_stop_go,
             warnings=self.warnings,
             corner_cut_warnings=self.corner_cut_warnings,
-            penalty_s=self.penalty_s,
+            penalty_s=max(self.penalty_s, self._penalty_pending_s),
             penalty_type=self.penalty_type,
             penalty_infringement=self.penalty_infringement,
             penalty_time_s=self.penalty_time_s,
@@ -1841,6 +1860,9 @@ class SessionState:
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
             track_warning_kind=self.track_warning_kind,
+            track_warning_count=self._track_warnings.get(
+                _warning_family(self.track_warning_kind), 0
+            ),
             track_warning_recent=(
                 self._last_track_warning_st is not None
                 and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)

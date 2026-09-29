@@ -557,7 +557,7 @@ rules:
   - id: penalty
     sessions: [race]
     priority: 1
-    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement != 21"
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement not in (7, 8, 9, 21)"
     clear_when: "not penalty_recent"
     cooldown_s: 15
     requires: [event]
@@ -599,10 +599,20 @@ rules:
       - "{penalty_time_s} second penalty, track limits. {penalty_s} total"
       - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
       - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
+  - id: penalty_corner_cut
+    sessions: [race]
+    priority: 1
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement in (7, 8, 9)"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "{penalty_time_s} seconds, corner cut. {penalty_s} total"
+      - "{penalty_time_s} second penalty, cutting. {penalty_s} total"
   - id: track_limit_warning
     sessions: [race]
     priority: 2
-    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn != th.warnings_warn - 1 and corner_cut_warnings % th.warnings_warn != 0"
+    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
     requires: [event]
@@ -611,22 +621,37 @@ rules:
       - "Track limits warning. Stay inside the kerbs"
       - "Track limits warning. Lovely bit of grass you found there"
       - "Warning for track limits. Stewards noticed, so did we"
-    escalate:
-      - after: 2
-        say:
-          - "Track limits again. Are we racing or sightseeing?"
-          - "Another one. The white line is not the racing line"
   - id: track_limit_last_warning
     sessions: [race]
     priority: 1
-    when: "track_warning_recent and track_warning_kind != 'overtake' and corner_cut_warnings % th.warnings_warn == th.warnings_warn - 1"
+    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
     requires: [event]
     say:
-      - "Track limits, {corner_cut_warnings} now. Next one's a penalty"
-      - "Track limits, {corner_cut_warnings}. Next one costs time"
-      - "{corner_cut_warnings} warnings. One more is a penalty"
+      - "Track limits, {track_warning_count} now. Next one's a penalty"
+      - "Track limits, {track_warning_count}. Next one costs time"
+      - "{track_warning_count} track limits. One more is a penalty"
+  - id: corner_cut_warning
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Corner cut warning. Give the time back"
+      - "Warning, cutting the corner. Stay on track"
+  - id: corner_cut_last_warning
+    sessions: [race]
+    priority: 1
+    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Corner cuts, {track_warning_count} now. Next one's a penalty"
+      - "{track_warning_count} corner cuts. One more costs time"
   - id: track_limit_overtake
     sessions: [race]
     priority: 2

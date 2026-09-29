@@ -315,6 +315,7 @@ fuel_margin_laps: float; fuel_per_lap_kg: float; fuel_source: str
 energy_per_lap_mj, energy_lap_delta_mj, energy_laps_to_floor: float; energy_mode: str
 drs_zone_ahead: bool; drs_available: bool (drs_allowed and gap_ahead_s < 1.0 and not sc)
 penalty_s: int; unserved_drive_through: int; unserved_stop_go: int; warnings: int; corner_cut_warnings: int
+track_warning_count: int             # warnings so far of the latest warning's kind (corner cut / running wide)
 penalty_recent: bool                # PENA event for the player inside th.penalty_recent_s
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)
 weather_now: int; rain_pct_now: int; rain_pct_in_10: int; rain_pct_in_30: int
@@ -457,7 +458,9 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |
 | `serve_penalty` | 2 | `unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now','box_in_n')` |
-| `warnings` | 3 | `corner_cut_warnings >= th.warnings_warn` |
+| `track_limit_warning` / `track_limit_last_warning` | 2/1 | running-wide warning (PENA 27–29); last one when `track_warning_count % th.warnings_warn == th.warnings_warn − 1` |
+| `corner_cut_warning` / `corner_cut_last_warning` | 2/1 | corner-cut warning (PENA 7), counted separately from running wide |
+| `penalty_corner_cut` | 1 | time penalty for a corner cut (infringement 7–9) |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
 | `rival_pitted` | 2 | `rival_ahead_pitted or rival_behind_pitted`; the behind call waits until our own tyres are 2 laps old, so it never announces cars that stopped alongside us |
 | `weather_crossover` | 2 | `weather_crossover != ''` |
