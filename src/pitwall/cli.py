@@ -1324,6 +1324,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not (sys.argv[1:] if argv is None else argv):
+        from pitwall.terminal_menu import run_menu
+
+        return run_menu(main)
     args = build_parser().parse_args(argv)
     return args.func(args)  # type: ignore[no-any-return]
 

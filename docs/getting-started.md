@@ -29,6 +29,7 @@ uv sync
 ## Check, then run
 
 ```powershell
+uv run pitwall                       # menu: pick start, debrief, cleanup... by number
 uv run pitwall doctor --seconds 30   # while on track: expect "N datagrams, N accepted"
 uv run pitwall speak                 # you should hear a radio check
 uv run pitwall start                 # ingest + rules + speech + dashboard
