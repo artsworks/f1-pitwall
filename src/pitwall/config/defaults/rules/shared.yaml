@@ -5,7 +5,7 @@ rules:
   - id: out_lap_s3_tyres_cold
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and (session_kind != 'race' or tyre_age_laps == 0) and s3_entry_coldest_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
@@ -16,7 +16,7 @@ rules:
   - id: out_lap_s3_tyres_ready
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and (session_kind != 'race' or tyre_age_laps == 0) and s3_entry_coldest_c >= (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]

@@ -61,11 +61,10 @@ def stop_laps(laps: Sequence[LapRow]) -> list[int]:
         for prev, cur in zip(laps, laps[1:], strict=False)
         if _new_set(prev, cur)
     ]
-    near = {n for pair in changes for n in pair}
-    out = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons and lap.lap_num in near}
-    for prev_n, cur_n in changes:
-        if not any(s in out for s in (prev_n, cur_n)):
-            out.add(prev_n)
+    pitted = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons}
+    out = {
+        cur_n if cur_n in pitted and prev_n not in pitted else prev_n for prev_n, cur_n in changes
+    }
     return sorted(out)
 
 

@@ -1407,13 +1407,14 @@ class SessionState:
         doesn't flap around the thresholds."""
         horizon = self._race_horizon_min()
         ahead = [
-            (int(f.rain_percentage), int(f.time_offset))
+            (int(f.rain_percentage), int(f.time_offset), int(f.weather))
             for f in self._forecast_samples
             if f.session_type == self.session_type
             and 5 <= f.time_offset
             and (f.time_offset <= horizon or f.time_offset <= 10)
         ]
-        rain, rain_min = max(ahead, default=(0, 0))
+        rain, rain_min, _ = max(ahead, default=(0, 0, 0))
+        heavy = any(w >= 4 for _, _, w in ahead)
         self._weather_crossover_pct, self._weather_crossover_min = rain, rain_min
         wet = self._th("rain_wet_pct", 85.0)
         inter = self._th("rain_inter_pct", 60.0)
@@ -1422,7 +1423,7 @@ class SessionState:
         cur = self._weather_crossover
         # Wetter states need the forecast past the band edge; clearing a
         # state needs it back below the band edge (hysteresis).
-        if rain >= wet + (0.0 if cur == "to_inter" else hyst):
+        if heavy and rain >= wet + (0.0 if cur == "to_inter" else hyst):
             cand = "to_wet"
         elif rain >= inter + (0.0 if cur == "to_wet" else hyst):
             cand = "to_inter"
