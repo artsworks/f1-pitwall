@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import sqlite3
 import sys
 import threading
@@ -621,6 +622,13 @@ def _handle_https_disconnect(loop: asyncio.AbstractEventLoop, context: dict[str,
     loop.default_exception_handler(context)
 
 
+class _QuietShutdownTimeout(logging.Filter):
+    """Drop uvicorn's timeout error when an open dashboard tab outlives shutdown."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "timeout graceful shutdown exceeded" not in record.getMessage()
+
+
 async def _serve(
     engine: Engine,
     hub: Hub,
@@ -674,6 +682,7 @@ async def _serve(
         host=settings.connection.http_host,
         port=settings.connection.http_port,
         log_level="warning",
+        lifespan="off",
         timeout_graceful_shutdown=settings.connection.shutdown_timeout_s,
         ssl_certfile=str(Path(settings.connection.https_cert).expanduser())
         if settings.connection.https_cert and settings.connection.https_key
@@ -683,6 +692,7 @@ async def _serve(
         else None,
     )
     server = uvicorn.Server(config)
+    logging.getLogger("uvicorn.error").addFilter(_QuietShutdownTimeout())
     host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
     print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")

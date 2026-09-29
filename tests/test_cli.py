@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from unittest.mock import Mock
 
-from pitwall.cli import _handle_https_disconnect, main
+from pitwall.cli import _handle_https_disconnect, _QuietShutdownTimeout, main
 
 from .synth import mixed_session_packets, write_synthetic_recording
 
@@ -25,6 +26,18 @@ def test_windows_https_disconnect_only_ignores_proactor_peer_resets() -> None:
     other_transport = {**expected, "message": "Exception in callback other_transport"}
     _handle_https_disconnect(loop, other_transport)
     assert loop.default_exception_handler.call_count == 2
+
+
+def test_shutdown_timeout_log_is_dropped_but_other_errors_kept() -> None:
+    quiet = _QuietShutdownTimeout()
+
+    def record(msg: str, *args: object) -> logging.LogRecord:
+        return logging.LogRecord("uvicorn.error", logging.ERROR, __file__, 1, msg, args, None)
+
+    assert not quiet.filter(
+        record("Cancel %s running task(s), timeout graceful shutdown exceeded", 0)
+    )
+    assert quiet.filter(record("Exception in ASGI application"))
 
 
 def test_stats_command(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
