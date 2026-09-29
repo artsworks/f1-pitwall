@@ -61,10 +61,11 @@ def stop_laps(laps: Sequence[LapRow]) -> list[int]:
         for prev, cur in zip(laps, laps[1:], strict=False)
         if _new_set(prev, cur)
     ]
-    pitted = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons}
-    out = {
-        cur_n if cur_n in pitted and prev_n not in pitted else prev_n for prev_n, cur_n in changes
-    }
+    near = {n for pair in changes for n in pair}
+    out = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons and lap.lap_num in near}
+    for prev_n, cur_n in changes:
+        if not any(s in out for s in (prev_n, cur_n)):
+            out.add(prev_n)
     return sorted(out)
 
 
@@ -81,7 +82,7 @@ def stints(laps: Sequence[LapRow], stops: Sequence[int]) -> list[list[LapRow]]:
 def stint_compound(stint: Sequence[LapRow]) -> str:
     """The stint's compound letter from its first lap; the in-lap can already
     carry the new set once tyres are changed before the timing line."""
-    return LETTERS.get(stint[0].visual or stint[0].compound, "?")
+    return LETTERS.get(stint[0].compound, "?")
 
 
 def _green(stint: Sequence[LapRow]) -> list[LapRow]:

@@ -8,14 +8,7 @@ from pathlib import Path
 
 from pitwall.cli import main
 from pitwall.digest import build_digest
-from pitwall.hindsight import (
-    grade_session,
-    linear_deg,
-    stint_compound,
-    stints,
-    stop_cost_s,
-    stop_laps,
-)
+from pitwall.hindsight import grade_session, linear_deg, stints, stop_cost_s, stop_laps
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 from pitwall.tune import tune_from_db
@@ -257,16 +250,3 @@ def test_single_off_lap_is_not_the_cliff(tmp_path: Path) -> None:
     _call(db, "t", "tyre_life", 10, laps_of_pace=6.0)
     (o,) = grade_session(db, UID, {"tyre_cliff_ms": 1500})
     assert o.label == "good" and o.actual == 6.0
-
-
-def test_in_and_out_lap_both_pitted_count_as_one_stop() -> None:
-    laps = [_lap(n, 80_000, 7, n - 1) for n in range(1, 9)]
-    laps[-1] = _lap(9, 95_000, 7, 8, pitted=True)
-    laps += [_lap(10, 100_000, 16, 0, pitted=True), _lap(11, 81_000, 16, 1)]
-    assert stop_laps(laps) == [9]
-
-
-def test_stint_letter_uses_visual_compound() -> None:
-    lap = replace(_lap(1, 80_000, 18, 0), visual=17)  # C3 run as the medium
-    assert stint_compound([lap]) == "M"
-    assert stint_compound([_lap(1, 80_000, 18, 0)]) == "H"

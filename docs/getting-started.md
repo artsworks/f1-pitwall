@@ -29,7 +29,6 @@ uv sync
 ## Check, then run
 
 ```powershell
-uv run pitwall                       # menu: pick start, debrief, cleanup... by number
 uv run pitwall doctor --seconds 30   # while on track: expect "N datagrams, N accepted"
 uv run pitwall speak                 # you should hear a radio check
 uv run pitwall start                 # ingest + rules + speech + dashboard
@@ -96,7 +95,6 @@ These commands are optional:
 | `pitwall evaluate` | Compare calls-on and calls-off sessions |
 | `pitwall propose` | Write threshold candidates for review |
 | `pitwall maintain` | Run upkeep now |
-| `pitwall cleanup` | Delete old learned recordings and caches; lists them and asks first |
 | `pitwall digest` | Write a digest JSON or ingest external recordings |
 
 Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not

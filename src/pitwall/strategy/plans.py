@@ -286,10 +286,6 @@ class PlanTracker:
         i = stops_done - base
         return seq[i:] if 0 <= i < len(seq) else ()
 
-    def _same_plan(self, pid: str, stops_done: int, e: PlanEval) -> bool:
-        rem = self._remaining(pid, stops_done)
-        return rem == e.compounds or (not rem and not e.stop_laps)
-
     def _set(self, pid: str, kind: str, stops_done: int, e: PlanEval) -> None:
         self.seqs[pid] = (stops_done, e.compounds)
         self.kinds[pid] = kind
@@ -352,9 +348,6 @@ class PlanTracker:
             if valid:
                 to = min(valid)[1]
                 self._switch(to, "invalid", lap, 0.0, evals[to])
-            elif not neutralised and self._same_plan(self.active, stops_done, best):
-                self._set(self.active, self.kinds[self.active], stops_done, best)
-                evals[self.active] = best
             elif not neutralised:
                 to = "B" if self.active != "B" else "A"
                 self._set(to, "alternative", stops_done, best)

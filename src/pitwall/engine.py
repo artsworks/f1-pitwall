@@ -645,7 +645,7 @@ class Engine:
             db.upsert_stint(uid, 0, compound, tail[0].lap_num, tail[-1].lap_num, fit)
 
         # Pit loss: measure when an out-lap completes against a pending in-lap.
-        if "pitted" in lap.invalid_reasons and "after_in_lap" not in lap.invalid_reasons:
+        if "pitted" in lap.invalid_reasons:
             self._pit_in_lap = lap
         elif "after_in_lap" in lap.invalid_reasons and self._pit_in_lap is not None:
             in_lap = self._pit_in_lap
@@ -810,9 +810,6 @@ class Engine:
             default=self._th("release_fallback_lap_s", 95.0) * 1000.0,
             min_weight=min_w,
         )
-        base = base_p.value
-        if base_p.source == "default":
-            base = self._measured_pace_ms() or base
         deg = deg_p.value
         if deg_p.source == "learned" and self.db is not None:
             deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap")
@@ -822,7 +819,7 @@ class Engine:
                 deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
             )
         return DegFit(
-            base_ms=base,
+            base_ms=base_p.value,
             deg_ms_per_lap=deg,
             fuel_ms_per_lap=fuel_p.value,
             n=0,
@@ -830,15 +827,6 @@ class Engine:
             confidence={"weekend": 0.45, "learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2),
             source=deg_p.source,
         )
-
-    def _measured_pace_ms(self) -> float:
-        """Median of the player's last 3 green laps this session, valid ones first; 0 if none."""
-        green = [lap for lap in self.state.laps if lap.sc_status == 0 and lap.lap_time_ms > 0]
-        own = [lap.lap_time_ms for lap in green if lap.valid] or [lap.lap_time_ms for lap in green]
-        if not own:
-            return 0.0
-        limit = min(own) * self._th("rival_pace_outlier_ratio", 1.07)
-        return float(median([t for t in own if t <= limit][-3:]))
 
     def fold_open_stint(self) -> None:
         """Persist the current tail stint when a session closes."""
