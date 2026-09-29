@@ -81,7 +81,7 @@ def stints(laps: Sequence[LapRow], stops: Sequence[int]) -> list[list[LapRow]]:
 def stint_compound(stint: Sequence[LapRow]) -> str:
     """The stint's compound letter from its first lap; the in-lap can already
     carry the new set once tyres are changed before the timing line."""
-    return LETTERS.get(stint[0].compound, "?")
+    return LETTERS.get(stint[0].visual or stint[0].compound, "?")
 
 
 def _green(stint: Sequence[LapRow]) -> list[LapRow]:

@@ -28,6 +28,7 @@ class LapSummary:
     weather: int = 0
     tyre_inner_c: float = 0.0
     tyre_surface_c: float = 0.0
+    visual: int = 0
 
 
 class LapAccumulator:
@@ -86,6 +87,7 @@ class LapAccumulator:
         fuel_in_tank: float = 0.0,
         ers_deployed_this_lap: float = 0.0,
         weather: int = 0,
+        visual: int = 0,
     ) -> LapSummary | None:
         """Feed one Lap Data tick for the player. Returns a summary when the
         lap counter increments."""
@@ -151,6 +153,7 @@ class LapAccumulator:
             weather=weather,
             tyre_inner_c=inner_c,
             tyre_surface_c=surface_c,
+            visual=visual,
         )
 
     def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:

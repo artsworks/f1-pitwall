@@ -20,7 +20,7 @@ BASE_MS = 90_000
 SLOPE = 100.0
 
 
-def _race_stream() -> list[tuple[float, bytes]]:
+def _race_stream(out_lap_in_pits: bool = False) -> list[tuple[float, bytes]]:
     """10 player laps on a 5 km race (session_type 15, track 7). Lap 8 pits
     (slow in-lap), lap 9 is the out-lap flagged after_in_lap. Rival session
     history for car 1 with two completed laps."""
@@ -46,7 +46,7 @@ def _race_stream() -> list[tuple[float, bytes]]:
 
     for lap in range(1, 11):
         driver_status = 2 if lap == 9 else 4  # lap 9 starts as IN_LAP -> after_in_lap
-        pit_status = 1 if lap == 8 else 0
+        pit_status = 1 if lap == 8 or (out_lap_in_pits and lap == 9) else 0
         for _ in range(3):
             emit(
                 PacketId.CAR_STATUS,
@@ -110,8 +110,8 @@ def _race_stream() -> list[tuple[float, bytes]]:
     return pkts
 
 
-def _run(tmp_path: Path) -> tuple[VirtualClock, object, Database]:
-    rec = write_packet_stream(tmp_path / "race.f1bin", _race_stream())
+def _run(tmp_path: Path, out_lap_in_pits: bool = False) -> tuple[VirtualClock, object, Database]:
+    rec = write_packet_stream(tmp_path / "race.f1bin", _race_stream(out_lap_in_pits))
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
     asyncio.run(run_replay(rec, engine, None))
@@ -155,6 +155,16 @@ def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
     assert p is not None and p.value == float(ev.loss_ms)
 
 
+def test_out_lap_also_marked_pitted_still_measures_pit_loss(tmp_path: Path) -> None:
+    _, state, db = _run(tmp_path, out_lap_in_pits=True)
+    uid = state.session_uid
+    assert uid is not None
+    out_lap = next(r for r in db.laps_for(uid, 0) if r.lap_num == 9)
+    assert {"pitted", "after_in_lap"} <= set(out_lap.invalid_reasons)
+    events = db.pit_events_for_session(uid)
+    assert [e.lap_num for e in events] == [8]
+
+
 def test_fuel_kg_per_lap_folded(tmp_path: Path) -> None:
     engine, state, db = _run(tmp_path)
     p = db.get_param(7, 0, "fuel_kg_per_lap")
@@ -193,3 +203,9 @@ def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:
     engine._fold_fit(7, 18, clean)
     p = db.get_param(7, 18, "deg_ms_per_lap")
     assert p is not None and p.value == 80.0
+
+
+def test_default_base_pace_uses_measured_laps(tmp_path: Path) -> None:
+    engine, _, _ = _run(tmp_path)
+    # laps 5-7 are the last valid ones; the in/out laps 8-9 are left out
+    assert engine._measured_pace_ms() == BASE_MS + SLOPE * 6

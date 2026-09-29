@@ -1060,6 +1060,7 @@ class SessionState:
             fuel_in_tank=self.fuel_in_tank,
             ers_deployed_this_lap=self.ers_deployed_this_lap_j,
             weather=self.weather,
+            visual=self.tyre_visual,
         )
         if summary is not None:
             self.laps.append(summary)
@@ -1301,10 +1302,11 @@ class SessionState:
         for i in range(emitted, completed):
             lap = pkt.laps[i]
             lap_num = i + 1
-            compound = 0
+            compound = visual = 0
             stint_start = 1
             for stint in stints:
                 compound = stint.tyre_actual_compound
+                visual = stint.tyre_visual_compound
                 if stint.end_lap >= lap_num:
                     break
                 stint_start = stint.end_lap + 1
@@ -1318,6 +1320,7 @@ class SessionState:
                         sector1_ms=lap.sector1_ms,
                         sector2_ms=lap.sector2_ms,
                         compound=compound,
+                        visual=visual,
                         tyre_age_laps=max(0, lap_num - stint_start),
                         fuel_remaining_laps_at_end=0.0,
                         valid=valid,
@@ -2229,6 +2232,9 @@ class SessionState:
         # Player pace = median of the last 3 valid own laps (best-lap
         # fallback); pit-exit rival projected by the docs/03 formula.
         own = [lap.lap_time_ms for lap in self.laps if lap.valid and lap.lap_time_ms > 0]
+        if own:
+            limit = min(own) * self._th("rival_pace_outlier_ratio", 1.07)
+            own = [t for t in own if t <= limit]
         pace_ms = int(median(own[-3:])) if own else self._best_laps.get(self._player_idx, 0)
         pit_s = model.pit_loss_s if model.pit_loss_s > 0 else self._th("pit_loss_default_s", 22.0)
         metres_lost = self.track_length_m * pit_s / (pace_ms / 1000.0) if pace_ms > 0 else math.inf
@@ -2292,7 +2298,10 @@ class SessionState:
                 return 0.0
             if not (math.isfinite(a[1]) and math.isfinite(b[1])):
                 return 0.0
-            return round(a[1] - b[1], 3)
+            change = a[1] - b[1]
+            if abs(change) > self._th("gap_trend_max_s", 5.0):
+                return 0.0  # a pit stop or incident, not racing pace
+            return round(change, 3)
 
         status = self.cars_status
 

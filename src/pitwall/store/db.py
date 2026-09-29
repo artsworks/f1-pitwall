@@ -250,6 +250,10 @@ MIGRATIONS: list[str] = [
         ran_at REAL
     );
     """,
+    # 10: visual compound (soft/medium/hard) beside the C-number compound.
+    """
+    ALTER TABLE laps ADD COLUMN visual INT DEFAULT 0;
+    """,
 ]
 
 
@@ -274,6 +278,7 @@ class LapRow:
     weather: int
     tyre_inner_c: float = 0.0
     tyre_surface_c: float = 0.0
+    visual: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,8 +447,8 @@ class Database:
                 "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms,"
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
                 " valid, invalid_reasons, wear_pct, fuel_kg, ers_deployed_j,"
-                " sc_status, weather, tyre_inner_c, tyre_surface_c)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " sc_status, weather, tyre_inner_c, tyre_surface_c, visual)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -463,6 +468,7 @@ class Database:
                     lap.weather,
                     lap.tyre_inner_c,
                     lap.tyre_surface_c,
+                    lap.visual,
                 ),
             )
 
@@ -690,6 +696,7 @@ class Database:
             weather=int(r["weather"] or 0),
             tyre_inner_c=float(r["tyre_inner_c"] or 0.0),
             tyre_surface_c=float(r["tyre_surface_c"] or 0.0),
+            visual=int(r["visual"] or 0),
         )
 
     def upsert_stint(
