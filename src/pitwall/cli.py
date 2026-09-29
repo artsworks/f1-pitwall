@@ -1081,6 +1081,55 @@ def cmd_maintain(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mb(n: int) -> str:
+    return f"{n / 1e6:.1f} MB"
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    """List old files that are safe to delete; delete them after confirmation."""
+    from pitwall.cleanup import apply, plan_cleanup
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("cleanup: persistence disabled, recordings are never deleted")
+    db_path = (
+        Path(db.path).expanduser()
+        if db is not None
+        else Path(settings.persistence.path).expanduser()
+    )
+    plan = plan_cleanup(
+        Path(args.recordings or settings.recording.directory),
+        db_path.parent,
+        Path(settings.speech.voices_dir),
+        db.ingested_uids() if db is not None else set(),
+        args.days,
+    )
+    if plan.kept_unlearned:
+        print(f"keeping {plan.kept_unlearned} old recording(s) not learned yet")
+    if not plan.delete:
+        print("cleanup: nothing to delete")
+        return 0
+    by_reason: dict[str, list[int]] = {}
+    for c in plan.delete:
+        print(f"  {_mb(c.size):>9}  {c.path}")
+        by_reason.setdefault(c.reason, []).append(c.size)
+    for reason, sizes in by_reason.items():
+        print(f"{len(sizes)} x {reason}: {_mb(sum(sizes))}")
+    prompt = f"Delete {len(plan.delete)} file(s), {_mb(plan.total_bytes)}? [y/N] "
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("cleanup: not confirmed (use --yes to run without a prompt)")
+            return 1
+        if input(prompt).strip().lower() not in ("y", "yes"):
+            print("cleanup: cancelled, nothing deleted")
+            return 1
+    n, freed = apply(plan)
+    print(f"cleanup: deleted {n} file(s), freed {_mb(freed)}")
+    return 0
+
+
 def cmd_compress(args: argparse.Namespace) -> int:
     dst = compress_recording(Path(args.file))
     print(f"compressed -> {dst}")
@@ -1141,6 +1190,13 @@ def build_parser() -> argparse.ArgumentParser:
     mt = sub.add_parser("maintain", help="repair learned state (runs automatically on start)")
     mt.add_argument("--db", default=None)
     mt.set_defaults(func=cmd_maintain)
+
+    cu = sub.add_parser("cleanup", help="delete old learned recordings and caches (asks first)")
+    cu.add_argument("--days", type=float, default=30.0, help="only files older than this")
+    cu.add_argument("--recordings", default=None, help="recordings folder (default: settings)")
+    cu.add_argument("--db", default=None)
+    cu.add_argument("--yes", action="store_true", help="delete without asking")
+    cu.set_defaults(func=cmd_cleanup)
 
     dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
     dg.add_argument("paths", nargs="*", help="recordings to ingest")

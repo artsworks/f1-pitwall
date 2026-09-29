@@ -1089,6 +1089,10 @@ class Database:
             return rows
         return self.sessions_for_track(track_id)
 
+    def ingested_uids(self) -> set[int]:
+        rows = self._conn.execute("SELECT session_uid FROM ingested").fetchall()
+        return {_uid_from_sql(int(r[0])) for r in rows}
+
     def ingested_count(self, track_id: int | None = None) -> int:
         if track_id is None:
             row = self._conn.execute("SELECT count(*) FROM ingested").fetchone()
