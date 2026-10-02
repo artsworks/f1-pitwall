@@ -219,6 +219,23 @@ class VoiceSettings(BaseModel):
     intents: dict[str, list[str]] = Field(default_factory=dict)  # intent -> phrases
 
 
+class JevSettings(BaseModel):
+    """Jev call arbitration (ADR 0010). Off by default; `arbitrate` stays off
+    until a shadow replay shows the ranking beats the heap order."""
+
+    enabled: bool = False  # master switch: no request is ever sent while False
+    arbitrate: bool = False  # live: reorder queued P2/P3 calls by Jev's pick
+    grade: bool = False  # `pitwall tune --judge jev` may grade decision-log records
+    endpoint: str = "https://ai-gateway.vercel.sh/v1/evaluate"
+    model: str = "typesafe-ai/jev"
+    api_key_env: str = "VERCEL_AI_GATEWAY_KEY"
+    timeout_ms: int = 300
+    confidence_threshold: float = 0.6
+    margin: float = 0.15  # pick must beat the heap's own choice by this much
+    sticky_s: float = 5.0
+    max_candidates: int = Field(default=5, ge=2)
+
+
 class PersistenceSettings(BaseModel):
     enabled: bool = True
     path: str = "~/.pitwall/pitwall.sqlite"
@@ -317,6 +334,7 @@ class Settings(BaseModel):
     menu: MenuSettings = Field(default_factory=MenuSettings)
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
+    jev: JevSettings = Field(default_factory=JevSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
     track: TrackOverlay | None = None

@@ -251,3 +251,18 @@ input:
     - {bit: 0x04000000, item: race_stat}  # UDP Action 7: most relevant race stat
     - {bit: 0x08000000, item: fight}      # UDP Action 8: fight + pace briefing
   negative_mute_laps: 3
+jev:
+  # Jev call arbitration (docs/adr/0010). Rules still produce every call and word;
+  # Jev only picks which queued P2/P3 call goes first. Off until a shadow replay
+  # (`pitwall replay FILE --arbitrate shadow`) shows the picks beat the heap order.
+  enabled: false
+  arbitrate: false
+  grade: false
+  endpoint: "https://ai-gateway.vercel.sh/v1/evaluate"
+  model: "typesafe-ai/jev"
+  api_key_env: VERCEL_AI_GATEWAY_KEY
+  timeout_ms: 300
+  confidence_threshold: 0.6
+  margin: 0.15
+  sticky_s: 5
+  max_candidates: 5

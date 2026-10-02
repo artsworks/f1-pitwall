@@ -2,6 +2,7 @@
 
 - **Status:** accepted; the decision part of "Why not an LLM" is superseded by
   [ADR 0009](0009-llm-chooser-with-rule-veto.md). Phrasing stays as decided here.
+  [ADR 0010](0010-jev-call-arbitration.md) applies 0009 to the order of queued calls.
 - **Context:** live session, exploratory laps with repeated front lock-ups
 
 ## What we saw

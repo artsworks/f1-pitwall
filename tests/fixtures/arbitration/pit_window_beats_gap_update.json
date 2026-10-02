@@ -1,0 +1,86 @@
+{
+  "digest": {
+    "now": 600.0,
+    "session_uid": 42,
+    "session": "race",
+    "lap": 12,
+    "total_laps": 20,
+    "laps_remaining": 8,
+    "position": 5,
+    "race_phase": "mid",
+    "safety_car": 0,
+    "stint_phase": "pit_window",
+    "tyres": {
+      "compound": 17,
+      "age_laps": 12,
+      "wear_max_pct": 38.0,
+      "deg_ms_per_lap": 85.0,
+      "laps_of_pace": 4.0,
+      "graining": false,
+      "overheat": false
+    },
+    "gaps": {
+      "ahead_s": 1.4,
+      "behind_s": 3.0,
+      "trend_ahead_s": -0.2,
+      "trend_behind_s": 0.1
+    },
+    "track_evolution": {
+      "lap_trend_ms": 40.0,
+      "weather": 0,
+      "rain_pct": 0
+    },
+    "plan": {
+      "active": "A",
+      "on_plan": true,
+      "target_lap": 13,
+      "window_open": true,
+      "next_compound": "hard"
+    }
+  },
+  "candidates": [
+    {
+      "call_id": "c1",
+      "rule_id": "gap_ahead",
+      "priority": 2,
+      "t": 600.0,
+      "lap": 12,
+      "session_time": 1500.0,
+      "text": "Gap ahead 1.4",
+      "tags": [],
+      "inputs": {}
+    },
+    {
+      "call_id": "c2",
+      "rule_id": "plan_box_next_lap",
+      "priority": 2,
+      "t": 600.0,
+      "lap": 12,
+      "session_time": 1500.0,
+      "text": "Box next lap, plan A",
+      "tags": [],
+      "inputs": {}
+    }
+  ],
+  "response": {
+    "model": "typesafe-ai/jev",
+    "answers": {
+      "best_call": {
+        "type": "choice",
+        "choice": "c2",
+        "probabilities": {
+          "c1": 0.12,
+          "c2": 0.84,
+          "none": 0.04
+        }
+      }
+    }
+  },
+  "expect": {
+    "arbitrated_by": "jev",
+    "order": [
+      "plan_box_next_lap",
+      "gap_ahead"
+    ]
+  }
+}

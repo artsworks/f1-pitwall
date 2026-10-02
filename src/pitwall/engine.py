@@ -75,6 +75,7 @@ from pitwall.strategy.plans import (
     view_fields,
 )
 from pitwall.tune import load_cooldown_mults
+from pitwall.voice.arbitrator import Arbitrator
 
 
 def action_bits(inp: InputSettings) -> dict[str, int]:
@@ -1589,9 +1590,11 @@ def build_engine(
     record_to: Path | None = None,
     db: Any = None,
     session_started_at: float | None = None,
+    arbitrator: Arbitrator | None = None,
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
-    SQLite mirroring (replays opt in via the CLI)."""
+    SQLite mirroring (replays opt in via the CLI). An arbitrator here runs
+    inline (replays and diffs are deterministic, never wall-clock bound)."""
     store = ConfigStore(overrides=overrides, rules_dir=rules_dir)
     settings = store.current()
     clock = clock or WallClock()
@@ -1639,6 +1642,9 @@ def build_engine(
         metrics=Metrics(),
         budget_override=mode.get("call_budget_per_lap"),
         input=settings.input,
+        arbitrator=arbitrator,
+        arbitration=settings.jev,
+        inline_arbitration=True,
     )
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
     engine.session_origin_started_at = session_started_at

@@ -5,16 +5,29 @@ from __future__ import annotations
 
 import heapq
 import itertools
+import time
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.clock import Clock
-from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
+from pitwall.config.models import InputSettings, JevSettings, PolicySettings, RuleDefModel
 from pitwall.input.press import Press
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate
 from pitwall.state.session import Snapshot
+from pitwall.voice.arbitrator import (
+    ArbCandidate,
+    Arbitrator,
+    Ranking,
+    arb_candidate,
+    build_digest,
+    decision_key,
+    heap_order,
+    name_labels,
+)
 
 _VERBOSITY_PRIORITIES = {
     "silent": set(),
@@ -58,12 +71,36 @@ class Call:
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     not_before: float = 0.0  # held in the queue until this time (min-gap spacing)
+    session_time: float = 0.0
+
+
+_QUEUE_SEQ = itertools.count()
 
 
 @dataclass(order=True)
 class _Queued:
     sort_key: tuple[int, float] = field(compare=True)
     call: Call = field(compare=False)
+    arb_rank: int = field(default=0, compare=True)  # -1: an arbitrator moved it to the head
+    seq: int = field(default_factory=lambda: next(_QUEUE_SEQ), compare=False)
+
+
+@dataclass(slots=True)
+class _PendingRanking:
+    """An arbitration request started at submit, applied at drain (ADR 0010)."""
+
+    key: str
+    ids: tuple[str, ...]
+    candidates: list[ArbCandidate]
+    digest: dict[str, Any]
+    future: Future[Ranking]
+    started: float  # wall clock
+
+
+@dataclass(slots=True)
+class _Applied:
+    key: str
+    ranking: Ranking
 
 
 class LogSink:
@@ -88,6 +125,10 @@ class Dispatcher:
         metrics: Metrics | None = None,
         budget_override: int | None = None,
         input: InputSettings | None = None,
+        arbitrator: Arbitrator | None = None,
+        arbitration: JevSettings | None = None,
+        inline_arbitration: bool = False,
+        wall: Callable[[], float] = time.monotonic,
     ) -> None:
         self.policy = policy
         self.input = input or InputSettings()
@@ -121,6 +162,14 @@ class Dispatcher:
         self._acked: dict[str, int] = {}  # rule_id -> lap acknowledged on
         self._defs: dict[str, RuleDefModel] = {}
         self._reply_n: dict[str, int] = {}
+        # Call arbitration (ADR 0010): None keeps the plain heap order.
+        self.arbitrator = arbitrator
+        self.arbitration = arbitration or JevSettings()
+        self._inline_arbitration = inline_arbitration
+        self._wall = wall
+        self._executor: ThreadPoolExecutor | None = None
+        self._arb_pending: _PendingRanking | None = None
+        self._arb_by_call: dict[str, _Applied] = {}
 
     @property
     def last_call_t(self) -> float | None:
@@ -159,10 +208,145 @@ class Dispatcher:
                 still_true=cand.still_true,
                 inputs=cand.inputs,
                 not_before=not_before,
+                session_time=snapshot.session_time,
             )
             self._book_call(call, cand, not_before)
             heapq.heappush(self._queue, _Queued((cand.priority, now), call))
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
+        if self.arbitrator is not None:
+            self._prefetch(snapshot)
+
+    # -- arbitration (ADR 0010) ---------------------------------------------
+
+    @staticmethod
+    def _arbitrable(call: Call) -> bool:
+        """Queued P2/P3 rule calls. P1, replies, menu prompts and say-agains never are."""
+        if call.priority == 1 or call.rule_id == "reply":
+            return False
+        return not {"reply", "menu", "say_again"} & set(call.tags)
+
+    def _arb_queue(self) -> list[_Queued]:
+        queued = sorted(
+            (q for q in self._queue if self._arbitrable(q.call)),
+            key=lambda q: (q.sort_key, q.arb_rank, q.call.not_before, q.seq),
+        )
+        return queued[: self.arbitration.max_candidates]
+
+    def _prefetch(self, snapshot: Snapshot) -> None:
+        """Start ranking the queued P2/P3 calls without blocking the tick."""
+        assert self.arbitrator is not None
+        queued = self._arb_queue()
+        if len(queued) < 2:
+            return
+        labels = name_labels(snapshot)
+        cands = [
+            arb_candidate(
+                q.call.id,
+                q.call.rule_id,
+                q.call.priority,
+                q.call.t,
+                q.call.lap,
+                q.call.session_time,
+                q.call.text,
+                q.call.tags,
+                q.call.inputs,
+                labels,
+            )
+            for q in queued
+        ]
+        key = decision_key(snapshot.session_uid, cands)
+        if self._arb_pending is not None and self._arb_pending.key == key:
+            return
+        digest = build_digest(snapshot)
+        future: Future[Ranking]
+        if self._inline_arbitration:
+            future = Future()
+            try:
+                future.set_result(self.arbitrator.rank(cands, digest))
+            except Exception as e:  # any arbitrator failure means heap order
+                future.set_exception(e)
+        else:
+            if self._executor is None:
+                self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="arbitrate")
+            future = self._executor.submit(self.arbitrator.rank, cands, digest)
+        self._arb_pending = _PendingRanking(
+            key=key,
+            ids=heap_order(cands),
+            candidates=cands,
+            digest=digest,
+            future=future,
+            started=self._wall(),
+        )
+
+    def _resolve_ranking(self) -> bool:
+        """Apply a finished ranking to the queue. True = hold P2/P3 calls this drain."""
+        p = self._arb_pending
+        if p is None:
+            return False
+        queued = {q.call.id: q for q in self._queue if self._arbitrable(q.call)}
+        if any(i not in queued for i in p.ids):
+            self._arb_pending = None  # a candidate left the queue: the question is stale
+            return False
+        if not p.future.done():
+            elapsed = self._wall() - p.started
+            if elapsed * 1000 < self.arbitration.timeout_ms:
+                return True
+            ranking = Ranking(
+                p.ids,
+                "jev_timeout",
+                latency_ms=round(elapsed * 1000, 1),
+                model=self.arbitrator.model if self.arbitrator else "",
+            )
+        else:
+            try:
+                ranking = p.future.result()
+            except Exception:
+                ranking = Ranking(
+                    p.ids, "jev_error", model=self.arbitrator.model if self.arbitrator else ""
+                )
+        self._arb_pending = None
+        if set(ranking.order) != set(p.ids):
+            ranking = Ranking(p.ids, "jev_error", model=ranking.model)
+        self._apply_ranking(ranking, queued)
+        applied = _Applied(p.key, ranking)
+        for i in p.ids:
+            self._arb_by_call[i] = applied
+        snap = self.latest_snapshot
+        self.log.write(
+            {
+                "t": snap.now if snap else self.clock.now(),
+                "session_time": snap.session_time if snap else None,
+                "lap": snap.lap_num if snap else None,
+                "lap_distance": snap.lap_distance if snap else None,
+                "call_id": ranking.order[0],
+                "rule_id": None,
+                "outcome": "arbitrated",
+                "suppressed_by": None,
+                "inputs": {},
+                "text": "",
+                "arb_key": p.key,
+                "arb_order": [p.ids.index(i) for i in ranking.order],
+                "candidates": [c.to_json() for c in p.candidates],
+                "digest": p.digest,
+                **ranking.fields(),
+            }
+        )
+        return False
+
+    def _apply_ranking(self, ranking: Ranking, queued: dict[str, _Queued]) -> None:
+        """Move the first call in `ranking` to the head: the best sort key and the earliest
+        min-gap slot. The other candidates keep their order in the remaining slots."""
+        items = [queued[i] for i in ranking.order]
+        first = items[0]
+        spoken = sorted(items, key=lambda q: (q.call.not_before, q.sort_key, q.arb_rank, q.seq))
+        best_key = min(q.sort_key for q in items)
+        if first is spoken[0] and first.sort_key == best_key:
+            return
+        slots = sorted(q.call.not_before for q in items)
+        for q, slot in zip([first, *(q for q in spoken if q is not first)], slots, strict=True):
+            q.call.not_before = slot
+        first.sort_key, first.arb_rank = best_key, -1
+        heapq.heapify(self._queue)
 
     def _suppression_reason(
         self, cand: Candidate, snapshot: Snapshot, now: float, allowed_p: set[int]
@@ -243,6 +427,7 @@ class Dispatcher:
         held: list[_Queued] = []  # P3 calls waiting for a straight
         snap = self.latest_snapshot
         on_straight = bool(snap.on_straight) if snap is not None else False
+        hold_arbitrable = self._resolve_ranking()
         while self._queue:
             q = heapq.heappop(self._queue)
             call = q.call
@@ -255,7 +440,11 @@ class Dispatcher:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
                 continue
-            if now < call.not_before or (waits_for_straight and not on_straight):
+            if (
+                now < call.not_before
+                or (waits_for_straight and not on_straight)
+                or (hold_arbitrable and self._arbitrable(call))
+            ):
                 held.append(q)
                 continue
             if call.still_true is not None and self.latest_snapshot is not None:
@@ -354,6 +543,7 @@ class Dispatcher:
     def purge(self, reason: str, now: float | None = None) -> int:
         """Drop every queued (not yet spoken) call, logging each as suppressed."""
         purged = 0
+        self._arb_pending = None
         while self._queue:
             call = heapq.heappop(self._queue).call
             self._log_call(call, "suppressed", reason)
@@ -363,6 +553,8 @@ class Dispatcher:
     def reset_session(self) -> None:
         """New session: clear the queue and per-stint/per-lap budgets."""
         self._queue.clear()
+        self._arb_pending = None
+        self._arb_by_call.clear()
         self._fires_this_stint.clear()
         self._calls_this_lap = 0
         self._calls_lap = (0, 0, 0)
@@ -563,6 +755,8 @@ class Dispatcher:
 
     def _log_call(self, call: Call, outcome: str, by: str | None) -> None:
         snap = self.latest_snapshot
+        applied = self._arb_by_call.pop(call.id, None)
+        arb = {"arb_key": applied.key, **applied.ranking.fields()} if applied else {}
         self.log.write(
             {
                 "t": snap.now if snap else self.clock.now(),
@@ -578,5 +772,6 @@ class Dispatcher:
                 "text": call.text,
                 "active_plan": snap.active_plan if snap else "",
                 "on_plan": snap.on_plan if snap and snap.active_plan else None,
+                **arb,
             }
         )
