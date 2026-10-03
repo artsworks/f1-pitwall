@@ -73,15 +73,15 @@ class WinsoundPlayer:
         self._slot ^= 1
         path = self._dir / f"call{self._slot}.wav"
         path.write_bytes(wav)
-        winsound.PlaySound(  # type: ignore[attr-defined]
+        winsound.PlaySound(  # type: ignore[attr-defined, unused-ignore]
             str(path),
-            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,  # type: ignore[attr-defined]
+            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,  # type: ignore[attr-defined, unused-ignore]
         )
 
     def stop(self) -> None:
         import winsound
 
-        winsound.PlaySound(None, 0)  # type: ignore[attr-defined]
+        winsound.PlaySound(None, 0)  # type: ignore[attr-defined, unused-ignore]
 
 
 def voice_path(settings: SpeechSettings, name: str | None = None) -> Path:
