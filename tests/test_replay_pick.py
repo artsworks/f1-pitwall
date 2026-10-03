@@ -12,6 +12,7 @@ from pitwall.net.replay import load_recorded_picks
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
 from pitwall.voice.arbitrator import RecordedArbitrator
+
 from .test_dispatcher_arbitration import CollectSink, PickRule, _cand, _snap
 
 
