@@ -169,34 +169,35 @@ def ingest_recordings(
             if uid and db.is_ingested(uid, DIGEST_VERSION):
                 results.append(IngestResult(path, uid, "skipped", []))
                 continue
-            digest_only = bool(uid and db.session_has_laps(uid))
-            if not digest_only:
-                engine = build_engine(
-                    clock=VirtualClock(),
-                    overrides={"engine": {"heartbeat_s": 0}},
-                    sinks=[],
-                    db=db,
-                    decision_log_fp=io.StringIO(),
-                    session_started_at=header.wall_clock_start_us / 1_000_000.0,
+            with db.transaction():
+                digest_only = bool(uid and db.session_has_laps(uid))
+                if not digest_only:
+                    engine = build_engine(
+                        clock=VirtualClock(),
+                        overrides={"engine": {"heartbeat_s": 0}},
+                        sinks=[],
+                        db=db,
+                        decision_log_fp=io.StringIO(),
+                        session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                    )
+                    asyncio.run(run_replay(path, engine))
+                    engine.fold_open_stint()
+                    uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
+                if not uid:
+                    raise ValueError("recording did not contain a session UID")
+                session = db.session_row(uid) or {}
+                origin_mode = calls_mode or str(header.metadata.get("calls_mode") or "")
+                if not origin_mode:
+                    origin_mode = str(session.get("calls_mode") or "")
+                db.set_session_origin(
+                    uid,
+                    started_at=header.wall_clock_start_us / 1_000_000.0,
+                    recording_path=str(path),
+                    calls_mode=origin_mode,
                 )
-                asyncio.run(run_replay(path, engine))
-                engine.fold_open_stint()
-                uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
-            if not uid:
-                raise ValueError("recording did not contain a session UID")
-            session = db.session_row(uid) or {}
-            origin_mode = calls_mode or str(header.metadata.get("calls_mode") or "")
-            if not origin_mode:
-                origin_mode = str(session.get("calls_mode") or "")
-            db.set_session_origin(
-                uid,
-                started_at=header.wall_clock_start_us / 1_000_000.0,
-                recording_path=str(path),
-                calls_mode=origin_mode,
-            )
-            digest = build_digest(db, uid, settings.thresholds)
-            (digest_dir / f"{uid}.json").write_text(json.dumps(digest, indent=2, default=str))
-            db.mark_ingested(uid, DIGEST_VERSION, str(path))
+                digest = build_digest(db, uid, settings.thresholds)
+                (digest_dir / f"{uid}.json").write_text(json.dumps(digest, indent=2, default=str))
+                db.mark_ingested(uid, DIGEST_VERSION, str(path))
             findings = [str(item) for item in digest.get("findings", [])]
             results.append(
                 IngestResult(

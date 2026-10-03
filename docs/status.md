@@ -34,3 +34,9 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 - Calibration remains `converged: false`.
 - There are no calls-off sessions yet, so `pitwall evaluate` has no on/off comparison.
 - LLM debrief prose is deferred (item 21).
+- Windows shutdown and EA Javelin compatibility still need a local check. Linux
+  tests cannot verify either.
+- The later 25% race fixes were reverted at the user's request. Mixed-weather
+  calls, drive-through tyre calls, stop summaries and early-race pace need a
+  separate follow-up. The numbered menu remains removed.
+- CI checks Linux lint, formatting and types. The full test suite runs locally.

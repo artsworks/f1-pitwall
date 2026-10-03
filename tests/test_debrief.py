@@ -12,6 +12,15 @@ from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 
 
+def test_debrief_preserves_track_zero_and_its_learning() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1, track_id=0, session_type=15)
+    db.set_param(0, 17, "deg_ms_per_lap", 123.4, 5)
+    report = render_debrief(db, 1, ConfigStore().current())
+    assert "<td>0</td>" in report
+    assert "123.4" in report
+
+
 def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> None:
     db = Database(tmp_path / "session.sqlite")
     db.upsert_session(140, track_id=7, session_type=15, started_at=1.0)

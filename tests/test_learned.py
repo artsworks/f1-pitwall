@@ -77,6 +77,18 @@ def test_learned_state_and_formatter_show_sources_and_feedback(tmp_path) -> None
     assert "energy energy_deployed_j_p50" in text and f"battle {PASS_DRS}" in text
 
 
+def test_learned_state_shows_both_race_distances() -> None:
+    db = Database(":memory:")
+    for distance, value in ((13, 250), (52, 90)):
+        db.set_param(7, 17, f"deg_ms_per_lap@{distance}L", value, 10)
+    state = learned_state(db, ConfigStore().current())
+    track = state["tracks"][0]
+    assert track["race_distances"][13][17]["deg_ms_per_lap"]["value"] == 250
+    assert track["race_distances"][52][17]["deg_ms_per_lap"]["value"] == 90
+    text = format_learned(state)
+    assert "13-lap race" in text and "52-lap race" in text
+
+
 def test_stats_learned_json_and_empty_doctor_are_safe(tmp_path, monkeypatch, capsys) -> None:
     db_path = tmp_path / "empty.sqlite"
     assert main(["stats", "--learned", "--db", str(db_path), "--json"]) == 0

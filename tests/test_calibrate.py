@@ -86,6 +86,87 @@ def test_calibration_gate_prevents_low_weight_writes(tmp_path) -> None:
     assert not overlay_dir.exists()
 
 
+def test_calibration_does_not_write_rank_deficient_pace() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1, track_id=7, session_type=1)
+    db.set_param(7, 17, "deg_ms_per_lap", 120, 5)
+    for age in range(1, 8):
+        db.insert_lap(
+            1,
+            0,
+            LapSummary(
+                age, 90_000 + 100 * age, 30_000, 30_000, 17, age, 0, True, [], fuel_kg=20 - age
+            ),
+        )
+    report = calibrate(db, ConfigStore().current(), track_id=7)["tracks"][0]
+    assert not report["k_identifiable"]
+    assert not any(w["name"] in ("base_ms", "deg_ms_per_lap") for w in report["writes"])
+    assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
+
+
+def test_calibration_preserves_separate_race_distances_and_practice() -> None:
+    db = Database(":memory:")
+    for uid, distance, deg in ((1, 13, 250), (2, 52, 90), (3, 0, 120)):
+        db.upsert_session(uid, track_id=7, session_type=15 if distance else 1)
+        db.set_session_total_laps(uid, distance)
+        for age in range(1, 8):
+            rate = 2 if distance == 52 else 1
+            fuel = 25 - rate * age + 0.2 * (age % 2)
+            db.insert_lap(
+                uid,
+                0,
+                LapSummary(
+                    age,
+                    round(90_000 + deg * age + 35 * fuel),
+                    30_000,
+                    30_000,
+                    17,
+                    age,
+                    0,
+                    True,
+                    [],
+                    fuel_kg=fuel,
+                ),
+            )
+    calibrate(db, ConfigStore().current(), track_id=7)
+    for name, expected in (
+        ("deg_ms_per_lap@13L", 250),
+        ("deg_ms_per_lap@52L", 90),
+        ("deg_ms_per_lap", 120),
+    ):
+        assert db.get_param(7, 17, name).value == pytest.approx(expected, abs=0.1)
+    assert db.get_param(7, 17, "fuel_ms_per_lap@13L").value == pytest.approx(35, abs=0.1)
+    assert db.get_param(7, 17, "fuel_ms_per_lap@52L").value == pytest.approx(70, abs=0.1)
+    assert db.get_param(7, 17, "deg_fuel_ref_ms_per_lap@52L").value == pytest.approx(70, abs=0.1)
+
+
+def test_unknown_race_length_does_not_replace_practice_priors() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1, track_id=7, session_type=15)
+    db.set_param(7, 17, "deg_ms_per_lap", 120, 5)
+    for age in range(1, 8):
+        fuel = 25 - age + 0.2 * (age % 2)
+        db.insert_lap(
+            1,
+            0,
+            LapSummary(
+                age,
+                round(90_000 + 250 * age + 35 * fuel),
+                30_000,
+                30_000,
+                17,
+                age,
+                0,
+                True,
+                [],
+                fuel_kg=fuel,
+            ),
+        )
+    report = calibrate(db, ConfigStore().current(), track_id=7)["tracks"][0]
+    assert report["compounds"][17]["status"] == "race length unknown"
+    assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
+
+
 def test_corpus_proposals_are_review_only_and_require_convergence(tmp_path) -> None:
     db, settings = _fit_corpus(tmp_path)
     before = [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()]

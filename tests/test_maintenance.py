@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import io
+import sqlite3
+
+import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
@@ -10,6 +13,7 @@ from pitwall.engine import build_engine
 from pitwall.maintenance import maintain
 from pitwall.model.deg import DegFit, corner_wear_life, fit_is_clean, planning_fit, scoped
 from pitwall.store.db import Database
+from pitwall.tune import AB_PREFIX, COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 
 TH = ConfigStore().current().thresholds
 
@@ -103,6 +107,39 @@ def test_maintain_quarantines_rebuilds_and_is_idempotent(tmp_path) -> None:
 def test_maintain_on_empty_db(tmp_path) -> None:
     db = Database(tmp_path / "empty.sqlite")
     assert maintain(db, TH).summary() == "learned state clean"
+
+
+def test_maintain_keeps_global_rule_tuning() -> None:
+    db = Database(":memory:")
+    for name, value in ((COOLDOWN_PREFIX + "box_now", 4.0), (AB_PREFIX + "box_now", -2.0)):
+        db.set_param(TUNE_TRACK, TUNE_COMPOUND, name, value, 3.0)
+    db.set_param(-1, 17, "base_ms", 95_000, 3.0)
+    for _ in range(2):
+        maintain(db, TH)
+        assert db.get_param(TUNE_TRACK, TUNE_COMPOUND, COOLDOWN_PREFIX + "box_now").value == 4.0
+        assert db.get_param(TUNE_TRACK, TUNE_COMPOUND, AB_PREFIX + "box_now").value == -2.0
+    assert db.get_param(-1, 17, "base_ms") is None
+    assert len(db.quarantined_params()) == 1
+
+
+def test_failed_upkeep_rolls_back_params_and_version(monkeypatch) -> None:
+    import pitwall.maintenance
+
+    db = Database(":memory:")
+    db.set_param(7, 17, "deg_ms_per_lap", 120, 3)
+
+    def fail_grade(db, th):
+        raise sqlite3.OperationalError("injected database failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(pitwall.maintenance, "grade_ungraded", fail_grade)
+        with pytest.raises(sqlite3.OperationalError):
+            maintain(db, TH)
+    assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
+    assert db.maintenance_version("learn_rebuild") == 0
+    assert db.quarantined_params() == []
+    maintain(db, TH)
+    assert db.maintenance_version("learn_rebuild") > 0
 
 
 def test_race_priors_do_not_mix_race_distances() -> None:

@@ -83,7 +83,9 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
         grade_count = sum(
             grade["grade"] in ("noise", "wrong", "too_late") for grade in db.grades_for_session(uid)
         )
-        groups[int(session.get("track_id") or -1)][str(mode)].append(
+        groups[int(session["track_id"] if session["track_id"] is not None else -1)][
+            str(mode)
+        ].append(
             {
                 "uid": uid,
                 "clean": clean,

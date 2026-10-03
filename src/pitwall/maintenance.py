@@ -21,6 +21,7 @@ from pitwall.hindsight import grade_and_store
 from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, ModelParam
+from pitwall.tune import AB_PREFIX, COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 
 LEARN_VERSION = 2
 STINT_PARAMS = ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap", DEG_FUEL_REF)
@@ -53,6 +54,12 @@ def _stint_param(name: str) -> str:
 
 
 def _bad_reason(p: ModelParam, th: Mapping[str, object]) -> str:
+    if (
+        p.track_id == TUNE_TRACK
+        and p.compound == TUNE_COMPOUND
+        and p.name.startswith((COOLDOWN_PREFIX, AB_PREFIX))
+    ):
+        return ""
     if p.track_id < 0:
         return "unknown_track"
     base = _stint_param(p.name)
@@ -168,9 +175,10 @@ def grade_ungraded(db: Database, th: Mapping[str, object]) -> int:
 
 def maintain(db: Database, th: Mapping[str, object]) -> MaintenanceReport:
     report = MaintenanceReport()
-    if db.maintenance_version("learn_rebuild") < LEARN_VERSION:
-        report.rebuilt, report.quarantined = rebuild_stint_params(db, th)
-        db.set_maintenance_version("learn_rebuild", LEARN_VERSION)
-    report.quarantined += quarantine_bad(db, th)
-    report.graded = grade_ungraded(db, th)
+    with db.transaction():
+        if db.maintenance_version("learn_rebuild") < LEARN_VERSION:
+            report.rebuilt, report.quarantined = rebuild_stint_params(db, th)
+            db.set_maintenance_version("learn_rebuild", LEARN_VERSION)
+        report.quarantined += quarantine_bad(db, th)
+        report.graded = grade_ungraded(db, th)
     return report

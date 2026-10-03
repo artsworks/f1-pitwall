@@ -14,7 +14,7 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.hindsight import linear_deg, stints, stop_laps
-from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps
+from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, LapRow
 
@@ -48,22 +48,23 @@ def _fit_pooled(
     sessions: Sequence[tuple[dict[str, Any], list[LapRow]]],
     fuel_ms_per_kg_max: float,
 ) -> dict[str, Any]:
-    by_compound: dict[int, list[LapRow]] = defaultdict(list)
-    for _, laps in sessions:
+    by_group: dict[tuple[int, int], list[LapRow]] = defaultdict(list)
+    for session, laps in sessions:
+        distance = _race_laps(session)
         for lap in laps:
             if _green(lap):
-                by_compound[lap.compound].append(lap)
-    compounds = sorted(by_compound)
-    if not compounds:
-        return {"compounds": {}, "k_ms_per_kg": None, "k_identifiable": False, "n": 0}
-    indices = {compound: index for index, compound in enumerate(compounds)}
-    column_count = 2 * len(compounds) + 1
+                by_group[(lap.compound, distance)].append(lap)
+    groups = sorted(by_group)
+    if not groups:
+        return {"compounds": {}, "groups": [], "k_ms_per_kg": None, "k_identifiable": False, "n": 0}
+    indices = {group: index for index, group in enumerate(groups)}
+    column_count = 2 * len(groups) + 1
     matrix: list[list[float]] = []
     target: list[float] = []
-    for compound in compounds:
-        for lap in by_compound[compound]:
+    for group in groups:
+        for lap in by_group[group]:
             row = [0.0] * column_count
-            idx = indices[compound]
+            idx = indices[group]
             row[2 * idx] = 1.0
             row[2 * idx + 1] = float(lap.tyre_age_laps)
             row[-1] = float(lap.fuel_kg)
@@ -75,16 +76,27 @@ def _fit_pooled(
     identifiable = int(rank) == column_count
     raw_k = float(coefficients[-1])
     k_value = min(max(raw_k, 0.0), fuel_ms_per_kg_max) if identifiable else None
+    if k_value is not None and k_value != raw_k:
+        coefficients = np.linalg.lstsq(design[:, :-1], times - k_value * design[:, -1], rcond=None)[
+            0
+        ]
     result: dict[int, dict[str, float | int]] = {}
-    for compound in compounds:
-        idx = indices[compound]
-        result[compound] = {
+    fitted_groups = []
+    for compound, distance in groups:
+        idx = indices[(compound, distance)]
+        values = {
+            "compound": compound,
+            "race_laps": distance,
             "base_ms": float(coefficients[2 * idx]),
             "deg_ms_per_lap": float(coefficients[2 * idx + 1]),
-            "n_laps": len(by_compound[compound]),
+            "n_laps": len(by_group[(compound, distance)]),
         }
+        fitted_groups.append(values)
+        if compound not in result or distance == 0:
+            result[compound] = values
     return {
         "compounds": result,
+        "groups": fitted_groups,
         "k_ms_per_kg": k_value,
         "k_raw_ms_per_kg": raw_k,
         "k_identifiable": identifiable,
@@ -171,6 +183,14 @@ def _is_race(session_type: int) -> bool:
         return False
 
 
+def _race_laps(session: Mapping[str, object]) -> int:
+    session_type = session.get("session_type")
+    total_laps = session.get("total_laps")
+    if isinstance(session_type, int) and _is_race(session_type):
+        return total_laps if isinstance(total_laps, int) and total_laps > 0 else -1
+    return 0
+
+
 def _fit_sessions(
     sessions: Sequence[tuple[dict[str, Any], list[LapRow]]],
     settings: Settings,
@@ -187,8 +207,18 @@ def _fit_sessions(
     )
     min_bin_laps = int(_th(thresholds, "calib_thermal_min_laps_per_bin", 3))
     thermal: dict[int, dict[str, Any]] = {}
-    for compound in fit["compounds"]:
-        comp_fit = fit["compounds"][compound]
+    for comp_fit in fit["groups"]:
+        compound = int(comp_fit["compound"])
+        group_sessions = [
+            entry for entry in sessions if _race_laps(entry[0]) == comp_fit["race_laps"]
+        ]
+        group_burn, group_n = _fuel_burn(
+            group_sessions,
+            min_delta_kg=_th(thresholds, "fuel_delta_min_kg", 0),
+            max_delta_kg=_th(thresholds, "fuel_delta_max_kg", 10),
+        )
+        comp_fit["fuel_kg_per_lap"] = group_burn
+        comp_fit["fuel_burn_n"] = group_n
         thermal_window = _thermal_window(
             sessions,
             compound,
@@ -227,9 +257,13 @@ def _convergence(
     for count in range(1, len(ordered_sessions) + 1):
         fit = _fit_sessions(ordered_sessions[:count], settings)
         values: dict[str, float] = {}
-        for compound, params in sorted(fit["compounds"].items()):
-            values[f"c{compound}.base_ms"] = float(params["base_ms"])
-            values[f"c{compound}.deg_ms_per_lap"] = float(params["deg_ms_per_lap"])
+        for params in fit["groups"]:
+            if int(params["race_laps"]) < 0:
+                continue
+            compound = int(params["compound"])
+            prefix = scoped(f"c{compound}", int(params["race_laps"]))
+            values[f"{prefix}.base_ms"] = float(params["base_ms"])
+            values[f"{prefix}.deg_ms_per_lap"] = float(params["deg_ms_per_lap"])
             thermal = fit["thermal"].get(compound)
             if thermal is not None:
                 values[f"c{compound}.thermal_lo_c"] = float(thermal["thermal_lo_c"])
@@ -298,25 +332,38 @@ def calibrate_track(
         "fuel_kg_per_lap": fit["fuel_kg_per_lap"],
         "fuel_burn_n": fit["fuel_burn_n"],
         "compounds": {},
+        "race_distances": {},
         "energy": fit["energy"],
         **convergence,
     }
     writes: list[tuple[int, str, float, float]] = []
-    for compound, params in sorted(fit["compounds"].items()):
+    for params in fit["groups"]:
+        compound = int(params["compound"])
+        distance = int(params["race_laps"])
         n = int(params["n_laps"])
-        gate = n >= need
+        gate = n >= need and fit["k_identifiable"] and distance >= 0
         values = {
             "base_ms": float(params["base_ms"]),
             "deg_ms_per_lap": float(params["deg_ms_per_lap"]),
         }
-        status = "ready" if gate else f"insufficient ({n}/{need})"
+        status = (
+            "ready"
+            if gate
+            else (
+                f"insufficient ({n}/{need})"
+                if n < need
+                else (
+                    "race length unknown" if distance < 0 else "fuel and tyre wear not identifiable"
+                )
+            )
+        )
         if (
             fit["k_identifiable"]
             and gate
             and fit["k_ms_per_kg"] is not None
-            and fit["fuel_burn_n"] >= need
+            and params["fuel_burn_n"] >= need
         ):
-            values["fuel_ms_per_lap"] = float(fit["k_ms_per_kg"]) * float(fit["fuel_kg_per_lap"])
+            values["fuel_ms_per_lap"] = float(fit["k_ms_per_kg"]) * float(params["fuel_kg_per_lap"])
         thermal = fit["thermal"].get(compound)
         if thermal is not None and int(thermal["n_laps"]) >= energy_need:
             values.update(
@@ -339,7 +386,9 @@ def calibrate_track(
                     writes.append(
                         (
                             compound,
-                            name,
+                            scoped(name, distance)
+                            if name in ("base_ms", "deg_ms_per_lap", "fuel_ms_per_lap")
+                            else name,
                             value,
                             float(
                                 min(
@@ -349,12 +398,17 @@ def calibrate_track(
                             ),
                         )
                     )
-        output["compounds"][compound] = {
+        group_output = {
             **values,
             "n_laps": n,
             "status": status,
             "thermal": thermal,
+            "race_laps": distance,
         }
+        if distance:
+            output["race_distances"].setdefault(distance, {})[compound] = group_output
+        if compound not in output["compounds"] or distance == 0:
+            output["compounds"][compound] = group_output
     if fit["fuel_burn_n"] >= need and not dry_run:
         writes.append(
             (
@@ -389,12 +443,15 @@ def calibrate_track(
                     ),
                 )
             )
-    fuel_by_compound = {c: v for c, name, v, _ in writes if name == "fuel_ms_per_lap"}
-    writes += [
-        (c, DEG_FUEL_REF, fuel_by_compound[c], w)
-        for c, name, _, w in list(writes)
-        if name == "deg_ms_per_lap" and c in fuel_by_compound
-    ]
+    fuel_by_compound = {
+        (c, name.removeprefix("fuel_ms_per_lap")): v
+        for c, name, v, _ in writes
+        if name.split("@", 1)[0] == "fuel_ms_per_lap"
+    }
+    for c, name, _, w in list(writes):
+        suffix = name.removeprefix("deg_ms_per_lap")
+        if name.split("@", 1)[0] == "deg_ms_per_lap" and (c, suffix) in fuel_by_compound:
+            writes.append((c, DEG_FUEL_REF + suffix, fuel_by_compound[(c, suffix)], w))
     if not dry_run:
         for compound, name, value, weight in writes:
             db.set_param(track_id, compound, name, value, weight)
@@ -471,7 +528,11 @@ def write_overlays(
         for key, values in track.get("compounds", {}).items():
             compound = int(key)
             n = int(values["n_laps"])
-            if n >= int(track.get("need", 1)):
+            if (
+                n >= int(track.get("need", 1))
+                and values.get("status") == "ready"
+                and not values.get("race_laps")
+            ):
                 compound_degs[compound] = round(float(values["deg_ms_per_lap"]), 1)
                 changed = True
             thermal = values.get("thermal")

@@ -112,7 +112,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
             ("Track", "Session", "Calls mode", "Recording"),
             [
                 (
-                    session.get("track_id") or "—",
+                    session["track_id"] if session["track_id"] is not None else "—",
                     session.get("session_type") or "—",
                     session.get("calls_mode") or "unknown",
                     session.get("recording_path") or "not linked",
@@ -312,7 +312,9 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
             ),
         )
     )
-    learned = learned_state(db, settings, int(session.get("track_id") or -1))
+    learned = learned_state(
+        db, settings, int(session["track_id"] if session["track_id"] is not None else -1)
+    )
     findings = [
         f"Review {_esc(rule)}: {count} negative grades."
         for rule, count in sorted(

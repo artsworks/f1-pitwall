@@ -217,6 +217,32 @@ def test_penalty_total_includes_new_penalty_before_lap_data_catches_up() -> None
     assert state.snapshot(60.0).penalty_s == 0
 
 
+def test_flashback_removes_future_warning_counts_and_pending_penalty() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 7, 0, 255, 255, 5, 0)
+    _pena(ingest, 4.0, 5, 28, 0, 255, 255, 5, 0)
+    _pena(ingest, 5.0, 4, 7, 0, 255, 10, 5, 0)
+    _lap(ingest, 2.5, penalties=0)
+    snap = state.snapshot(2.5)
+    assert snap.track_warning_kind == "minor"
+    assert snap.track_warning_count == 1
+    assert snap.penalty_s == 0 and not snap.penalty_recent
+    _pena(ingest, 3.0, 5, 7, 0, 255, 255, 5, 0)
+    assert state.snapshot(3.0).track_warning_count == 1
+
+
+def test_penalty_total_does_not_double_count_lap_data_arriving_first() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, penalties=3)
+    _lap(ingest, 2.0, penalties=13)
+    _pena(ingest, 2.0, 4, 7, 0, 255, 10, 5, 0)
+    assert state.snapshot(2.0).penalty_s == 13
+    _lap(ingest, 2.1, penalties=13)
+    assert state.snapshot(2.1).penalty_s == 13
+
+
 def test_weather_crossover_ignores_forecast_after_the_flag() -> None:
     ingest, state = _state()
     state._best_laps[0] = 90_000

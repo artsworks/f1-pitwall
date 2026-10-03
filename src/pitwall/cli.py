@@ -1099,13 +1099,18 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         if db is not None
         else Path(settings.persistence.path).expanduser()
     )
-    plan = plan_cleanup(
-        Path(args.recordings or settings.recording.directory),
-        db_path.parent,
-        Path(settings.speech.voices_dir),
-        db.ingested_uids() if db is not None else set(),
-        args.days,
-    )
+    try:
+        plan = plan_cleanup(
+            Path(args.recordings or settings.recording.directory),
+            db_path.parent,
+            Path(settings.speech.voices_dir),
+            db.ingested_uids() if db is not None else set(),
+            args.days,
+            recording_imports=db.ingested_recordings() if db is not None else {},
+        )
+    except ValueError as exc:
+        print(f"cleanup: {exc}")
+        return 2
     if plan.kept_unlearned:
         print(f"keeping {plan.kept_unlearned} old recording(s) not learned yet")
     if not plan.delete:

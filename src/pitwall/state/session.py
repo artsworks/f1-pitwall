@@ -802,7 +802,10 @@ class SessionState:
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
+        self._warning_events: list[tuple[float, str]] = []
         self._penalty_pending_s = 0
+        self._penalty_lap_increase_s = 0
+        self._penalty_lap_change_st: float | None = None
         self.lights_out = False
         self.chequered = False
         self._flag_as_leader = False
@@ -932,6 +935,17 @@ class SessionState:
         self.contacts.reset()
         self.off_track.reset()
         self.boost.reset()
+        self._warning_events = [(when, kind) for when, kind in self._warning_events if when <= t]
+        self._track_warnings.clear()
+        for _, kind in self._warning_events:
+            family = _warning_family(kind)
+            self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
+        self.track_warning_kind = self._warning_events[-1][1] if self._warning_events else ""
+        self._last_track_warning_st = self._warning_events[-1][0] if self._warning_events else None
+        self._penalty_pending_s = 0
+        self._penalty_lap_increase_s = 0
+        self._penalty_lap_change_st = None
+        self._last_penalty_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
         # Per-car session history stays: it is authoritative from the game and
@@ -1019,6 +1033,9 @@ class SessionState:
         self.result_status = car.result_status
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
+        if car.penalties != self.penalty_s:
+            self._penalty_lap_increase_s = max(0, car.penalties - self.penalty_s)
+            self._penalty_lap_change_st = pkt.header.session_time
         self.penalty_s = car.penalties
         if car.penalties >= self._penalty_pending_s:
             self._penalty_pending_s = 0
@@ -1224,6 +1241,7 @@ class SessionState:
                 if ptype == PENALTY_TYPE_WARNING and warn_kind:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
+                    self._warning_events.append((pkt.header.session_time, warn_kind))
                     family = _warning_family(warn_kind)
                     self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
                 if kind:
@@ -1236,10 +1254,16 @@ class SessionState:
                     self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
                     self.penalty_time_s = time_s if kind == "time" and time_s != 255 else 0
                     if self.penalty_time_s:
-                        # Lap data carries the new total a few frames after the event.
-                        self._penalty_pending_s = (
-                            max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
-                        )
+                        if (
+                            self._penalty_lap_change_st is not None
+                            and self._penalty_lap_change_st >= pkt.header.session_time
+                            and self._penalty_lap_increase_s >= self.penalty_time_s
+                        ):
+                            self._penalty_lap_increase_s -= self.penalty_time_s
+                        else:
+                            self._penalty_pending_s = (
+                                max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
+                            )
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:

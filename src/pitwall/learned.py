@@ -106,6 +106,7 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
             for lap in db.laps_for(int(session["uid"])):
                 compounds.add(lap.compound)
         compound_values: dict[int, Any] = {}
+        distance_values: dict[int, dict[int, Any]] = {}
         default_deg = _th(settings.thresholds, "deg_default_ms_per_lap", 80.0)
         default_base = _th(settings.thresholds, "release_fallback_lap_s", 95.0) * 1000.0
         default_fuel_ms = _th(settings.thresholds, "fuel_ms_per_lap_default", 30.0)
@@ -140,6 +141,28 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
                     min_weight,
                 )
             compound_values[compound] = values
+            distances = {
+                int(param.name.rsplit("@", 1)[1][:-1])
+                for param in params
+                if param.track_id == current_track
+                and param.compound == compound
+                and param.name.startswith("deg_ms_per_lap@")
+                and param.name.endswith("L")
+                and param.name.rsplit("@", 1)[1][:-1].isdecimal()
+            }
+            for distance in sorted(distances):
+                distance_values.setdefault(distance, {})[compound] = {
+                    key: _param(
+                        db,
+                        current_track,
+                        compound,
+                        f"{key}@{distance}L",
+                        values[key]["value"],
+                        None,
+                        min_weight,
+                    )
+                    for key in ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap")
+                }
         fuel_overlay_raw = overlay.get("fuel_kg_per_lap")
         fuel_overlay = float(fuel_overlay_raw) if fuel_overlay_raw is not None else None
         fuel = _param(
@@ -226,6 +249,7 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
                 "session_count": len(track_sessions),
                 "ingested_count": db.ingested_count(current_track),
                 "compounds": compound_values,
+                "race_distances": distance_values,
                 "fuel_kg_per_lap": fuel,
                 "pit_loss_ms": pit,
                 "thermal": thermal,
@@ -260,7 +284,7 @@ def format_learned(state: Mapping[str, Any]) -> str:
         return (
             f"{float(value['value']):.1f} ({value['source']}, w={float(value['weight']):.1f}; "
             f"default={float(value['default']):.1f}, overlay={overlay_text}, "
-            f"delta={float(value['delta_to_default']):+.2f})"
+            f"delta={float(value['delta_to_default']):+.1f})"
         )
 
     lines: list[str] = []
@@ -272,6 +296,10 @@ def format_learned(state: Mapping[str, Any]) -> str:
         for compound, values in sorted(track["compounds"].items()):
             parts = [f"{name}={prior_text(value)}" for name, value in values.items()]
             lines.append(f"  compound {compound}: " + ", ".join(parts))
+        for distance, compounds in sorted(track.get("race_distances", {}).items()):
+            for compound, values in sorted(compounds.items()):
+                parts = [f"{name}={prior_text(value)}" for name, value in values.items()]
+                lines.append(f"  {distance}-lap race, compound {compound}: " + ", ".join(parts))
         fuel = track["fuel_kg_per_lap"]
         lines.append(f"  fuel burn kg/lap: {prior_text(fuel)}")
         pit = ", ".join(

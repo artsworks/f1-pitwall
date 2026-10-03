@@ -160,6 +160,28 @@ def test_ingest_isolates_file_errors_and_caps_findings(tmp_path: Path) -> None:
     assert db.read_heartbeat() is None
 
 
+def test_failed_ingest_rolls_back_learning_and_retries_complete_recording(tmp_path, monkeypatch):
+    import pitwall.digest
+
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261005
+    recording = _recording(tmp_path / "race.f1bin", uid)
+    settings = ConfigStore().current()
+
+    def fail_digest(*args, **kwargs):
+        raise OSError("injected digest failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(pitwall.digest, "build_digest", fail_digest)
+        result = ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
+    assert result[0].status == "error"
+    assert _counts(db) == (0, 0, 0, 0, 0)
+    assert db.all_params() == []
+    retry = ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
+    assert retry[0].status == "ingested"
+    assert [lap.lap_num for lap in db.laps_for(uid)] == [1, 2, 3, 4]
+
+
 def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     uid = 0xF1261004

@@ -101,6 +101,10 @@ These commands are optional:
 Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not
 need to run it for a live session or edit SQLite.
 
+Cleanup keeps recordings until that exact file has been imported. Another file with
+the same session ID is not enough. It also keeps files changed after import and files
+written within the last hour. Check the list before confirming deletion.
+
 ## Recording
 
 | Command | Use |

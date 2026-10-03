@@ -45,3 +45,11 @@ def test_evaluation_separates_modes_tracks_and_invalid_laps(tmp_path) -> None:
     assert not result["tracks"][1]["comparable"]
     assert len(evaluate_corpus(db, 8)["tracks"]) == 1
     db.close()
+
+
+def test_track_zero_is_retained() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1, track_id=0, session_type=15)
+    db.set_session_origin(1, started_at=0, recording_path="race.f1bin", calls_mode="on")
+    db.insert_lap(1, 0, LapSummary(1, 90_000, 30_000, 30_000, 17, 1, 10, True, []))
+    assert evaluate_corpus(db, 0)["tracks"][0]["track_id"] == 0

@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -370,6 +371,7 @@ class Database:
             check_same_thread=False,
         )
         self._conn.row_factory = sqlite3.Row
+        self._transaction_id = 0
         if file_backed:
             self._conn.execute("PRAGMA journal_mode=WAL")
         self.migrate()
@@ -390,6 +392,20 @@ class Database:
     def close(self) -> None:
         self._conn.close()
 
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        self._transaction_id += 1
+        name = f"pitwall_{self._transaction_id}"
+        self._conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield
+        except BaseException:
+            self._conn.execute(f"ROLLBACK TO {name}")
+            self._conn.execute(f"RELEASE {name}")
+            raise
+        else:
+            self._conn.execute(f"RELEASE {name}")
+
     # -- writes ---------------------------------------------------------------
 
     def upsert_session(
@@ -407,7 +423,7 @@ class Database:
         weekend_link: int = 0,
         calls_mode: str = "",
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
                 " game_version, config_hash, weather, recording_path, game_mode,"
@@ -437,7 +453,7 @@ class Database:
 
     def insert_lap(self, session_uid: int, car_idx: int, lap: LapSummary) -> None:
         """Persist a state.lap.LapSummary (attribute access keeps it duck-typed)."""
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms,"
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
@@ -470,7 +486,7 @@ class Database:
         """Mirror a decision-log record: calls/bookmarks tables."""
         outcome = record.get("outcome")
         if outcome == "bookmark":
-            with self._conn:
+            with self.transaction():
                 self._conn.execute(
                     "INSERT INTO bookmarks(session_uid, t, session_time, lap,"
                     " lap_distance, note) VALUES(?,?,?,?,?,?)",
@@ -490,7 +506,7 @@ class Database:
         if outcome not in _CALL_OUTCOMES:
             return
         inputs = record.get("inputs")
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO calls(session_uid, call_id, t, session_time, lap,"
                 " lap_distance, rule_id, priority, outcome, suppressed_by,"
@@ -518,7 +534,7 @@ class Database:
 
     def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
         """A named-plan set / switch / off / on event (engine plan tracker)."""
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO plan_events(session_uid, t, session_time, lap, kind,"
                 " from_plan, to_plan, reason, delta_s, sequence, plans)"
@@ -540,7 +556,7 @@ class Database:
 
     def _insert_driver_input(self, session_uid: int, record: dict[str, Any]) -> None:
         inputs = record.get("inputs")
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO driver_inputs(session_uid, t, session_time, lap, lap_distance,"
                 " item_id, kind, topic, label, reply, inputs, mindset)"
@@ -569,7 +585,7 @@ class Database:
         grade: str,
         note: str = "",
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
                 " note, graded_at) VALUES(?,?,?,?,?,?)"
@@ -601,7 +617,7 @@ class Database:
     def replace_outcomes(self, session_uid: int, rows: list[dict[str, Any]]) -> None:
         """Replace a session's hindsight outcomes (recomputed as a whole)."""
         uid = _uid_to_sql(session_uid)
-        with self._conn:
+        with self.transaction():
             self._conn.execute("DELETE FROM outcomes WHERE session_uid=?", (uid,))
             self._conn.executemany(
                 "INSERT INTO outcomes(session_uid, call_id, rule_id, lap, metric,"
@@ -636,7 +652,7 @@ class Database:
         return rows[0] if rows else None
 
     def set_session_total_laps(self, uid: int, total_laps: int) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
             )
@@ -714,7 +730,7 @@ class Database:
                 "fuel_fitted": fit.fuel_fitted,
             }
         )
-        with self._conn:
+        with self.transaction():
             cur = self._conn.execute(
                 "UPDATE stints SET compound=?, end_lap=?, deg_params=?,"
                 " n_valid_laps=?, base_ms=?, deg_ms_per_lap=?, fuel_ms_per_lap=?,"
@@ -850,7 +866,7 @@ class Database:
         out_lap_ms: int,
         ref_pace_ms: int,
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO pit_events(session_uid, lap_num, loss_ms, neutralised,"
                 " lane_ms, in_lap_ms, out_lap_ms, ref_pace_ms, car_idx)"
@@ -924,7 +940,7 @@ class Database:
         new_v = (old_v * old_w + value * weight) / total_w if total_w > 0 else value
         new_w = min(total_w, param_weight_cap)
         now = time.time()
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO model_params(track_id, compound, name, value, weight,"
                 " updated_at) VALUES(?,?,?,?,?,?)"
@@ -950,7 +966,7 @@ class Database:
     ) -> ModelParam:
         """Overwrite a model_params row (recomputed values, e.g. pitwall tune)."""
         now = time.time()
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO model_params(track_id, compound, name, value, weight,"
                 " updated_at) VALUES(?,?,?,?,?,?)"
@@ -963,7 +979,7 @@ class Database:
 
     def quarantine_param(self, param: ModelParam, reason: str) -> None:
         """Move a model_params row aside so it no longer feeds any prior."""
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO model_params_quarantine(track_id, compound, name, reason,"
                 " value, weight, updated_at, quarantined_at) VALUES(?,?,?,?,?,?,?,?)"
@@ -996,7 +1012,7 @@ class Database:
         return int(row["version"]) if row is not None else 0
 
     def set_maintenance_version(self, key: str, version: int) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO maintenance(key, version, ran_at) VALUES(?,?,?)"
                 " ON CONFLICT(key) DO UPDATE SET version=excluded.version,"
@@ -1038,14 +1054,14 @@ class Database:
         recording_path: str,
         calls_mode: str,
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=? WHERE uid=?",
                 (started_at, recording_path, calls_mode, _uid_to_sql(uid)),
             )
 
     def mark_ingested(self, uid: int, digest_version: int, path: str) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO ingested(session_uid,path,digest_version,ingested_at)"
                 " VALUES(?,?,?,?) ON CONFLICT(session_uid) DO UPDATE SET"
@@ -1085,6 +1101,13 @@ class Database:
     def ingested_uids(self) -> set[int]:
         rows = self._conn.execute("SELECT session_uid FROM ingested").fetchall()
         return {_uid_from_sql(int(r[0])) for r in rows}
+
+    def ingested_recordings(self) -> dict[Path, float]:
+        return {
+            Path(str(row["path"])).expanduser().resolve(): float(row["ingested_at"])
+            for row in self._conn.execute("SELECT path, ingested_at FROM ingested")
+            if row["path"] and row["ingested_at"] is not None
+        }
 
     def ingested_count(self, track_id: int | None = None) -> int:
         if track_id is None:
@@ -1151,7 +1174,7 @@ class Database:
         only_b: int = 0,
         both: int = 0,
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO ab_results(recorded_at, recording, a_dir, b_dir,"
                 " a_mindset, b_mindset, rule_id, only_a, only_b, both)"
@@ -1178,7 +1201,7 @@ class Database:
         recording_path: str,
         lap_num: int,
     ) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "INSERT INTO runtime(key, session_uid, session_t, wall_t,"
                 " recording_path, lap_num) VALUES('heartbeat',?,?,?,?,?)"
@@ -1190,7 +1213,7 @@ class Database:
             )
 
     def clear_heartbeat(self) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute("DELETE FROM runtime WHERE key='heartbeat'")
 
     def read_heartbeat(self) -> Heartbeat | None:
@@ -1206,7 +1229,7 @@ class Database:
         )
 
     def end_session(self, uid: int, ended_at: float) -> None:
-        with self._conn:
+        with self.transaction():
             self._conn.execute(
                 "UPDATE sessions SET ended_at=? WHERE uid=?", (ended_at, _uid_to_sql(uid))
             )

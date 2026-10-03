@@ -4,6 +4,11 @@ How pitwall gets better from each session without repeating the same mistakes.
 Live decisions stay deterministic (ADR 0008). Upkeep and calibration write learned values;
 proposals remain review-only.
 
+Recording imports and startup upkeep use database transactions. A failed import
+leaves no partial learning. Calibration stores race pace and tyre wear separately
+for each race length. A fit that cannot separate fuel from tyre age does not replace
+those priors. `pitwall stats --learned` lists each race length.
+
 ```
 session ──► SQLite laps, stints, calls and plan events
         ──► grade at session end
