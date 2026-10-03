@@ -5,25 +5,25 @@ rules:
   - id: out_lap_s3_tyres_cold
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
     say:
-      - "Tyres still coming in. {coldest_tyre} coldest at {coldest_tyre_c:.0f}, fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Work them to the line."
-      - "Not there yet. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}, {coldest_tyre} the cold one. Keep working them."
-      - "Still cool. {coldest_tyre} at {coldest_tyre_c:.0f}. Lean on it through the last sector."
+      - "Tyres still coming in. {coldest_tyre} coldest at {coldest_tyre_c:.0f}. Keep working them."
+      - "Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. {coldest_tyre} is cold."
+      - "{coldest_tyre} still cool, {coldest_tyre_c:.0f}. Lean on it."
   - id: out_lap_s3_tyres_ready
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= th.tyre_inner_cold_c + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
     say:
-      - "Tyres are in. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Good to push."
-      - "Temps look good, fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. You can go."
-      - "That's them in the window. Push when ready."
+      - "Tyres are in, {tyre_inner_front_c:.0f} and {tyre_inner_rear_c:.0f}. Push."
+      - "Temps good. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Go."
+      - "Tyres in the window. Push."
   - id: front_wing_damage
     sessions: [practice, qualifying, race]
     priority: 2
@@ -33,13 +33,13 @@ rules:
     cooldown_s: 120
     requires: [car_damage]
     say:
-      - "Front wing damage, front left {damage.front_left_wing} percent, front right {damage.front_right_wing} percent. Expect understeer."
-      - "We've got wing damage. Left {damage.front_left_wing}, right {damage.front_right_wing} percent. It'll push in the slow corners."
+      - "Front wing damage, {damage.front_left_wing} and {damage.front_right_wing} percent. Understeer."
+      - "Wing damage, left {damage.front_left_wing}, right {damage.front_right_wing}. It'll push."
     escalate:
       - after: 2
         say:
-          - "More wing damage. Left {damage.front_left_wing}, right {damage.front_right_wing} percent. We'll talk about a new nose."
-          - "Wing's getting worse, {damage.front_left_wing} and {damage.front_right_wing} percent. Keep it off the kerbs."
+          - "More wing damage, {damage.front_left_wing} and {damage.front_right_wing}. Thinking new nose."
+          - "Wing worse, {damage.front_left_wing} and {damage.front_right_wing}. Off the kerbs."
   # Wing gone in a race: box for a nose unless the flag is too close.
   - id: front_wing_lost_box
     sessions: [race]
@@ -50,9 +50,9 @@ rules:
     cooldown_s: 60
     requires: [car_damage, lap_data]
     say:
-      - "Front wing's gone. Box this lap, box this lap for a new nose"
-      - "We've lost the front wing. Box, box, new nose this lap"
-      - "Wing's broken, front left {damage.front_left_wing}, front right {damage.front_right_wing}. Box this lap"
+      - "Front wing's gone. Box, box, new nose"
+      - "Lost the front wing. Box this lap"
+      - "Wing broken, {damage.front_left_wing} and {damage.front_right_wing}. Box"
   - id: front_wing_lost_nurse
     sessions: [race]
     priority: 1
@@ -61,8 +61,8 @@ rules:
     cooldown_s: 60
     requires: [car_damage, lap_data]
     say:
-      - "Front wing's gone, but it's too late to stop. Stay out, nurse it home, it'll push"
-      - "Wing's damaged. Not worth a stop now, bring it home, early on the brakes"
+      - "Wing's gone, too late to stop. Nurse it home"
+      - "Wing damaged. No stop, brake early"
   - id: puncture
     sessions: [practice, qualifying, race]
     priority: 1
@@ -72,8 +72,8 @@ rules:
     cooldown_s: 60
     requires: [car_damage]
     say:
-      - "Puncture, {puncture_corner}. Box, box. Bring it back steady, off the racing line"
-      - "We've got a puncture, {puncture_corner}. Box this lap, easy through the fast stuff"
+      - "Puncture, {puncture_corner}. Box, box. Steady"
+      - "Puncture {puncture_corner}. Box, easy in fast corners"
       - "{puncture_corner} tyre's gone. Box, box, nurse it back"
   - id: rear_wing_damage
     sessions: [practice, qualifying, race]
@@ -83,8 +83,8 @@ rules:
     cooldown_s: 120
     requires: [car_damage]
     say:
-      - "Rear wing damage, {damage.rear_wing} percent. Less rear grip, gentle on the throttle out of the slow corners"
-      - "We've got {damage.rear_wing} percent rear wing damage. Watch the rear on corner exit"
+      - "Rear wing damage, {damage.rear_wing} percent. Gentle throttle"
+      - "{damage.rear_wing} percent rear wing damage. Watch exits"
   - id: floor_damage
     sessions: [practice, qualifying, race]
     priority: 2
@@ -93,8 +93,8 @@ rules:
     cooldown_s: 120
     requires: [car_damage]
     say:
-      - "Floor damage. We've lost downforce, brake a touch earlier into the fast stuff"
-      - "Damage on the floor. Less grip in the high-speed corners, adjust your lines"
+      - "Floor damage. Less downforce, brake earlier"
+      - "Floor damage. Less grip in fast corners"
   - id: gearbox_damage
     sessions: [practice, qualifying, race]
     priority: 2
@@ -103,8 +103,8 @@ rules:
     cooldown_s: 180
     requires: [car_damage]
     say:
-      - "Gearbox damage, {damage.gearbox} percent. Short-shift and be gentle on the downshifts"
-      - "Gearbox is at {damage.gearbox} percent damage. Smooth shifts, no kerb abuse"
+      - "Gearbox damage, {damage.gearbox} percent. Short-shift"
+      - "Gearbox {damage.gearbox} percent. Smooth shifts"
   - id: engine_damage
     sessions: [practice, qualifying, race]
     priority: 2
@@ -113,8 +113,8 @@ rules:
     cooldown_s: 180
     requires: [car_damage]
     say:
-      - "Engine damage, {damage.engine} percent. Lift and coast into the big stops, look after it"
-      - "Engine's at {damage.engine} percent damage. Short-shift where you can"
+      - "Engine damage, {damage.engine} percent. Lift and coast"
+      - "Engine {damage.engine} percent damage. Short-shift"
   - id: drs_fault
     sessions: [practice, qualifying, race]
     priority: 2
@@ -122,8 +122,8 @@ rules:
     clear_when: "damage.drs_fault == 0"
     requires: [car_damage]
     say:
-      - "DRS fault. No DRS for us, overtakes have to come on the brakes"
-      - "We've lost DRS, it's faulty. Work the exits instead"
+      - "DRS fault. Pass on the brakes"
+      - "No DRS. Work the exits"
   - id: ers_fault
     sessions: [practice, qualifying, race]
     priority: 1
@@ -131,8 +131,8 @@ rules:
     clear_when: "damage.ers_fault == 0"
     requires: [car_damage]
     say:
-      - "ERS fault, no deployment. Protect the braking zones, they'll come at you on the straights"
-      - "We've got an ERS fault. No battery, defend the inside"
+      - "ERS fault, no deploy. Defend brake zones"
+      - "ERS fault. No battery, cover inside"
   # Boost still on when the driver lifts or brakes for a corner means full power on the exit.
   - id: boost_left_on
     sessions: [practice, qualifying, race]
@@ -143,13 +143,13 @@ rules:
     requires: [car_status, car_telemetry]
     say:
       - "Boost still on. Turn it off for the exit."
-      - "Boost is on. Switch it off before you get on the power."
+      - "Boost is on. Off before the power."
       - "You've left the boost on. Off for the exit."
     escalate:
       - after: 3
         say:
           - "Boost. Again. Off, please."
-          - "Boost is still on, that's {repeat} times now. Habit before exits."
+          - "Boost still on, {repeat} times now."
           - "Boost. You know the drill."
   - id: yellow_ahead
     sessions: [practice, qualifying, race]
@@ -159,9 +159,9 @@ rules:
     still_true: "yellow_ahead_m <= th.yellow_warn_ahead_m or yellow_here"
     requires: [session, lap_data]
     say:
-      - "Yellow ahead, sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. Careful, no overtaking."
-      - "Yellow flag coming up in sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. Lift and hold position."
-      - "Yellow, {yellow_ahead_m:.0f} metres ahead. No passing, be ready for a car on track."
+      - "Yellow ahead, sector {yellow_ahead_sector}, {yellow_ahead_m:.0f} metres. No overtaking."
+      - "Yellow, sector {yellow_ahead_sector}. Lift, hold position."
+      - "Yellow, {yellow_ahead_m:.0f} metres. Car on track maybe."
   - id: yellow_behind
     sessions: [practice, qualifying, race]
     priority: 3
@@ -171,9 +171,9 @@ rules:
     cooldown_s: 30
     requires: [session, lap_data]
     say:
-      - "Yellow behind you in sector {yellow_behind_sector}. You're clear, ignore it."
-      - "Yellow's behind you, sector {yellow_behind_sector}. Not your problem, keep going."
-      - "Someone's off behind, sector {yellow_behind_sector}. You're clear."
+      - "Yellow behind, sector {yellow_behind_sector}. You're clear."
+      - "Yellow behind you. Keep going."
+      - "Car off behind. You're clear."
   # Same braking zone as on earlier laps: coach the corner, not the event.
   - id: lockup_front_same_spot
     sessions: [practice, qualifying, race]
@@ -184,14 +184,14 @@ rules:
     cooldown_group: lockup_front
     requires: [motion_ex]
     say:
-      - "Locking up in the same braking zone as last lap. Brake a few metres earlier there."
-      - "Same corner, same lock-up, {lockup_wheel}. Move your braking point back."
-      - "That's the one you locked last time too. Earlier and softer on the pedal there."
+      - "Same lock-up as last lap. Brake earlier there."
+      - "Same corner lock-up, {lockup_wheel}. Brake earlier."
+      - "Locked there last time too. Softer pedal."
     escalate:
       - after: 3
         say:
-          - "That braking zone again, {lockup_spot_laps} laps running now. Brake earlier, or a click of bias rearward from {front_brake_bias}."
-          - "Same place, {lockup_spot_laps} laps in a row. Pick a new marker, or take a click of bias back from {front_brake_bias}."
+          - "Same zone, {lockup_spot_laps} laps. Brake earlier or bias back from {front_brake_bias}."
+          - "{lockup_spot_laps} laps same spot. New marker, or bias back from {front_brake_bias}."
   - id: lockup_front
     sessions: [practice, qualifying, race]
     priority: 3
@@ -201,20 +201,20 @@ rules:
     cooldown_group: lockup_front
     requires: [motion_ex]
     say:
-      - "Lock-up, {lockup_wheel}. Ease the brake pressure into the corner, that costs tyre."
-      - "Locked the {lockup_wheel} there. Bit less pedal on the way in."
-      - "That's a flat spot waiting to happen, {lockup_wheel}. Brake a touch earlier."
-      - "{lockup_wheel} locking on entry. Ease off the initial hit."
+      - "Lock-up, {lockup_wheel}. Ease the pressure."
+      - "Locked the {lockup_wheel}. Less pedal."
+      - "{lockup_wheel} lock-up. Brake earlier."
+      - "{lockup_wheel} locking. Softer initial hit."
     escalate:
       - after: 3
         say:
-          - "Another lock-up. That's {repeat} in the last ten minutes."
-          - "Front's locking again. The tyres are keeping count, even if you aren't."
-          - "Lock-up. We brought these tyres to race on, not to sand down."
+          - "Another lock-up, {repeat} in ten minutes."
+          - "Fronts locking again. Tyres are counting."
+          - "Lock-up. Save these tyres."
       - after: 6
         say:
-          - "Lock-up number {repeat}. I'll just leave that there."
-          - "Again. Brake earlier, it's cheaper than a new set."
+          - "Lock-up number {repeat}."
+          - "Again. Brake earlier."
           - "You know what I'm going to say."
   - id: lockup_rear
     sessions: [practice, qualifying, race]
@@ -224,17 +224,17 @@ rules:
     cooldown_s: 45
     requires: [motion_ex]
     say:
-      - "Rears locking, {lockup_wheel}. Move the brake bias forward, you're on {front_brake_bias}."
-      - "Rear's locking on entry. Bias forward a click or two from {front_brake_bias}."
-      - "{lockup_wheel} locked. Try more front bias, currently {front_brake_bias}."
+      - "Rears locking, {lockup_wheel}. Bias forward from {front_brake_bias}."
+      - "Rear locking. Bias forward from {front_brake_bias}."
+      - "{lockup_wheel} locked. More front bias, now {front_brake_bias}."
     escalate:
       - after: 2
         say:
-          - "Rears still stepping out on entry. Bias forward from {front_brake_bias}, or more off-throttle diff, you're on {setup_off_throttle_diff} percent."
+          - "Rears still loose. Bias forward from {front_brake_bias}, or more off-throttle diff."
       - after: 3
         say:
           - "Rears again. Bias forward, you're still on {front_brake_bias}."
-          - "That's {repeat} rear lock-ups. The bias won't move itself, {front_brake_bias} now."
+          - "{repeat} rear lock-ups. Bias still {front_brake_bias}."
   # Spun: first check the mirrors. A car closing from behind means hold the
   # car until it has passed; once clear, rejoin gently on overheated rears.
   - id: spun_rejoin_traffic
@@ -246,9 +246,9 @@ rules:
     requires: [motion_ex, lap_data]
     cooldown_s: 8
     say:
-      - "Car coming, {traffic_behind_s:.1f} seconds. Hold it there, let it through."
-      - "Wait, wait. Traffic behind, {traffic_behind_s:.1f} seconds. Stay put."
-      - "Hold the car. One coming through, {traffic_behind_s:.1f} seconds."
+      - "Car coming, {traffic_behind_s:.1f} seconds. Hold it."
+      - "Wait. Traffic, {traffic_behind_s:.1f} seconds."
+      - "Hold. Car in {traffic_behind_s:.1f} seconds."
   # A slide the driver caught without spinning.
   - id: saved_moment
     sessions: [practice, qualifying, race]
@@ -268,13 +268,13 @@ rules:
       - when: "save_peak_deg >= 25"
         say:
           - "Wow, that was nearly around. Brilliant save"
-          - "How did you keep that? Massive save. Breathe, reset"
-          - "That was so close to a spin. Great reactions, ease the rears for a bit"
+          - "Massive save! Breathe"
+          - "Nearly spun. Great reactions, ease the rears"
     escalate:
       - after: 3
         say:
-          - "Another moment, that's {saves} now. Rears are on the edge, smoother on the throttle"
-          - "Caught it again, but that's {saves}. Short-shift out of the slow corners"
+          - "{saves} moments now. Smoother throttle"
+          - "That's {saves}. Short-shift out of slow corners"
   - id: spun_rejoin
     sessions: [practice, qualifying, race]
     priority: 1
@@ -285,15 +285,15 @@ rules:
     cooldown_s: 8
     max_per_stint: 5
     say:
-      - "You're clear behind. Easy on the throttle, the rears are cooked."
-      - "Clear to rejoin. Gentle on the power, no grip in the rears."
-      - "Nobody coming. Short-shift and feather it, the rears are hot."
+      - "Clear behind. Easy throttle, rears are hot."
+      - "Clear to rejoin. Gentle on the power."
+      - "Nobody coming. Short-shift, feather it."
     escalate:
       - after: 2
         say:
-          - "Lost it again. Clear behind, same deal, gentle on the throttle."
-          - "That's {repeat} moments now. Clear to rejoin, a bit less throttle on the exits."
-          - "Number {repeat}. You're clear. Easy on the power, let the rears cool."
+          - "Lost it again. Clear, gentle throttle."
+          - "{repeat} moments. Clear, less throttle on exits."
+          - "Number {repeat}. Clear. Let the rears cool."
   # Practice: a deleted lap is not a benchmark; say so once and give the reset.
   - id: practice_lap_invalid
     sessions: [practice]
@@ -302,9 +302,9 @@ rules:
     clear_when: "not current_lap_invalid"
     requires: [lap_data]
     say:
-      - "Lap's deleted, track limits. Won't count as a benchmark. Finish it for the tyre data and go again next lap."
-      - "That one's invalid. Keep it for practice, not the timesheet. Next lap, two wheels inside the white line."
-      - "Lap deleted. Don't chase this one. Reset and give me a clean one next time round."
+      - "Lap deleted, track limits. Clean one next."
+      - "Lap invalid. Next one, inside the white line."
+      - "Lap deleted. Reset, clean one next."
   # Just out of the pit lane: a car closing on the merge.
   - id: pit_exit_traffic
     sessions: [practice, qualifying, race]
@@ -316,9 +316,9 @@ rules:
     cooldown_group: car_behind
     requires: [lap_data]
     say:
-      - "Car coming as you exit, {traffic_behind_s:.1f} seconds. Stay off the line."
-      - "Watch the merge, one closing, {traffic_behind_s:.1f} seconds behind."
-      - "Traffic on the exit. Keep right of the line and let it go."
+      - "Car coming at exit, {traffic_behind_s:.1f} seconds. Off the line."
+      - "Watch the merge, car {traffic_behind_s:.1f} behind."
+      - "Traffic at exit. Let it go."
   # Out-lap, last sector: what the hot lap will start into. One per out-lap.
   - id: prep_car_behind
     sessions: [practice, qualifying]
@@ -330,9 +330,9 @@ rules:
     cooldown_group: prep_gap
     requires: [lap_data]
     say:
-      - "Car behind on a push lap, {traffic_behind_s:.1f} seconds. Let it go, then start yours."
-      - "Push lap coming up behind. Move over, let it by before the line."
-      - "Someone's on a lap behind you. Give them the track, then go."
+      - "Push lap behind, {traffic_behind_s:.1f} seconds. Let it by."
+      - "Push lap behind. Let it by."
+      - "Car on a lap behind. Give room, then go."
   - id: slow_car_ahead
     sessions: [practice, qualifying]
     priority: 1
@@ -343,7 +343,7 @@ rules:
     say:
       - "Slow car ahead, {traffic_ahead_m:.0f} metres"
       - "Traffic ahead, {traffic_ahead_m:.0f} metres. Watch your line"
-      - "Heads up, slow car {traffic_ahead_m:.0f} metres up the road"
+      - "Slow car, {traffic_ahead_m:.0f} metres"
   - id: prep_traffic_ahead
     sessions: [practice, qualifying]
     priority: 2
@@ -354,9 +354,9 @@ rules:
     cooldown_group: prep_gap
     requires: [lap_data]
     say:
-      - "Slow car {traffic_ahead_s:.1f} ahead. Back off and make a gap before the line."
-      - "Traffic ahead, {traffic_ahead_s:.1f} seconds, on a slow lap. Drop back a bit."
-      - "You'll catch the car ahead. Ease off, give yourself some room."
+      - "Slow car {traffic_ahead_s:.1f} ahead. Make a gap."
+      - "Slow car {traffic_ahead_s:.1f} ahead. Drop back."
+      - "You'll catch the car ahead. Ease off."
   - id: prep_dirty_air
     sessions: [practice, qualifying]
     priority: 2
@@ -367,8 +367,8 @@ rules:
     cooldown_group: prep_gap
     requires: [lap_data]
     say:
-      - "Too close to the car ahead, {traffic_ahead_s:.1f}. Drop back, you'll be in dirty air."
-      - "Only {traffic_ahead_s:.1f} to the car in front. Let it go a bit more."
+      - "Too close, {traffic_ahead_s:.1f}. Drop back, dirty air."
+      - "Only {traffic_ahead_s:.1f} ahead. Drop back."
   - id: prep_tow
     sessions: [practice, qualifying]
     priority: 2
@@ -379,9 +379,9 @@ rules:
     cooldown_group: prep_gap
     requires: [lap_data]
     say:
-      - "Car {traffic_ahead_s:.1f} ahead on a push lap. That's a tow, use it on the straights."
-      - "Nice gap, {traffic_ahead_s:.1f} to the car ahead. You'll get a tow."
-      - "Tow's there, {traffic_ahead_s:.1f} ahead. Stay in it down the straights."
+      - "Car {traffic_ahead_s:.1f} ahead. Use the tow."
+      - "Nice gap, {traffic_ahead_s:.1f}. Tow is there."
+      - "Tow, {traffic_ahead_s:.1f} ahead. Stay in it."
   - id: prep_clear
     sessions: [practice, qualifying]
     priority: 3
@@ -393,17 +393,16 @@ rules:
     requires: [lap_data]
     say:
       - "Clear ahead. Good gap for your lap."
-      - "Nobody in front, clean air. It's all yours."
+      - "Clean air. All yours."
       - "Track's clear ahead. Good spacing."
   # Red flag: all sessions; repeats on cooldown while the flag stays out.
   - id: red_flag
     priority: 1
     when: "red_flag"
     clear_when: "not red_flag"
-    cooldown_s: 60
     say:
-      - "Red flag. Red flag. Slow down and return to the pits"
-      - "Red flag, red flag. Back to the pits, careful on the way in"
+      - "Red flag. Red flag. Slow, back to pits"
+      - "Red flag, red flag. Back to the pits"
 
   # Abnormal per-corner / per-axle wear (SessionState._note_corner_wear).
   # Loaded corner: front left and rear left carry the load in right-handers.
@@ -415,9 +414,9 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Front left is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Protect it in the right-handers, less entry speed, no sliding"
-      - "Front left's taking a beating, {wear_hot_ratio:.1f} times the rest. Brake a touch earlier into the right-handers, don't slide it"
-      - "Watch the front left, it's wearing {wear_hot_ratio:.1f} times faster. Slow in, fast out in the right-handers"
+      - "Front left wearing {wear_hot_ratio:.1f} times faster. Less entry speed, right-handers"
+      - "Front left {wear_hot_ratio:.1f} times the rest. Don't slide it in right-handers"
+      - "Watch the front left. Slow in, fast out, right-handers"
   - id: wear_front_right
     sessions: [practice, race]
     priority: 2
@@ -426,9 +425,9 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Front right is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Protect it in the left-handers, less entry speed, no sliding"
-      - "Front right's taking a beating, {wear_hot_ratio:.1f} times the rest. Brake a touch earlier into the left-handers, don't slide it"
-      - "Watch the front right, it's wearing {wear_hot_ratio:.1f} times faster. Slow in, fast out in the left-handers"
+      - "Front right wearing {wear_hot_ratio:.1f} times faster. Less entry speed, left-handers"
+      - "Front right {wear_hot_ratio:.1f} times the rest. Don't slide it in left-handers"
+      - "Watch the front right. Slow in, fast out, left-handers"
   - id: wear_rear_left
     sessions: [practice, race]
     priority: 2
@@ -437,9 +436,9 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Rear left is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Smooth on the throttle out of the right-handers, short-shift"
-      - "Rear left's going, {wear_hot_ratio:.1f} times the rest. Easy with boost out of the right-handers, no wheelspin"
-      - "Look after the rear left, {wear_hot_ratio:.1f} times faster wear. Short-shift out of the slow right-handers"
+      - "Rear left wearing {wear_hot_ratio:.1f} times faster. Smooth out of right-handers"
+      - "Rear left {wear_hot_ratio:.1f} times the rest. No wheelspin, right-handers"
+      - "Save the rear left. Short-shift out of right-handers"
   - id: wear_rear_right
     sessions: [practice, race]
     priority: 2
@@ -448,9 +447,9 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Rear right is wearing {wear_hot_ratio:.1f} times the others, {wear_hot_pct:.0f} percent. Smooth on the throttle out of the left-handers, short-shift"
-      - "Rear right's going, {wear_hot_ratio:.1f} times the rest. Easy with boost out of the left-handers, no wheelspin"
-      - "Look after the rear right, {wear_hot_ratio:.1f} times faster wear. Short-shift out of the slow left-handers"
+      - "Rear right wearing {wear_hot_ratio:.1f} times faster. Smooth out of left-handers"
+      - "Rear right {wear_hot_ratio:.1f} times the rest. No wheelspin, left-handers"
+      - "Save the rear right. Short-shift out of left-handers"
   - id: wear_fronts
     sessions: [practice, race]
     priority: 2
@@ -459,9 +458,9 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Fronts are wearing {wear_hot_ratio:.1f} times the rears. That's understeer eating them. Slow in, fast out"
-      - "Front tyres going {wear_hot_ratio:.1f} times faster than the rears. Less entry speed, don't push through the understeer"
-      - "We're front limited, {wear_hot_ratio:.1f} times the rears. Brake straighter and let the car rotate"
+      - "Fronts wearing {wear_hot_ratio:.1f} times the rears. Slow in, fast out"
+      - "Fronts {wear_hot_ratio:.1f} times faster. Less entry speed"
+      - "Front limited. Brake straighter, let it rotate"
   - id: wear_rears
     sessions: [practice, race]
     priority: 2
@@ -470,6 +469,6 @@ rules:
     cooldown_s: 300
     requires: [car_damage, lap_data]
     say:
-      - "Rears are wearing {wear_hot_ratio:.1f} times the fronts. Traction. Smooth throttle, short-shift, less boost out of slow corners"
-      - "Rear tyres going {wear_hot_ratio:.1f} times faster than the fronts. Kill the wheelspin, easy on boost in the low gears"
-      - "We're rear limited, {wear_hot_ratio:.1f} times the fronts. Short-shift and feed the throttle in"
+      - "Rears wearing {wear_hot_ratio:.1f} times the fronts. Smooth throttle"
+      - "Rears {wear_hot_ratio:.1f} times faster. No wheelspin"
+      - "Rear limited. Short-shift, feed the throttle"

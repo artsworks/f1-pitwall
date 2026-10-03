@@ -1,23 +1,25 @@
 # Learning loop
 
 How pitwall gets better from each session without repeating the same mistakes.
-Live decisions stay deterministic (ADR 0008). Learning only changes config, model
-parameters and tests, and only through the gates below.
+Live decisions stay deterministic (ADR 0008). Upkeep and calibration write learned values;
+proposals remain review-only.
+
+Recording imports and startup upkeep use database transactions. A failed import
+leaves no partial learning. Calibration stores race pace and tyre wear separately
+for each race length. A fit that cannot separate fuel from tyre age does not replace
+those priors. `pitwall stats --learned` lists each race length.
 
 ```
-race ──► recording + SQLite facts (laps, stints, pit_events, calls, plan_events)
-      ──► 1. hindsight grader   automatic outcome label on every fired call / plan event
-      ──► 2. session digest     ~5–10 KB JSON per session: the compressed memory
-      ──► 3. lessons ledger     claims with evidence; hypothesis → confirmed → applied
-      ──► 4. promotion gate     corpus replay A/B must improve, must-fire calls kept
-      ──► 5. regression fixture trimmed slice + replay test per confirmed mistake
-      ──► learned overlay / model_params / rules PR ──► next race
+session ──► SQLite laps, stints, calls and plan events
+        ──► grade at session end
+        ──► maintain at next start: rebuild clean stint priors, quarantine bad values
+        ──► calibrate and inspect learned state
+        ──► optional debrief, evaluation and review-only proposals
 ```
 
-Phases: **L1** hindsight grader + digest (built, below). **L2** lessons ledger, corpus-scored
-`diff` gate, `tune` for bounded thresholds and priors, trim-to-fixture. **L3** battle state and
-push / defend / manage / encourage coaching with a learned pass model. **L4** debrief §07
-actions from the ledger; optional offline LLM analyst that only *proposes* lessons.
+Learned values are data. A lesson ledger,
+automatic promotion and LLM debrief prose are not implemented; LLM prose is deferred
+(item 21).
 
 ## 1. Hindsight grader (`pitwall.hindsight`)
 
@@ -43,11 +45,11 @@ but only for calls nobody graded by hand. A human grade always overrides the aut
 ## 2. Session digest (`pitwall digest`)
 
 ```
-pitwall digest [--db PATH] [--session UID|latest] [--out DIR|-] [--json]
+pitwall digest [PATHS...] [--calls-mode on|off] [--db PATH] [--session UID|latest] [--out DIR|-] [--json]
 ```
 
-Runs the grader, prints the top findings and writes `~/.pitwall/digests/<uid>.json`
-(version 1):
+Writes digest JSON to `~/.pitwall/digests/<uid>.json` and prints findings. With paths,
+it ingests recordings first. A digest is optional; live sessions are graded automatically.
 
 - `session`: uid, track, type, mode, weather, config hash, laps
 - `pace`: valid green laps, best, median, stdev
@@ -59,25 +61,31 @@ Runs the grader, prints the top findings and writes `~/.pitwall/digests/<uid>.js
 - `bookmarks`, `findings`: deterministic templates, most costly first, at most
   `digest_max_findings`
 
-A digest contains no raw telemetry. Recordings stay out of git (ADR 0005); digests are small
-enough to keep forever and to diff between sessions.
+A digest contains no raw telemetry. Recordings stay out of git (ADR 0005).
 
-## 3–5. Lessons, promotion, fixtures (L2)
+## Automatic upkeep
 
-A lesson is a claim with a scope (track / compound / rule), a metric, the digests that
-support it, the effect size and spread, and a status. "Conclusive" means at least
-`lesson_min_sessions` sessions where the effect has a consistent sign and the spread
-excludes zero. Contradicting evidence moves a lesson back to `hypothesis`, or to `retired`.
+`pitwall start` runs `maintain()` before rules start. It rebuilds stint-derived values once
+per learning version, quarantines invalid active values with a reason, and grades sessions
+that still need grading. A session is also graded when it ends. Upkeep is idempotent;
+database errors are logged and skipped. Run it manually with `pitwall maintain`.
 
-A confirmed lesson becomes a candidate change. It's promoted only if
-`pitwall diff --corpus`, scored on hindsight labels, improves and no must-fire call is lost
-(SC, box, fuel short, penalty). Bounded parameter moves go to the learned overlay with the
-lesson id as provenance; rule or logic changes become a PR. Each confirmed mistake gets a
-`pitwall trim` slice and a replay test asserting the corrected call.
+Race stint values are scoped to total race distance. A 52-lap race uses names such as
+`deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value
+does not have enough weight, the engine falls back to the unscoped value. Non-race stints
+fold without a distance suffix.
+
+## Calibration and review
+
+`pitwall calibrate` fits values from stored sessions. `pitwall stats --learned` shows
+their values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by
+track; it is descriptive, not a causal comparison. `pitwall propose` writes candidates
+for review and does not change active settings. `pitwall tune` updates rule cooldowns
+from human grades and A/B results.
 
 ## After a race
 
-1. Record with the `full` profile (review mode needs it).
-2. Bookmark every wrong, late or missing call (long press with `input.long_press: bookmark`, docs/12).
-3. `pitwall digest`, then grade the pit and plan calls in review mode.
-4. `pitwall tune` to fold grades and outcomes into the rule cooldowns.
+No command is required. Grading runs at session end; upkeep runs at the next start.
+Optionally open `/debrief/<uid>` to review and grade calls, run `pitwall calibrate` to
+fit track values, or use `pitwall stats --learned` to inspect them. Use `pitwall digest`
+only when you want digest JSON or need to ingest external recordings.

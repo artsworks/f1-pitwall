@@ -98,11 +98,17 @@ def projected_lap_ms(
     best_s1: int,
     best_s2: int,
     best_s3: int,
+    ref_sectors: Sequence[int] = (0, 0, 0),
 ) -> int:
     """Projected final lap time: completed sectors at their actual times,
     remaining sectors at best, plus whatever the in-progress sector is over
-    its best. 0 if any needed best is unknown."""
-    bests = [best_s1, best_s2, best_s3]
+    its best. A known reference sector (the cut-off car's) caps a slower own
+    best so a scrappy banker lap doesn't condemn a good one. 0 if any needed
+    best is unknown."""
+    bests = [
+        min(own, ref) if own > 0 and ref > 0 else own
+        for own, ref in zip((best_s1, best_s2, best_s3), ref_sectors, strict=True)
+    ]
     if sector < 0 or sector > 2:
         return 0
     needed = bests[sector:]

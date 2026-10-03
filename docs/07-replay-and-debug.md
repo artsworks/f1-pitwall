@@ -50,14 +50,12 @@ Raw recording is not the only artefact. Alongside it:
 | Option | Purpose |
 |---|---|
 | `--speed 1|10|max` | wall-clock, faster, or as fast as the CPU allows |
-| `--from-lap N` / `--to-lap M` | seek via the index |
-| `--from-event SCAR` | jump to the first safety car, red flag, pit entry… |
-| `--step` | advance one tick at a time, interactively |
-| `--pause-on-call` | stop the moment a call fires and print its full input snapshot |
-| `--rules config/rules-experiment/` | run a different rule set over the same session |
-| `--no-audio` / `--serve` | headless, or serve the dashboard so you can watch it back |
+| `--from-lap N` | seek via the index |
+| `--from-us N` / `--to-us N` | limit replay by session time |
+| `--mask-restricted` | zero rivals' restricted fuel, ERS and tyre-wear data |
+| `--serve` | serve the dashboard so you can watch the replay |
 | `--stats` | packet census per type, rates, gaps, malformed counts |
-| `--seed-db :memory:` | replay without polluting the real database |
+| `--seed-db PATH` | choose replay persistence; defaults to `:memory:` |
 
 Replay drives the **same ingest entry point** as the live socket. The only difference is
 the source object and the clock. Everything time-dependent — EMAs, cooldowns, deadlines,
@@ -107,9 +105,8 @@ the assistant gets better without new races.
 Some situations are hard to produce on demand (red flag, a specific SC timing, a
 particular weather crossover). Two answers:
 
-- **Trim tool**: `pitwall trim <recording> --from-lap 22 --to-lap 27 -o fixtures/sc.f1bin`
-  — small, committable slices of real sessions. These are the regression fixtures; full
-  sessions stay outside git.
+- **Trim tool**: `pitwall trim <recording> --from-us N --to-us N --out fixtures/sc.f1bin`
+  — small local slices for replay. Recordings stay out of git (ADR 0005).
 - **Synthetic generator**: build valid packets from the layout tables to script an exact
   scenario. Used only for cases real recordings do not cover, and always flagged as
   synthetic, because synthetic data quietly encodes your assumptions.

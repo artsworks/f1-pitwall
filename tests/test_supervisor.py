@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import socket
+import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+from unittest.mock import Mock
 
 from pitwall.config.models import EngineSettings
 from pitwall.net.recording import RecordingReader, RecordingRotator
@@ -112,3 +114,22 @@ def test_hung_engine_is_killed_and_restarted(tmp_path: Path) -> None:
     sup.stop()
     t.join(15)
     assert not t.is_alive()
+
+
+def test_second_interrupt_while_stopping_terminates_the_engine(tmp_path: Path) -> None:
+    sup = Supervisor(
+        _settings(),
+        None,
+        [],
+        tmp_path,
+        udp_host="127.0.0.1",
+        udp_port=_free_port(),
+        log=lambda m: None,
+    )
+    child = Mock(spec=subprocess.Popen)
+    child.poll.return_value = None
+    child.wait.side_effect = [KeyboardInterrupt(), 0]
+    sup._child = child
+    sup._stop_child()
+    child.terminate.assert_called_once_with()
+    child.kill.assert_not_called()

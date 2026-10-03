@@ -126,6 +126,10 @@ visual-only mode a first-class configuration rather than "turn the volume down" 
 also the right mode for streaming.
 
 **20. The LLM question, answered once.**
+_Superseded in part by ADR 0009 (`adr/0009-llm-chooser-with-rule-veto.md`): a model may
+now choose among rule-generated candidates once it passes the promotion gate. Phrasing
+stays deterministic._
+
 There will be a temptation to put a language model in the loop. The defensible place for
 one is *phrasing* — turning a deterministic decision into natural speech — and
 *post-race Q&A over the stored database*. It is not a good fit for the decision itself:
@@ -166,7 +170,7 @@ Open points to settle before building:
   from raw data. Provider behind a small interface so the model is a config line.
 - Per-token cost, and an optional API key in the layered config (`08-configuration.md`),
   absent by default.
-- Surface: embedded in the HTML debrief, or a separate `pitwall debrief --ask` CLI/chat.
+- Surface: embedded in the HTML debrief, or a separate debrief chat.
 - Grounding: feed structured stats and the decision log, never raw packets, to keep
   hallucination risk low and context small.
 - Marking LLM-generated text visually so it is never confused with the deterministic,

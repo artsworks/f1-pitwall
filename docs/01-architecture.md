@@ -108,7 +108,7 @@ micro-benchmark. See `09-performance.md`.
 | Storage | SQLite (stdlib) | zero-ops, queryable, portable |
 | Config | YAML + pydantic | validated, hot-reloadable |
 | Frontend | vanilla HTML/CSS/JS, vendored | no build, no CDN, works offline |
-| Speech | Windows SAPI (pilot), Piper later | offline, no browser gesture or focus problems |
+| Speech | Windows SAPI and Piper | offline, no browser gesture or focus problems |
 | Input | UDP Action via `BUTN`; Windows keyboard hook | wheel and spacebar (`12-driver-input.md`) |
 | Tooling | uv, ruff, mypy, pytest | fast, standard |
 
@@ -120,24 +120,23 @@ avoiding a build step means it can be edited on the race PC between sessions.
 ```
 pitwall/
 ├── docs/
-├── config/
-│   ├── defaults/              # packaged defaults, never user-edited
-│   ├── rules/                 # rule definitions (quali.yaml, race.yaml, shared.yaml)
-│   ├── mindsets.yaml          # balanced / aggressive parameter sets (defend, survive later)
-│   ├── thresholds.yaml        # thermal windows etc. by compound/track
-│   └── tracks.yaml            # pit-loss priors, braking zones, pit-exit distance
+├── scripts/
 ├── src/pitwall/
-│   ├── net/                   # udp listener, recorder, replay
-│   ├── protocol/              # layout tables + generated parsers, enums
-│   ├── state/                 # session state, lap accumulator, ema, persistence
-│   ├── config/                # layered loading, validation, hot reload, hashing
-│   ├── rules/                 # rule engine + predicate library
-│   ├── model/                 # lap-time / degradation / pit-loss model
-│   ├── audio/                 # dispatcher, queue, phrasing
-│   └── server/                # FastAPI app, websocket protocol
-├── web/                       # index.html, app.js, vendored css
+│   ├── audio/
+│   ├── config/
+│   │   └── defaults/          # settings, rules, tracks, voice and menu data
+│   ├── input/
+│   ├── model/
+│   ├── net/
+│   ├── protocol/
+│   ├── rules/
+│   ├── server/
+│   ├── state/
+│   ├── store/
+│   ├── strategy/
+│   ├── voice/
+│   ├── cli.py
+│   └── engine.py
 ├── tests/
-│   ├── fixtures/              # golden packet bytes + short recordings
-│   └── replays/               # full-session recordings (git-lfs or external)
-└── tools/                     # replay, diff, trim, doctor, calibrate, debrief, bench
+└── web/
 ```

@@ -14,7 +14,7 @@ The foundation that makes every later milestone cheap.
 - UDP listener on 20777, raw `.f1bin` recorder with receive timestamps, `.f1idx` sidecar.
 - `pitwall replay`: stream a recording through the ingest path at 1×/N×/max, with seek by
   lap and by event; virtual clock so a 10× replay decides identically to 1×.
-- `pitwall trim` for committable fixtures; header parsing and packet-ID counters;
+- `pitwall trim` for local replay slices; recordings stay out of git (ADR 0005);
   `--stats` packet census.
 - Repo scaffolding: uv, ruff, mypy, pytest, GitHub Actions.
 

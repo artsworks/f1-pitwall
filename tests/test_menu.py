@@ -19,7 +19,7 @@ from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer, validate, validate_shortcuts
 from pitwall.protocol.header import PacketId
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Damage, Snapshot
 from pitwall.store.db import Database
 
 from .race_synth import RaceSpec, race_stream
@@ -329,13 +329,13 @@ def test_race_stat_and_fight_answers() -> None:
     assert answer(stat, short, "b")[0] == "fuel_short"
     plain = Snapshot(now=0.0, position=4, laps_remaining=12, player_best_lap_ms=92_412)
     case, values = answer(stat, plain, "b")
-    assert case == "position" and values["pos"] == "4" and values["best"] == "1:32.4"
+    assert case == "position" and values["pos"] == "4" and values["best"] == "1 minute 32.4 seconds"
     assert answer(stat, Snapshot(now=0.0), "b")[0] == "unknown"
     practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
     assert answer(stat, practice, "b")[0] == "practice_no_best"
     timed = dataclasses.replace(practice, player_best_lap_ms=81_298, tyre_age_laps=5)
     case, values = answer(stat, timed, "b")
-    assert case == "practice" and values["best"] == "1:21.3"
+    assert case == "practice" and values["best"] == "1 minute 21.3 seconds"
     fight = MenuItemModel(id="fight", label="Fight")
     snap = Snapshot(
         now=0.0,
@@ -433,3 +433,38 @@ def test_pit_answer_judges_tyres_to_the_end() -> None:
     planned = Snapshot(**base, laps_of_pace=6.0, pit_plan="box_now")  # type: ignore[arg-type]
     assert answer(pit, planned, "b")[0] == "box_now"
     assert answer(pit, Snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
+
+
+def test_pit_answer_accounts_for_front_wing_repair() -> None:
+    pit = MenuItemModel(id="pit", label="Pit now?")
+    snap = Snapshot(
+        now=0.0,
+        laps_remaining=3,
+        front_wing_pit_status="box",
+        damage=Damage(front_left_wing=76),
+        wear_max_pct=1.0,
+        tyre_age_laps=1,
+        laps_of_pace=10,
+        position=7,
+    )
+    case, values = answer(pit, snap, "balanced")
+    assert case == "box_now"
+    assert "front wing 76 percent" in values["reason"]
+    assert (
+        answer(
+            pit,
+            dataclasses.replace(
+                snap, front_wing_pit_status="review", damage=Damage(front_left_wing=39)
+            ),
+            "balanced",
+        )[0]
+        == "damage_review"
+    )
+    assert (
+        answer(
+            pit,
+            dataclasses.replace(snap, front_wing_pit_status="nurse", laps_remaining=1),
+            "balanced",
+        )[0]
+        == "damage_nurse"
+    )

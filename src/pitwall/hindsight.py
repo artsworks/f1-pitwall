@@ -8,6 +8,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 
+from pitwall.model.deg import fuel_burned_laps
 from pitwall.store.db import Database, LapRow
 from pitwall.strategy.plans import LETTERS
 
@@ -95,10 +96,10 @@ def fuel_corrected_ms(stint: Sequence[LapRow], fuel_ms: float) -> dict[int, floa
     green = _green(stint)
     if not green:
         return {}
-    ref = max(lap.fuel_remaining_laps for lap in green)
+    burned = fuel_burned_laps(green)
     return {
-        lap.lap_num: lap.lap_time_ms + fuel_ms * max(0.0, ref - lap.fuel_remaining_laps)
-        for lap in green
+        lap.lap_num: lap.lap_time_ms + fuel_ms * max(0.0, b)
+        for lap, b in zip(green, burned, strict=True)
     }
 
 

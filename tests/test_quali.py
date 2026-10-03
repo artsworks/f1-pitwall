@@ -86,6 +86,11 @@ def test_projected_lap_ms() -> None:
     assert projected_lap_ms(2, 100_000, 32_000, 30_000, *bests) == 100_000
     # missing best -> 0
     assert projected_lap_ms(1, 32_000, 32_000, 0, 30_000, 0, 30_000) == 0
+    # a spin-lap S3 best is capped by the cut-off car's S3
+    slow = (29_569, 39_022, 33_987)
+    cut = (29_900, 37_900, 26_780)
+    assert projected_lap_ms(1, 29_461, 29_461, 0, *slow) == 102_470
+    assert projected_lap_ms(1, 29_461, 29_461, 0, *slow, ref_sectors=cut) == 94_141
 
 
 def test_quali_cutoff() -> None:

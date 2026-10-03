@@ -9,14 +9,16 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from pitwall.config.loader import ConfigStore
+from pitwall.debrief import render_debrief
 from pitwall.metrics import Metrics
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Snapshot, pressure_window, thermal_window
+from pitwall.store.db import Database
 
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 STALE_MS = 1000.0
@@ -345,10 +347,7 @@ def quali_payload(
         th = thresholds or {}
         out["cool"] = {
             "ers_min_pct": snapshot.ers_need_pct or th.get("cool_ers_min_pct", 40.0),
-            "window_c": [
-                th.get("pressure_window_low_c", 88.0),
-                th.get("pressure_window_high_c", 102.0),
-            ],
+            "window_c": list(pressure_window(th, snapshot.tyre_compound)),
             "ers_pct": snapshot.ers_store_pct,
             "ers_mode": snapshot.ers_deploy_mode,
             "recharging": snapshot.ers_deploy_mode == th.get("ers_recharge_mode", -1),
@@ -365,6 +364,8 @@ def quali_payload(
                     "driver": snapshot.pole_driver or None,
                     "gap_ms": snapshot.pole_gap_ms,
                     "sector_gaps_ms": list(snapshot.pole_sector_gaps_ms),
+                    "sectors_ms": list(snapshot.best_sectors_ms),
+                    "pole_sectors_ms": list(snapshot.pole_sectors_ms),
                 }
                 if snapshot.pole_gap_ms > 0
                 else None
@@ -386,8 +387,7 @@ def state_payload(
     page: str | None = None,
     menu: dict[str, object] | None = None,
 ) -> dict[str, Any]:
-    cold = settings.thresholds.get("tyre_inner_cold_c", 80.0)
-    hot = settings.thresholds.get("tyre_inner_hot_c", 110.0)
+    cold, hot = thermal_window(settings.thresholds, snapshot.tyre_compound)
     age_ms = packet_age_ms(snapshot)
     live = age_ms is not None and age_ms < STALE_MS
 
@@ -530,6 +530,7 @@ def create_app(
     on_client_press: Any = None,
     on_client_message: Any = None,
     review: Any = None,
+    db: Database | None = None,
 ) -> FastAPI:
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
     frames (defaults to the hub's no-state placeholder). on_client_press:
@@ -553,6 +554,36 @@ def create_app(
     @app.get("/radio")
     async def radio() -> FileResponse:
         return FileResponse(WEB_DIR / "radio.html")
+
+    @app.get("/sw.js")
+    async def service_worker() -> FileResponse:
+        return FileResponse(WEB_DIR / "sw.js", media_type="text/javascript")
+
+    if db is not None:
+
+        @app.get("/debrief/{uid}")
+        async def debrief(uid: int) -> HTMLResponse:
+            if db.session_row(uid) is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+            return HTMLResponse(render_debrief(db, uid, settings_store.current(), editable=True))
+
+        @app.post("/api/debrief/{uid}/grade")
+        async def debrief_grade(uid: int, request: Request) -> JSONResponse:
+            if db.session_row(uid) is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(status_code=400, detail="Invalid grade")
+            grade = body.get("grade")
+            call_id = body.get("call_id")
+            if grade not in ("good", "noise", "too_late", "wrong") or not isinstance(call_id, str):
+                raise HTTPException(status_code=400, detail="Invalid grade")
+            calls = db.calls_for_session(uid)
+            call = next((row for row in calls if row["call_id"] == call_id), None)
+            if call is None:
+                raise HTTPException(status_code=404, detail="Call not found")
+            db.grade_call(uid, call_id, str(call["rule_id"]), grade)
+            return JSONResponse({"call_id": call_id, "grade": grade})
 
     @app.get("/api/health")
     async def health() -> JSONResponse:

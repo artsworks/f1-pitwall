@@ -179,10 +179,11 @@ class Supervisor:
             return
         try:
             child.wait(timeout=_STOP_WAIT_S)
-        except subprocess.TimeoutExpired:
+            return
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
             child.terminate()
-            try:
-                child.wait(timeout=_STOP_WAIT_S)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait()
+        try:
+            child.wait(timeout=_STOP_WAIT_S)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            child.kill()
+            child.wait()

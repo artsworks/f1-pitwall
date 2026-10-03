@@ -22,14 +22,28 @@ from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
+from pitwall.hindsight import grade_and_store
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
 from pitwall.input.press import Press, PressDetector
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
-from pitwall.model.deg import DegFit, Prior, fit_stint, laps_of_pace, resolve_prior
+from pitwall.model.deg import (
+    DEG_FUEL_REF,
+    DegFit,
+    Prior,
+    corner_wear_life,
+    fit_is_clean,
+    fit_stint,
+    fuel_adjusted_deg,
+    laps_of_pace,
+    planning_fit,
+    resolve_prior,
+    scoped,
+)
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
+from pitwall.protocol.enums import SessionType
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.state.lap import LapSummary
@@ -182,6 +196,7 @@ class Engine:
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
+        self.session_origin_started_at: float | None = None
         self._track_loaded: int | None = None
         self._session_ended_written = False
         # M3 model outputs, exposed on the engine until H2 moves them into
@@ -206,6 +221,7 @@ class Engine:
         self.energy_budget: EnergyBudget | None = None
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
+        self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
         self._fuel_last_kg: float | None = None
         self._session_fuel_last_kg: float | None = None
         self._session_fuel_deltas: list[float] = []
@@ -214,12 +230,16 @@ class Engine:
         self._model_key: tuple[int | None, int, int] | None = None
         self._fuel_prior = Prior(0.0, 0.0, "default")
         self._wear_per_lap = 0.0
+        self._stint_wear0: tuple[float, ...] = ()
+        self._stint_age0 = 0.0
+        self._stint_compound0 = -1
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
+        state.session_end_listeners.append(self.fold_open_stint)
 
     @property
     def tick_period(self) -> float:
@@ -497,6 +517,7 @@ class Engine:
         self._session_ended_written = False
         self._pit_in_lap = None
         self._folded_stints.clear()
+        self._weekend_prior_cache.clear()
         self._fuel_last_kg = None
         self._session_fuel_last_kg = None
         self._session_fuel_deltas = []
@@ -506,9 +527,11 @@ class Engine:
         self.battle_tracker.reset()
         self._battle_rates = None
         self._stops_done = 0
+        self._stint_wear0 = ()
+        self._stint_compound0 = -1
         self._used_compounds.clear()
         self._prev_race_phase = ""
-        self._upsert_session(uid)
+        self.session_origin_started_at = None
 
     def _upsert_session(self, uid: int) -> None:
         if self.db is None:
@@ -517,13 +540,22 @@ class Engine:
         snap = self.state.snapshot(self.clock.now())
         self.db.upsert_session(
             uid,
-            track_id=getattr(snap, "track_id", 0),
-            session_type=getattr(snap, "session_type", 0),
-            started_at=self.clock.now(),
-            game_version=getattr(snap, "game_version", ""),
+            track_id=snap.track_id,
+            session_type=snap.session_type,
+            started_at=(
+                self.session_origin_started_at
+                if self.session_origin_started_at is not None
+                else time.time()
+            ),
             config_hash=self.store.hash,
-            weather=getattr(snap, "weather", 0),
-            game_mode=getattr(snap, "game_mode", 0),
+            weather=snap.weather,
+            game_mode=snap.game_mode,
+            weekend_link=snap.weekend_link,
+            calls_mode=(
+                "off"
+                if self.store.current().policy.quiet or not self.store.current().speech.enabled
+                else "on"
+            ),
         )
 
     def _write_laps(self) -> None:
@@ -572,11 +604,10 @@ class Engine:
 
         if len(tail) < len(all_laps):
             # A stint just closed; fold its fitted params exactly once.
-            boundary = tail[0].lap_num
-            key = (uid, boundary)
+            prev = self._stint_rows(all_laps[: len(all_laps) - len(tail)])
+            key = (uid, prev[0].lap_num) if prev else (uid, tail[0].lap_num)
             if key not in self._folded_stints:
                 self._folded_stints.add(key)
-                prev = self._stint_rows(all_laps[: len(all_laps) - len(tail)])
                 if prev:
                     prior = self._deg_prior(track_id, prev[0].compound, settings)
                     fit = fit_stint(
@@ -587,27 +618,16 @@ class Engine:
                         deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                         deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
                     )
-                    if fit.source == "fit":
-                        for name, value in (
-                            ("deg_ms_per_lap", fit.deg_ms_per_lap),
-                            ("base_ms", fit.base_ms),
-                            ("fuel_ms_per_lap", fit.fuel_ms_per_lap),
-                        ):
-                            db.fold_param(
-                                track_id,
-                                prev[0].compound,
-                                name,
-                                value,
-                                weight=float(fit.n),
-                                param_weight_cap=self._th("param_weight_cap", 50),
-                            )
+                    self._fold_fit(track_id, prev[0].compound, fit)
+                    self._weekend_prior_cache.pop((uid, prev[0].compound), None)
 
         if tail:
             self._stint_laps = tail
-            self._stint_fuel_ref = max((r.fuel_remaining_laps for r in tail), default=0.0)
+            self._stint_fuel_ref = max((r.fuel_kg for r in tail), default=0.0)
             compound = tail[0].compound
             prior = self._deg_prior(track_id, compound, settings)
-            fuel_param = db.get_param(track_id, compound, "fuel_ms_per_lap")
+            fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
+            fuel_param = db.get_param(track_id, compound, fuel_name)
             fuel_fixed = (
                 fuel_param.value
                 if fuel_param is not None and fuel_param.weight >= self._th("prior_min_weight", 2)
@@ -657,19 +677,22 @@ class Engine:
                         pit.ref_pace_ms,
                     )
                     suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    db.fold_param(
-                        track_id,
-                        0,
-                        f"pit_loss_{suffix}_ms",
-                        float(pit.loss_ms),
-                        param_weight_cap=self._th("param_weight_cap", 50),
-                    )
+                    if track_id >= 0:
+                        db.fold_param(
+                            track_id,
+                            0,
+                            f"pit_loss_{suffix}_ms",
+                            float(pit.loss_ms),
+                            param_weight_cap=self._th("param_weight_cap", 50),
+                        )
 
         # Fuel burn per lap: fold each consecutive-valid-lap delta.
         if lap.valid and lap.fuel_kg > 0:
             if self._fuel_last_kg is not None:
                 delta = self._fuel_last_kg - lap.fuel_kg
-                if 0.0 < delta < 10.0:
+                if track_id >= 0 and self._th("fuel_delta_min_kg", 0) < delta < self._th(
+                    "fuel_delta_max_kg", 10
+                ):
                     db.fold_param(
                         track_id,
                         0,
@@ -728,20 +751,57 @@ class Engine:
     def _deg_prior(self, track_id: int, compound: int, settings: Any) -> DegFit:
         overlay = settings.track
         min_w = self._th("prior_min_weight", 2)
-        deg_p = resolve_prior(
+        uid = self.state.session_uid
+        fuel_p = resolve_prior(
             self.db,
             track_id,
             compound,
-            "deg_ms_per_lap",
-            overlay_value=(overlay.deg_ms_per_lap.get(compound) if overlay is not None else None),
-            default=self._th("deg_default_ms_per_lap", 80),
+            self._learned_name(track_id, compound, "fuel_ms_per_lap"),
+            overlay_value=None,
+            default=self._th("fuel_ms_per_lap_default", 30),
             min_weight=min_w,
         )
+        deg_p: Prior | None = None
+        if self.db is not None and uid is not None:
+            cache_key = (uid, compound)
+            weekend = self._weekend_prior_cache.get(cache_key)
+            if weekend is None:
+                stints = self.db.weekend_stints(uid, track_id, compound)
+                n = sum(stint.n_valid_laps for stint in stints)
+                if n:
+                    value = (
+                        sum(
+                            fuel_adjusted_deg(
+                                stint.deg_ms_per_lap, stint.fuel_ms_per_lap, fuel_p.value
+                            )
+                            * stint.n_valid_laps
+                            for stint in stints
+                        )
+                        / n
+                    )
+                else:
+                    value = 0.0
+                weekend = (value, n)
+                self._weekend_prior_cache[cache_key] = weekend
+            if weekend[1] >= self._th("weekend_min_laps", 6):
+                deg_p = Prior(weekend[0], float(weekend[1]), "weekend")
+        if deg_p is None:
+            deg_p = resolve_prior(
+                self.db,
+                track_id,
+                compound,
+                self._learned_name(track_id, compound, "deg_ms_per_lap"),
+                overlay_value=(
+                    overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
+                ),
+                default=self._th("deg_default_ms_per_lap", 80),
+                min_weight=min_w,
+            )
         base_p = resolve_prior(
             self.db,
             track_id,
             compound,
-            "base_ms",
+            self._learned_name(track_id, compound, "base_ms"),
             overlay_value=(
                 float(overlay.base_pace_ms)
                 if overlay is not None and overlay.base_pace_ms > 0
@@ -750,28 +810,110 @@ class Engine:
             default=self._th("release_fallback_lap_s", 95.0) * 1000.0,
             min_weight=min_w,
         )
-        fuel_p = resolve_prior(
-            self.db,
-            track_id,
-            compound,
-            "fuel_ms_per_lap",
-            overlay_value=None,
-            default=self._th("fuel_ms_per_lap_default", 30),
-            min_weight=min_w,
-        )
+        deg = deg_p.value
+        if deg_p.source == "learned" and self.db is not None:
+            deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap")
+            suffix = deg_name.removeprefix("deg_ms_per_lap")
+            ref = self.db.get_param(track_id, compound, DEG_FUEL_REF + suffix)
+            deg = fuel_adjusted_deg(
+                deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
+            )
         return DegFit(
             base_ms=base_p.value,
-            deg_ms_per_lap=deg_p.value,
+            deg_ms_per_lap=deg,
             fuel_ms_per_lap=fuel_p.value,
             n=0,
             rmse_ms=0.0,
-            confidence={"learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2),
+            confidence={"weekend": 0.45, "learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2),
             source=deg_p.source,
         )
+
+    def fold_open_stint(self) -> None:
+        """Persist the current tail stint when a session closes."""
+        if self.db is None or self.state.session_uid is None:
+            return
+        self._write_laps()
+        uid = self.state.session_uid
+        rows = self.db.laps_for(uid, 0)
+        stint = self._stint_rows(rows)
+        if not stint:
+            return
+        key = (uid, stint[0].lap_num)
+        if key in self._folded_stints:
+            return
+        self._folded_stints.add(key)
+        settings = self.store.current()
+        prior = self._deg_prior(self.state.track_id, stint[0].compound, settings)
+        fit = fit_stint(
+            stint,
+            prior,
+            min_laps=int(self._th("deg_min_laps", 3)),
+            fuel_coeff_fixed=None,
+            deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+            deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+        )
+        self.db.upsert_stint(uid, 0, stint[0].compound, stint[0].lap_num, stint[-1].lap_num, fit)
+        self._weekend_prior_cache.pop((uid, stint[0].compound), None)
+        self._fold_fit(self.state.track_id, stint[0].compound, fit)
+
+    def _fold_fit(self, track_id: int, compound: int, fit: DegFit) -> None:
+        """Fold a stint fit into the learned priors when it is a clean fit on
+        an identified track; noisy stints stay in `stints` only."""
+        if (
+            self.db is None
+            or track_id < 0
+            or not fit_is_clean(
+                fit,
+                deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+                deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+                base_min_ms=self._th("learn_base_min_ms", 40_000),
+                base_max_ms=self._th("learn_base_max_ms", 200_000),
+            )
+        ):
+            return
+        race_laps = self._race_laps()
+        params = [
+            ("deg_ms_per_lap", fit.deg_ms_per_lap),
+            (DEG_FUEL_REF, fit.fuel_ms_per_lap),
+            ("base_ms", fit.base_ms),
+        ]
+        if fit.fuel_fitted:
+            params.append(("fuel_ms_per_lap", fit.fuel_ms_per_lap))
+        for name, value in params:
+            self.db.fold_param(
+                track_id,
+                compound,
+                scoped(name, race_laps),
+                value,
+                weight=float(fit.n),
+                param_weight_cap=self._th("param_weight_cap", 50),
+            )
+
+    def _learned_name(self, track_id: int, compound: int, name: str) -> str:
+        """The race-distance prior once it has weight, else the practice one."""
+        name_at = scoped(name, self._race_laps())
+        if name_at == name or self.db is None:
+            return name
+        p = self.db.get_param(track_id, compound, name_at)
+        return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
+
+    def _race_laps(self) -> int:
+        """Race distance the stint-derived priors are scoped to; 0 outside races."""
+        try:
+            kind = SessionType(self.state.session_type).kind()
+        except ValueError:
+            return 0
+        return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
 
     def _th(self, name: str, default: float) -> float:
         v = self.store.current().thresholds.get(name, default)
         return float(v) if isinstance(v, int | float) else default
+
+    def _lap_fraction(self) -> float:
+        state = self.state
+        if state.track_length_m <= 0:
+            return 0.0
+        return min(max(state.lap_distance / state.track_length_m, 0.0), 1.0)
 
     def _update_model(self) -> None:
         """Refresh priors (once per lap) and budgets (every tick), then hand
@@ -852,29 +994,48 @@ class Engine:
 
         fit = self.deg_fit
         wear = state.tyres_wear.as_tuple()
-        wear_mean = sum(wear) / 4.0
-        wear_max = max(wear)
-        # The worst corner hits the cliff first; scale the stint's mean rate to it.
-        worst_rate = self._wear_per_lap * (wear_max / wear_mean if wear_mean > 0 else 1.0)
-        wear_cliff = self._th("wear_cliff_pct", 70)
-        lop = math.inf
+        age = state.tyre_age_laps
+        if (
+            not self._stint_wear0
+            or state.tyre_compound != self._stint_compound0
+            or age < self._stint_age0
+            or any(w < w0 - 1.0 for w, w0 in zip(wear, self._stint_wear0, strict=True))
+        ):
+            self._stint_wear0 = wear
+            self._stint_age0 = age + self._lap_fraction()
+            self._stint_compound0 = state.tyre_compound
+        lop = corner_wear_life(
+            wear,
+            self._stint_wear0,
+            age + self._lap_fraction() - self._stint_age0,
+            wear_cliff_pct=self._th("wear_cliff_pct", 70),
+            default_rate_pct=self._wear_per_lap,
+        )
         predicted = 0
-        if fit is None and state.tyre_age_laps >= 2 and worst_rate > 0:
-            lop = max(0.0, (wear_cliff - wear_max) / worst_rate)
         if fit is not None:
-            lop = laps_of_pace(
-                fit,
-                state.tyre_age_laps,
-                wear_max,
-                cliff_ms=self._th("tyre_cliff_ms", 1500),
-                wear_cliff_pct=wear_cliff,
-                wear_per_lap=worst_rate,
+            lop = min(
+                lop,
+                laps_of_pace(
+                    planning_fit(fit, self._fresh_prior, self._th("deg_rmse_bad_ms", 800))
+                    if self._fresh_prior is not None
+                    else fit,
+                    age,
+                    max(wear),
+                    cliff_ms=self._th("tyre_cliff_ms", 1500),
+                    wear_cliff_pct=self._th("wear_cliff_pct", 70),
+                    wear_per_lap=0.0,
+                ),
             )
-            burned = self._stint_fuel_ref - state.fuel_remaining_laps
+            per_lap = self.fuel_budget.per_lap_kg if self.fuel_budget is not None else 0.0
+            burned = (
+                max(0.0, self._stint_fuel_ref - state.fuel_in_tank) / per_lap
+                if per_lap > 0 and self._stint_fuel_ref > 0
+                else 0.0
+            )
             predicted = int(
                 fit.base_ms
                 + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
-                + fit.fuel_ms_per_lap * (burned + 1)
+                - fit.fuel_ms_per_lap * (burned + 1)
             )
         eb = self.energy_budget
         fb = self.fuel_budget
@@ -911,6 +1072,7 @@ class Engine:
             return snap
         if fit is None:
             return self._plans(snap, self._fresh_prior, NO_PLAN)
+        fit = planning_fit(fit, self._fresh_prior, self._th("deg_rmse_bad_ms", 800))
         settings = self.store.current()
         ahead = (
             RivalView(
@@ -1191,6 +1353,14 @@ class Engine:
         if self.state.track_id != self._track_loaded:
             self._track_loaded = self.state.track_id
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
+        if (
+            self.db is not None
+            and self.state.session_uid is not None
+            and self.state.track_id >= 0
+            and self.state.session_type > 0
+            and self._session_upserted != self.state.session_uid
+        ):
+            self._upsert_session(self.state.session_uid)
         self._write_laps()
         self._update_model()
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
@@ -1207,7 +1377,7 @@ class Engine:
                 run_lap_kind="cool",
                 run_plan="manual_cool",
                 run_plan_reason="driver",
-                run_plan_why="Driver requested a cooldown",
+                run_plan_why="Your call",
             )
         if (
             snapshot.session_ended
@@ -1215,8 +1385,11 @@ class Engine:
             and self.db is not None
             and self.state.session_uid is not None
         ):
+            self.fold_open_stint()
             self._session_ended_written = True
             self.db.end_session(self.state.session_uid, now)
+            grade_and_store(self.db, self.state.session_uid, self.store.current().thresholds)
+            self.db.mark_graded(self.state.session_uid)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
@@ -1247,12 +1420,6 @@ class Engine:
             self._paused = snapshot.paused
         if snapshot.paused:
             return []
-        if (
-            self.db is not None
-            and self.state.session_uid is not None
-            and self._session_upserted != self.state.session_uid
-        ):
-            self._upsert_session(self.state.session_uid)
         self._heartbeat(now)
         if self.recovering:
             if self.rule_engine is not None:
@@ -1421,6 +1588,7 @@ def build_engine(
     sinks: list[CallSink] | None = None,
     record_to: Path | None = None,
     db: Any = None,
+    session_started_at: float | None = None,
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
@@ -1467,12 +1635,14 @@ def build_engine(
         settings.policy,
         clock,
         decision_log=dlog,
-        sinks=sinks or [LogSink()],
+        sinks=sinks if sinks is not None else [LogSink()],
         metrics=Metrics(),
         budget_override=mode.get("call_budget_per_lap"),
         input=settings.input,
     )
-    return Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine.session_origin_started_at = session_started_at
+    return engine
 
 
 def build_census_engine(clock: Clock | None = None) -> Engine:

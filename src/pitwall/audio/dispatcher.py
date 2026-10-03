@@ -93,7 +93,7 @@ class Dispatcher:
         self.input = input or InputSettings()
         self.clock = clock
         self.log = decision_log or DecisionLog()
-        self.sinks = sinks or [LogSink()]
+        self.sinks = [LogSink()] if sinks is None else sinks
         self.metrics = metrics or Metrics()
         self.budget_override = budget_override
         self._queue: list[_Queued] = []
@@ -461,7 +461,7 @@ class Dispatcher:
                 self._log_press(now, snapshot, "quiet_until", None, None)
                 mins = f"{self.input.quiet_minutes:g}"
                 self._reply(
-                    [f"Copy, going quiet for {mins} minutes. One click brings me back."],
+                    [f"Copy, going quiet for {mins} minutes. Click to undo."],
                     snapshot,
                 )
             self._broadcast_press(payload)

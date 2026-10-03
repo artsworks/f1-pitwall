@@ -1,6 +1,10 @@
 thresholds:
   tyre_inner_cold_c: 80
   tyre_inner_hot_c: 110
+  tyre_inner_cold_by_compound_c: {7: 60, 8: 50, 16: 70, 17: 75, 18: 80, 19: 85, 20: 90, 21: 90, 22: 65}
+  tyre_inner_hot_by_compound_c: {7: 85, 8: 80, 16: 90, 17: 100, 18: 105, 19: 115, 20: 115, 21: 125, 22: 85}
+  pressure_window_inset_c: 5
+  cool_tyre_hot_margin_c: 1
   front_wing_damage_warn_pct: 15
   boost_warn_s: 3          # boost continuously on for this long...
   boost_warn_brake: 0.3    # ...and the driver brakes

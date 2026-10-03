@@ -120,9 +120,9 @@ def test_sc_cheap_stop(runs) -> None:
 
 def test_penalty_call(runs) -> None:
     calls, _ = runs["penalty"]
-    pen = next(c for c in calls if c.rule_id == "penalty")
+    pen = next(c for c in calls if c.rule_id == "penalty_corner_cut")
     assert pen.lap == 3
-    assert "5 seconds" in pen.text
+    assert "5 second" in pen.text
 
 
 def test_blue_flag_call(runs) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pitwall.state.lap import LapSummary
+from pitwall.state.lap import LapAccumulator, LapSummary
 from pitwall.store.db import MIGRATIONS, Database
 
 
@@ -102,3 +102,90 @@ def test_call_inputs_with_dataclass_values_are_stored() -> None:
     db = Database(":memory:")
     db.insert_call(1, {"outcome": "fired", "call_id": "c-1", "inputs": {"damage": Damage(7)}})
     assert "front_left_wing" in db.calls_for_session(1)[0]["inputs"]
+
+
+def test_m4_session_ingest_and_lap_temperature_persistence() -> None:
+    db = Database(":memory:")
+    uid = 0xF1264001
+    db.upsert_session(
+        uid,
+        track_id=7,
+        session_type=15,
+        started_at=100.0,
+        weekend_link=27,
+        calls_mode="on",
+    )
+    db.set_session_origin(
+        uid,
+        started_at=50.0,
+        recording_path="race.f1bin",
+        calls_mode="off",
+    )
+    db.insert_lap(
+        uid,
+        0,
+        LapSummary(
+            lap_num=2,
+            lap_time_ms=90_000,
+            sector1_ms=30_000,
+            sector2_ms=30_000,
+            compound=17,
+            tyre_age_laps=1,
+            fuel_remaining_laps_at_end=10.0,
+            valid=True,
+            tyre_inner_c=92.5,
+            tyre_surface_c=105.25,
+        ),
+    )
+
+    row = db.session_row(uid)
+    lap = db.laps_for(uid)[0]
+    assert row is not None
+    assert row["started_at"] == 50.0
+    assert row["recording_path"] == "race.f1bin"
+    assert row["weekend_link"] == 27 and row["calls_mode"] == "off"
+    assert lap.tyre_inner_c == 92.5 and lap.tyre_surface_c == 105.25
+    assert db.session_has_laps(uid)
+
+    db.mark_ingested(uid, 3, "race.f1bin")
+    assert db.is_ingested(uid, 3)
+    assert not db.is_ingested(uid, 2)
+    assert db.ingested_count(7) == 1
+    assert db._conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)  # noqa: SLF001
+
+
+def test_lap_temperature_accumulator_averages_samples_and_corners() -> None:
+    accumulator = LapAccumulator()
+    accumulator.update(
+        current_lap_num=1,
+        last_lap_time_ms=0,
+        sector1_ms=0,
+        sector2_ms=0,
+        pit_status=0,
+        driver_status=4,
+        current_lap_invalid=0,
+        safety_car_status=0,
+        compound=17,
+        tyre_age_laps=0,
+        fuel_remaining_laps=10.0,
+    )
+    accumulator.note_tyre_temperatures((80, 90, 100, 110), (100, 110, 120, 130))
+    accumulator.note_tyre_temperatures((100, 110, 120, 130), (120, 130, 140, 150))
+
+    lap = accumulator.update(
+        current_lap_num=2,
+        last_lap_time_ms=90_000,
+        sector1_ms=30_000,
+        sector2_ms=30_000,
+        pit_status=0,
+        driver_status=4,
+        current_lap_invalid=0,
+        safety_car_status=0,
+        compound=17,
+        tyre_age_laps=1,
+        fuel_remaining_laps=9.0,
+    )
+
+    assert lap is not None
+    assert lap.tyre_inner_c == 105.0
+    assert lap.tyre_surface_c == 125.0

@@ -167,9 +167,7 @@ def test_boost_rule_fires_on_lift_not_on_straight() -> None:
 def test_lockup_rules_text() -> None:
     e = _engine()
     t = _texts(e, lockup="rear", lockup_wheel="rear right", front_brake_bias=54)
-    assert t["lockup_rear"] == (
-        "Rears locking, rear right. Move the brake bias forward, you're on 54."
-    )
+    assert t["lockup_rear"] == ("Rears locking, rear right. Bias forward from 54.")
     t = _texts(e, lockup="front", lockup_wheel="front left")
     assert t["lockup_front"].startswith("Lock-up, front left.")
 
@@ -177,9 +175,9 @@ def test_lockup_rules_text() -> None:
 def test_yellow_rules_text() -> None:
     e = _engine()
     t = _texts(e, yellow_ahead_m=450.0, yellow_ahead_sector=2)
-    assert t["yellow_ahead"] == "Yellow ahead, sector 2, 450 metres. Careful, no overtaking."
+    assert t["yellow_ahead"] == "Yellow ahead, sector 2, 450 metres. No overtaking."
     t = _texts(e, yellow_behind_m=600.0, yellow_behind_sector=1)
-    assert t["yellow_behind"] == "Yellow behind you in sector 1. You're clear, ignore it."
+    assert t["yellow_behind"] == "Yellow behind, sector 1. You're clear."
     assert _texts(e) == {}
 
 
@@ -191,6 +189,30 @@ def test_out_lap_rules_speak_in_s3_only() -> None:
     e = _engine()
     t = _texts(e, phase="out_lap", sector=2, s3_entry_coldest_c=85.0)
     assert list(t) == ["out_lap_s3_tyres_ready"]
+
+
+def test_wet_compounds_in_green_window_on_out_lap() -> None:
+    for compound, green in ((7, 70.0), (8, 60.0)):
+        e = _engine()
+        assert list(
+            _texts(
+                e,
+                phase="out_lap",
+                sector=2,
+                tyre_compound=compound,
+                s3_entry_coldest_c=green,
+            )
+        ) == ["out_lap_s3_tyres_ready"]
+        e = _engine()
+        assert list(
+            _texts(
+                e,
+                phase="out_lap",
+                sector=2,
+                tyre_compound=compound,
+                s3_entry_coldest_c=green - 15,
+            )
+        ) == ["out_lap_s3_tyres_cold"]
 
 
 # -- state wiring ----------------------------------------------------------
@@ -331,13 +353,13 @@ def test_lockup_same_braking_zone_on_later_lap() -> None:
 def test_same_spot_rule_replaces_generic_lockup_call() -> None:
     t = _texts(_engine(), lockup="front", lockup_wheel="front left", lockup_spot_laps=1)
     assert list(t) == ["lockup_front_same_spot"]
-    assert t["lockup_front_same_spot"].startswith("Locking up in the same braking zone")
+    assert t["lockup_front_same_spot"].startswith("Same lock-up as last lap")
 
 
 def test_spin_rule_speaks_and_escalates() -> None:
     e = _engine()
     first = _texts(e, now=0.0, spun=True)["spun_rejoin"]
-    assert first.startswith("You're clear behind") and "throttle" in first
+    assert first.startswith("Clear behind") and "throttle" in first
     _texts(e, now=10.0)
     second = _texts(e, now=20.0, spun=True, spins=2)["spun_rejoin"]
     assert (
@@ -461,14 +483,14 @@ def test_fastest_lap_calls() -> None:
         _engine(),
         phase="racing",
         fastest_lap_mine=True,
-        fastest_lap_time="1:19.195",
+        fastest_lap_spoken="1 minute 19.195 seconds",
         fastest_lap_age_s=1.0,
     )
-    assert "fastest_lap_mine" in mine and "1:19.195" in mine["fastest_lap_mine"]
+    assert "fastest_lap_mine" in mine and "1 minute 19.195 seconds" in mine["fastest_lap_mine"]
     rival: dict[str, object] = {
         "phase": "racing",
         "fastest_lap_name": "LECLERC",
-        "fastest_lap_time": "1:18.900",
+        "fastest_lap_spoken": "1 minute 18.9 seconds",
         "fastest_lap_age_s": 3.0,
         "fastest_lap_gap_s": 0.3,
         "laps_remaining": 3,

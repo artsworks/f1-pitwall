@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 
 from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.rules.expr import ExprError, Predicate
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Snapshot, spoken_lap_time
 
 Answer = tuple[str, dict[str, str]]  # (case, template values)
 
@@ -159,12 +159,20 @@ def _pit(snap: Snapshot) -> Answer:
         "window": f"{snap.pit_window_start} to {snap.pit_window_end}"
         if snap.pit_window_start
         else "",
+        "wing": str(max(snap.damage.front_left_wing, snap.damage.front_right_wing)),
     }
+    if snap.front_wing_pit_status == "box":
+        v["reason"] = f"front wing {v['wing']} percent, replace the nose"
+        return "box_now", v
+    if snap.front_wing_pit_status == "nurse":
+        return "damage_nurse", v
     if plan in ("box_now", "cheap_stop", "free_stop"):
         return "box_now", v
     if plan == "box_in_n":
         return "soon", v
     if (snap.wear_max_pct <= 0 and snap.tyre_age_laps == 0) or left <= 0:
+        if snap.front_wing_pit_status == "review":
+            return "damage_review", v
         if plan == "no_stop":
             return "no_stop", v
         if plan in ("stay", "overcut"):
@@ -174,6 +182,8 @@ def _pit(snap: Snapshot) -> Answer:
         return "tyres_short", v
     if left >= 3 and gain >= loss + PIT_FIGHT_MARGIN_S:
         return "box_fight", v
+    if snap.front_wing_pit_status == "review":
+        return "damage_review", v
     return "hold", v
 
 
@@ -277,10 +287,7 @@ def _push(snap: Snapshot) -> Answer:
 
 
 def _lap_time(ms: float) -> str:
-    if ms <= 0 or not math.isfinite(ms):
-        return "?"
-    m, sec = divmod(ms / 1000.0, 60.0)
-    return f"{int(m)}:{sec:04.1f}"
+    return spoken_lap_time(round(ms / 100) * 100)
 
 
 def _race_stat(snap: Snapshot) -> Answer:
@@ -372,7 +379,18 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
 
 TEMPLATE_KEYS = frozenset(
     {"lap", "laps_left", "mindset", "wear", "age", "pace_laps", "plan_lap", "in_laps"}
-    | {"reason", "gain", "window", "gap", "name", "trend", "margin", "compound_sets", "loss"}
+    | {
+        "reason",
+        "gain",
+        "window",
+        "gap",
+        "name",
+        "trend",
+        "margin",
+        "compound_sets",
+        "loss",
+        "wing",
+    }
     | {
         "in10",
         "in30",

@@ -10,8 +10,10 @@ Voices are downloaded once into `speech.voices_dir` (`pitwall voices get`).
 
 from __future__ import annotations
 
+import hashlib
 import io
 import itertools
+import json
 import queue
 import sys
 import tempfile
@@ -24,6 +26,7 @@ from pathlib import Path
 from typing import Protocol
 
 import numpy as np
+import yaml
 
 from pitwall.audio.dispatcher import Call
 from pitwall.config.models import SpeechSettings
@@ -204,12 +207,16 @@ class PiperSpeaker:
         player: Player,
         label: str = "piper",
         tones: dict[int, Synth] | None = None,
+        cache_dir: Path | None = None,
+        cache_key: str = "",
     ) -> None:
         self.name = label
         self.on_spoken: Callable[[str, float], None] | None = None
         self._synth = synth
         self._tones = tones or {}
         self._player = player
+        self._cache_dir = cache_dir
+        self._cache_key = cache_key
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
         self._q: queue.PriorityQueue[tuple[int, int, Call | None]] = queue.PriorityQueue()
         self._seq = itertools.count()
@@ -239,11 +246,37 @@ class PiperSpeaker:
         if hit is not None:
             self._cache.move_to_end(key)
             return hit
-        out = (synth or self._synth)(text)
+        disk_path = (
+            self._cache_dir
+            / f"{hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()}.wav"
+            if self._cache_dir is not None
+            else None
+        )
+        if disk_path is not None and disk_path.is_file():
+            wav = disk_path.read_bytes()
+            with wave.open(io.BytesIO(wav)) as reader:
+                seconds = reader.getnframes() / reader.getframerate()
+            out = wav, seconds
+        else:
+            out = (synth or self._synth)(text)
         self._cache[key] = out
         if len(self._cache) > CACHE_SIZE:
             self._cache.popitem(last=False)
         return out
+
+    def warm(self, phrases: list[tuple[str, int]]) -> int:
+        if self._cache_dir is None:
+            return 0
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        for text, priority in phrases:
+            wav, _ = self.render(text, priority)
+            key = (priority if priority in self._tones else 0, text)
+            path = self._cache_dir / (
+                f"{hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()}.wav"
+            )
+            if not path.exists():
+                path.write_bytes(wav)
+        return len(phrases)
 
     def _worker(self) -> None:
         while True:
@@ -274,5 +307,34 @@ class PiperSpeaker:
 def make_piper_speaker(settings: SpeechSettings) -> PiperSpeaker:
     player = WinsoundPlayer()
     tones = make_piper_tone_synths(settings)
-    speaker = PiperSpeaker(tones[2], player, label=f"piper ({settings.piper_voice})", tones=tones)
+    model = voice_path(settings)
+    identity = hashlib.sha256(
+        json.dumps(
+            {
+                "settings": settings.model_dump(mode="json"),
+                "model_size": model.stat().st_size,
+                "model_mtime_ns": model.stat().st_mtime_ns,
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    speaker = PiperSpeaker(
+        tones[2],
+        player,
+        label=f"piper ({settings.piper_voice})",
+        tones=tones,
+        cache_dir=Path(settings.voices_dir) / ".phrases",
+        cache_key=identity,
+    )
     return speaker
+
+
+def common_phrases(limit: int = 50) -> list[tuple[str, int]]:
+    root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
+    phrases: set[tuple[str, int]] = set()
+    for path in sorted(root.glob("*.yaml")):
+        for rule in yaml.safe_load(path.read_text()).get("rules", []):
+            for text in rule.get("say", []):
+                if "{" not in text:
+                    phrases.add((text, int(rule.get("priority", 2))))
+    return sorted(phrases, key=lambda item: (item[1], item[0]))[:limit]
