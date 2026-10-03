@@ -63,6 +63,9 @@ rules on graded outcomes.
    | `strategy.react`: SC/VSC cheap stop, undercut/overcut choice | on the event | 1.0 s | shadow |
    | `mfd.balance`: brake bias / on-throttle step among rule options | race, P3 | 1.0 s | shadow |
 
+   `radio.arbitrate` (the speaking order of queued P2/P3 calls) is specified in
+   [ADR 0010](0010-jev-call-arbitration.md).
+
    Rules-only, with no model involved: flags, penalties, damage, lock-ups, spins, boost,
    fuel-critical and any P1 call. They are safety- or time-critical and have one right
    answer.

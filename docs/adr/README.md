@@ -20,3 +20,4 @@ PC and are git-ignored; the ADR records the finding, not the data.
 | [0007](0007-driving-event-signals.md) | Driving-event signals: lock-ups, boost, yellows, out-lap timing |
 | [0008](0008-natural-phrasing-without-an-llm.md) | Natural phrasing without an LLM: variants, escalation, spins |
 | [0009](0009-llm-chooser-with-rule-veto.md) | LLM as a gated chooser with rule veto (supersedes 0008's decision part) |
+| [0010](0010-jev-call-arbitration.md) | Jev call arbitration: order queued P2/P3 calls under 0009 (proposed) |

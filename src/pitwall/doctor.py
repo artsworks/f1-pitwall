@@ -175,8 +175,8 @@ def run_doctor(
         )
     if sys.platform == "win32":
         try:
-            import pythoncom
-            import win32com.client
+            import pythoncom  # type: ignore[import-untyped]
+            import win32com.client  # type: ignore[import-untyped]
 
             pythoncom.CoInitialize()
             voices = win32com.client.Dispatch("SAPI.SpVoice").GetVoices()

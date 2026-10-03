@@ -13,8 +13,12 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 if TYPE_CHECKING:
+    from pitwall.config.models import Settings
     from pitwall.server.hub import Hub
+    from pitwall.store.db import Database
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
@@ -40,6 +44,18 @@ from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
 from pitwall.supervisor import ALIVE_FILE, Supervisor, read_recording_pointer, runtime_dir
+from pitwall.voice.arbitrator import (
+    ArbCandidate,
+    Arbitrator,
+    JevArbitrator,
+    JevError,
+    RecordedArbitrator,
+    ShadowArbitrator,
+    api_key,
+    build_live_arbitrator,
+    format_shadow_report,
+    shadow_report,
+)
 
 
 def _parse_speed(value: str) -> float | None:
@@ -155,15 +171,66 @@ def cmd_replay(args: argparse.Namespace) -> int:
         asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
-    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
+    arbitrator, shadow, recorded = None, None, None
+    if not args.no_rules:
+        try:
+            arbitrator, shadow, recorded = _replay_arbitrator(args)
+        except ValueError as e:
+            print(f"replay: {e}")
+            return 1
+    engine = (
+        build_census_engine(clock)
+        if args.no_rules
+        else build_engine(clock=clock, db=db, arbitrator=arbitrator)
+    )
     if args.mask_restricted:
         engine.ingest.transform = mask_restricted
     replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
     print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
+    if recorded is not None and recorded.picks:
+        print(
+            f"arbitration: repeated {recorded.hits} recorded picks"
+            f" ({recorded.misses} decision points had none: heap order)"
+        )
+    if shadow is not None:
+        report = shadow_report(shadow.decisions)
+        print(json.dumps(report, indent=2) if args.json else format_shadow_report(report))
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
     return 0
+
+
+def _replay_arbitrator(
+    args: argparse.Namespace,
+) -> tuple[Arbitrator | None, ShadowArbitrator | None, RecordedArbitrator | None]:
+    """Replay ordering (ADR 0010): the recorded live picks, Jev again, or a shadow diff."""
+    from pitwall.net.replay import load_recorded_picks
+
+    jev_settings = ConfigStore().current().jev
+    if args.arbitrate == "shadow" or args.recompute:
+        if not jev_settings.enabled:
+            raise ValueError("jev.enabled is false in settings")
+        key = api_key(jev_settings)
+        if not key:
+            raise ValueError(f"{jev_settings.api_key_env} is not set")
+        jev = JevArbitrator(jev_settings, api_key=key)
+        if args.arbitrate == "shadow":
+            shadow = ShadowArbitrator(jev)
+            return shadow, shadow, None
+        print("arbitration: --recompute asks Jev again (experimental; not what live said)")
+        return jev, None, None
+    if args.arbitrate == "off":
+        return None, None, None
+    sources = [Path(p) for p in args.picks] if args.picks else _default_pick_sources()
+    recorded = RecordedArbitrator(load_recorded_picks(sources))
+    return (recorded if recorded.picks else None), None, recorded
+
+
+def _default_pick_sources() -> list[Path]:
+    """Live decision logs: `<recordings>/<mindset>.decisions.jsonl`."""
+    rec_dir = Path(ConfigStore().current().recording.directory).expanduser()
+    return sorted(rec_dir.glob("*.decisions.jsonl"))
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
@@ -226,7 +293,63 @@ def cmd_tune(args: argparse.Namespace) -> int:
                 f"{result.session_uid} {result.status} {result.path}"
                 + (f": {result.error}" if result.error else "")
             )
+    if args.judge == "jev":
+        return _judge_jev(args, settings, db)
     print(format_tune(tune_from_db(db, settings.thresholds)))
+    return 0
+
+
+def _judge_jev(args: argparse.Namespace, settings: Settings, db: Database) -> int:
+    """Grade recorded arbitration decision points with Jev into a labeled JSONL corpus."""
+    from pitwall.net.replay import arbitration_records
+
+    jev_settings = settings.jev
+    if not (jev_settings.enabled and jev_settings.grade):
+        print("tune: --judge jev needs jev.enabled and jev.grade in settings")
+        return 1
+    key = api_key(jev_settings)
+    if not key:
+        print(f"tune: {jev_settings.api_key_env} is not set")
+        return 1
+    records = (
+        list(arbitration_records(Path(p) for p in args.log)) if args.log else db.arbitrations()
+    )
+    out_dir = (
+        Path(args.out).expanduser()
+        if args.out
+        else Path(settings.recording.directory).expanduser() / "jev_training"
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"jev_training_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
+    jev = JevArbitrator(jev_settings, api_key=key)
+    graded = failed = 0
+    with out_path.open("w", encoding="utf-8") as fp:
+        for record in records:
+            cands = [ArbCandidate.from_json(c) for c in record.get("candidates") or ()]
+            order = record.get("arb_order") or []
+            if len(cands) < 2 or not order or not 0 <= int(order[0]) < len(cands):
+                continue
+            pick = cands[int(order[0])].call_id
+            digest = record.get("digest") or {}
+            try:
+                verdict = jev.judge(cands, digest, pick)
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, JevError):
+                failed += 1
+                continue
+            row = {
+                "arb_key": record.get("arb_key"),
+                "digest": digest,
+                "candidates": [c.to_json() for c in cands],
+                "pick": pick,
+                "arbitrated_by": record.get("arbitrated_by"),
+                "verdict": verdict.verdict,
+                "verdict_confidence": verdict.confidence,
+                "best_call": verdict.best_call,
+                "model": verdict.model,
+            }
+            fp.write(json.dumps(row, default=str) + "\n")
+            graded += 1
+    print(f"tune: graded {graded} decision points ({failed} failed) -> {out_path}")
     return 0
 
 
@@ -770,6 +893,8 @@ def cmd_start(args: argparse.Namespace) -> int:
         decision_log=dlog,
         sinks=[hub, speaker],
         input=settings.input,
+        arbitrator=build_live_arbitrator(settings.jev),
+        arbitration=settings.jev,
     )
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
@@ -1166,6 +1291,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=":memory:",
         help="SQLite db for replay persistence (default :memory:; never the real DB)",
     )
+    rep.add_argument(
+        "--arbitrate",
+        choices=["recorded", "shadow", "off"],
+        default="recorded",
+        help="call order: recorded live picks (default), shadow = ask Jev and report"
+        " heap-vs-Jev diffs without changing the replay, off = heap order",
+    )
+    rep.add_argument(
+        "--picks",
+        action="append",
+        default=None,
+        help="decision log (JSONL) or SQLite db holding live picks (default: recordings/)",
+    )
+    rep.add_argument(
+        "--recompute",
+        action="store_true",
+        help="experimental: ask Jev again instead of repeating the recorded picks",
+    )
+    rep.add_argument("--json", action="store_true", help="shadow report as JSON")
     rep.set_defaults(func=cmd_replay)
 
     dif = sub.add_parser("diff", help="compare two rules dirs over recording(s)")
@@ -1185,6 +1329,21 @@ def build_parser() -> argparse.ArgumentParser:
     tun.add_argument("paths", nargs="*", help="recordings to ingest before tuning")
     tun.add_argument("--calls-mode", choices=["on", "off"], default=None)
     tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    tun.add_argument(
+        "--judge",
+        choices=["jev"],
+        default=None,
+        help="grade recorded arbitration decision points with Jev into a labeled JSONL corpus",
+    )
+    tun.add_argument(
+        "--log",
+        action="append",
+        default=None,
+        help="decision log(s) to grade with --judge (default: the database's arbitrations)",
+    )
+    tun.add_argument(
+        "--out", default=None, help="corpus dir for --judge (default: recordings/jev_training)"
+    )
     tun.set_defaults(func=cmd_tune)
 
     mt = sub.add_parser("maintain", help="repair learned state (runs automatically on start)")

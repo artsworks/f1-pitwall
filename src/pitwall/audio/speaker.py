@@ -76,7 +76,7 @@ def _speak_one(
         try:
             import winsound
 
-            winsound.PlaySound(blip, winsound.SND_MEMORY)  # type: ignore[attr-defined]
+            winsound.PlaySound(blip, winsound.SND_MEMORY)  # type: ignore[attr-defined, unused-ignore]
         except Exception:
             pass
     flags = SVSF_ASYNC | (SVSF_PURGE_BEFORE_SPEAK if call.priority == 1 else 0)

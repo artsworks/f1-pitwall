@@ -250,6 +250,35 @@ MIGRATIONS: list[str] = [
         ran_at REAL
     );
     """,
+    # 10: call arbitration (docs/adr/0010). Each call row carries the ranking
+    # that ordered it; `arbitrations` keeps every decision point so a replay
+    # can say what live said and `pitwall tune --judge jev` can grade it.
+    """
+    ALTER TABLE calls ADD COLUMN arb_key TEXT;
+    ALTER TABLE calls ADD COLUMN arbitrated_by TEXT;
+    ALTER TABLE calls ADD COLUMN arb_pick TEXT;
+    ALTER TABLE calls ADD COLUMN arb_confidence REAL;
+    ALTER TABLE calls ADD COLUMN arb_latency_ms REAL;
+    ALTER TABLE calls ADD COLUMN arb_model TEXT;
+    CREATE TABLE arbitrations (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        arb_key TEXT,
+        t REAL,
+        session_time REAL,
+        lap INT,
+        call_id TEXT,
+        arb_order TEXT,
+        arbitrated_by TEXT,
+        arb_pick TEXT,
+        arb_confidence REAL,
+        arb_latency_ms REAL,
+        arb_model TEXT,
+        candidates TEXT,
+        digest TEXT
+    );
+    CREATE INDEX arbitrations_key ON arbitrations(session_uid, arb_key);
+    """,
 ]
 
 
@@ -487,6 +516,9 @@ class Database:
         if outcome == "driver_input":
             self._insert_driver_input(session_uid, record)
             return
+        if outcome == "arbitrated":
+            self._insert_arbitration(session_uid, record)
+            return
         if outcome not in _CALL_OUTCOMES:
             return
         inputs = record.get("inputs")
@@ -494,8 +526,9 @@ class Database:
             self._conn.execute(
                 "INSERT INTO calls(session_uid, call_id, t, session_time, lap,"
                 " lap_distance, rule_id, priority, outcome, suppressed_by,"
-                " text, inputs, config_hash, mindset, active_plan, on_plan)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " text, inputs, config_hash, mindset, active_plan, on_plan,"
+                " arb_key, arbitrated_by, arb_pick, arb_confidence, arb_latency_ms, arb_model)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     record.get("call_id"),
@@ -513,8 +546,53 @@ class Database:
                     record.get("mindset"),
                     record.get("active_plan") or None,
                     _bool_to_sql(record.get("on_plan")),
+                    record.get("arb_key"),
+                    record.get("arbitrated_by"),
+                    record.get("arb_pick"),
+                    record.get("arb_confidence"),
+                    record.get("arb_latency_ms"),
+                    record.get("arb_model"),
                 ),
             )
+
+    def _insert_arbitration(self, session_uid: int, record: dict[str, Any]) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO arbitrations(session_uid, arb_key, t, session_time, lap,"
+                " call_id, arb_order, arbitrated_by, arb_pick, arb_confidence,"
+                " arb_latency_ms, arb_model, candidates, digest)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    record.get("arb_key"),
+                    record.get("t"),
+                    record.get("session_time"),
+                    record.get("lap"),
+                    record.get("call_id"),
+                    json.dumps(record.get("arb_order") or []),
+                    record.get("arbitrated_by"),
+                    record.get("arb_pick"),
+                    record.get("arb_confidence"),
+                    record.get("arb_latency_ms"),
+                    record.get("arb_model"),
+                    json.dumps(record.get("candidates") or [], default=str),
+                    json.dumps(record.get("digest") or {}, default=str),
+                ),
+            )
+
+    def arbitrations(self, uid: int | None = None) -> list[dict[str, Any]]:
+        """Arbitration decision points, as decision-log records (JSON fields decoded)."""
+        if uid is None:
+            rows = self._rows("SELECT * FROM arbitrations ORDER BY session_uid, id", ())
+        else:
+            rows = self._rows(
+                "SELECT * FROM arbitrations WHERE session_uid=? ORDER BY id", (_uid_to_sql(uid),)
+            )
+        for row in rows:
+            row["outcome"] = "arbitrated"
+            for column in ("arb_order", "candidates", "digest"):
+                row[column] = json.loads(row[column] or "null")
+        return rows
 
     def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
         """A named-plan set / switch / off / on event (engine plan tracker)."""
