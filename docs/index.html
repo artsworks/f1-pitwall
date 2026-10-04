@@ -209,13 +209,13 @@ function markActive() {
 function overview() {
   document.title = "f1-pitwall · a race engineer for F1 26";
   const calls = [
-    ["Qualifying run plan", "Clean-air release, abort advice and a push, cool, box or push-now plan with fuel and battery reminders.",
+    ["Qualifying run plan", "Tells you when the pit exit is clear, when to abort a lap, and whether to push, cool or box. It also reminds you about fuel and battery.",
       ["Traffic at exit. Hold 4 seconds", "Abort, 0.4 off the cut. Save the set", "Battery 38, need 60. One more cool lap"]],
-    ["Race strategy", "Plans A, B and C, pit windows, undercut and overcut advice, and safety-car or VSC stop calls.",
+    ["Race strategy", "Keeps Plans A, B and C up to date, calls the pit window, warns about undercuts and overcuts, and tells you when a safety car or VSC makes a stop cheap.",
       ["Norris has boxed. Stay out and push, overcut is on", "Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]],
-    ["Tyres, fuel and ERS", "Tyre life from worst-corner wear and the pace cliff. Fuel and energy calls use live budgets.",
+    ["Tyres, fuel and ERS", "Estimates tyre life from the most worn corner and the pace cliff. Fuel and energy calls use the live budgets.",
       ["About 6 laps left in the tyres", "Fuel 0.4 laps short. Lift and coast", "Battery spare, 0.8 MJ. Deploy"]],
-    ["Driving events", "Wing damage, boost left on, yellow flags, lock-ups, spins and slides. Repeat a mistake and the tone gets drier.",
+    ["Driving events", "Calls wing damage, boost left on, yellow flags, lock-ups, spins and slides. If you repeat a mistake, the tone gets drier.",
       ["Same lock-up as last lap. Brake earlier there.", "Yellow, sector 2. Lift, hold position.", "Boost. You know the drill."]]
   ];
   const flow = [
@@ -226,42 +226,42 @@ function overview() {
   ];
   const milestones = [
     ["M0", "Done", "done", "Capture and replay"],
-    ["M1", "Built", "", "One call, end to end. Live exit pending"],
-    ["M2", "Done", "done", "Qualifying, Q1 to Q3 driven"],
-    ["M3", "Built", "", "Race strategy, PR #7 merged"],
-    ["M4", "Built", "", "Better over time, PR #21"]
+    ["M1", "Built", "", "One call, end to end. Live exit criteria still open"],
+    ["M2", "Done", "done", "Qualifying. Driven from Q1 to Q3"],
+    ["M3", "Built", "", "Race. Merged in PR #7"],
+    ["M4", "Built", "", "Better over time. Built in PR #21"]
   ];
   const works = [
-    "<b>Qualifying.</b> Traffic-aware release, abort guidance, run plan, fuel and battery reminders, tyre-pressure advice.",
-    "<b>Race strategy.</b> Plans A, B and C, pit windows, undercut and overcut, SC and VSC stops, plan updates after a stop.",
+    "<b>Qualifying.</b> f1-pitwall advises on release into traffic, aborts and the run plan. It also gives fuel, battery and tyre-pressure advice.",
+    "<b>Race strategy.</b> f1-pitwall keeps Plans A, B and C, calls pit windows, undercuts, overcuts and SC or VSC stops, and updates the plan after a stop.",
     "<b>Tyres, fuel and ERS.</b> Tyre life is the lower of worst-corner wear life and pace-cliff life.",
-    "<b>Learning.</b> Session grading, <code>pitwall calibrate</code>, <code>evaluate</code>, <code>propose</code> and <code>stats --learned</code>.",
-    "<b>Debrief.</b> A standalone HTML export and an editable <code>/debrief/&lt;uid&gt;</code> page.",
-    "<b>Voice and phone.</b> Piper phrase cache and a phone radio PWA.",
+    "<b>Learning.</b> f1-pitwall grades each session. <code>pitwall calibrate</code>, <code>evaluate</code>, <code>propose</code> and <code>stats --learned</code> show and apply what it learnt.",
+    "<b>Debrief.</b> f1-pitwall exports a standalone HTML debrief and serves an editable <code>/debrief/&lt;uid&gt;</code> page.",
+    "<b>Voice and phone.</b> Piper caches spoken phrases. A phone PWA works as a second radio.",
     "<b>Recovery.</b> The watchdog restarts a failed or stalled engine while the recorder keeps running."
   ];
   const next = [
-    ["21-voice-command", "Design only", "Voice command", "Tap a wheel button, say \"gap ahead?\" and the pit wall answers. Closed grammar, offline, no LLM."],
-    ["19-guest-tower", "Design only", "Guest timing tower", "A /tower screen for people watching from the garage: full field, sectors, pace and our race story."],
-    ["22-setup-advisor", "Proposal", "Setup advisor", "Setup advice from stored tyre, wear and pace history, with a parc fermé matrix and YAML rule tables."],
-    ["13-league-multiplayer", "Target", "Friends league", "Three humans and an AI grid, with rival data treated as unknown under Restricted telemetry."],
-    ["16-debrief-design", "Deferred", "Debrief LLM layer", "Optional coaching and Q&A over the debrief and session history, behind an API key. Decisions stay deterministic."]
+    ["21-voice-command", "Design only", "Voice command", "Tap a wheel button, say \"gap ahead?\" and f1-pitwall answers. It recognises a fixed list of about 40 phrases, offline, without an LLM."],
+    ["19-guest-tower", "Design only", "Guest timing tower", "A /tower screen for guests watching from the garage. It shows the full field, sectors, pace and a plain-words summary of our race."],
+    ["22-setup-advisor", "Proposal", "Setup advisor", "Suggests setup changes from stored tyre, wear and pace history. It knows what parc fermé allows and keeps its rules in YAML tables."],
+    ["13-league-multiplayer", "Goal", "Friends league", "Supports a league of three friends and an AI grid. It treats hidden rival data as unknown."],
+    ["16-debrief-design", "Deferred", "Debrief LLM layer", "Adds optional coaching and Q&A over the debrief and session history if you set an API key. The rules still make every decision."]
   ];
   $("#content").innerHTML = `<div class="landing">
     <section class="hero">
       <a class="badge" href="#/status">M4 built in PR #21</a>
       <h1>f1<span>-</span>pitwall</h1>
-      <p class="pitch">A race engineer for F1 26 — it reads telemetry, decides what's worth saying, and says it over your headset</p>
-      <p class="lede">It runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. This site holds the docs, the design and the build status.</p>
+      <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
+      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. Here you find the design docs, the decision records and the status of each milestone.</p>
       <div class="cta">
         <a class="btn primary" href="#/getting-started">Getting started</a>
-        <a class="btn" href="mockups/dashboard-1080p.html">Live dashboard mockup</a>
+        <a class="btn" href="mockups/dashboard-1080p.html">Dashboard mockup</a>
         <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
       </div>
     </section>
 
     <h2>What it calls on the radio</h2>
-    <p class="lede">Every call is a rule in YAML. Each rule rotates through several phrasings, so the same call does not sound the same every lap.</p>
+    <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake (<a href="#/adr/0008-natural-phrasing-without-an-llm">ADR 0008</a>).</p>
     <div class="calls">${calls.map(([t, d, ex]) => `<div><b>${t}</b><p>${d}</p>${ex.map(x => `<div class="radio">${x}</div>`).join("")}</div>`).join("")}</div>
 
     <h2>How it works</h2>
@@ -271,9 +271,9 @@ function overview() {
     </ol>
     <p class="flow-note">Recordings replay through the same ingest, state and rules path. <a href="#/01-architecture">Read the architecture</a>.</p>
     <div class="pillars">
-      <div><b>Record and replay</b>Every session is captured raw, and strategy is tuned offline against recordings.</div>
-      <div><b>Rules as data</b>Every call is a declarative rule with its own hysteresis, cooldown, phrasing and replay test.</div>
-      <div><b>A mindset you set</b>Balanced or aggressive: one control that biases pit windows, energy, tyres and rival focus.</div>
+      <div><b>Record and replay</b>f1-pitwall records every session raw. You tune strategy offline against the recordings.</div>
+      <div><b>Rules as data</b>Each call is a declarative rule. The rule has its own hysteresis, cooldown, phrasing and replay test.</div>
+      <div><b>Mindset control</b>Choose balanced or aggressive. The setting biases pit windows, energy use, tyres and rival focus.</div>
     </div>
 
     <h2>Where it stands</h2>
