@@ -652,8 +652,8 @@ rules:
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and rival_ahead_pitted and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s"
-    clear_when: "not rival_ahead_pitted"
+    when: "phase == 'racing' and rival_ahead_in_pit_lane and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s"
+    clear_when: "not rival_ahead_in_pit_lane"
     cooldown_s: 45
     cooldown_group: rival_pit
     requires: [lap_data]

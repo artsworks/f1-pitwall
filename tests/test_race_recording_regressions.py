@@ -128,6 +128,7 @@ def test_session_latches_validated_ahead_through_pit_lane() -> None:
     assert after.rival_ahead_idx == 1
     assert after.rival_ahead_name == "OCON"
     assert after.rival_ahead_pitted
+    assert after.rival_ahead_in_pit_lane
     assert after.gap_ahead_s == pytest.approx(2.97)
 
 
@@ -139,7 +140,8 @@ def test_session_ahead_pitted_requires_current_pit_status() -> None:
 
     assert snapshot.rival_ahead_idx == 1
     assert snapshot.cars[1].pit_status == 0
-    assert not snapshot.rival_ahead_pitted
+    assert snapshot.rival_ahead_pitted
+    assert not snapshot.rival_ahead_in_pit_lane
 
 
 def _rule_engine() -> RuleEngine:
