@@ -226,3 +226,26 @@ def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch,
 
     assert main(["tune", str(recording), "--db", str(db_path), "--calls-mode", "on"]) == 0
     assert f"{uid} skipped" in capsys.readouterr().out
+
+
+def test_ingest_relabels_already_ingested_legacy_session(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF126100A
+    spec = RaceSpec(laps=5, session_uid=uid, session_type=15, dt=1.0, send_session_end=True)
+    recording = write_packet_stream(
+        tmp_path / "legacy.f1bin",
+        race_stream(spec),
+        session_uid=uid,
+        metadata={"calls_mode": "off"},
+    )
+    settings = ConfigStore().current()
+    ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
+    # an older ingest trusted the header
+    db.set_session_origin(uid, started_at=1.0, recording_path=str(recording), calls_mode="off")
+    laps_before = _counts(db)
+
+    again = ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
+    assert again[0].status == "skipped"
+    row = db.session_row(uid)
+    assert row is not None and row["calls_mode"] == "on"
+    assert _counts(db) == laps_before

@@ -187,18 +187,21 @@ class RunTracker:
                 self.kind = ""
                 self.plan = Plan("", "")
             return None
-        self._invalid |= invalid
         if self.kind in ("", OUT):
             self._start_lap(t, HOT, ers_pct, lockups, spins)
+            self._invalid = invalid
             self.crossings += 1
             return None
         crossed = prev_ms is not None and lap_time_ms + 5000 < prev_ms and lap_distance < 500
+        if not crossed:
+            self._invalid |= invalid
         if crossed:
             assert prev_ms is not None
             done: HotLap | None = None
             self.crossings += 1
-            # Track limits can delete this lap and the next: the flag is still
-            # set on the first tick of the new lap.
+            # Track limits can delete this lap and the next: the flag was set
+            # before the line and is still set on the first tick of the new lap.
+            # A flag that first appears on this tick belongs to the new lap only.
             carried = invalid and self._invalid
             if self.kind == HOT:
                 done = HotLap(
@@ -219,7 +222,8 @@ class RunTracker:
             if carried and self.plan.plan != "box":
                 self.plan = Plan("cool", "invalid")
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
-            self._invalid = self.next_lap_invalid = carried
+            self._invalid = invalid
+            self.next_lap_invalid = carried
             return done
         if sector == 1 and prev_sector == 0 and sector1_ms > 0:
             self._s1 = sector1_ms

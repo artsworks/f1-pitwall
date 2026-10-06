@@ -227,7 +227,7 @@ rules:
     # Battery near full or the hot-lap prep zone: the driver is right to be out of recharge.
     when: "cool_lap and not cool_prep and ers_store_pct < th.cool_recharge_full_pct and lap_distance < track_length_m - th.cool_hot_mode_m and th.ers_recharge_mode >= 0 and ers_deploy_mode != th.ers_recharge_mode and cool_elapsed_s >= 15"
     clear_when: "not cool_lap or ers_deploy_mode == th.ers_recharge_mode or ers_store_pct >= th.cool_recharge_full_pct or lap_distance >= track_length_m - th.cool_hot_mode_m"
-    still_true: "cool_lap and ers_deploy_mode != th.ers_recharge_mode"
+    still_true: "cool_lap and not cool_prep and ers_deploy_mode != th.ers_recharge_mode and ers_store_pct < th.cool_recharge_full_pct and lap_distance < track_length_m - th.cool_hot_mode_m"
     requires: [car_status]
     say:
       - "Not in recharge. Switch it"
