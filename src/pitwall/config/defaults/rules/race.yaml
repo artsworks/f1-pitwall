@@ -310,7 +310,7 @@ rules:
       - "Over energy budget, {energy_lap_delta_mj:+.1f} MJ. Harvest"
   - id: energy_under
     sessions: [race]
-    min_lap: 4  # laps 1-3 use the race-start battery
+    min_lap: 4  # grades the lap before; laps 1-2 spend the launch charge
     priority: 3
     when: "phase == 'racing' and energy_prev_lap_mode == 'under' and sector == 0"
     clear_when: "sector != 0"
