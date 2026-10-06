@@ -145,7 +145,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                     if isinstance(item, dict) and item.get("reason") == "locked"
                 )
     else:
-        signals = session_signals(db, uid, settings.thresholds)
+        signals = session_signals(db, uid, settings.thresholds, run_choice="longest")
         if signals is not None:
             event_laps = signals.event_laps
             setup = (
@@ -153,10 +153,6 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                 if signals.setup_state_id is not None
                 else None
             )
-            if setup is None:
-                changes = db.setup_changes_for_session(uid)
-                if changes:
-                    setup = db.setup_state_fields(int(changes[-1]["to_state"]))
             setup = setup or {}
             parc_ferme_value = session.get("parc_ferme")
             parc_ferme = int(parc_ferme_value) if parc_ferme_value is not None else -1

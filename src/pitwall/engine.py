@@ -715,14 +715,19 @@ class Engine:
             return
         settings = self.store.current()
         try:
-            signals = session_signals(self.db, uid, settings.thresholds)
+            signals = session_signals(
+                self.db,
+                uid,
+                settings.thresholds,
+                run_choice="longest",
+            )
             if signals is None:
                 return
             setup = (
                 self.db.setup_state_fields(signals.setup_state_id)
                 if signals.setup_state_id is not None
                 else None
-            ) or self.state.setup
+            ) or {}
             recommendations = evaluate(
                 signals,
                 setup,

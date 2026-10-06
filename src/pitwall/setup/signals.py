@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from statistics import fmean
-from typing import Any
+from typing import Any, Literal
 
 from pitwall.setup.states import Run, runs_for_session
 from pitwall.state.session import thermal_window
@@ -35,6 +35,11 @@ class RunSignals:
     lap_slope_ms: float | None = None
     wear_front_slope: float | None = None
     wear_rear_slope: float | None = None
+    traction_exits: int | None = None
+    lockups_rear: int | None = None
+    lockups_front: int | None = None
+    snaps_entry: int | None = None
+    snaps_exit: int | None = None
 
 
 def _green(lap: LapRow) -> bool:
@@ -98,6 +103,12 @@ def _rate(rows: Sequence[LapRow], field: str, minimum_laps: int) -> float | None
     if len(rows) < minimum_laps:
         return None
     return 10.0 * sum(int(getattr(lap, field) or 0) for lap in rows) / len(rows)
+
+
+def _event_count(rows: Sequence[LapRow], field: str, minimum_laps: int) -> int | None:
+    if len(rows) < minimum_laps:
+        return None
+    return sum(int(getattr(lap, field) or 0) for lap in rows)
 
 
 def _snap_phase(rows: Sequence[LapRow]) -> str:
@@ -192,6 +203,11 @@ def signals_for_run(
         lap_slope_ms=_lap_slope_ms(run_laps),
         wear_front_slope=front_rate,
         wear_rear_slope=rear_rate,
+        traction_exits=_event_count(run_laps, "traction_exits", minimum_event_laps),
+        lockups_rear=_event_count(run_laps, "lockups_rear", minimum_event_laps),
+        lockups_front=_event_count(run_laps, "lockups_front", minimum_event_laps),
+        snaps_entry=_event_count(run_laps, "snaps_entry", minimum_event_laps),
+        snaps_exit=_event_count(run_laps, "snaps_exit", minimum_event_laps),
     )
 
 
@@ -200,24 +216,36 @@ def session_signals(
     uid: int,
     thresholds: Mapping[str, Any],
     *,
+    run_choice: Literal["latest", "longest"] = "latest",
     learned_slip_base: float | None = None,
 ) -> RunSignals | None:
-    """Build last-run signals while keeping rates scoped to its setup state."""
+    """Build run signals while keeping rates scoped to its setup state."""
     runs = runs_for_session(db, uid)
     if not runs:
         return None
     session = db.session_row(uid)
     if session is None:
         return None
-    last_run = runs[-1]
+    if run_choice == "latest":
+        selected_run = runs[-1]
+    elif run_choice == "longest":
+        selected_run = max(
+            enumerate(runs),
+            key=lambda item: (
+                sum(1 for lap in item[1].laps if _green(lap)),
+                item[0],
+            ),
+        )[1]
+    else:
+        raise ValueError(f"unknown run choice: {run_choice}")
     all_green = [lap for lap in db.laps_for(uid) if _green(lap)]
-    event_laps = [lap for lap in all_green if lap.setup_state_id == last_run.setup_state_id]
-    slip_base = slip_base_for_session(db, uid, last_run.compound, thresholds, learned_slip_base)
+    event_laps = [lap for lap in all_green if lap.setup_state_id == selected_run.setup_state_id]
+    slip_base = slip_base_for_session(db, uid, selected_run.compound, thresholds, learned_slip_base)
 
     signals = signals_for_run(
         db,
         uid,
-        last_run,
+        selected_run,
         thresholds,
         learned_slip_base=slip_base,
     )
@@ -236,6 +264,11 @@ def session_signals(
         lockups_front_per10=_rate(event_laps, "lockups_front", minimum_event_laps),
         snaps_entry_per10=_rate(event_laps, "snaps_entry", minimum_event_laps),
         snaps_exit_per10=_rate(event_laps, "snaps_exit", minimum_event_laps),
+        traction_exits=_event_count(event_laps, "traction_exits", minimum_event_laps),
+        lockups_rear=_event_count(event_laps, "lockups_rear", minimum_event_laps),
+        lockups_front=_event_count(event_laps, "lockups_front", minimum_event_laps),
+        snaps_entry=_event_count(event_laps, "snaps_entry", minimum_event_laps),
+        snaps_exit=_event_count(event_laps, "snaps_exit", minimum_event_laps),
         snap_phase=_snap_phase(event_laps),
         slip_balance=state_slip_balance,
     )

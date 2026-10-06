@@ -101,7 +101,7 @@ setup_rules:
       contexts: [practice_garage, next_visit]
   symptoms:
     entry_instability:
-      when: "lockups_rear_per10 >= setup_lockups_rear_per10 or (snaps_entry_per10 >= setup_snaps_per10 and snap_phase == 'entry')"
+      when: "(lockups_rear is not None and lockups_rear >= setup_min_events and lockups_rear_per10 >= setup_lockups_rear_per10) or (snaps_entry is not None and snaps_entry >= setup_min_events and snaps_entry_per10 >= setup_snaps_per10 and snap_phase == 'entry')"
       candidates:
         - param: brake_bias
           dir: 1
@@ -122,7 +122,7 @@ setup_rules:
           expect: less rear pitch under braking
           tradeoff: kerb strikes
     traction_limited:
-      when: "traction_exits_per10 >= setup_trac_per10 or (snaps_exit_per10 >= setup_snaps_per10 and snap_phase == 'exit')"
+      when: "(traction_exits is not None and traction_exits >= setup_min_events and traction_exits_per10 >= setup_trac_per10) or (snaps_exit is not None and snaps_exit >= setup_min_events and snaps_exit_per10 >= setup_snaps_per10 and snap_phase == 'exit')"
       candidates:
         - param: on_throttle
           dir: -1
@@ -181,7 +181,7 @@ setup_rules:
           conf: medium
           expect: rear rotates more
           tradeoff: rears run cooler, less traction
-      contra: ["traction_exits_per10 >= setup_trac_per10"]
+      contra: ["traction_exits is not None and traction_exits >= setup_min_events and traction_exits_per10 >= setup_trac_per10"]
     oversteer_balance:
       when: "slip_balance is not None and slip_balance < -setup_slip_os_deg"
       candidates:

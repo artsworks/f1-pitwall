@@ -20,6 +20,7 @@ thresholds:
   setup_trac_per10: 25
   setup_snaps_per10: 2
   setup_lockups_rear_per10: 3
+  setup_min_events: 2
   setup_rec_cooldown_laps: 5
   setup_base_min_weight: 1.0
   setup_learned_min_weight: 3.0

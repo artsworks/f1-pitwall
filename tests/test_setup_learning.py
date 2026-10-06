@@ -350,6 +350,7 @@ def test_learned_direction_flips_race_recommendation() -> None:
         lockups_front_per10=0.0,
         snaps_entry_per10=0.0,
         snaps_exit_per10=0.0,
+        traction_exits=18,
         snap_phase="",
         slip_balance=None,
         wear_axle_ratio=1.0,

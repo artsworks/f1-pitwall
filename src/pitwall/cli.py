@@ -338,7 +338,12 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if session is None:
         print(f"setup: session {uid} not found")
         return 1
-    signals = session_signals(db, uid, settings.thresholds)
+    signals = session_signals(
+        db,
+        uid,
+        settings.thresholds,
+        run_choice="longest" if args.mode == "debrief" else "latest",
+    )
     if signals is None:
         print(f"setup: session {uid} has no player laps")
         return 1

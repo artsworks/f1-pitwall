@@ -39,6 +39,11 @@ def _signals(**updates: Any) -> RunSignals:
         "lockups_front_per10": 0.0,
         "snaps_entry_per10": 0.0,
         "snaps_exit_per10": 0.0,
+        "traction_exits": 0,
+        "lockups_rear": 0,
+        "lockups_front": 0,
+        "snaps_entry": 0,
+        "snaps_exit": 0,
         "snap_phase": "",
         "slip_balance": 0.0,
         "wear_axle_ratio": 1.0,
@@ -70,8 +75,8 @@ def _setup() -> dict[str, float]:
 @pytest.mark.parametrize(
     ("signals", "param", "delta"),
     [
-        ({"lockups_rear_per10": 3.0}, "brake_bias", 1.0),
-        ({"traction_exits_per10": 30.0}, "on_throttle", -5.0),
+        ({"lockups_rear_per10": 3.0, "lockups_rear": 2}, "brake_bias", 1.0),
+        ({"traction_exits_per10": 30.0, "traction_exits": 24}, "on_throttle", -5.0),
         (
             {"wear_axle_ratio": 1.2, "z_rear": 0.8},
             "rear_pressure",
@@ -109,6 +114,103 @@ def test_each_symptom_has_a_primary_candidate(
     assert primary.delta == delta
 
 
+def test_rate_symptoms_require_two_raw_events(
+    setup_config: tuple[SetupRules, dict[str, Any]],
+) -> None:
+    rules, thresholds = setup_config
+    rules = replace(rules, confidence_floor="low")
+
+    one_snap = evaluate(
+        _signals(
+            session_type=15,
+            event_laps=5,
+            snaps_entry=1,
+            snaps_entry_per10=2.0,
+            snap_phase="entry",
+        ),
+        _setup(),
+        mode="race",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+    )
+    two_snaps = evaluate(
+        _signals(
+            session_type=15,
+            event_laps=5,
+            snaps_entry=2,
+            snaps_entry_per10=4.0,
+            snap_phase="entry",
+        ),
+        _setup(),
+        mode="race",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+    )
+    assert all(rec.rule_id != "entry_instability" for rec in one_snap)
+    assert any(rec.rule_id == "entry_instability" for rec in two_snaps)
+
+    traction_thresholds = dict(thresholds, setup_trac_per10=2)
+    one_exit = evaluate(
+        _signals(
+            session_type=15,
+            event_laps=5,
+            traction_exits=1,
+            traction_exits_per10=2.0,
+        ),
+        _setup(),
+        mode="race",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=traction_thresholds,
+    )
+    two_exits = evaluate(
+        _signals(
+            session_type=15,
+            event_laps=5,
+            traction_exits=2,
+            traction_exits_per10=4.0,
+        ),
+        _setup(),
+        mode="race",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=traction_thresholds,
+    )
+    assert all(rec.rule_id != "traction_limited" for rec in one_exit)
+    assert any(rec.rule_id == "traction_limited" for rec in two_exits)
+
+    one_exit_understeer = evaluate(
+        _signals(
+            event_laps=5,
+            slip_balance=1.0,
+            traction_exits=1,
+            traction_exits_per10=2.0,
+        ),
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=traction_thresholds,
+    )
+    two_exit_understeer = evaluate(
+        _signals(
+            event_laps=5,
+            slip_balance=1.0,
+            traction_exits=2,
+            traction_exits_per10=4.0,
+        ),
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=traction_thresholds,
+    )
+    assert any(rec.rule_id == "understeer_balance" for rec in one_exit_understeer)
+    assert all(rec.rule_id != "understeer_balance" for rec in two_exit_understeer)
+
+
 def test_race_mode_filters_parameters_and_uses_race_step(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
@@ -119,6 +221,8 @@ def test_race_mode_filters_parameters_and_uses_race_step(
             session_type=15,
             lockups_rear_per10=3.0,
             traction_exits_per10=30.0,
+            lockups_rear=2,
+            traction_exits=24,
         ),
         _setup(),
         mode="race",
@@ -136,7 +240,13 @@ def test_quali_garage_parc_ferme_and_next_visit_contexts(
 ) -> None:
     rules, thresholds = setup_config
     rules = replace(rules, confidence_floor="low")
-    signals = _signals(session_type=7, lockups_rear_per10=3.0, traction_exits_per10=30.0)
+    signals = _signals(
+        session_type=7,
+        lockups_rear_per10=3.0,
+        traction_exits_per10=30.0,
+        lockups_rear=2,
+        traction_exits=24,
+    )
     setup = _setup() | {"brake_bias": 70.0}
 
     locked = evaluate(
@@ -231,7 +341,7 @@ def test_low_confidence_is_an_experiment_only_in_debrief(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
     rules, thresholds = setup_config
-    signals = _signals(traction_exits_per10=30.0)
+    signals = _signals(traction_exits_per10=30.0, traction_exits=24)
     debrief = evaluate(
         signals,
         _setup(),
@@ -265,7 +375,7 @@ def test_at_limit_falls_through_and_suppression_is_attached(
 ) -> None:
     rules, thresholds = setup_config
     recs = evaluate(
-        _signals(lockups_rear_per10=3.0),
+        _signals(lockups_rear_per10=3.0, lockups_rear=2),
         _setup() | {"brake_bias": 70.0},
         mode="garage",
         parc_ferme=1,
@@ -359,6 +469,11 @@ def test_all_none_signals_return_no_recommendations(
         lockups_front_per10=None,
         snaps_entry_per10=None,
         snaps_exit_per10=None,
+        traction_exits=None,
+        lockups_rear=None,
+        lockups_front=None,
+        snaps_entry=None,
+        snaps_exit=None,
         slip_balance=None,
         wear_axle_ratio=None,
         z_front=None,
@@ -382,7 +497,7 @@ def test_repeated_evaluation_is_deterministic(
 ) -> None:
     rules, thresholds = setup_config
     args = (
-        _signals(traction_exits_per10=30.0),
+        _signals(traction_exits_per10=30.0, traction_exits=24),
         _setup(),
     )
     first = evaluate(
@@ -406,7 +521,12 @@ def test_alternative_cap_applies_across_all_symptoms(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
     rules, thresholds = setup_config
-    signals = _signals(lockups_rear_per10=3.0, traction_exits_per10=30.0)
+    signals = _signals(
+        lockups_rear_per10=3.0,
+        traction_exits_per10=30.0,
+        lockups_rear=2,
+        traction_exits=24,
+    )
     recs = evaluate(
         signals,
         _setup(),
@@ -459,6 +579,7 @@ def test_session_signals_use_green_laps_and_slip_baselines(
     one_state = session_signals(db_one, uid_one, thresholds)
     assert one_state is not None
     assert one_state.traction_exits_per10 == pytest.approx(3.75)
+    assert one_state.traction_exits == 3
     assert one_state.slip_balance is None
 
     db_two, uid_two = _replay_practice_db(tmp_path, change_setup=True, name="double")

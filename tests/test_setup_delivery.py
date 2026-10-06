@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from pitwall.cli import main
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief
@@ -54,6 +56,46 @@ def _seed_session(
             setup_state_id=state_id,
         )
     return state_id, fields
+
+
+def _seed_longest_runs(
+    db: Database,
+    uid: int,
+    *,
+    second_run_laps: int = 2,
+) -> tuple[int, int, dict[str, float]]:
+    fields_a = {
+        "brake_bias": 56.0,
+        "on_throttle": 55.0,
+        "front_wing": 10.0,
+        "rear_anti_roll_bar": 5.0,
+        "rear_suspension_height": 30.0,
+    }
+    fields_b = fields_a | {"brake_bias": 60.0}
+    state_a = db.setup_state_id(f"sha1:{uid}:state-a", fields_a)
+    state_b = db.setup_state_id(f"sha1:{uid}:state-b", fields_b)
+    db.upsert_session(uid, track_id=7, session_type=15, parc_ferme=1)
+    lap_num = 0
+    for state_id, count, lockups_rear in ((state_a, 9, 1), (state_b, second_run_laps, 0)):
+        for _ in range(count):
+            lap_num += 1
+            db.insert_lap(
+                uid,
+                0,
+                LapSummary(
+                    lap_num=lap_num,
+                    lap_time_ms=90_000,
+                    sector1_ms=30_000,
+                    sector2_ms=30_000,
+                    compound=18,
+                    tyre_age_laps=lap_num,
+                    fuel_remaining_laps_at_end=2.0,
+                    valid=True,
+                    lockups_rear=lockups_rear,
+                ),
+                setup_state_id=state_id,
+            )
+    return state_a, state_b, fields_b
 
 
 def _recommendation(
@@ -296,6 +338,75 @@ def test_debrief_renders_stored_setup_recommendations_and_empty_state() -> None:
     empty_report = render_debrief(empty_db, empty_uid, settings)
     assert "No setup change suggested: no symptom passed its threshold." in empty_report
     assert "Run event laps: 3." in empty_report
+
+
+def test_session_signals_choose_longest_run_and_later_tie() -> None:
+    settings = ConfigStore().current()
+    db = Database(":memory:")
+    uid = 106
+    state_a, state_b, _ = _seed_longest_runs(db, uid)
+
+    latest = session_signals(db, uid, settings.thresholds)
+    longest = session_signals(db, uid, settings.thresholds, run_choice="longest")
+
+    assert latest is not None and longest is not None
+    assert latest.setup_state_id == state_b
+    assert latest.run_laps == 2
+    assert latest.lockups_rear is None
+    assert latest.lockups_rear_per10 is None
+    assert longest.setup_state_id == state_a
+    assert longest.run_laps == longest.event_laps == 9
+    assert longest.lockups_rear == 9
+    assert longest.lockups_rear_per10 == 10.0
+
+    tie_db = Database(":memory:")
+    tie_uid = 107
+    _, tie_state_b, _ = _seed_longest_runs(tie_db, tie_uid, second_run_laps=9)
+    tied = session_signals(tie_db, tie_uid, settings.thresholds, run_choice="longest")
+    assert tied is not None
+    assert tied.setup_state_id == tie_state_b
+
+
+def test_post_session_advice_uses_longest_run_setup_state(tmp_path: Path, capsys: Any) -> None:
+    settings = ConfigStore().current()
+    db_path = tmp_path / "longest.sqlite"
+    db = Database(db_path)
+    uid = 108
+    state_a, _, fields_b = _seed_longest_runs(db, uid)
+
+    report = render_debrief(db, uid, settings)
+    assert "56 → 57" in report
+    assert "60 → 61" not in report
+
+    assert main(["setup", str(uid), "--mode", "debrief", "--json", "--db", str(db_path)]) == 0
+    recommendations = json.loads(capsys.readouterr().out)
+    brake_bias = next(rec for rec in recommendations if rec["param"] == "brake_bias")
+    assert brake_bias["from_value"] == 56.0
+    assert brake_bias["setup_state_id"] == state_a
+
+    assert main(["setup", str(uid), "--mode", "garage", "--json", "--db", str(db_path)]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.session_uid = uid
+    engine.state.session_type = 15
+    engine.state.track_id = 7
+    engine.state.lap_num = 11
+    engine.state.setup = fields_b
+    engine.state.parc_ferme_rules = 1
+    engine._store_debrief_setup(uid)
+    stored = next(
+        rec
+        for rec in db.setup_recs_for_session(uid)
+        if rec["mode"] == "debrief" and rec["param"] == "brake_bias"
+    )
+    assert stored["from_value"] == 56.0
+    assert stored["setup_state_id"] == state_a
 
 
 def test_session_end_stores_debrief_setup_recommendations() -> None:
