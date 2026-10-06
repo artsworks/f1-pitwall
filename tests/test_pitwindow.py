@@ -79,6 +79,42 @@ def test_too_late_to_stop() -> None:
     p = run(laps_remaining=2)
     assert p.plan == "no_stop"
     assert p.reason == "too late to stop"
+    assert p.undercut_s == p.overcut_s == 0.0
+
+
+@pytest.mark.parametrize("laps_remaining", [1, 2])
+def test_rival_pits_too_late_to_overcut(laps_remaining: int) -> None:
+    p = run(
+        laps_remaining=laps_remaining,
+        rival_ahead=RivalView(1, "NORRIS", 92_500, True),
+        gap_ahead_s=1.0,
+        laps_of_pace=8.0,
+        fit=fit(10),
+        fresh=fit(10),
+        tyre_age=2,
+        mode=AGGRESSIVE,
+    )
+    assert p.plan == "no_stop"
+    assert p.reason == "too late to stop"
+    assert not p.projections
+    assert p.undercut_s == p.overcut_s == 0.0
+
+
+def test_overcut_requires_a_viable_stop() -> None:
+    p = run(
+        laps_remaining=3,
+        th={**TH, "pit_min_laps_left": 3, "overcut_laps": 2},
+        rival_ahead=RivalView(1, "NORRIS", 90_000, True),
+        gap_ahead_s=20.0,
+        laps_of_pace=8.0,
+        fit=fit(10),
+        fresh=fit(10),
+        tyre_age=2,
+        mode=AGGRESSIVE,
+    )
+    assert p.plan == "no_stop"
+    assert not p.projections
+    assert p.overcut_s == 0.0
 
 
 def test_box_now_past_the_cliff() -> None:
@@ -116,6 +152,28 @@ def test_undercut_on_slow_rival_ahead() -> None:
     assert p.plan == "undercut"
     assert p.rival_name == "NORRIS"
     assert p.undercut_s >= float(BALANCED["undercut_speak_threshold_s"])
+
+
+@pytest.mark.parametrize("laps_left_offset", [-1, 0, 1])
+def test_undercut_requires_time_for_fresh_laps_and_stop(laps_left_offset: int) -> None:
+    min_laps = int(TH["undercut_laps"]) + int(TH["pit_min_laps_left"])
+    p = run(
+        laps_remaining=min_laps + laps_left_offset,
+        rival_ahead=RivalView(1, "NORRIS", 92_500, False),
+        gap_ahead_s=1.0,
+        tyre_age=20,
+        laps_of_pace=0.0,
+        fit=fit(300),
+        mode={**BALANCED, "undercut_speak_threshold_s": 0.0},
+    )
+    assert p.projections
+    assert p.window[0] == p.projections[0][0]
+    if laps_left_offset <= 0:
+        assert p.undercut_s == 0.0
+        assert p.plan != "undercut"
+    else:
+        assert p.undercut_s > 0.0
+        assert p.plan == "undercut"
 
 
 def test_undercut_uses_session_seeded_base_pace() -> None:
@@ -158,6 +216,28 @@ def test_overcut_after_rival_pits() -> None:
         tyre_age=2,
     )
     assert balanced.plan != "overcut"
+
+
+@pytest.mark.parametrize("laps_remaining", [4, 5])
+def test_overcut_requires_more_than_its_delay(laps_remaining: int) -> None:
+    p = run(
+        laps_remaining=laps_remaining,
+        th={**TH, "overcut_laps": 4},
+        rival_ahead=RivalView(1, "NORRIS", 90_000, True),
+        gap_ahead_s=20.0,
+        laps_of_pace=3.0,
+        fit=fit(10),
+        fresh=fit(10),
+        tyre_age=2,
+        mode={**AGGRESSIVE, "pit_gain_min_s": 0.0},
+    )
+    assert p.projections
+    if laps_remaining == 4:
+        assert p.overcut_s == 0.0
+        assert p.plan != "overcut"
+    else:
+        assert p.overcut_s > 0.0
+        assert p.plan == "overcut"
 
 
 def test_free_stop_with_big_gap_behind() -> None:

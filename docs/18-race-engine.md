@@ -374,14 +374,19 @@ waiting gains). Decisions:
   The pit loss used is the SC/VSC prior.
 - `free_stop`: pitting now costs no position: `gap_behind_s > pit_loss_s + th.free_stop_margin_s`
   and `pit_exit_clean` → `plan='free_stop'` when `best_k <= lap_num + 1`.
-- `undercut`: viable when `gap_ahead_s < th.undercut_max_gap_s` and predicted fresh-tyre delta over `th.undercut_laps`
-  laps versus the rival's current pace (`rival_ahead.pace_ms` vs our fresh prediction) exceeds
-  `gap_ahead_s + mode.undercut_speak_threshold_s` → `plan='undercut', lap=lap_num`.
-- `overcut`: rival ahead has pitted this lap (`rival_ahead.pitted`) and our `laps_of_pace >=
-  th.overcut_min_laps` and predicted our-pace-vs-their-out-lap gain > `mode.pit_gain_min_s` →
-  `plan='overcut', lap=lap_num + th.overcut_laps`.
+- `undercut` requires `gap_ahead_s < th.undercut_max_gap_s` and an open pit window, `window[0] <= lap_num`.
+  The predicted fresh-tyre gain over `th.undercut_laps` must reach `gap_ahead_s + mode.undercut_speak_threshold_s`.
+  It also requires `laps_remaining > th.undercut_laps + th.pit_min_laps_left`.
+  The optimiser returns `plan='undercut', lap=lap_num`.
+- `overcut` requires `rival_ahead.pitted`, `laps_of_pace >= th.overcut_min_laps`, and a predicted gain of at least `mode.pit_gain_min_s`.
+  It also requires `laps_remaining > th.overcut_laps` and a possible stop.
+  The optimiser returns `plan='overcut', lap=lap_num + th.overcut_laps`.
 - otherwise `box_now` if `best_k == lap_num`, `box_in_n` if `best_k <= lap_num + th.box_in_max_laps`,
   else `stay`.
+
+The optimiser sets `undercut_s` and `overcut_s` to zero when their remaining-lap requirements fail.
+When no stop is possible, the optimiser returns `no_stop` with both values at zero.
+The snapshot therefore excludes tyre gains that cannot affect the finish.
 
 `confidence = fit.confidence * (restricted_factor if restricted else 1) * pit_loss_conf` where
 `pit_loss_conf = 1.0 learned/this-session, 0.8 overlay, 0.6 default`.

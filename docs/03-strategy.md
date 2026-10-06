@@ -101,6 +101,13 @@ no model.
 **Undercut / overcut vs. a specific rival.** Same projection, restricted to the target
 ahead and the chaser behind.
 
+The optimiser sets `undercut_s` to zero unless
+`laps_remaining > th.undercut_laps + th.pit_min_laps_left`.
+The optimiser sets `overcut_s` to zero unless `laps_remaining > th.overcut_laps` and a stop remains possible.
+These limits suppress values and plans when too few laps remain to exploit the tyre advantage.
+When `laps_remaining <= th.pit_min_laps_left`, the optimiser returns `no_stop` with both values at zero.
+The `rival_ahead_pitted` rule also stays silent at this limit.
+
 **Free stop.** Gap to the car behind exceeds measured pit loss → position-neutral stop
 available.
 
