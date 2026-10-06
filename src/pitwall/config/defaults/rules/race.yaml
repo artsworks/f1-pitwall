@@ -841,6 +841,8 @@ rules:
       - "Three to go, P{position}. No mistakes now"
   - id: last_lap_defend
     sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
     priority: 1
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_behind_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
@@ -850,6 +852,8 @@ rules:
       - "Final lap, {rival_behind_name} {gap_behind_s:.1f} back. Hold him off"
   - id: last_lap_attack
     sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
     priority: 1
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_ahead_s < th.last_lap_fight_s and not gap_behind_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
@@ -860,6 +864,8 @@ rules:
       - "Final lap, {gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
   - id: last_lap
     sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
     priority: 2
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and not gap_behind_s < th.last_lap_fight_s and not gap_ahead_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
@@ -893,6 +899,11 @@ rules:
     say:
       - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're {fastest_lap_gap_s:.1f} off."
       - "Fastest lap, {fastest_lap_name}. {fastest_lap_gap_s:.1f} to find."
+    severity:
+      - when: "fastest_lap_gap_s < 0.05"
+        say:
+          - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're level on time."
+          - "Fastest lap, {fastest_lap_name}. You're level, a tenth takes it."
   # Time penalties decide the classified result: say where we really are.
   - id: penalty_cost
     sessions: [race]

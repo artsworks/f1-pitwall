@@ -159,3 +159,28 @@ def test_race_priors_do_not_mix_race_distances() -> None:
     assert engine._learned_name(7, 17, "deg_ms_per_lap") == scoped("deg_ms_per_lap", 52)  # noqa: SLF001
     state.session_type = 1
     assert engine._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
+
+
+def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> None:
+    db = Database(tmp_path / "p.sqlite")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    settings = engine.store.current()
+    deg_max = float(TH["deg_max_ms_per_lap"])
+
+    # A fit pinned at the slope clamp is a clamp, not a measurement.
+    engine._fold_fit(10, 19, DegFit(110_967.0, deg_max, 30.0, 6, 744.0, 0.9, "fit"))  # noqa: SLF001
+    assert db.get_param(10, 19, "deg_ms_per_lap") is None
+    assert engine._deg_prior(10, 19, settings).source == "default"  # noqa: SLF001
+
+    # Six folded laps of a steep slope: halfway between it and the default.
+    db.fold_param(10, 17, "deg_ms_per_lap", 500.0, weight=6)
+    thin = engine._deg_prior(10, 17, settings)  # noqa: SLF001
+    default = float(TH["deg_default_ms_per_lap"])
+    assert thin.source == "learned"
+    assert thin.deg_ms_per_lap == pytest.approx(0.5 * 500.0 + 0.5 * default)
+    assert 0.2 < thin.confidence < 0.5
+
+    db.fold_param(10, 17, "deg_ms_per_lap", 500.0, weight=12)
+    full = engine._deg_prior(10, 17, settings)  # noqa: SLF001
+    assert full.deg_ms_per_lap == pytest.approx(500.0)
+    assert full.confidence == pytest.approx(0.5)

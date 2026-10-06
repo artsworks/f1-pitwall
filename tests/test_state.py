@@ -584,3 +584,49 @@ def test_contact_increment_on_damaged_wing_remains_major() -> None:
     snap = state.snapshot(15.0)
     assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 76)
     assert snap.contact_damage_major
+
+
+def test_tyre_change_resets_emas_and_pit_lane_blocks_overheat() -> None:
+    ingest, state = _state()
+
+    def status(t: float, compound: int) -> None:
+        pkt = pack_packet(
+            PacketId.CAR_STATUS,
+            {"cars": {0: {"actual_tyre_compound": compound, "visual_tyre_compound": 18}}},
+            session_time=t,
+        )
+        _send(ingest, pkt, t)
+
+    def lap(t: float, pit_status: int) -> None:
+        car = {"current_lap_num": 9, "driver_status": 1, "pit_status": pit_status}
+        _send(ingest, pack_packet(PacketId.LAP_DATA, {"cars": {0: car}}, session_time=t), t)
+
+    def temps(t: float, c: float) -> None:
+        pkt = pack_packet(
+            PacketId.CAR_TELEMETRY,
+            {"cars": {0: {"tyres_inner_temperature": (c, c, c, c)}}},
+            session_time=t,
+        )
+        _send(ingest, pkt, t)
+
+    status(0.0, 19)
+    lap(0.0, 0)
+    for i in range(200):
+        temps(i / 2.0, 118)
+    assert state.snapshot(100.0).overheat
+
+    # Pit lane: the old set's heat is not an overheat call.
+    lap(100.5, 1)
+    assert not state.snapshot(100.5).overheat
+    lap(101.0, 0)
+    assert state.snapshot(101.0).overheat
+
+    # New set on: EMAs restart from the first sample on the new tyres.
+    lap(101.5, 2)
+    status(101.5, 17)
+    temps(102.0, 75)
+    snap = state.snapshot(102.0)
+    assert snap.tyre_inner_ema_slow.FL == pytest.approx(75.0)
+    assert not snap.overheat
+    lap(103.0, 0)
+    assert not state.snapshot(103.0).overheat

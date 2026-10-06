@@ -128,7 +128,9 @@ For degradation, enough earlier practice data in the same weekend takes preceden
 a race first looks for its total-distance-scoped `model_params` value with weight at least
 `prior_min_weight`; if it is too light, the engine tries the unscoped value. It then tries the
 track overlay and global default. Non-race stint values are unscoped. A scoped value from one
-race distance is never combined with another.
+race distance is never combined with another. A learned degradation prior lighter than
+`prior_full_weight` laps is blended toward the overlay or default value in proportion to its
+weight, and its confidence scales the same way, so one steep stint cannot set the plan alone.
 
 Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`; `N` is the
 session's total race laps. Weekend degradation uses earlier fitted practice stints on the
@@ -315,7 +317,7 @@ deg_fit_source: str; deg_ms_per_lap: float; deg_confidence: float; base_pace_ms:
 laps_of_pace: float; wear_mean_pct: float; wear_per_lap_pct: float
 blister_max_pct: int                # max tyre_blisters corner (Car Damage)
 graining: bool                      # slow inner EMA in the graining band (< th.tyre_graining_c) with hysteresis
-overheat: bool                      # slow inner EMA > th.tyre_inner_hot_c with hysteresis
+overheat: bool                      # slow inner EMA > th.tyre_inner_hot_c with hysteresis; never in the pit lane
 pit_loss_s, pit_loss_source: float, str
 fuel_margin_laps: float; fuel_per_lap_kg: float; fuel_source: str
 energy_per_lap_mj, energy_lap_delta_mj, energy_laps_to_floor: float; energy_mode: str

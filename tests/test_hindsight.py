@@ -8,7 +8,14 @@ from pathlib import Path
 
 from pitwall.cli import main
 from pitwall.digest import build_digest
-from pitwall.hindsight import grade_session, linear_deg, stints, stop_cost_s, stop_laps
+from pitwall.hindsight import (
+    grade_session,
+    linear_deg,
+    stint_compound,
+    stints,
+    stop_cost_s,
+    stop_laps,
+)
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 from pitwall.tune import tune_from_db
@@ -250,3 +257,22 @@ def test_single_off_lap_is_not_the_cliff(tmp_path: Path) -> None:
     _call(db, "t", "tyre_life", 10, laps_of_pace=6.0)
     (o,) = grade_session(db, UID, {"tyre_cliff_ms": 1500})
     assert o.label == "good" and o.actual == 6.0
+
+
+def test_plan_graded_on_visual_compound_with_pitted_out_lap(tmp_path: Path) -> None:
+    """Real compound codes (C2 then C5) with the visual set stored beside them,
+    and both the in-lap and the out-lap flagged pitted: one stop, H then S."""
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=10, session_type=15)
+    db.set_session_total_laps(UID, 10)
+    for n in range(1, 11):
+        compound, visual, age = (19, 18, n - 1) if n <= 8 else (17, 16, n - 9)
+        lap = replace(_lap(n, 111_000, compound, age, pitted=n in (8, 9)), visual=visual)
+        db.insert_lap(UID, 0, lap)
+    laps = db.laps_for(UID, 0)
+    assert laps[0].visual == 18
+    assert stop_laps(laps) == [8]
+    assert [stint_compound(s) for s in stints(laps, [8])] == ["H", "S"]
+    db.insert_plan_event(UID, {"lap": 1, "kind": "set", "to_plan": "A", "sequence": "H-S"})
+    (o,) = grade_session(db, UID, {})
+    assert o.label == "good", o.detail
