@@ -433,6 +433,49 @@ def test_state_payload_quali_zone() -> None:
     assert "release" not in flying["quali"]
 
 
+def test_state_payload_quali_pole_available_outside_cool_lap() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    payload = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="flying",
+            pole_gap_ms=420,
+            pole_driver="NORRIS",
+            pole_sector_gaps_ms=(100, 350, -30),
+            best_sectors_ms=(30_100, 40_350, 20_970),
+            pole_sectors_ms=(30_000, 40_000, 21_000),
+            pole_worst_sector=2,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    quali = payload["quali"]
+    assert quali["pole"] == {
+        "driver": "NORRIS",
+        "gap_ms": 420,
+        "sector_gaps_ms": [100, 350, -30],
+        "sectors_ms": [30_100, 40_350, 20_970],
+        "pole_sectors_ms": [30_000, 40_000, 21_000],
+        "worst_sector": 2,
+    }
+    assert "cool" not in quali
+
+    without_pole = state_payload(
+        Snapshot(now=1.0, session_kind="qualifying", pole_gap_ms=0),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert without_pole["quali"]["pole"] is None
+
+
 def test_pit_board_payload() -> None:
     from pitwall.protocol.layouts import Corners
     from pitwall.server.app import pit_board_payload

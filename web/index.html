@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=5">
+  <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body class="dash connecting">
   <header class="status">
@@ -187,6 +187,27 @@
     <div id="d-plan" class="b-foot">--</div>
   </section>
 
+  <section id="qrail" class="zone qrail" hidden>
+    <div id="qr-cut" class="b-card q-card">
+      <div class="q-head"><h2>CUT-OFF</h2><span id="qr-pos" class="pos">P--</span><span id="qr-pill" class="badge inf">--</span><span id="qr-margin" class="gap">--</span></div>
+      <div id="qr-cut-sub" class="q-sub">--</div>
+    </div>
+    <div id="qr-bench" class="b-card q-card">
+      <div class="q-head"><h2>BENCHMARK</h2><span id="qr-pole" class="name">--</span><span id="qr-gap" class="gap">--</span></div>
+      <table class="q-bench">
+        <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th></tr></thead>
+        <tbody>
+          <tr id="qr-gaps"><th>gap</th><td>--</td><td>--</td><td>--</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="qr-phase" class="b-card q-card">
+      <div class="q-head"><h2 id="qr-ph-k">FLYING</h2><span id="qr-ph-main" class="name">--</span><span id="qr-ph-flag" class="gap"></span></div>
+      <div id="qr-ph-sub" class="q-sub">--</div>
+    </div>
+    <div id="qr-session" class="b-foot">--</div>
+  </section>
+
   <section class="log"><ol id="log"></ol></section>
 
   <footer class="footer">
@@ -196,7 +217,7 @@
     <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=5"></script>
-  <script src="/static/review.js?v=5"></script>
+  <script src="/static/app.js?v=7"></script>
+  <script src="/static/review.js?v=7"></script>
 </body>
 </html>

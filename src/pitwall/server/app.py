@@ -298,7 +298,7 @@ def quali_payload(
     snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
 ) -> dict[str, Any] | None:
     """Zone F in qualifying (docs/15 §8): release window in the garage, lap vs
-    cut-off while flying."""
+    cut-off while flying. Pole sectors are sent in every qualifying phase."""
     if snapshot.session_kind != "qualifying":
         return None
     out: dict[str, Any] = {
@@ -342,6 +342,19 @@ def quali_payload(
         }
     if snapshot.run_plan:
         out["plan"] = {"plan": snapshot.run_plan, "reason": snapshot.run_plan_reason}
+    pole = (
+        {
+            "driver": snapshot.pole_driver or None,
+            "gap_ms": snapshot.pole_gap_ms,
+            "sector_gaps_ms": list(snapshot.pole_sector_gaps_ms),
+            "sectors_ms": list(snapshot.best_sectors_ms),
+            "pole_sectors_ms": list(snapshot.pole_sectors_ms),
+            "worst_sector": snapshot.pole_worst_sector or None,
+        }
+        if snapshot.pole_gap_ms > 0
+        else None
+    )
+    out["pole"] = pole
     if snapshot.cool_lap and (not snapshot.cool_prep or snapshot.cool_extend):
         inner = snapshot.tyre_inner_ema_fast
         th = thresholds or {}
@@ -359,17 +372,7 @@ def quali_payload(
             "fuel_laps": snapshot.fuel_remaining_laps,
             "last_hot_ms": snapshot.last_hot.lap_time_ms if snapshot.last_hot else None,
             "mistakes": snapshot.last_hot_mistakes or None,
-            "pole": (
-                {
-                    "driver": snapshot.pole_driver or None,
-                    "gap_ms": snapshot.pole_gap_ms,
-                    "sector_gaps_ms": list(snapshot.pole_sector_gaps_ms),
-                    "sectors_ms": list(snapshot.best_sectors_ms),
-                    "pole_sectors_ms": list(snapshot.pole_sectors_ms),
-                }
-                if snapshot.pole_gap_ms > 0
-                else None
-            ),
+            "pole": pole,
             "car_behind_s": _finite(snapshot.hot_car_behind_s),
         }
     return out

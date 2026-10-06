@@ -251,6 +251,7 @@ def test_cool_payload_swaps_layout() -> None:
         "sector_gaps_ms": [100, 1_700, 200],
         "sectors_ms": [0, 0, 0],
         "pole_sectors_ms": [0, 0, 0],
+        "worst_sector": None,
     }
     assert cool["car_behind_s"] is None and cool["mistakes"] is None
     assert q["plan"] == {"plan": "cool", "reason": "battery"}
