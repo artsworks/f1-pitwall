@@ -79,7 +79,8 @@ database transaction:
 A session is also graded when it ends. The engine folds pit loss and pass or hold rates
 live during the session. The refit drops any value that the quarantine check rejects, so
 a quarantined value does not come back. Weights stay at or below `param_weight_cap`.
-Upkeep never writes threshold YAML.
+Upkeep never writes threshold YAML. A watchdog restart during a session skips the refit
+and cooldown steps, so priors do not move mid-race.
 
 Upkeep is idempotent. A second run with no new data changes nothing. Database errors are
 logged and skipped. Run upkeep manually with `pitwall maintain`. To skip the refit and

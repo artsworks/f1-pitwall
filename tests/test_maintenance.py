@@ -11,7 +11,7 @@ from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import LearningSettings
 from pitwall.engine import build_engine
-from pitwall.maintenance import maintain
+from pitwall.maintenance import maintain, mid_session
 from pitwall.model.deg import DegFit, corner_wear_life, fit_is_clean, planning_fit, scoped
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
@@ -235,6 +235,17 @@ def test_maintain_skips_calibrate_and_tune_when_disabled() -> None:
     assert (report.calibrated, report.tuned) == (0, 0)
     assert db.get_param(7, 17, "deg_ms_per_lap") is None
     assert load_cooldown_mults(db) == {}
+
+
+def test_mid_session_restart_skips_refit() -> None:
+    db = _learning_db()
+    db.write_heartbeat(1, 10.0, 1_000.0, "rec.f1bin", 3)
+    assert mid_session(db, SETTINGS, wall_now=1_000.0 + SETTINGS.engine.recovery_max_age_s)
+    assert not mid_session(db, SETTINGS, wall_now=1_001.0 + SETTINGS.engine.recovery_max_age_s)
+    report = maintain(db, SETTINGS, refit=False)
+    assert report.graded == 1 and (report.calibrated, report.tuned) == (0, 0)
+    assert db.get_param(7, 17, "deg_ms_per_lap") is None
+    assert maintain(db, SETTINGS).calibrated > 0
 
 
 def test_auto_calibrate_keeps_quarantined_values_out() -> None:

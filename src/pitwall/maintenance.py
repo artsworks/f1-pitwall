@@ -11,13 +11,15 @@ session: nobody should need `pitwall digest` or SQLite to keep priors sane.
 - calibrate and tune (`learning.auto_calibrate`): track priors are refit from
   stored laps and rule cooldowns from human grades plus auto-graded outcomes.
   Writes that would fail the quarantine check are dropped. Threshold YAML is
-  never written; `pitwall propose` stays review-only.
+  never written; `pitwall propose` stays review-only. A watchdog restart
+  mid-session passes `refit=False` so priors do not move during a race.
 
 Deterministic and idempotent: a second run changes nothing."""
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -217,7 +219,16 @@ def tune_learned(db: Database, th: Mapping[str, object]) -> int:
     return sum(before.get(rule) != mult for rule, mult in after.items())
 
 
-def maintain(db: Database, settings: Settings) -> MaintenanceReport:
+def mid_session(db: Database, settings: Settings, wall_now: float | None = None) -> bool:
+    """True when a fresh heartbeat shows a session is still running (watchdog restart)."""
+    hb = db.read_heartbeat()
+    if hb is None:
+        return False
+    wall_now = time.time() if wall_now is None else wall_now
+    return wall_now - hb.wall_t <= settings.engine.recovery_max_age_s
+
+
+def maintain(db: Database, settings: Settings, *, refit: bool = True) -> MaintenanceReport:
     th = settings.thresholds
     report = MaintenanceReport()
     with db.transaction():
@@ -226,7 +237,7 @@ def maintain(db: Database, settings: Settings) -> MaintenanceReport:
             db.set_maintenance_version("learn_rebuild", LEARN_VERSION)
         report.quarantined += quarantine_bad(db, th)
         report.graded = grade_ungraded(db, th)
-        if settings.learning.auto_calibrate:
+        if refit and settings.learning.auto_calibrate:
             report.calibrated = calibrate_learned(db, settings)
             report.tuned = tune_learned(db, th)
     return report

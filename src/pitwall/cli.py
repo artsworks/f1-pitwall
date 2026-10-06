@@ -751,10 +751,11 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         db = open_configured(settings)
     if db is not None:
-        from pitwall.maintenance import maintain
+        from pitwall.maintenance import maintain, mid_session
 
         try:
-            print(f"learning: {maintain(db, settings).summary()}", flush=True)
+            report = maintain(db, settings, refit=not mid_session(db, settings))
+            print(f"learning: {report.summary()}", flush=True)
         except sqlite3.Error as e:
             print(f"learning: upkeep skipped ({e})", flush=True)
     dlog = DecisionLog(
