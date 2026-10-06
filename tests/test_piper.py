@@ -173,7 +173,7 @@ def test_radio_blip_shape() -> None:
 
 def test_missing_voice_falls_back(tmp_path: Path) -> None:
     s = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
-    with pytest.raises(FileNotFoundError, match="pitwall voices get"):
+    with pytest.raises(FileNotFoundError, match="pitwall voice get"):
         make_piper_synth(s)
     assert isinstance(make_speaker(s), NullSpeaker)
 

@@ -1,4 +1,4 @@
-"""pitwall CLI: record, replay, trim, index, stats, doctor."""
+"""pitwall CLI: start, replay, review, learning and voice tools."""
 
 from __future__ import annotations
 
@@ -29,17 +29,18 @@ from pitwall.net.recording import (
     RecordingReader,
     RecordingRotator,
     RecordingWriter,
-    build_index,
-    compress_recording,
+    ensure_index,
     index_path_for,
+    list_recordings,
     read_index,
-    write_index,
 )
-from pitwall.net.udp import listen
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
 from pitwall.supervisor import ALIVE_FILE, Supervisor, read_recording_pointer, runtime_dir
+
+if TYPE_CHECKING:
+    from pitwall.config.models import Settings
 
 
 def _parse_speed(value: str) -> float | None:
@@ -51,33 +52,47 @@ def _parse_speed(value: str) -> float | None:
     return v
 
 
-def cmd_record(args: argparse.Namespace) -> int:
-    out_dir = Path(args.out)
-    recorder = RecordingRotator(out_dir, profile=args.profile)
-    ingest = Ingest(recorder=recorder)
-    clock = WallClock()
+class RecordingNotFoundError(LookupError):
+    pass
 
-    async def run() -> None:
-        transport = await listen(args.host, args.port, ingest, clock)
-        print(f"recording on {args.host}:{args.port} -> {out_dir} (ctrl-c to stop)")
-        try:
-            await asyncio.Event().wait()
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            pass
-        finally:
-            transport.close()
-            recorder.close()
 
-    try:
-        asyncio.run(run())
-    except KeyboardInterrupt:
-        recorder.close()
-    if recorder.last_path is not None:
-        print(f"last recording: {recorder.last_path}")
-    return 0
+def _resolve_recording(arg: str | None, settings: Settings) -> Path:
+    """Resolve None/"latest", an index into `pitwall recordings`, a bare file name in
+    the recordings folder, or a path."""
+    directory = Path(settings.recording.directory)
+    if arg is None or arg == "latest":
+        found = list_recordings(directory)
+        if not found:
+            raise RecordingNotFoundError(f"no recordings in {directory}")
+        path = found[0]
+    elif Path(arg).expanduser().exists():
+        path = Path(arg).expanduser()
+    elif arg.isdigit():
+        found = list_recordings(directory)
+        if int(arg) >= len(found):
+            raise RecordingNotFoundError(
+                f"no recording #{arg} in {directory} ({len(found)} found, see pitwall recordings)"
+            )
+        path = found[int(arg)]
+    else:
+        candidates = [directory / arg, directory / f"{arg}.f1bin", directory / f"{arg}.f1bin.zst"]
+        path = next((c for c in candidates if c.exists()), Path())
+        if path == Path():
+            raise RecordingNotFoundError(f"recording not found: {arg}")
+    print(f"recording: {path}", file=sys.stderr)
+    return path
+
+
+def _resolve_recordings(args: list[str], settings: Settings) -> list[str]:
+    """Resolve each entry; glob patterns pass through for expand_paths."""
+    import glob
+
+    return [a if glob.has_magic(a) else str(_resolve_recording(a, settings)) for a in args]
 
 
 def _lap_seek_us(path: Path, lap: int) -> int | None:
+    if ensure_index(path):
+        print(f"index: rebuilt {index_path_for(path)}")
     for entry in read_index(path):
         if entry["kind"] == "lap" and entry["detail"] == str(lap):
             return int(entry["offset_us"])
@@ -89,11 +104,12 @@ def cmd_replay(args: argparse.Namespace) -> int:
     from pitwall.store.db import Database
 
     speed = _parse_speed(args.speed)
+    file = _resolve_recording(args.file, ConfigStore().current())
     from_us = args.from_us
     if args.from_lap is not None:
-        from_us = _lap_seek_us(Path(args.file), args.from_lap)
+        from_us = _lap_seek_us(file, args.from_lap)
         if from_us is None:
-            print(f"replay: lap {args.from_lap} not found in index of {args.file}")
+            print(f"replay: lap {args.from_lap} not found in index of {file}")
             return 1
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.serve:
@@ -127,7 +143,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         live_speed = speed or 1.0  # paced replay drives the dashboard
         review = ReviewController(
-            Path(args.file),
+            file,
             _engine_factory,
             hub,
             speed=live_speed,
@@ -158,9 +174,9 @@ def cmd_replay(args: argparse.Namespace) -> int:
     engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
     if args.mask_restricted:
         engine.ingest.transform = mask_restricted
-    replay_coro = run_replay(Path(args.file), engine, speed, from_us=from_us, to_us=args.to_us)
+    replay_coro = run_replay(file, engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
-    print(f"replayed {delivered} datagrams from {args.file}; {len(calls)} calls")
+    print(f"replayed {delivered} datagrams from {file}; {len(calls)} calls")
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
     return 0
@@ -171,7 +187,8 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
     from pitwall.diff import format_diff, run_diff
 
-    recordings = [Path(f) for f in args.recordings]
+    settings = ConfigStore().current()
+    recordings = [Path(f) for f in _resolve_recordings(args.recordings, settings)]
     if args.corpus:
         recordings += [Path(p) for p in sorted(_glob.glob(args.corpus))]
     if not recordings:
@@ -193,7 +210,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
         from pitwall.store.db import open_configured
         from pitwall.tune import record_diff
 
-        db = open_configured(ConfigStore().current())
+        db = open_configured(settings)
         if db is not None:
             n = record_diff(
                 db,
@@ -220,7 +237,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
     if args.paths:
         from pitwall.ingest import ingest_recordings
 
-        results = ingest_recordings(db, args.paths, settings, calls_mode=args.calls_mode)
+        paths = _resolve_recordings(args.paths, settings)
+        results = ingest_recordings(db, paths, settings, calls_mode=args.calls_mode)
         for result in results:
             print(
                 f"{result.session_uid} {result.status} {result.path}"
@@ -246,7 +264,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
         out_dir = None if args.out in (None, "-") else Path(args.out)
         results = ingest_recordings(
             db,
-            args.paths,
+            _resolve_recordings(args.paths, settings),
             settings,
             calls_mode=args.calls_mode,
             out_dir=out_dir,
@@ -358,14 +376,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     store = ConfigStore()
     settings = store.current()
     rec_dir = Path(settings.recording.directory)
-    if args.recording:
-        rec_path = Path(args.recording)
-    else:
-        candidates = sorted(rec_dir.glob("*.f1bin"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not candidates:
-            print(f"report: no .f1bin recordings in {rec_dir}")
-            return 1
-        rec_path = candidates[0]
+    rec_path = _resolve_recording(args.recording or args.recording_opt, settings)
     out = Path(args.out) if args.out else Path(f"pitwall-report-{int(time.time())}.zip")
 
     db = open_configured(settings)
@@ -439,7 +450,7 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
 
 
 def cmd_trim(args: argparse.Namespace) -> int:
-    src = Path(args.file)
+    src = _resolve_recording(args.file, ConfigStore().current())
     from_us = args.from_us if args.from_us is not None else 0
     to_us = args.to_us
     keep = RecordFilter(args.profile) if args.profile else None
@@ -473,15 +484,6 @@ def cmd_trim(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_index(args: argparse.Namespace) -> int:
-    path = Path(args.file)
-    entries = build_index(path)
-    out = index_path_for(path)
-    write_index(out, entries)
-    print(f"wrote {len(entries)} index entries -> {out}")
-    return 0
-
-
 def cmd_calibrate(args: argparse.Namespace) -> int:
     from pitwall.calibrate import calibrate, format_calibration, write_overlays
     from pitwall.store.db import Database, open_configured
@@ -495,7 +497,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     if args.paths:
         from pitwall.ingest import ingest_recordings
 
-        results = ingest_recordings(db, args.paths, settings)
+        results = ingest_recordings(db, _resolve_recordings(args.paths, settings), settings)
         for result in results:
             if result.status == "error":
                 errors = True
@@ -528,18 +530,16 @@ def cmd_stats(args: argparse.Namespace) -> int:
         state = learned_state(db, settings, track_id=args.track)
         print(json.dumps(state, indent=2, default=str) if args.json else format_learned(state))
         return 0
-    if not args.file:
-        print("stats: provide a recording or use --learned")
-        return 2
+    file = _resolve_recording(args.file, ConfigStore().current())
     ingest = Ingest()
     last_t = 0.0
-    with RecordingReader(Path(args.file)) as reader:
+    with RecordingReader(file) as reader:
         header = reader.header
         for offset_us, payload in reader:
             last_t = offset_us / 1_000_000
             ingest.on_datagram(payload, last_t)
     out = {
-        "file": args.file,
+        "file": str(file),
         "session_uid": header.session_uid,
         "packet_format": header.packet_format,
         "config_hash": header.config_hash,
@@ -890,7 +890,17 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
     return 0
 
 
-def cmd_speak(args: argparse.Namespace) -> int:
+def cmd_voice(args: argparse.Namespace) -> int:
+    """Piper voices, speech check and the voice-command channel (docs/21)."""
+    action = args.voice_action or "list"
+    if action in ("list", "get", "warm"):
+        return _voice_piper(action, getattr(args, "names", []))
+    if action == "say":
+        return _voice_say(args)
+    return _voice_channel(action, args)
+
+
+def _voice_say(args: argparse.Namespace) -> int:
     """Diagnose the audio path: speak TEXT and report when it was spoken."""
     from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth
     from pitwall.audio.speaker import make_speaker
@@ -951,7 +961,7 @@ def cmd_speak(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_voices(args: argparse.Namespace) -> int:
+def _voice_piper(action: str, names: list[str]) -> int:
     from pitwall.audio.piper_tts import (
         SUGGESTED_VOICES,
         common_phrases,
@@ -961,12 +971,12 @@ def cmd_voices(args: argparse.Namespace) -> int:
     )
 
     speech = ConfigStore().current().speech
-    if args.action == "get":
-        for name in args.names or [speech.piper_voice]:
+    if action == "get":
+        for name in names or [speech.piper_voice]:
             path = download_voice(speech, name)
             print(f"downloaded {name} -> {path}")
         return 0
-    if args.action == "warm":
+    if action == "warm":
         speaker = make_piper_speaker(speech)
         try:
             count = speaker.warm(common_phrases())
@@ -979,25 +989,25 @@ def cmd_voices(args: argparse.Namespace) -> int:
     for name in have:
         print(f"  {'*' if name == speech.piper_voice else ' '} {name}")
     if not have:
-        print("  (none) - run: pitwall voices get")
+        print("  (none) - run: pitwall voice get")
     print("suggested: " + ", ".join(SUGGESTED_VOICES))
     print("all voices: https://rhasspy.github.io/piper-samples/")
     return 0
 
 
-def cmd_voice(args: argparse.Namespace) -> int:
-    """Voice channel tooling (docs/21): grammar, devices, spike."""
+def _voice_channel(action: str, args: argparse.Namespace) -> int:
+    """Voice-command channel tooling (docs/21): grammar, devices, spike."""
     from pitwall.voice.grammar import VoiceGrammar
 
     settings = ConfigStore().current()
     voice = settings.voice
-    if args.action == "grammar":
+    if action == "grammar":
         print(VoiceGrammar.from_mapping(voice.intents).to_srgs(args.lang), end="")
         return 0
     if sys.platform != "win32":
         print("voice devices/spike need Windows SAPI (pywin32)")
         return 1
-    if args.action == "devices":
+    if action == "devices":
         from pitwall.voice.sapi import list_inputs
 
         recs, ins = list_inputs()
@@ -1032,6 +1042,58 @@ def cmd_voice(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_recordings(args: argparse.Namespace) -> int:
+    """List recordings newest first; the index works as a recording argument."""
+    directory = Path(ConfigStore().current().recording.directory)
+    found = list_recordings(directory)
+    if not found:
+        print(f"recordings: none in {directory}")
+        return 0
+    print(f"recordings in {directory}, newest first:")
+    print(f"{'#':>3}  {'file':<44} {'start':<16} {'size':>9}  session_uid")
+    for i, path in enumerate(found):
+        start, uid = "?", "?"
+        try:
+            with RecordingReader(path) as reader:
+                header = reader.header
+            uid = str(header.session_uid)
+            if header.wall_clock_start_us:
+                t = time.localtime(header.wall_clock_start_us / 1e6)
+                start = time.strftime("%Y-%m-%d %H:%M", t)
+        except Exception:
+            pass
+        print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}")
+    return 0
+
+
+def cmd_sessions(args: argparse.Namespace) -> int:
+    """List stored sessions newest first, with their debrief link."""
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("sessions: persistence disabled")
+        return 1
+    rows = db.sessions()[::-1][: args.limit]
+    if not rows:
+        print("sessions: none in the database")
+        return 0
+    print(f"{'session_uid':<20} {'start':<16} {'track':>5} {'type':>4} {'laps':>4}  recording")
+    for row in rows:
+        uid = int(row["uid"])
+        started = row.get("started_at")
+        start = time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else "?"
+        rec = Path(row["recording_path"]).name if row.get("recording_path") else "-"
+        laps = len(db.laps_for(uid))
+        print(
+            f"{uid:<20} {start:<16} {row.get('track_id', '?'):>5} "
+            f"{row.get('session_type', '?'):>4} {laps:>4}  {rec}"
+        )
+    print("debrief: /debrief on the dashboard, or pitwall debrief --session <uid>")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from pitwall.doctor import run_doctor
 
@@ -1061,24 +1123,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except Exception:
         print("learned state: unavailable")
     return result
-
-
-def cmd_maintain(args: argparse.Namespace) -> int:
-    """Quarantine bad learned values, rebuild stint priors, grade sessions."""
-    from pitwall.maintenance import maintain
-    from pitwall.store.db import Database, open_configured
-
-    settings = ConfigStore().current()
-    db = Database(args.db) if args.db else open_configured(settings)
-    if db is None:
-        print("maintain: persistence disabled")
-        return 1
-    report = maintain(db, settings.thresholds)
-    print(f"database: {db.path}")
-    for line in report.quarantined:
-        print(f"  quarantined {line}")
-    print(f"maintain: {report.summary()}")
-    return 0
 
 
 def _mb(n: int) -> str:
@@ -1135,29 +1179,22 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_compress(args: argparse.Namespace) -> int:
-    dst = compress_recording(Path(args.file))
-    print(f"compressed -> {dst}")
-    return 0
+REC_HELP = "recording: path, file name, # from `pitwall recordings`, or latest (default)"
+REC_LIST_HELP = "each a path, file name, # from `pitwall recordings`, or latest"
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pitwall")
     sub = p.add_subparsers(dest="command", required=True)
 
-    rec = sub.add_parser("record", help="record UDP telemetry to .f1bin")
-    rec.add_argument("--host", default="0.0.0.0")
-    rec.add_argument("--port", type=int, default=20777)
-    rec.add_argument("--out", default="recordings/")
-    rec.add_argument("--profile", choices=PROFILES, default="full")
-    rec.set_defaults(func=cmd_record)
-
     rep = sub.add_parser("replay", help="replay a recording through the engine")
-    rep.add_argument("file")
+    rep.add_argument("file", nargs="?", default=None, help=REC_HELP)
     rep.add_argument("--speed", default="max", help="1|N|max")
     rep.add_argument("--stats", action="store_true")
     rep.add_argument("--no-rules", action="store_true", help="packet census only")
-    rep.add_argument("--from-lap", type=int, default=None, help="seek via .f1idx")
+    rep.add_argument(
+        "--from-lap", type=int, default=None, help="seek via .f1idx (rebuilt if missing or stale)"
+    )
     rep.add_argument("--from-us", type=int, default=None)
     rep.add_argument("--to-us", type=int, default=None)
     rep.add_argument("--serve", action="store_true", help="run dashboard while replaying")
@@ -1174,7 +1211,7 @@ def build_parser() -> argparse.ArgumentParser:
     rep.set_defaults(func=cmd_replay)
 
     dif = sub.add_parser("diff", help="compare two rules dirs over recording(s)")
-    dif.add_argument("recordings", nargs="+")
+    dif.add_argument("recordings", nargs="+", help=REC_LIST_HELP)
     dif.add_argument("--a", default=None, help="rules dir A (default: packaged defaults)")
     dif.add_argument("--b", required=True, help="rules dir B")
     dif.add_argument("--a-mindset", default=None)
@@ -1187,14 +1224,12 @@ def build_parser() -> argparse.ArgumentParser:
     dif.set_defaults(func=cmd_diff)
 
     tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
-    tun.add_argument("paths", nargs="*", help="recordings to ingest before tuning")
+    tun.add_argument(
+        "paths", nargs="*", help="recordings to ingest before tuning; " + REC_LIST_HELP
+    )
     tun.add_argument("--calls-mode", choices=["on", "off"], default=None)
     tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     tun.set_defaults(func=cmd_tune)
-
-    mt = sub.add_parser("maintain", help="repair learned state (runs automatically on start)")
-    mt.add_argument("--db", default=None)
-    mt.set_defaults(func=cmd_maintain)
 
     cu = sub.add_parser("cleanup", help="delete old learned recordings and caches (asks first)")
     cu.add_argument("--days", type=float, default=30.0, help="only files older than this")
@@ -1204,7 +1239,7 @@ def build_parser() -> argparse.ArgumentParser:
     cu.set_defaults(func=cmd_cleanup)
 
     dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
-    dg.add_argument("paths", nargs="*", help="recordings to ingest")
+    dg.add_argument("paths", nargs="*", help="recordings to ingest; " + REC_LIST_HELP)
     dg.add_argument("--calls-mode", choices=["on", "off"], default=None)
     dg.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     dg.add_argument("--session", default=None, help="session uid (default: latest)")
@@ -1231,7 +1266,9 @@ def build_parser() -> argparse.ArgumentParser:
     proposal.set_defaults(func=cmd_propose)
 
     cal = sub.add_parser("calibrate", help="fit track priors from recorded sessions")
-    cal.add_argument("paths", nargs="*", help="recordings to ingest before calibration")
+    cal.add_argument(
+        "paths", nargs="*", help="recordings to ingest before calibration; " + REC_LIST_HELP
+    )
     cal.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     cal.add_argument("--track", type=int, default=None)
     cal.add_argument("--dry-run", action="store_true")
@@ -1241,7 +1278,8 @@ def build_parser() -> argparse.ArgumentParser:
     cal.set_defaults(func=cmd_calibrate)
 
     rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
-    rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")
+    rpt.add_argument("recording", nargs="?", default=None, help=REC_HELP)
+    rpt.add_argument("--recording", dest="recording_opt", default=None, help=argparse.SUPPRESS)
     rpt.add_argument("-o", "--out", default=None, help="output zip path")
     rpt.set_defaults(func=cmd_report)
 
@@ -1251,7 +1289,7 @@ def build_parser() -> argparse.ArgumentParser:
     rcheck.set_defaults(func=cmd_rules_check)
 
     trim = sub.add_parser("trim", help="extract a time range from a recording")
-    trim.add_argument("file")
+    trim.add_argument("file", nargs="?", default=None, help=REC_HELP)
     trim.add_argument("--from-us", type=int, default=None)
     trim.add_argument("--to-us", type=int, default=None)
     trim.add_argument(
@@ -1260,41 +1298,54 @@ def build_parser() -> argparse.ArgumentParser:
     trim.add_argument("--out", required=True)
     trim.set_defaults(func=cmd_trim)
 
-    idx = sub.add_parser("index", help="rebuild the .f1idx sidecar")
-    idx.add_argument("file")
-    idx.set_defaults(func=cmd_index)
-
     st = sub.add_parser("stats", help="packet census of a recording")
-    st.add_argument("file", nargs="?")
+    st.add_argument("file", nargs="?", default=None, help=REC_HELP)
     st.add_argument("--learned", action="store_true")
     st.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     st.add_argument("--track", type=int, default=None)
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_stats)
 
-    vc = sub.add_parser("voice", help="voice channel: SRGS grammar, SAPI devices, Phase 0 spike")
-    vc.add_argument("action", choices=["spike", "devices", "grammar"])
-    vc.add_argument("--port", type=int, default=None, help="UDP port for Action 1 taps")
-    vc.add_argument("--no-udp", action="store_true", help="Enter key only; don't bind UDP")
-    vc.add_argument("--device", type=int, default=None, help="audio input index")
-    vc.add_argument("--recognizer", default=None, help="recogniser description substring")
-    vc.add_argument("--confidence", type=float, default=None, help="confidence_min override")
-    vc.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
-    vc.add_argument("--grammar", choices=["srgs", "api"], default="srgs")
-    vc.add_argument("--lang", default="en-US", help="xml:lang for `grammar`")
-    vc.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
-    vc.add_argument("--log", default=None, help="JSONL log path")
-    vc.set_defaults(func=cmd_voice)
+    vc = sub.add_parser("voice", help="Piper voices, speech check, voice-command channel")
+    vc.set_defaults(func=cmd_voice, voice_action=None)
+    vsub = vc.add_subparsers(dest="voice_action")
+    vsub.add_parser("list", help="list installed and suggested Piper voices (default)")
+    vget = vsub.add_parser("get", help="download Piper voices")
+    vget.add_argument("names", nargs="*", help="voice names (default: configured)")
+    vsub.add_parser("warm", help="pre-render common fixed phrases")
+    vsay = vsub.add_parser("say", help="audio check: speak a line through the speech backend")
+    vsay.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
+    vsay.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
+    vsay.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
+    vsay.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
+    vsay.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
+    vsub.add_parser("devices", help="list SAPI recognisers and audio inputs")
+    vgram = vsub.add_parser("grammar", help="print the SRGS grammar")
+    vgram.add_argument("--lang", default="en-US", help="xml:lang of the grammar")
+    vspike = vsub.add_parser("spike", help="Phase 0 SAPI recogniser check")
+    vspike.add_argument("--port", type=int, default=None, help="UDP port for Action 1 taps")
+    vspike.add_argument("--no-udp", action="store_true", help="Enter key only; don't bind UDP")
+    vspike.add_argument("--device", type=int, default=None, help="audio input index")
+    vspike.add_argument("--recognizer", default=None, help="recogniser description substring")
+    vspike.add_argument("--confidence", type=float, default=None, help="confidence_min override")
+    vspike.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
+    vspike.add_argument("--grammar", choices=["srgs", "api"], default="srgs")
+    vspike.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
+    vspike.add_argument("--log", default=None, help="JSONL log path")
+
+    rl = sub.add_parser("recordings", help="list recordings with their # for other commands")
+    rl.set_defaults(func=cmd_recordings)
+
+    ss = sub.add_parser("sessions", help="list stored sessions, newest first")
+    ss.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    ss.add_argument("--limit", type=int, default=20)
+    ss.set_defaults(func=cmd_sessions)
 
     doc = sub.add_parser("doctor", help="bind-test the port and report observed telemetry")
     doc.add_argument("--host", default="0.0.0.0")
     doc.add_argument("--port", type=int, default=20777)
     doc.add_argument("--seconds", type=float, default=5.0)
     doc.set_defaults(func=cmd_doctor)
-
-    cz = sub.add_parser("compress", help="zstd-compress a recording")
-    cz.add_argument("file")
-    cz.set_defaults(func=cmd_compress)
 
     st2 = sub.add_parser("start", help="live: UDP ingest + rules + dashboard + speech")
     st2.add_argument(
@@ -1312,25 +1363,16 @@ def build_parser() -> argparse.ArgumentParser:
     st2.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     st2.set_defaults(func=cmd_start)
 
-    sp = sub.add_parser("speak", help="audio check: speak a line through the speech backend")
-    sp.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
-    sp.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
-    sp.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
-    sp.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
-    sp.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
-    sp.set_defaults(func=cmd_speak)
-
-    vo = sub.add_parser("voices", help="list or download Piper voices")
-    vo.add_argument("action", nargs="?", choices=["list", "get", "warm"], default="list")
-    vo.add_argument("names", nargs="*", help="voice names for get (default: configured)")
-    vo.set_defaults(func=cmd_voices)
-
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args)  # type: ignore[no-any-return]
+    try:
+        return args.func(args)  # type: ignore[no-any-return]
+    except RecordingNotFoundError as exc:
+        print(f"{args.command}: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
