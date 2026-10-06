@@ -764,9 +764,11 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .banner.p1 .meta .pri { background: var(--crit); color: #fff; padding: 0 .4rem; border-radius: .25rem; }
 
 .status #position { font-size: 2rem; font-weight: bold; padding: 0 .5rem; border-radius: .3rem;
-  background: var(--fg); color: var(--bg); line-height: 1.2; }
-.status #lap { font-weight: bold; }
-.status #age { font-size: 1.1rem; }
+  background: var(--fg); color: var(--bg); line-height: 1.2; min-width: calc(3ch + 1rem); text-align: center; }
+/* fixed-width readouts so digit-count changes never shift neighbours:
+   "LAP 78/78", "1000 ms", "20 upd/s", "voice lag 9999 ms · screen lag 9999 ms" */
+.status #lap { font-weight: bold; display: inline-block; min-width: 9ch; }
+.status #age { font-size: 1.1rem; display: inline-block; min-width: 7ch; }
 .flag.sc { border-color: var(--warn); background: var(--warn); color: #000; }
 
 .corner .det { color: var(--soft); display: flex; gap: .8rem; align-items: baseline; }
@@ -802,7 +804,9 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pb-corner .lbl { font-weight: bold; }
 .footer { font-size: 1rem; color: var(--soft); }
 body.sc .footer #sc { color: var(--warn); font-weight: bold; }
-#rate, #latency { color: var(--dim); }
+#rate, #latency { color: var(--dim); display: inline-block; }
+#rate { min-width: 8ch; }
+#latency { min-width: 38ch; }
 
 /* laptop / small desktop landscape (e.g. 1366x768, 1024x768): the fixed grid
    would crush the tyre tiles, so zones keep a readable minimum and the page
