@@ -142,6 +142,199 @@ def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
     return pace_words(closing_s)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _EnergyLapLatch:
+    lap_num: int
+    start_store_j: float
+    start_laps_remaining: int
+    gradable: bool
+
+
+class _EnergyLapTracker:
+    _COUNTER_RESET_TOLERANCE_J = 1_000.0
+
+    def __init__(self) -> None:
+        self._epoch_dep_max: float | None = None
+        self._epoch_harv_max: float | None = None
+        self._latch: _EnergyLapLatch | None = None
+        self._pending_lap: _EnergyLapLatch | None = None
+        self._ended_epoch: tuple[float, float] | None = None
+        self._partial_next_latch = False
+        self.prev_lap: EnergyBudget | None = None
+
+    def reset(self) -> None:
+        self._clear(partial_next=True)
+
+    def _clear(self, *, partial_next: bool) -> None:
+        self._epoch_dep_max = None
+        self._epoch_harv_max = None
+        self._latch = None
+        self._pending_lap = None
+        self._ended_epoch = None
+        self._partial_next_latch = partial_next
+        self.prev_lap = None
+
+    def _start_latch(
+        self,
+        lap_num: int,
+        laps_remaining: int,
+        store_j: float,
+        dep: float,
+        harv: float,
+        *,
+        gradable: bool,
+    ) -> None:
+        self._epoch_dep_max = dep
+        self._epoch_harv_max = harv
+        self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, gradable)
+        self._pending_lap = None
+        self._ended_epoch = None
+        self._partial_next_latch = False
+
+    def _grade(
+        self,
+        lap: _EnergyLapLatch,
+        counters: tuple[float, float],
+        *,
+        store_j: float,
+        store_capacity_j: float,
+        soc_floor_pct: float,
+        over_tolerance_j: float,
+        attack_ok: bool,
+    ) -> None:
+        self.prev_lap = None
+        if not lap.gradable:
+            return
+        deployed_j, harvested_j = counters
+        self.prev_lap = energy_budget(
+            store_j=store_j,
+            allowance_store_j=lap.start_store_j,
+            store_capacity_j=store_capacity_j,
+            laps_remaining=lap.start_laps_remaining,
+            deployed_this_lap_j=deployed_j,
+            harvested_this_lap_j=harvested_j,
+            soc_floor_pct=soc_floor_pct,
+            over_tolerance_j=over_tolerance_j,
+            attack_ok=attack_ok,
+        )
+
+    def observe(
+        self,
+        lap_num: int,
+        laps_remaining: int,
+        store_j: float,
+        dep: float,
+        harv: float,
+        *,
+        store_capacity_j: float,
+        soc_floor_pct: float,
+        over_tolerance_j: float,
+        attack_ok: bool,
+    ) -> tuple[float, float, float | None, int]:
+        if lap_num < 1:
+            if self._latch is not None:
+                self.reset()
+            return dep, harv, None, laps_remaining
+
+        if self._latch is None:
+            self._start_latch(
+                lap_num,
+                laps_remaining,
+                store_j,
+                dep,
+                harv,
+                gradable=lap_num == 1 and not self._partial_next_latch,
+            )
+            return self._live_values(lap_num, laps_remaining, dep, harv)
+
+        lap = self._latch
+        if lap_num not in (lap.lap_num, lap.lap_num + 1):
+            self._clear(partial_next=False)
+            self._start_latch(lap_num, laps_remaining, store_j, dep, harv, gradable=False)
+            return self._live_values(lap_num, laps_remaining, dep, harv)
+
+        ended_epoch: tuple[float, float] | None = None
+        epoch_dep_max = self._epoch_dep_max
+        epoch_harv_max = self._epoch_harv_max
+        if epoch_dep_max is None or epoch_harv_max is None:
+            self._epoch_dep_max = dep
+            self._epoch_harv_max = harv
+        elif (
+            dep < epoch_dep_max - self._COUNTER_RESET_TOLERANCE_J
+            or harv < epoch_harv_max - self._COUNTER_RESET_TOLERANCE_J
+        ):
+            ended_epoch = (epoch_dep_max, epoch_harv_max)
+            self._epoch_dep_max = dep
+            self._epoch_harv_max = harv
+            if self._pending_lap is not None:
+                self._grade(
+                    self._pending_lap,
+                    ended_epoch,
+                    store_j=store_j,
+                    store_capacity_j=store_capacity_j,
+                    soc_floor_pct=soc_floor_pct,
+                    over_tolerance_j=over_tolerance_j,
+                    attack_ok=attack_ok,
+                )
+                self._pending_lap = None
+            else:
+                self._ended_epoch = ended_epoch
+        else:
+            self._epoch_dep_max = max(epoch_dep_max, dep)
+            self._epoch_harv_max = max(epoch_harv_max, harv)
+
+        if lap_num == lap.lap_num + 1:
+            self.prev_lap = None
+            if self._ended_epoch is not None:
+                self._grade(
+                    lap,
+                    self._ended_epoch,
+                    store_j=store_j,
+                    store_capacity_j=store_capacity_j,
+                    soc_floor_pct=soc_floor_pct,
+                    over_tolerance_j=over_tolerance_j,
+                    attack_ok=attack_ok,
+                )
+                self._ended_epoch = None
+            elif (
+                self._pending_lap is None
+                and self._epoch_dep_max is not None
+                and self._epoch_harv_max is not None
+                and self._epoch_dep_max <= self._COUNTER_RESET_TOLERANCE_J
+                and self._epoch_harv_max <= self._COUNTER_RESET_TOLERANCE_J
+            ):
+                self._grade(
+                    lap,
+                    (0.0, 0.0),
+                    store_j=store_j,
+                    store_capacity_j=store_capacity_j,
+                    soc_floor_pct=soc_floor_pct,
+                    over_tolerance_j=over_tolerance_j,
+                    attack_ok=attack_ok,
+                )
+            elif self._pending_lap is None:
+                self._pending_lap = lap
+            self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, True)
+
+        return self._live_values(lap_num, laps_remaining, dep, harv)
+
+    def _live_values(
+        self, lap_num: int, laps_remaining: int, dep: float, harv: float
+    ) -> tuple[float, float, float | None, int]:
+        if self._pending_lap is not None:
+            live_dep, live_harv = 0.0, 0.0
+        elif self._ended_epoch is not None:
+            live_dep, live_harv = self._ended_epoch
+        else:
+            live_dep = self._epoch_dep_max if self._epoch_dep_max is not None else dep
+            live_harv = self._epoch_harv_max if self._epoch_harv_max is not None else harv
+
+        lap = self._latch
+        if lap is not None and lap.lap_num == lap_num and lap.gradable:
+            return live_dep, live_harv, lap.start_store_j, lap.start_laps_remaining
+        return live_dep, live_harv, None, laps_remaining
+
+
 class Engine:
     def __init__(
         self,
@@ -221,11 +414,7 @@ class Engine:
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
         self.energy_prev_lap: EnergyBudget | None = None
-        self._energy_lap_num: int | None = None
-        self._energy_lap_start_store_j: float | None = None
-        self._energy_lap_start_laps_remaining: int | None = None
-        self._energy_max_deployed_j = 0.0
-        self._energy_max_harvested_j = 0.0
+        self._energy_lap_tracker = _EnergyLapTracker()
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
@@ -243,6 +432,7 @@ class Engine:
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
+            self._reset_energy_lap_tracking()
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
@@ -542,12 +732,8 @@ class Engine:
         self.session_origin_started_at = None
 
     def _reset_energy_lap_tracking(self) -> None:
+        self._energy_lap_tracker.reset()
         self.energy_prev_lap = None
-        self._energy_lap_num = None
-        self._energy_lap_start_store_j = None
-        self._energy_lap_start_laps_remaining = None
-        self._energy_max_deployed_j = 0.0
-        self._energy_max_harvested_j = 0.0
 
     def _upsert_session(self, uid: int) -> None:
         if self.db is None:
@@ -1005,32 +1191,27 @@ class Engine:
         lap_num = state.lap_num
         deployed_j = state.ers_deployed_this_lap_j
         harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
-        if lap_num < 1:
-            if self._energy_lap_num is not None:
-                self._reset_energy_lap_tracking()
-        elif self._energy_lap_num is None:
-            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
-        elif lap_num == self._energy_lap_num:
-            self._energy_max_deployed_j = max(self._energy_max_deployed_j, deployed_j)
-            self._energy_max_harvested_j = max(self._energy_max_harvested_j, harvested_j)
-        elif lap_num == self._energy_lap_num + 1 and self._energy_lap_num >= 1:
-            assert self._energy_lap_start_store_j is not None
-            assert self._energy_lap_start_laps_remaining is not None
-            self.energy_prev_lap = energy_budget(
-                store_j=state.ers_store_energy_j,
-                allowance_store_j=self._energy_lap_start_store_j,
-                store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
-                laps_remaining=self._energy_lap_start_laps_remaining,
-                deployed_this_lap_j=self._energy_max_deployed_j,
-                harvested_this_lap_j=self._energy_max_harvested_j,
-                soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
-                over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
-                attack_ok=mode.get("ers_policy") == "attack_rival",
-            )
-            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
-        else:
-            self._reset_energy_lap_tracking()
-            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
+        energy_capacity_j = self._th("ers_store_capacity_j", 4_000_000)
+        energy_floor_pct = float(mode.get("ers_soc_floor_pct", 0) or 0)
+        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 200_000)
+        energy_attack_ok = mode.get("ers_policy") == "attack_rival"
+        (
+            live_deployed_j,
+            live_harvested_j,
+            allowance_store_j,
+            live_laps_remaining,
+        ) = self._energy_lap_tracker.observe(
+            lap_num,
+            laps_remaining,
+            state.ers_store_energy_j,
+            deployed_j,
+            harvested_j,
+            store_capacity_j=energy_capacity_j,
+            soc_floor_pct=energy_floor_pct,
+            over_tolerance_j=energy_over_tolerance_j,
+            attack_ok=energy_attack_ok,
+        )
+        self.energy_prev_lap = self._energy_lap_tracker.prev_lap
         per_lap_kg, fuel_source = self._fuel_per_lap(laps_remaining)
         self.fuel_budget = fuel_budget(
             laps_remaining=laps_remaining,
@@ -1043,24 +1224,14 @@ class Engine:
         )
         self.energy_budget = energy_budget(
             store_j=state.ers_store_energy_j,
-            store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
-            laps_remaining=(
-                self._energy_lap_start_laps_remaining
-                if self._energy_lap_start_laps_remaining is not None
-                else laps_remaining
-            ),
-            deployed_this_lap_j=(
-                self._energy_max_deployed_j if self._energy_lap_num == lap_num else deployed_j
-            ),
-            harvested_this_lap_j=(
-                self._energy_max_harvested_j if self._energy_lap_num == lap_num else harvested_j
-            ),
-            allowance_store_j=(
-                self._energy_lap_start_store_j if self._energy_lap_num == lap_num else None
-            ),
-            soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
-            over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
-            attack_ok=mode.get("ers_policy") == "attack_rival",
+            store_capacity_j=energy_capacity_j,
+            laps_remaining=live_laps_remaining,
+            deployed_this_lap_j=live_deployed_j,
+            harvested_this_lap_j=live_harvested_j,
+            allowance_store_j=allowance_store_j,
+            soc_floor_pct=energy_floor_pct,
+            over_tolerance_j=energy_over_tolerance_j,
+            attack_ok=energy_attack_ok,
         )
 
         fit = self.deg_fit
@@ -1142,15 +1313,6 @@ class Engine:
                 predicted_lap_ms=predicted,
             )
         )
-
-    def _latch_energy_lap(
-        self, lap_num: int, laps_remaining: int, deployed_j: float, harvested_j: float
-    ) -> None:
-        self._energy_lap_num = lap_num
-        self._energy_lap_start_store_j = self.state.ers_store_energy_j
-        self._energy_lap_start_laps_remaining = laps_remaining
-        self._energy_max_deployed_j = deployed_j
-        self._energy_max_harvested_j = harvested_j
 
     def _plan(self, snap: Snapshot) -> Snapshot:
         """Run the pit-window optimiser on the fresh snapshot and fold the
