@@ -819,6 +819,17 @@ class Engine:
             deg = fuel_adjusted_deg(
                 deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
             )
+        confidence = {"weekend": 0.45, "learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2)
+        if deg_p.source == "learned":
+            # A thin learned prior (few folded laps) is pulled toward the
+            # overlay/default so one steep stint cannot set the plan alone.
+            full = self._th("prior_full_weight", 12)
+            trust = min(deg_p.weight / full, 1.0) if full > 0 else 1.0
+            fallback = overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
+            if fallback is None:
+                fallback = self._th("deg_default_ms_per_lap", 80)
+            deg = trust * deg + (1.0 - trust) * float(fallback)
+            confidence = 0.2 + (confidence - 0.2) * trust
         if base_p.source == "default" and self.db is not None and uid is not None:
             seeded = session_base_ms(self.db.laps_for(uid, 0), deg)
             if seeded > 0:
@@ -829,7 +840,7 @@ class Engine:
             fuel_ms_per_lap=fuel_p.value,
             n=0,
             rmse_ms=0.0,
-            confidence={"weekend": 0.45, "learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2),
+            confidence=confidence,
             source=deg_p.source,
         )
 

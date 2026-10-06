@@ -78,6 +78,7 @@ mindset:
 thresholds:
   # M3 race engine (docs/18); per-track overlays may override these.
   prior_min_weight: 2          # model_params weight needed to count as a learned prior
+  prior_full_weight: 12        # learned deg weight (laps) trusted in full; lighter blends toward the default
   param_weight_cap: 50         # cap on fold_param running-mean weight
   deg_min_laps: 3              # valid laps before an OLS deg fit leaves the prior
   deg_max_ms_per_lap: 600      # clamp on fitted deg/fuel slopes

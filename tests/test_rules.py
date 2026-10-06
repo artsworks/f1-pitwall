@@ -227,3 +227,35 @@ def test_quali_safe_margin_and_pressure_rules() -> None:
     assert not {"tyre_pressure_advice", "tyre_pressure_ok"} & {
         c.rule.defn.id for c in result.candidates
     }
+
+
+def test_fastest_lap_level_copy() -> None:
+    from pitwall.config.loader import ConfigStore
+
+    th = ConfigStore().current().thresholds
+    base = {
+        "phase": "racing",
+        "lap_num": 10,
+        "total_laps": 11,
+        "laps_remaining": 2,
+        "fastest_lap_mine": False,
+        "fastest_lap_age_s": float(th["fastest_lap_settle_s"]),
+        "fastest_lap_name": "RUSSELL",
+        "fastest_lap_spoken": "1 minute 51.3 seconds",
+    }
+
+    def text(gap: float) -> str:
+        res = _default_rule_engine().evaluate(_snap(**base, fastest_lap_gap_s=gap))
+        return next(c.text for c in res.candidates if c.rule.defn.id == "fastest_lap_taken")
+
+    assert "level" in text(0.001) and "0.0" not in text(0.001)
+    assert "0.3" in text(0.3)
+
+
+def test_last_lap_rules_share_one_cooldown() -> None:
+    from pitwall.config.loader import ConfigStore
+
+    defs = {r.id: r for r in ConfigStore().current().rules}
+    ids = ("last_lap", "last_lap_defend", "last_lap_attack")
+    assert {defs[i].cooldown_group for i in ids} == {"last_lap"}
+    assert all(defs[i].cooldown_s >= 60 for i in ids)

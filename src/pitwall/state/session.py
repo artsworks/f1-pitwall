@@ -1110,6 +1110,7 @@ class SessionState:
             fuel_in_tank=self.fuel_in_tank,
             ers_deployed_this_lap=self.ers_deployed_this_lap_j,
             weather=self.weather,
+            visual=self.tyre_visual,
         )
         if summary is not None:
             self.laps.append(summary)
@@ -1365,10 +1366,11 @@ class SessionState:
         for i in range(emitted, completed):
             lap = pkt.laps[i]
             lap_num = i + 1
-            compound = 0
+            compound = visual = 0
             stint_start = 1
             for stint in stints:
                 compound = stint.tyre_actual_compound
+                visual = stint.tyre_visual_compound
                 if stint.end_lap >= lap_num:
                     break
                 stint_start = stint.end_lap + 1
@@ -1382,6 +1384,7 @@ class SessionState:
                         sector1_ms=lap.sector1_ms,
                         sector2_ms=lap.sector2_ms,
                         compound=compound,
+                        visual=visual,
                         tyre_age_laps=max(0, lap_num - stint_start),
                         fuel_remaining_laps_at_end=0.0,
                         valid=valid,
@@ -1570,6 +1573,8 @@ class SessionState:
         car = pkt.cars[self._player_idx]
         self.front_brake_bias = car.front_brake_bias
         self.boost.update(st, car.ers_deploy_mode)
+        if self.tyre_compound and car.actual_tyre_compound != self.tyre_compound:
+            self._on_tyre_change()
         self.tyre_compound = car.actual_tyre_compound
         self.tyre_visual = car.visual_tyre_compound
         self.tyre_age_laps = car.tyres_age_laps
@@ -1585,6 +1590,19 @@ class SessionState:
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
+
+    def _on_tyre_change(self) -> None:
+        """A new set is on: restart the tyre EMAs so the old set's heat is not
+        read against the new compound's window."""
+        for ema in (
+            self.tyre_inner_fast,
+            self.tyre_inner_slow,
+            self.tyre_surface_fast,
+            self.tyre_surface_slow,
+        ):
+            ema.reset()
+        self._overheat = False
+        self._graining = False
 
     def _on_car_damage(self, pkt: CarDamagePacket) -> None:
         self.cars_damage = pkt.cars
@@ -2520,7 +2538,8 @@ class SessionState:
         hyst = self._th("thermal_hysteresis_c", 4.0)
         suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
         grain_c = self._th(f"tyre_graining{suffix}_c", 75.0)
-        self._overheat = (self._overheat and hot > hot_c - hyst) or hot >= hot_c
+        on_track = self.pit_status == PitStatus.NONE
+        self._overheat = on_track and ((self._overheat and hot > hot_c - hyst) or hot >= hot_c)
         in_context = self.race_phase == "racing" and self.tyre_age_laps >= 2
         self._graining = in_context and (
             (self._graining and coldest < grain_c + hyst) or coldest <= grain_c
