@@ -3,6 +3,12 @@ setup_rules:
   defaults:
     max_alternatives: 2
     confidence_floor: medium
+  # Symmetry, repeatability, and pace terms are not computed yet.
+  objective:
+    w_deg: 0.30
+    w_lim: 0.25
+    w_th: 0.10
+    w_ev: 0.10
   # A Q3 recording showed off-throttle remains adjustable with parc fermé on.
   quali_locked:
     - rear_wing

@@ -82,6 +82,11 @@ class SetupRules:
     confidence_floor: str
     version: int = 1
     quali_locked: tuple[str, ...] = ()
+    objective: Mapping[str, float] = field(
+        default_factory=lambda: MappingProxyType(
+            {"w_deg": 0.30, "w_lim": 0.25, "w_th": 0.10, "w_ev": 0.10}
+        )
+    )
 
 
 PRESSURE_SETUP_FIELDS = {
@@ -146,7 +151,15 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         data = _mapping(data["setup_rules"], "setup_rules")
     _unknown_keys(
         data,
-        {"version", "defaults", "params", "symptoms", "magnitudes", "quali_locked"},
+        {
+            "version",
+            "defaults",
+            "params",
+            "symptoms",
+            "magnitudes",
+            "quali_locked",
+            "objective",
+        },
         "",
     )
 
@@ -310,6 +323,16 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
             raise ValueError(f"setup_rules.magnitudes.by_z[{index}] values must be positive")
         by_z.append((z, steps))
 
+    raw_objective = _mapping(
+        data.get(
+            "objective",
+            {"w_deg": 0.30, "w_lim": 0.25, "w_th": 0.10, "w_ev": 0.10},
+        ),
+        "objective",
+    )
+    _unknown_keys(raw_objective, {"w_deg", "w_lim", "w_th", "w_ev"}, "objective")
+    objective = {str(name): float(weight) for name, weight in raw_objective.items()}
+
     return SetupRules(
         params=MappingProxyType(params),
         symptoms=tuple(symptoms),
@@ -318,4 +341,5 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         confidence_floor=confidence_floor,
         version=version,
         quali_locked=quali_locked,
+        objective=MappingProxyType(objective),
     )

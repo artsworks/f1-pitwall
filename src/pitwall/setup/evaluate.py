@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from typing import Any
 
 from pitwall.rules.expr import Predicate, TrackedNamespace
@@ -48,6 +48,58 @@ class _Proposal:
     to_value: float
     evidence: dict[str, Any]
     context_tier: str
+
+
+def _learned_candidates(
+    symptom: Symptom,
+    learned: Mapping[tuple[str, str, int], tuple[float, float]],
+    minimum_weight: float,
+) -> list[tuple[Candidate, float | None, float | None, bool]]:
+    ranked: list[tuple[int, Candidate, float | None, float | None, bool]] = []
+    for index, candidate in enumerate(symptom.candidates):
+        yaml_gain = learned.get((symptom.rule_id, candidate.param, candidate.direction))
+        opposite_gain = learned.get((symptom.rule_id, candidate.param, -candidate.direction))
+        qualified_yaml = (
+            yaml_gain if yaml_gain is not None and yaml_gain[1] >= minimum_weight else None
+        )
+        qualified_opposite = (
+            opposite_gain
+            if opposite_gain is not None and opposite_gain[1] >= minimum_weight
+            else None
+        )
+        flipped = (
+            qualified_opposite is not None
+            and qualified_opposite[0] > 0
+            and (qualified_yaml is None or qualified_yaml[0] <= 0)
+        )
+        selected = qualified_opposite if flipped else qualified_yaml
+        direction = -candidate.direction if flipped else candidate.direction
+        confidence = candidate.confidence
+        if selected is not None:
+            confidence = "high" if selected[0] > 0 else "low"
+        effective = replace(candidate, direction=direction, confidence=confidence)
+        raw = learned.get((symptom.rule_id, candidate.param, direction))
+        gain = raw[0] if raw is not None else None
+        weight = raw[1] if raw is not None else None
+        ranked.append((index, effective, gain, weight, flipped))
+    ranked.sort(
+        key=lambda item: (
+            0
+            if item[2] is not None
+            and item[3] is not None
+            and item[3] >= minimum_weight
+            and item[2] > 0
+            else 1,
+            -item[2]
+            if item[2] is not None
+            and item[3] is not None
+            and item[3] >= minimum_weight
+            and item[2] > 0
+            else 0.0,
+            item[0],
+        )
+    )
+    return [(candidate, gain, weight, flipped) for _, candidate, gain, weight, flipped in ranked]
 
 
 def _session_kind(session_type: int) -> str | None:
@@ -143,6 +195,7 @@ def _evaluate(
     parc_ferme: int,
     rules: SetupRules,
     thresholds: Mapping[str, Any],
+    learned: Mapping[tuple[str, str, int], tuple[float, float]] | None,
 ) -> tuple[list[Recommendation], list[dict[str, str]]]:
     if mode not in {"debrief", "garage", "race", "race_stop"}:
         raise ValueError("mode must be debrief, garage, race, or race_stop")
@@ -186,7 +239,10 @@ def _evaluate(
     signs_by_param: dict[str, set[int]] = defaultdict(set)
     for symptom in fired:
         proposals: list[_Proposal] = []
-        for candidate in symptom.candidates:
+        minimum_weight = thresholds.get("setup_learned_min_weight", 3.0)
+        minimum_weight = float(minimum_weight) if isinstance(minimum_weight, int | float) else 3.0
+        learned_candidates = _learned_candidates(symptom, learned or {}, minimum_weight)
+        for candidate, learned_gain, learned_weight, flipped in learned_candidates:
             spec = rules.params[candidate.param]
             if mode == "race" and candidate.param not in RACE_PARAMS:
                 item = {"param": candidate.param, "reason": "locked"}
@@ -251,7 +307,12 @@ def _evaluate(
                 from_value=from_value,
                 delta=round(delta, 6),
                 to_value=to_value,
-                evidence=symptom_evidence[symptom.rule_id],
+                evidence={
+                    **symptom_evidence[symptom.rule_id],
+                    "learned_gain": learned_gain,
+                    "learned_weight": learned_weight,
+                    "flipped": flipped,
+                },
                 context_tier=context_tier,
             )
             proposals.append(proposal)
@@ -350,6 +411,7 @@ def evaluate(
     parc_ferme: int,
     rules: SetupRules,
     thresholds: Mapping[str, Any],
+    learned: Mapping[tuple[str, str, int], tuple[float, float]] | None = None,
 ) -> list[Recommendation]:
     """Return deterministic recommendations for the supplied run and setup."""
     recommendations, _ = _evaluate(
@@ -359,6 +421,7 @@ def evaluate(
         parc_ferme=parc_ferme,
         rules=rules,
         thresholds=thresholds,
+        learned=learned,
     )
     return recommendations
 
@@ -371,6 +434,7 @@ def explain(
     parc_ferme: int,
     rules: SetupRules,
     thresholds: Mapping[str, Any],
+    learned: Mapping[tuple[str, str, int], tuple[float, float]] | None = None,
 ) -> list[dict[str, str]]:
     """Return candidate and symptom suppressions for a setup evaluation."""
     _, suppressed = _evaluate(
@@ -380,5 +444,6 @@ def explain(
         parc_ferme=parc_ferme,
         rules=rules,
         thresholds=thresholds,
+        learned=learned,
     )
     return suppressed

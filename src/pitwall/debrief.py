@@ -13,6 +13,7 @@ from typing import Any
 from pitwall.config.models import Settings
 from pitwall.learned import learned_state
 from pitwall.setup.evaluate import evaluate, explain
+from pitwall.setup.learn import learned_gains
 from pitwall.setup.rules import parse_setup_rules
 from pitwall.setup.signals import session_signals
 from pitwall.state.session import thermal_window
@@ -160,6 +161,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
             parc_ferme_value = session.get("parc_ferme")
             parc_ferme = int(parc_ferme_value) if parc_ferme_value is not None else -1
             rules = parse_setup_rules(settings.setup_rules)
+            learned = learned_gains(db, signals.track_id, signals.compound)
             recommendations = evaluate(
                 signals,
                 setup,
@@ -167,6 +169,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                 parc_ferme=parc_ferme,
                 rules=rules,
                 thresholds=settings.thresholds,
+                learned=learned,
             )
             suppressions = explain(
                 signals,
@@ -175,6 +178,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                 parc_ferme=parc_ferme,
                 rules=rules,
                 thresholds=settings.thresholds,
+                learned=learned,
             )
             locked.update(
                 (item.get("param", ""), item.get("rule_id", ""))

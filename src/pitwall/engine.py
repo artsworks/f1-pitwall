@@ -50,6 +50,7 @@ from pitwall.protocol.enums import SessionType
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.setup.evaluate import Recommendation, evaluate
+from pitwall.setup.learn import learned_gains
 from pitwall.setup.rules import parse_setup_rules, reason_for_symptom
 from pitwall.setup.signals import session_signals
 from pitwall.setup.states import majority_state
@@ -681,6 +682,7 @@ class Engine:
                     parc_ferme=self.state.parc_ferme_rules,
                     rules=self._setup_rules,
                     thresholds=thresholds,
+                    learned=learned_gains(self.db, signals.track_id, signals.compound),
                 )
             )
             for rec in recommendations:
@@ -728,6 +730,7 @@ class Engine:
                 parc_ferme=self.state.parc_ferme_rules,
                 rules=self._setup_rules,
                 thresholds=settings.thresholds,
+                learned=learned_gains(self.db, signals.track_id, signals.compound),
             )
             for rec in recommendations:
                 self.db.insert_setup_rec(

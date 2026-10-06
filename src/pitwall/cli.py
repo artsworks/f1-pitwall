@@ -280,7 +280,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
     if uid is None:
         print("digest: no sessions in the database")
         return 1
-    digest = build_digest(db, uid, settings.thresholds)
+    digest = build_digest(db, uid, settings.thresholds, setup_rules=settings.setup_rules)
     if args.json:
         print(json.dumps(digest, indent=2, default=str))
     else:
@@ -319,6 +319,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
     from pitwall.setup.evaluate import evaluate, explain
+    from pitwall.setup.learn import learned_gains
     from pitwall.setup.rules import parse_setup_rules
     from pitwall.setup.signals import session_signals
     from pitwall.setup.states import runs_for_session
@@ -355,6 +356,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         parc_ferme=parc_ferme,
         rules=rules,
         thresholds=settings.thresholds,
+        learned=learned_gains(db, signals.track_id, signals.compound),
     )
     if args.store:
         run = runs_for_session(db, uid)[-1]
@@ -387,6 +389,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         parc_ferme=parc_ferme,
         rules=rules,
         thresholds=settings.thresholds,
+        learned=learned_gains(db, signals.track_id, signals.compound),
     )
     if suppression_explanations:
         items = ", ".join(

@@ -282,10 +282,12 @@ MIGRATIONS: list[str] = [
         track_id INT,
         compound INT,
         lap INT,
-        evidence TEXT
+        evidence TEXT,
+        folded INT DEFAULT 0
     );
     ALTER TABLE stints ADD COLUMN setup_state_id INT;
     ALTER TABLE sessions ADD COLUMN parc_ferme INT;
+    ALTER TABLE sessions ADD COLUMN setup_folded INT DEFAULT 0;
     ALTER TABLE laps ADD COLUMN setup_state_id INT;
     ALTER TABLE laps ADD COLUMN traction_exits INT DEFAULT 0;
     ALTER TABLE laps ADD COLUMN slip_balance_deg REAL DEFAULT 0;
@@ -841,10 +843,16 @@ class Database:
                 raise ValueError("recommendation rec_id must start with its session uid") from exc
         with self.transaction():
             self._conn.execute(
-                "INSERT OR REPLACE INTO setup_recs"
+                "INSERT INTO setup_recs"
                 "(session_uid, rec_id, rule_id, mode, param, from_value, delta, conf,"
                 " setup_state_id, track_id, compound, lap, evidence)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(rec_id) DO UPDATE SET"
+                " session_uid=excluded.session_uid, rule_id=excluded.rule_id,"
+                " mode=excluded.mode, param=excluded.param,"
+                " from_value=excluded.from_value, delta=excluded.delta, conf=excluded.conf,"
+                " setup_state_id=excluded.setup_state_id, track_id=excluded.track_id,"
+                " compound=excluded.compound, lap=excluded.lap, evidence=excluded.evidence",
                 (
                     _uid_to_sql(session_uid),
                     rec.rec_id,
@@ -861,6 +869,34 @@ class Database:
                     json.dumps(evidence, default=str),
                 ),
             )
+
+    def setup_rec_by_id(self, rec_id: str) -> dict[str, Any] | None:
+        rows = self._rows("SELECT * FROM setup_recs WHERE rec_id=?", (rec_id,))
+        if not rows:
+            return None
+        row = rows[0]
+        try:
+            evidence = json.loads(str(row["evidence"] or "{}"))
+        except json.JSONDecodeError:
+            evidence = {}
+        row["evidence"] = evidence if isinstance(evidence, dict) else {}
+        return row
+
+    def mark_setup_rec_folded(self, rec_id: str) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "UPDATE setup_recs SET folded=1 WHERE rec_id=? AND COALESCE(folded, 0)=0",
+                (rec_id,),
+            )
+        return cursor.rowcount > 0
+
+    def mark_setup_session_folded(self, uid: int) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "UPDATE sessions SET setup_folded=1 WHERE uid=? AND COALESCE(setup_folded, 0)=0",
+                (_uid_to_sql(uid),),
+            )
+        return cursor.rowcount > 0
 
     def setup_recs_for_session(self, uid: int) -> list[dict[str, Any]]:
         rows = self._rows(

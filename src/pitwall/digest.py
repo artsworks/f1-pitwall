@@ -13,7 +13,7 @@ from typing import Any
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
-DIGEST_VERSION = 1
+DIGEST_VERSION = 2
 
 
 def _th(th: Mapping[str, object], name: str, default: float) -> float:
@@ -72,8 +72,14 @@ def findings(
     return [text for _, text in scored[: int(_th(th, "digest_max_findings", 5))]]
 
 
-def build_digest(db: Database, uid: int, th: Mapping[str, object]) -> dict[str, Any]:
-    outcomes = grade_and_store(db, uid, th)
+def build_digest(
+    db: Database,
+    uid: int,
+    th: Mapping[str, object],
+    *,
+    setup_rules: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    outcomes = grade_and_store(db, uid, th, setup_rules=setup_rules)
     laps = db.laps_for(uid, 0)
     stops = stop_laps(laps)
     parts = stints(laps, stops)
@@ -113,6 +119,10 @@ def build_digest(db: Database, uid: int, th: Mapping[str, object]) -> dict[str, 
     pits = db.pit_events_for_session(uid)
     bookmarks = db.bookmarks_for_session(uid)
     labels = Counter(o.label for o in outcomes)
+    setup_recs = db.setup_recs_for_session(uid)
+    setup_outcomes = [o for o in outcomes if o.metric.startswith("setup:")]
+    setup_graded_ids = {o.call_id for o in setup_outcomes if o.label in {"good", "wrong"}}
+    setup_counts = Counter(o.label for o in setup_outcomes)
     return {
         "version": DIGEST_VERSION,
         "session": {
@@ -160,6 +170,21 @@ def build_digest(db: Database, uid: int, th: Mapping[str, object]) -> dict[str, 
             "pit_loss_green_s": _mean([p.loss_ms / 1000 for p in pits if not p.neutralised]),
         },
         "outcomes": dict(sorted(labels.items())),
+        "setup": {
+            "recs": len(setup_recs),
+            "graded": setup_counts["good"] + setup_counts["wrong"],
+            "good": setup_counts["good"],
+            "wrong": setup_counts["wrong"],
+            "ignored": setup_counts["ignored"],
+            "censored": setup_counts["censored"],
+            "na": setup_counts["n/a"],
+            "open_experiments": sum(
+                rec.get("evidence", {}).get("tier") == "experiment"
+                and rec.get("rec_id") not in setup_graded_ids
+                for rec in setup_recs
+                if isinstance(rec.get("evidence"), dict)
+            ),
+        },
         "calls": dict(sorted(calls.items())),
         "bookmarks": [{"lap": b.get("lap"), "note": b.get("note") or ""} for b in bookmarks],
         "findings": findings(outcomes, calls, len(bookmarks), th),
