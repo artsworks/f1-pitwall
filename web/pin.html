@@ -98,7 +98,8 @@
           if (result.status === 429) {
             error.textContent = "Too many tries. Wait " + result.body.retry_after_s + " s.";
           } else if (result.status === 401 && result.body.error === "wrong") {
-            error.textContent = "Wrong PIN. " + result.body.tries_left + " tries left.";
+            var left = result.body.tries_left;
+            error.textContent = "Wrong PIN. " + left + (left === 1 ? " try left." : " tries left.");
           } else {
             error.textContent = "Can't reach Pitwall.";
           }
