@@ -775,7 +775,8 @@
       " · best " + lapTime(q.best_lap_ms));
 
     var pole = q.pole || (q.cool && q.cool.pole) || null;
-    setText("qr-pole", pole ? String(pole.driver || "POLE").toUpperCase() : "no pole time");
+    setText("qr-pole", pole ? String(pole.driver || "POLE").toUpperCase() :
+    p.position === 1 && q.best_lap_ms ? "you hold pole" : "no pole time");
     setText("qr-gap", pole ? signed(pole.gap_ms) : "--");
     var gaps = pole ? pole.sector_gaps_ms : [0, 0, 0];
     var worst = pole && pole.worst_sector ? pole.worst_sector - 1 : gaps.indexOf(Math.max.apply(null, gaps));
@@ -801,6 +802,8 @@
         } else if (q.plan) {
           main = "PLAN " + String(q.plan.plan).toUpperCase();
           sub = q.plan.reason || "";
+        } else {
+          sub = "no run plan yet";
         }
         setText("qr-ph-main", main);
         setText("qr-ph-flag", flag);

@@ -456,6 +456,7 @@ body.dash.review.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
 .q-bench td.crit { color: var(--crit); }
 .q-bench td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
 .b-foot .comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; }
+.qrail .b-foot > :last-child { flex: none; }
 body.stale .qrail > * { filter: grayscale(1); opacity: .4; }
 .cp-grid { display: grid; grid-template-columns: 1fr; gap: .7rem; }
 .cp-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
