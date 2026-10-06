@@ -34,6 +34,7 @@ def _settings(**kw: float) -> EngineSettings:
 def _run(sup: Supervisor) -> threading.Thread:
     t = threading.Thread(target=sup.run, daemon=True)
     t.start()
+    assert sup.ready.wait(10.0), "supervisor did not bind its UDP socket"
     return t
 
 

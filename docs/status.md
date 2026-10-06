@@ -19,7 +19,7 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 - **Qualifying:** traffic-aware release advice, abort guidance, a push/cool/box/push-now run plan, fuel and battery reminders, and tyre-pressure advice.
 - **Race strategy:** Plans A/B/C, pit windows, undercut and overcut calls, safety-car and VSC stop advice, and plan updates after a stop.
 - **Tyres, fuel and ERS:** tyre life is the minimum of worst-corner wear life and pace-cliff life; fuel and ERS calls use live budgets.
-- **Learning:** session grading, `pitwall calibrate`, `pitwall evaluate`, `pitwall propose`, and `pitwall stats --learned`. Upkeep runs automatically when `pitwall start` begins.
+- **Learning:** session grading, `pitwall calibrate`, `pitwall evaluate`, `pitwall propose`, and `pitwall stats --learned`. Upkeep runs on each `pitwall start` and refits track priors and rule cooldowns.
 - **Debrief:** standalone HTML export and an editable `/debrief/<uid>` page.
 - **Voice and phone:** Piper phrase cache, plus a phone radio PWA that caches static assets.
 - **Recovery:** the watchdog restarts a failed or stalled engine while the recorder continues.
@@ -32,6 +32,9 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 ## Known gaps
 
 - Calibration remains `converged: false`.
+- Upkeep grades calls, refits priors and adjusts cooldowns. Grading calls at
+  `/debrief/latest` and applying threshold YAML from `pitwall propose` stay manual by
+  design, so rule thresholds never change without human review.
 - There are no calls-off sessions yet, so `pitwall evaluate` has no on/off comparison.
 - LLM debrief prose is deferred (item 21).
 - Windows shutdown and EA Javelin compatibility still need a local check. Linux
@@ -39,4 +42,6 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 - The later 25% race fixes were reverted at the user's request. Mixed-weather
   calls, drive-through tyre calls, stop summaries and early-race pace need a
   separate follow-up. The numbered menu remains removed.
-- CI checks Linux lint, formatting and types. The full test suite runs locally.
+- CI runs lint, formatting and type checks on Linux. Pull requests also run the fast
+  tests (`pytest -m "not slow"`) and the replay determinism check. Pushes to `main` run
+  the full suite. Tests that need real recordings or Windows still skip in CI.

@@ -1,8 +1,8 @@
 # Learning loop
 
 How pitwall gets better from each session without repeating the same mistakes.
-Live decisions stay deterministic (ADR 0008). Upkeep and calibration write learned values;
-proposals remain review-only.
+Live decisions stay deterministic (ADR 0008). Upkeep and calibration write learned values.
+Proposals remain review-only.
 
 Recording imports and startup upkeep use database transactions. A failed import
 leaves no partial learning. Calibration stores race pace and tyre wear separately
@@ -12,8 +12,9 @@ those priors. `pitwall stats --learned` lists each race length.
 ```
 session ──► SQLite laps, stints, calls and plan events
         ──► grade at session end
-        ──► maintain at next start: rebuild clean stint priors, quarantine bad values
-        ──► calibrate and inspect learned state
+        ──► maintain at next start: rebuild clean stint priors, quarantine bad values,
+            refit track priors, tune rule cooldowns
+        ──► inspect learned state
         ──► optional debrief, evaluation and review-only proposals
 ```
 
@@ -65,10 +66,25 @@ A digest contains no raw telemetry. Recordings stay out of git (ADR 0005).
 
 ## Automatic upkeep
 
-`pitwall start` runs `maintain()` before rules start. It rebuilds stint-derived values once
-per learning version, quarantines invalid active values with a reason, and grades sessions
-that still need grading. A session is also graded when it ends. Upkeep is idempotent;
-database errors are logged and skipped. Run it manually with `pitwall maintain`.
+`pitwall start` runs `maintain()` before rules start. Upkeep does these steps in one
+database transaction:
+
+- It rebuilds stint-derived values once per learning version.
+- It quarantines invalid active values with a reason.
+- It grades sessions that still need grading.
+- It refits pace, tyre wear, fuel, thermal and energy priors with the `pitwall calibrate` fit.
+- It refolds rule cooldowns with the `pitwall tune` fold. Auto-graded `good` and `wrong`
+  outcomes count at `tune_auto_weight`, and a human grade replaces the automatic one.
+
+A session is also graded when it ends. The engine folds pit loss and pass or hold rates
+live during the session. The refit drops any value that the quarantine check rejects, so
+a quarantined value does not come back. Weights stay at or below `param_weight_cap`.
+Upkeep never writes threshold YAML. A watchdog restart during a session skips the refit
+and cooldown steps, so priors do not move mid-race.
+
+Upkeep is idempotent. A second run with no new data changes nothing. Database errors are
+logged and skipped. To run upkeep again, restart `pitwall start`. To skip the refit and
+cooldown steps, set `learning.auto_calibrate: false`.
 
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
 `deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value
@@ -80,12 +96,17 @@ fold without a distance suffix.
 `pitwall calibrate` fits values from stored sessions. `pitwall stats --learned` shows
 their values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by
 track; it is descriptive, not a causal comparison. `pitwall propose` writes candidates
-for review and does not change active settings. `pitwall tune` updates rule cooldowns
-from human grades and A/B results.
+for review and does not change active settings. `pitwall calibrate` and `pitwall tune`
+run the same steps as upkeep on demand. `pitwall tune` also folds A/B results from
+`pitwall diff`.
 
 ## After a race
 
-No command is required. Grading runs at session end; upkeep runs at the next start.
-Optionally open `/debrief/<uid>` to review and grade calls, run `pitwall calibrate` to
-fit track values, or use `pitwall stats --learned` to inspect them. Use `pitwall digest`
+No command is required. Pitwall grades the session when it ends. On the next start,
+upkeep refits pace, tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns.
+Two steps stay manual by design: grading calls and applying the threshold YAML changes
+that `pitwall propose` writes. Open `/debrief` to pick a session (`/debrief/latest` for
+the newest) and grade its calls. `pitwall sessions` lists the same sessions in the
+terminal. Rule thresholds never change without your review. Use `pitwall stats --learned`
+to inspect learned values. Use `pitwall digest`
 only when you want digest JSON or need to ingest external recordings.

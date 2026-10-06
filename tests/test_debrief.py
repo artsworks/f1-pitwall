@@ -106,6 +106,10 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
     assert "data-grade='good'" in client.get("/debrief/140").text
     assert "data-grade='good'" not in result
     assert client.get("/debrief/999").status_code == 404
+    latest = client.get("/debrief/latest", follow_redirects=False)
+    assert latest.status_code == 307 and latest.headers["location"] == "/debrief/140"
+    index = client.get("/debrief")
+    assert index.status_code == 200 and "href='/debrief/140'" in index.text
     assert (
         client.post(
             "/api/debrief/140/grade",
@@ -129,3 +133,9 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
         == 400
     )
     db.close()
+
+
+def test_debrief_latest_404_and_empty_index() -> None:
+    client = TestClient(create_app(Hub(), ConfigStore(), Metrics(), db=Database(":memory:")))
+    assert client.get("/debrief/latest", follow_redirects=False).status_code == 404
+    assert "No sessions stored yet" in client.get("/debrief").text

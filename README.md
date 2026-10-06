@@ -24,10 +24,10 @@ cd f1-pitwall
 uv sync                      # creates .venv with Python 3.12 and all dependencies
 
 # 3. Optional: natural voice (~60 MB download into voices/, git-ignored)
-uv run pitwall voices get
+uv run pitwall voice get
 
 # 4. Check the setup, then run
-uv run pitwall speak         # radio check through your headset
+uv run pitwall voice say     # radio check through your headset
 uv run pitwall doctor        # ports, wire format, packet rate, speech
 uv run pitwall start         # engine + speech + dashboard
 ```
@@ -68,8 +68,8 @@ To update later: `git pull; uv sync`.
 | `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
 | `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
 | Dashboard says STALE | Run `uv run pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
-| No speech | `uv run pitwall speak` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
-| Robotic voice | `uv run pitwall voices get`, then restart `pitwall start`. |
+| No speech | `uv run pitwall voice say` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
+| Robotic voice | `uv run pitwall voice get`, then restart `pitwall start`. |
 
 More in [docs/getting-started.md](docs/getting-started.md).
 
@@ -94,6 +94,16 @@ with thresholds in [`thresholds.yaml`](src/pitwall/config/defaults/thresholds.ya
 No steps are required. Pitwall grades sessions at the end and runs upkeep at the next
 start. Optional review and learning commands are in
 [After a session](docs/getting-started.md#after-a-session).
+
+### Learning loop
+
+Pitwall grades each session when it ends. On the next `pitwall start`, it refits pace,
+tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns from the grades.
+Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
+threshold YAML changes that `pitwall propose` writes. Your grades always override
+automatic ones. Rule thresholds never change without your review, and cooldown
+multipliers stay between `tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
+Set `learning.auto_calibrate: false` to turn off the refit and cooldown steps.
 
 ## Shape of the system
 

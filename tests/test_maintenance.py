@@ -9,13 +9,22 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.models import LearningSettings
 from pitwall.engine import build_engine
-from pitwall.maintenance import maintain
+from pitwall.maintenance import maintain, mid_session
 from pitwall.model.deg import DegFit, corner_wear_life, fit_is_clean, planning_fit, scoped
+from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
-from pitwall.tune import AB_PREFIX, COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
+from pitwall.tune import (
+    AB_PREFIX,
+    COOLDOWN_PREFIX,
+    TUNE_COMPOUND,
+    TUNE_TRACK,
+    load_cooldown_mults,
+)
 
-TH = ConfigStore().current().thresholds
+SETTINGS = ConfigStore().current()
+TH = SETTINGS.thresholds
 
 
 def _session(db: Database, uid: int, *, track: int, stype: int, laps: int) -> None:
@@ -84,7 +93,7 @@ def test_maintain_quarantines_rebuilds_and_is_idempotent(tmp_path) -> None:
     db.fold_param(-1, 18, "base_ms", 95_000.0, weight=3)
     db.fold_param(7, 0, "fuel_kg_per_lap", 1.4, weight=5)
 
-    first = maintain(db, TH)
+    first = maintain(db, SETTINGS)
     assert first.rebuilt == 9
     assert any("track -1" in q for q in first.quarantined)
     assert db.get_param(7, 19, "deg_ms_per_lap") is None
@@ -99,14 +108,14 @@ def test_maintain_quarantines_rebuilds_and_is_idempotent(tmp_path) -> None:
     before = [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()]
     db.close()
     db = Database(path)
-    again = maintain(db, TH)
+    again = maintain(db, SETTINGS)
     assert again.rebuilt == 0 and not again.quarantined and again.graded == 0
     assert [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()] == before
 
 
 def test_maintain_on_empty_db(tmp_path) -> None:
     db = Database(tmp_path / "empty.sqlite")
-    assert maintain(db, TH).summary() == "learned state clean"
+    assert maintain(db, SETTINGS).summary() == "learned state clean"
 
 
 def test_maintain_keeps_global_rule_tuning() -> None:
@@ -115,7 +124,7 @@ def test_maintain_keeps_global_rule_tuning() -> None:
         db.set_param(TUNE_TRACK, TUNE_COMPOUND, name, value, 3.0)
     db.set_param(-1, 17, "base_ms", 95_000, 3.0)
     for _ in range(2):
-        maintain(db, TH)
+        maintain(db, SETTINGS)
         assert db.get_param(TUNE_TRACK, TUNE_COMPOUND, COOLDOWN_PREFIX + "box_now").value == 4.0
         assert db.get_param(TUNE_TRACK, TUNE_COMPOUND, AB_PREFIX + "box_now").value == -2.0
     assert db.get_param(-1, 17, "base_ms") is None
@@ -134,11 +143,11 @@ def test_failed_upkeep_rolls_back_params_and_version(monkeypatch) -> None:
     with monkeypatch.context() as patch:
         patch.setattr(pitwall.maintenance, "grade_ungraded", fail_grade)
         with pytest.raises(sqlite3.OperationalError):
-            maintain(db, TH)
+            maintain(db, SETTINGS)
     assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
     assert db.maintenance_version("learn_rebuild") == 0
     assert db.quarantined_params() == []
-    maintain(db, TH)
+    maintain(db, SETTINGS)
     assert db.maintenance_version("learn_rebuild") > 0
 
 
@@ -184,3 +193,102 @@ def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> No
     full = engine._deg_prior(10, 17, settings)  # noqa: SLF001
     assert full.deg_ms_per_lap == pytest.approx(500.0)
     assert full.confidence == pytest.approx(0.5)
+
+
+def _laps(db: Database, uid: int, *, compound: int, base: int, deg: int) -> None:
+    for age in range(1, 8):
+        fuel = 25 - age + 0.2 * (age % 2)
+        lap_ms = round(base + deg * age + 35 * fuel)
+        db.insert_lap(
+            uid,
+            0,
+            LapSummary(age, lap_ms, 30_000, 30_000, compound, age, 0, True, [], fuel_kg=fuel),
+        )
+
+
+def _auto(db: Database, uid: int, rule_id: str, labels: list[str]) -> None:
+    db.upsert_session(uid, track_id=7, session_type=1, started_at=float(uid))
+    db.replace_outcomes(
+        uid,
+        [
+            {"call_id": f"{rule_id}-{i}", "rule_id": rule_id, "lap": i, "metric": "m", "label": lab}
+            for i, lab in enumerate(labels)
+        ],
+    )
+
+
+def _learning_db() -> Database:
+    db = Database(":memory:")
+    _session(db, 1, track=7, stype=1, laps=0)
+    _laps(db, 1, compound=17, base=90_000, deg=120)
+    _auto(db, 10, "fuel_short", ["wrong", "wrong", "wrong"])
+    _auto(db, 11, "box_now", ["wrong", "wrong", "wrong"])
+    for i in range(3):
+        db.grade_call(11, f"box_now-{i}", "box_now", "good")
+    return db
+
+
+def _params(db: Database) -> list[tuple[int, int, str, float, float]]:
+    return [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()]
+
+
+def test_maintain_calibrates_and_tunes_idempotently() -> None:
+    db = _learning_db()
+    first = maintain(db, SETTINGS)
+    assert first.graded == 1
+    assert first.calibrated > 0 and first.tuned == 2
+    assert "learned values refit" in first.summary()
+    assert "rule cooldowns adjusted" in first.summary()
+    assert db.get_param(7, 17, "deg_ms_per_lap").value == pytest.approx(120, abs=0.1)  # type: ignore[union-attr]
+    cooldowns = load_cooldown_mults(db)
+    assert cooldowns["fuel_short"] > 1.0
+    assert cooldowns["box_now"] < 1.0  # human "good" grades override auto "wrong"
+    cap = float(TH["param_weight_cap"])
+    assert all(p.weight <= cap for p in db.all_params())
+
+    before = _params(db)
+    again = maintain(db, SETTINGS)
+    assert (again.calibrated, again.tuned, again.graded, again.quarantined) == (0, 0, 0, [])
+    assert again.summary() == "learned state clean"
+    assert _params(db) == before
+
+
+def test_maintain_skips_calibrate_and_tune_when_disabled() -> None:
+    db = _learning_db()
+    off = SETTINGS.model_copy(update={"learning": LearningSettings(auto_calibrate=False)})
+    report = maintain(db, off)
+    assert (report.calibrated, report.tuned) == (0, 0)
+    assert db.get_param(7, 17, "deg_ms_per_lap") is None
+    assert load_cooldown_mults(db) == {}
+
+
+def test_mid_session_restart_skips_refit() -> None:
+    db = _learning_db()
+    db.write_heartbeat(1, 10.0, 1_000.0, "rec.f1bin", 3)
+    assert mid_session(db, SETTINGS, wall_now=1_000.0 + SETTINGS.engine.recovery_max_age_s)
+    assert not mid_session(db, SETTINGS, wall_now=1_001.0 + SETTINGS.engine.recovery_max_age_s)
+    report = maintain(db, SETTINGS, refit=False)
+    assert report.graded == 1 and (report.calibrated, report.tuned) == (0, 0)
+    assert db.get_param(7, 17, "deg_ms_per_lap") is None
+    assert maintain(db, SETTINGS).calibrated > 0
+
+
+def test_auto_calibrate_keeps_quarantined_values_out() -> None:
+    db = Database(":memory:")
+    _session(db, 1, track=7, stype=1, laps=0)
+    _laps(db, 1, compound=19, base=55_000, deg=900)
+    _session(db, 2, track=-1, stype=1, laps=0)
+    _laps(db, 2, compound=17, base=90_000, deg=120)
+    db.fold_param(7, 19, "deg_ms_per_lap", 600.0, weight=7)
+
+    first = maintain(db, SETTINGS)
+    assert first.calibrated > 0
+    reasons = {
+        (q["track_id"], q["compound"], q["name"], q["reason"]) for q in db.quarantined_params()
+    }
+    assert (7, 19, "deg_ms_per_lap", "deg_clamped") in reasons
+    for _ in range(2):
+        assert db.get_param(7, 19, "deg_ms_per_lap") is None
+        assert not [p for p in db.all_params() if p.track_id < 0 and p.compound != TUNE_COMPOUND]
+        again = maintain(db, SETTINGS)
+        assert not again.quarantined and again.calibrated == 0

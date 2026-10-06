@@ -4,10 +4,14 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
+
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
 
 from .synth import out_lap_scenario, write_packet_stream
+
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
 
 
 def _replay(tmp_path: Path, speed: float | None, rec_path: Path) -> tuple[list[object], list[dict]]:

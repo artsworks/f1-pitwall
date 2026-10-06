@@ -121,10 +121,9 @@ def main() -> None:
     print(f"wrote {path}")
 
     # Index sidecar for lap-skips/duration.
-    from pitwall.cli import build_parser
+    from pitwall.net.recording import ensure_index
 
-    args = build_parser().parse_args(["index", str(path)])
-    args.func(args)
+    ensure_index(path)
 
 
 if __name__ == "__main__":

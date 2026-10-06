@@ -18,6 +18,8 @@ from pitwall.state.race import penalty_standing, relevant_rivals
 from pitwall.state.session import CarLap, Participant, SessionState, Snapshot
 from pitwall.store.db import Database
 
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
+
 
 @dataclass
 class _RecordingCar:

@@ -5,6 +5,10 @@ description: Exercise dashboard, menu, radio synchronization, responsive layouts
 
 # Replay-backed dashboard checks
 
+Use this browser and screenshot procedure only for PRs that change `web/` or the
+server endpoints that the dashboard uses. For backend-only changes, run pytest
+and check endpoints with FastAPI `TestClient`.
+
 Run from the repository root with `uv sync`, then
 `uv run pitwall replay /absolute/path/to/recording.f1bin --serve --speed 1`.
 Open `/` and `/radio` on localhost:8000 in separate tabs. The replay command may
