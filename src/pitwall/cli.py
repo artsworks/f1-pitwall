@@ -691,6 +691,19 @@ async def _serve(
     await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
 
 
+def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, object]:
+    """Header fields for a live recording. `speech_enabled` and `quiet` are the
+    inputs behind `calls_mode`; their presence also marks a recorder whose
+    speaker honours `speech.enabled` (ingest trusts `calls_mode: off` only then)."""
+    return {
+        "config_hash": store.hash,
+        "send_rate_hz": settings.connection.send_rate_hz,
+        "speech_enabled": settings.speech.enabled,
+        "quiet": settings.policy.quiet,
+        "calls_mode": "off" if settings.policy.quiet or not settings.speech.enabled else "on",
+    }
+
+
 def cmd_start(args: argparse.Namespace) -> int:
     from pitwall.audio.speaker import make_speaker
     from pitwall.doctor import set_below_normal_priority
@@ -714,13 +727,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         recorder = RecordingRotator(
             Path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
-            metadata={
-                "config_hash": store.hash,
-                "send_rate_hz": settings.connection.send_rate_hz,
-                "calls_mode": (
-                    "off" if settings.policy.quiet or not settings.speech.enabled else "on"
-                ),
-            },
+            metadata=_recording_metadata(store, settings),
             profile=profile,
             compress=settings.recording.compress_on_close,
         )
@@ -858,13 +865,7 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
         recorder = RecordingRotator(
             rec_dir,
             config_hash=int(store.hash, 16) % (2**32),
-            metadata={
-                "config_hash": store.hash,
-                "send_rate_hz": settings.connection.send_rate_hz,
-                "calls_mode": (
-                    "off" if settings.policy.quiet or not settings.speech.enabled else "on"
-                ),
-            },
+            metadata=_recording_metadata(store, settings),
             profile=profile,
             compress=settings.recording.compress_on_close,
         )

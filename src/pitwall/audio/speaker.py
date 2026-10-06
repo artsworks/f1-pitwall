@@ -169,6 +169,8 @@ class SapiSpeaker:
 
 
 def make_speaker(settings: SpeechSettings) -> Speaker:
+    if not settings.enabled:
+        return NullSpeaker()
     engine = settings.engine
     if engine == "auto":
         if voice_path(settings).exists() and sys.platform == "win32":
