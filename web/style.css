@@ -450,7 +450,7 @@ body.dash.review.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
 .q-bench th, .q-bench td { border: 1px solid var(--line); padding: .1rem .6rem; text-align: right; }
 .q-bench th { color: var(--dim); font-weight: normal; font-size: 1.05rem; letter-spacing: .12em; }
 .q-bench tbody th { text-align: left; width: 5rem; }
-.q-bench td { font-weight: bold; }
+.q-bench td { font-weight: bold; font-size: 2.4rem; padding: .15rem .8rem; }
 .q-bench td.gain { color: var(--info); }
 .q-bench td.ok { color: var(--ok); }
 .q-bench td.crit { color: var(--crit); }

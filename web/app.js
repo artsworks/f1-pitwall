@@ -780,9 +780,6 @@
     setText("qr-gap", pole ? signed(pole.gap_ms) : "--");
     var gaps = pole ? pole.sector_gaps_ms : [0, 0, 0];
     var worst = pole && pole.worst_sector ? pole.worst_sector - 1 : gaps.indexOf(Math.max.apply(null, gaps));
-    var sec = function (a) { return a.map(function (v) { return v ? (v / 1000).toFixed(1) : "--"; }); };
-    setRow("qr-you", sec(pole ? pole.sectors_ms : [0, 0, 0]));
-    setRow("qr-polerow", sec(pole ? pole.pole_sectors_ms : [0, 0, 0]));
     setRow("qr-gaps", gaps.map(function (v) { return v ? signed(v) : "--"; }),
       gaps.map(function (v, i) { return gapClass(v) + (i === worst && v > 0 ? " worst" : ""); }));
 
