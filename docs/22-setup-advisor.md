@@ -39,6 +39,7 @@ agree.
 | S13 | EA, *F1 25 / 26 Season Update wheel MFD shortcuts (PC)* — https://www.ea.com/games/f1/f1-25/26-season-update-controls-hub/mfd-shortcuts-wheel-pc | official (bindings only) |
 | S14 | FIA, *Parc life: how parc fermé regulations work* — https://www.fia.com/news/fia-insights-parc-life-how-fias-parc-ferme-regulations-make-sure-car-qualifies-one-races | real-world regulation (what the game imitates) |
 | S15 | EA Forums, *Brake and differential* (F1 25) — https://forums.ea.com/discussions/f1-25-general-discussion-en/brake-and-differential/12278579 | player bug report |
+| S16 | F1 26 complete car setup guide, community video (transcript supplied by user) | F1 26-specific community video |
 | R | This repo: `protocol/layouts.py`, `reference/f1-26-udp-notes.md`, the reviewed race recording (`18-race-engine.md`) | own telemetry, highest weight for *what is observable* |
 
 F1 26 is the *F1 2026 Season Pack* for F1 25 with reworked handling (S5, S6): the setup
@@ -66,21 +67,21 @@ plus brake temperature (S3).
 
 | Area | Parameter (↑) | Balance | Surface vs core temp | Wear | Conf. | Basis / disagreements |
 |------|---------------|---------|----------------------|------|-------|-----------------------|
-| Aero | Front wing ↑ | More front grip, less understeer, more rotation; too much → rear light, exit oversteer | Less front sliding → fewer front surface spikes when understeer-limited; more front load → higher front core on high-speed tracks | Front wear ↓ if wear is understeer scrub; ↑ if load-driven | Balance **high**; temp/wear **low** | S1, S2, S9, S10 agree on balance. No source measures temp/wear; the sign depends on *why* the fronts wear (§4, rule `front_wear_limited`) |
-| Aero | Rear wing ↑ | More rear stability and traction; more understeer by balance; drag, top speed ↓ | Fewer rear surface spikes on exits | Rear wear ↓ via less wheelspin | Balance **high**; wear **medium** | S1, S2, S9, S10. F1 26: active aero/straight-line mode makes higher wings cheaper (S5, S6, medium); S5's published F1 26 setups run a large front/rear gap (40–50 / 7–10) "because 2026 cars understeer" |
-| Transmission | On-throttle diff ↑ (more locked) | **Disputed.** S4, S2: more drive, but easier to spin up the inside rear and oversteer. Repo convention (`f1-26-udp-notes.md`): more stable exits, more exit understeer | More rear surface flash heat if it causes wheelspin | Rear wear ↑ with wheelspin | **Low** (sign disputed) | S5's F1 26 setups run 100 %; S5's own pre-release article predicted *lower* on-throttle for 2026. Our race: rear spin samples 3–13 %/lap at 60 %, 4–30 %/lap at 50 % — inconclusive (R). Must be settled by the learning loop per track |
-| Transmission | Off-throttle diff ↑ | More stable entry, less lift-off oversteer, more entry understeer | — | Rear entry lock-ups ↓ | **Medium** | S2, S4, S6 and repo convention agree (lower = more rotation). Already used in `rules/shared.yaml` rear-lock-up line |
+| Aero | Front wing ↑ | More front grip, less understeer, more rotation; too much → rear light, exit oversteer | Less front sliding → fewer front surface spikes when understeer-limited; more front load → higher front core on high-speed tracks | Front wear ↓ if wear is understeer scrub; ↑ if load-driven | Balance **high**; temp/wear **low** | S1, S2, S9, S10 agree on balance. No source measures temp/wear; the sign depends on *why* the fronts wear (§4, rule `front_wear_limited`). S16 (F1 26): the front wing costs less drag than the rear wing for the same downforce |
+| Aero | Rear wing ↑ | More rear stability and traction; more understeer by balance; drag, top speed ↓ | Fewer rear surface spikes on exits | Rear wear ↓ via less wheelspin | Balance **high**; wear **medium** | S1, S2, S9, S10. F1 26: active aero/straight-line mode makes higher wings cheaper (S5, S6, medium); S5's published F1 26 setups run a large front/rear gap (40–50 / 7–10) "because 2026 cars understeer". S16 runs the front about 15 above the rear, or about 10 for a more stable car. S16 sets the total downforce level by how much straight-line mode the track allows |
+| Transmission | On-throttle diff ↑ (more locked) | **Disputed.** S4, S2: more drive, but easier to spin up the inside rear and oversteer. Repo convention (`f1-26-udp-notes.md`) and S16: more stable exits, more exit understeer | More rear surface flash heat if it causes wheelspin | Rear wear ↑ with wheelspin | **Low** (sign disputed) | S5's F1 26 setups run 100 %; S5's own pre-release article predicted *lower* on-throttle for 2026. Our race: rear spin samples 3–13 %/lap at 60 %, 4–30 %/lap at 50 % — inconclusive (R). S16 runs 100 and sides with the repo convention. A locked diff spins both rears at the same rate even when inside and outside grip differ, so wheelspin is predictable. An open diff is snappy and can pitch the car into a snap. S4 and S2 still disagree and R is inconclusive, so confidence stays low. Must be settled by the learning loop per track |
+| Transmission | Off-throttle diff ↑ | More stable entry, less lift-off oversteer, more entry understeer | — | Rear entry lock-ups ↓ | **Medium** | S2, S4, S6 and repo convention agree (lower = more rotation). Already used in `rules/shared.yaml` rear-lock-up line. S16 gives the mechanism: the off-throttle diff acts whenever the driver steers off throttle, because the inside wheel travels a shorter path. It acts through the braking and coasting phases of a corner. Straight-line coasting is unaffected. S16's 40–45 baseline is higher than the other sources suggest (§4.1) |
 | Transmission | Engine braking ↑ | More rear braking on lift → entry rotation / rear instability | — | — | **Low** | In packet (R) and in the v1 sketch; no current guide covers it for F1 26 |
-| Geometry | Camber more negative (front / rear) | More loaded cornering grip; less braking/traction contact | Inner-shoulder heat — **not observable** (UDP has one surface value per tyre, no inner/middle/outer) | Guides split: S9 says more heat and wear; S5's F1 26 esports setups run the most negative values (−3.5 / −2.0) for race and quali alike, implying little race penalty | **Low** | S2, S9. S9 also claims an inner/middle/outer HUD, contradicted by S3 and the UDP — one reason S9 is low trust |
-| Geometry | Toe (front out / rear in) ↑ | Front toe-out: sharper turn-in; rear toe-in: stability | More constant slip → surface and core ↑ | Wear ↑, drag ↑ | **Medium** for "more toe = more heat/wear/drag"; balance **low** | S2, S9; S5's F1 26 setups sit at minimum toe (0 / 0.1) |
-| Suspension | Front springs ↑ (stiffer) | Sharper response; too stiff → front slides over bumps/kerbs | — | — | **Medium** | S1 (stiff = high-speed stability, soft = kerbs), S2, S5 ("very stiff" in F1 26) |
-| Suspension | Rear springs ↑ | Less traction, more oversteer on exit | Rear surface spikes on exits | Rear wear ↑ via wheelspin | **Medium** | S2, S10 (soft rear = traction) |
+| Geometry | Camber more negative (front / rear) | More loaded cornering grip; less braking/traction contact | Inner-shoulder heat — **not observable** (UDP has one surface value per tyre, no inner/middle/outer) | Guides split: S9 says more heat and wear; S5's F1 26 esports setups run the most negative values (−3.5 / −2.0) for race and quali alike, implying little race penalty | **Low** | S2, S9. S9 also claims an inner/middle/outer HUD, contradicted by S3 and the UDP — one reason S9 is low trust. S16 says camber does nothing in F1 25 and F1 26 and runs it at the slider minimum, which matches S5's values |
+| Geometry | Toe (front out / rear in) ↑ | Front toe-out: sharper turn-in; rear toe-in: stability | More constant slip → surface and core ↑ | Wear ↑, drag ↑ | **Medium** for "more toe = more heat/wear/drag"; balance **low** | S2, S9; S5's F1 26 setups sit at minimum toe (0 / 0.1). S16 says toe does nothing in F1 25 and F1 26 and runs the minimum. That disagrees with the heat, wear and drag claim from S2 and S9 |
+| Suspension | Front springs ↑ (stiffer) | Sharper response; too stiff → front slides over bumps/kerbs | — | — | **Medium** | S1 (stiff = high-speed stability, soft = kerbs), S2, S5 ("very stiff" in F1 26), S16 (stiffer springs control the aero platform better) |
+| Suspension | Rear springs ↑ | Less traction, more oversteer on exit | Rear surface spikes on exits | Rear wear ↑ via wheelspin | **Medium** | S2, S10 (soft rear = traction). S16: a stiffer rear also controls the aero platform better, and F1 26 costs less traction for it than F1 25 |
 | Suspension | Front ARB ↑ | More turn-in; slow-corner understeer when overloaded | — | — | **Low** (disputed) | S2 says stiff front ARB → slow-corner understeer; community "inverted ARB" trend and S5 ("soft ARBs ideal in F1 26") differ |
-| Suspension | Rear ARB ↑ | More rotation / oversteer; less traction | — | Rear wear ↑ | **Medium** | S2, S10 |
-| Suspension | Ride height ↑ (either) | Less bottoming, less downforce; rake (rear ↑) adds rotation and drag | — | — | **Medium** | S2, S5 ("more rake may aid rotation" for F1 26). No bottoming signal in UDP; ride height advice is blind beyond "if you hit kerbs/bottom" |
-| Brakes | Brake bias ↑ (forward) | Stable under braking, more entry understeer; front lock-ups ↑ | Front brake temps ↑; whether brake heat reaches the tyre is **disputed** (S3 yes for F1 25; S8 measured "almost zero" in F1 24) | Front flat-spot risk ↑ | Balance/lock-up **high** | S2, S4, S10, ADR 0007 (R: five front lock-ups in the Brazil file) |
-| Brakes | Brake pressure ↑ | Shorter stops, more lock-ups | — | Lock-up wear | **Medium** | S2, S10 (most setups at 100 %, S5) |
-| Tyres | Pressure ↑ | Smaller contact patch: more response, less mechanical grip/traction, higher top speed | **Runs cooler** in F1 24/25 (inverse relation); F1 23 was the opposite | Wear ↓ slightly when it keeps the tyre in window | Direction **high** for F1 24/25, **medium** for F1 26; magnitude small | S3, S7, S2 agree on direction. S10 notes the sign flipped vs F1 23 — and S10 contradicts itself (one list says raise when cold, the text says lower). S7 measured only 5–6 °C difference min→max over 5 laps. Repo already handles the sign as `pressure_hot_sign` |
+| Suspension | Rear ARB ↑ | More rotation / oversteer; less traction | — | Rear wear ↑ | **Medium** | S2, S10, S16. S16 treats the rear ARB as the main mechanical source of rotation and runs it as high as the driver can control, roughly 13 or less |
+| Suspension | Ride height ↑ (either) | Less bottoming, less downforce; rake (rear ↑) adds rotation and drag | — | — | **Medium** | S2, S5 ("more rake may aid rotation" for F1 26). No bottoming signal in UDP; ride height advice is blind beyond "if you hit kerbs/bottom". S16 runs the rear as low as possible (about 40) and raises it only for tracks with heavy kerb use. S16 says F1 26 makes the car more sensitive to pitch under braking. As the rear lifts, the diffuser loses efficiency, so a higher rear makes low-speed entry oversteer worse |
+| Brakes | Brake bias ↑ (forward) | Stable under braking, more entry understeer; front lock-ups ↑ | Front brake temps ↑; whether brake heat reaches the tyre is **disputed** (S3 yes for F1 25; S8 measured "almost zero" in F1 24) | Front flat-spot risk ↑ | Balance/lock-up **high** | S2, S4, S10, ADR 0007 (R: five front lock-ups in the Brazil file). S16: move bias forward for tracks with big braking zones and rearward for tracks with small ones. If the rears lock, move it forward. If the fronts lock, move it rearward |
+| Brakes | Brake pressure ↑ | Shorter stops, more lock-ups | — | Lock-up wear | **Medium** | S2, S10 (most setups at 100 %, S5). S16 runs 100 and suggests a lower value, such as 97, while the driver adapts to driving without ABS |
+| Tyres | Pressure ↑ | Smaller contact patch: more response, less mechanical grip/traction, higher top speed | **Runs cooler** in F1 24/25 (inverse relation); F1 23 was the opposite | Wear ↓ slightly when it keeps the tyre in window | Direction **high** for F1 24/25, **medium** for F1 26; magnitude small | S3, S7, S2 agree on direction. S10 notes the sign flipped vs F1 23 — and S10 contradicts itself (one list says raise when cold, the text says lower). S7 measured only 5–6 °C difference min→max over 5 laps. Repo already handles the sign as `pressure_hot_sign`. S16 agrees for F1 26: higher pressure gives a smaller contact patch and a stiffer sidewall, so the tyre runs cooler. S16 also uses rear pressure to add rotation, because a higher rear pressure shrinks the rear contact patch |
 | Tyres | — | — | Surface spikes = sliding/wheelspin; core moves slowly and is the target (S3) | Cold *or* hot → sliding → wear ↑ (S3 grip/wear table) | **Medium** | S3; S8's carcass telemetry. Basis for §3 |
 | Fuel / ballast | Fuel load, ballast | Weight; ballast position not in packet | — | Heavier = more wear | **Medium** | R (in packet). Not a recommendation target |
 
@@ -108,7 +109,7 @@ than guessing.
 On track (S4, S13, R): brake bias and on-throttle diff via MFD/bindings at any time
 (the reviewed race shows bias 57 → 56 and on-throttle 60 → 50, rebroadcast in Car Setups
 a few seconds later; off-throttle untouched). S4 states only on-throttle is adjustable in
-a race. Front wing can be requested for the next pit stop (S9, low trust, corroborated by
+a race. S16 states that off-throttle cannot change while the car is on track. Front wing can be requested for the next pit stop (S9, low trust, corroborated by
 the Car Setups field `next_front_wing_value`, R). An EA forum thread (S15) reports that pressing
 bias/diff bindings before opening the MFD resets the value to its minimum — an argument
 for always quoting the current value in calls.
@@ -127,7 +128,7 @@ scope):
 | Front wing | ✔ | — | ✔ | — | ✔ | request for stop | ✔ (requested value) |
 | Rear wing | ✔ | — | locked | — | locked | — | — |
 | On-throttle diff | ✔ | ✔ MFD | ✔ | ✔ MFD | ✔ | ✔ | — |
-| Off-throttle diff | ✔ | ? | locked | ? | locked | ✘ (S4) / unconfirmed | — |
+| Off-throttle diff | ✔ | ? | locked | ? | locked | ✘ (S4, S16) | — |
 | Engine braking | ✔ | — | locked | — | locked | — | — |
 | Camber, toe | ✔ | — | locked | — | locked | — | — |
 | Springs, ARBs, ride height | ✔ | — | locked | — | locked | — | — |
@@ -424,6 +425,32 @@ Every recommendation is a record, the same shape as a call's `inputs`:
   "suppressed": [{"param": "rear_wing", "reason": "locked"}]
 }
 ```
+
+### 4.1 Starting values (S16)
+
+This section lists the F1 26 baseline from S16. The advisor can use it as the prior for a
+track with no history. Learned per-track values replace it once the learning loop has
+enough weight (§6.4).
+
+| Parameter | S16 baseline | Notes |
+|-----------|--------------|-------|
+| Wing gap (front minus rear) | 15 | 10 for a more stable car. S5's published setups run a much larger gap, 30 or more |
+| On-throttle diff | 100 | Same as S5's F1 26 setups |
+| Off-throttle diff | 40–45 | Higher than other sources, see below |
+| Suspension (front / rear) | about 41 / 41 | |
+| Front ARB | 4–7 | |
+| Rear ARB | 6–10 | Up to about 13 if the driver can control it (§1.2) |
+| Front ride height | 21–23 | |
+| Rear ride height | 40 | Raise for tracks with heavy kerb use, such as Singapore |
+| Brake bias | 54–56 | Forward for big braking zones (§1.2) |
+| Brake pressure | 100 | Lower, such as 97, while the driver adapts to no ABS |
+| Front tyre pressure | High in the range | |
+| Rear tyre pressure | Depends on the track | Lower for traction tracks such as Monza. Higher for tracks limited by tyre temperature, such as Mexico and Singapore |
+
+The off-throttle baseline is a disagreement. S16 starts at 40–45. The other community
+notes in §1.2 (S2, S4, S6) say a lower value gives more rotation, and their range sits below
+40–45. This document records both. The per-track learning loop decides which one works, as
+it does for the on-throttle sign (§6.4).
 
 ## 5. Setup state and history (schema proposal)
 
