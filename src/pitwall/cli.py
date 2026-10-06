@@ -631,8 +631,10 @@ async def _serve(
     import uvicorn
 
     from pitwall.server.app import create_app
+    from pitwall.server.pin import PinGate
 
     settings = store.current()
+    gate = PinGate() if settings.connection.require_pin else None
     if sys.platform == "win32" and settings.connection.https_cert and settings.connection.https_key:
         asyncio.get_running_loop().set_exception_handler(_handle_https_disconnect)
 
@@ -657,6 +659,7 @@ async def _serve(
         on_client_message=lambda msg: active().client_message(msg),
         review=review,
         db=engine.db,
+        pin_gate=gate,
     )
 
     def _health() -> dict[str, Any]:
@@ -686,6 +689,8 @@ async def _serve(
     host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
     print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")
+    if gate is not None:
+        print(f"dashboard PIN: {gate.pin}  (other devices only)")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
     await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
@@ -705,6 +710,7 @@ def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, obj
 
 
 def cmd_start(args: argparse.Namespace) -> int:
+    from pitwall.audio.piper_tts import PiperSpeaker
     from pitwall.audio.speaker import make_speaker
     from pitwall.doctor import set_below_normal_priority
     from pitwall.net.recording import RecordingRotator
@@ -781,6 +787,9 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
+    if isinstance(speaker, PiperSpeaker):
+        speaker.on_audio = hub.audio
+        hub.streams_audio = True
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path

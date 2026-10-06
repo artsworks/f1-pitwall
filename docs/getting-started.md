@@ -78,6 +78,8 @@ when backend speech is off to avoid hearing duplicate calls. Browsers may suspen
 speech in background tabs; keep the page open and visible. The PWA caches only
 static assets; live telemetry still requires a connection to the PC.
 
+Other devices need the 4-digit PIN that Pitwall prints at startup. The PIN changes on each start. After 5 wrong tries, that device waits 60 s. This PC needs no PIN. Set `connection.require_pin: false` to turn it off. Do not forward port 8000 to the internet.
+
 ## After a session
 
 Nothing is required after a live session. Pitwall grades it when it ends. Then

@@ -4,6 +4,7 @@ connection:
   send_rate_hz: 30
   http_host: "0.0.0.0"
   http_port: 8000
+  require_pin: true  # 4-digit PIN for other devices; this PC needs none
   https_cert: ""  # optional mkcert PEM path for LAN phone access
   https_key: ""
   shutdown_timeout_s: 3  # close lingering dashboard connections on Ctrl+C
