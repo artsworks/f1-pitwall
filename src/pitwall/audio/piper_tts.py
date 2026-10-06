@@ -299,7 +299,7 @@ class PiperSpeaker:
             if call.priority == 1:
                 self._urgent.clear()
             self._player.play(wav)
-            if self.on_audio is not None:
+            if self.on_audio is not None and call.id not in self._cancelled:
                 try:
                     self.on_audio(call.id, call.priority, wav)
                 except Exception as exc:

@@ -20,8 +20,8 @@
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
-  var soundOn = false, serverAudio = false, spokenIds = {}, audioQueue = [];
-  var playingId = null, soundAttempt = 0;
+  var soundOn = false, serverAudio = false, spokenIds = {}, cancelledIds = {}, audioQueue = [];
+  var playingId = null, soundAttempt = 0, soundFailed = false;
   var armRadio = document.getElementById("arm-radio");
   var soundButton = document.getElementById("sound");
   var audioSupported = typeof window.Audio === "function";
@@ -34,19 +34,21 @@
   if (soundButton) soundButton.hidden = !mobile;
 
   function updateSoundButtons() {
+    var blocked = soundFailed && !soundOn;
     if (soundButton) {
       soundButton.setAttribute("aria-pressed", String(soundOn));
-      soundButton.textContent = soundOn ? "SOUND ON" : "ENABLE SOUND";
+      soundButton.textContent = blocked ? "SOUND BLOCKED. TAP AGAIN" : soundOn ? "SOUND ON" : "ENABLE SOUND";
     }
     if (armRadio) {
       armRadio.setAttribute("aria-pressed", String(soundOn));
-      armRadio.textContent = soundOn ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
+      armRadio.textContent = blocked ? "SOUND BLOCKED. TAP AGAIN" : soundOn ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
     }
   }
 
   function stopSound() {
     soundAttempt += 1;
     soundOn = false;
+    soundFailed = false;
     audioQueue = [];
     playingId = null;
     if (player) player.pause();
@@ -57,11 +59,22 @@
 
   function startSound() {
     var attempt = ++soundAttempt;
+    soundFailed = false;
+    updateSoundButtons();
     function armed() {
       if (attempt !== soundAttempt) return;
       soundOn = true;
       updateSoundButtons();
       sendCtl({ type: "audio", on: true });
+    }
+    function blocked() {
+      if (attempt !== soundAttempt) return;
+      if (!serverAudio && speechSupported) {
+        armed();
+      } else {
+        soundFailed = true;
+        updateSoundButtons();
+      }
     }
     if (!player) {
       if (speechSupported) armed();
@@ -71,12 +84,12 @@
     try {
       var started = player.play();
       if (started && typeof started.then === "function") {
-        started.then(armed).catch(function () {});
+        started.then(armed).catch(blocked);
       } else {
         armed();
       }
     } catch (e) {
-      return;
+      blocked();
     }
   }
 
@@ -114,7 +127,7 @@
   }
 
   function queueAudio(p) {
-    if (!soundOn || !player || !p || !p.id || !p.data) return;
+    if (!soundOn || !player || !p || !p.id || !p.data || cancelledIds[p.id]) return;
     var item = {
       id: p.id,
       priority: p.priority,
@@ -134,6 +147,8 @@
   }
 
   function cancelAudio(id) {
+    cancelledIds[id] = true;
+    if (Object.keys(cancelledIds).length > 200) cancelledIds = {};
     audioQueue = audioQueue.filter(function (item) { return item.id !== id; });
     if (playingId === id) {
       playingId = null;
@@ -1362,6 +1377,7 @@
     if (typeof m.t === "number") clockOffset = m.t - Date.now() / 1000;
     var p = m.payload;
     if (m.type === "hello") {
+      cancelledIds = {};
       serverAudio = !!(p && p.audio);
       if (p && p.review) {
         document.body.classList.add("review");

@@ -126,6 +126,25 @@ def test_piper_speaker_skips_cancelled() -> None:
     sp.close()
 
 
+def test_piper_audio_callback_skips_call_cancelled_during_playback() -> None:
+    sp, player, spoken, _ = _speaker(0.0)
+    call = _call("cancel-during-play")
+    audio: list[tuple[str, int, bytes]] = []
+    original_play = player.play
+
+    def play(wav: bytes) -> None:
+        original_play(wav)
+        sp.cancel(call.id)
+
+    player.play = play
+    sp.on_audio = lambda cid, priority, wav: audio.append((cid, priority, wav))
+    sp.speak(call)
+    _wait_for(lambda: spoken == [call.id])
+    assert player.played == [b"box box"]
+    assert audio == []
+    sp.close()
+
+
 def test_piper_audio_callback_follows_playback_and_isolates_errors() -> None:
     sp, player, spoken, _ = _speaker(0.0)
     order: list[tuple[str, str]] = []
