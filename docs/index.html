@@ -24,7 +24,7 @@ nav h4{margin:16px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppe
 nav a{display:block;padding:4px 8px;border-radius:5px;font-size:14px;color:var(--fg);text-decoration:none}
 nav a:hover{background:var(--panel)}
 nav a.active{background:var(--panel);color:var(--accent);font-weight:600}
-nav a .n{display:inline-block;width:24px;color:var(--muted);font-variant-numeric:tabular-nums}
+nav a.sub{padding-left:20px;font-size:13px;color:var(--muted)}
 main{padding:28px 40px 80px;min-width:0}
 article{max-width:820px}
 article h1{font-size:30px;line-height:1.25;margin:0 0 12px}
@@ -147,7 +147,7 @@ const GROUPS = [
     ["05-roadmap", "Roadmap", "M0 capture and replay through M4 calibration, with exit criteria for each milestone."]
   ]],
   ["Decisions (ADRs)", [
-    ["adr/README", "Decision records", "Lessons from live sessions, recorded so they are not relearnt."],
+    ["adr/README", "Decisions", "Lessons from live sessions, recorded so they are not relearnt."],
     ["adr/0001-format-2026-is-the-only-header-gate", "ADR 0001 · Format gate", "Packet format 2026 is the only header gate; the game reports year 25."],
     ["adr/0002-two-clock-domains", "ADR 0002 · Clock domains", "Session time vs receive clock; never subtract across them."],
     ["adr/0003-doctor-counts-raw-datagrams", "ADR 0003 · Doctor counts raw", "Count raw datagrams, not only accepted ones."],
@@ -193,15 +193,26 @@ const byId = Object.fromEntries(DOCS.map(d => [d[0], d]));
 const $ = s => document.querySelector(s);
 const cache = {};
 
-function renderNav(filter = "") {
+const grp = name => GROUPS.find(g => g[0] === name)[1];
+const NAV = [
+  ["Start here", [...grp("Start here"), byId["adr/README"]]],
+  ["Design", grp("Core design")],
+  ["Reference", [...grp("In depth"), ...grp("Reference and provenance")]]
+];
+const ADRS = grp("Decisions (ADRs)").filter(d => d[0] !== "adr/README");
+
+function renderNav(filter = $("#filter").value) {
   const f = filter.trim().toLowerCase();
-  $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + GROUPS.map(([g, docs]) => {
-    const items = docs.filter(d => !f || (d[1] + " " + d[2] + " " + d[0]).toLowerCase().includes(f));
-    if (!items.length) return "";
-    return `<h4>${g}</h4>` + items.map(d => {
-      const m = d[0].match(/^(\d\d)-/);
-      return `<a href="#/${d[0]}" data-id="${d[0]}"><span class="n">${m ? m[1] : "·"}</span>${d[1]}</a>`;
-    }).join("");
+  const hit = d => !f || (d[1] + " " + d[2] + " " + d[0]).toLowerCase().includes(f);
+  const link = (d, sub) => `<a${sub ? ' class="sub"' : ""} href="#/${d[0]}" data-id="${d[0]}">${d[1]}</a>`;
+  const id = current();
+  $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + NAV.map(([g, docs]) => {
+    const items = docs.flatMap(d => {
+      if (d[0] !== "adr/README") return hit(d) ? [link(d)] : [];
+      const adrs = ADRS.filter(a => f ? hit(a) : a[0] === id);
+      return hit(d) || adrs.length ? [link(d), ...adrs.map(a => link(a, true))] : [];
+    });
+    return items.length ? `<h4>${g}</h4>` + items.join("") : "";
   }).join("");
   markActive();
 }
@@ -390,7 +401,7 @@ function route() {
   document.body.classList.remove("nav-open");
   $("#menu").setAttribute("aria-expanded", "false");
   const [id, frag] = location.hash.replace(/^#\/?/, "").split("#").map(decodeURIComponent);
-  markActive();
+  renderNav();
   if (!id) { overview(); window.scrollTo(0, 0); return; }
   const loaded = $(".path") && document.title.startsWith(byId[id]?.[1] || "\0");
   if (loaded && frag) { document.getElementById(frag)?.scrollIntoView(); return; }
