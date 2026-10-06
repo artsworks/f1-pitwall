@@ -7,21 +7,36 @@ session: nobody should need `pitwall digest` or SQLite to keep priors sane.
 - rebuild (once per LEARN_VERSION): each stored stint is refit from its laps
   with today's model, then stint-derived priors are recomputed with today's
   gate and race-distance scoping;
-- grade: sessions without hindsight outcomes are graded.
+- grade: sessions without hindsight outcomes are graded;
+- calibrate and tune (`learning.auto_calibrate`): track priors are refit from
+  stored laps and rule cooldowns from human grades plus auto-graded outcomes.
+  Writes that would fail the quarantine check are dropped. Threshold YAML is
+  never written; `pitwall propose` stays review-only. A watchdog restart
+  mid-session passes `refit=False` so priors do not move during a race.
 
 Deterministic and idempotent: a second run changes nothing."""
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from pitwall.calibrate import calibrate
+from pitwall.config.models import Settings
 from pitwall.hindsight import grade_and_store
 from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, ModelParam
-from pitwall.tune import AB_PREFIX, COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
+from pitwall.tune import (
+    AB_PREFIX,
+    COOLDOWN_PREFIX,
+    TUNE_COMPOUND,
+    TUNE_TRACK,
+    load_cooldown_mults,
+    tune_from_db,
+)
 
 LEARN_VERSION = 2
 STINT_PARAMS = ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap", DEG_FUEL_REF)
@@ -32,6 +47,8 @@ class MaintenanceReport:
     quarantined: list[str] = field(default_factory=list)
     rebuilt: int = 0
     graded: int = 0
+    calibrated: int = 0
+    tuned: int = 0
 
     def summary(self) -> str:
         parts = []
@@ -41,6 +58,10 @@ class MaintenanceReport:
             parts.append(f"{self.rebuilt} learned values rebuilt from stints")
         if self.graded:
             parts.append(f"{self.graded} sessions graded")
+        if self.calibrated:
+            parts.append(f"{self.calibrated} learned values refit")
+        if self.tuned:
+            parts.append(f"{self.tuned} rule cooldowns adjusted")
         return ", ".join(parts) if parts else "learned state clean"
 
 
@@ -173,7 +194,42 @@ def grade_ungraded(db: Database, th: Mapping[str, object]) -> int:
     return len(uids)
 
 
-def maintain(db: Database, th: Mapping[str, object]) -> MaintenanceReport:
+def calibrate_learned(db: Database, settings: Settings) -> int:
+    """Refit track priors from stored laps. Returns the number of values that
+    changed. Values that would be quarantined are never written."""
+    th = settings.thresholds
+
+    def accept(track_id: int, compound: int, name: str, value: float) -> bool:
+        return not _bad_reason(ModelParam(track_id, compound, name, value, 0.0, 0.0), th)
+
+    before = {(p.track_id, p.compound, p.name): (p.value, p.weight) for p in db.all_params()}
+    report = calibrate(db, settings, accept=accept)
+    return sum(
+        before.get((track["track_id"], w["compound"], w["name"])) != (w["value"], w["weight"])
+        for track in report["tracks"]
+        for w in track["writes"]
+    )
+
+
+def tune_learned(db: Database, th: Mapping[str, object]) -> int:
+    """Refold rule cooldowns. Returns the number of rules whose multiplier changed."""
+    before = load_cooldown_mults(db)
+    tune_from_db(db, th)
+    after = load_cooldown_mults(db)
+    return sum(before.get(rule) != mult for rule, mult in after.items())
+
+
+def mid_session(db: Database, settings: Settings, wall_now: float | None = None) -> bool:
+    """True when a fresh heartbeat shows a session is still running (watchdog restart)."""
+    hb = db.read_heartbeat()
+    if hb is None:
+        return False
+    wall_now = time.time() if wall_now is None else wall_now
+    return wall_now - hb.wall_t <= settings.engine.recovery_max_age_s
+
+
+def maintain(db: Database, settings: Settings, *, refit: bool = True) -> MaintenanceReport:
+    th = settings.thresholds
     report = MaintenanceReport()
     with db.transaction():
         if db.maintenance_version("learn_rebuild") < LEARN_VERSION:
@@ -181,4 +237,7 @@ def maintain(db: Database, th: Mapping[str, object]) -> MaintenanceReport:
             db.set_maintenance_version("learn_rebuild", LEARN_VERSION)
         report.quarantined += quarantine_bad(db, th)
         report.graded = grade_ungraded(db, th)
+        if refit and settings.learning.auto_calibrate:
+            report.calibrated = calibrate_learned(db, settings)
+            report.tuned = tune_learned(db, th)
     return report

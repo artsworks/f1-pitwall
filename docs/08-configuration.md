@@ -35,7 +35,7 @@ access token, HTTPS cert paths.
 
 **Recording and data**
 recording on/off, directory, retention size, auto-tag rules, persistence on/off,
-database path, downsample rate, redaction of online player names.
+database path, automatic refit and cooldown tuning (`learning.auto_calibrate`), downsample rate, redaction of online player names.
 
 **Engine**
 tick rate (default 10 Hz), EMA windows (fast 3 s, slow 30 s), staleness thresholds per

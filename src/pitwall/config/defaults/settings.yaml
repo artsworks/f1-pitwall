@@ -26,6 +26,8 @@ engine:
 persistence:
   enabled: true
   path: ~/.pitwall/pitwall.sqlite
+learning:
+  auto_calibrate: true  # upkeep refits priors and tunes cooldowns; YAML stays review-only
 
   ema_fast_s: 3.0
   ema_slow_s: 30.0

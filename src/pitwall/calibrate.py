@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,8 @@ from pitwall.hindsight import linear_deg, stints, stop_laps
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
 from pitwall.protocol.enums import SessionType
 from pitwall.store.db import Database, LapRow
+
+WriteFilter = Callable[[int, int, str, float], bool]
 
 
 def _th(th: Mapping[str, object], name: str, default: float) -> float:
@@ -308,8 +310,10 @@ def calibrate_track(
     settings: Settings,
     *,
     dry_run: bool = False,
+    accept: WriteFilter | None = None,
 ) -> dict[str, Any]:
-    """Fit one track and optionally write only sufficiently supported values."""
+    """Fit one track and optionally write only sufficiently supported values.
+    `accept(track_id, compound, name, value)` can veto individual writes."""
     rows = db.sessions_for_track(track_id)
     max_sessions = int(_th(settings.thresholds, "calib_max_sessions", 20))
     ordered = sorted(rows, key=lambda row: (float(row.get("started_at") or 0.0), int(row["uid"])))
@@ -452,6 +456,8 @@ def calibrate_track(
         suffix = name.removeprefix("deg_ms_per_lap")
         if name.split("@", 1)[0] == "deg_ms_per_lap" and (c, suffix) in fuel_by_compound:
             writes.append((c, DEG_FUEL_REF + suffix, fuel_by_compound[(c, suffix)], w))
+    if accept is not None:
+        writes = [w for w in writes if accept(track_id, w[0], w[1], w[2])]
     if not dry_run:
         for compound, name, value, weight in writes:
             db.set_param(track_id, compound, name, value, weight)
@@ -469,6 +475,7 @@ def calibrate(
     *,
     track_id: int | None = None,
     dry_run: bool = False,
+    accept: WriteFilter | None = None,
 ) -> dict[str, Any]:
     tracks = (
         [track_id]
@@ -478,7 +485,9 @@ def calibrate(
         )
     )
     return {
-        "tracks": [calibrate_track(db, track, settings, dry_run=dry_run) for track in tracks],
+        "tracks": [
+            calibrate_track(db, track, settings, dry_run=dry_run, accept=accept) for track in tracks
+        ],
         "dry_run": dry_run,
     }
 

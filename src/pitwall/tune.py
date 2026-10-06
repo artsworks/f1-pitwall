@@ -50,6 +50,7 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
     lo = _th(th, "tune_min_cooldown_mult", 0.5)
     hi = _th(th, "tune_max_cooldown_mult", 4.0)
     auto_w = _th(th, "tune_auto_weight", 0.5)
+    cap = _th(th, "param_weight_cap", 50)
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     graded: set[tuple[object, str]] = set()
     for g in db.all_grades():
@@ -87,7 +88,7 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
             mult = min(hi, max(lo, 2.0 ** (gain * w_net / w_n)))
         mult = round(mult, 3)
         if n or n_auto:
-            db.set_param(TUNE_TRACK, TUNE_COMPOUND, COOLDOWN_PREFIX + rule_id, mult, w_n)
+            db.set_param(TUNE_TRACK, TUNE_COMPOUND, COOLDOWN_PREFIX + rule_id, mult, min(w_n, cap))
         if rule_id in ab:
             db.set_param(TUNE_TRACK, TUNE_COMPOUND, AB_PREFIX + rule_id, float(ab[rule_id]), 1.0)
         out.append(RuleTune(rule_id, n, good, bad, mult, ab.get(rule_id, 0), n_auto))

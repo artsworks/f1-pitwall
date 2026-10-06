@@ -224,6 +224,10 @@ class PersistenceSettings(BaseModel):
     path: str = "~/.pitwall/pitwall.sqlite"
 
 
+class LearningSettings(BaseModel):
+    auto_calibrate: bool = True  # maintain() refits priors and tunes cooldowns
+
+
 class SpeechSettings(BaseModel):
     enabled: bool = True
     engine: Literal["auto", "piper", "sapi", "null"] = "auto"
@@ -316,6 +320,7 @@ class Settings(BaseModel):
     input: InputSettings = Field(default_factory=InputSettings)
     menu: MenuSettings = Field(default_factory=MenuSettings)
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
+    learning: LearningSettings = Field(default_factory=LearningSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
