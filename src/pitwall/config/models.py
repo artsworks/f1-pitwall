@@ -324,6 +324,7 @@ class Settings(BaseModel):
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
     thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
+    setup_rules: dict[str, Any] = Field(default_factory=dict)
     track: TrackOverlay | None = None
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
     rules: list[RuleDefModel] = Field(default_factory=list)

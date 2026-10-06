@@ -814,6 +814,67 @@ class Database:
             change["session_uid"] = _uid_from_sql(int(change["session_uid"]))
         return changes
 
+    def insert_setup_rec(
+        self,
+        rec: Any,
+        *,
+        track_id: int,
+        compound: int,
+        lap: int,
+    ) -> None:
+        """Replace a stored recommendation with the same deterministic id."""
+        evidence = {
+            "signals": rec.evidence,
+            "suppressed": rec.suppressed,
+            "tier": rec.tier,
+            "expect": rec.expect,
+            "tradeoff": rec.tradeoff,
+            "to_value": rec.to_value,
+            "session_type": rec.session_type,
+            "parc_ferme": rec.parc_ferme,
+        }
+        session_uid = getattr(rec, "session_uid", None)
+        if session_uid is None:
+            try:
+                session_uid = int(rec.rec_id.split(":", 1)[0])
+            except (AttributeError, ValueError) as exc:
+                raise ValueError("recommendation rec_id must start with its session uid") from exc
+        with self.transaction():
+            self._conn.execute(
+                "INSERT OR REPLACE INTO setup_recs"
+                "(session_uid, rec_id, rule_id, mode, param, from_value, delta, conf,"
+                " setup_state_id, track_id, compound, lap, evidence)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(session_uid),
+                    rec.rec_id,
+                    rec.rule_id,
+                    rec.mode,
+                    rec.param,
+                    rec.from_value,
+                    rec.delta,
+                    rec.conf,
+                    rec.setup_state_id,
+                    track_id,
+                    compound,
+                    lap,
+                    json.dumps(evidence, default=str),
+                ),
+            )
+
+    def setup_recs_for_session(self, uid: int) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT * FROM setup_recs WHERE session_uid=? ORDER BY id",
+            (_uid_to_sql(uid),),
+        )
+        for row in rows:
+            try:
+                evidence = json.loads(str(row["evidence"] or "{}"))
+            except json.JSONDecodeError:
+                evidence = {}
+            row["evidence"] = evidence if isinstance(evidence, dict) else {}
+        return rows
+
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
@@ -830,6 +891,14 @@ class Database:
     def latest_session_uid(self) -> int | None:
         row = self._conn.execute(
             "SELECT uid FROM sessions ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        return _uid_from_sql(int(row[0])) if row else None
+
+    def latest_session_with_laps_uid(self) -> int | None:
+        row = self._conn.execute(
+            "SELECT s.uid FROM sessions s WHERE EXISTS("
+            "SELECT 1 FROM laps l WHERE l.session_uid=s.uid AND l.car_idx=0)"
+            " ORDER BY s.started_at DESC LIMIT 1"
         ).fetchone()
         return _uid_from_sql(int(row[0])) if row else None
 
