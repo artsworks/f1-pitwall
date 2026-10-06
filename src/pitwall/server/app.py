@@ -8,21 +8,28 @@ import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
+from pitwall.server.pin import PIN_COOKIE, PinGate
 from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
 
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 STALE_MS = 1000.0
+
+
+class PinRequest(BaseModel):
+    pin: str
 
 
 def tyre_status(inner: float, cold_c: float, hot_c: float) -> str:
@@ -594,6 +601,7 @@ def create_app(
     on_client_message: Any = None,
     review: Any = None,
     db: Database | None = None,
+    pin_gate: PinGate | None = None,
 ) -> FastAPI:
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
     frames (defaults to the hub's no-state placeholder). on_client_press:
@@ -603,6 +611,64 @@ def create_app(
     optional ReviewController; when present the /api/review/* routes are
     mounted and the hello frame carries review=True."""
     app = FastAPI(title="pitwall")
+
+    if pin_gate is not None:
+
+        @app.middleware("http")
+        async def require_pin(request: Request, call_next: Any) -> Any:
+            host = request.client.host if request.client else None
+            if pin_gate.allowed(host, request.cookies.get(PIN_COOKIE)):
+                return await call_next(request)
+
+            path = request.url.path
+            if (
+                path in ("/pin", "/api/pin", "/sw.js")
+                or path == "/static"
+                or path.startswith("/static/")
+            ):
+                return await call_next(request)
+            if path.startswith("/api/"):
+                return JSONResponse({"error": "pin required"}, status_code=401)
+
+            next_path = path
+            if request.url.query:
+                next_path += "?" + request.url.query
+            return RedirectResponse(
+                "/pin?next=" + quote(next_path, safe=""),
+                status_code=303,
+            )
+
+        @app.get("/pin")
+        async def pin_page() -> FileResponse:
+            return FileResponse(WEB_DIR / "pin.html")
+
+        @app.post("/api/pin")
+        async def unlock(request_data: PinRequest, request: Request) -> JSONResponse:
+            host = request.client.host if request.client else ""
+            result = pin_gate.check(host, request_data.pin)
+            if result.retry_after_s > 0:
+                return JSONResponse(
+                    {
+                        "error": "locked",
+                        "retry_after_s": math.ceil(result.retry_after_s),
+                    },
+                    status_code=429,
+                )
+            if not result.ok:
+                return JSONResponse(
+                    {"error": "wrong", "tries_left": result.tries_left},
+                    status_code=401,
+                )
+            response = JSONResponse({"ok": True})
+            response.set_cookie(
+                PIN_COOKIE,
+                pin_gate.token,
+                max_age=86400,
+                httponly=True,
+                samesite="strict",
+                path="/",
+            )
+            return response
 
     def snapshot_now() -> Snapshot:
         if latest_snapshot is not None:
@@ -678,6 +744,13 @@ def create_app(
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
+        if pin_gate is not None and not pin_gate.allowed(
+            websocket.client.host if websocket.client else None,
+            websocket.cookies.get(PIN_COOKIE),
+        ):
+            await websocket.accept()
+            await websocket.close(code=4003, reason="pin required")
+            return
         await websocket.accept()
         settings = settings_store.current()
         await websocket.send_text(
@@ -690,6 +763,7 @@ def create_app(
                         "mindset": settings.mindset.active,
                         "verbosity": settings.policy.verbosity,
                         "review": review is not None,
+                        "audio": hub.streams_audio,
                     },
                 )
             )
@@ -720,6 +794,11 @@ def create_app(
                     and on_client_press is not None
                 ):
                     on_client_press(bool(msg.get("down")))
+                elif isinstance(msg, dict) and msg.get("type") == "audio":
+                    if msg.get("on") is True:
+                        hub.audio_clients.add(websocket)
+                    elif msg.get("on") is False:
+                        hub.audio_clients.discard(websocket)
                 elif (
                     isinstance(msg, dict)
                     and msg.get("type") in ("mindset", "page", "menu")
@@ -730,6 +809,7 @@ def create_app(
             pass
         finally:
             hub.clients.discard(websocket)
+            hub.audio_clients.discard(websocket)
 
     if review is not None:
 

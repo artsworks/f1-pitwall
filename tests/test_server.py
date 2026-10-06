@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import io
+import time
 
 import pytest
 from fastapi import WebSocketDisconnect
@@ -52,12 +54,13 @@ def _app(store: ConfigStore | None = None) -> tuple[TestClient, Hub]:
 
 
 def test_websocket_hello_and_state_shape() -> None:
-    client, _ = _app()
+    client, hub = _app()
     with client.websocket_connect("/ws") as ws:
         hello = ws.receive_json()
         assert hello["type"] == "hello"
         assert hello["payload"]["protocol"] == 1
         assert hello["payload"]["config_hash"]
+        assert hello["payload"]["audio"] is False
         ws.send_json({"type": "hello", "v": 1, "last_seq": 7})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
@@ -71,6 +74,20 @@ def test_websocket_hello_and_state_shape() -> None:
                 "status",
             }
         assert "calls" in snap["payload"]
+
+
+def test_websocket_audio_subscription_is_removed_on_disconnect() -> None:
+    client, hub = _app()
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "hello", "v": 1, "last_seq": None})
+        ws.receive_json()
+        ws.send_json({"type": "audio", "on": True})
+        end = time.monotonic() + 2
+        while not hub.audio_clients and time.monotonic() < end:
+            time.sleep(0.01)
+        assert len(hub.audio_clients) == 1
+    assert not hub.audio_clients
 
 
 def test_websocket_version_mismatch_close() -> None:
@@ -97,6 +114,28 @@ def test_hub_broadcast_order_and_snapshot() -> None:
         ws.send_json({"type": "hello", "v": 1, "last_seq": 0})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
+
+
+def test_hub_audio_is_not_buffered_without_subscribers() -> None:
+    hub = Hub()
+    hub.audio("c1", 2, b"wav")
+    assert hub.outbox == []
+
+
+def test_hub_audio_frame_targets_audio_clients_without_loop() -> None:
+    hub = Hub()
+    client = object()
+    wav = b"test wav"
+    hub.audio_clients.add(client)
+    hub.audio("c1", 1, wav)
+    assert len(hub.outbox) == 1
+    frame = hub.outbox[0]
+    assert frame["type"] == "audio"
+    assert frame["payload"]["id"] == "c1"
+    assert frame["payload"]["priority"] == 1
+    assert frame["payload"]["format"] == "wav"
+    assert base64.b64decode(frame["payload"]["data"]) == wav
+    assert len(hub.recent_calls) == 0
 
 
 def test_reconnect_snapshot_has_calls() -> None:

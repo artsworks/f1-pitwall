@@ -115,6 +115,74 @@ def test_run_tracker_hot_cool_transitions() -> None:
     assert rt.kind == ""
 
 
+def test_run_tracker_carries_track_limits_into_next_lap() -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    assert rt.kind == HOT
+    # cut in sector 3: this lap and the next are invalid, the flag stays set over the line
+    rt.update(
+        t=60.0,
+        phase="flying",
+        lap_time_ms=70_000,
+        lap_distance=4100.0,
+        sector=2,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=True,
+        ers_pct=40.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=20_000,
+        cool_pace_pct=10.0,
+        decide=lambda: PUSH,
+    )
+    done = rt.update(
+        t=64.0,
+        phase="flying",
+        lap_time_ms=50,
+        lap_distance=5.0,
+        sector=0,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=True,
+        ers_pct=40.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=20_000,
+        cool_pace_pct=10.0,
+        decide=lambda: PUSH,
+    )
+    assert done is not None and done.invalid
+    assert rt.plan == Plan("cool", "invalid") and rt.kind == COOL and rt.next_lap_invalid
+    # the flag clears at the next line: back to the plan
+    _feed(rt, 130.0, 70_000, 4100.0, 2)
+    assert _feed(rt, 131.0, 50, 5.0, 0) is None
+    assert rt.kind == HOT and not rt.next_lap_invalid
+    # a lap deleted mid-lap that clears before the line carries nothing
+    rt2 = RunTracker()
+    _feed(rt2, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt2, 1.0, 100, 10.0, 0)
+    rt2.update(
+        t=30.0,
+        phase="flying",
+        lap_time_ms=30_000,
+        lap_distance=2000.0,
+        sector=1,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=True,
+        ers_pct=40.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=20_000,
+        cool_pace_pct=10.0,
+        decide=lambda: PUSH,
+    )
+    done = _feed(rt2, 64.0, 50, 5.0, 0)
+    assert done is not None and done.invalid and rt2.plan == PUSH and not rt2.next_lap_invalid
+
+
 def test_run_tracker_ignores_flashback() -> None:
     rt = RunTracker()
     _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
@@ -170,11 +238,29 @@ def test_plan_rules_at_the_line() -> None:
     assert "plan_push_now" in ids
     ids = _ids(_qsnap(sector=0, run_plan="box", run_plan_reason="safe", quali_margin_s=1.3))
     assert "plan_box_safe" in ids and "plan_box" not in ids
+    ids = _ids(
+        _qsnap(
+            sector=0,
+            run_plan="cool",
+            run_plan_reason="invalid",
+            run_plan_why="Next lap's gone too, track limits",
+            next_lap_invalid=True,
+        )
+    )
+    assert "next_lap_invalid" in ids and "plan_cool" not in ids
+    assert ids["next_lap_invalid"].startswith(("Next lap's gone too", "That one's deleted"))
     assert not {k for k in _ids(_qsnap(sector=1, run_plan="cool")) if k.startswith("plan_")}
 
 
 def test_cool_lap_coaching_rules() -> None:
-    cool = {"cool_lap": True, "run_lap_kind": "cool", "run_plan": "cool"}
+    cool = {
+        "cool_lap": True,
+        "run_lap_kind": "cool",
+        "run_plan": "cool",
+        "track_length_m": 4300.0,
+        "lap_distance": 1000.0,
+        "ers_store_pct": 40.0,
+    }
     # plan_cool already said "recharge"; the separate reminder is for driver-initiated cools
     assert "cool_recharge" not in _ids(_qsnap(sector=0, **cool))
     assert "cool_recharge" in _ids(_qsnap(sector=0, cool_lap=True, run_plan="push"))
@@ -182,6 +268,22 @@ def test_cool_lap_coaching_rules() -> None:
     assert "cool_recharge_check" in _ids(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=2, **cool))
     assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=5.0, ers_deploy_mode=2, **cool))
     assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=0, **cool))
+    # battery full or inside the hot-lap prep zone: no nag (Q1/Q3 recordings, 6 Oct)
+    full = {**cool, "ers_store_pct": 100.0}
+    assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=1, **full))
+    late = {**cool, "lap_distance": 4050.0}
+    assert "cool_recharge_check" not in _ids(_qsnap(cool_elapsed_s=80.0, ers_deploy_mode=3, **late))
+    # a queued reminder drops once either gate closes
+    nag = next(
+        c
+        for c in _rules()
+        .evaluate(_qsnap(cool_elapsed_s=30.0, ers_deploy_mode=2, **cool))
+        .candidates
+        if c.rule.defn.id == "cool_recharge_check"
+    )
+    assert nag.still_true(_qsnap(cool_elapsed_s=40.0, ers_deploy_mode=2, **cool))
+    assert not nag.still_true(_qsnap(cool_elapsed_s=40.0, ers_deploy_mode=2, **full))
+    assert not nag.still_true(_qsnap(cool_elapsed_s=40.0, ers_deploy_mode=2, **late))
     ids = _ids(
         _qsnap(
             sector=1,
@@ -315,3 +417,52 @@ def test_fuel_thresholds_configurable() -> None:
     # Q2 recording: 2.84 laps at the line was enough for cool + hot + in.
     assert _plan(ers_pct=0.0, fuel_laps=2.84, fuel_cool_laps=2.2) == Plan("cool", "battery")
     assert _plan(ers_pct=0.0, fuel_laps=2.0, fuel_cool_laps=2.2) == Plan("push_now", "fuel")
+
+
+def test_run_tracker_flag_first_set_at_the_line_is_the_new_lap_only() -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    assert rt.kind == HOT
+    _feed(rt, 60.0, 70_000, 4100.0, 2)
+    # clean lap, then the first tick of the next lap already carries a cut
+    done = rt.update(
+        t=64.0,
+        phase="flying",
+        lap_time_ms=50,
+        lap_distance=5.0,
+        sector=0,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=True,
+        ers_pct=40.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=20_000,
+        cool_pace_pct=10.0,
+        decide=lambda: PUSH,
+    )
+    assert done is not None and not done.invalid
+    assert rt.plan == PUSH
+    assert rt.kind == HOT
+    assert not rt.next_lap_invalid
+    # the new lap's own flag still marks it invalid when it completes
+    _feed(rt, 120.0, 70_000, 4100.0, 2)
+    done = rt.update(
+        t=130.0,
+        phase="flying",
+        lap_time_ms=40,
+        lap_distance=4.0,
+        sector=0,
+        sector1_ms=0,
+        sector2_ms=0,
+        invalid=False,
+        ers_pct=40.0,
+        lockups=0,
+        spins=0,
+        best_s1_ms=20_000,
+        cool_pace_pct=10.0,
+        decide=lambda: PUSH,
+    )
+    assert done is not None and done.invalid
+    assert not rt.next_lap_invalid

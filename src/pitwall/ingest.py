@@ -14,7 +14,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
@@ -26,6 +26,9 @@ from pitwall.protocol.header import (
     parse_header,
 )
 from pitwall.store.db import Database
+
+if TYPE_CHECKING:
+    from pitwall.net.recording import FileHeader
 
 RATE_WINDOW_S = 5.0
 
@@ -144,6 +147,33 @@ def expand_paths(paths: Sequence[str]) -> list[Path]:
     return sorted(found, key=lambda item: str(item))
 
 
+def _relabel_calls_mode(
+    db: Database, uid: int, path: Path, header: FileHeader, calls_mode: str | None
+) -> None:
+    """An already ingested session keeps its row, but its `calls_mode` may come
+    from a header that `header_calls_mode` now reads differently."""
+    mode = calls_mode or header_calls_mode(header.metadata)
+    session = db.session_row(uid)
+    if not mode or session is None or session.get("calls_mode") == mode:
+        return
+    db.set_session_origin(
+        uid,
+        started_at=header.wall_clock_start_us / 1_000_000.0,
+        recording_path=str(path),
+        calls_mode=mode,
+    )
+
+
+def header_calls_mode(metadata: dict[str, Any]) -> str:
+    """`calls_mode` from a recording header. Recorders before the
+    `speech_enabled` field spoke every call regardless of `speech.enabled`, so
+    their "off" only holds when `policy.quiet` set it."""
+    mode = str(metadata.get("calls_mode") or "")
+    if mode == "off" and "speech_enabled" not in metadata and not metadata.get("quiet"):
+        return "on"
+    return mode
+
+
 def ingest_recordings(
     db: Database,
     paths: Sequence[str],
@@ -167,6 +197,7 @@ def ingest_recordings(
                 header = reader.header
             uid = header.session_uid
             if uid and db.is_ingested(uid, DIGEST_VERSION):
+                _relabel_calls_mode(db, uid, path, header, calls_mode)
                 results.append(IngestResult(path, uid, "skipped", []))
                 continue
             with db.transaction():
@@ -186,7 +217,7 @@ def ingest_recordings(
                 if not uid:
                     raise ValueError("recording did not contain a session UID")
                 session = db.session_row(uid) or {}
-                origin_mode = calls_mode or str(header.metadata.get("calls_mode") or "")
+                origin_mode = calls_mode or header_calls_mode(header.metadata)
                 if not origin_mode:
                     origin_mode = str(session.get("calls_mode") or "")
                 db.set_session_origin(

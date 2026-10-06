@@ -3,15 +3,18 @@
 Envelope {"v":1,"type","seq","t","payload"}. A ring buffer of the last 12
 calls backs the reconnect `snapshot` frame; each entry carries its dispatch
 frame time `t` and `audio`: "dispatched" | "started" | "dropped" |
-"interrupted" (docs/15 §7).
+"interrupted" (docs/15 §7). Opted-in clients receive rendered Piper WAVs as
+`audio` frames.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import time
 from collections import deque
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.dispatcher import Call
@@ -26,6 +29,8 @@ CALLS_BUFFER = 12
 class Hub:
     def __init__(self) -> None:
         self.clients: set[WebSocket] = set()
+        self.audio_clients: set[WebSocket] = set()
+        self.streams_audio = False
         self.seq = 0
         self.recent_calls: deque[dict[str, Any]] = deque(maxlen=CALLS_BUFFER)
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -57,12 +62,12 @@ class Hub:
         self._send(frame)
         return frame
 
-    def _send(self, frame: dict[str, Any]) -> None:
+    def _send(self, frame: dict[str, Any], clients: Iterable[WebSocket] | None = None) -> None:
         data = json.dumps(frame)
         if self._loop is None:
             self.outbox.append(frame)
             return
-        for ws in list(self.clients):
+        for ws in list(self.clients if clients is None else clients):
             asyncio.run_coroutine_threadsafe(self._send_ws(ws, data), self._loop)
 
     async def _send_ws(self, ws: WebSocket, data: str) -> None:
@@ -70,6 +75,7 @@ class Hub:
             await ws.send_text(data)
         except Exception:
             self.clients.discard(ws)
+            self.audio_clients.discard(ws)
 
     # -- CallSink ----------------------------------------------------------
 
@@ -87,6 +93,22 @@ class Hub:
                 "tags": call.tags,
                 "lap": call.lap,
             },
+        )
+
+    def audio(self, call_id: str, priority: int, wav: bytes) -> None:
+        if not self.audio_clients:
+            return
+        self._send(
+            self.frame(
+                "audio",
+                {
+                    "id": call_id,
+                    "priority": priority,
+                    "format": "wav",
+                    "data": base64.b64encode(wav).decode("ascii"),
+                },
+            ),
+            list(self.audio_clients),
         )
 
     def _mark(self, call_id: str, update: Any) -> None:

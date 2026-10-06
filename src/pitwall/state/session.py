@@ -576,6 +576,7 @@ class Snapshot:
     run_plan_why: str = ""
     cool_lap: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    next_lap_invalid: bool = False  # track limits deleted this lap before it started
     cool_elapsed_s: float = 0.0
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
     cool_extend: bool = False  # cool lap ending short of battery, time for another
@@ -2247,6 +2248,8 @@ class SessionState:
             why = "No fuel for another lap"
         elif plan.reason == "flag":
             why = "That's the flag"
+        elif plan.reason == "invalid":
+            why = "Next lap's gone too, track limits"
         elif plan.reason == "safe":
             why = "You're safe"
         pole_idx = min(
@@ -2276,6 +2279,7 @@ class SessionState:
             run_plan_why=why,
             cool_lap=cool_lap,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            next_lap_invalid=run.next_lap_invalid,
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),
             time_for_cool_and_hot=self._time_for_cool_and_hot(),

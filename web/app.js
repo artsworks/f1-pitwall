@@ -7,30 +7,181 @@
   var SC_WORDS = { 1: "SAFETY CAR", 2: "VSC", 3: "FORMATION" };
 
   var ws = null, lastSeq = null, backoff = 500, mismatched = false;
-  var phoneSpeech = false, spokenIds = {};
+  var SILENT = "data:audio/wav;base64," +
+    "UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+  var soundOn = false, serverAudio = false, spokenIds = {}, cancelledIds = {}, audioQueue = [];
+  var playingId = null, soundAttempt = 0, soundFailed = false;
   var armRadio = document.getElementById("arm-radio");
-  if (armRadio) {
-    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-      armRadio.disabled = true;
-      armRadio.textContent = "PHONE SPEECH UNAVAILABLE";
-    } else {
-      armRadio.addEventListener("click", function () {
-        phoneSpeech = !phoneSpeech;
-        armRadio.setAttribute("aria-pressed", String(phoneSpeech));
-        armRadio.textContent = phoneSpeech ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
-        if (!phoneSpeech) speechSynthesis.cancel();
-        keepAwake();
-      });
+  var soundButton = document.getElementById("sound");
+  var audioSupported = typeof window.Audio === "function";
+  var speechSupported = !!window.speechSynthesis;
+  var utteranceSupported = !!window.SpeechSynthesisUtterance;
+  var player = audioSupported ? new Audio() : null;
+  var mobile = /[?&]sound=1/.test(location.search) ||
+    (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches);
+  if (/[?&]sound=0/.test(location.search)) mobile = false;
+  if (soundButton) soundButton.hidden = !mobile;
+
+  function updateSoundButtons() {
+    var blocked = soundFailed && !soundOn;
+    if (soundButton) {
+      soundButton.setAttribute("aria-pressed", String(soundOn));
+      soundButton.textContent = blocked ? "SOUND BLOCKED. TAP AGAIN" : soundOn ? "SOUND ON" : "ENABLE SOUND";
+    }
+    if (armRadio) {
+      armRadio.setAttribute("aria-pressed", String(soundOn));
+      armRadio.textContent = blocked ? "SOUND BLOCKED. TAP AGAIN" : soundOn ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
     }
   }
+
+  function stopSound() {
+    soundAttempt += 1;
+    soundOn = false;
+    soundFailed = false;
+    audioQueue = [];
+    playingId = null;
+    if (player) player.pause();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    updateSoundButtons();
+    sendCtl({ type: "audio", on: false });
+  }
+
+  function startSound() {
+    var attempt = ++soundAttempt;
+    soundFailed = false;
+    updateSoundButtons();
+    function armed() {
+      if (attempt !== soundAttempt) return;
+      soundOn = true;
+      updateSoundButtons();
+      sendCtl({ type: "audio", on: true });
+    }
+    function blocked() {
+      if (attempt !== soundAttempt) return;
+      if (!serverAudio && speechSupported) {
+        armed();
+      } else {
+        soundFailed = true;
+        updateSoundButtons();
+      }
+    }
+    if (!player) {
+      if (speechSupported) armed();
+      return;
+    }
+    player.src = SILENT;
+    try {
+      var started = player.play();
+      if (started && typeof started.then === "function") {
+        started.then(armed).catch(blocked);
+      } else {
+        armed();
+      }
+    } catch (e) {
+      blocked();
+    }
+  }
+
+  function toggleSound() {
+    keepAwake();
+    if (soundOn) stopSound();
+    else startSound();
+  }
+
+  function playNextAudio() {
+    if (!soundOn || !player || playingId !== null || !audioQueue.length) return;
+    var item = audioQueue.shift();
+    playingId = item.id;
+    player.src = item.src;
+    try {
+      var started = player.play();
+      if (started && typeof started.catch === "function") {
+        started.catch(function () {
+          if (playingId === item.id) {
+            playingId = null;
+            playNextAudio();
+          }
+        });
+      }
+    } catch (e) {
+      playingId = null;
+      playNextAudio();
+    }
+  }
+
+  function finishAudio() {
+    if (playingId === null) return;
+    playingId = null;
+    playNextAudio();
+  }
+
+  function queueAudio(p) {
+    if (!soundOn || !player || !p || !p.id || !p.data || cancelledIds[p.id]) return;
+    var item = {
+      id: p.id,
+      priority: p.priority,
+      src: "data:audio/wav;base64," + p.data
+    };
+    if (p.priority === 1) {
+      audioQueue = [];
+      playingId = null;
+      player.pause();
+      audioQueue.push(item);
+    } else {
+      var i = 0;
+      while (i < audioQueue.length && audioQueue[i].priority <= item.priority) i += 1;
+      audioQueue.splice(i, 0, item);
+    }
+    playNextAudio();
+  }
+
+  function cancelAudio(id) {
+    cancelledIds[id] = true;
+    if (Object.keys(cancelledIds).length > 200) cancelledIds = {};
+    audioQueue = audioQueue.filter(function (item) { return item.id !== id; });
+    if (playingId === id) {
+      playingId = null;
+      if (player) player.pause();
+      playNextAudio();
+    }
+  }
+
+  if (!audioSupported && !speechSupported) {
+    [armRadio, soundButton].forEach(function (button) {
+      if (!button) return;
+      button.disabled = true;
+      button.textContent = "PHONE SPEECH UNAVAILABLE";
+    });
+  } else {
+    [armRadio, soundButton].forEach(function (button) {
+      if (button) button.addEventListener("click", toggleSound);
+    });
+    if (player) {
+      player.addEventListener("ended", finishAudio);
+      player.addEventListener("error", finishAudio);
+    }
+    updateSoundButtons();
+  }
+
   function phoneCall(c) {
-    if (!phoneSpeech || !c || !c.id || spokenIds[c.id]) return;
+    if (!soundOn || serverAudio || !utteranceSupported || !c || !c.id || spokenIds[c.id]) return;
     spokenIds[c.id] = true;
     if (Object.keys(spokenIds).length > 200) spokenIds = {};
-    if (c.priority === 1) speechSynthesis.cancel();
-    var utterance = new SpeechSynthesisUtterance(c.text);
+    if (c.priority === 1) window.speechSynthesis.cancel();
+    var utterance = new window.SpeechSynthesisUtterance(c.text);
     utterance.rate = 1.15;
-    speechSynthesis.speak(utterance);
+    window.speechSynthesis.speak(utterance);
   }
   var calls = []; // {id, seq, t, priority, text, lap, audio}
   var clockOffset = 0; // server epoch seconds - local epoch seconds
@@ -1299,6 +1450,8 @@
     if (typeof m.t === "number") clockOffset = m.t - Date.now() / 1000;
     var p = m.payload;
     if (m.type === "hello") {
+      cancelledIds = {};
+      serverAudio = !!(p && p.audio);
       if (p && p.review) {
         document.body.classList.add("review");
         if (window.pitwallReviewInit) window.pitwallReviewInit();
@@ -1318,8 +1471,13 @@
         if (calls.length > MAX_CALLS) calls = calls.slice(-MAX_CALLS);
       }
       phoneCall(p);
+    } else if (m.type === "audio") {
+      queueAudio(p);
     } else if (m.type === "cancel") {
-      if (phoneSpeech && spokenIds[p.id]) speechSynthesis.cancel();
+      cancelAudio(p.id);
+      if (soundOn && !serverAudio && spokenIds[p.id] && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       calls.forEach(function (c) {
         if (c.id === p.id) c.audio = heard(c) ? "interrupted" : "dropped";
       });
@@ -1347,10 +1505,15 @@
     ws.onopen = function () {
       backoff = 500;
       ws.send(JSON.stringify({ type: "hello", v: 1, last_seq: lastSeq }));
+      if (soundOn) sendCtl({ type: "audio", on: true });
     };
     ws.onmessage = function (ev) { onFrame(JSON.parse(ev.data)); };
     ws.onclose = function (ev) {
       lastFrameAt = null;
+      if (ev.code === 4003) {
+        location.replace("/pin?next=" + encodeURIComponent(location.pathname + location.search));
+        return;
+      }
       if (ev.code === 4001) { showMismatch(); return; }
       render();
       if (!mismatched) setTimeout(connect, backoff = Math.min(backoff * 2, 5000));

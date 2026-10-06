@@ -326,7 +326,7 @@ def test_debrief_renders_stored_setup_recommendations_and_empty_state() -> None:
     db.insert_setup_rec(rec, track_id=7, compound=17, lap=3)
 
     report = render_debrief(db, uid, settings)
-    assert "<h3>Setup</h3>" in report
+    assert "<h3>SETUP</h3>" in report
     assert "<td>brake_bias</td>" in report
     assert "56 → 57" in report
     assert "Would suggest rear_anti_roll_bar (entry_instability), locked by parc fermé." in report
