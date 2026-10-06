@@ -79,10 +79,11 @@ static assets; live telemetry still requires a connection to the PC.
 
 ## After a session
 
-Nothing is required after a live session. Pitwall grades it when it ends. On the next
-`pitwall start`, automatic upkeep grades any remaining sessions, rebuilds stint priors
-once per learning version, and moves bad learned values to SQLite quarantine with a
-reason such as `unknown_track` or `deg_clamped`. `pitwall doctor` reports the quarantine
+Nothing is required after a live session. Pitwall grades it when it ends. Then
+automatic upkeep runs on the next `pitwall start`. It grades any remaining sessions and
+rebuilds stint priors once per learning version. It moves bad learned values to SQLite
+quarantine with a reason such as `unknown_track` or `deg_clamped`. It also refits track
+priors and adjusts rule cooldowns. `pitwall doctor` reports the quarantine
 count.
 
 These commands are optional:
@@ -91,7 +92,7 @@ These commands are optional:
 |---|---|
 | `pitwall debrief --session latest` | Export a session review as HTML |
 | `pitwall stats --learned` | Show learned values and their sources |
-| `pitwall calibrate` | Fit track values from stored sessions |
+| `pitwall calibrate` | Fit track values now (upkeep also runs this fit) |
 | `pitwall evaluate` | Compare calls-on and calls-off sessions |
 | `pitwall propose` | Write threshold candidates for review |
 | `pitwall maintain` | Run upkeep now |

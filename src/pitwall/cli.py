@@ -754,7 +754,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         from pitwall.maintenance import maintain
 
         try:
-            print(f"learning: {maintain(db, settings.thresholds).summary()}", flush=True)
+            print(f"learning: {maintain(db, settings).summary()}", flush=True)
         except sqlite3.Error as e:
             print(f"learning: upkeep skipped ({e})", flush=True)
     dlog = DecisionLog(
@@ -1064,7 +1064,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_maintain(args: argparse.Namespace) -> int:
-    """Quarantine bad learned values, rebuild stint priors, grade sessions."""
+    """Quarantine bad learned values, rebuild stint priors, grade sessions,
+    refit track priors and rule cooldowns."""
     from pitwall.maintenance import maintain
     from pitwall.store.db import Database, open_configured
 
@@ -1073,7 +1074,7 @@ def cmd_maintain(args: argparse.Namespace) -> int:
     if db is None:
         print("maintain: persistence disabled")
         return 1
-    report = maintain(db, settings.thresholds)
+    report = maintain(db, settings)
     print(f"database: {db.path}")
     for line in report.quarantined:
         print(f"  quarantined {line}")
