@@ -70,6 +70,7 @@ p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
 .cols-2 { grid-template-columns:1fr 1fr; }
 .cols-3 { grid-template-columns:repeat(3,1fr); }
 .cols-4 { grid-template-columns:repeat(4,1fr); }
+.row.stint-row { align-items:start; }
 .card {
   background:var(--panel); border:1px solid var(--line); border-radius:.35rem;
   padding:.9rem 1rem; min-width:0;
@@ -116,7 +117,7 @@ header.session .meta b { color:var(--fg); font-weight:normal; }
 .badge { font-size:.7rem; letter-spacing:.12em; padding:.1rem .5rem; border-radius:.25rem; }
 .badge.det { background:#173a25; color:var(--ok); }
 svg { display:block; width:100%; height:auto; }
-.axis { stroke:var(--faint); stroke-width:1; }
+.axis { fill:none; stroke:var(--faint); stroke-width:1; }
 .grid { stroke:var(--line); stroke-width:1; }
 .lbl { fill:var(--dim); font-family:var(--mono); font-size:11px; }
 .lbl.b { fill:var(--fg); }
@@ -136,6 +137,7 @@ svg { display:block; width:100%; height:auto; }
 .stint rect.hard { fill:var(--hard); }
 .stint rect.inter { fill:var(--inter); } .stint rect.wet { fill:var(--wet); }
 .stint rect.alt { opacity:.35; }
+.stint .lbl { fill:var(--bg); }
 .trace { fill:none; stroke-width:1.5; }
 .trace.me { stroke:var(--ok); stroke-width:2.2; }
 .scroll { overflow-x:auto; }
@@ -517,7 +519,7 @@ def _stint_bars(laps: list[LapRow], stints: list[StintRow]) -> str:
         parts.append(
             f"<g class='stint'><rect class='{_esc(css_class)}' x='{start_x:.1f}' "
             f"y='12' width='{max(2, end_x - start_x - 2):.1f}' height='24' rx='2'/>"
-            f"<text x='{start_x + 5:.1f}' y='28' fill='#000' class='lbl'>"
+            f"<text x='{start_x + 5:.1f}' y='28' class='lbl'>"
             f"{_esc(f'{word} {stint.start_lap}–{stint.end_lap}')}</text></g>"
         )
     parts.append("</svg>")
@@ -677,6 +679,7 @@ def _summary_section(
     mean = _lap_time(round(statistics.fmean(lap.lap_time_ms for lap in clean))) if clean else "—"
     spread = f"{statistics.pstdev(lap.lap_time_ms for lap in clean) / 1000:.1f} s" if clean else "—"
     pit_laps = _pit_laps(pits, stints)
+    stop_count = len(pit_laps)
     pit = next((event for event in pits if event.lap_num), None)
     if pit is not None:
         pit_value = f"L{pit.lap_num} · {pit.loss_ms / 1000:.1f} s"
@@ -688,7 +691,8 @@ def _summary_section(
         pit_value = "none"
         pit_note = "no pit stop recorded"
     summary_text = (
-        f"{len(laps)} laps · {len(clean)} clean green laps · {len(pits)} stops · "
+        f"{len(laps)} laps · {len(clean)} clean green laps · {stop_count} "
+        f"{'stop' if stop_count == 1 else 'stops'} · "
         f"{len(fired)} calls · {judged['good']} graded good · {judged['wrong']} graded wrong. "
         f"Mean clean pace {mean}, spread {spread}."
     )
@@ -711,11 +715,12 @@ def _summary_section(
             f"{_esc(value)}</b><small>{_esc(note)}</small></div>"
         )
     table = _table(
-        ("Track", "Session", "Calls mode", "Recording"),
+        ("Track", "Track name", "Session", "Calls mode", "Recording"),
         [
             (
                 session.get("track_id") if session.get("track_id") is not None else "—",
-                session.get("session_type") or "—",
+                _track_name(session.get("track_id")),
+                session.get("session_type") if session.get("session_type") is not None else "—",
                 session.get("calls_mode") or "unknown",
                 session.get("recording_path") or "not linked",
             )
@@ -787,7 +792,7 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pits: list[PitEven
     )
     content = (
         chart
-        + "<div class='row cols-2'>"
+        + "<div class='row cols-2 stint-row'>"
         + stint_chart
         + trace_chart
         + "</div><div class='row cols-2'>"
@@ -857,9 +862,24 @@ def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
     return _section("tyres", "03", "Tyres", card)
 
 
+def _hindsight(automatic: list[dict[str, Any]] | None) -> str:
+    if not automatic:
+        return "—"
+    parts = []
+    for item in automatic:
+        metric = str(item.get("metric") or "").strip()
+        label = str(item.get("label") or "").strip()
+        if metric and label:
+            parts.append(f"{metric}: {label}")
+        elif metric or label:
+            parts.append(metric or label)
+    return " · ".join(parts) or "—"
+
+
 def _strategy_section(
     calls: list[dict[str, Any]],
     pits: list[PitEventRow],
+    stints: list[StintRow],
     grades: dict[str, dict[str, Any]],
     outcomes: dict[str, list[dict[str, Any]]],
 ) -> str:
@@ -886,7 +906,7 @@ def _strategy_section(
                     rule_id,
                     call.get("text") or "",
                     _verdict(verdict),
-                    json.dumps(automatic, sort_keys=True, default=str),
+                    _hindsight(automatic),
                 )
             )
     strategy = _card(
@@ -897,17 +917,25 @@ def _strategy_section(
             "calls, call_grades, outcomes",
         ),
     )
-    pit = _card(
-        "PIT STOPS",
-        _table(
+    if pits:
+        pit_content = _table(
             ("Pit lap", "Loss (s)", "Neutralised"),
             [
                 (event.lap_num, f"{event.loss_ms / 1000:.1f}", bool(event.neutralised))
                 for event in pits
             ],
             "pit_events",
-        ),
-    )
+        )
+    else:
+        pit_laps = _pit_laps(pits, stints)
+        if pit_laps:
+            labels = ", ".join(f"L{lap}" for lap in pit_laps)
+            change = "change" if len(pit_laps) == 1 else "changes"
+            empty_message = f"No pit events stored. Stint {change} on {labels}."
+        else:
+            empty_message = "No pit stops."
+        pit_content = f"<p>{_esc(empty_message)}</p>"
+    pit = _card("PIT STOPS", pit_content, "pit_events")
     return _section("strategy", "04", "Strategy calls", strategy + pit)
 
 
@@ -1073,16 +1101,16 @@ def _incidents_section(laps: list[LapRow]) -> str:
     rows = [
         (
             lap.lap_num,
-            f"{lap.ers_deployed_j:.0f}",
+            f"{lap.ers_deployed_j / 1_000_000:.1f}",
             f"{lap.fuel_kg:.1f}",
-            lap.sc_status,
+            {0: "green", 1: "SC", 2: "VSC", 3: "formation"}.get(lap.sc_status, lap.sc_status),
         )
         for lap in laps
     ]
     card = _card(
         "INCIDENTS AND ENERGY",
         _table(
-            ("Lap", "ERS deployed (J)", "Fuel (kg)", "SC status"),
+            ("Lap", "ERS deployed (MJ)", "Fuel (kg)", "SC status"),
             rows,
             "laps; raw event details require the recording index",
         ),
@@ -1188,7 +1216,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + _pace_section(laps, stints, pits)
         + _sector_section(laps)
         + _tyres_section(laps, settings)
-        + _strategy_section(calls, pits, grades, outcomes)
+        + _strategy_section(calls, pits, stints, grades, outcomes)
         + _radio_section(calls, laps, pits, stints, grades, outcomes, inputs, editable=editable)
         + _incidents_section(laps)
         + _actions_section(db, settings, session, grades)

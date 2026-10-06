@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
-from pitwall.debrief import render_debrief, rules_version
+from pitwall.debrief import _hindsight, render_debrief, rules_version
 from pitwall.metrics import Metrics
 from pitwall.model.deg import DegFit
 from pitwall.server.app import create_app
@@ -17,11 +17,17 @@ from pitwall.store.db import Database
 
 def test_debrief_preserves_track_zero_and_its_learning() -> None:
     db = Database(":memory:")
-    db.upsert_session(1, track_id=0, session_type=15)
+    db.upsert_session(1, track_id=0, session_type=0)
     db.set_param(0, 17, "deg_ms_per_lap", 123.4, 5)
     report = render_debrief(db, 1, ConfigStore().current())
-    assert "<td>0</td>" in report
+    summary = report.split("<section id='summary'", 1)[1].split("</section>", 1)[0]
+    assert summary.count("<td>0</td>") == 2
     assert "123.4" in report
+
+
+def test_debrief_empty_hindsight() -> None:
+    assert _hindsight(None) == "—"
+    assert _hindsight([]) == "—"
 
 
 def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> None:
@@ -65,9 +71,17 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
                 "label": "wrong",
                 "error": 3.0,
                 "detail": "Pit loss exceeded plan",
-            }
+            },
+            {
+                "call_id": "c1",
+                "rule_id": "box_now",
+                "lap": 2,
+                "metric": "<b>kind</b>",
+                "label": "<img>",
+            },
         ],
     )
+    db.insert_pit_event(140, 0, 2, 5000, 0, 30000, 90000, 92000, 91000)
     db.grade_call(140, "c1", "box_now", "noise")
     settings = ConfigStore().current()
 
@@ -86,8 +100,10 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
         )
     )
     assert "Box now" in result and "Pit loss exceeded plan" in result
+    assert "stop_cost_s: wrong · &lt;b&gt;kind&lt;/b&gt;: &lt;img&gt;" in result
     assert "cooldown" in result and "noise" in result
     assert "&lt;script&gt;" in result and "<script>alert(1)</script>" not in result
+    assert "<th scope='col'>Pit lap</th>" in result
     assert (
         main(
             [
@@ -174,7 +190,8 @@ def test_debrief_layout_hooks() -> None:
                 lap_num not in (3, 5),
                 ["pitted"] if lap_num == 3 else [],
                 fuel_kg=5.0,
-                sc_status=1 if lap_num == 5 else 0,
+                ers_deployed_j=5_189_100 if lap_num == 1 else 0.0,
+                sc_status={2: 1, 3: 2, 4: 3, 5: 4}.get(lap_num, 0),
                 visual=visual,
             ),
         )
@@ -230,12 +247,27 @@ def test_debrief_layout_hooks() -> None:
     assert f"rules {rules_version(settings)}" in report
     assert "mindset aggressive" in report
     assert "BRAZIL · RACE · 6 LAPS" in report
+    assert "2 clean green laps · 1 stop" in report
+    assert "No pit events stored. Stint change on L3." in report
+    assert "<th scope='col'>Track name</th>" in report
+    assert "<td>Brazil</td>" in report
+    strategy_section = report.split("<section id='strategy'", 1)[1].split("</section>", 1)[0]
+    assert "<td>[]</td>" not in strategy_section
     assert "class='pt hard'" in report
     assert "class='pt med'" in report
     assert "class='pt inv'" in report
     assert "class='fit hard'" in report
     assert "class='band'" in report
     assert "class='pitline'" in report
+    axis_rule = re.search(r"\.axis \{([^}]*)\}", report)
+    assert axis_rule and "fill:none" in axis_rule.group(1)
+    assert ".stint .lbl { fill:var(--bg); }" in report
+    assert "class='row cols-2 stint-row'" in report
+    incidents_section = report.split("<section id='incidents'", 1)[1].split("</section>", 1)[0]
+    assert "ERS deployed (MJ)" in incidents_section
+    assert "<td>5.2</td>" in incidents_section
+    for status in ("green", "SC", "VSC", "formation", "4"):
+        assert f"<td>{status}</td>" in incidents_section
     lap_y = {
         int(lap_num): float(y)
         for y, lap_num in re.findall(
