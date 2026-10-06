@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -23,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Fast tests
-        run: uv run pytest -m "not slow" -n auto
+        run: uv run pytest -m "not slow" -n auto --dist loadfile
       - name: Replay determinism (max vs 10x)
         run: >-
           uv run pytest
@@ -37,4 +38,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Full test suite
-        run: uv run pytest -n auto
+        run: uv run pytest -n auto --dist loadfile
