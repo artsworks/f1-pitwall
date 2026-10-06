@@ -17,6 +17,18 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
+GAP_TOLERANCE_S = 3.0
+
+
+def gap_plausible(gap_ms: int, dist_m: float, speed_mps: float) -> bool:
+    """True if a game time gap agrees with the on-track distance between the two cars."""
+    if gap_ms <= 0:
+        return False
+    if speed_mps <= 0:
+        return True
+    est = max(0.0, dist_m) / speed_mps
+    return abs(gap_ms / 1000.0 - est) <= max(GAP_TOLERANCE_S, 0.5 * est)
+
 
 class RacePhase:
     """Race-session phase machine. `phase` is the current state; `sc_laps`
@@ -139,6 +151,7 @@ def relevant_rivals(
     player_idx: int,
     gap_behind_max_s: float,
     pit_exit_projection: tuple[float, float, float],
+    ref_speed_mps: float = 0.0,
 ) -> tuple[int, int, int]:
     """(ahead, behind, pit_exit) car indices; -1 = none.
 
@@ -154,6 +167,7 @@ def relevant_rivals(
         return ahead, behind, pit_exit
     player = cars[player_idx]
     pos = getattr(player, "car_position", 0)
+    track_m = pit_exit_projection[1]
     for i, c in enumerate(cars):
         if i == player_idx:
             continue
@@ -163,10 +177,36 @@ def relevant_rivals(
             ahead = i
         elif getattr(c, "car_position", 0) == pos + 1:
             behind = i
+    if ahead >= 0:
+        candidate = cars[ahead]
+        player_distance = getattr(player, "total_distance", None)
+        candidate_distance = getattr(candidate, "total_distance", None)
+        if getattr(candidate, "pit_status", 0) != 0 or (
+            player_distance is not None
+            and candidate_distance is not None
+            and not gap_plausible(
+                getattr(player, "delta_to_car_in_front_ms", 0),
+                candidate_distance - player_distance,
+                ref_speed_mps,
+            )
+        ):
+            ahead = -1
     if behind >= 0:
-        gap_ms = getattr(cars[behind], "delta_to_car_in_front_ms", 0)
+        candidate = cars[behind]
+        gap_ms = getattr(candidate, "delta_to_car_in_front_ms", 0)
         if gap_ms <= 0 or gap_ms / 1000.0 > gap_behind_max_s:
             behind = -1
+        elif getattr(candidate, "pit_status", 0) != 0:
+            behind = -1
+        else:
+            player_distance = getattr(player, "total_distance", None)
+            candidate_distance = getattr(candidate, "total_distance", None)
+            if player_distance is not None and candidate_distance is not None:
+                distance = player_distance - candidate_distance
+                if (track_m > 0 and distance >= track_m) or not gap_plausible(
+                    gap_ms, distance, ref_speed_mps
+                ):
+                    behind = -1
 
     d_player, track_m, metres_lost = pit_exit_projection
     if track_m > 0:
@@ -185,7 +225,7 @@ def relevant_rivals(
 
 
 def penalty_standing(
-    cars: Sequence[Any], player_idx: int, track_m: float
+    cars: Sequence[Any], player_idx: int, track_m: float, speed_mps: float = 0.0
 ) -> tuple[int, float, int]:
     """(position once time penalties are applied, margin in seconds over the
     first car on the road behind that the penalties bring closest, its index).
@@ -209,12 +249,23 @@ def penalty_standing(
             if getattr(c, "car_position", 0) > 0 and getattr(c, "result_status", 0) in (2, 3)
         )
     )
+    leader = next((cars[i] for p, i in road if p == 1), me)
     total: dict[int, float] = {}
     for p, i in road:
         c = cars[i]
         if p > pos and me.total_distance - c.total_distance >= track_m:
-            break
-        total[i] = (max(0, c.delta_to_race_leader_ms) / 1000.0 if p > 1 else 0.0) + c.penalties
+            continue
+        if p == 1:
+            race_time = 0.0
+        else:
+            dist = leader.total_distance - c.total_distance
+            if gap_plausible(c.delta_to_race_leader_ms, dist, speed_mps):
+                race_time = c.delta_to_race_leader_ms / 1000.0
+            elif speed_mps > 0:
+                race_time = max(0.0, dist) / speed_mps
+            else:
+                race_time = max(0, c.delta_to_race_leader_ms) / 1000.0
+        total[i] = race_time + c.penalties
     if player_idx not in total or not any(cars[i].penalties for i in total):
         return pos, math.inf, -1
     mine = (total[player_idx], pos)

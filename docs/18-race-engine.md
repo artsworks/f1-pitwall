@@ -306,6 +306,8 @@ rival_ahead_pace_ms, rival_behind_pace_ms, rival_pit_exit_pace_ms: int
 rival_ahead_name, rival_behind_name, rival_pit_exit_name: str
 rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
+rival_ahead_in_pit_lane: bool                  # the validated car ahead is in the pit lane now
+# The latched car keeps its pre-pit gap while it stops.
 rival_data_restricted: bool         # rival Car Status/Damage fields all zero for >= th.restricted_detect_laps
 pit_exit_rival_gap_s: float         # projected gap to rival_pit_exit_idx at pit exit (positive = rival ahead)
 pit_exit_clean: bool                # release_window() at pit exit with the race gap threshold
@@ -466,7 +468,7 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `corner_cut_warning` / `corner_cut_last_warning` | 2/1 | corner-cut warning (PENA 7), counted separately from running wide |
 | `penalty_corner_cut` | 1 | time penalty for a corner cut (infringement 7–9) |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
-| `rival_pitted` | 2 | `rival_ahead_pitted or rival_behind_pitted`; the behind call waits until our own tyres are 2 laps old, so it never announces cars that stopped alongside us |
+| `rival_pitted` | 2 | `rival_ahead_in_pit_lane or rival_behind_pitted`; the behind call waits until our own tyres are 2 laps old, so it never announces cars that stopped alongside us |
 | `weather_crossover` | 2 | `weather_crossover != ''` |
 | `sc_deployed` / `vsc_deployed` / `sc_ending` | 1 | phase transitions |
 | `lights_out` | 3 | LGOT: "laps_remaining, fuel margin, plan" |

@@ -356,6 +356,7 @@ class Snapshot:
     rival_ahead_age: int = 0
     rival_behind_age: int = 0
     rival_ahead_pitted: bool = False
+    rival_ahead_in_pit_lane: bool = False
     rival_behind_pitted: bool = False
     rival_ahead_pos: int = 0
     rival_behind_pos: int = 0
@@ -598,6 +599,22 @@ class Snapshot:
         return max(0, self.penalty_position - self.position) if self.penalty_position else 0
 
     @property
+    def classified_position(self) -> int:
+        return self.penalty_position if self.penalty_position > 0 else self.position
+
+    @property
+    def classified_gained(self) -> int:
+        return (
+            self.grid_position - self.classified_position
+            if self.grid_position and self.classified_position
+            else 0
+        )
+
+    @property
+    def classified_lost(self) -> int:
+        return max(0, -self.classified_gained)
+
+    @property
     def penalty_need_s(self) -> float:
         return max(0.0, -self.penalty_margin_s) if math.isfinite(self.penalty_margin_s) else 0.0
 
@@ -758,6 +775,7 @@ class SessionState:
         # (rival idx, gap s) now / at the last two line crossings, for gap trends.
         self._gap_now: dict[str, tuple[int, float]] = {}
         self._gap_lines: list[dict[str, tuple[int, float]]] = []
+        self._ahead_latch: tuple[int, float] = (-1, math.inf)
         self.cars_damage: tuple[Any, ...] | None = None
 
         # M2 packet state
@@ -951,6 +969,9 @@ class SessionState:
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
+        self._gap_now = {}
+        self._gap_lines = []
+        self._ahead_latch = (-1, math.inf)
         self._straight_since = None
         for cb in self.rewind_listeners:
             cb(t)
@@ -1860,9 +1881,12 @@ class SessionState:
             laps_remaining=laps_remaining,
             lights_out=self.lights_out,
             chequered=self.chequered,
-            gap_ahead_s=self.delta_to_car_in_front_ms / 1000.0
-            if self.delta_to_car_in_front_ms > 0
-            else math.inf,
+            gap_ahead_s=race.pop(
+                "gap_ahead_s",
+                self.delta_to_car_in_front_ms / 1000.0
+                if self.delta_to_car_in_front_ms > 0
+                else math.inf,
+            ),
             blister_max_pct=self.blister_max_pct,
             wear_hot_corner=self.wear_hot_corner,
             wear_hot_ratio=self.wear_hot_ratio,
@@ -2206,6 +2230,11 @@ class SessionState:
             positions_gained=(
                 self.grid_position - self.position if self.grid_position and self.position else 0
             ),
+            gap_ahead_s=(
+                self.delta_to_car_in_front_ms / 1000.0
+                if kind != "race" and self.delta_to_car_in_front_ms > 0
+                else math.inf
+            ),
             sc_ending=self.sc_ending and self.race_phase in ("sc", "vsc"),
             **self._fastest_lap_view(st, field_best),
             neutral_ended_s=max(0.0, (self._last_session_time or 0.0) - self._race.neutral_end_t),
@@ -2275,15 +2304,37 @@ class SessionState:
         # fallback); pit-exit rival projected by the docs/03 formula.
         own = [lap.lap_time_ms for lap in self.laps if lap.valid and lap.lap_time_ms > 0]
         pace_ms = int(median(own[-3:])) if own else self._best_laps.get(self._player_idx, 0)
+        ref_speed = (
+            self.track_length_m / (pace_ms / 1000.0)
+            if pace_ms > 0
+            else self.track_length_m / self._th("release_fallback_lap_s", 95.0)
+        )
         pit_s = model.pit_loss_s if model.pit_loss_s > 0 else self._th("pit_loss_default_s", 22.0)
         metres_lost = self.track_length_m * pit_s / (pace_ms / 1000.0) if pace_ms > 0 else math.inf
-        pen_pos, pen_margin, pen_i = penalty_standing(cars, self._player_idx, self.track_length_m)
+        pen_pos, pen_margin, pen_i = penalty_standing(
+            cars, self._player_idx, self.track_length_m, speed_mps=ref_speed
+        )
         ahead_i, behind_i, exit_i = relevant_rivals(
             cars,
             self._player_idx,
             math.inf,
             (self.lap_distance, self.track_length_m, metres_lost),
+            ref_speed_mps=ref_speed,
         )
+        if ahead_i >= 0:
+            gap_ahead = self.delta_to_car_in_front_ms / 1000.0
+            self._ahead_latch = (ahead_i, gap_ahead)
+        else:
+            latch_i, latch_gap = self._ahead_latch
+            if (
+                0 <= latch_i < len(cars)
+                and cars[latch_i].pit_status != 0
+                and 0 < cars[latch_i].car_position < self.position
+            ):
+                ahead_i, gap_ahead = latch_i, latch_gap
+            else:
+                self._ahead_latch = (-1, math.inf)
+                gap_ahead = math.inf
         # gap_behind = the car behind's delta to the car in front of it (us).
         gap_behind = math.inf
         if behind_i >= 0:
@@ -2323,11 +2374,11 @@ class SessionState:
             exit_gap = (
                 fwd / v if fwd <= self.track_length_m / 2 else -((self.track_length_m - fwd) / v)
             )
-        d_ahead = self.delta_to_car_in_front_ms
         self._gap_now = {
-            "ahead": (ahead_i, d_ahead / 1000.0 if d_ahead > 0 else math.inf),
+            "ahead": (ahead_i, gap_ahead),
             "behind": (behind_i, gap_behind),
         }
+        base["gap_ahead_s"] = gap_ahead
 
         def trend(side: str, idx: int) -> float:
             if len(self._gap_lines) < 2 or idx < 0:
@@ -2368,9 +2419,10 @@ class SessionState:
             rival_ahead_age=self._rival_age(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_age=self._rival_age(behind_i) if behind_i >= 0 else 0,
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
+            rival_ahead_in_pit_lane=ahead_i >= 0 and cars[ahead_i].pit_status != 0,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             pit_exit_rival_gap_s=exit_gap,
-            **self._teammate_view(ahead_i, behind_i, gap_behind, name_of),
+            **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
             slick_gain_s=slick_gain,
             inter_gain_s=inter_gain,
             tyre_switch_to=self._tyre_switch(slick_gain, inter_gain),
@@ -2388,14 +2440,19 @@ class SessionState:
         return base
 
     def _teammate_view(
-        self, ahead_i: int, behind_i: int, gap_behind: float, name_of: Callable[[int], str]
+        self,
+        ahead_i: int,
+        behind_i: int,
+        gap_ahead: float,
+        gap_behind: float,
+        name_of: Callable[[int], str],
     ) -> dict[str, Any]:
         mate = self._teammate()
         if mate < 0:
             return {}
         gap = math.inf
-        if mate == ahead_i and self.delta_to_car_in_front_ms > 0:
-            gap = self.delta_to_car_in_front_ms / 1000.0
+        if mate == ahead_i:
+            gap = gap_ahead
         elif mate == behind_i:
             gap = gap_behind
         return dict(
