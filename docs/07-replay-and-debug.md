@@ -60,9 +60,10 @@ Raw recording is not the only artefact. Alongside it:
 Replay drives the **same ingest entry point** as the live socket. The only difference is
 the source object and the clock. Everything time-dependent — EMAs, cooldowns, deadlines,
 budgets — reads a `Clock`, which is wall-clock live and virtual in replay, so a 10×
-replay produces byte-identical decisions to the 1× one. That determinism is the whole
-point; if it ever breaks, the tests stop meaning anything, so there is a CI check that
-replays a fixture at 1× and at max and diffs the call streams.
+replay produces the same decisions as a replay at max speed. That determinism is the whole
+point; if it ever breaks, the tests stop meaning anything. On every pull request, CI runs
+`test_deterministic_across_speeds` and `test_replay_deterministic_across_speeds`. They replay
+a synthetic recording at 10× and at max speed and diff the decision logs.
 
 ## Review mode (the part that makes it useful for a human)
 

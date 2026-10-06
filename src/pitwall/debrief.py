@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import statistics
+import time
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any
@@ -13,6 +14,17 @@ from pitwall.config.models import Settings
 from pitwall.learned import learned_state
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, StintRow
+
+_STYLE = (
+    "<style>:root{color-scheme:dark}body{background:#111821;color:#e4eaf2;"
+    "font:16px/1.5 system-ui;max-width:1000px;margin:auto;padding:1.5rem}"
+    "a{color:#94d9cf}section{border-top:1px solid #445064;padding:1rem 0}"
+    "article{border-left:3px solid #3fbf9c;padding:.1rem 1rem;margin:.8rem 0}"
+    ".scroll{overflow-x:auto}table{border-collapse:collapse;width:100%}"
+    "td,th{border-bottom:1px solid #445064;padding:.55rem;text-align:left}"
+    "svg{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}"
+    "small{color:#abb8c8}details{margin:1rem 0}</style>"
+)
 
 
 def _esc(value: object) -> str:
@@ -354,14 +366,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>Session {_esc(uid)} · Pitwall debrief</title>"
-        "<style>:root{color-scheme:dark}body{background:#111821;color:#e4eaf2;"
-        "font:16px/1.5 system-ui;max-width:1000px;margin:auto;padding:1.5rem}"
-        "a{color:#94d9cf}section{border-top:1px solid #445064;padding:1rem 0}"
-        "article{border-left:3px solid #3fbf9c;padding:.1rem 1rem;margin:.8rem 0}"
-        ".scroll{overflow-x:auto}table{border-collapse:collapse;width:100%}"
-        "td,th{border-bottom:1px solid #445064;padding:.55rem;text-align:left}"
-        "svg{width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}"
-        "small{color:#abb8c8}details{margin:1rem 0}</style></head><body>"
+        f"{_STYLE}</head><body>"
         f"<header><h1>Session {_esc(uid)} debrief</h1>"
         f"<p>Track {_esc(session.get('track_id') or '—')} · "
         f"{_esc(recording or 'No recording linked')}</p>"
@@ -383,4 +388,42 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + "".join(sections)
         + grade_script
         + "</body></html>"
+    )
+
+
+def render_debrief_index(db: Database, *, limit: int = 100) -> str:
+    """HTML list of stored sessions, newest first, each linking to its debrief."""
+    rows = db.sessions()[::-1][:limit]
+    body = "".join(
+        "<tr>"
+        f"<td><a href='/debrief/{int(row['uid'])}'>{_esc(row['uid'])}</a></td>"
+        + _cell(
+            time.strftime("%Y-%m-%d %H:%M", time.localtime(row["started_at"]))
+            if row.get("started_at")
+            else "—"
+        )
+        + _cell(row["track_id"] if row.get("track_id") is not None else "—")
+        + _cell(row.get("session_type") if row.get("session_type") is not None else "—")
+        + _cell(len(db.laps_for(int(row["uid"]))))
+        + _cell(row.get("recording_path") or "not linked")
+        + "</tr>"
+        for row in rows
+    )
+    head = "".join(
+        f"<th scope='col'>{label}</th>"
+        for label in ("Session", "Start", "Track", "Type", "Laps", "Recording")
+    )
+    table = (
+        f"<div class='scroll'><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody>"
+        "</table></div>"
+        if rows
+        else "<p>No sessions stored yet.</p>"
+    )
+    return (
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>Sessions · Pitwall debrief</title>{_STYLE}</head><body>"
+        "<header><h1>Sessions</h1><p>Newest first. "
+        "<a href='/debrief/latest'>Open the latest debrief</a>.</p></header>"
+        f"{table}</body></html>"
     )

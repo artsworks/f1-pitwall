@@ -83,7 +83,7 @@ Upkeep never writes threshold YAML. A watchdog restart during a session skips th
 and cooldown steps, so priors do not move mid-race.
 
 Upkeep is idempotent. A second run with no new data changes nothing. Database errors are
-logged and skipped. Run upkeep manually with `pitwall maintain`. To skip the refit and
+logged and skipped. To run upkeep again, restart `pitwall start`. To skip the refit and
 cooldown steps, set `learning.auto_calibrate: false`.
 
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
@@ -104,7 +104,9 @@ run the same steps as upkeep on demand. `pitwall tune` also folds A/B results fr
 
 No command is required. Pitwall grades the session when it ends. On the next start,
 upkeep refits pace, tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns.
-Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
-threshold YAML changes that `pitwall propose` writes. Rule thresholds never change
-without your review. Use `pitwall stats --learned` to inspect learned values. Use `pitwall digest`
+Two steps stay manual by design: grading calls and applying the threshold YAML changes
+that `pitwall propose` writes. Open `/debrief` to pick a session (`/debrief/latest` for
+the newest) and grade its calls. `pitwall sessions` lists the same sessions in the
+terminal. Rule thresholds never change without your review. Use `pitwall stats --learned`
+to inspect learned values. Use `pitwall digest`
 only when you want digest JSON or need to ingest external recordings.

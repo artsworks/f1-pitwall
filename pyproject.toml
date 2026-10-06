@@ -27,6 +27,7 @@ pitwall = "pitwall.cli:main"
 dev = [
     "httpx",
     "pytest",
+    "pytest-xdist",
     "ruff",
     "mypy",
     "types-PyYAML",
@@ -49,3 +50,7 @@ mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: replay-heavy or long-running tests",
+    "replay: tests that replay recorded fixtures",
+]

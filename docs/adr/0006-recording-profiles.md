@@ -49,7 +49,7 @@ Observations:
   rotated sessions in a background thread, the last one synchronously on exit.
 - `pitwall trim FILE --profile lite --out X` downsamples an existing full
   recording.
-- `pitwall record` (the dedicated capture tool) defaults to `full`.
+- `pitwall record` (the dedicated capture tool) defaulted to `full`. It was later removed; use `pitwall start --record full`.
 
 Verified: the first live recording trimmed to lite (13,057 datagrams, 0.98 MB
 zstd) and minimal (7,002 datagrams, 0.68 MB zstd) both replay to the same

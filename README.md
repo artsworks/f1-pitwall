@@ -24,10 +24,10 @@ cd f1-pitwall
 uv sync                      # creates .venv with Python 3.12 and all dependencies
 
 # 3. Optional: natural voice (~60 MB download into voices/, git-ignored)
-uv run pitwall voices get
+uv run pitwall voice get
 
 # 4. Check the setup, then run
-uv run pitwall speak         # radio check through your headset
+uv run pitwall voice say     # radio check through your headset
 uv run pitwall doctor        # ports, wire format, packet rate, speech
 uv run pitwall start         # engine + speech + dashboard
 ```
@@ -68,8 +68,8 @@ To update later: `git pull; uv sync`.
 | `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
 | `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
 | Dashboard says STALE | Run `uv run pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
-| No speech | `uv run pitwall speak` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
-| Robotic voice | `uv run pitwall voices get`, then restart `pitwall start`. |
+| No speech | `uv run pitwall voice say` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
+| Robotic voice | `uv run pitwall voice get`, then restart `pitwall start`. |
 
 More in [docs/getting-started.md](docs/getting-started.md).
 

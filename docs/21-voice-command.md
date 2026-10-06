@@ -539,6 +539,6 @@ Phase 3 — optional, only if asked for
 - **Not in the recording:** keyboard and Stream Deck routes go through the
   dashboard, as the Space route does today; the intent record is what makes replay
   complete, the press edge itself is not needed.
-- **Dependency:** `vosk` (and its model download via `pitwall voices get`-style command)
+- **Dependency:** `vosk` (and its model download via a `pitwall voice get`-style command)
   and `sounddevice` (PortAudio) are new; both ship Windows wheels. Neither is needed when
   `voice.enabled` is false; import lazily in the voice process only.
