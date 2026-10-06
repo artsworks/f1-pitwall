@@ -27,7 +27,14 @@ _Last updated: live qualifying review, 6 Oct 2026._
 ## Next
 
 - Record calls-off sessions for an on/off comparison (`speech.enabled: false` now silences the speaker and stamps `calls_mode: off`).
-- Tuning backlog from the 6 Oct qualifying review: `release_go` fires on garage entry and flip-flops with `release_hold`, `cool_hot_mode` after `quali_through`, cool-lap digest fires three lines at once, fuel-laps estimate one lap pessimistic, one-stop plan in a 5-lap race, energy under/over flip, wear and energy advice on the final lap.
+- Tuning backlog from the 6 Oct qualifying review:
+  - `release_go` fires on garage entry and flip-flops with `release_hold`.
+  - `cool_hot_mode` fires after `quali_through`.
+  - The cool-lap digest fires three lines at once.
+  - The fuel-laps estimate is one lap pessimistic.
+  - The race plan proposes one stop in a 5-lap race.
+  - Energy advice flips between under and over.
+  - Wear and energy advice fires on the final lap.
 - Add more races and check calibration convergence.
 
 ## Known gaps
