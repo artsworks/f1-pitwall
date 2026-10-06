@@ -2,7 +2,7 @@
 
 Design and implementation proposal for the "second product" parked as item 9 in
 `10-angles-not-yet-considered.md`: setup advice derived from stored tyre, wear and pace
-history, delivered in three phase-aware modes. **Status: proposal, no code.** Numbered 22
+history, delivered in three phase-aware modes. **Status: A1 to A4 implemented (PR #37). A5 not started.** Numbered 22
 because 17 is taken by `17-quali-run-plan.md`.
 
 Today the only setup advice is tyre pressure (`state/pressure.py`, core temperature vs a
@@ -128,7 +128,7 @@ scope):
 | Front wing | ✔ | — | ✔ | — | ✔ | request for stop | ✔ (requested value) |
 | Rear wing | ✔ | — | locked | — | locked | — | — |
 | On-throttle diff | ✔ | ✔ MFD | ✔ | ✔ MFD | ✔ | ✔ | — |
-| Off-throttle diff | ✔ | ? | locked | ? | locked | ✘ (S4, S16) | — |
+| Off-throttle diff | ✔ | ? | ✔ (R) | ? | locked | ✘ (S4, S16) | — |
 | Engine braking | ✔ | — | locked | — | locked | — | — |
 | Camber, toe | ✔ | — | locked | — | locked | — | — |
 | Springs, ARBs, ride height | ✔ | — | locked | — | locked | — | — |
@@ -136,6 +136,11 @@ scope):
 | Brake bias | ✔ | ✔ MFD | ✔ | ✔ MFD | ✔ | ✔ | — |
 | Tyre pressures | ✔ | — | ✔ | — | ✔ | — | unconfirmed |
 | Fuel load | ✔ | — | ✔ (quali fuel) | — | ✔ | — | — |
+
+A Q3 recording with `parc_ferme_rules = 1` shows off-throttle 30 → 25 in the garage after
+the Q1 out-laps, so the quali garage cell is ✔ (R). The Car Setups packet reported the
+change. The recording can't show whether the car ran with it. `setup_rules.yaml` holds this
+matrix, and its `quali_locked` list drives the pre-qualifying checklist.
 
 With `parc_ferme_rules = 0` every "locked" cell becomes ✔. "?" cells are never advised.
 Before the first qualifying out-lap the real-world rule leaves the car free; whether the
