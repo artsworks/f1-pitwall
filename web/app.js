@@ -177,6 +177,7 @@
     renderPage(p);
     renderStrategy(p.strategy, p.quali);
     renderDuel(p.strategy, p.quali);
+    renderQRail(p.quali, p);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
 
@@ -732,6 +733,92 @@
     }
   }
 
+
+  // Qualifying right column: cut-off, pole benchmark, phase, session. Additive;
+  // the pit board and cool-down takeovers still hide it.
+  var PHASE_WORDS = { out_lap: "OUT LAP", in_lap: "IN LAP", flying: "FLYING" };
+  function cutState(q) {
+    var m = q.margin_ms, has = m !== null && m !== undefined;
+    if (q.margin_kind === "pole") {
+      return has && m > 0 ? { pill: "POLE", cls: "ok" } : { pill: "P2+", cls: "warn" };
+    }
+    if (q.through || (has && m > 0)) return { pill: "THROUGH", cls: "ok" };
+    if (has) return { pill: "OUT", cls: "crit" };
+    return { pill: "--", cls: "" };
+  }
+  function gapClass(ms) {
+    if (!ms) return "";
+    return ms < 0 ? "gain" : ms <= 50 ? "ok" : "crit";
+  }
+  function setRow(id, vals, cls) {
+    var row = el(id);
+    if (!row) return;
+    var tds = row.querySelectorAll("td");
+    for (var i = 0; i < 3; i++) {
+      tds[i].textContent = vals[i];
+      tds[i].className = cls ? cls[i] : "";
+    }
+  }
+  function renderQRail(q, p) {
+    var box = el("qrail"), on = !!q && p.session_kind === "qualifying";
+    if (!box) return;
+    box.hidden = !on;
+    document.body.classList.toggle("qrail-on", on);
+    if (!on) return;
+    var cs = cutState(q), m = q.margin_ms, has = m !== null && m !== undefined;
+    setClass("qr-cut", "b-card q-card " + cs.cls);
+    setText("qr-pos", p.position ? "P" + p.position : "P--");
+    setText("qr-pill", cs.pill);
+    setClass("qr-pill", "badge " + (cs.cls || "inf"));
+    setText("qr-margin", has ? signed(-m) : "--");
+    setText("qr-cut-sub", (q.margin_kind === "pole" ? "vs P2" : "cut " + lapTime(q.cutoff_ms)) +
+      " · best " + lapTime(q.best_lap_ms));
+
+    var pole = q.pole || (q.cool && q.cool.pole) || null;
+    setText("qr-pole", pole ? String(pole.driver || "POLE").toUpperCase() : "no pole time");
+    setText("qr-gap", pole ? signed(pole.gap_ms) : "--");
+    var gaps = pole ? pole.sector_gaps_ms : [0, 0, 0];
+    var worst = pole && pole.worst_sector ? pole.worst_sector - 1 : gaps.indexOf(Math.max.apply(null, gaps));
+    var sec = function (a) { return a.map(function (v) { return v ? (v / 1000).toFixed(1) : "--"; }); };
+    setRow("qr-you", sec(pole ? pole.sectors_ms : [0, 0, 0]));
+    setRow("qr-polerow", sec(pole ? pole.pole_sectors_ms : [0, 0, 0]));
+    setRow("qr-gaps", gaps.map(function (v) { return v ? signed(v) : "--"; }),
+      gaps.map(function (v, i) { return gapClass(v) + (i === worst && v > 0 ? " worst" : ""); }));
+
+    var ph = el("qr-phase"), lap = q.lap;
+    if (ph) {
+      var word = PHASE_WORDS[p.phase];
+      ph.hidden = !word;
+      if (word) {
+        setText("qr-ph-k", word);
+        var main = "--", flag = "", sub = "", cls = "";
+        if (lap) {
+          var d = lap.delta_ms;
+          main = "PROJ " + lapTime(lap.projected_ms);
+          sub = d === null ? "no cut-off yet" : signed(d) + " to cut " + lapTime(q.cutoff_ms);
+          cls = lap.abort ? "crit" : d !== null && d <= 0 ? "ok" : "warn";
+          flag = lap.abort ? "✗ ABORT" : d !== null ? signed(d) : "";
+        } else if (q.plan) {
+          main = "PLAN " + String(q.plan.plan).toUpperCase();
+          sub = q.plan.reason || "";
+        }
+        setText("qr-ph-main", main);
+        setText("qr-ph-flag", flag);
+        setText("qr-ph-sub", sub || "--");
+        ph.className = "b-card q-card " + cls;
+      }
+    }
+
+    var f = el("qr-session");
+    if (f) {
+      var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
+      f.innerHTML = "";
+      f.appendChild(span("SESSION", "k"));
+      f.appendChild(span(clock(q.session_time_left) + " left", ""));
+      f.appendChild(span(String(q.fresh_sets) + " fresh", ""));
+      f.appendChild(span(comp, "comp " + comp.toLowerCase()));
+    }
+  }
 
   // Pit board (garage / pitting): release light, per-corner pressure target,
   // next-run summary and the car setup in game-menu order.

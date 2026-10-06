@@ -425,6 +425,38 @@ body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
     "transport transport" "footer footer"; }
 body.dash.page-race.duel-on #s-ahead, body.dash.page-race.duel-on #s-behind { display: none; }
 body.stale .duel > * { filter: grayscale(1); opacity: .4; }
+/* qualifying right column: cut-off, pole benchmark, phase, session above the log */
+.qrail { grid-area: qrail; display: none; flex-direction: column; gap: .35rem; overflow: hidden;
+  font-size: 1.15rem; }
+body.dash.page-race.qrail-on:not(.pit):not(.cool) .qrail { display: flex; }
+body.dash.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres qrail" "fuel qrail" "strat log" "footer footer"; }
+body.dash.review.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
+    "status status" "banner banner" "tyres qrail" "fuel qrail" "strat log"
+    "transport transport" "footer footer"; }
+.q-head { display: flex; align-items: baseline; gap: .6rem; font-size: 1.6rem; font-weight: bold;
+  white-space: nowrap; min-width: 0; }
+.q-head h2 { margin: 0; width: 9rem; flex: none; }
+.q-head .pos { color: var(--dim); font-weight: normal; flex: none; }
+.q-head .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.q-head .gap { font-size: 2rem; flex: none; margin-left: auto; text-align: right; }
+.q-card.ok .q-head, .q-card.ok .q-head h2 { color: var(--ok); }
+.q-card.warn .q-head, .q-card.warn .q-head h2 { color: var(--warn); }
+.q-card.crit .q-head, .q-card.crit .q-head h2 { color: var(--crit); }
+.q-card .q-head .pos { color: var(--dim); }
+.q-sub { color: var(--soft); font-size: 1.25rem; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.q-bench { width: 100%; border-collapse: collapse; font-size: 1.4rem; margin-top: .2rem; }
+.q-bench th, .q-bench td { border: 1px solid var(--line); padding: .1rem .6rem; text-align: right; }
+.q-bench th { color: var(--dim); font-weight: normal; font-size: 1.05rem; letter-spacing: .12em; }
+.q-bench tbody th { text-align: left; width: 5rem; }
+.q-bench td { font-weight: bold; }
+.q-bench td.gain { color: var(--info); }
+.q-bench td.ok { color: var(--ok); }
+.q-bench td.crit { color: var(--crit); }
+.q-bench td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
+.b-foot .comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; }
+body.stale .qrail > * { filter: grayscale(1); opacity: .4; }
 .cp-grid { display: grid; grid-template-columns: 1fr; gap: .7rem; }
 .cp-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
   padding: .5rem .8rem; }
@@ -517,6 +549,10 @@ body.stale .carpage > *, body.stale .trackpage > * {
       "status" "banner" "strat" "duel" "tyres" "fuel" "log" "footer"; }
   body.dash.review.page-race.duel-on:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "strat" "duel" "tyres" "fuel" "log" "transport" "footer"; }
+  body.dash.review.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "strat" "qrail" "tyres" "fuel" "log" "transport" "footer"; }
+  body.dash.page-race.qrail-on:not(.pit):not(.cool) { grid-template-areas:
+      "status" "banner" "strat" "qrail" "tyres" "fuel" "log" "footer"; }
   body.dash.page-car:not(.pit):not(.cool) { grid-template-areas:
       "status" "banner" "carpage" "tyres" "fuel" "strat" "footer"; }
   body.dash.review.page-car:not(.pit):not(.cool) { grid-template-areas:
