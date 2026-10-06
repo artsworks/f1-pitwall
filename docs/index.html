@@ -115,13 +115,15 @@ article:has(.landing){max-width:none}
   .hero{display:grid;grid-template-columns:minmax(380px,1fr) minmax(0,2fr);gap:48px;align-items:center;padding:16px 0 12px}
   .hero .shot{margin:0}
   .hero h1{font-size:56px}
-  .shots{grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:18px}
+  .shots{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+  .shots:has(>figure:nth-child(5):last-child)>figure:first-child{grid-column:span 2;grid-row:span 2}
   .gallery{display:grid;grid-template-columns:300px minmax(0,1fr);column-gap:40px}
   .gallery .group{grid-column:1/-1}
   .gallery .group.phone{grid-column:1}
   .gallery .group.phone .shots{grid-template-columns:1fr}
   .gallery .group.phone+.group{grid-column:2}
   .gallery .group.phone+.group .shots{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gallery .group.phone+.group .shots>figure:first-child{grid-column:1/-1}
   .calls{grid-template-columns:repeat(4,minmax(0,1fr))}
   .works{columns:3}
 }
