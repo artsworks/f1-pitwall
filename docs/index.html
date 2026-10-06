@@ -56,13 +56,16 @@ article img{max-width:100%}
 .cards a span{font-size:14px;color:var(--muted)}
 .path{font-size:13px;color:var(--muted);margin-bottom:6px}
 .err{color:var(--accent)}
-article:has(.landing){max-width:1040px}
+.layout:has(.landing){max-width:2080px}
+article:has(.landing){max-width:none}
 .landing h2{font-size:24px}
 .landing .lede{color:var(--muted);max-width:720px;margin:0 0 14px}
 .hero{padding:8px 0 4px}
 .hero h1{font-size:44px;line-height:1.1;margin:6px 0 10px;letter-spacing:-.01em}
 .hero h1 span{color:var(--accent)}
 .hero .pitch{font-size:21px;line-height:1.45;color:var(--fg);max-width:760px;margin:0 0 12px}
+.hero .shot{display:block;margin:22px 0 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0a0a0a;box-shadow:0 14px 36px rgba(0,0,0,.18)}
+.hero .shot img{display:block;width:100%;height:auto}
 .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);text-decoration:none}
 .badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .cta{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
@@ -93,12 +96,14 @@ article:has(.landing){max-width:1040px}
 .milestones small{display:block;color:var(--muted);line-height:1.4}
 .works{columns:2;column-gap:28px;padding-left:20px;font-size:15px}
 .works li{break-inside:avoid;margin-bottom:6px}
-.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:12px 0 20px}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px;margin:12px 0 20px}
 .shots figure{margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
 .shots img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;background:#0a0a0a}
+.shots figure.tall{max-width:300px}
+.shots figure.tall img{aspect-ratio:390/844}
 .shots figcaption{padding:8px 12px;font-size:13px;color:var(--muted)}
 .shots figcaption b{color:var(--fg)}
-.next{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:16px 0}
+.next{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:16px 0}
 .next a{display:block;border:1px dashed var(--line);border-radius:10px;padding:14px 16px;text-decoration:none;color:var(--fg);font-size:14px}
 .next a:hover{border-style:solid;border-color:var(--accent)}
 .next a b{display:block;font-size:16px;margin-bottom:4px}
@@ -106,6 +111,20 @@ article:has(.landing){max-width:1040px}
 .next a em{display:inline-block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-bottom:6px}
 .landing .dive h3{margin:22px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .foot{font-size:13px;color:var(--muted);margin-top:30px}
+@media (min-width:1500px){
+  .hero{display:grid;grid-template-columns:minmax(380px,1fr) minmax(0,2fr);gap:48px;align-items:center;padding:16px 0 12px}
+  .hero .shot{margin:0}
+  .hero h1{font-size:56px}
+  .shots{grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:18px}
+  .gallery{display:grid;grid-template-columns:300px minmax(0,1fr);column-gap:40px}
+  .gallery .group{grid-column:1/-1}
+  .gallery .group.phone{grid-column:1}
+  .gallery .group.phone .shots{grid-template-columns:1fr}
+  .gallery .group.phone+.group{grid-column:2}
+  .gallery .group.phone+.group .shots{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .calls{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .works{columns:3}
+}
 @media (max-width:860px){
   #menu{display:inline-block}
   header .status{display:none}
@@ -286,8 +305,10 @@ function overview() {
       ["debrief-calls", "Call review", "Every call on a timeline, with its inputs and buttons to grade it."]
     ]]
   ];
+  const tall = f => f.startsWith("phone-");
   $("#content").innerHTML = `<div class="landing">
     <section class="hero">
+      <div>
       <a class="badge" href="#/status">M0 to M4 done</a>
       <h1>f1<span>-</span>pitwall</h1>
       <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
@@ -297,12 +318,14 @@ function overview() {
         <a class="btn" href="mockups/dashboard-1080p.html">Dashboard mockup</a>
         <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
       </div>
+      </div>
+      <a class="shot" href="assets/screens/race-box-call.webp"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"></a>
     </section>
 
     <h2>Screens</h2>
     <p class="lede">Captured from replays of real Q1 and race recordings at 1920x1080. Select a screen to open it at full size.</p>
-    ${screens.map(([g, list]) => `<h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
-      `<figure><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" width="1920" height="1080"></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div>`).join("")}
+    <div class="gallery">${screens.map(([g, list]) => `<div class="group${list.some(([f]) => tall(f)) ? " phone" : ""}"><h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
+      `<figure${tall(f) ? ` class="tall"` : ""}><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" ${tall(f) ? `width="390" height="844"` : `width="1920" height="1080"`}></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div></div>`).join("")}</div>
 
     <h2>What it calls on the radio</h2>
     <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake (<a href="#/adr/0008-natural-phrasing-without-an-llm">ADR 0008</a>).</p>
