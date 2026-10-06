@@ -2,7 +2,8 @@
 
 `PiperSpeaker` renders each call to a WAV (optional radio blip + speech) on
 its worker thread and hands it to a `Player`; `on_spoken` fires at playback
-start. Rendered WAVs are cached by text, so repeated calls skip synthesis.
+start. An optional `on_audio` callback receives each played WAV for phone
+streaming. Rendered WAVs are cached by text, so repeated calls skip synthesis.
 A P1 call preempts whatever is playing; queued calls play in priority order.
 
 Voices are downloaded once into `speech.voices_dir` (`pitwall voice get`).
@@ -212,6 +213,7 @@ class PiperSpeaker:
     ) -> None:
         self.name = label
         self.on_spoken: Callable[[str, float], None] | None = None
+        self.on_audio: Callable[[str, int, bytes], None] | None = None
         self._synth = synth
         self._tones = tones or {}
         self._player = player
@@ -297,6 +299,11 @@ class PiperSpeaker:
             if call.priority == 1:
                 self._urgent.clear()
             self._player.play(wav)
+            if self.on_audio is not None:
+                try:
+                    self.on_audio(call.id, call.priority, wav)
+                except Exception as exc:
+                    print(f"speech: piper audio stream failed: {exc!r}", file=sys.stderr)
             self.busy_until = time.monotonic() + seconds
             if self.on_spoken is not None:
                 self.on_spoken(call.id, time.time())

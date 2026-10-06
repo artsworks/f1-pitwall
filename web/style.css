@@ -165,6 +165,9 @@ body.radio #arm-radio { border: 1px solid var(--ok); border-radius: .4rem; color
   background: var(--panel); padding: .6rem; font: inherit; cursor: pointer; }
 body.radio #arm-radio[aria-pressed="true"] { background: var(--ok); color: #0a0a0c; }
 body.radio #arm-radio:disabled { opacity: .6; cursor: default; }
+.sound { border: 1px solid var(--ok); color: var(--ok); background: var(--panel);
+  border-radius: .4rem; padding: .2rem .6rem; font: inherit; cursor: pointer; }
+.sound[aria-pressed="true"] { background: var(--ok); color: #0a0a0c; }
 body.radio .banner { min-height: 9rem; }
 body.radio .banner .text { font-size: 2.6rem; }
 body.radio .log ol { font-size: 1.6rem; }

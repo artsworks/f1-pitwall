@@ -705,6 +705,7 @@ def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, obj
 
 
 def cmd_start(args: argparse.Namespace) -> int:
+    from pitwall.audio.piper_tts import PiperSpeaker
     from pitwall.audio.speaker import make_speaker
     from pitwall.doctor import set_below_normal_priority
     from pitwall.net.recording import RecordingRotator
@@ -781,6 +782,9 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
     speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
+    if isinstance(speaker, PiperSpeaker):
+        speaker.on_audio = hub.audio
+        hub.streams_audio = True
     engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path

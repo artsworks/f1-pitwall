@@ -630,6 +630,7 @@ def create_app(
                         "mindset": settings.mindset.active,
                         "verbosity": settings.policy.verbosity,
                         "review": review is not None,
+                        "audio": hub.streams_audio,
                     },
                 )
             )
@@ -660,6 +661,11 @@ def create_app(
                     and on_client_press is not None
                 ):
                     on_client_press(bool(msg.get("down")))
+                elif isinstance(msg, dict) and msg.get("type") == "audio":
+                    if msg.get("on") is True:
+                        hub.audio_clients.add(websocket)
+                    elif msg.get("on") is False:
+                        hub.audio_clients.discard(websocket)
                 elif (
                     isinstance(msg, dict)
                     and msg.get("type") in ("mindset", "page", "menu")
@@ -670,6 +676,7 @@ def create_app(
             pass
         finally:
             hub.clients.discard(websocket)
+            hub.audio_clients.discard(websocket)
 
     if review is not None:
 
