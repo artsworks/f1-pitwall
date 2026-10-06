@@ -2,17 +2,17 @@
 
 Where the build stands against the [roadmap](05-roadmap.md).
 
-_Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
+_Last updated: live qualifying review, 6 Oct 2026._
 
 ## Milestones
 
 | Milestone | State | Evidence |
 |---|---|---|
 | **M0** Capture and replay | Done | Live F1 26 practice recorded and replayed with matching packet census and decisions |
-| **M1** One call, end to end | Built, live exit pending | Parsers, state, rules, dispatcher, dashboard and SAPI speech run against the live game; the front-wing damage call fires on replay of the live recording and is audible. Pending: out-lap tyre call inside 300 ms, frame-time A/B, tray app |
-| **M2** Qualifying | Done | Full Q1–Q3 driven with the assistant; decision logs reviewed and tuned |
+| **M1** One call, end to end | Built, live exit pending | Parsers, state, rules, dispatcher, dashboard and SAPI speech run against the live game; the front-wing damage call fires on replay of the live recording and is audible. Out-lap tyre call measured at 41 to 101 ms on three live out-laps (6 Oct). Pending: frame-time A/B, tray app |
+| **M2** Qualifying | Done | Full Q1–Q3 driven with the assistant; decision logs reviewed and tuned. 6 Oct review added the next-lap invalidation call and gated the recharge nag |
 | **M3** Race | Built; PR #7 merged | 25% and 100% races recorded; strategy fixes from the 100% race are in PR #21 |
-| **M4** Better over time | Built in PR #21 | Debrief produced from a real sprint and 100% race. Calibration is not yet converged. No calls-off sessions are recorded, so on/off evaluation has no comparison. |
+| **M4** Better over time | Built in PR #21 | Debrief produced from a real sprint and 100% race. Calibration is not yet converged. No true calls-off sessions yet: `speech.enabled: false` did not silence the speaker before 6 Oct, so sessions stamped `off` before then were spoken and ingest relabels them `on`. |
 
 ## What works today
 
@@ -26,7 +26,8 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 
 ## Next
 
-- Record calls-off sessions for an on/off comparison.
+- Record calls-off sessions for an on/off comparison (`speech.enabled: false` now silences the speaker and stamps `calls_mode: off`).
+- Tuning backlog from the 6 Oct qualifying review: `release_go` fires on garage entry and flip-flops with `release_hold`, `cool_hot_mode` after `quali_through`, cool-lap digest fires three lines at once, fuel-laps estimate one lap pessimistic, one-stop plan in a 5-lap race, energy under/over flip, wear and energy advice on the final lap.
 - Add more races and check calibration convergence.
 
 ## Known gaps
@@ -35,7 +36,8 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 - Upkeep grades calls, refits priors and adjusts cooldowns. Grading calls at
   `/debrief/latest` and applying threshold YAML from `pitwall propose` stay manual by
   design, so rule thresholds never change without human review.
-- There are no calls-off sessions yet, so `pitwall evaluate` has no on/off comparison.
+- There are no true calls-off sessions yet, so `pitwall evaluate` has no on/off comparison. `policy.quiet` still passes priority 1 calls.
+- Player lap rows in `laps` have no sector times, and lap rows are written twice per lap.
 - LLM debrief prose is deferred (item 21).
 - Windows shutdown and EA Javelin compatibility still need a local check. Linux
   tests cannot verify either.

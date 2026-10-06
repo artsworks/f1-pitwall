@@ -5,7 +5,7 @@ from pathlib import Path
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
 from pitwall.digest import DIGEST_VERSION
-from pitwall.ingest import Ingest, expand_paths, ingest_recordings
+from pitwall.ingest import Ingest, expand_paths, header_calls_mode, ingest_recordings
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
@@ -103,6 +103,31 @@ def test_expand_paths_directories_and_globs(tmp_path: Path) -> None:
         [second.resolve(), compressed.resolve()], key=str
     )
     assert expand_paths([str(first), str(first)]) == [first.resolve()]
+
+
+def test_header_calls_mode_distrusts_legacy_off() -> None:
+    # recorders before `speech_enabled` spoke every call with speech.enabled: false
+    assert header_calls_mode({"calls_mode": "off"}) == "on"
+    assert header_calls_mode({"calls_mode": "off", "quiet": True}) == "off"
+    assert header_calls_mode({"calls_mode": "off", "speech_enabled": False}) == "off"
+    assert header_calls_mode({"calls_mode": "on"}) == "on"
+    assert header_calls_mode({}) == ""
+
+
+def test_ingest_relabels_legacy_off_header(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261009
+    spec = RaceSpec(laps=5, session_uid=uid, session_type=15, dt=1.0, send_session_end=True)
+    recording = write_packet_stream(
+        tmp_path / "legacy.f1bin",
+        race_stream(spec),
+        session_uid=uid,
+        metadata={"calls_mode": "off"},
+    )
+    settings = ConfigStore().current()
+    ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
+    row = db.session_row(uid)
+    assert row is not None and row["calls_mode"] == "on"
 
 
 def test_ingest_is_idempotent_and_clears_heartbeat(tmp_path: Path) -> None:

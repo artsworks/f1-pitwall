@@ -178,6 +178,10 @@ def test_missing_voice_falls_back(tmp_path: Path) -> None:
     assert isinstance(make_speaker(s), NullSpeaker)
 
 
+def test_speech_disabled_makes_null_speaker() -> None:
+    assert isinstance(make_speaker(SpeechSettings(enabled=False, engine="sapi")), NullSpeaker)
+
+
 VOICES = Path.home() / "voices"
 
 

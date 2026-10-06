@@ -221,9 +221,14 @@ def out_lap_scenario(
 
 
 def write_packet_stream(
-    path: Path, packets: list[tuple[float, bytes]], *, session_uid: int = 0xDEADBEEF
+    path: Path,
+    packets: list[tuple[float, bytes]],
+    *,
+    session_uid: int = 0xDEADBEEF,
+    metadata: dict[str, object] | None = None,
 ) -> Path:
-    with RecordingWriter(path, session_uid=session_uid, metadata={"synthetic": True}) as writer:
+    meta: dict[str, object] = {"synthetic": True, **(metadata or {})}
+    with RecordingWriter(path, session_uid=session_uid, metadata=meta) as writer:
         for t, pkt in packets:
             writer.write_datagram(t, pkt)
     return path

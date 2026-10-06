@@ -33,7 +33,7 @@ class HotLap:
 @dataclass(frozen=True, slots=True)
 class Plan:
     plan: str  # "push" | "cool" | "box" | "push_now" | ""
-    reason: str  # "ready" | "battery" | "tyres" | "safe" | "time" | "fuel" | "flag"
+    reason: str  # "ready" | "battery" | "tyres" | "safe" | "time" | "fuel" | "flag" | "invalid"
 
 
 def run_plan(
@@ -117,6 +117,7 @@ class RunTracker:
         "_invalid",
         "_lap_start_t",
         "cool_start_t",
+        "next_lap_invalid",
     )
 
     def __init__(self) -> None:
@@ -135,6 +136,7 @@ class RunTracker:
         self._invalid = False
         self._lap_start_t = 0.0
         self.cool_start_t = 0.0
+        self.next_lap_invalid = False
 
     def note_rewind(self) -> None:
         self._prev_lap_ms = None
@@ -195,6 +197,9 @@ class RunTracker:
             assert prev_ms is not None
             done: HotLap | None = None
             self.crossings += 1
+            # Track limits can delete this lap and the next: the flag is still
+            # set on the first tick of the new lap.
+            carried = invalid and self._invalid
             if self.kind == HOT:
                 done = HotLap(
                     lap_time_ms=prev_ms,
@@ -211,7 +216,10 @@ class RunTracker:
                 self.plan = decide()
             elif not (self.kind == COOL and extend_cool):
                 self.plan = Plan("", "")
+            if carried and self.plan.plan != "box":
+                self.plan = Plan("cool", "invalid")
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
+            self._invalid = self.next_lap_invalid = carried
             return done
         if sector == 1 and prev_sector == 0 and sector1_ms > 0:
             self._s1 = sector1_ms

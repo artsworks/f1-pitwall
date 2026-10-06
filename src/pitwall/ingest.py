@@ -144,6 +144,16 @@ def expand_paths(paths: Sequence[str]) -> list[Path]:
     return sorted(found, key=lambda item: str(item))
 
 
+def header_calls_mode(metadata: dict[str, Any]) -> str:
+    """`calls_mode` from a recording header. Recorders before the
+    `speech_enabled` field spoke every call regardless of `speech.enabled`, so
+    their "off" only holds when `policy.quiet` set it."""
+    mode = str(metadata.get("calls_mode") or "")
+    if mode == "off" and "speech_enabled" not in metadata and not metadata.get("quiet"):
+        return "on"
+    return mode
+
+
 def ingest_recordings(
     db: Database,
     paths: Sequence[str],
@@ -186,7 +196,7 @@ def ingest_recordings(
                 if not uid:
                     raise ValueError("recording did not contain a session UID")
                 session = db.session_row(uid) or {}
-                origin_mode = calls_mode or str(header.metadata.get("calls_mode") or "")
+                origin_mode = calls_mode or header_calls_mode(header.metadata)
                 if not origin_mode:
                     origin_mode = str(session.get("calls_mode") or "")
                 db.set_session_origin(
