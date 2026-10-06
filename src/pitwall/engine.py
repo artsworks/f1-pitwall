@@ -40,6 +40,7 @@ from pitwall.model.deg import (
     planning_fit,
     resolve_prior,
     scoped,
+    session_base_ms,
 )
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
@@ -818,6 +819,10 @@ class Engine:
             deg = fuel_adjusted_deg(
                 deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
             )
+        if base_p.source == "default" and self.db is not None and uid is not None:
+            seeded = session_base_ms(self.db.laps_for(uid, 0), deg)
+            if seeded > 0:
+                base_p = Prior(seeded, 0.0, "session")
         return DegFit(
             base_ms=base_p.value,
             deg_ms_per_lap=deg,

@@ -118,6 +118,18 @@ def test_undercut_on_slow_rival_ahead() -> None:
     assert p.undercut_s >= float(BALANCED["undercut_speak_threshold_s"])
 
 
+def test_undercut_uses_session_seeded_base_pace() -> None:
+    rival = RivalView(1, "NORRIS", 112_333, False)
+    blended = DegFit(99_337.0, 60.0, 30.0, 10, 100.0, 0.9, "fit")
+    seeded = DegFit(112_349.0, 60.0, 30.0, 10, 100.0, 0.9, "fit")
+
+    old_base = run(rival_ahead=rival, gap_ahead_s=1.62, fit=blended, fresh=blended)
+    session_base = run(rival_ahead=rival, gap_ahead_s=1.62, fit=seeded, fresh=seeded)
+
+    assert old_base.undercut_s == pytest.approx(23.7, abs=0.1)
+    assert session_base.undercut_s < 1.0
+
+
 def test_no_undercut_when_gap_too_big() -> None:
     rival = RivalView(1, "NORRIS", 92_500, False)
     p = run(rival_ahead=rival, gap_ahead_s=8.0, laps_of_pace=6.0)

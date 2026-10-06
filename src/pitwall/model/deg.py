@@ -131,6 +131,14 @@ def _correlation(xs: Sequence[float], ys: Sequence[float]) -> float:
     return sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / math.sqrt(sxx * syy)
 
 
+def session_base_ms(laps: Sequence[LapRow], deg_ms_per_lap: float) -> float:
+    """Median clean-lap time this session with tyre age taken out; 0 if no clean lap."""
+    usable = [lap for lap in laps if lap.valid == 1 and lap.sc_status == 0 and lap.lap_time_ms > 0]
+    if not usable:
+        return 0.0
+    return float(median(lap.lap_time_ms - deg_ms_per_lap * lap.tyre_age_laps for lap in usable))
+
+
 def fit_stint(
     laps: Sequence[LapRow],
     prior: DegFit,

@@ -138,6 +138,10 @@ For other priors, `model_params` with weight at least `prior_min_weight` wins, t
 overlay, then the global default. Sources are reported as `weekend`, `learned`, `overlay`, or
 `default`.
 
+When a track has no learned or track-file base, the engine uses the median of this session's
+clean laps after removing tyre-age degradation. Before the first clean lap, the engine uses the
+95 s `release_fallback_lap_s` fallback.
+
 ## `pitwall.model.deg`
 
 ```python

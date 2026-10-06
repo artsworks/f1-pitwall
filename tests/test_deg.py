@@ -4,6 +4,7 @@ pace, rival pace median."""
 from __future__ import annotations
 
 from dataclasses import replace
+from statistics import median
 from types import SimpleNamespace
 from typing import Any
 
@@ -16,6 +17,7 @@ from pitwall.model.deg import (
     fuel_burned_laps,
     laps_of_pace,
     rival_pace_ms,
+    session_base_ms,
 )
 from pitwall.store.db import LapRow
 
@@ -92,6 +94,21 @@ def test_invalid_and_sc_laps_excluded() -> None:
     laps[4] = _lap(4, 120_000, sc=1)
     fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
     assert fit.n == 3 and fit.source == "blend"
+
+
+def test_session_base_uses_median_of_clean_laps() -> None:
+    clean = [_lap(1, 112_618), _lap(2, 112_958), _lap(3, 112_093)]
+    laps = [*clean, _lap(4, 127_038, valid=0), _lap(5, 127_038, sc=1)]
+
+    expected = median(lap.lap_time_ms - 60 * lap.tyre_age_laps for lap in clean)
+
+    assert session_base_ms(laps, 60) == expected
+
+
+def test_session_base_returns_zero_without_clean_laps() -> None:
+    laps = [_lap(1, 127_038, valid=0), _lap(2, 127_038, sc=1)]
+
+    assert session_base_ms(laps, 60) == 0.0
 
 
 def test_deg_slope_clamped() -> None:
