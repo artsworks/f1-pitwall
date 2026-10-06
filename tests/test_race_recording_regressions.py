@@ -131,6 +131,17 @@ def test_session_latches_validated_ahead_through_pit_lane() -> None:
     assert after.gap_ahead_s == pytest.approx(2.97)
 
 
+def test_session_ahead_pitted_requires_current_pit_status() -> None:
+    state, _ = _session_rivals()
+    state._pitted_lap_snapshot.add(1)
+
+    snapshot = state.snapshot(811.0)
+
+    assert snapshot.rival_ahead_idx == 1
+    assert snapshot.cars[1].pit_status == 0
+    assert not snapshot.rival_ahead_pitted
+
+
 def _rule_engine() -> RuleEngine:
     store = ConfigStore()
     settings = store.current()
@@ -197,8 +208,17 @@ def test_full_recording_replay_regressions(tmp_path: Path) -> None:
     engine.dispatcher.log.flush()
     rows = [json.loads(line) for line in log.read_text().splitlines() if line]
 
-    rival_calls = [call for call in calls if call.rule_id == "rival_ahead_pitted"]
-    assert all("PIASTRI" not in call.text for call in rival_calls)
+    relevant_rival_rows = [
+        row
+        for row in rows
+        if row["rule_id"] == "rival_ahead_pitted" and row["outcome"] in {"queued", "fired"}
+    ]
+    assert all(
+        "PIASTRI" not in row["text"] and "RUSSELL" not in row["text"] for row in relevant_rival_rows
+    )
+    fired_rival_rows = [
+        row for row in rows if row["rule_id"] == "rival_ahead_pitted" and row["outcome"] == "fired"
+    ]
     lap_eight_calls = [
         row
         for row in rows
@@ -216,7 +236,7 @@ def test_full_recording_replay_regressions(tmp_path: Path) -> None:
     )
     assert finish_row["inputs"]["penalty_position"] == 3
     print(
-        f"recording replay: {elapsed:.1f}s; lap-8 rival calls="
-        f"{[(row['session_time'], row['text']) for row in lap_eight_calls]}; "
+        f"recording replay: {elapsed:.1f}s; rival_ahead_pitted calls="
+        f"{[(row['session_time'], row['text']) for row in fired_rival_rows]}; "
         f"finish call={(finish_call.rule_id, finish_call.text)}"
     )

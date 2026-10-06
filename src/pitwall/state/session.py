@@ -2292,7 +2292,7 @@ class SessionState:
             rival_pit_exit_name=name_of(exit_i),
             rival_ahead_age=self._rival_age(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_age=self._rival_age(behind_i) if behind_i >= 0 else 0,
-            rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
+            rival_ahead_pitted=ahead_i >= 0 and cars[ahead_i].pit_status != 0,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             pit_exit_rival_gap_s=exit_gap,
             **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
