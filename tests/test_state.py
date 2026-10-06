@@ -44,6 +44,94 @@ def test_phase_mapping() -> None:
     assert state.snapshot(2.0).phase == "garage"
 
 
+def test_car_setup_changes_wait_for_three_seconds_of_stability() -> None:
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 1, "track_id": 7},
+            session_time=0.0,
+        ),
+        0.0,
+    )
+
+    def send_setup(t: float, brake_bias: int) -> None:
+        _send(
+            ingest,
+            pack_packet(
+                PacketId.CAR_SETUPS,
+                {
+                    "cars": {
+                        0: {
+                            "brake_bias": brake_bias,
+                            "front_wing": 12,
+                            "rear_wing": 14,
+                        }
+                    }
+                },
+                session_time=t,
+            ),
+            t,
+        )
+
+    for t in range(4):
+        send_setup(float(t), 56)
+    assert len(state.setup_changes) == 1
+    assert state.setup_changes[0].from_hash == ""
+    assert state.setup_changes[0].session_time == 0.0
+
+    send_setup(4.0, 55)
+    send_setup(5.0, 55)
+    send_setup(6.0, 55)
+    assert len(state.setup_changes) == 1
+    send_setup(7.0, 55)
+    send_setup(8.0, 55)
+    assert len(state.setup_changes) == 2
+    assert state.setup_changes[1].session_time == 4.0
+    assert state.setup_changes[1].lap_num == 0
+
+
+def test_car_setup_change_that_returns_before_settling_is_dropped() -> None:
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 1, "track_id": 7},
+            session_time=0.0,
+        ),
+        0.0,
+    )
+
+    def send_setup(t: float, brake_bias: int) -> None:
+        _send(
+            ingest,
+            pack_packet(
+                PacketId.CAR_SETUPS,
+                {
+                    "cars": {
+                        0: {
+                            "brake_bias": brake_bias,
+                            "front_wing": 12,
+                            "rear_wing": 14,
+                        }
+                    }
+                },
+                session_time=t,
+            ),
+            t,
+        )
+
+    for t in range(4):
+        send_setup(float(t), 56)
+    send_setup(4.0, 55)
+    send_setup(5.0, 56)
+    send_setup(6.0, 56)
+    assert len(state.setup_changes) == 1
+    assert state.setup_hash == state.setup_changes[0].to_hash
+
+
 def test_ema_converges_and_uses_session_time() -> None:
     ingest, state = _state()
     # settle at 60, then step to 90: fast EMA (tau 3s) tracks far ahead of

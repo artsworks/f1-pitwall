@@ -745,6 +745,7 @@ class SessionState:
         self.setup_tyre_pressure = _ZERO_CORNERS
         self.setup: dict[str, float] = {}
         self.setup_hash = ""
+        self._pending_setup: tuple[str, dict[str, Any], float, int] | None = None
         self.next_front_wing_value = 0.0
         self._pressure_base: Corners | None = None
         self.tyre_compound = 0
@@ -1166,6 +1167,8 @@ class SessionState:
             tyre_age_laps=self.tyre_age_laps,
             fuel_remaining_laps=self.fuel_remaining_laps,
             wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
+            wear_front_mean_pct=(self.tyres_wear.fl + self.tyres_wear.fr) / 2.0,
+            wear_rear_mean_pct=(self.tyres_wear.rl + self.tyres_wear.rr) / 2.0,
             fuel_in_tank=self.fuel_in_tank,
             ers_deployed_this_lap=self.ers_deployed_this_lap_j,
             weather=self.weather,
@@ -1606,17 +1609,25 @@ class SessionState:
         self.setup_off_throttle_diff = car.off_throttle
         self.setup = dataclasses.asdict(car)
         new_hash = setup_hash(self.setup)
-        if new_hash and new_hash != self.setup_hash:
-            self.setup_changes.append(
-                SetupChange(
-                    session_time=self._last_session_time or 0.0,
-                    lap_num=self.lap_num,
-                    from_hash=self.setup_hash,
-                    to_hash=new_hash,
-                    fields=dict(self.setup),
+        if not new_hash or new_hash == self.setup_hash:
+            self._pending_setup = None
+        else:
+            now = self._last_session_time or 0.0
+            pending = self._pending_setup
+            if pending is None or pending[0] != new_hash:
+                self._pending_setup = (new_hash, dict(self.setup), now, self.lap_num)
+            elif now - pending[2] >= self._th("setup_settle_s", 3.0):
+                self.setup_changes.append(
+                    SetupChange(
+                        session_time=pending[2],
+                        lap_num=pending[3],
+                        from_hash=self.setup_hash,
+                        to_hash=pending[0],
+                        fields=pending[1],
+                    )
                 )
-            )
-            self.setup_hash = new_hash
+                self.setup_hash = pending[0]
+                self._pending_setup = None
         self.setup_tyre_pressure = Corners(
             car.rear_left_tyre_pressure,
             car.rear_right_tyre_pressure,

@@ -294,6 +294,10 @@ MIGRATIONS: list[str] = [
     ALTER TABLE laps ADD COLUMN lockups_rear INT DEFAULT 0;
     ALTER TABLE laps ADD COLUMN snaps_entry INT DEFAULT 0;
     ALTER TABLE laps ADD COLUMN snaps_exit INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN wear_front_pct REAL DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN wear_rear_pct REAL DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN tyre_inner_front_c REAL DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN tyre_inner_rear_c REAL DEFAULT 0;
     """,
 ]
 
@@ -318,6 +322,10 @@ class LapRow:
     sc_status: int
     weather: int
     tyre_inner_c: float = 0.0
+    wear_front_pct: float = 0.0
+    wear_rear_pct: float = 0.0
+    tyre_inner_front_c: float = 0.0
+    tyre_inner_rear_c: float = 0.0
     tyre_surface_c: float = 0.0
     visual: int = 0
     setup_state_id: int | None = None
@@ -533,8 +541,9 @@ class Database:
                 " valid, invalid_reasons, wear_pct, fuel_kg, ers_deployed_j,"
                 " sc_status, weather, tyre_inner_c, tyre_surface_c, visual,"
                 " setup_state_id, traction_exits, slip_balance_deg, slip_samples,"
-                " lockups_front, lockups_rear, snaps_entry, snaps_exit)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " lockups_front, lockups_rear, snaps_entry, snaps_exit,"
+                " wear_front_pct, wear_rear_pct, tyre_inner_front_c, tyre_inner_rear_c)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -563,6 +572,10 @@ class Database:
                     getattr(lap, "lockups_rear", 0),
                     getattr(lap, "snaps_entry", 0),
                     getattr(lap, "snaps_exit", 0),
+                    getattr(lap, "wear_front_pct", 0.0),
+                    getattr(lap, "wear_rear_pct", 0.0),
+                    getattr(lap, "tyre_inner_front_c", 0.0),
+                    getattr(lap, "tyre_inner_rear_c", 0.0),
                 ),
             )
 
@@ -849,6 +862,10 @@ class Database:
             sc_status=int(r["sc_status"] or 0),
             weather=int(r["weather"] or 0),
             tyre_inner_c=float(r["tyre_inner_c"] or 0.0),
+            wear_front_pct=float(r["wear_front_pct"] or 0.0),
+            wear_rear_pct=float(r["wear_rear_pct"] or 0.0),
+            tyre_inner_front_c=float(r["tyre_inner_front_c"] or 0.0),
+            tyre_inner_rear_c=float(r["tyre_inner_rear_c"] or 0.0),
             tyre_surface_c=float(r["tyre_surface_c"] or 0.0),
             visual=int(r["visual"] or 0),
             setup_state_id=(int(r["setup_state_id"]) if r["setup_state_id"] is not None else None),

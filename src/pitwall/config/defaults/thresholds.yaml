@@ -10,6 +10,16 @@ thresholds:
   slip_bal_throttle_max: 0.8
   snap_entry_throttle: 0.2
   snap_exit_throttle: 0.5
+  setup_settle_s: 3
+  setup_min_run_laps: 6
+  setup_min_event_laps: 3
+  setup_wear_axle_ratio: 1.06
+  setup_z_band: 0.3
+  setup_slip_us_deg: 0.5
+  setup_slip_os_deg: 0.5
+  setup_trac_per10: 25
+  setup_snaps_per10: 2
+  setup_lockups_rear_per10: 1
   tyre_inner_cold_c: 80
   tyre_inner_hot_c: 110
   tyre_inner_cold_by_compound_c: {7: 60, 8: 50, 16: 70, 17: 75, 18: 80, 19: 85, 20: 90, 21: 90, 22: 65}

@@ -224,7 +224,11 @@ def test_m4_session_ingest_and_lap_temperature_persistence() -> None:
             fuel_remaining_laps_at_end=10.0,
             valid=True,
             tyre_inner_c=92.5,
+            tyre_inner_front_c=95.0,
+            tyre_inner_rear_c=90.0,
             tyre_surface_c=105.25,
+            wear_front_pct=12.0,
+            wear_rear_pct=10.0,
         ),
     )
 
@@ -235,6 +239,8 @@ def test_m4_session_ingest_and_lap_temperature_persistence() -> None:
     assert row["recording_path"] == "race.f1bin"
     assert row["weekend_link"] == 27 and row["calls_mode"] == "off"
     assert lap.tyre_inner_c == 92.5 and lap.tyre_surface_c == 105.25
+    assert (lap.wear_front_pct, lap.wear_rear_pct) == (12.0, 10.0)
+    assert (lap.tyre_inner_front_c, lap.tyre_inner_rear_c) == (95.0, 90.0)
     assert db.session_has_laps(uid)
 
     db.mark_ingested(uid, 3, "race.f1bin")
@@ -279,3 +285,5 @@ def test_lap_temperature_accumulator_averages_samples_and_corners() -> None:
     assert lap is not None
     assert lap.tyre_inner_c == 105.0
     assert lap.tyre_surface_c == 125.0
+    assert lap.tyre_inner_front_c == 115.0
+    assert lap.tyre_inner_rear_c == 95.0

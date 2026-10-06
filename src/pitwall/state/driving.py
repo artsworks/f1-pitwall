@@ -418,10 +418,10 @@ class TractionDetector:
 class SlipBalance:
     """Accumulates front-minus-rear wheel slip angles during steady cornering.
 
-    Positive values indicate understeer and negative values indicate oversteer.
-    Wheel slip angle is assumed to be in radians, and the yaw-rate lateral-g
-    estimate uses angular velocity and local speed. These units and signs have
-    not been verified on a recording.
+    Wheel slip angle is in radians by its measured magnitude. Real sessions on
+    tracks 10 and 17 show a +2 to +5 degree offset, so compare against a baseline.
+    Positive is assumed to mean understeer and negative oversteer, but the sign
+    convention remains unconfirmed.
     """
 
     def __init__(

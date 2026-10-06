@@ -49,7 +49,7 @@ def test_majority_state_uses_later_lap_for_ties() -> None:
     assert majority_state(rows) == 4
 
 
-def _practice_setup_stream() -> list[tuple[float, bytes]]:
+def _practice_setup_stream(*, change_setup: bool = True) -> list[tuple[float, bytes]]:
     packets: list[tuple[float, bytes]] = []
     t = 0.0
 
@@ -67,15 +67,30 @@ def _practice_setup_stream() -> list[tuple[float, bytes]]:
             "parc_ferme_rules": 2,
         },
     )
-    emit(
-        PacketId.CAR_SETUPS,
-        {
-            "cars": {0: {"brake_bias": 56, "front_wing": 12, "fuel_load": 45.0}},
-            "next_front_wing_value": 13.0,
-        },
-    )
+    initial_setup = {
+        "cars": {0: {"brake_bias": 56, "front_wing": 12, "fuel_load": 45.0}},
+        "next_front_wing_value": 13.0,
+    }
+    emit(PacketId.CAR_SETUPS, initial_setup)
+    for _ in range(3):
+        t += 0.967
+        emit(PacketId.CAR_SETUPS, initial_setup)
 
-    for lap_num in range(1, 8):
+    for lap_num in range(1, 11):
+        setup_bias = 55 if change_setup and lap_num >= 4 else 56
+        emit(
+            PacketId.CAR_SETUPS,
+            {
+                "cars": {
+                    0: {
+                        "brake_bias": setup_bias,
+                        "front_wing": 12,
+                        "fuel_load": 45.0,
+                    }
+                },
+                "next_front_wing_value": 13.0,
+            },
+        )
         emit(
             PacketId.CAR_STATUS,
             {
@@ -102,16 +117,7 @@ def _practice_setup_stream() -> list[tuple[float, bytes]]:
                 }
             },
         )
-        if lap_num == 4:
-            emit(
-                PacketId.CAR_SETUPS,
-                {
-                    "cars": {0: {"brake_bias": 55, "front_wing": 12, "fuel_load": 38.0}},
-                    "next_front_wing_value": 14.0,
-                },
-            )
-
-        spinning = lap_num in {2, 5}
+        spinning = lap_num in {2, 5, 8}
         motion_frames = 10 if spinning else 16
         for frame in range(motion_frames + (6 if spinning else 0)):
             active_spin = spinning and frame < motion_frames
@@ -131,14 +137,28 @@ def _practice_setup_stream() -> list[tuple[float, bytes]]:
     return packets
 
 
-def test_practice_replay_persists_laps_and_setup_runs(tmp_path: Path) -> None:
-    recording = write_packet_stream(tmp_path / "practice.f1bin", _practice_setup_stream())
-    db = Database(":memory:")
+def _replay_practice_db(
+    tmp_path: Path,
+    *,
+    change_setup: bool = True,
+    db_path: str | Path = ":memory:",
+    name: str = "practice",
+) -> tuple[Database, int]:
+    recording = write_packet_stream(
+        tmp_path / f"{name}.f1bin",
+        _practice_setup_stream(change_setup=change_setup),
+    )
+    db = Database(db_path)
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
     asyncio.run(run_replay(recording, engine, None))
 
     uid = engine.state.session_uid
     assert uid is not None
+    return db, uid
+
+
+def test_practice_replay_persists_laps_and_setup_runs(tmp_path: Path) -> None:
+    db, uid = _replay_practice_db(tmp_path)
     laps = db.laps_for(uid)
     assert laps
     assert any(row.traction_exits > 0 for row in laps if row.lap_num in {2, 5})
