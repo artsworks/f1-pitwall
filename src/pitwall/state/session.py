@@ -396,8 +396,11 @@ class Snapshot:
     fuel_source: str = ""
     energy_per_lap_mj: float = 0.0
     energy_lap_delta_mj: float = 0.0
+    energy_prev_lap_delta_mj: float = 0.0
+    energy_prev_lap_mode: str = ""
     energy_laps_to_floor: float = math.inf
     energy_mode: str = ""
+    num_pit_stops: int = 0
     drs_zone_ahead: bool = False
     drs_available: bool = False
     penalty_s: int = 0
@@ -626,6 +629,10 @@ class Snapshot:
     @property
     def energy_under_mj(self) -> float:
         return max(0.0, -self.energy_lap_delta_mj)
+
+    @property
+    def energy_prev_under_mj(self) -> float:
+        return max(0.0, -self.energy_prev_lap_delta_mj)
 
     @property
     def penalty_kind_text(self) -> str:
@@ -2276,8 +2283,11 @@ class SessionState:
             fuel_source=model.fuel_source,
             energy_per_lap_mj=model.energy_per_lap_mj,
             energy_lap_delta_mj=model.energy_lap_delta_mj,
+            energy_prev_lap_delta_mj=model.energy_prev_lap_delta_mj,
+            energy_prev_lap_mode=model.energy_prev_lap_mode,
             energy_laps_to_floor=model.energy_laps_to_floor,
             energy_mode=model.energy_mode,
+            num_pit_stops=self.num_pit_stops,
             predicted_lap_ms=model.predicted_lap_ms,
             pit_plan=model.pit_plan,
             pit_plan_lap=model.pit_plan_lap,

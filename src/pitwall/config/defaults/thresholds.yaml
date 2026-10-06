@@ -9,7 +9,6 @@ thresholds:
   boost_warn_s: 3          # boost continuously on for this long...
   boost_warn_brake: 0.3    # ...and the driver brakes
   boost_warn_lift: 0.5     # ...or lifts for a corner
-  boost_max_s: 12          # or on this long regardless
   yellow_warn_ahead_m: 800
   yellow_info_behind_m: 1500
   release_clean_gap_s: 4.0   # gap needed both ways at pit exit for "clean air"

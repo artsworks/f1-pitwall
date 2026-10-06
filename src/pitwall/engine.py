@@ -220,6 +220,12 @@ class Engine:
         self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
+        self.energy_prev_lap: EnergyBudget | None = None
+        self._energy_lap_num: int | None = None
+        self._energy_lap_start_store_j: float | None = None
+        self._energy_lap_start_laps_remaining: int | None = None
+        self._energy_max_deployed_j = 0.0
+        self._energy_max_harvested_j = 0.0
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
@@ -510,6 +516,7 @@ class Engine:
 
     def _on_new_session(self, uid: int) -> None:
         self.dispatcher.reset_session()
+        self._reset_energy_lap_tracking()
         self.menu.close()
         self._menu_replies.reset()
         self.opinions.clear()
@@ -533,6 +540,14 @@ class Engine:
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self.session_origin_started_at = None
+
+    def _reset_energy_lap_tracking(self) -> None:
+        self.energy_prev_lap = None
+        self._energy_lap_num = None
+        self._energy_lap_start_store_j = None
+        self._energy_lap_start_laps_remaining = None
+        self._energy_max_deployed_j = 0.0
+        self._energy_max_harvested_j = 0.0
 
     def _upsert_session(self, uid: int) -> None:
         if self.db is None:
@@ -987,6 +1002,35 @@ class Engine:
             )
 
         laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        lap_num = state.lap_num
+        deployed_j = state.ers_deployed_this_lap_j
+        harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
+        if lap_num < 1:
+            if self._energy_lap_num is not None:
+                self._reset_energy_lap_tracking()
+        elif self._energy_lap_num is None:
+            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
+        elif lap_num == self._energy_lap_num:
+            self._energy_max_deployed_j = max(self._energy_max_deployed_j, deployed_j)
+            self._energy_max_harvested_j = max(self._energy_max_harvested_j, harvested_j)
+        elif lap_num == self._energy_lap_num + 1 and self._energy_lap_num >= 1:
+            assert self._energy_lap_start_store_j is not None
+            assert self._energy_lap_start_laps_remaining is not None
+            self.energy_prev_lap = energy_budget(
+                store_j=state.ers_store_energy_j,
+                allowance_store_j=self._energy_lap_start_store_j,
+                store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
+                laps_remaining=self._energy_lap_start_laps_remaining,
+                deployed_this_lap_j=self._energy_max_deployed_j,
+                harvested_this_lap_j=self._energy_max_harvested_j,
+                soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
+                over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
+                attack_ok=mode.get("ers_policy") == "attack_rival",
+            )
+            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
+        else:
+            self._reset_energy_lap_tracking()
+            self._latch_energy_lap(lap_num, laps_remaining, deployed_j, harvested_j)
         per_lap_kg, fuel_source = self._fuel_per_lap(laps_remaining)
         self.fuel_budget = fuel_budget(
             laps_remaining=laps_remaining,
@@ -1000,9 +1044,20 @@ class Engine:
         self.energy_budget = energy_budget(
             store_j=state.ers_store_energy_j,
             store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
-            laps_remaining=laps_remaining,
-            deployed_this_lap_j=state.ers_deployed_this_lap_j,
-            harvested_this_lap_j=state.ers_harvested_mguk_j + state.ers_harvested_mguh_j,
+            laps_remaining=(
+                self._energy_lap_start_laps_remaining
+                if self._energy_lap_start_laps_remaining is not None
+                else laps_remaining
+            ),
+            deployed_this_lap_j=(
+                self._energy_max_deployed_j if self._energy_lap_num == lap_num else deployed_j
+            ),
+            harvested_this_lap_j=(
+                self._energy_max_harvested_j if self._energy_lap_num == lap_num else harvested_j
+            ),
+            allowance_store_j=(
+                self._energy_lap_start_store_j if self._energy_lap_num == lap_num else None
+            ),
             soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
             over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
             attack_ok=mode.get("ers_policy") == "attack_rival",
@@ -1074,11 +1129,28 @@ class Engine:
                 fuel_source=fb.source if fb is not None else "",
                 energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
                 energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
+                energy_prev_lap_delta_mj=(
+                    self.energy_prev_lap.lap_delta_j / 1e6
+                    if self.energy_prev_lap is not None
+                    else 0.0
+                ),
+                energy_prev_lap_mode=(
+                    self.energy_prev_lap.mode if self.energy_prev_lap is not None else ""
+                ),
                 energy_laps_to_floor=eb.laps_to_floor if eb is not None else math.inf,
                 energy_mode=eb.mode if eb is not None else "",
                 predicted_lap_ms=predicted,
             )
         )
+
+    def _latch_energy_lap(
+        self, lap_num: int, laps_remaining: int, deployed_j: float, harvested_j: float
+    ) -> None:
+        self._energy_lap_num = lap_num
+        self._energy_lap_start_store_j = self.state.ers_store_energy_j
+        self._energy_lap_start_laps_remaining = laps_remaining
+        self._energy_max_deployed_j = deployed_j
+        self._energy_max_harvested_j = harvested_j
 
     def _plan(self, snap: Snapshot) -> Snapshot:
         """Run the pit-window optimiser on the fresh snapshot and fold the
