@@ -407,15 +407,22 @@ rules:
     cooldown_group: battle
     requires: [lap_data]
     say:
-      - "{rival_behind_name} behind, {battle_pace_behind}. Cover the inside"
+      - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}"
       - "Car behind is {battle_pace_behind}. Keep the battery for the straight"
-      - "{rival_behind_name} in DRS, {battle_pace_behind}. One move only"
     severity:
+      - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_tyre_offset_behind >= 5"
+        priority: 1
+        say:
+          - "{rival_behind_name} {gap_behind_s:.1f} behind on older tyres. He'll fade"
+      - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_tyre_offset_behind <= -5"
+        priority: 1
+        say:
+          - "{rival_behind_name} {gap_behind_s:.1f} behind on fresher tyres. Battery {ers_store_pct:.0f}"
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5"
         priority: 1
         say:
-          - "{rival_behind_name} right on you, {battle_pace_behind}. Defend now"
-          - "He's all over you. Cover inside, save battery"
+          - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}. Battery {ers_store_pct:.0f}"
+          - "{rival_behind_name} right on you, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
   - id: battle_under_threat
     sessions: [race]
     min_lap: 2
@@ -528,8 +535,6 @@ rules:
     requires: [lap_data]
     say:
       - "Ahead of {battle_result_name}. Nail the exit, no DRS"
-      - "Back ahead of {battle_result_name}. Cover the next brake zone"
-      - "Ahead again. Defend that spot early"
   - id: battle_swap_behind
     sessions: [race]
     priority: 3
@@ -842,7 +847,6 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Last lap. {rival_behind_name} {gap_behind_s:.1f} behind. Cover inside"
       - "Final lap, {rival_behind_name} {gap_behind_s:.1f} back. Hold him off"
   - id: last_lap_attack
     sessions: [race]

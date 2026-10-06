@@ -131,8 +131,7 @@ rules:
     clear_when: "damage.ers_fault == 0"
     requires: [car_damage]
     say:
-      - "ERS fault, no deploy. Defend brake zones"
-      - "ERS fault. No battery, cover inside"
+      - "ERS fault. No deploy"
   # Boost still on when the driver lifts or brakes for a corner means full power on the exit.
   - id: boost_left_on
     sessions: [practice, qualifying, race]
