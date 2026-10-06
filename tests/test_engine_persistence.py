@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from statistics import median
 
 import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
+from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PacketId
+from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 
 from .synth import pack_packet, write_packet_stream
@@ -117,6 +120,86 @@ def _run(tmp_path: Path) -> tuple[VirtualClock, object, Database]:
     return engine, engine.state, db
 
 
+def _deg_prior_engine(db: Database):
+    uid = 0xF1262010
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+    )
+    engine.store.set_track(7)
+    engine.state.session_uid = uid
+    engine.state.session_type = 15
+    db.upsert_session(uid, track_id=7, session_type=15)
+    settings = engine.store.current()
+    assert settings.track is not None and settings.track.base_pace_ms == 0
+    return engine, uid, settings
+
+
+def _insert_deg_prior_lap(
+    db: Database,
+    uid: int,
+    lap_num: int,
+    lap_time_ms: int,
+    tyre_age_laps: int,
+    *,
+    valid: bool = True,
+    sc_status: int = 0,
+) -> None:
+    db.insert_lap(
+        uid,
+        0,
+        LapSummary(
+            lap_num=lap_num,
+            lap_time_ms=lap_time_ms,
+            sector1_ms=0,
+            sector2_ms=0,
+            compound=17,
+            tyre_age_laps=tyre_age_laps,
+            fuel_remaining_laps_at_end=10.0,
+            valid=valid,
+            sc_status=sc_status,
+        ),
+    )
+
+
+def test_deg_prior_uses_clean_session_lap_median() -> None:
+    db = Database(":memory:")
+    engine, uid, settings = _deg_prior_engine(db)
+    clean = [(112_618, 1), (112_958, 2), (112_093, 3)]
+    for lap_num, (lap_time_ms, age) in enumerate(clean, start=1):
+        _insert_deg_prior_lap(db, uid, lap_num, lap_time_ms, age)
+
+    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+    expected = median(lap_time_ms - prior.deg_ms_per_lap * age for lap_time_ms, age in clean)
+
+    assert prior.base_ms == expected
+    assert prior.base_ms != 95_000
+
+
+def test_deg_prior_keeps_learned_base_ahead_of_session_laps() -> None:
+    db = Database(":memory:")
+    engine, uid, settings = _deg_prior_engine(db)
+    _insert_deg_prior_lap(db, uid, 1, 112_618, 1)
+    name = engine._learned_name(7, 17, "base_ms")  # noqa: SLF001
+    db.set_param(7, 17, name, 110_000.0, weight=3.0)
+
+    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+
+    assert prior.base_ms == 110_000.0
+
+
+def test_deg_prior_uses_fallback_without_clean_session_laps() -> None:
+    db = Database(":memory:")
+    engine, uid, settings = _deg_prior_engine(db)
+    _insert_deg_prior_lap(db, uid, 1, 127_038, 1, valid=False)
+    _insert_deg_prior_lap(db, uid, 2, 127_038, 2, sc_status=1)
+
+    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+
+    assert prior.base_ms == 95_000
+
+
 def test_player_laps_carry_wear_fuel_ers(tmp_path: Path) -> None:
     engine, state, db = _run(tmp_path)
     uid = state.session_uid
@@ -178,3 +261,17 @@ def test_rules_facing_snapshot_carries_model(tmp_path: Path) -> None:
     assert snap.pit_loss_source != ""
     assert snap.predicted_lap_ms > 0
     assert snap.fuel_source != ""
+
+
+def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), db=db)
+    clean = DegFit(90_000.0, 80.0, 30.0, 8, 150.0, 0.9, "fit")
+    engine._fold_fit(-1, 18, clean)
+    engine._fold_fit(7, 18, DegFit(55_520.0, 600.0, 0.0, 7, 7_992.0, 0.2, "fit"))
+    engine._fold_fit(7, 18, DegFit(90_000.0, 80.0, 30.0, 4, 150.0, 0.5, "blend"))
+    assert db.get_param(-1, 18, "deg_ms_per_lap") is None
+    assert db.get_param(7, 18, "deg_ms_per_lap") is None
+    engine._fold_fit(7, 18, clean)
+    p = db.get_param(7, 18, "deg_ms_per_lap")
+    assert p is not None and p.value == 80.0

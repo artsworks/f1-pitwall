@@ -196,8 +196,23 @@ def test_cool_lap_coaching_rules() -> None:
     )
     assert {"cool_status", "cool_vs_pole", "cool_mistakes"} <= set(ids)
     assert ids["cool_vs_pole"] in (
-        "Pole is 2.2 up. Most of it is sector 2, 1.9",
-        "2.2 to pole, 1.9 of that in sector 2",
+        "2.2 to pole. Most in sector 2, 1.9",
+        "2.2 to pole. Sector 2, 1.9",
+    )
+    ids = _ids(
+        _qsnap(
+            sector=1,
+            pole_gap_ms=402,
+            pole_gap_s=0.4,
+            pole_worst_sector=2,
+            pole_worst_sector_s=1.0,
+            **cool,
+        )
+    )
+    assert "cool_vs_pole" not in ids
+    assert ids["cool_vs_pole_split"] in (
+        "0.4 to pole. Sector 2 costs 1.0, you gain elsewhere",
+        "0.4 to pole. Lose 1.0 in sector 2, gain some back",
     )
     assert "cool_car_behind" in _ids(_qsnap(hot_car_behind_s=2.0, **cool))
     assert "cool_car_behind" not in _ids(_qsnap(hot_car_behind_s=math.inf, **cool))
@@ -230,7 +245,13 @@ def test_cool_payload_swaps_layout() -> None:
     assert isinstance(cool, dict)
     assert cool["ers_pct"] == 12.0 and cool["dist_to_hot_m"] == 1800.0
     assert cool["ers_min_pct"] == 40 and cool["window_c"] == [88, 102]
-    assert cool["pole"] == {"driver": None, "gap_ms": 2_000, "sector_gaps_ms": [100, 1_700, 200]}
+    assert cool["pole"] == {
+        "driver": None,
+        "gap_ms": 2_000,
+        "sector_gaps_ms": [100, 1_700, 200],
+        "sectors_ms": [0, 0, 0],
+        "pole_sectors_ms": [0, 0, 0],
+    }
     assert cool["car_behind_s"] is None and cool["mistakes"] is None
     assert q["plan"] == {"plan": "cool", "reason": "battery"}
     # hot-lap-mode point reached: normal layout returns

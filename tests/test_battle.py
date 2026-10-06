@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 from pitwall.clock import VirtualClock
+from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
+from pitwall.rules.engine import RuleEngine
 from pitwall.server.app import strategy_payload
 from pitwall.state.session import CarLap, Snapshot
 from pitwall.store.db import Database
@@ -283,6 +285,39 @@ def test_replay_defend_call(battle_runs) -> None:
     calls, _ = battle_runs["defend"]
     assert "battle_defend" in _ids(calls)
     assert "battle_attack" not in _ids(calls)
+
+
+def test_battle_defend_urgent_phrases_include_battery_and_tyre_info() -> None:
+    def phrase_for_tyre_offset(offset: int) -> str:
+        store = ConfigStore()
+        settings = store.current()
+        engine = RuleEngine(
+            list(settings.rules),
+            thresholds=settings.thresholds,
+            mode=store.current().resolved_mindset(),
+            staleness_s=settings.engine.staleness_s,
+        )
+        snapshot = Snapshot(
+            now=0.0,
+            session_kind="race",
+            session_type=15,
+            lap_num=5,
+            phase="racing",
+            rival_behind_name="NORRIS",
+            gap_behind_s=0.5,
+            battle_mode="defending",
+            battle_closing_behind_s=0.3,
+            battle_tyre_offset_behind=offset,
+            battle_pace_behind="three tenths faster",
+            ers_store_pct=42.0,
+            _ages={"lap_data": 0.1},
+        )
+        candidates = engine.evaluate(snapshot).candidates
+        return next(c.text for c in candidates if c.rule.defn.id == "battle_defend")
+
+    assert "Battery" in phrase_for_tyre_offset(0)
+    assert "older tyres" in phrase_for_tyre_offset(6)
+    assert "fresher tyres" in phrase_for_tyre_offset(-6)
 
 
 def test_replay_free_air_is_quiet(battle_runs) -> None:

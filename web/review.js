@@ -53,7 +53,7 @@
     Object.keys(inputs).forEach(function (k) {
       var v = inputs[k];
       rows += "<tr><td>" + k + "</td><td>" +
-        (typeof v === "number" ? +v.toFixed(3) : String(v)) + "</td></tr>";
+        (typeof v === "number" ? +v.toFixed(1) : String(v)) + "</td></tr>";
     });
     detail.innerHTML =
       "<b>" + (d.rule_id || d.outcome) + "</b> — " + d.outcome +

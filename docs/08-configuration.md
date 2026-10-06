@@ -183,15 +183,7 @@ focus from a fullscreen game (`12-driver-input.md`).
 
 ## Weekend and season context
 
-Config also carries the things that persist across sessions in a weekend or a career:
-
-- weekend link (P1/P2/P3 → Q → R at one track share a context, so practice data informs
-  the race);
-- tyre allocation remaining across the weekend;
-- in career/season play, engine-component allocation and grid-penalty state, which change
-  what "push now" means;
-- AI difficulty and assists, since rival pace models are only comparable within a
-  difficulty.
-
-These are read from telemetry where the packets provide them and configured where they do
-not.
+The engine uses the weekend link for degradation priors. Earlier fitted practice stints can
+inform a race on the same track and compound. Nonzero links must match; if either link is
+zero, the UTC session dates must match. The engine needs at least `weekend_min_laps` fitted
+laps.

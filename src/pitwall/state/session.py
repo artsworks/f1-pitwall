@@ -57,6 +57,38 @@ from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
 
+
+def thermal_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
+    cold_map = thresholds.get("tyre_inner_cold_by_compound_c", {})
+    hot_map = thresholds.get("tyre_inner_hot_by_compound_c", {})
+    cold = cold_map.get(compound, thresholds.get("tyre_inner_cold_c", 80.0))
+    hot = hot_map.get(compound, thresholds.get("tyre_inner_hot_c", 110.0))
+    return float(cold), float(hot)
+
+
+def pressure_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
+    cold_map = thresholds.get("tyre_inner_cold_by_compound_c", {})
+    if compound not in cold_map:
+        return (
+            float(thresholds.get("pressure_window_low_c", 88.0)),
+            float(thresholds.get("pressure_window_high_c", 102.0)),
+        )
+    inset = float(thresholds.get("pressure_window_inset_c", 5.0))
+    cold, hot = thermal_window(thresholds, compound)
+    return cold + inset, hot - inset
+
+
+def spoken_lap_time(ms: float) -> str:
+    if ms <= 0 or not math.isfinite(ms):
+        return "?"
+    minutes, seconds = divmod(round(ms / 100) / 10, 60)
+    seconds_text = f"{seconds:.1f}".removesuffix(".0")
+    if minutes == 0:
+        return f"{seconds_text} seconds"
+    unit = "minute" if minutes == 1 else "minutes"
+    return f"{int(minutes)} {unit} {seconds_text} seconds"
+
+
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",
@@ -85,6 +117,13 @@ SECTOR3_VALID = 0x08
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
 PENALTY_TYPE_WARNING = 5
+
+
+def _warning_family(kind: str) -> str:
+    """Warnings the game counts together toward a penalty: corner cuts, running wide."""
+    return kind if kind in ("cut", "overtake") else "limits"
+
+
 # PENA infringement_type -> kind of track-limit / corner-cutting warning.
 _TRACK_WARNING_KINDS = {
     7: "cut",
@@ -226,6 +265,7 @@ class Snapshot:
     drs_allowed: int = 0
     tyres_wear: Corners = _ZERO_CORNERS
     damage: Damage = _ZERO_DAMAGE
+    front_wing_pit_status: str = ""
     speed_kmh: float = 0.0
     throttle: float = 0.0
     brake: float = 0.0
@@ -256,6 +296,7 @@ class Snapshot:
     laps: tuple[LapSummary, ...] = ()
     # M2: session context
     session_uid: int = 0
+    weekend_link: int = 0
     session_time_left: float = 0.0
     session_duration: float = 0.0
     track_length_m: float = 0.0
@@ -280,6 +321,7 @@ class Snapshot:
     fastest_lap_mine: bool = False
     fastest_lap_name: str = ""
     fastest_lap_time: str = ""  # "1:19.195"
+    fastest_lap_spoken: str = ""
     fastest_lap_age_s: float = math.inf  # since it was set
     fastest_lap_gap_s: float = math.inf  # player best minus fastest lap
     grid_position: int = 0
@@ -296,7 +338,7 @@ class Snapshot:
     contact_episodes: int = 0  # contact episodes this session
     contact_damage: str = ""  # part with the biggest new damage, e.g. "front left wing"
     contact_damage_pct: int = 0
-    contact_damage_major: bool = False  # crossed its warn threshold: the damage rules speak
+    contact_damage_major: bool = False
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
@@ -375,6 +417,7 @@ class Snapshot:
     penalty_threat_name: str = ""
     track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
     track_warning_recent: bool = False
+    track_warning_count: int = 0  # warnings of the latest warning's kind (cut / track limits)
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -519,6 +562,8 @@ class Snapshot:
     pole_gap_ms: int = 0  # player best - pole best; 0 when unknown or on pole
     pole_gap_s: float = 0.0
     pole_sector_gaps_ms: tuple[int, int, int] = (0, 0, 0)
+    best_sectors_ms: tuple[int, int, int] = (0, 0, 0)
+    pole_sectors_ms: tuple[int, int, int] = (0, 0, 0)
     pole_worst_sector: int = 0
     pole_worst_sector_s: float = 0.0
     hot_car_behind_s: float = math.inf
@@ -606,10 +651,12 @@ class SessionState:
         self.last_recv_wall: float | None = None
         self._player_idx = 0
         self.session_uid: int | None = None
+        self.weekend_link_identifier = 0
         # Called with session_time on each flashback rewind.
         self.rewind_listeners: list[Callable[[float], None]] = []
         # Called with the new session_uid on each session change.
         self.session_listeners: list[Callable[[int], None]] = []
+        self.session_end_listeners: list[Callable[[], None]] = []
         # Called with (recv_time, down) on each UDP-action button edge.
         self.press_listeners: list[Callable[[float, bool], None]] = []
         # Called with recv_time on each press of the radio-silent toggle button.
@@ -637,6 +684,7 @@ class SessionState:
         # session context
         self.session_type = 0
         self.track_id = -1
+        self.weekend_link_identifier = 0
         self.total_laps = 0
         self.weekend_structure: tuple[int, ...] = ()
         self.safety_car_status = 0
@@ -771,6 +819,11 @@ class SessionState:
         self._last_penalty_st: float | None = None
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
+        self._track_warnings: dict[str, int] = {}
+        self._warning_events: list[tuple[float, str]] = []
+        self._penalty_pending_s = 0
+        self._penalty_lap_increase_s = 0
+        self._penalty_lap_change_st: float | None = None
         self.lights_out = False
         self.chequered = False
         self._flag_as_leader = False
@@ -829,6 +882,8 @@ class SessionState:
         if self.session_uid is None:
             self.session_uid = header.session_uid
         elif header.session_uid != self.session_uid:
+            for end_listener in self.session_end_listeners:
+                end_listener()
             self._reset_session()
             self.session_uid = header.session_uid
             for cb in self.session_listeners:
@@ -898,6 +953,17 @@ class SessionState:
         self.contacts.reset()
         self.off_track.reset()
         self.boost.reset()
+        self._warning_events = [(when, kind) for when, kind in self._warning_events if when <= t]
+        self._track_warnings.clear()
+        for _, kind in self._warning_events:
+            family = _warning_family(kind)
+            self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
+        self.track_warning_kind = self._warning_events[-1][1] if self._warning_events else ""
+        self._last_track_warning_st = self._warning_events[-1][0] if self._warning_events else None
+        self._penalty_pending_s = 0
+        self._penalty_lap_increase_s = 0
+        self._penalty_lap_change_st = None
+        self._last_penalty_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
         # Per-car session history stays: it is authoritative from the game and
@@ -917,6 +983,7 @@ class SessionState:
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
+        self.weekend_link_identifier = pkt.weekend_link_identifier
         self.safety_car_status = pkt.safety_car_status
         self.session_time_left = float(pkt.session_time_left)
         self.session_duration = float(pkt.session_duration)
@@ -987,7 +1054,12 @@ class SessionState:
         self.result_status = car.result_status
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
+        if car.penalties != self.penalty_s:
+            self._penalty_lap_increase_s = max(0, car.penalties - self.penalty_s)
+            self._penalty_lap_change_st = pkt.header.session_time
         self.penalty_s = car.penalties
+        if car.penalties >= self._penalty_pending_s:
+            self._penalty_pending_s = 0
         self.warnings = car.total_warnings
         self.corner_cut_warnings = car.corner_cutting_warnings
         self.unserved_drive_through = car.num_unserved_drive_through_pens
@@ -1091,7 +1163,12 @@ class SessionState:
             ers_pct=self.ers_store_pct,
             ers_min_pct=self._ers_need_pct(),
             hottest_c=max(self._ema_or_zero(self.tyre_inner_fast).as_tuple()),
-            tyre_hot_c=self._th("cool_tyre_hot_c", 104.0),
+            tyre_hot_c=(
+                thermal_window(self._thresholds, self.tyre_compound)[1]
+                - self._th("cool_tyre_hot_margin_c", 1.0)
+                if self.tyre_compound in self._thresholds.get("tyre_inner_hot_by_compound_c", {})
+                else self._th("cool_tyre_hot_c", 104.0)
+            ),
             time_left_s=self.session_time_left,
             cool_lap_s=self._th("cool_lap_factor", 1.3) * lap_s,
             fuel_laps=self.fuel_remaining_laps,
@@ -1140,6 +1217,7 @@ class SessionState:
             self._handle_rewind(pkt.header.session_time)
         elif pkt.code == "RDFL":
             self.red_flag = True
+            self.lap_acc.note_red_flag()
         elif pkt.code == "SSTA":
             self.red_flag = False
         elif pkt.code == "SEND":
@@ -1184,6 +1262,9 @@ class SessionState:
                 if ptype == PENALTY_TYPE_WARNING and warn_kind:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
+                    self._warning_events.append((pkt.header.session_time, warn_kind))
+                    family = _warning_family(warn_kind)
+                    self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
                 if kind:
                     # Warnings, lap invalidations and retirements also arrive as PENA
                     # with time_s = 255; only real penalties are announced.
@@ -1193,6 +1274,17 @@ class SessionState:
                     self.penalty_kind = kind
                     self.penalty_infringement = int(pkt.detail.get("infringement_type", 0))
                     self.penalty_time_s = time_s if kind == "time" and time_s != 255 else 0
+                    if self.penalty_time_s:
+                        if (
+                            self._penalty_lap_change_st is not None
+                            and self._penalty_lap_change_st >= pkt.header.session_time
+                            and self._penalty_lap_increase_s >= self.penalty_time_s
+                        ):
+                            self._penalty_lap_increase_s -= self.penalty_time_s
+                        else:
+                            self._penalty_pending_s = (
+                                max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
+                            )
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -1450,6 +1542,9 @@ class SessionState:
         car = pkt.cars[self._player_idx]
         self.tyre_surface = car.tyres_surface_temperature
         self.tyre_inner = car.tyres_inner_temperature
+        self.lap_acc.note_tyre_temperatures(
+            car.tyres_inner_temperature.as_tuple(), car.tyres_surface_temperature.as_tuple()
+        )
         self.brake_temp = car.brakes_temperature
         self.speed_kmh = float(car.speed)
         self.off_track.update_surface(st, car.surface_type.as_tuple())
@@ -1565,7 +1660,7 @@ class SessionState:
             contact_episodes=c.episodes,
             contact_damage=part,
             contact_damage_pct=pct,
-            contact_damage_major=pct >= warn and c.baseline.get(part, 0) < warn,
+            contact_damage_major=pct >= warn,
         )
 
     def _teammate(self) -> int:
@@ -1702,6 +1797,14 @@ class SessionState:
                     player_best_s1,
                     player_best_s2,
                     player_best_s3,
+                    ref_sectors=next(
+                        (
+                            self._best_lap_sectors.get(i, (0, 0, 0))
+                            for i, b in enumerate(field_best)
+                            if b == cutoff_ms and i != self._player_idx
+                        ),
+                        (0, 0, 0),
+                    ),
                 )
                 advice = abort_advice(
                     proj_ms,
@@ -1725,11 +1828,12 @@ class SessionState:
                 self._pressure_base = self.setup_tyre_pressure
         else:
             self._pressure_base = None
+        pressure_low, pressure_high = pressure_window(self._thresholds, self.tyre_compound)
         pressures = pressure_advice(
             run_avg,
             self._pressure_base or self.setup_tyre_pressure,
-            self._th("pressure_window_low_c", 88.0),
-            self._th("pressure_window_high_c", 102.0),
+            pressure_low,
+            pressure_high,
             hot_sign=self._th("pressure_hot_sign", 1.0),
             medium_c=self._th("pressure_size_medium_c", 5.0),
             large_c=self._th("pressure_size_large_c", 10.0),
@@ -1743,6 +1847,7 @@ class SessionState:
         )
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)
+        laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
         return Snapshot(
             now=now,
             session_time=st,
@@ -1760,6 +1865,7 @@ class SessionState:
             phase=phase,
             safety_car_status=self.safety_car_status,
             session_uid=self.session_uid or 0,
+            weekend_link=self.weekend_link_identifier,
             session_time_left=self.session_time_left,
             session_duration=self.session_duration,
             track_length_m=self.track_length_m,
@@ -1772,9 +1878,7 @@ class SessionState:
             rewinds=self.rewinds,
             weather=self.weather,
             game_mode=self.game_mode,
-            laps_remaining=(
-                max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
-            ),
+            laps_remaining=laps_remaining,
             lights_out=self.lights_out,
             chequered=self.chequered,
             gap_ahead_s=race.pop(
@@ -1794,7 +1898,7 @@ class SessionState:
             unserved_stop_go=self.unserved_stop_go,
             warnings=self.warnings,
             corner_cut_warnings=self.corner_cut_warnings,
-            penalty_s=self.penalty_s,
+            penalty_s=max(self.penalty_s, self._penalty_pending_s),
             penalty_type=self.penalty_type,
             penalty_infringement=self.penalty_infringement,
             penalty_time_s=self.penalty_time_s,
@@ -1804,6 +1908,9 @@ class SessionState:
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
             track_warning_kind=self.track_warning_kind,
+            track_warning_count=self._track_warnings.get(
+                _warning_family(self.track_warning_kind), 0
+            ),
             track_warning_recent=(
                 self._last_track_warning_st is not None
                 and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)
@@ -1887,6 +1994,19 @@ class SessionState:
             drs_allowed=self.drs_allowed,
             tyres_wear=self.tyres_wear,
             damage=self.damage,
+            front_wing_pit_status=(
+                "box"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_lost_pct", 50.0)
+                and laps_remaining > self._th("pit_min_laps_left", 2.0)
+                else "nurse"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_lost_pct", 50.0)
+                else "review"
+                if max(self.damage.front_left_wing, self.damage.front_right_wing)
+                >= self._th("front_wing_damage_warn_pct", 15.0)
+                else ""
+            ),
             speed_kmh=self.speed_kmh,
             throttle=self.throttle,
             brake=self.brake,
@@ -1956,13 +2076,12 @@ class SessionState:
         run = self.run
         temps = inner.as_tuple()
         hot_i = max(range(4), key=lambda i: temps[i])
-        low_c = self._th("pressure_window_low_c", 88.0)
-        high_c = self._th("pressure_window_high_c", 102.0)
+        low_c, high_c = pressure_window(self._thresholds, self.tyre_compound)
         if temps[hot_i] > high_c:
-            hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, keep it off the kerbs"
+            hint = f"{WHEEL_NAMES[hot_i]} {temps[hot_i]:.0f}, off the kerbs"
         elif min(temps) < low_c:
             cold_i = min(range(4), key=lambda i: temps[i])
-            hint = f"{WHEEL_NAMES[cold_i]} down to {temps[cold_i]:.0f}, keep some heat in it"
+            hint = f"{WHEEL_NAMES[cold_i]} {temps[cold_i]:.0f}, keep heat in it"
         else:
             hint = (
                 f"tyres in the window, fronts {(inner.fl + inner.fr) / 2:.0f}, "
@@ -1994,9 +2113,10 @@ class SessionState:
         pole_gap = 0
         gaps = (0, 0, 0)
         name = ""
+        mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
+        theirs: tuple[int, int, int] = (0, 0, 0)
         if pole_idx >= 0 and pole_idx != self._player_idx and player_best > 0:
             pole_gap = player_best - field_best[pole_idx]
-            mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
             theirs = self._best_lap_sectors.get(pole_idx, (0, 0, 0))
             gaps = (
                 mine[0] - theirs[0] if mine[0] and theirs[0] else 0,
@@ -2031,6 +2151,8 @@ class SessionState:
             pole_gap_ms=pole_gap,
             pole_gap_s=round(pole_gap / 1000.0, 1),
             pole_sector_gaps_ms=gaps,
+            best_sectors_ms=mine,
+            pole_sectors_ms=theirs,
             pole_worst_sector=worst + 1 if gaps[worst] > 0 else 0,
             pole_worst_sector_s=round(max(0, gaps[worst]) / 1000.0, 1),
             hot_car_behind_s=(
@@ -2080,12 +2202,13 @@ class SessionState:
         name = self.participants[idx].name if 0 <= idx < len(self.participants) else ""
         mine = idx == self._player_idx
         best = field_best[self._player_idx] if 0 <= self._player_idx < len(field_best) else 0
-        secs = ms / 1000.0
+        secs = round(ms / 100) / 10
         return dict(
             fastest_lap_ms=ms,
             fastest_lap_mine=mine,
             fastest_lap_name=name,
-            fastest_lap_time=f"{int(secs // 60)}:{secs % 60:06.3f}",
+            fastest_lap_time=f"{int(secs // 60)}:{secs % 60:04.1f}",
+            fastest_lap_spoken=spoken_lap_time(ms),
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
         )
@@ -2222,9 +2345,11 @@ class SessionState:
             h = self._histories.get(i)
             if h is None:
                 return self._best_laps.get(i, 0)
-            return rival_pace_ms(h, int(self._th("rival_pace_window", 3.0))) or self._best_laps.get(
-                i, 0
-            )
+            return rival_pace_ms(
+                h,
+                int(self._th("rival_pace_window", 3.0)),
+                self._th("rival_pace_outlier_ratio", 1.07),
+            ) or self._best_laps.get(i, 0)
 
         def name_of(i: int) -> str:
             return self.participants[i].name if 0 <= i < len(self.participants) else ""
@@ -2390,9 +2515,10 @@ class SessionState:
         temps = self._ema_or_zero(self.tyre_inner_slow).as_tuple()
         hot = max(temps)
         coldest = min(temps)
-        suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
-        hot_c = self._th(f"tyre_inner_hot{suffix}_c", 110.0) + self._thermal_warn_offset_c
+        hot_c = thermal_window(self._thresholds, self.tyre_compound)[1]
+        hot_c += self._thermal_warn_offset_c
         hyst = self._th("thermal_hysteresis_c", 4.0)
+        suffix = {7: "_inter", 8: "_wet"}.get(self.tyre_compound, "")
         grain_c = self._th(f"tyre_graining{suffix}_c", 75.0)
         self._overheat = (self._overheat and hot > hot_c - hyst) or hot >= hot_c
         in_context = self.race_phase == "racing" and self.tyre_age_laps >= 2

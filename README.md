@@ -77,19 +77,23 @@ More in [docs/getting-started.md](docs/getting-started.md).
 
 | Call | When |
 |---|---|
-| Out-lap tyre check | Entering sector 3 of the out-lap: "still coming in" with temperatures, or "tyres are in, good to push" |
-| Front wing damage | Wing damage ≥ 15 %, with left/right percentages |
-| Boost left on | ERS boost on for 3 s and you lift or brake, or 12 s regardless |
-| Yellow flag | Ahead within 800 m: careful, no overtaking. Appeared behind you: you're clear |
-| Lock-up | After the wheel releases; front → ease brake pressure, rear → move brake bias forward |
-| Lost it | After a big slide or spin, as you get going again: easy on the throttle, the rears are cooked |
-| Same corner | Locking up in the same braking zone as an earlier lap: move the braking point |
+| Qualifying | Clean-air release, abort advice, and a push/cool/box/push-now run plan with fuel and battery reminders |
+| Race strategy | Plans A/B/C, pit windows, undercut and overcut advice, and safety-car or VSC stop calls |
+| Tyres | Out-lap checks, thermal advice, and life from the minimum of worst-corner wear life and the pace cliff |
+| Fuel and ERS | Fuel margin, deployment and energy-budget calls |
+| Driving and flags | Wing damage, boost left on, yellow flags, lock-ups, spins and slides |
 
 Calls rotate through several phrasings, and repeat the same mistake often
 enough and the engineer gets drier about it (ADR 0008).
 
 Every call is a rule in [`src/pitwall/config/defaults/rules/shared.yaml`](src/pitwall/config/defaults/rules/shared.yaml)
 with thresholds in [`thresholds.yaml`](src/pitwall/config/defaults/thresholds.yaml).
+
+### After a session
+
+No steps are required. Pitwall grades sessions at the end and runs upkeep at the next
+start. Optional review and learning commands are in
+[After a session](docs/getting-started.md#after-a-session).
 
 ## Shape of the system
 
@@ -140,9 +144,10 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | Document | Contents |
 |---|---|
 | [`docs/status.md`](docs/status.md) | Milestone progress, what works today, what is next |
-| [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, doctor, recording profiles, replay, troubleshooting |
+| [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, after-session commands, recording profiles, replay |
 | [`docs/07-replay-and-debug.md`](docs/07-replay-and-debug.md) | Recording format, replay CLI, A/B diffing, live diagnostics |
 | [`docs/08-configuration.md`](docs/08-configuration.md) | Settings model, verbosity presets, balanced/aggressive mindset |
+| [`docs/20-learning-loop.md`](docs/20-learning-loop.md) | Automatic grading and upkeep, calibration, learned state |
 
 **Design**
 
@@ -156,6 +161,11 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/12-driver-input.md`](docs/12-driver-input.md) | Wheel button and spacebar: acknowledge / negative |
 | [`docs/13-league-multiplayer.md`](docs/13-league-multiplayer.md) | Friends-league target: restricted telemetry, league preset |
 | [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard design (implemented in `web/`) |
+| [`docs/16-debrief-design.md`](docs/16-debrief-design.md) | Session debrief: built sections, grading and deferred work |
+| [`docs/17-quali-run-plan.md`](docs/17-quali-run-plan.md) | Qualifying run plan and coaching |
+| [`docs/18-race-engine.md`](docs/18-race-engine.md) | Race engine, tyre life, degradation priors and persistence |
+| [`docs/21-voice-command.md`](docs/21-voice-command.md) | Voice-command design and implementation status |
+| [`docs/22-setup-advisor.md`](docs/22-setup-advisor.md) | Setup advisor proposal: parameter effects, parc fermé matrix, balance signals, rule tables, learning loop |
 
 **Decisions and reference**
 

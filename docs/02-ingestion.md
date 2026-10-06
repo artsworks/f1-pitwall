@@ -53,10 +53,7 @@ The in-game send rate is a user setting (10–60 Hz; we assume 30 Hz). No calcul
 - **Low rates degrade gracefully.** At 10 Hz, fine thermal trends and distance-to-corner
   gating get coarser; the doctor warns but does not refuse.
 
-The rate is chosen before starting the backend: `pitwall start --send-rate 30`, the
-`connection.send_rate_hz` setting, or the tray menu. A mismatch with the observed rate is
-a warning, never an error. Recordings store the observed rate, so replays of 20 Hz and
-60 Hz sessions behave the same.
+Set the UDP Send Rate in the game before starting `pitwall start`.
 
 ## Packets consumed
 

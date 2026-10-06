@@ -42,6 +42,18 @@ def test_out_lap_cold_fires_once(tmp_path: Path) -> None:
     assert "60" in fired[0]
 
 
+def test_wet_compounds_green_out_lap_replay(tmp_path: Path) -> None:
+    for compound, green in ((7, 70), (8, 60)):
+        rec = write_packet_stream(
+            tmp_path / f"out-{compound}.f1bin",
+            out_lap_scenario(cold_s=0, warm_temp=green, compound=compound, rate_hz=10),
+        )
+        _, decision_log = _replay(tmp_path, None, rec)
+        fired = [row["rule_id"] for row in decision_log if row["outcome"] == "fired"]
+        assert "out_lap_s3_tyres_ready" in fired
+        assert "out_lap_s3_tyres_cold" not in fired
+
+
 def test_deterministic_across_speeds(tmp_path: Path) -> None:
     rec = write_packet_stream(tmp_path / "out.f1bin", out_lap_scenario())
     _, log_max = _replay(tmp_path, None, rec)

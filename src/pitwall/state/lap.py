@@ -1,6 +1,6 @@
 """Lap accumulator and LapSummary. Validity per docs/03 "Lap validity":
 not lap 1; pit_status == 0 throughout; not the lap after an in-lap;
-safety_car_status == 0 throughout; current_lap_invalid == 0; no flashback.
+safety_car_status == 0 throughout; no red flag; current_lap_invalid == 0; no flashback.
 (The docs' "no weather transition" needs Session weather tracking — deferred,
 recorded but not yet an invalidator.)
 """
@@ -26,6 +26,8 @@ class LapSummary:
     ers_deployed_j: float = 0.0  # ers_deployed_this_lap at lap end
     sc_status: int = 0  # max safety_car_status seen during the lap
     weather: int = 0
+    tyre_inner_c: float = 0.0
+    tyre_surface_c: float = 0.0
 
 
 class LapAccumulator:
@@ -37,17 +39,34 @@ class LapAccumulator:
         self._prev_was_in_lap = False
         self._saw_pit = False
         self._saw_sc = False
+        self._saw_red_flag = False
         self._saw_flashback = False
         self._saw_invalid = False
         self._sc_max = 0
         self._last_driver_status = 0
+        self._tyre_inner_sum = 0.0
+        self._tyre_surface_sum = 0.0
+        self._tyre_samples = 0
 
     def note_flashback(self) -> None:
         self._saw_flashback = True
 
+    def note_red_flag(self) -> None:
+        self._saw_red_flag = True
+
     def reset_stint_flags(self) -> None:
-        self._saw_pit = self._saw_sc = self._saw_flashback = self._saw_invalid = False
+        self._saw_pit = self._saw_sc = self._saw_red_flag = False
+        self._saw_flashback = self._saw_invalid = False
         self._sc_max = 0
+
+    def note_tyre_temperatures(
+        self,
+        inner_corners: tuple[float, float, float, float],
+        surface_corners: tuple[float, float, float, float],
+    ) -> None:
+        self._tyre_inner_sum += sum(inner_corners) / 4.0
+        self._tyre_surface_sum += sum(surface_corners) / 4.0
+        self._tyre_samples += 1
 
     def update(
         self,
@@ -81,11 +100,17 @@ class LapAccumulator:
         prev_flags = (
             self._saw_pit,
             self._saw_sc,
+            self._saw_red_flag,
             self._saw_flashback,
             self._saw_invalid,
             self._prev_was_in_lap,
             self._sc_max,
         )
+        inner_c = self._tyre_inner_sum / self._tyre_samples if self._tyre_samples else 0.0
+        surface_c = self._tyre_surface_sum / self._tyre_samples if self._tyre_samples else 0.0
+        self._tyre_inner_sum = 0.0
+        self._tyre_surface_sum = 0.0
+        self._tyre_samples = 0
         self.reset_stint_flags()
         self._prev_was_in_lap = driver_status == 2  # in lap
         self._accumulate(pit_status, current_lap_invalid, safety_car_status)
@@ -93,7 +118,7 @@ class LapAccumulator:
 
         if finished == 0:
             return None  # first observation; nothing completed
-        saw_pit, saw_sc, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
+        saw_pit, saw_sc, saw_red_flag, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
         reasons: list[str] = []
         if finished == 1:
             reasons.append("first_lap")
@@ -103,6 +128,8 @@ class LapAccumulator:
             reasons.append("after_in_lap")
         if saw_sc:
             reasons.append("safety_car")
+        if saw_red_flag:
+            reasons.append("red_flag")
         if saw_inv:
             reasons.append("invalid")
         if saw_fb:
@@ -122,6 +149,8 @@ class LapAccumulator:
             ers_deployed_j=ers_deployed_this_lap,
             sc_status=sc_max,
             weather=weather,
+            tyre_inner_c=inner_c,
+            tyre_surface_c=surface_c,
         )
 
     def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:

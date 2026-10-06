@@ -43,6 +43,7 @@ and falls back to SAPI if it cannot load:
 ```powershell
 uv run pitwall voices get                     # default: en_GB-northern_english_male-medium
 uv run pitwall voices get en_US-ryan-high     # try others; samples: https://rhasspy.github.io/piper-samples/
+uv run pitwall voices warm                    # pre-render 50 common fixed phrases
 uv run pitwall speak --engine piper --voice en_US-ryan-high "Box this lap."
 uv run pitwall speak --engine sapi            # compare with the old voice
 ```
@@ -56,6 +57,53 @@ default).
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.
+
+## Phone radio over HTTPS
+
+On the PC that hosts Pitwall, install [mkcert](https://github.com/FiloSottile/mkcert)
+and run `mkcert -install`. Make a certificate for the PC's actual LAN IP:
+
+```powershell
+mkcert -cert-file "$HOME\.pitwall\phone.pem" -key-file "$HOME\.pitwall\phone-key.pem" 192.168.1.20 localhost 127.0.0.1
+```
+
+Replace `192.168.1.20` with the PC's IP. Configure `connection.https_cert` and
+`connection.https_key` with those absolute PEM paths and restart Pitwall. Install
+mkcert's local root CA on the phone (the mkcert README explains the phone-specific
+steps); the phone must trust it for wake lock, service worker, and PWA install.
+Open `https://<PC-LAN-IP>:8000/radio`, choose **ARM PHONE RADIO** once on the
+phone, then install the page from the browser menu if desired. Use phone speech
+when backend speech is off to avoid hearing duplicate calls. Browsers may suspend
+speech in background tabs; keep the page open and visible. The PWA caches only
+static assets; live telemetry still requires a connection to the PC.
+
+## After a session
+
+Nothing is required after a live session. Pitwall grades it when it ends. On the next
+`pitwall start`, automatic upkeep grades any remaining sessions, rebuilds stint priors
+once per learning version, and moves bad learned values to SQLite quarantine with a
+reason such as `unknown_track` or `deg_clamped`. `pitwall doctor` reports the quarantine
+count.
+
+These commands are optional:
+
+| Command | Purpose |
+|---|---|
+| `pitwall debrief --session latest` | Export a session review as HTML |
+| `pitwall stats --learned` | Show learned values and their sources |
+| `pitwall calibrate` | Fit track values from stored sessions |
+| `pitwall evaluate` | Compare calls-on and calls-off sessions |
+| `pitwall propose` | Write threshold candidates for review |
+| `pitwall maintain` | Run upkeep now |
+| `pitwall cleanup` | Delete old learned recordings and caches; lists them and asks first |
+| `pitwall digest` | Write a digest JSON or ingest external recordings |
+
+Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not
+need to run it for a live session or edit SQLite.
+
+Cleanup keeps recordings until that exact file has been imported. Another file with
+the same session ID is not enough. It also keeps files changed after import and files
+written within the last hour. Check the list before confirming deletion.
 
 ## Recording
 

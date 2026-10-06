@@ -16,6 +16,9 @@ class ConnectionSettings(BaseModel):
     send_rate_hz: int = 30
     http_host: str = "0.0.0.0"
     http_port: int = 8000
+    https_cert: str = ""
+    https_key: str = ""
+    shutdown_timeout_s: int = 3
 
 
 class RecordingSettings(BaseModel):
@@ -132,7 +135,7 @@ class InputSettings(BaseModel):
     silent_off_replies: list[str] = Field(
         default_factory=lambda: [
             "Back with you. Feeding you info again.",
-            "Radio's back on. I'll keep you posted.",
+            "Radio's back on.",
             "Back on the radio.",
         ]
     )

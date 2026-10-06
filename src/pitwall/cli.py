@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sqlite3
 import sys
 import threading
 import time
@@ -216,6 +217,15 @@ def cmd_tune(args: argparse.Namespace) -> int:
     if db is None:
         print("tune: persistence disabled")
         return 1
+    if args.paths:
+        from pitwall.ingest import ingest_recordings
+
+        results = ingest_recordings(db, args.paths, settings, calls_mode=args.calls_mode)
+        for result in results:
+            print(
+                f"{result.session_uid} {result.status} {result.path}"
+                + (f": {result.error}" if result.error else "")
+            )
     print(format_tune(tune_from_db(db, settings.thresholds)))
     return 0
 
@@ -230,6 +240,24 @@ def cmd_digest(args: argparse.Namespace) -> int:
     if db is None:
         print("digest: persistence disabled")
         return 1
+    if args.paths:
+        from pitwall.ingest import ingest_recordings
+
+        out_dir = None if args.out in (None, "-") else Path(args.out)
+        results = ingest_recordings(
+            db,
+            args.paths,
+            settings,
+            calls_mode=args.calls_mode,
+            out_dir=out_dir,
+        )
+        for result in results:
+            print(f"session {result.session_uid}: {result.status} ({result.path})")
+            for finding in result.findings:
+                print(f"  - {finding}")
+            if result.error:
+                print(f"  error: {result.error}")
+        return 1 if any(result.status == "error" for result in results) else 0
     uid = db.latest_session_uid() if args.session in (None, "latest") else int(args.session)
     if uid is None:
         print("digest: no sessions in the database")
@@ -246,6 +274,74 @@ def cmd_digest(args: argparse.Namespace) -> int:
         path = out_dir / f"{uid}.json"
         path.write_text(json.dumps(digest, indent=2, default=str))
         print(f"digest: {path}")
+    return 0
+
+
+def cmd_debrief(args: argparse.Namespace) -> int:
+    from pitwall.debrief import render_debrief
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("debrief: persistence disabled")
+        return 1
+    uid = db.latest_session_uid() if args.session == "latest" else int(args.session)
+    if uid is None or db.session_row(uid) is None:
+        print("debrief: session not found")
+        return 1
+    path = Path(args.out) if args.out else Path(f"debrief-{uid}.html")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_debrief(db, uid, settings))
+    print(f"debrief: {path}")
+    return 0
+
+
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    from pitwall.evaluate import evaluate_corpus
+    from pitwall.store.db import Database, open_configured
+
+    db = Database(args.db) if args.db else open_configured(ConfigStore().current())
+    if db is None:
+        print("evaluate: persistence disabled")
+        return 1
+    result = evaluate_corpus(db, args.track)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        for track in result["tracks"]:
+            mode_status = "comparable" if track["comparable"] else "one mode only"
+            print(f"Track {track['track_id']}: {mode_status}")
+            for mode, row in (("on", track["on"]), ("off", track["off"])):
+                print(
+                    f"  calls {mode}: {row['sessions']} sessions, {row['completed_laps']} laps, "
+                    f"clean pace p25/p50/p75={row['lap_time_s']['p25']}/"
+                    f"{row['lap_time_s']['p50']}/{row['lap_time_s']['p75']} s; "
+                    f"invalid laps={row['invalid_laps']} ({row['mistake_rate']}); "
+                    f"negative call grades={row['negative_call_grades']}"
+                )
+        print(result["note"])
+    return 0
+
+
+def cmd_propose(args: argparse.Namespace) -> int:
+    import yaml
+
+    from pitwall.propose import propose_thresholds
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("propose: persistence disabled")
+        return 1
+    result = propose_thresholds(db, settings, args.candidate_rules)
+    output = yaml.safe_dump(result, sort_keys=False)
+    if args.out:
+        Path(args.out).write_text(output)
+        print(f"propose: review {args.out} before editing YAML")
+    else:
+        print(output)
     return 0
 
 
@@ -386,7 +482,55 @@ def cmd_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from pitwall.calibrate import calibrate, format_calibration, write_overlays
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("calibrate: persistence disabled")
+        return 1
+    errors = False
+    if args.paths:
+        from pitwall.ingest import ingest_recordings
+
+        results = ingest_recordings(db, args.paths, settings)
+        for result in results:
+            if result.status == "error":
+                errors = True
+                print(f"ingest error {result.path}: {result.error}")
+    report = calibrate(db, settings, track_id=args.track, dry_run=args.dry_run)
+    if args.write_overlay and not args.dry_run:
+        report["overlays"] = [
+            str(path) for path in write_overlays(report, settings, args.overlay_dir)
+        ]
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+    else:
+        print(format_calibration(report))
+        for path in report.get("overlays", []):
+            print(f"overlay: {path}")
+    return 1 if errors else 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
+    if args.learned:
+        from pitwall.store.db import Database, open_configured
+
+        settings = ConfigStore().current()
+        db = Database(args.db) if args.db else open_configured(settings)
+        if db is None:
+            print("stats --learned: persistence disabled")
+            return 1
+        from pitwall.learned import format_learned, learned_state
+
+        state = learned_state(db, settings, track_id=args.track)
+        print(json.dumps(state, indent=2, default=str) if args.json else format_learned(state))
+        return 0
+    if not args.file:
+        print("stats: provide a recording or use --learned")
+        return 2
     ingest = Ingest()
     last_t = 0.0
     with RecordingReader(Path(args.file)) as reader:
@@ -464,6 +608,19 @@ async def _state_broadcast(
         await base.clock.sleep(period)
 
 
+def _handle_https_disconnect(loop: asyncio.AbstractEventLoop, context: dict[str, object]) -> None:
+    message = context.get("message")
+    if (
+        isinstance(context.get("exception"), ConnectionResetError)
+        and isinstance(message, str)
+        and message.startswith(
+            "Exception in callback _ProactorBasePipeTransport._call_connection_lost("
+        )
+    ):
+        return
+    loop.default_exception_handler(context)
+
+
 async def _serve(
     engine: Engine,
     hub: Hub,
@@ -476,6 +633,8 @@ async def _serve(
     from pitwall.server.app import create_app
 
     settings = store.current()
+    if sys.platform == "win32" and settings.connection.https_cert and settings.connection.https_key:
+        asyncio.get_running_loop().set_exception_handler(_handle_https_disconnect)
 
     def active() -> Engine:
         """Review mode rebuilds the engine on play/seek; follow the current one."""
@@ -497,6 +656,7 @@ async def _serve(
         on_client_press=lambda down: active().client_press(down),
         on_client_message=lambda msg: active().client_message(msg),
         review=review,
+        db=engine.db,
     )
 
     def _health() -> dict[str, Any]:
@@ -514,10 +674,18 @@ async def _serve(
         host=settings.connection.http_host,
         port=settings.connection.http_port,
         log_level="warning",
+        timeout_graceful_shutdown=settings.connection.shutdown_timeout_s,
+        ssl_certfile=str(Path(settings.connection.https_cert).expanduser())
+        if settings.connection.https_cert and settings.connection.https_key
+        else None,
+        ssl_keyfile=str(Path(settings.connection.https_key).expanduser())
+        if settings.connection.https_cert and settings.connection.https_key
+        else None,
     )
     server = uvicorn.Server(config)
     host, port = settings.connection.http_host, settings.connection.http_port
-    print(f"dashboard: http://{host}:{port}  (LAN: http://{_lan_ip()}:{port})")
+    scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
+    print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
     await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
@@ -546,7 +714,13 @@ def cmd_start(args: argparse.Namespace) -> int:
         recorder = RecordingRotator(
             Path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
-            metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
+            metadata={
+                "config_hash": store.hash,
+                "send_rate_hz": settings.connection.send_rate_hz,
+                "calls_mode": (
+                    "off" if settings.policy.quiet or not settings.speech.enabled else "on"
+                ),
+            },
             profile=profile,
             compress=settings.recording.compress_on_close,
         )
@@ -576,6 +750,13 @@ def cmd_start(args: argparse.Namespace) -> int:
         from pitwall.store.db import open_configured
 
         db = open_configured(settings)
+    if db is not None:
+        from pitwall.maintenance import maintain
+
+        try:
+            print(f"learning: {maintain(db, settings.thresholds).summary()}", flush=True)
+        except sqlite3.Error as e:
+            print(f"learning: upkeep skipped ({e})", flush=True)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
@@ -676,7 +857,13 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
         recorder = RecordingRotator(
             rec_dir,
             config_hash=int(store.hash, 16) % (2**32),
-            metadata={"config_hash": store.hash, "send_rate_hz": settings.connection.send_rate_hz},
+            metadata={
+                "config_hash": store.hash,
+                "send_rate_hz": settings.connection.send_rate_hz,
+                "calls_mode": (
+                    "off" if settings.policy.quiet or not settings.speech.enabled else "on"
+                ),
+            },
             profile=profile,
             compress=settings.recording.compress_on_close,
         )
@@ -765,13 +952,27 @@ def cmd_speak(args: argparse.Namespace) -> int:
 
 
 def cmd_voices(args: argparse.Namespace) -> int:
-    from pitwall.audio.piper_tts import SUGGESTED_VOICES, download_voice, installed_voices
+    from pitwall.audio.piper_tts import (
+        SUGGESTED_VOICES,
+        common_phrases,
+        download_voice,
+        installed_voices,
+        make_piper_speaker,
+    )
 
     speech = ConfigStore().current().speech
     if args.action == "get":
         for name in args.names or [speech.piper_voice]:
             path = download_voice(speech, name)
             print(f"downloaded {name} -> {path}")
+        return 0
+    if args.action == "warm":
+        speaker = make_piper_speaker(speech)
+        try:
+            count = speaker.warm(common_phrases())
+            print(f"cached {count} phrases for {speech.piper_voice}")
+        finally:
+            speaker.close()
         return 0
     have = installed_voices(speech)
     print(f"voices in {speech.voices_dir}/ (configured: {speech.piper_voice}):")
@@ -834,7 +1035,104 @@ def cmd_voice(args: argparse.Namespace) -> int:
 def cmd_doctor(args: argparse.Namespace) -> int:
     from pitwall.doctor import run_doctor
 
-    return run_doctor(seconds=args.seconds)
+    result = run_doctor(seconds=args.seconds)
+    try:
+        from pitwall.learned import learned_state
+        from pitwall.store.db import open_configured
+
+        settings = ConfigStore().current()
+        db = open_configured(settings)
+        state = learned_state(db, settings) if db is not None else {}
+        tracks = state.get("tracks", [])
+        tuned = state.get("tuned_cooldowns", [])
+        print("learned state:")
+        if tracks:
+            for track in tracks:
+                print(
+                    f"  track {track['track_id']} {track['name']}: "
+                    f"{track['session_count']} sessions, {track['ingested_count']} ingested"
+                )
+        else:
+            print("  no persisted track learning")
+        print(f"  tuned rules: {len(tuned)}")
+        if db is not None:
+            print(f"  database: {db.path}")
+            print(f"  quarantined values: {len(db.quarantined_params())}")
+    except Exception:
+        print("learned state: unavailable")
+    return result
+
+
+def cmd_maintain(args: argparse.Namespace) -> int:
+    """Quarantine bad learned values, rebuild stint priors, grade sessions."""
+    from pitwall.maintenance import maintain
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("maintain: persistence disabled")
+        return 1
+    report = maintain(db, settings.thresholds)
+    print(f"database: {db.path}")
+    for line in report.quarantined:
+        print(f"  quarantined {line}")
+    print(f"maintain: {report.summary()}")
+    return 0
+
+
+def _mb(n: int) -> str:
+    return f"{n / 1e6:.1f} MB"
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    """List old files that are safe to delete; delete them after confirmation."""
+    from pitwall.cleanup import apply, plan_cleanup
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("cleanup: persistence disabled, recordings are never deleted")
+    db_path = (
+        Path(db.path).expanduser()
+        if db is not None
+        else Path(settings.persistence.path).expanduser()
+    )
+    try:
+        plan = plan_cleanup(
+            Path(args.recordings or settings.recording.directory),
+            db_path.parent,
+            Path(settings.speech.voices_dir),
+            db.ingested_uids() if db is not None else set(),
+            args.days,
+            recording_imports=db.ingested_recordings() if db is not None else {},
+        )
+    except ValueError as exc:
+        print(f"cleanup: {exc}")
+        return 2
+    if plan.kept_unlearned:
+        print(f"keeping {plan.kept_unlearned} old recording(s) not learned yet")
+    if not plan.delete:
+        print("cleanup: nothing to delete")
+        return 0
+    by_reason: dict[str, list[int]] = {}
+    for c in plan.delete:
+        print(f"  {_mb(c.size):>9}  {c.path}")
+        by_reason.setdefault(c.reason, []).append(c.size)
+    for reason, sizes in by_reason.items():
+        print(f"{len(sizes)} x {reason}: {_mb(sum(sizes))}")
+    prompt = f"Delete {len(plan.delete)} file(s), {_mb(plan.total_bytes)}? [y/N] "
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("cleanup: not confirmed (use --yes to run without a prompt)")
+            return 1
+        if input(prompt).strip().lower() not in ("y", "yes"):
+            print("cleanup: cancelled, nothing deleted")
+            return 1
+    n, freed = apply(plan)
+    print(f"cleanup: deleted {n} file(s), freed {_mb(freed)}")
+    return 0
 
 
 def cmd_compress(args: argparse.Namespace) -> int:
@@ -889,15 +1187,58 @@ def build_parser() -> argparse.ArgumentParser:
     dif.set_defaults(func=cmd_diff)
 
     tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
+    tun.add_argument("paths", nargs="*", help="recordings to ingest before tuning")
+    tun.add_argument("--calls-mode", choices=["on", "off"], default=None)
     tun.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     tun.set_defaults(func=cmd_tune)
 
+    mt = sub.add_parser("maintain", help="repair learned state (runs automatically on start)")
+    mt.add_argument("--db", default=None)
+    mt.set_defaults(func=cmd_maintain)
+
+    cu = sub.add_parser("cleanup", help="delete old learned recordings and caches (asks first)")
+    cu.add_argument("--days", type=float, default=30.0, help="only files older than this")
+    cu.add_argument("--recordings", default=None, help="recordings folder (default: settings)")
+    cu.add_argument("--db", default=None)
+    cu.add_argument("--yes", action="store_true", help="delete without asking")
+    cu.set_defaults(func=cmd_cleanup)
+
     dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
+    dg.add_argument("paths", nargs="*", help="recordings to ingest")
+    dg.add_argument("--calls-mode", choices=["on", "off"], default=None)
     dg.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     dg.add_argument("--session", default=None, help="session uid (default: latest)")
     dg.add_argument("--out", default=None, help="digest dir (default: ~/.pitwall/digests, - none)")
     dg.add_argument("--json", action="store_true")
     dg.set_defaults(func=cmd_digest)
+
+    debrief = sub.add_parser("debrief", help="export a standalone session debrief")
+    debrief.add_argument("--session", default="latest", help="session uid (default: latest)")
+    debrief.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    debrief.add_argument("--out", default=None, help="HTML output path")
+    debrief.set_defaults(func=cmd_debrief)
+
+    ev = sub.add_parser("evaluate", help="compare recorded calls-on and calls-off outcomes")
+    ev.add_argument("--db", default=None)
+    ev.add_argument("--track", type=int, default=None)
+    ev.add_argument("--json", action="store_true")
+    ev.set_defaults(func=cmd_evaluate)
+
+    proposal = sub.add_parser("propose", help="review-only corpus threshold proposals")
+    proposal.add_argument("--db", default=None)
+    proposal.add_argument("--candidate-rules", type=Path, default=None)
+    proposal.add_argument("--out", default=None)
+    proposal.set_defaults(func=cmd_propose)
+
+    cal = sub.add_parser("calibrate", help="fit track priors from recorded sessions")
+    cal.add_argument("paths", nargs="*", help="recordings to ingest before calibration")
+    cal.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    cal.add_argument("--track", type=int, default=None)
+    cal.add_argument("--dry-run", action="store_true")
+    cal.add_argument("--write-overlay", action="store_true")
+    cal.add_argument("--overlay-dir", type=Path, default=None)
+    cal.add_argument("--json", action="store_true")
+    cal.set_defaults(func=cmd_calibrate)
 
     rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
     rpt.add_argument("--recording", default=None, help=".f1bin path (default: newest in dir)")
@@ -924,7 +1265,11 @@ def build_parser() -> argparse.ArgumentParser:
     idx.set_defaults(func=cmd_index)
 
     st = sub.add_parser("stats", help="packet census of a recording")
-    st.add_argument("file")
+    st.add_argument("file", nargs="?")
+    st.add_argument("--learned", action="store_true")
+    st.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    st.add_argument("--track", type=int, default=None)
+    st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_stats)
 
     vc = sub.add_parser("voice", help="voice channel: SRGS grammar, SAPI devices, Phase 0 spike")
@@ -976,7 +1321,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_speak)
 
     vo = sub.add_parser("voices", help="list or download Piper voices")
-    vo.add_argument("action", nargs="?", choices=["list", "get"], default="list")
+    vo.add_argument("action", nargs="?", choices=["list", "get", "warm"], default="list")
     vo.add_argument("names", nargs="*", help="voice names for get (default: configured)")
     vo.set_defaults(func=cmd_voices)
 

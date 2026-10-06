@@ -3,10 +3,22 @@ pace, rival pace median."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+from statistics import median
 from types import SimpleNamespace
 from typing import Any
 
-from pitwall.model.deg import DegFit, fit_stint, laps_of_pace, rival_pace_ms
+import pytest
+
+from pitwall.model.deg import (
+    DegFit,
+    fit_stint,
+    fuel_adjusted_deg,
+    fuel_burned_laps,
+    laps_of_pace,
+    rival_pace_ms,
+    session_base_ms,
+)
 from pitwall.store.db import LapRow
 
 PRIOR = DegFit(90_000.0, 80.0, 30.0, 0, 0.0, 0.3, "prior")
@@ -52,10 +64,10 @@ def test_fit_recovers_known_slope() -> None:
 
 
 def test_fuel_slope_fitted_when_not_fixed() -> None:
-    # time = base + deg*age + fuel_gain*(fuel_ref - fuel_remaining); quadratic
+    # time = base + deg*age - fuel_gain*fuel_burned (lighter is faster); quadratic
     # burn keeps the fuel regressor independent of tyre_age.
     laps = [
-        _lap(a, 90_000 + 50 * a + 25 * (a * a * 0.1), fuel_rem=5.0 - a * a * 0.1) for a in range(8)
+        _lap(a, 90_000 + 50 * a - 25 * (a * a * 0.1), fuel_rem=5.0 - a * a * 0.1) for a in range(8)
     ]
     fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=None)
     assert abs(fit.deg_ms_per_lap - 50.0) < 1.0
@@ -82,6 +94,21 @@ def test_invalid_and_sc_laps_excluded() -> None:
     laps[4] = _lap(4, 120_000, sc=1)
     fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
     assert fit.n == 3 and fit.source == "blend"
+
+
+def test_session_base_uses_median_of_clean_laps() -> None:
+    clean = [_lap(1, 112_618), _lap(2, 112_958), _lap(3, 112_093)]
+    laps = [*clean, _lap(4, 127_038, valid=0), _lap(5, 127_038, sc=1)]
+
+    expected = median(lap.lap_time_ms - 60 * lap.tyre_age_laps for lap in clean)
+
+    assert session_base_ms(laps, 60) == expected
+
+
+def test_session_base_returns_zero_without_clean_laps() -> None:
+    laps = [_lap(1, 127_038, valid=0), _lap(2, 127_038, sc=1)]
+
+    assert session_base_ms(laps, 60) == 0.0
 
 
 def test_deg_slope_clamped() -> None:
@@ -119,3 +146,30 @@ def test_rival_pace_median() -> None:
     h = _history([(90_000, 1), (91_000, 1), (95_000, 1), (99_000, 1), (120_000, 0)])
     assert rival_pace_ms(h, 3) == 95_000  # last 3 valid: 91000, 95000, 99000
     assert rival_pace_ms(_history([(90_000, 0)]), 3) == 0
+
+
+def test_rival_pace_drops_red_flag_laps() -> None:
+    h = _history([(95_000, 1), (233_000, 1), (236_000, 1)])
+    assert rival_pace_ms(h, 3) == 233_000
+    assert rival_pace_ms(h, 3, outlier_ratio=1.07) == 95_000
+
+
+def test_fuel_burn_from_kg_not_mfd_margin() -> None:
+    # Game MFD margin stays flat; kg falls 1.5/lap. Lighter car gains 30 ms/lap
+    # of fuel, so the raw slope (70) understates tyre deg (100).
+    laps = [
+        replace(_lap(a, 90_000 + 100 * a - 30 * a, fuel_rem=0.4), fuel_kg=20.0 - 1.5 * a)
+        for a in range(8)
+    ]
+    assert fuel_burned_laps(laps)[-1] == pytest.approx(7.0)
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=None)
+    assert fit.fuel_ms_per_lap == PRIOR.fuel_ms_per_lap == 30.0
+    assert fit.deg_ms_per_lap == pytest.approx(100.0, abs=1.0)
+
+
+def test_learned_deg_resplit_with_current_fuel_slope() -> None:
+    # A race stint fit with fuel fixed at 30 read flat laps as 30 deg; once
+    # fuel is learned as 0, the same laps mean 0 deg.
+    assert fuel_adjusted_deg(30.0, 30.0, 0.0) == 0.0
+    assert fuel_adjusted_deg(80.0, 30.0, 50.0) == 100.0
+    assert fuel_adjusted_deg(80.0, None, 0.0) == 80.0

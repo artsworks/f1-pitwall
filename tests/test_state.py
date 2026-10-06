@@ -5,9 +5,9 @@ import pytest
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.state.ema import Ema
-from pitwall.state.session import SessionState
+from pitwall.state.session import Damage, SessionState, Snapshot, pressure_window, thermal_window
 
-from .synth import pack_packet
+from .synth import make_event_packet, pack_packet
 
 
 def _state() -> tuple[Ingest, SessionState]:
@@ -400,6 +400,43 @@ def test_red_flag_set_and_cleared() -> None:
     assert state.snapshot(0.2).session_ended
 
 
+def test_red_flag_invalidates_interrupted_lap() -> None:
+    ingest, state = _state()
+    for lap, t in ((8, 1.0), (8, 2.0)):
+        _send(
+            ingest,
+            pack_packet(
+                PacketId.LAP_DATA,
+                {"cars": {0: {"current_lap_num": lap, "driver_status": 4}}},
+                session_time=t,
+            ),
+            t,
+        )
+    _send(ingest, make_event_packet(b"RDFL", session_time=3.0), 3.0)
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {0: {"current_lap_num": 11, "driver_status": 4, "last_lap_time_ms": 236_000}}},
+            session_time=4.0,
+        ),
+        4.0,
+    )
+    assert state.laps[-1].lap_num == 8
+    assert state.laps[-1].invalid_reasons == ["red_flag"]
+    _send(ingest, make_event_packet(b"LGOT", session_time=5.0), 5.0)
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {0: {"current_lap_num": 12, "driver_status": 4, "last_lap_time_ms": 94_000}}},
+            session_time=6.0,
+        ),
+        6.0,
+    )
+    assert state.laps[-1].valid
+
+
 def test_session_uid_change_resets_state() -> None:
     ingest, state = _state()
     _send(
@@ -455,8 +492,36 @@ def test_fastest_lap_event_in_snapshot() -> None:
     _send(ingest, make_packet(PacketId.EVENT, body=b"SPTP" + bytes(8), session_time=104.0), 0.1)
     snap = state.snapshot(0.1)
     assert snap.fastest_lap_mine and snap.fastest_lap_ms == 79_195
-    assert snap.fastest_lap_time == "1:19.195"
+    assert snap.fastest_lap_time == "1:19.2"
+    assert snap.fastest_lap_spoken == "1 minute 19.2 seconds"
     assert 3.9 < snap.fastest_lap_age_s < 4.1
+
+
+def test_compound_thermal_windows_match_dashboard_and_pressure_targets() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import state_payload
+
+    settings = ConfigStore().current()
+    cases = (
+        (7, 70.0, (60.0, 85.0), (65.0, 80.0)),
+        (8, 60.0, (50.0, 80.0), (55.0, 75.0)),
+        (16, 78.0, (70.0, 90.0), (75.0, 85.0)),
+        (21, 100.0, (90.0, 125.0), (95.0, 120.0)),
+    )
+    for compound, green, expected, pressure in cases:
+        assert thermal_window(settings.thresholds, compound) == expected
+        assert pressure_window(settings.thresholds, compound) == pressure
+        snap = Snapshot(
+            now=0.0,
+            tyre_compound=compound,
+            tyre_inner_ema_fast=Corners(green, green, green, green),
+        )
+        payload = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+        assert {corner["status"] for corner in payload["tyres"].values()} == {"OK"}
+    assert thermal_window(settings.thresholds, 0) == (80, 110)
+    assert pressure_window(settings.thresholds, 0) == (88, 102)
 
 
 def test_tyre_switch_from_field_compound_gap() -> None:
@@ -504,3 +569,18 @@ def test_collision_event_starts_contact_check_and_reports() -> None:
     assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 8)
     assert not snap.contact_damage_major
     assert state._teammate() == 2
+
+
+def test_contact_increment_on_damaged_wing_remains_major() -> None:
+    ingest, state = _state()
+    state.damage = Damage(front_left_wing=39)
+    state.contacts.hit(10.0, 1, 1, state._damage_parts())
+    state.damage = Damage(front_left_wing=76)
+    _send(
+        ingest,
+        pack_packet(PacketId.EVENT, {"event_string_code": b"SPTP"}, session_time=15.0),
+        15.0,
+    )
+    snap = state.snapshot(15.0)
+    assert (snap.contact_damage, snap.contact_damage_pct) == ("front left wing", 76)
+    assert snap.contact_damage_major

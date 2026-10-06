@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0a0a0c"/>
+  <path d="M82 300h90l50-112 64 201 56-117h88" stroke="#38d7b1" stroke-width="26" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="256" y="150" text-anchor="middle" fill="#f1f6f9" font-family="sans-serif" font-weight="bold" font-size="74">PIT</text>
+</svg>

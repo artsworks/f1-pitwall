@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 
 from pitwall.audio.dispatcher import Call
-from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth, radio_blip, to_wav
+from pitwall.audio.piper_tts import (
+    PiperSpeaker,
+    common_phrases,
+    make_piper_synth,
+    radio_blip,
+    to_wav,
+)
 from pitwall.audio.speaker import NullSpeaker, make_speaker
 from pitwall.config.models import SpeechSettings
 
@@ -71,6 +77,39 @@ def test_piper_speaker_plays_reports_and_caches() -> None:
     assert player.played == [b"front left cold", b"front left cold"]
     assert synthed == ["front left cold"]
     sp.close()
+
+
+def test_prerendered_phrases_survive_restart_and_keep_tone_separate(tmp_path: Path) -> None:
+    synthed: list[str] = []
+    wav = to_wav(np.zeros(160), 16_000)
+
+    def synth(text: str) -> tuple[bytes, float]:
+        synthed.append(text)
+        return wav, 0.01
+
+    first = PiperSpeaker(
+        synth,
+        FakePlayer(),
+        tones={1: synth, 2: synth},
+        cache_dir=tmp_path,
+        cache_key="configured-voice-tone",
+    )
+    assert first.warm([("Box this lap", 1), ("Box this lap", 2)]) == 2
+    assert synthed == ["Box this lap", "Box this lap"]
+    first.close()
+    restarted = PiperSpeaker(
+        synth,
+        FakePlayer(),
+        tones={1: synth, 2: synth},
+        cache_dir=tmp_path,
+        cache_key="configured-voice-tone",
+    )
+    assert restarted.render("Box this lap", 1) == (wav, 0.01)
+    assert restarted.render("Box this lap", 2) == (wav, 0.01)
+    assert len(synthed) == 2
+    restarted.close()
+    assert len(common_phrases()) == 50
+    assert all("{" not in text for text, _ in common_phrases())
 
 
 def test_piper_speaker_skips_cancelled() -> None:

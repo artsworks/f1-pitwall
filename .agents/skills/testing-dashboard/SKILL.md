@@ -39,6 +39,18 @@ the lead; do not substitute frontend state mocks.
   saving a live screenshot. Review pause can preserve a live clock and is not an
   equivalent disconnect test.
 
+## Replay tests for session-derived models
+
+Replay writes laps to the database. Copy the user's database and pass the copy with `--seed-db`. Do not pass the original.
+
+The review pre-pass in `ReviewController._build_timeline` can write the whole race into the database before visible playback starts. Before you test cold-start model values, isolate the pre-pass database or skip the timeline step in a temporary helper outside the repo. Do not change engine calculations or recorded packets.
+
+Play the replay in order when a model uses this session's completed laps. A review seek can skip laps that the model needs.
+
+To take repeatable screenshots, pause the clock at checkpoints. This does not change the model.
+
+One more packet batch can arrive between a pause request and the paused frame. Record exact values from engine samples, not from screenshots.
+
 ## Matching takeover fixtures
 
 Do not assume a race pit stop produces the same payload as a garage/pitting

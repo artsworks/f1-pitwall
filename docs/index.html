@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>f1-pitwall · planning docs</title>
-<meta name="description" content="Design documents for f1-pitwall, a race engineer for F1 26.">
+<title>f1-pitwall · docs and status</title>
+<meta name="description" content="Documentation and current build status for f1-pitwall, a race engineer for F1 26.">
 <style>
-:root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4}
-@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff}}
+:root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4;--ok:#17803d;--built:#b45309}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff;--ok:#4ade80;--built:#fbbf24}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 a{color:var(--link)}
@@ -56,6 +56,51 @@ article img{max-width:100%}
 .cards a span{font-size:14px;color:var(--muted)}
 .path{font-size:13px;color:var(--muted);margin-bottom:6px}
 .err{color:var(--accent)}
+article:has(.landing){max-width:1040px}
+.landing h2{font-size:24px}
+.landing .lede{color:var(--muted);max-width:720px;margin:0 0 14px}
+.hero{padding:8px 0 4px}
+.hero h1{font-size:44px;line-height:1.1;margin:6px 0 10px;letter-spacing:-.01em}
+.hero h1 span{color:var(--accent)}
+.hero .pitch{font-size:21px;line-height:1.45;color:var(--fg);max-width:760px;margin:0 0 12px}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);text-decoration:none}
+.badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--built)}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.btn{display:inline-block;padding:9px 18px;border-radius:8px;border:1px solid var(--line);font-weight:600;font-size:15px;text-decoration:none;color:var(--fg);background:var(--panel)}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.calls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.calls>div{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel);font-size:14px}
+.calls b{display:block;font-size:16px;margin-bottom:2px}
+.calls p{margin:0 0 10px;color:var(--muted)}
+.radio{margin:6px 0 0;padding:6px 10px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 6px 6px 0;font:13px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--fg)}
+.radio::before{content:"RADIO ";color:var(--accent);font-weight:700;font-size:11px;letter-spacing:.06em}
+.flow{display:flex;align-items:stretch;gap:26px;margin:18px 0 10px;padding:0;list-style:none}
+.flow li{position:relative;flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel);font-size:13px;color:var(--muted)}
+.flow li b{display:block;color:var(--fg);font-size:15px}
+.flow li+li::before{content:"→";position:absolute;left:-21px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:700}
+.flow li.out{display:flex;flex-direction:column;gap:6px;padding:0;border:0;background:none}
+.flow li.out span{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--panel)}
+.flow-note{font-size:14px;color:var(--muted);margin:0 0 6px}
+.milestones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:16px 0}
+.milestones a{display:block;border:1px solid var(--line);border-top:4px solid var(--built);border-radius:8px;padding:10px 12px;text-decoration:none;color:var(--fg);font-size:13px;background:var(--panel)}
+.milestones a.done{border-top-color:var(--ok)}
+.milestones a:hover{border-color:var(--accent)}
+.milestones b{display:block;font-size:17px}
+.milestones .st{display:block;font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--built);margin:2px 0 4px}
+.milestones .done .st{color:var(--ok)}
+.milestones small{display:block;color:var(--muted);line-height:1.4}
+.works{columns:2;column-gap:28px;padding-left:20px;font-size:15px}
+.works li{break-inside:avoid;margin-bottom:6px}
+.next{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:16px 0}
+.next a{display:block;border:1px dashed var(--line);border-radius:10px;padding:14px 16px;text-decoration:none;color:var(--fg);font-size:14px}
+.next a:hover{border-style:solid;border-color:var(--accent)}
+.next a b{display:block;font-size:16px;margin-bottom:4px}
+.next a span{color:var(--muted)}
+.next a em{display:inline-block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-bottom:6px}
+.landing .dive h3{margin:22px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.foot{font-size:13px;color:var(--muted);margin-top:30px}
 @media (max-width:860px){
   #menu{display:inline-block}
   header .status{display:none}
@@ -63,6 +108,13 @@ article img{max-width:100%}
   nav{display:none;position:fixed;top:53px;left:0;right:0;bottom:0;height:auto;background:var(--bg);z-index:4;border:0}
   body.nav-open nav{display:block}
   main{padding:20px 18px 60px}
+  .hero h1{font-size:34px}
+  .hero .pitch{font-size:18px}
+  .flow{flex-direction:column;gap:22px}
+  .flow li+li::before{content:"↓";left:50%;top:-19px;transform:translateX(-50%)}
+  .milestones{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .works{columns:1}
+  .calls{grid-template-columns:1fr}
 }
 @media print{header,nav,.pager,.toc{display:none}.layout{display:block}main{padding:0}}
 </style>
@@ -71,7 +123,7 @@ article img{max-width:100%}
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
-  <span class="status">M1 built · live-tested on F1 26</span>
+  <span class="status">M3 built · M4 built in PR #21</span>
   <a class="gh" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
 </header>
 <div class="layout">
@@ -85,8 +137,8 @@ article img{max-width:100%}
 <script>
 const GROUPS = [
   ["Start here", [
-    ["status", "Status", "Milestone progress, what works today, what is next and known gaps."],
-    ["getting-started", "Getting started", "Install, game telemetry settings, doctor, start, recording profiles and replay."],
+    ["status", "Status", "M0–M4 progress, current features, calibration evidence and open gaps."],
+    ["getting-started", "Getting started", "Install, game settings, live use, after-session commands and replay."],
     ["05-roadmap", "Roadmap", "M0 capture and replay through M4 calibration, with exit criteria for each milestone."]
   ]],
   ["Decisions (ADRs)", [
@@ -98,18 +150,22 @@ const GROUPS = [
     ["adr/0005-recordings-never-committed", "ADR 0005 · Recordings stay local", "Recordings never enter git; learnings do."],
     ["adr/0006-recording-profiles", "ADR 0006 · Recording profiles", "Lite by default, full on demand; measured sizes."],
     ["adr/0007-driving-event-signals", "ADR 0007 · Driving-event signals", "Lock-ups, boost, yellows, out-lap timing from live data."],
-    ["adr/0008-natural-phrasing-without-an-llm", "ADR 0008 · Natural phrasing", "Variant pools and escalation instead of an LLM."]
+    ["adr/0008-natural-phrasing-without-an-llm", "ADR 0008 · Natural phrasing", "Variant pools and escalation instead of an LLM."],
+    ["adr/0009-llm-chooser-with-rule-veto", "ADR 0009 · LLM chooser", "Optional: no key means fully deterministic. With a key, the model picks among rule-generated candidates, shadow first, promoted per decision type, and the rules veto and fall back."]
   ]],
   ["Core design", [
     ["01-architecture", "Architecture", "Layers, cross-cutting decisions, stack and repository layout."],
     ["02-ingestion", "Ingestion", "Game settings, the F1 26-only parser, send-rate independence and recording."],
     ["03-strategy", "Strategy engine", "Rules as data, the pace and degradation model, pit windows and rivals."],
+    ["17-quali-run-plan", "Qualifying run plan", "Qualifying push, cool and box decisions, release advice and coaching."],
+    ["18-race-engine", "Race engine", "Race strategy, tyre life, race-distance priors and automatic upkeep."],
     ["04-audio-ui", "Audio, UI and transport", "Call priorities, budgets, backend speech and the second-monitor dashboard."],
     ["12-driver-input", "Driver input", "Wheel button 2 and spacebar: acknowledge, negative and bookmark."],
     ["21-voice-command", "Voice command", "Talk toggle on Action 1 (single tap), closed-grammar speech into the driver menu, driver-first radio hold with stale-drop and digest: design, recogniser choice, and the CPU/memory impact on the game PC. Design only."],
     ["15-dashboard-design", "Dashboard redesign", "Second-monitor race-engineer screen: hierarchy, zones, tokens, state mapping, banner lifecycle, phased plan."],
     ["19-guest-tower", "Guest timing tower", "Spectator /tower route for guests in the garage: full field, sectors, pace and our race story. Design only."],
-    ["20-learning-loop", "Learning loop", "Hindsight grader, session digests, lessons ledger and promotion gate: how each race improves the next."],
+    ["20-learning-loop", "Learning loop", "Automatic grading and upkeep, calibration, learned state and optional review commands."],
+    ["22-setup-advisor", "Setup advisor", "Research-backed setup advice: parameter effects with confidence, parc fermé matrix, measurable balance, phase-aware YAML rule tables, setup-outcome learning, and the LLM chooser under ADR 0009. Proposal only."],
     ["16-debrief-design", "Debrief screen", "Post-session report page: research-derived agenda, layout, chart grammar, call grading, optional generated section, phased plan."],
     ["13-league-multiplayer", "Friends league", "Three humans plus an AI grid, Restricted telemetry and the feedback loop."]
   ]],
@@ -151,21 +207,92 @@ function markActive() {
 }
 
 function overview() {
-  document.title = "f1-pitwall · docs and status";
-  $("#content").innerHTML = `
-    <div class="hero">
-      <h1>A race engineer for F1 26</h1>
-      <p>f1-pitwall reads the game's UDP telemetry, keeps a model of the session, decides what is worth saying, says it over your headset and shows it on a second monitor. This site holds the docs, the design and the build status.</p>
-      <p><a href="#/status"><b>Status: M0 done, M1 built</b></a> · <a href="#/getting-started">Getting started</a> · <a href="mockups/dashboard-1080p.html">Dashboard mockup</a> · <a href="mockups/debrief.html">Debrief mockup</a></p>
-    </div>
+  document.title = "f1-pitwall · a race engineer for F1 26";
+  const calls = [
+    ["Qualifying run plan", "Tells you when the pit exit is clear, when to abort a lap, and whether to push, cool or box. It also reminds you about fuel and battery.",
+      ["Traffic at exit. Hold 4 seconds", "Abort, 0.4 off the cut. Save the set", "Battery 38, need 60. One more cool lap"]],
+    ["Race strategy", "Keeps Plans A, B and C up to date, calls the pit window, warns about undercuts and overcuts, and tells you when a safety car or VSC makes a stop cheap.",
+      ["Norris has boxed. Stay out and push, overcut is on", "Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]],
+    ["Tyres, fuel and ERS", "Estimates tyre life from the most worn corner and the pace cliff. Fuel and energy calls use the live budgets.",
+      ["About 6 laps left in the tyres", "Fuel 0.4 laps short. Lift and coast", "Battery spare, 0.8 MJ. Deploy"]],
+    ["Driving events", "Calls wing damage, boost left on, yellow flags, lock-ups, spins and slides. If you repeat a mistake, the tone gets drier.",
+      ["Same lock-up as last lap. Brake earlier there.", "Yellow, sector 2. Lift, hold position.", "Boost. You know the drill."]]
+  ];
+  const flow = [
+    ["Ingest", "F1 26 UDP on port 20777, parsed and recorded"],
+    ["State", "Session model, 10 Hz snapshots"],
+    ["Rules", "YAML conditions with hysteresis"],
+    ["Dispatcher", "Priority, cooldown and call budget"]
+  ];
+  const milestones = [
+    ["M0", "Done", "done", "Capture and replay"],
+    ["M1", "Built", "", "One call, end to end. Live exit criteria still open"],
+    ["M2", "Done", "done", "Qualifying. Driven from Q1 to Q3"],
+    ["M3", "Built", "", "Race. Merged in PR #7"],
+    ["M4", "Built", "", "Better over time. Built in PR #21"]
+  ];
+  const works = [
+    "<b>Qualifying.</b> f1-pitwall advises on release into traffic, aborts and the run plan. It also gives fuel, battery and tyre-pressure advice.",
+    "<b>Race strategy.</b> f1-pitwall keeps Plans A, B and C, calls pit windows, undercuts, overcuts and SC or VSC stops, and updates the plan after a stop.",
+    "<b>Tyres, fuel and ERS.</b> Tyre life is the lower of worst-corner wear life and pace-cliff life.",
+    "<b>Learning.</b> f1-pitwall grades each session. <code>pitwall calibrate</code>, <code>evaluate</code>, <code>propose</code> and <code>stats --learned</code> show and apply what it learnt.",
+    "<b>Debrief.</b> f1-pitwall exports a standalone HTML debrief and serves an editable <code>/debrief/&lt;uid&gt;</code> page.",
+    "<b>Voice and phone.</b> Piper caches spoken phrases. A phone PWA works as a second radio.",
+    "<b>Recovery.</b> The watchdog restarts a failed or stalled engine while the recorder keeps running."
+  ];
+  const next = [
+    ["21-voice-command", "Design only", "Voice command", "Tap a wheel button, say \"gap ahead?\" and f1-pitwall answers. It recognises a fixed list of about 40 phrases, offline, without an LLM."],
+    ["19-guest-tower", "Design only", "Guest timing tower", "A /tower screen for guests watching from the garage. It shows the full field, sectors, pace and a plain-words summary of our race."],
+    ["22-setup-advisor", "Proposal", "Setup advisor", "Suggests setup changes from stored tyre, wear and pace history. It knows what parc fermé allows and keeps its rules in YAML tables."],
+    ["13-league-multiplayer", "Goal", "Friends league", "Supports a league of three friends and an AI grid. It treats hidden rival data as unknown."],
+    ["16-debrief-design", "Deferred", "Debrief LLM layer", "Adds optional coaching and Q&A over the debrief and session history if you set an API key. The rules still make every decision."]
+  ];
+  $("#content").innerHTML = `<div class="landing">
+    <section class="hero">
+      <a class="badge" href="#/status">M4 built in PR #21</a>
+      <h1>f1<span>-</span>pitwall</h1>
+      <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
+      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. Here you find the design docs, the decision records and the status of each milestone.</p>
+      <div class="cta">
+        <a class="btn primary" href="#/getting-started">Getting started</a>
+        <a class="btn" href="mockups/dashboard-1080p.html">Dashboard mockup</a>
+        <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
+      </div>
+    </section>
+
+    <h2>What it calls on the radio</h2>
+    <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake (<a href="#/adr/0008-natural-phrasing-without-an-llm">ADR 0008</a>).</p>
+    <div class="calls">${calls.map(([t, d, ex]) => `<div><b>${t}</b><p>${d}</p>${ex.map(x => `<div class="radio">${x}</div>`).join("")}</div>`).join("")}</div>
+
+    <h2>How it works</h2>
+    <ol class="flow" aria-label="Pipeline">
+      ${flow.map(([t, d]) => `<li><b>${t}</b>${d}</li>`).join("")}
+      <li class="out"><span><b>Speech</b>Piper or SAPI on your headset</span><span><b>Dashboard</b>WebSocket on port 8000</span></li>
+    </ol>
+    <p class="flow-note">Recordings replay through the same ingest, state and rules path. <a href="#/01-architecture">Read the architecture</a>.</p>
     <div class="pillars">
-      <div><b>Record and replay</b>Every session is captured raw, and strategy is tuned offline against recordings.</div>
-      <div><b>Rules as data</b>Every call is a declarative rule with its own hysteresis, cooldown, phrasing and replay test.</div>
-      <div><b>A mindset you set</b>Balanced or aggressive: one control that biases pit windows, energy, tyres and rival focus.</div>
-    </div>` +
-    GROUPS.map(([g, docs]) => `<h2>${g}</h2><div class="cards">` +
+      <div><b>Record and replay</b>f1-pitwall records every session raw. You tune strategy offline against the recordings.</div>
+      <div><b>Rules as data</b>Each call is a declarative rule. The rule has its own hysteresis, cooldown, phrasing and replay test.</div>
+      <div><b>Mindset control</b>Choose balanced or aggressive. The setting biases pit windows, energy use, tyres and rival focus.</div>
+    </div>
+
+    <h2>Where it stands</h2>
+    <div class="milestones">${milestones.map(([m, st, cls, d]) => `<a class="${cls}" href="#/status"><b>${m}</b><span class="st">${st}</span><small>${d}</small></a>`).join("")}</div>
+    <h3>What works today</h3>
+    <ul class="works">${works.map(w => `<li>${w}</li>`).join("")}</ul>
+    <p><a href="#/status">Full status, evidence and known gaps</a> · <a href="#/05-roadmap">Roadmap</a></p>
+
+    <h2>What's next</h2>
+    <p class="lede">Ideas from the roadmap's "Later, if wanted" list. Each one has a design doc.</p>
+    <div class="next">${next.map(([id, tag, t, d]) => `<a href="#/${id}"><em>${tag}</em><b>${t}</b><span>${d}</span></a>`).join("")}</div>
+
+    <h2>Dive into the docs</h2>
+    <div class="dive">` +
+    GROUPS.map(([g, docs]) => `<h3>${g}</h3><div class="cards">` +
       docs.filter(d => !/^adr\/\d/.test(d[0])).map(d => `<a href="#/${d[0]}"><b>${d[1]}</b><span>${d[2]}</span></a>`).join("") + `</div>`).join("") +
-    `<p class="path">Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>`;
+    `</div>
+    <p class="foot">Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>
+  </div>`;
 }
 
 function slug(t) { return t.toLowerCase().replace(/<[^>]+>/g, "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-"); }

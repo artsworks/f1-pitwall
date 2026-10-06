@@ -180,7 +180,7 @@ action links to the section that produced it. This is the debrief's real output.
 
 **08 Engineer's notes (optional, generated).** See §6.
 
-## 6. The generated section
+## 6. Deferred: generated section design
 
 Item 21 sits inside the ADR 0008 boundary: a model may phrase or analyse, never decide.
 On this page that becomes a set of presentation rules, following the disclosure pattern
@@ -205,10 +205,9 @@ AI-generated content is labelled in a clear, distinguishable way:
 7. **Absent by default.** With no API key configured the section is simply not rendered;
    nothing else on the page changes.
 
-**Ask box.** Freeform Q&A ("why did I lose time in S2 all weekend?") is the same
-pipeline with the question appended; answers render as further anchored paragraphs. It
-is served-page only (needs the backend); the export shows any answers already given.
-Whether a `pitwall debrief --ask` CLI is also wanted stays an open point in item 21.
+**Ask box.** Not built. The proposed design is freeform Q&A over the same structured
+report data, with answers linked to their evidence. A local debrief command for questions
+is also an open point in item 21.
 
 **Model tier.** The job is phrasing and correlation over pre-computed stats, not
 reasoning over raw data, so the fast, cheap tier is preferred over frontier models:
@@ -217,30 +216,26 @@ where league privacy (items 13 / 15) rules out sending rivals' names off-machine
 provider sits behind a small interface (`complete(system, user) -> text`) so the model is
 one line in the layered config (`08-configuration.md`) next to the optional API key.
 
-## 7. Data the page needs that doesn't exist yet
+## 7. Current data and limits
 
-- `calls.grade` and `calls.audio_fate` columns (grading is currently review-mode only).
-- `stints` fit fields: `deg_s_per_lap`, `fit_laps`, `r2`; and the *prior-session* lookup
-  for the same track/compound.
-- Thermal-window aggregates per stint from the 10 Hz downsample (or computed at debrief
-  time from it).
-- Rival stints and pit laps persisted from Session History packets.
-- Event rows (lock-up, off-track, damage) with lap and, where known, corner — the `.f1idx`
-  already indexes event packets; the debrief needs them in SQLite.
-- A `debrief_meta` row per session: recording path, lite/full, config hash, rules
-  version, mindset — for the nav footer and for pairing with the decision log.
+The report reads `sessions`, `laps`, `stints`, `pit_events`, `calls`, `call_grades`,
+`outcomes`, `driver_inputs` and learned state from SQLite. It shows a session summary,
+lap and stint pace, sector means, lap-mean inner temperatures, strategy calls and pit
+events, radio decisions, lap fuel and ERS values, and persisted learning.
 
-These are additive schema changes; item 16's migration rule applies.
+The thermal section compares lap-mean inner temperature with configured windows. It does
+not show 10 Hz traces or per-stint thermal fits. The incident section shows lap data, not
+the event detail from recordings. The report does not yet compare sessions or show rival
+race traces. Sector 3 is derived from lap time minus sectors 1 and 2.
 
 ## 8. Phased plan
 
-| Phase | Scope | Output |
-|-------|-------|--------|
-| D1 | `tools/debrief.py` renders §00, §01 (scatter, own stints), §05 (list, no grading) from SQLite + decision log to a static HTML file | first useful debrief from an M2 session |
-| D2 | §02, §03, §04, §06 once the schema additions in §7 land; rival stints and race trace from Session History | full deterministic report |
-| D3 | Served at `/debrief/<session>` with grading, "open in review mode" deep-link, tag/keep, export | grading loop closed |
-| D4 | §07 action rules | debrief produces a to-do list |
-| D5 | §08 behind an API key: provider interface, prompt over §00–§07 stats, anchored rendering, hide toggle; ask box | item 21 delivered |
+| Phase | State | What is built |
+|-------|-------|----------------|
+| D1–D2 | Built, limited | Standalone HTML with sections 00–07 from persisted session data |
+| D3 | Built | `/debrief/<uid>` serves the report; call grades are saved through the API |
+| D4 | Partial | Section 07 lists rules with negative human grades and shows learned state; it is not a generated action list |
+| D5 | Deferred | LLM prose and the ask box (item 21) |
 
 Each phase is testable by rendering a recorded session (`07-replay-and-debug.md`) and
 diffing the produced HTML against a golden file, the same way replay tests pin decisions.

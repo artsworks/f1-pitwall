@@ -1,0 +1,12 @@
+{
+  "name": "Pitwall radio",
+  "short_name": "Pitwall",
+  "start_url": "/radio",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0a0a0c",
+  "background_color": "#0a0a0c",
+  "icons": [
+    {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

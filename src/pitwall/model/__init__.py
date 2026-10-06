@@ -10,6 +10,7 @@ from pitwall.model.deg import (
     laps_of_pace,
     resolve_prior,
     rival_pace_ms,
+    session_base_ms,
 )
 from pitwall.model.pitloss import PitLoss, current_pit_loss, measure
 
@@ -27,4 +28,5 @@ __all__ = [
     "measure",
     "resolve_prior",
     "rival_pace_ms",
+    "session_base_ms",
 ]
