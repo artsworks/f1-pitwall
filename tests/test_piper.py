@@ -114,12 +114,64 @@ def test_prerendered_phrases_survive_restart_and_keep_tone_separate(tmp_path: Pa
 
 def test_piper_speaker_skips_cancelled() -> None:
     sp, player, spoken, _ = _speaker(0.3)
+    audio: list[tuple[str, int, bytes]] = []
+    sp.on_audio = lambda cid, priority, wav: audio.append((cid, priority, wav))
     sp.speak(_call("a"))
     _wait_for(lambda: spoken == ["a"])
     sp.speak(_call("b"))
     sp.cancel("b")
     sp.speak(_call("c", text="c"))
     _wait_for(lambda: spoken == ["a", "c"])
+    assert audio == [("a", 2, b"box box"), ("c", 2, b"c")]
+    sp.close()
+
+
+def test_piper_audio_callback_skips_call_cancelled_during_playback() -> None:
+    sp, player, spoken, _ = _speaker(0.0)
+    call = _call("cancel-during-play")
+    audio: list[tuple[str, int, bytes]] = []
+    original_play = player.play
+
+    def play(wav: bytes) -> None:
+        original_play(wav)
+        sp.cancel(call.id)
+
+    player.play = play
+    sp.on_audio = lambda cid, priority, wav: audio.append((cid, priority, wav))
+    sp.speak(call)
+    _wait_for(lambda: spoken == [call.id])
+    assert player.played == [b"box box"]
+    assert audio == []
+    sp.close()
+
+
+def test_piper_audio_callback_follows_playback_and_isolates_errors() -> None:
+    sp, player, spoken, _ = _speaker(0.0)
+    order: list[tuple[str, str]] = []
+
+    def audio(cid: str, priority: int, wav: bytes) -> None:
+        order.append(("audio", cid))
+        if cid == "a":
+            raise RuntimeError("stream unavailable")
+
+    original_play = player.play
+
+    def play(wav: bytes) -> None:
+        original_play(wav)
+        order.append(("play", wav.decode()))
+
+    player.play = play
+    sp.on_audio = audio
+    sp.speak(_call("a", text="first"))
+    sp.speak(_call("b", text="second"))
+    _wait_for(lambda: spoken == ["a", "b"])
+    assert order == [
+        ("play", "first"),
+        ("audio", "a"),
+        ("play", "second"),
+        ("audio", "b"),
+    ]
+    assert player.played == [b"first", b"second"]
     sp.close()
 
 
