@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -251,6 +251,50 @@ MIGRATIONS: list[str] = [
         ran_at REAL
     );
     """,
+    # 10: setup advisor A1 (docs/22 §5).
+    """
+    CREATE TABLE setup_states (
+        id INTEGER PRIMARY KEY,
+        hash TEXT UNIQUE,
+        fields TEXT
+    );
+    CREATE TABLE setup_changes (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        lap INT,
+        session_time REAL,
+        from_state INT,
+        to_state INT
+    );
+    CREATE UNIQUE INDEX setup_changes_key
+        ON setup_changes(session_uid, session_time, to_state);
+    CREATE TABLE setup_recs (
+        id INTEGER PRIMARY KEY,
+        session_uid INT,
+        rec_id TEXT UNIQUE,
+        rule_id TEXT,
+        mode TEXT,
+        param TEXT,
+        from_value REAL,
+        delta REAL,
+        conf TEXT,
+        setup_state_id INT,
+        track_id INT,
+        compound INT,
+        lap INT,
+        evidence TEXT
+    );
+    ALTER TABLE stints ADD COLUMN setup_state_id INT;
+    ALTER TABLE sessions ADD COLUMN parc_ferme INT;
+    ALTER TABLE laps ADD COLUMN setup_state_id INT;
+    ALTER TABLE laps ADD COLUMN traction_exits INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN slip_balance_deg REAL DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN slip_samples INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN lockups_front INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN lockups_rear INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN snaps_entry INT DEFAULT 0;
+    ALTER TABLE laps ADD COLUMN snaps_exit INT DEFAULT 0;
+    """,
 ]
 
 
@@ -276,6 +320,14 @@ class LapRow:
     tyre_inner_c: float = 0.0
     tyre_surface_c: float = 0.0
     visual: int = 0
+    setup_state_id: int | None = None
+    traction_exits: int = 0
+    slip_balance_deg: float = 0.0
+    slip_samples: int = 0
+    lockups_front: int = 0
+    lockups_rear: int = 0
+    snaps_entry: int = 0
+    snaps_exit: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +344,7 @@ class StintRow:
     fuel_ms_per_lap: float
     rmse_ms: float
     updated_at: float
+    setup_state_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,20 +485,22 @@ class Database:
         game_mode: int = 0,
         weekend_link: int = 0,
         calls_mode: str = "",
+        parc_ferme: int | None = None,
     ) -> None:
         with self.transaction():
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
                 " game_version, config_hash, weather, recording_path, game_mode,"
-                " weekend_link, calls_mode)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+                " weekend_link, calls_mode, parc_ferme)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
                 " config_hash=excluded.config_hash, weather=excluded.weather,"
                 " recording_path=excluded.recording_path,"
                 " game_mode=excluded.game_mode, weekend_link=excluded.weekend_link,"
-                " calls_mode=excluded.calls_mode",
+                " calls_mode=excluded.calls_mode,"
+                " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme)",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -458,18 +513,28 @@ class Database:
                     game_mode,
                     weekend_link,
                     calls_mode,
+                    parc_ferme,
                 ),
             )
 
-    def insert_lap(self, session_uid: int, car_idx: int, lap: LapSummary) -> None:
+    def insert_lap(
+        self,
+        session_uid: int,
+        car_idx: int,
+        lap: LapSummary,
+        *,
+        setup_state_id: int | None = None,
+    ) -> None:
         """Persist a state.lap.LapSummary (attribute access keeps it duck-typed)."""
         with self.transaction():
             self._conn.execute(
                 "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms,"
                 " s1_ms, s2_ms, compound, tyre_age_laps, fuel_remaining_laps,"
                 " valid, invalid_reasons, wear_pct, fuel_kg, ers_deployed_j,"
-                " sc_status, weather, tyre_inner_c, tyre_surface_c, visual)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " sc_status, weather, tyre_inner_c, tyre_surface_c, visual,"
+                " setup_state_id, traction_exits, slip_balance_deg, slip_samples,"
+                " lockups_front, lockups_rear, snaps_entry, snaps_exit)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -490,6 +555,14 @@ class Database:
                     lap.tyre_inner_c,
                     lap.tyre_surface_c,
                     lap.visual,
+                    setup_state_id,
+                    getattr(lap, "traction_exits", 0),
+                    getattr(lap, "slip_balance_deg", 0.0),
+                    getattr(lap, "slip_samples", 0),
+                    getattr(lap, "lockups_front", 0),
+                    getattr(lap, "lockups_rear", 0),
+                    getattr(lap, "snaps_entry", 0),
+                    getattr(lap, "snaps_exit", 0),
                 ),
             )
 
@@ -668,6 +741,66 @@ class Database:
                 "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
             )
 
+    def set_session_parc_ferme(self, uid: int, value: int) -> None:
+        with self.transaction():
+            self._conn.execute(
+                "UPDATE sessions SET parc_ferme=? WHERE uid=?", (value, _uid_to_sql(uid))
+            )
+
+    def setup_state_id(self, hash: str, fields: Mapping[str, Any] | None = None) -> int:
+        """Get or insert a setup-state row, keyed by its stable hash."""
+        encoded = json.dumps(dict(fields)) if fields is not None else None
+        with self.transaction():
+            self._conn.execute(
+                "INSERT OR IGNORE INTO setup_states(hash, fields) VALUES(?,?)",
+                (hash, encoded),
+            )
+            if encoded is not None:
+                self._conn.execute(
+                    "UPDATE setup_states SET fields=COALESCE(fields,?) WHERE hash=?",
+                    (encoded, hash),
+                )
+            row = self._conn.execute("SELECT id FROM setup_states WHERE hash=?", (hash,)).fetchone()
+        if row is None:
+            raise RuntimeError("setup state insert did not produce a row")
+        return int(row["id"])
+
+    def setup_state_fields(self, state_id: int) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT fields FROM setup_states WHERE id=?", (state_id,)
+        ).fetchone()
+        if row is None or row["fields"] is None:
+            return None
+        try:
+            fields = json.loads(str(row["fields"]))
+        except json.JSONDecodeError:
+            return None
+        return fields if isinstance(fields, dict) else None
+
+    def insert_setup_change(
+        self,
+        session_uid: int,
+        lap: int,
+        session_time: float,
+        from_state: int | None,
+        to_state: int,
+    ) -> None:
+        with self.transaction():
+            self._conn.execute(
+                "INSERT OR IGNORE INTO setup_changes"
+                "(session_uid, lap, session_time, from_state, to_state) VALUES(?,?,?,?,?)",
+                (_uid_to_sql(session_uid), lap, session_time, from_state, to_state),
+            )
+
+    def setup_changes_for_session(self, uid: int) -> list[dict[str, Any]]:
+        changes = self._rows(
+            "SELECT * FROM setup_changes WHERE session_uid=? ORDER BY session_time, id",
+            (_uid_to_sql(uid),),
+        )
+        for change in changes:
+            change["session_uid"] = _uid_from_sql(int(change["session_uid"]))
+        return changes
+
     def grades_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
@@ -718,6 +851,14 @@ class Database:
             tyre_inner_c=float(r["tyre_inner_c"] or 0.0),
             tyre_surface_c=float(r["tyre_surface_c"] or 0.0),
             visual=int(r["visual"] or 0),
+            setup_state_id=(int(r["setup_state_id"]) if r["setup_state_id"] is not None else None),
+            traction_exits=int(r["traction_exits"] or 0),
+            slip_balance_deg=float(r["slip_balance_deg"] or 0.0),
+            slip_samples=int(r["slip_samples"] or 0),
+            lockups_front=int(r["lockups_front"] or 0),
+            lockups_rear=int(r["lockups_rear"] or 0),
+            snaps_entry=int(r["snaps_entry"] or 0),
+            snaps_exit=int(r["snaps_exit"] or 0),
         )
 
     def upsert_stint(
@@ -728,6 +869,8 @@ class Database:
         start_lap: int,
         end_lap: int,
         fit: DegFit,
+        *,
+        setup_state_id: int | None = None,
     ) -> None:
         """Insert or refresh the stint row keyed on (session, car, start_lap)."""
         uid = _uid_to_sql(session_uid)
@@ -746,7 +889,7 @@ class Database:
             cur = self._conn.execute(
                 "UPDATE stints SET compound=?, end_lap=?, deg_params=?,"
                 " n_valid_laps=?, base_ms=?, deg_ms_per_lap=?, fuel_ms_per_lap=?,"
-                " rmse_ms=?, updated_at=?"
+                " rmse_ms=?, updated_at=?, setup_state_id=?"
                 " WHERE session_uid=? AND car_idx=? AND start_lap=?",
                 (
                     compound,
@@ -758,6 +901,7 @@ class Database:
                     fit.fuel_ms_per_lap,
                     fit.rmse_ms,
                     time.time(),
+                    setup_state_id,
                     uid,
                     car_idx,
                     start_lap,
@@ -767,8 +911,8 @@ class Database:
                 self._conn.execute(
                     "INSERT INTO stints(session_uid, car_idx, compound, start_lap,"
                     " end_lap, deg_params, n_valid_laps, base_ms, deg_ms_per_lap,"
-                    " fuel_ms_per_lap, rmse_ms, updated_at)"
-                    " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " fuel_ms_per_lap, rmse_ms, updated_at, setup_state_id)"
+                    " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         uid,
                         car_idx,
@@ -782,6 +926,7 @@ class Database:
                         fit.fuel_ms_per_lap,
                         fit.rmse_ms,
                         time.time(),
+                        setup_state_id,
                     ),
                 )
 
@@ -799,6 +944,7 @@ class Database:
             fuel_ms_per_lap=float(r["fuel_ms_per_lap"] or 0.0),
             rmse_ms=float(r["rmse_ms"] or 0.0),
             updated_at=float(r["updated_at"] or 0.0),
+            setup_state_id=(int(r["setup_state_id"]) if r["setup_state_id"] is not None else None),
         )
 
     def stints_for_track(self, track_id: int, compound: int, limit: int = 20) -> list[StintRow]:

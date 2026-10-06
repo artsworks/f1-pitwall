@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
+
+from pitwall.model.deg import DegFit
 from pitwall.state.lap import LapAccumulator, LapSummary
 from pitwall.store.db import MIGRATIONS, Database
 
@@ -27,6 +30,93 @@ def test_incremental_migration() -> None:
         db._conn.execute("SELECT uid FROM sessions")  # earlier tables intact
     finally:
         dbmod.MIGRATIONS.pop()
+
+
+def test_setup_advisor_migration_from_previous_version(tmp_path) -> None:
+    path = tmp_path / "previous.sqlite"
+    conn = sqlite3.connect(path)
+    for version, migration in enumerate(MIGRATIONS[:-1], start=1):
+        conn.executescript(migration)
+        conn.execute(f"PRAGMA user_version={version}")
+    conn.close()
+
+    db = Database(path)
+
+    assert db._conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)  # noqa: SLF001
+    tables = {
+        row["name"]
+        for row in db._conn.execute(  # noqa: SLF001
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    assert {"setup_states", "setup_changes", "setup_recs"} <= tables
+    columns = {
+        row["name"]
+        for row in db._conn.execute("PRAGMA table_info(laps)")  # noqa: SLF001
+    }
+    assert {
+        "setup_state_id",
+        "traction_exits",
+        "slip_balance_deg",
+        "slip_samples",
+        "lockups_front",
+        "lockups_rear",
+        "snaps_entry",
+        "snaps_exit",
+    } <= columns
+
+
+def test_setup_state_change_lap_and_stint_round_trip() -> None:
+    db = Database(":memory:")
+    uid = 83
+    db.upsert_session(uid, track_id=7, parc_ferme=2)
+    state_id = db.setup_state_id("sha1:setup", {"brake_bias": 56.0})
+    assert db.setup_state_id("sha1:setup", {"brake_bias": 56.0}) == state_id
+    assert db.setup_state_fields(state_id) == {"brake_bias": 56.0}
+
+    db.insert_setup_change(uid, 1, 4.5, None, state_id)
+    db.insert_setup_change(uid, 1, 4.5, None, state_id)
+    changes = db.setup_changes_for_session(uid)
+    assert len(changes) == 1
+    assert changes[0]["to_state"] == state_id and changes[0]["from_state"] is None
+
+    lap = LapSummary(
+        lap_num=1,
+        lap_time_ms=91_234,
+        sector1_ms=30_000,
+        sector2_ms=31_000,
+        compound=16,
+        tyre_age_laps=1,
+        fuel_remaining_laps_at_end=14.5,
+        valid=True,
+        traction_exits=2,
+        lockups_front=1,
+        lockups_rear=3,
+        snaps_entry=1,
+        snaps_exit=2,
+        slip_balance_deg=2.5,
+        slip_samples=14,
+    )
+    db.insert_lap(uid, 0, lap, setup_state_id=state_id)
+    stored_lap = db.laps_for(uid)[0]
+    assert stored_lap.setup_state_id == state_id
+    assert stored_lap.traction_exits == 2
+    assert stored_lap.lockups_front == 1 and stored_lap.lockups_rear == 3
+    assert stored_lap.snaps_entry == 1 and stored_lap.snaps_exit == 2
+    assert stored_lap.slip_balance_deg == 2.5 and stored_lap.slip_samples == 14
+
+    db.upsert_stint(
+        uid,
+        0,
+        16,
+        1,
+        1,
+        DegFit(90_000.0, 100.0, 30.0, 1, 100.0, 0.9, "fit"),
+        setup_state_id=state_id,
+    )
+    assert db.stints_for_session(uid)[0].setup_state_id == state_id
+    db.set_session_parc_ferme(uid, 3)
+    assert db.session_row(uid)["parc_ferme"] == 3
 
 
 def test_call_grade_bookmark_round_trip() -> None:

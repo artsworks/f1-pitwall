@@ -15,7 +15,9 @@ from pitwall.state.driving import (
     LockupDetector,
     OffTrackTracker,
     SaveDetector,
+    SlipBalance,
     SpinDetector,
+    TractionDetector,
     YellowTracker,
 )
 from pitwall.state.session import SessionState, Snapshot
@@ -67,6 +69,108 @@ def test_rear_lockup_and_low_speed_ignored() -> None:
         slow.update(i / 30, _slip(fl=-1.0), 20.0, 1.0, 3)
     slow.update(1.2, FREE, 0.0, 1.0, 3)
     assert slow.recent(1.2) == ("", "")
+
+
+def test_lockup_session_counts_by_axle() -> None:
+    rear = LockupDetector()
+    for i in range(20):
+        rear.update(i / 30, _slip(rl=-0.8), 150.0, 0.8, 3)
+    for i in range(6):
+        rear.update((20 + i) / 30, FREE, 150.0, 0.8, 3)
+    assert (rear.count, rear.count_front, rear.count_rear) == (1, 0, 1)
+
+    front = LockupDetector()
+    for i in range(20):
+        front.update(i / 30, _slip(fl=-0.8), 150.0, 0.8, 3)
+    for i in range(6):
+        front.update((20 + i) / 30, FREE, 150.0, 0.8, 3)
+    assert (front.count, front.count_front, front.count_rear) == (1, 1, 0)
+
+
+def _traction_episode(
+    detector: TractionDetector,
+    wheel_slip: Corners,
+    *,
+    throttle: float = 0.9,
+    speed_kmh: float = 100.0,
+    duration_s: float = 0.3,
+) -> None:
+    t = 0.0
+    while t < duration_s:
+        detector.update(t, wheel_slip, speed_kmh, throttle)
+        t += 1 / 30
+    for _ in range(6):
+        detector.update(t, FREE, speed_kmh, throttle)
+        t += 1 / 30
+
+
+def test_traction_detector_counts_sustained_rear_spin() -> None:
+    detector = TractionDetector()
+    _traction_episode(detector, _slip(rl=0.2))
+    assert detector.count == 1
+
+
+def test_traction_detector_rejects_short_low_throttle_speed_and_front_slip() -> None:
+    detector = TractionDetector()
+    _traction_episode(detector, _slip(rl=0.2), duration_s=0.1)
+    _traction_episode(detector, _slip(rl=0.2), throttle=0.5)
+    _traction_episode(detector, _slip(rl=0.2), speed_kmh=40.0)
+    _traction_episode(detector, _slip(rl=0.2), speed_kmh=220.0)
+    _traction_episode(detector, _slip(fl=0.2, fr=0.3))
+    assert detector.count == 0
+
+
+def test_traction_reset_drops_only_the_active_episode() -> None:
+    detector = TractionDetector()
+    _traction_episode(detector, _slip(rl=0.2))
+    assert detector.count == 1
+    detector.update(1.0, _slip(rl=0.2), 100.0, 0.9)
+    detector.reset()
+    detector.update(2.0, FREE, 100.0, 0.9)
+    assert detector.count == 1
+
+
+def test_slip_balance_sign_gates_and_take() -> None:
+    balance = SlipBalance()
+    velocity = (0.0, 0.0, 20.0)
+    angular_velocity = (0.0, 1.0, 0.0)
+    balance.update(Corners(0.05, 0.05, 0.2, 0.2), velocity, angular_velocity, 0.5, 0.0)
+    assert balance.mean_deg() > 0
+    positive, samples = balance.take()
+    assert positive > 0 and samples == 1
+    assert balance.take() == (0.0, 0)
+
+    balance.update(Corners(0.2, 0.2, 0.05, 0.05), velocity, angular_velocity, 0.5, 0.0)
+    assert balance.mean_deg() < 0
+    balance.take()
+    balance.update(Corners(0.05, 0.05, 0.2, 0.2), velocity, angular_velocity, 0.5, 0.1)
+    balance.update(Corners(0.05, 0.05, 0.2, 0.2), velocity, (0.0, 0.1, 0.0), 0.5, 0.0)
+    balance.update(Corners(0.05, 0.05, 0.2, 0.2), velocity, angular_velocity, 1.0, 0.0)
+    assert balance.take() == (0.0, 0)
+
+
+def test_save_phase_is_captured_at_slide_onset() -> None:
+    for phase in ("entry", "exit", "mid"):
+        detector = SaveDetector()
+        detector.update(0.0, (10.0, 0.0, 20.0), phase=phase)
+        for i in range(1, 12):
+            detector.update(i * 0.1, (0.0, 0.0, 20.0), phase="mid")
+        assert detector.count == 1
+        assert detector.count_entry == int(phase == "entry")
+        assert detector.count_exit == int(phase == "exit")
+        assert detector.last_phase == phase
+
+
+def test_spin_phase_is_captured_at_slide_onset() -> None:
+    for phase in ("entry", "exit", "mid"):
+        detector = SpinDetector(min_s=0.2)
+        for i in range(3):
+            detector.update(i * 0.1, (10.0, 0.0, 10.0), phase=phase if i == 0 else "mid")
+        detector.update(0.3, (0.0, 0.0, 10.0), phase="mid")
+        assert detector.count == 1
+        assert detector.count_entry == int(phase == "entry")
+        assert detector.count_exit == int(phase == "exit")
+        assert detector.last_phase == phase
 
 
 def test_boost_timer() -> None:

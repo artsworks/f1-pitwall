@@ -47,6 +47,7 @@ from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import SessionType
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
+from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import SessionState, Snapshot
@@ -197,6 +198,7 @@ class Engine:
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
+        self._parc_ferme_written: int | None = None
         self.session_origin_started_at: float | None = None
         self._track_loaded: int | None = None
         self._session_ended_written = False
@@ -557,7 +559,9 @@ class Engine:
                 if self.store.current().policy.quiet or not self.store.current().speech.enabled
                 else "on"
             ),
+            parc_ferme=snap.parc_ferme if snap.parc_ferme >= 0 else None,
         )
+        self._parc_ferme_written = snap.parc_ferme if snap.parc_ferme >= 0 else None
 
     def _write_laps(self) -> None:
         if self.db is None or self.state.session_uid is None:
@@ -565,15 +569,36 @@ class Engine:
         if self.recovering:
             # Rebuilt laps are already committed; don't insert or fold twice.
             self.state.rival_laps.clear()
+            self.state.setup_changes.clear()
             self._laps_written = len(self.state.laps)
             return
         uid = self.state.session_uid
+        parc_ferme = self.state.parc_ferme_rules
+        if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
+            self.db.set_session_parc_ferme(uid, parc_ferme)
+            self._parc_ferme_written = parc_ferme
+        for change in self.state.setup_changes:
+            to_id = self.db.setup_state_id(change.to_hash, change.fields)
+            from_id = self.db.setup_state_id(change.from_hash) if change.from_hash else None
+            self.db.insert_setup_change(
+                uid,
+                change.lap_num,
+                change.session_time,
+                from_id,
+                to_id,
+            )
+        self.state.setup_changes.clear()
         for car_idx, lap in self.state.rival_laps:
             self.db.insert_lap(uid, car_idx, lap)
         self.state.rival_laps.clear()
         new_laps = self.state.laps[self._laps_written :]
         for lap in new_laps:
-            self.db.insert_lap(uid, 0, lap)
+            self.db.insert_lap(
+                uid,
+                0,
+                lap,
+                setup_state_id=self.db.setup_state_id(lap.setup_hash) if lap.setup_hash else None,
+            )
         self._laps_written = len(self.state.laps)
         if new_laps and self.state.total_laps > 0:
             self.db.set_session_total_laps(uid, self.state.total_laps)
@@ -643,7 +668,15 @@ class Engine:
                 deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
             )
             self.deg_fit = fit
-            db.upsert_stint(uid, 0, compound, tail[0].lap_num, tail[-1].lap_num, fit)
+            db.upsert_stint(
+                uid,
+                0,
+                compound,
+                tail[0].lap_num,
+                tail[-1].lap_num,
+                fit,
+                setup_state_id=majority_state(tail),
+            )
 
         # Pit loss: measure when an out-lap completes against a pending in-lap.
         if "pitted" in lap.invalid_reasons:
@@ -868,7 +901,15 @@ class Engine:
             deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
             deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
         )
-        self.db.upsert_stint(uid, 0, stint[0].compound, stint[0].lap_num, stint[-1].lap_num, fit)
+        self.db.upsert_stint(
+            uid,
+            0,
+            stint[0].compound,
+            stint[0].lap_num,
+            stint[-1].lap_num,
+            fit,
+            setup_state_id=majority_state(stint),
+        )
         self._weekend_prior_cache.pop((uid, stint[0].compound), None)
         self._fold_fit(self.state.track_id, stint[0].compound, fit)
 

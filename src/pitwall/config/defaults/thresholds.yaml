@@ -1,4 +1,15 @@
 thresholds:
+  # Setup advisor A1 detector thresholds
+  trac_slip: 0.08
+  trac_throttle: 0.7
+  trac_min_kmh: 60
+  trac_max_kmh: 200
+  trac_min_s: 0.15
+  slip_bal_lat_g: 1.5
+  slip_bal_throttle_min: 0.2
+  slip_bal_throttle_max: 0.8
+  snap_entry_throttle: 0.2
+  snap_exit_throttle: 0.5
   tyre_inner_cold_c: 80
   tyre_inner_hot_c: 110
   tyre_inner_cold_by_compound_c: {7: 60, 8: 50, 16: 70, 17: 75, 18: 80, 19: 85, 20: 90, 21: 90, 22: 65}

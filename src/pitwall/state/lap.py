@@ -29,6 +29,14 @@ class LapSummary:
     tyre_inner_c: float = 0.0
     tyre_surface_c: float = 0.0
     visual: int = 0  # visual compound (soft/medium/hard) beside the C-number compound
+    traction_exits: int = 0
+    lockups_front: int = 0
+    lockups_rear: int = 0
+    snaps_entry: int = 0
+    snaps_exit: int = 0
+    slip_balance_deg: float = 0.0
+    slip_samples: int = 0
+    setup_hash: str = ""
 
 
 class LapAccumulator:
