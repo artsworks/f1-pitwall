@@ -64,7 +64,7 @@ article:has(.landing){max-width:1040px}
 .hero h1 span{color:var(--accent)}
 .hero .pitch{font-size:21px;line-height:1.45;color:var(--fg);max-width:760px;margin:0 0 12px}
 .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);text-decoration:none}
-.badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--built)}
+.badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .cta{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
 .btn{display:inline-block;padding:9px 18px;border-radius:8px;border:1px solid var(--line);font-weight:600;font-size:15px;text-decoration:none;color:var(--fg);background:var(--panel)}
 .btn:hover{border-color:var(--accent)}
@@ -123,7 +123,7 @@ article:has(.landing){max-width:1040px}
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
-  <span class="status">M3 built · M4 built in PR #21</span>
+  <span class="status">M0 to M4 done</span>
   <a class="gh" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
 </header>
 <div class="layout">
@@ -226,10 +226,10 @@ function overview() {
   ];
   const milestones = [
     ["M0", "Done", "done", "Capture and replay"],
-    ["M1", "Built", "", "One call, end to end. Live exit criteria still open"],
+    ["M1", "Done", "done", "One call, end to end. Out-lap call inside 300 ms"],
     ["M2", "Done", "done", "Qualifying. Driven from Q1 to Q3"],
-    ["M3", "Built", "", "Race. Merged in PR #7"],
-    ["M4", "Built", "", "Better over time. Built in PR #21"]
+    ["M3", "Done", "done", "Race. 25% and 100% races reviewed"],
+    ["M4", "Done", "done", "Better over time. Debrief, calibration and evaluation"]
   ];
   const works = [
     "<b>Qualifying.</b> f1-pitwall advises on release into traffic, aborts and the run plan. It also gives fuel, battery and tyre-pressure advice.",
@@ -249,7 +249,7 @@ function overview() {
   ];
   $("#content").innerHTML = `<div class="landing">
     <section class="hero">
-      <a class="badge" href="#/status">M4 built in PR #21</a>
+      <a class="badge" href="#/status">M0 to M4 done</a>
       <h1>f1<span>-</span>pitwall</h1>
       <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
       <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. Here you find the design docs, the decision records and the status of each milestone.</p>

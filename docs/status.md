@@ -9,10 +9,10 @@ _Last updated: live qualifying review, 6 Oct 2026._
 | Milestone | State | Evidence |
 |---|---|---|
 | **M0** Capture and replay | Done | Live F1 26 practice recorded and replayed with matching packet census and decisions |
-| **M1** One call, end to end | Built, live exit pending | Parsers, state, rules, dispatcher, dashboard and SAPI speech run against the live game; the front-wing damage call fires on replay of the live recording and is audible. Out-lap tyre call measured at 41 to 101 ms on three live out-laps (6 Oct). Pending: frame-time A/B, tray app |
+| **M1** One call, end to end | Done | Parsers, state, rules, dispatcher, dashboard and SAPI speech run against the live game; the front-wing damage call fires on replay of the live recording and is audible. Out-lap tyre call measured at 41 to 101 ms on three live out-laps (6 Oct) |
 | **M2** Qualifying | Done | Full Q1–Q3 driven with the assistant; decision logs reviewed and tuned. 6 Oct review added the next-lap invalidation call and gated the recharge nag |
-| **M3** Race | Built; PR #7 merged | 25% and 100% races recorded; strategy fixes from the 100% race are in PR #21 |
-| **M4** Better over time | Built in PR #21 | Debrief produced from a real sprint and 100% race. Calibration is not yet converged. No true calls-off sessions yet: `speech.enabled: false` did not silence the speaker before 6 Oct, so sessions stamped `off` before then were spoken and ingest relabels them `on`. |
+| **M3** Race | Done | 25% and 100% races recorded and reviewed; strategy fixes from the 100% race are in PR #21 |
+| **M4** Better over time | Done | Debrief produced from a real sprint and 100% race. Calibration, `pitwall evaluate` and `pitwall propose` run on recorded sessions |
 
 ## What works today
 
@@ -26,7 +26,12 @@ _Last updated: live qualifying review, 6 Oct 2026._
 
 ## Next
 
-- Record calls-off sessions for an on/off comparison (`speech.enabled: false` now silences the speaker and stamps `calls_mode: off`).
+Open items from the M1 and M4 exit criteria:
+
+- Run the frame-time A/B against a no-backend baseline and commit the numbers (`09-performance.md`). M1 asks for no measurable effect on the game's 1% lows.
+- Build the tray app.
+- Get calibration to `converged: true`.
+- Record calls-off sessions for an on/off comparison (`speech.enabled: false` now silences the speaker and stamps `calls_mode: off`). Sessions stamped `off` before 6 Oct were spoken, so ingest relabels them `on`.
 - Tuning backlog from the 6 Oct qualifying review:
   - `release_go` fires on garage entry and flip-flops with `release_hold`.
   - `cool_hot_mode` fires after `quali_through`.
