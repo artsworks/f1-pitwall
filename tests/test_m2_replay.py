@@ -14,7 +14,7 @@ from pitwall.rules.engine import Candidate
 
 from .synth import make_event_packet, out_lap_scenario, pack_packet, write_packet_stream
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
 
 
 def _read_log(path: Path) -> list[dict]:

@@ -18,7 +18,7 @@ from pitwall.store.db import MIGRATIONS, Database
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
 
 Run = tuple[list[Call], list[dict], list[dict], list[dict]]
 

@@ -18,7 +18,7 @@ from .corpus_synth import generate_learning_corpus
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
 
 
 def _run_calls(db: Database, recording: Path, uid: int) -> list[dict]:

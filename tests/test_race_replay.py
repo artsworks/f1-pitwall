@@ -19,7 +19,7 @@ from pitwall.store.db import Database
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.replay]
 
 
 def _replay(tmp: Path, spec: RaceSpec) -> tuple[list[Call], list[dict]]:

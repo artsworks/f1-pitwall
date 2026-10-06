@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from pitwall.clock import VirtualClock
 from pitwall.ingest import Ingest
 from pitwall.net.recording import RecordingReader
 from pitwall.net.replay import replay
 
 from .synth import mixed_session_packets, write_synthetic_recording
+
+pytestmark = pytest.mark.replay
 
 
 def _make_recording(tmp_path: Path) -> Path:
