@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import socket
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -60,6 +61,7 @@ class Supervisor:
         self.restarts = 0
         self.datagrams = 0
         self.stopping = False
+        self.ready = threading.Event()
         self._child: subprocess.Popen[bytes] | None = None
         self._spawned_at = 0.0
         self._backoff_s = 0.0
@@ -80,6 +82,7 @@ class Supervisor:
         with contextlib.suppress(OSError):
             rx.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
         rx.bind((self.udp_host, self.udp_port))
+        self.ready.set()
         rx.settimeout(_RECV_TIMEOUT_S)
         target = ("127.0.0.1", self.engine.engine_port)
         self._spawn()

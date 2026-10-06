@@ -39,4 +39,6 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 - The later 25% race fixes were reverted at the user's request. Mixed-weather
   calls, drive-through tyre calls, stop summaries and early-race pace need a
   separate follow-up. The numbered menu remains removed.
-- CI checks Linux lint, formatting and types. The full test suite runs locally.
+- CI runs lint, formatting and type checks on Linux. Pull requests also run the fast
+  tests (`pytest -m "not slow"`) and the replay determinism check. Pushes to `main` run
+  the full suite. Tests that need real recordings or Windows still skip in CI.
