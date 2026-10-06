@@ -5,12 +5,16 @@ import json
 import struct
 from pathlib import Path
 
+import pytest
+
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import Candidate
 
 from .synth import make_event_packet, out_lap_scenario, pack_packet, write_packet_stream
+
+pytestmark = pytest.mark.slow
 
 
 def _read_log(path: Path) -> list[dict]:

@@ -19,6 +19,8 @@ from pitwall.store.db import Database
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
+pytestmark = pytest.mark.slow
+
 
 def _replay(tmp: Path, spec: RaceSpec) -> tuple[list[Call], list[dict]]:
     path = write_packet_stream(tmp / "race.f1bin", race_stream(spec))

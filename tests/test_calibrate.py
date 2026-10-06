@@ -17,6 +17,8 @@ from .corpus_synth import generate_learning_corpus
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
+pytestmark = pytest.mark.slow
+
 
 def _fit_corpus(tmp_path):
     db = Database(tmp_path / "learn.sqlite")
