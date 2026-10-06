@@ -255,7 +255,7 @@ function overview() {
   const screens = [
     ["Qualifying", [
       ["quali-pit-exit", "Pit exit", "The pit board says the track is clear and shows the next run plan."],
-      ["quali-out-lap-track", "Out-lap", "The track page shows weather, flags, penalties and the gaps to the cars around you."],
+      ["quali-out-lap", "Out-lap", "The banner says the tyres are in. The cut-off and pole gaps fill in after the first lap."],
       ["quali-flying", "Flying lap", "The right column shows the cut-off, the sector gaps to pole and the projected lap."],
       ["quali-cool-lap", "Cool lap", "Battery, push distance and tyre temperatures before the next push."]
     ]],
@@ -263,11 +263,16 @@ function overview() {
       ["race-duel", "Race", "Cards for the cars ahead and behind, with pace and the gap trend."],
       ["race-box-call", "Box call", "An urgent call turns the banner red, and the strategy row shows the pit window."],
       ["race-car-page", "Car page", "Battery use per lap, fuel at the finish and tyre life."],
-      ["race-in-lap-track", "In-lap", "The track page shows weather, penalties and traffic at the pit exit."],
-      ["race-final-lap", "Final lap", "The banner gives the position after penalties and the gap you need."]
+      ["race-in-lap-track", "In-lap", "The track page shows weather, flags and penalties on the way to the pits."],
+      ["race-final-lap", "Final lap", "The last-lap call gives the position. Hot tyres turn red."]
     ]],
     ["On the phone", [
-      ["phone-radio", "Phone radio", "The /radio page on a phone, with the latest calls."]
+      ["phone-radio", "Phone radio", "The /radio page on a phone during a box call, with the latest calls."]
+    ]],
+    ["Debrief and review", [
+      ["review-transport", "Review bar", "In review mode a bar at the bottom steps through laps and shows every call on a strip."],
+      ["debrief-summary", "Debrief", "The report after a session. Lap times use the tyre colours, and a dashed line marks the stop."],
+      ["debrief-calls", "Call review", "Every call on a timeline, with its inputs and buttons to grade it."]
     ]]
   ];
   $("#content").innerHTML = `<div class="landing">
@@ -284,7 +289,7 @@ function overview() {
     </section>
 
     <h2>Screens</h2>
-    <p class="lede">Captured from replays of real Q1, Q3 and race recordings at 1920x1080. Select a screen to open it at full size.</p>
+    <p class="lede">Captured from replays of real Q1 and race recordings at 1920x1080. Select a screen to open it at full size.</p>
     ${screens.map(([g, list]) => `<h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
       `<figure><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" width="1920" height="1080"></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div>`).join("")}
 
