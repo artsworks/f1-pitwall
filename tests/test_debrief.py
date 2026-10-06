@@ -247,31 +247,33 @@ def test_incidents_keep_unknown_sc_status_values() -> None:
 
 def test_pit_laps_require_race_boundary_evidence_but_keep_explicit_events() -> None:
     db = Database(":memory:")
-    fit = DegFit(90_000, 100.0, 0.0, 2, 50.0, 1.0, "fit")
 
-    def add_session(uid: int, session_type: int, pitted: bool):
+    def add_session(uid: int, session_type: int, values: list[tuple[int, int, tuple[str, ...]]]):
         db.upsert_session(uid, track_id=16, session_type=session_type)
-        for lap_num in range(10, 15):
+        for lap_num, tyre_age, invalid_reasons in values:
             _insert_lap(
                 db,
                 uid,
                 lap_num,
-                invalid_reasons=("pitted",) if pitted and lap_num == 12 else (),
+                invalid_reasons=invalid_reasons,
+                tyre_age_laps=tyre_age,
             )
-        db.upsert_stint(uid, 0, 19, 10, 12, fit)
-        db.upsert_stint(uid, 0, 18, 13, 14, fit)
-        return db.stints_for_session(uid), db.laps_for(uid)
+        return db.laps_for(uid)
 
-    practice_stints, practice_laps = add_session(152, 5, True)
-    race_stints, race_laps = add_session(153, 15, True)
-    no_pit_stints, no_pit_laps = add_session(154, 15, False)
+    in_lap = add_session(152, 15, [(8, 8, ()), (9, 0, ("pitted",))])
+    out_lap = add_session(153, 15, [(8, 8, ("pitted",)), (9, 0, ())])
+    bare_reset = add_session(154, 15, [(8, 8, ()), (9, 0, ())])
+    no_stop = add_session(155, 15, [(8, 8, ()), (9, 9, ())])
+    practice = add_session(156, 5, [(8, 8, ()), (9, 0, ("pitted",))])
 
-    assert _pit_laps([], practice_stints, practice_laps, 5) == []
-    assert _pit_laps([], race_stints, race_laps, 15) == [12]
-    assert _pit_laps([], no_pit_stints, no_pit_laps, 15) == []
+    assert _pit_laps([], in_lap, 15) == [9]
+    assert _pit_laps([], out_lap, 15) == [8]
+    assert _pit_laps([], bare_reset, 15) == [8]
+    assert _pit_laps([], no_stop, 15) == []
+    assert _pit_laps([], practice, 5) == []
 
-    db.insert_pit_event(152, 0, 15, 5_000, 0, 30_000, 90_000, 92_000, 91_000)
-    assert _pit_laps(db.pit_events_for_session(152), practice_stints, practice_laps, 5) == [15]
+    db.insert_pit_event(156, 0, 15, 5_000, 0, 30_000, 90_000, 92_000, 91_000)
+    assert _pit_laps(db.pit_events_for_session(156), practice, 5) == [15]
     db.close()
 
 
@@ -390,6 +392,8 @@ def test_debrief_layout_hooks() -> None:
     assert "class='pt hard'" in report
     assert "class='pt med'" in report
     assert "class='pt inv'" in report
+    for rule in (".pt.unk", ".fit.unk", ".stint rect.unk"):
+        assert rule in report
     assert "class='fit hard'" in report
     assert re.search(r"<polyline class='fit hard' points='", report)
     fit_rule = re.search(r"\.fit \{([^}]*)\}", report)

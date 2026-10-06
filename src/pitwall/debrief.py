@@ -14,6 +14,7 @@ from typing import Any
 
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
+from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
 from pitwall.state.session import thermal_window
@@ -125,10 +126,12 @@ svg { display:block; width:100%; height:auto; }
 .lbl.b { fill:var(--fg); }
 .pt.soft { fill:var(--soft); } .pt.med { fill:var(--med); } .pt.hard { fill:var(--hard); }
 .pt.inter { fill:var(--inter); } .pt.wet { fill:var(--wet); }
+.pt.unk { fill:var(--dim); }
 .pt.inv { fill:none; stroke:var(--faint); stroke-width:1.2; }
 .fit { fill:none; stroke-width:1.6; stroke-dasharray:4 3; }
 .fit.soft { stroke:var(--soft); } .fit.med { stroke:var(--med); } .fit.hard { stroke:var(--hard); }
 .fit.inter { stroke:var(--inter); } .fit.wet { stroke:var(--wet); }
+.fit.unk { stroke:var(--dim); }
 .band { fill:var(--warn); opacity:.12; }
 .pitline { stroke:var(--dim); stroke-width:1; stroke-dasharray:2 3; }
 .calltick { fill:var(--warn); }
@@ -138,6 +141,7 @@ svg { display:block; width:100%; height:auto; }
 .stint rect.med { fill:var(--med); }
 .stint rect.hard { fill:var(--hard); }
 .stint rect.inter { fill:var(--inter); } .stint rect.wet { fill:var(--wet); }
+.stint rect.unk { fill:var(--dim); }
 .stint rect.alt { opacity:.35; }
 .stint .lbl { fill:var(--bg); }
 .trace { fill:none; stroke-width:1.5; }
@@ -378,15 +382,13 @@ def _lap_time(lap_time_ms: int) -> str:
 
 def _pit_laps(
     pits: list[PitEventRow],
-    stints: list[StintRow],
     laps: list[LapRow],
     session_type: object,
 ) -> list[int]:
-    pit_laps = {pit.lap_num for pit in pits}
+    found = {pit.lap_num for pit in pits}
     if _as_int(session_type) in (15, 16, 17):
-        pitted_laps = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons}
-        pit_laps.update(stint.end_lap for stint in stints[:-1] if stint.end_lap in pitted_laps)
-    return sorted(pit_laps)
+        found.update(stop_laps(laps))
+    return sorted(found)
 
 
 def _sc_runs(laps: list[LapRow]) -> list[tuple[int, int, str]]:
@@ -1221,7 +1223,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     laps = db.laps_for(uid)
     stints = db.stints_for_session(uid)
     pits = db.pit_events_for_session(uid)
-    pit_laps = _pit_laps(pits, stints, laps, session.get("session_type"))
+    pit_laps = _pit_laps(pits, laps, session.get("session_type"))
     calls = db.calls_for_session(uid)
     grades = {str(row["call_id"]): row for row in db.grades_for_session(uid)}
     outcomes: dict[str, list[dict[str, Any]]] = {}
