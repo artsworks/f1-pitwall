@@ -171,7 +171,7 @@ def run_doctor(
             out,
             "INFO",
             f"Piper voice {speech.piper_voice} not installed (natural voice): "
-            f"uv run pitwall voices get",
+            f"uv run pitwall voice get",
         )
     if sys.platform == "win32":
         try:

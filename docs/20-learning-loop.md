@@ -67,8 +67,8 @@ A digest contains no raw telemetry. Recordings stay out of git (ADR 0005).
 
 `pitwall start` runs `maintain()` before rules start. It rebuilds stint-derived values once
 per learning version, quarantines invalid active values with a reason, and grades sessions
-that still need grading. A session is also graded when it ends. Upkeep is idempotent;
-database errors are logged and skipped. Run it manually with `pitwall maintain`.
+that still need grading. A session is also graded when it ends. Upkeep is idempotent.
+Pitwall logs database errors and skips them. To run upkeep again, restart `pitwall start`.
 
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
 `deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value
@@ -86,6 +86,7 @@ from human grades and A/B results.
 ## After a race
 
 No command is required. Grading runs at session end; upkeep runs at the next start.
-Optionally open `/debrief/<uid>` to review and grade calls, run `pitwall calibrate` to
-fit track values, or use `pitwall stats --learned` to inspect them. Use `pitwall digest`
+Optionally open `/debrief` to pick a session (`/debrief/latest` for the newest) and grade
+its calls. `pitwall sessions` lists the same sessions in the terminal. Run
+`pitwall calibrate` to fit track values, or use `pitwall stats --learned` to inspect them. Use `pitwall digest`
 only when you want digest JSON or need to ingest external recordings.

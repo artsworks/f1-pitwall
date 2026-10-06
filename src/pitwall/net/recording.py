@@ -401,6 +401,28 @@ def read_index(path: Path) -> list[dict[str, Any]]:
     return list(data)
 
 
+def ensure_index(path: Path) -> bool:
+    """Rebuild the .f1idx sidecar when it is missing or older than the recording.
+
+    Returns True if it was rebuilt."""
+    src = Path(path)
+    idx = index_path_for(src)
+    if idx.exists() and idx.stat().st_mtime >= src.stat().st_mtime:
+        return False
+    write_index(idx, build_index(src))
+    return True
+
+
+def list_recordings(directory: Path) -> list[Path]:
+    """Recordings (.f1bin and .f1bin.zst) in a directory, newest first by mtime."""
+    folder = Path(directory)
+    if not folder.is_dir():
+        return []
+    found = {p for pattern in ("*.f1bin", "*.f1bin.zst") for p in folder.glob(pattern)}
+    files = [p for p in found if p.is_file()]
+    return sorted(files, key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
+
+
 def compress_recording(path: Path, *, level: int = 3, remove: bool = False) -> Path:
     """Compress a .f1bin to .f1bin.zst. Intended for post-session, low priority."""
     src = Path(path)

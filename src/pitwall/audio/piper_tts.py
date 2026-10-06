@@ -5,7 +5,7 @@ its worker thread and hands it to a `Player`; `on_spoken` fires at playback
 start. Rendered WAVs are cached by text, so repeated calls skip synthesis.
 A P1 call preempts whatever is playing; queued calls play in priority order.
 
-Voices are downloaded once into `speech.voices_dir` (`pitwall voices get`).
+Voices are downloaded once into `speech.voices_dir` (`pitwall voice get`).
 """
 
 from __future__ import annotations
@@ -166,7 +166,7 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
     if not path.exists():
         raise FileNotFoundError(
             f"Piper voice {settings.piper_voice} not found in {settings.voices_dir}/ "
-            f"(run: pitwall voices get {settings.piper_voice})"
+            f"(run: pitwall voice get {settings.piper_voice})"
         )
     voice = PiperVoice.load(path)
     rate = max(-10, min(10, settings.rate))

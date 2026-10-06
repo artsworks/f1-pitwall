@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from pitwall.config.loader import ConfigStore
-from pitwall.debrief import render_debrief
+from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
@@ -560,6 +560,17 @@ def create_app(
         return FileResponse(WEB_DIR / "sw.js", media_type="text/javascript")
 
     if db is not None:
+
+        @app.get("/debrief")
+        async def debrief_index() -> HTMLResponse:
+            return HTMLResponse(render_debrief_index(db))
+
+        @app.get("/debrief/latest")
+        async def debrief_latest() -> RedirectResponse:
+            uid = db.latest_session_uid()
+            if uid is None:
+                raise HTTPException(status_code=404, detail="No sessions stored")
+            return RedirectResponse(f"/debrief/{uid}", status_code=307)
 
         @app.get("/debrief/{uid}")
         async def debrief(uid: int) -> HTMLResponse:
