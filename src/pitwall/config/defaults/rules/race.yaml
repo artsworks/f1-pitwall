@@ -907,34 +907,34 @@ rules:
   - id: finish_gained
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_gained > 0 and penalty_places == 0"
+    when: "phase == 'finished' and grid_position > 0 and classified_gained > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag. P{position}, up {positions_gained} from P{grid_position}. Great drive"
-      - "That's the flag. P{position}, {positions_gained} places gained. Brilliant job"
+      - "Chequered flag. P{classified_position}, up {classified_gained} from P{grid_position}. Great drive"
+      - "That's the flag. P{classified_position}, {classified_gained} places gained. Brilliant job"
   - id: finish_lost
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_lost > 0 and penalty_places == 0"
+    when: "phase == 'finished' and grid_position > 0 and classified_lost > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag. P{position}, from P{grid_position}. We'll go through it in the debrief"
-      - "That's the flag, P{position}. Tough one, we'll find the time in the debrief"
+      - "Chequered flag. P{classified_position}, from P{grid_position}. We'll go through it in the debrief"
+      - "That's the flag, P{classified_position}. Tough one, we'll find the time in the debrief"
   - id: finish_held
     sessions: [race]
     priority: 2
-    when: "phase == 'finished' and grid_position > 0 and positions_gained == 0 and penalty_places == 0"
+    when: "phase == 'finished' and grid_position > 0 and classified_gained == 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag. P{position}, same as the grid. Solid job"
-      - "That's the flag, P{position}. Held the grid slot, good work"
+      - "Chequered flag. P{classified_position}, same as the grid. Solid job"
+      - "That's the flag, P{classified_position}. Held the grid slot, good work"
   - id: finish_win
     sessions: [race]
     priority: 1
-    when: "phase == 'finished' and position == 1 and penalty_places == 0"
+    when: "phase == 'finished' and classified_position == 1 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
@@ -947,14 +947,14 @@ rules:
   - id: finish_podium
     sessions: [race]
     priority: 1
-    when: "phase == 'finished' and position in (2, 3) and penalty_places == 0"
+    when: "phase == 'finished' and classified_position in (2, 3) and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "That's it, you've done it! P{position}, on the podium!"
-      - "P{position}! Podium! Get in there, brilliant job"
-      - "Chequered flag, P{position}. That's a podium, mate. Well driven"
-      - "Yes! P{position}, trophy time. Great stuff"
+      - "That's it, you've done it! P{classified_position}, on the podium!"
+      - "P{classified_position}! Podium! Get in there, brilliant job"
+      - "Chequered flag, P{classified_position}. That's a podium, mate. Well driven"
+      - "Yes! P{classified_position}, trophy time. Great stuff"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

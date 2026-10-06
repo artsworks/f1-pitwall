@@ -22,6 +22,7 @@ class _Car:
     delta_to_car_in_front_ms: int = 0
     result_status: int = 2
     pit_status: int = 0
+    total_distance: float | None = None
 
 
 def test_ahead_behind_scope() -> None:
@@ -132,3 +133,28 @@ def test_penalty_standing_ignores_lapped_cars_and_clean_races() -> None:
     covered = [_Timed(1, 0), _Timed(2, 900, penalties=5), _Timed(3, 6900)]
     pos, margin, _ = penalty_standing(covered, 1, 5000.0)
     assert pos == 2 and margin == pytest.approx(1.0)
+
+
+def test_penalty_standing_skips_a_lapped_car_without_stopping() -> None:
+    cars = [
+        _Timed(1, 0, total_distance=50000.0),
+        _Timed(2, 900, penalties=5, total_distance=50000.0),
+        _Timed(3, 1100, total_distance=44000.0),
+        _Timed(4, 3000, total_distance=50001.0),
+    ]
+    assert penalty_standing(cars, 1, 5000.0)[0] == 3
+
+
+def test_behind_rival_rejects_lapped_and_implausible_gap() -> None:
+    cars = [
+        _Car(3, 1000.0, 900, total_distance=50000.0),
+        _Car(2, 1200.0, 800, total_distance=50200.0),
+        _Car(4, 950.0, 1500, total_distance=44000.0),
+    ]
+    _, behind, _ = relevant_rivals(cars, 0, math.inf, (1000.0, 5000.0, 0.0), 70.0)
+    assert behind == -1
+
+    cars[2].total_distance = 49950.0
+    cars[2].delta_to_car_in_front_ms = 65503
+    _, behind, _ = relevant_rivals(cars, 0, math.inf, (1000.0, 5000.0, 0.0), 70.0)
+    assert behind == -1
