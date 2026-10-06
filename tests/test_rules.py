@@ -142,6 +142,26 @@ def _default_rule_engine() -> RuleEngine:
     )
 
 
+@pytest.mark.parametrize("laps_left_offset", [-1, 0, 1])
+def test_rival_ahead_pitted_rule_requires_time_to_stop(laps_left_offset: int) -> None:
+    from pitwall.config.loader import ConfigStore
+
+    min_left = int(ConfigStore().current().thresholds["pit_min_laps_left"])
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            laps_remaining=min_left + laps_left_offset,
+            rival_ahead_in_pit_lane=True,
+            rival_ahead_pitted=True,
+            rival_ahead_name="NORRIS",
+            gap_ahead_s=1.0,
+            pit_plan="no_stop",
+        )
+    )
+    ids = {candidate.rule.defn.id for candidate in result.candidates}
+    assert ("rival_ahead_pitted" in ids) == (laps_left_offset > 0)
+
+
 def test_front_wing_damage_rule_fires() -> None:
     from pitwall.state.session import Damage
 

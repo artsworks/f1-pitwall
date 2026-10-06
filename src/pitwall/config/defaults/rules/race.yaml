@@ -682,7 +682,7 @@ rules:
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and rival_ahead_in_pit_lane and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s"
+    when: "phase == 'racing' and rival_ahead_in_pit_lane and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s and laps_remaining > th.pit_min_laps_left"
     clear_when: "not rival_ahead_in_pit_lane"
     cooldown_s: 45
     cooldown_group: rival_pit

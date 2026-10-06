@@ -145,7 +145,12 @@ def optimise(
     # Undercut: our fresh laps vs the rival's current (degrading) pace.
     uc_laps = int(_f(th, "undercut_laps", 2))
     undercut_s = 0.0
-    if rival_ahead is not None and rival_ahead.pace_ms > 0 and math.isfinite(gap_ahead_s):
+    if (
+        laps_remaining > uc_laps + min_left
+        and rival_ahead is not None
+        and rival_ahead.pace_ms > 0
+        and math.isfinite(gap_ahead_s)
+    ):
         gained = 0.0
         for j in range(uc_laps):
             theirs = rival_ahead.pace_ms + fit.deg_ms_per_lap * (j + 1)
@@ -155,7 +160,7 @@ def optimise(
     # Overcut: rival just pitted; our old laps vs their warm-up + fresh laps.
     oc_laps = int(_f(th, "overcut_laps", 2))
     overcut_s = 0.0
-    if rival_ahead is not None and rival_ahead.pitted:
+    if laps_remaining > oc_laps and projections and rival_ahead is not None and rival_ahead.pitted:
         lost = 0.0
         for j in range(oc_laps):
             lost += (
@@ -175,8 +180,8 @@ def optimise(
             "",
             "too late to stop",
             (0, 0),
-            undercut_s,
-            overcut_s,
+            0.0,
+            0.0,
             (),
         )
     best_k, best_delta = min(
@@ -233,6 +238,7 @@ def optimise(
         rival_ahead is not None
         and gap_ahead_s < _f(th, "undercut_max_gap_s", 3.0)
         and undercut_s >= _f(mode, "undercut_speak_threshold_s", 1.0)
+        and laps_remaining > uc_laps + min_left
         and window[0] <= lap_num
     ):
         return plan(
@@ -243,6 +249,7 @@ def optimise(
         and rival_ahead.pitted
         and laps_of_pace >= _f(th, "overcut_min_laps", 3)
         and overcut_s >= gain_min
+        and laps_remaining > oc_laps
     ):
         return plan(
             "overcut",
