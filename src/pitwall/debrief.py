@@ -12,8 +12,10 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
+from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
 from pitwall.learned import learned_state
+from pitwall.model.deg import fuel_burned_laps
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, PitEventRow, StintRow
 
@@ -205,6 +207,16 @@ _VISUAL_COMPOUNDS = {
     7: ("inter", "INTER"),
     8: ("wet", "WET"),
 }
+_ACTUAL_COMPOUNDS = {
+    22: "C6",
+    16: "C5",
+    17: "C4",
+    18: "C3",
+    19: "C2",
+    20: "C1",
+    21: "C0",
+}
+_SC_WORDS = {0: "green", 1: "SC", 2: "VSC", 3: "formation"}
 _TRACK_NAMES = {
     0: "Melbourne",
     2: "Shanghai",
@@ -277,8 +289,13 @@ def rules_version(settings: Settings) -> str:
 
 
 def _compound(visual: int, compound: int) -> tuple[str, str]:
-    visual_id = visual if visual in _VISUAL_COMPOUNDS else compound
-    return _VISUAL_COMPOUNDS.get(visual_id, ("unk", "UNKNOWN"))
+    if visual in _VISUAL_COMPOUNDS:
+        return _VISUAL_COMPOUNDS[visual]
+    if compound in (7, 8):
+        return _VISUAL_COMPOUNDS[compound]
+    if compound in _ACTUAL_COMPOUNDS:
+        return "unk", _ACTUAL_COMPOUNDS[compound]
+    return "unk", "UNKNOWN"
 
 
 def _compound_for_stint(stint: StintRow, laps: list[LapRow]) -> tuple[str, str]:
@@ -359,28 +376,52 @@ def _lap_time(lap_time_ms: int) -> str:
     return f"{minutes}:{remainder // 10:02d}.{remainder % 10}"
 
 
-def _pit_laps(pits: list[PitEventRow], stints: list[StintRow]) -> list[int]:
-    return sorted({pit.lap_num for pit in pits} | {stint.end_lap for stint in stints[:-1]})
+def _pit_laps(
+    pits: list[PitEventRow],
+    stints: list[StintRow],
+    laps: list[LapRow],
+    session_type: object,
+) -> list[int]:
+    pit_laps = {pit.lap_num for pit in pits}
+    if _as_int(session_type) in (15, 16, 17):
+        pitted_laps = {lap.lap_num for lap in laps if "pitted" in lap.invalid_reasons}
+        pit_laps.update(stint.end_lap for stint in stints[:-1] if stint.end_lap in pitted_laps)
+    return sorted(pit_laps)
 
 
 def _sc_runs(laps: list[LapRow]) -> list[tuple[int, int, str]]:
-    safety_car_laps = [lap for lap in laps if lap.sc_status > 0]
+    safety_car_laps = [lap for lap in laps if lap.sc_status in (1, 2)]
     if not safety_car_laps:
         return []
-    runs: list[tuple[int, int, list[int]]] = []
+    runs: list[tuple[int, int, int]] = []
     start = previous = safety_car_laps[0].lap_num
-    statuses = [safety_car_laps[0].sc_status]
+    status = safety_car_laps[0].sc_status
     for lap in safety_car_laps[1:]:
-        if lap.lap_num != previous + 1:
-            runs.append((start, previous, statuses))
+        if lap.lap_num != previous + 1 or lap.sc_status != status:
+            runs.append((start, previous, status))
             start = lap.lap_num
-            statuses = []
-        statuses.append(lap.sc_status)
+            status = lap.sc_status
         previous = lap.lap_num
-    runs.append((start, previous, statuses))
+    runs.append((start, previous, status))
+    return [(start_lap, end_lap, _SC_WORDS[status]) for start_lap, end_lap, status in runs]
+
+
+def _fit_points(stint: StintRow, laps: list[LapRow]) -> list[tuple[int, float]]:
+    usable = [
+        lap
+        for lap in laps
+        if stint.start_lap <= lap.lap_num <= stint.end_lap
+        and lap.valid == 1
+        and lap.sc_status == 0
+        and lap.lap_time_ms > 0
+    ]
+    burned = fuel_burned_laps(usable)
     return [
-        (start_lap, end_lap, "VSC" if all(status == 2 for status in status_list) else "SC")
-        for start_lap, end_lap, status_list in runs
+        (
+            lap.lap_num,
+            stint.base_ms + stint.deg_ms_per_lap * lap.tyre_age_laps - stint.fuel_ms_per_lap * fuel,
+        )
+        for lap, fuel in zip(usable, burned, strict=True)
     ]
 
 
@@ -458,23 +499,30 @@ def _lap_chart(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) 
             f"{_esc(f'PIT L{pit_lap}')}</text>"
         )
     for stint in stints:
-        if stint.n_valid_laps < 2:
+        fit_points = _fit_points(stint, laps)
+        if len(fit_points) < 2:
             continue
         css_class, word = _compound_for_stint(stint, laps)
-        start_ms = stint.base_ms
-        end_ms = stint.base_ms + stint.deg_ms_per_lap * (stint.end_lap - stint.start_lap)
-        x1, x2 = x(stint.start_lap), x(stint.end_lap)
-        y1, y2 = y(start_ms), y(end_ms)
+        points = " ".join(
+            f"{x(lap_num):.1f},{y(fitted_ms):.1f}" for lap_num, fitted_ms in fit_points
+        )
         title = f"{word} fitted degradation {stint.deg_ms_per_lap:.1f} ms/lap"
         parts.append(
-            f"<line class='fit {_esc(css_class)}' x1='{x1:.1f}' y1='{y1:.1f}' "
-            f"x2='{x2:.1f}' y2='{y2:.1f}'><title>{_esc(title)}</title></line>"
+            f"<polyline class='fit {_esc(css_class)}' points='{_esc(points)}'>"
+            f"<title>{_esc(title)}</title></polyline>"
         )
+        midpoint = len(fit_points) // 2
+        if len(fit_points) % 2:
+            mid_lap: float = float(fit_points[midpoint][0])
+            mid_ms: float = fit_points[midpoint][1]
+        else:
+            before, after = fit_points[midpoint - 1 : midpoint + 1]
+            mid_lap = (before[0] + after[0]) / 2
+            mid_ms = (before[1] + after[1]) / 2
         sign = "+" if stint.deg_ms_per_lap >= 0 else ""
         parts.append(
-            f"<text class='lbl' x='{(x1 + x2) / 2:.1f}' "
-            f"y='{(y1 + y2) / 2 - 8:.1f}' text-anchor='middle'>"
-            f"{_esc(f'{word} {sign}{stint.deg_ms_per_lap:.0f} ms/lap')}</text>"
+            f"<text class='lbl' x='{x(mid_lap):.1f}' y='{y(mid_ms) - 8:.1f}' "
+            f"text-anchor='middle'>{_esc(f'{word} {sign}{stint.deg_ms_per_lap:.0f} ms/lap')}</text>"
         )
     for lap in timed:
         css_class, word = _compound(lap.visual, lap.compound)
@@ -482,7 +530,11 @@ def _lap_chart(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) 
         invalid = not lap.valid or lap.sc_status > 0 or slow
         cy = top if slow else min(height - bottom, max(top, y(lap.lap_time_ms)))
         reason = ", ".join(lap.invalid_reasons) or (
-            "SC" if lap.sc_status > 0 else "invalid" if not lap.valid else "valid"
+            _SC_WORDS.get(lap.sc_status, str(lap.sc_status))
+            if lap.sc_status
+            else "invalid"
+            if not lap.valid
+            else "valid"
         )
         title = (
             f"Lap {lap.lap_num}: {_lap_time(lap.lap_time_ms)}, {word}, "
@@ -637,19 +689,21 @@ def _provenance(session: dict[str, Any], calls: list[dict[str, Any]], settings: 
             pass
         else:
             recording += f" · {size_mb:.1f} MB"
-    config_hash = session.get("config_hash") or ""
-    if not config_hash:
+    current = config_hash(settings)
+    resolved_hash = session.get("config_hash") or ""
+    if not resolved_hash:
         call_configs = Counter(
             str(call["config_hash"]) for call in calls if call.get("config_hash")
         )
-        config_hash = call_configs.most_common(1)[0][0] if call_configs else "unknown"
+        resolved_hash = call_configs.most_common(1)[0][0] if call_configs else "unknown"
+    matches = resolved_hash == current
     mindsets = Counter(str(call["mindset"]) for call in calls if call.get("mindset"))
-    mindset = mindsets.most_common(1)[0][0] if mindsets else settings.mindset.active
+    mindset = mindsets.most_common(1)[0][0] if calls and mindsets else "unknown"
     lines = (
         recording,
-        f"profile {settings.recording.profile}",
-        f"config {config_hash}",
-        f"rules {rules_version(settings)}",
+        f"profile {settings.recording.profile if matches else 'unknown'}",
+        f"config {resolved_hash}",
+        f"rules {rules_version(settings) if matches else 'unknown'}",
         f"mindset {mindset}",
     )
     content = "<br>".join(_esc(line) for line in lines)
@@ -667,7 +721,7 @@ def _summary_section(
     session: dict[str, Any],
     laps: list[LapRow],
     pits: list[PitEventRow],
-    stints: list[StintRow],
+    pit_laps: list[int],
     calls: list[dict[str, Any]],
     grades: dict[str, dict[str, Any]],
 ) -> str:
@@ -678,7 +732,6 @@ def _summary_section(
     )
     mean = _lap_time(round(statistics.fmean(lap.lap_time_ms for lap in clean))) if clean else "—"
     spread = f"{statistics.pstdev(lap.lap_time_ms for lap in clean) / 1000:.1f} s" if clean else "—"
-    pit_laps = _pit_laps(pits, stints)
     stop_count = len(pit_laps)
     pit = next((event for event in pits if event.lap_num), None)
     if pit is not None:
@@ -736,8 +789,7 @@ def _summary_section(
     return _section("summary", "00", "Summary", content)
 
 
-def _pace_section(laps: list[LapRow], stints: list[StintRow], pits: list[PitEventRow]) -> str:
-    pit_laps = _pit_laps(pits, stints)
+def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) -> str:
     chart = _card(
         "LAP TIME BY LAP · COLOUR = COMPOUND · HOLLOW = INVALID · DASHED = DEG FIT · AMBER = SC",
         _lap_chart(laps, stints, pit_laps),
@@ -760,7 +812,10 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pits: list[PitEven
             _chip(*_compound(lap.visual, lap.compound)),
             lap.tyre_age_laps,
             f"{lap.fuel_kg:.1f}",
-            "valid" if lap.valid and not lap.sc_status else ", ".join(lap.invalid_reasons) or "SC",
+            "valid"
+            if lap.valid and lap.sc_status == 0
+            else ", ".join(lap.invalid_reasons)
+            or (_SC_WORDS.get(lap.sc_status, str(lap.sc_status)) if lap.sc_status else "invalid"),
         )
         for lap in laps
     ]
@@ -879,7 +934,7 @@ def _hindsight(automatic: list[dict[str, Any]] | None) -> str:
 def _strategy_section(
     calls: list[dict[str, Any]],
     pits: list[PitEventRow],
-    stints: list[StintRow],
+    pit_laps: list[int],
     grades: dict[str, dict[str, Any]],
     outcomes: dict[str, list[dict[str, Any]]],
 ) -> str:
@@ -927,7 +982,6 @@ def _strategy_section(
             "pit_events",
         )
     else:
-        pit_laps = _pit_laps(pits, stints)
         if pit_laps:
             labels = ", ".join(f"L{lap}" for lap in pit_laps)
             change = "change" if len(pit_laps) == 1 else "changes"
@@ -942,8 +996,7 @@ def _strategy_section(
 def _call_timeline(
     calls: list[dict[str, Any]],
     laps: list[LapRow],
-    pits: list[PitEventRow],
-    stints: list[StintRow],
+    pit_laps: list[int],
 ) -> str:
     numbers = [lap.lap_num for lap in laps] + [
         int(call["lap"]) for call in calls if call.get("lap")
@@ -967,7 +1020,7 @@ def _call_timeline(
     for start_lap, end_lap, _ in _sc_runs(laps):
         x1, x2 = x(start_lap - 0.5), x(end_lap + 0.5)
         parts.append(f"<rect class='band' x='{x1:.1f}' y='6' width='{x2 - x1:.1f}' height='36'/>")
-    for pit_lap in _pit_laps(pits, stints):
+    for pit_lap in pit_laps:
         pit_x = x(pit_lap + 0.5)
         parts.append(
             f"<line class='pitline' x1='{pit_x:.1f}' x2='{pit_x:.1f}' y1='6' y2='{baseline}'/>"
@@ -1003,8 +1056,7 @@ def _call_timeline(
 def _radio_section(
     calls: list[dict[str, Any]],
     laps: list[LapRow],
-    pits: list[PitEventRow],
-    stints: list[StintRow],
+    pit_laps: list[int],
     grades: dict[str, dict[str, Any]],
     outcomes: dict[str, list[dict[str, Any]]],
     inputs: list[dict[str, Any]],
@@ -1013,7 +1065,7 @@ def _radio_section(
 ) -> str:
     timeline = _card(
         "CALL TIMELINE",
-        _call_timeline(calls, laps, pits, stints),
+        _call_timeline(calls, laps, pit_laps),
         "calls · safety-car laps · pit events",
     )
     rows = []
@@ -1037,10 +1089,12 @@ def _radio_section(
         detail = json.dumps(parsed_inputs, sort_keys=True, indent=2, default=str)
         evidence = json.dumps(automatic, sort_keys=True, default=str)
         outcome = str(call.get("outcome") or "")
-        if outcome == "suppressed":
-            said = "suppressed · " + str(call.get("suppressed_by") or "unknown")
-        else:
-            said = str(call.get("text") or "")
+        said = str(call.get("text") or "—")
+        decision = (
+            "suppressed · " + str(call.get("suppressed_by") or "unknown")
+            if outcome == "suppressed"
+            else outcome
+        )
         details = (
             "<details class='why'><summary>why</summary><pre>"
             + _esc(detail)
@@ -1059,7 +1113,7 @@ def _radio_section(
             f"<tr{row_class}><td>{_esc(lap_value)}</td>"
             f"<td>{_priority_chip(call.get('priority'))}</td>"
             f"<td class='mono'>{_esc(call.get('rule_id') or '—')}</td>"
-            f"<td>{_esc(said)}{details}</td><td>{_esc(outcome)}</td><td>{grade_cell}</td></tr>"
+            f"<td>{_esc(said)}{details}</td><td>{_esc(decision)}</td><td>{grade_cell}</td></tr>"
         )
     header = "".join(
         f"<th scope='col'>{_esc(value)}</th>"
@@ -1103,7 +1157,7 @@ def _incidents_section(laps: list[LapRow]) -> str:
             lap.lap_num,
             f"{lap.ers_deployed_j / 1_000_000:.1f}",
             f"{lap.fuel_kg:.1f}",
-            {0: "green", 1: "SC", 2: "VSC", 3: "formation"}.get(lap.sc_status, lap.sc_status),
+            _SC_WORDS.get(lap.sc_status, lap.sc_status),
         )
         for lap in laps
     ]
@@ -1167,6 +1221,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     laps = db.laps_for(uid)
     stints = db.stints_for_session(uid)
     pits = db.pit_events_for_session(uid)
+    pit_laps = _pit_laps(pits, stints, laps, session.get("session_type"))
     calls = db.calls_for_session(uid)
     grades = {str(row["call_id"]): row for row in db.grades_for_session(uid)}
     outcomes: dict[str, list[dict[str, Any]]] = {}
@@ -1212,12 +1267,12 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + "</nav>"
     )
     sections = (
-        _summary_section(session, laps, pits, stints, calls, grades)
-        + _pace_section(laps, stints, pits)
+        _summary_section(session, laps, pits, pit_laps, calls, grades)
+        + _pace_section(laps, stints, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)
-        + _strategy_section(calls, pits, stints, grades, outcomes)
-        + _radio_section(calls, laps, pits, stints, grades, outcomes, inputs, editable=editable)
+        + _strategy_section(calls, pits, pit_laps, grades, outcomes)
+        + _radio_section(calls, laps, pit_laps, grades, outcomes, inputs, editable=editable)
         + _incidents_section(laps)
         + _actions_section(db, settings, session, grades)
     )
