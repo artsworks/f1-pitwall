@@ -70,7 +70,7 @@ def _setup() -> dict[str, float]:
 @pytest.mark.parametrize(
     ("signals", "param", "delta"),
     [
-        ({"lockups_rear_per10": 2.0}, "brake_bias", 1.0),
+        ({"lockups_rear_per10": 3.0}, "brake_bias", 1.0),
         ({"traction_exits_per10": 30.0}, "on_throttle", -5.0),
         (
             {"wear_axle_ratio": 1.2, "z_rear": 0.8},
@@ -117,7 +117,7 @@ def test_race_mode_filters_parameters_and_uses_race_step(
     recommendations = evaluate(
         _signals(
             session_type=15,
-            lockups_rear_per10=2.0,
+            lockups_rear_per10=3.0,
             traction_exits_per10=30.0,
         ),
         _setup(),
@@ -136,7 +136,7 @@ def test_quali_garage_parc_ferme_and_next_visit_contexts(
 ) -> None:
     rules, thresholds = setup_config
     rules = replace(rules, confidence_floor="low")
-    signals = _signals(session_type=7, lockups_rear_per10=2.0, traction_exits_per10=30.0)
+    signals = _signals(session_type=7, lockups_rear_per10=3.0, traction_exits_per10=30.0)
     setup = _setup() | {"brake_bias": 70.0}
 
     locked = evaluate(
@@ -265,7 +265,7 @@ def test_at_limit_falls_through_and_suppression_is_attached(
 ) -> None:
     rules, thresholds = setup_config
     recs = evaluate(
-        _signals(lockups_rear_per10=2.0),
+        _signals(lockups_rear_per10=3.0),
         _setup() | {"brake_bias": 70.0},
         mode="garage",
         parc_ferme=1,
@@ -406,7 +406,7 @@ def test_alternative_cap_applies_across_all_symptoms(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
     rules, thresholds = setup_config
-    signals = _signals(lockups_rear_per10=2.0, traction_exits_per10=30.0)
+    signals = _signals(lockups_rear_per10=3.0, traction_exits_per10=30.0)
     recs = evaluate(
         signals,
         _setup(),

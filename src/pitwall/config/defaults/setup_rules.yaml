@@ -3,6 +3,21 @@ setup_rules:
   defaults:
     max_alternatives: 2
     confidence_floor: medium
+  # A Q3 recording showed off-throttle remains adjustable with parc fermé on.
+  quali_locked:
+    - rear_wing
+    - engine_braking
+    - front_camber
+    - rear_camber
+    - front_toe
+    - rear_toe
+    - front_suspension
+    - rear_suspension
+    - front_anti_roll_bar
+    - rear_anti_roll_bar
+    - front_suspension_height
+    - rear_suspension_height
+    - brake_pressure
   # Context access follows docs/22-setup-advisor.md §1.3.
   params:
     front_wing:

@@ -74,6 +74,8 @@ def _predicate_result(
 def _context_for(mode: str, kind: str) -> str:
     if mode == "garage":
         return f"{kind}_garage"
+    if mode == "race_stop":
+        return "race_stop"
     if mode == "race":
         return "race_track"
     if kind == "practice":
@@ -142,10 +144,10 @@ def _evaluate(
     rules: SetupRules,
     thresholds: Mapping[str, Any],
 ) -> tuple[list[Recommendation], list[dict[str, str]]]:
-    if mode not in {"debrief", "garage", "race"}:
-        raise ValueError("mode must be debrief, garage, or race")
+    if mode not in {"debrief", "garage", "race", "race_stop"}:
+        raise ValueError("mode must be debrief, garage, race, or race_stop")
     kind = _session_kind(signals.session_type)
-    if kind is None or (mode == "race" and kind != "race"):
+    if kind is None or (mode in {"race", "race_stop"} and kind != "race"):
         return [], []
 
     context = _context_for(mode, kind)
@@ -187,6 +189,11 @@ def _evaluate(
         for candidate in symptom.candidates:
             spec = rules.params[candidate.param]
             if mode == "race" and candidate.param not in RACE_PARAMS:
+                item = {"param": candidate.param, "reason": "locked"}
+                local_suppressed[symptom.rule_id].append(item)
+                suppressed.append({"rule_id": symptom.rule_id, **item})
+                continue
+            if mode == "race_stop" and candidate.param != "front_wing":
                 item = {"param": candidate.param, "reason": "locked"}
                 local_suppressed[symptom.rule_id].append(item)
                 suppressed.append({"rule_id": symptom.rule_id, **item})

@@ -19,7 +19,8 @@ thresholds:
   setup_slip_os_deg: 0.5
   setup_trac_per10: 25
   setup_snaps_per10: 2
-  setup_lockups_rear_per10: 1
+  setup_lockups_rear_per10: 3
+  setup_rec_cooldown_laps: 5
   tyre_inner_cold_c: 80
   tyre_inner_hot_c: 110
   tyre_inner_cold_by_compound_c: {7: 60, 8: 50, 16: 70, 17: 75, 18: 80, 19: 85, 20: 90, 21: 90, 22: 65}

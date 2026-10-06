@@ -81,6 +81,44 @@ class SetupRules:
     max_alternatives: int
     confidence_floor: str
     version: int = 1
+    quali_locked: tuple[str, ...] = ()
+
+
+PRESSURE_SETUP_FIELDS = {
+    "front_pressure": ("front_left_tyre_pressure", "front_right_tyre_pressure"),
+    "rear_pressure": ("rear_left_tyre_pressure", "rear_right_tyre_pressure"),
+}
+
+
+def setup_fields_for_param(param: str, rules: SetupRules | Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the Car Setups fields changed by a setup parameter."""
+    if param in PRESSURE_SETUP_FIELDS:
+        return PRESSURE_SETUP_FIELDS[param]
+    if isinstance(rules, SetupRules):
+        spec = rules.params.get(param)
+        setup_field = spec.setup_field if spec is not None else ""
+    else:
+        data = rules.get("setup_rules", rules)
+        if not isinstance(data, Mapping):
+            return ()
+        params = data.get("params", {})
+        if not isinstance(params, Mapping):
+            return ()
+        spec = params.get(param, {})
+        setup_field = spec.get("setup_field", "") if isinstance(spec, Mapping) else ""
+    field_name = str(setup_field)
+    return (field_name,) if field_name in SETUP_FIELDS else ()
+
+
+def reason_for_symptom(rule_id: str) -> str:
+    """Return the short driver-facing reason for a setup symptom."""
+    return {
+        "entry_instability": "rears locking on entry",
+        "traction_limited": "wheelspin on exits",
+        "rear_wear_limited": "rear tyre wear",
+        "understeer_balance": "understeer",
+        "oversteer_balance": "oversteer",
+    }.get(rule_id, rule_id.replace("_", " "))
 
 
 def _mapping(value: Any, where: str) -> Mapping[str, Any]:
@@ -108,7 +146,7 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         data = _mapping(data["setup_rules"], "setup_rules")
     _unknown_keys(
         data,
-        {"version", "defaults", "params", "symptoms", "magnitudes"},
+        {"version", "defaults", "params", "symptoms", "magnitudes", "quali_locked"},
         "",
     )
 
@@ -132,6 +170,15 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
     param_data = _mapping(data.get("params", {}), "params")
     params: dict[str, ParamSpec] = {}
     setup_fields = set(SETUP_FIELDS)
+    raw_quali_locked = data.get("quali_locked", [])
+    if not isinstance(raw_quali_locked, list):
+        raise ValueError("setup_rules.quali_locked must be a list")
+    quali_locked = tuple(str(field_name) for field_name in raw_quali_locked)
+    unknown_locked = sorted(set(quali_locked) - setup_fields)
+    if unknown_locked:
+        raise ValueError(
+            "setup_rules.quali_locked: unknown Car Setups field(s): " + ", ".join(unknown_locked)
+        )
     for name, raw_spec in param_data.items():
         if name not in PARAMETERS:
             raise ValueError(f"setup_rules.params: unknown parameter {name!r}")
@@ -270,4 +317,5 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         max_alternatives=max_alternatives,
         confidence_floor=confidence_floor,
         version=version,
+        quali_locked=quali_locked,
     )

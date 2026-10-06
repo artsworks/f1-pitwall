@@ -12,6 +12,9 @@ from typing import Any
 
 from pitwall.config.models import Settings
 from pitwall.learned import learned_state
+from pitwall.setup.evaluate import evaluate, explain
+from pitwall.setup.rules import parse_setup_rules
+from pitwall.setup.signals import session_signals
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, StintRow
 
@@ -94,6 +97,143 @@ def _plot(laps: list[LapRow], stints: list[StintRow]) -> str:
 
 def _section(section_id: str, title: str, content: str) -> str:
     return f"<section id='{section_id}'><h2>{_esc(title)}</h2>{content}</section>"
+
+
+def _setup_number(value: object) -> str:
+    if isinstance(value, int | float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Settings) -> str:
+    stored = [row for row in db.setup_recs_for_session(uid) if row.get("mode") == "debrief"]
+    rows: list[tuple[object, ...]] = []
+    locked: set[tuple[str, str]] = set()
+    event_laps = 0
+    source = "setup_recs, laps, setup_states"
+    if stored:
+        for rec in stored:
+            evidence = rec.get("evidence", {})
+            signals = evidence.get("signals", {}) if isinstance(evidence, dict) else {}
+            if isinstance(signals, dict):
+                event_laps = max(event_laps, int(signals.get("event_laps", 0) or 0))
+            from_value = float(rec.get("from_value") or 0)
+            to_value = evidence.get("to_value", from_value + float(rec.get("delta") or 0))
+            rows.append(
+                (
+                    evidence.get("tier", ""),
+                    rec.get("param", ""),
+                    f"{_setup_number(from_value)} → {_setup_number(to_value)}",
+                    rec.get("conf", ""),
+                    evidence.get("expect", ""),
+                    evidence.get("tradeoff", ""),
+                    ", ".join(
+                        f"{key}={value}"
+                        for key, value in sorted(signals.items())
+                        if key not in {"run_laps", "compound", "setup_state_id"}
+                    )
+                    if isinstance(signals, dict)
+                    else "",
+                )
+            )
+            suppressions = evidence.get("suppressed", []) if isinstance(evidence, dict) else []
+            if isinstance(suppressions, list):
+                locked.update(
+                    (str(item.get("param", "")), str(rec.get("rule_id", "")))
+                    for item in suppressions
+                    if isinstance(item, dict) and item.get("reason") == "locked"
+                )
+    else:
+        signals = session_signals(db, uid, settings.thresholds)
+        if signals is not None:
+            event_laps = signals.event_laps
+            setup = (
+                db.setup_state_fields(signals.setup_state_id)
+                if signals.setup_state_id is not None
+                else None
+            )
+            if setup is None:
+                changes = db.setup_changes_for_session(uid)
+                if changes:
+                    setup = db.setup_state_fields(int(changes[-1]["to_state"]))
+            setup = setup or {}
+            parc_ferme_value = session.get("parc_ferme")
+            parc_ferme = int(parc_ferme_value) if parc_ferme_value is not None else -1
+            rules = parse_setup_rules(settings.setup_rules)
+            recommendations = evaluate(
+                signals,
+                setup,
+                mode="debrief",
+                parc_ferme=parc_ferme,
+                rules=rules,
+                thresholds=settings.thresholds,
+            )
+            suppressions = explain(
+                signals,
+                setup,
+                mode="debrief",
+                parc_ferme=parc_ferme,
+                rules=rules,
+                thresholds=settings.thresholds,
+            )
+            locked.update(
+                (item.get("param", ""), item.get("rule_id", ""))
+                for item in suppressions
+                if item.get("reason") == "locked"
+            )
+            for recommendation in recommendations:
+                event_laps = max(
+                    event_laps,
+                    int(recommendation.evidence.get("event_laps", 0) or 0),
+                )
+                rows.append(
+                    (
+                        recommendation.tier,
+                        recommendation.param,
+                        f"{_setup_number(recommendation.from_value)} "
+                        f"→ {_setup_number(recommendation.to_value)}",
+                        recommendation.conf,
+                        recommendation.expect,
+                        recommendation.tradeoff,
+                        ", ".join(
+                            f"{key}={value}"
+                            for key, value in sorted(recommendation.evidence.items())
+                            if key not in {"run_laps", "compound", "setup_state_id"}
+                        ),
+                    )
+                )
+                locked.update(
+                    (item.get("param", ""), recommendation.rule_id)
+                    for item in recommendation.suppressed
+                    if item.get("reason") == "locked"
+                )
+
+    content = (
+        _table(
+            (
+                "Tier",
+                "Parameter",
+                "Current → proposed",
+                "Confidence",
+                "Why",
+                "Trade-off",
+                "Evidence",
+            ),
+            rows,
+            source,
+        )
+        if rows
+        else (
+            "<p>No setup change suggested: no symptom passed its threshold. "
+            f"Run event laps: {event_laps}.</p><small>Source: {_esc(source)}.</small>"
+        )
+    )
+    locked_html = "".join(
+        f"<p>Would suggest {_esc(param)} ({_esc(rule)}), locked by parc fermé.</p>"
+        for param, rule in sorted(locked)
+        if param and rule
+    )
+    return content + locked_html
 
 
 def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool = False) -> str:
@@ -342,7 +482,9 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         _section(
             "actions",
             "07 Actions and learned state",
-            "<ul>"
+            "<h3>Setup</h3>"
+            + _setup_actions(db, uid, session, settings)
+            + "<ul>"
             + "".join(f"<li>{text}</li>" for text in findings)
             + "</ul>"
             + "<details><summary>Persisted learning</summary><pre>"

@@ -897,6 +897,21 @@
       list.appendChild(e);
       return;
     }
+    var setupAdvice = b.setup_advice || [], setupLocked = b.setup_locked || [];
+    function adviceFor(field) {
+      return setupAdvice.find(function (rec) { return rec.fields.indexOf(field) >= 0; });
+    }
+    function isLocked(field) {
+      return setupLocked.some(function (rec) { return rec.fields.indexOf(field) >= 0; });
+    }
+    function adviceTag(rec) {
+      return (rec.tier === "alternative" ? "ALT " : "") + rec.reason;
+    }
+    function matchesTarget(rec, current) {
+      if (current === undefined || current === null) return false;
+      var tolerance = rec.param.indexOf("pressure") >= 0 ? 0.05 : 0;
+      return Math.abs(Number(current) - Number(rec.to)) <= tolerance;
+    }
     SETUP_GROUPS.forEach(function (g) {
       if (g[1] === null) {
         var todo = CORNERS.filter(function (k) {
@@ -909,16 +924,74 @@
           return k.toUpperCase() + " " + fmt(t.psi, 1) +
             (todo.indexOf(k) >= 0 && !t.applied ? "→" + fmt(t.target_psi, 1) : "");
         }).join("  ");
+        var pressureTags = [];
+        ["front_pressure", "rear_pressure"].forEach(function (param) {
+          var rec = setupAdvice.find(function (item) { return item.param === param; });
+          if (!rec) return;
+          var axle = param === "front_pressure" ? ["fl", "fr"] : ["rl", "rr"];
+          var hasPressureTarget = axle.some(function (k) {
+            return b.tyres[k].target_psi !== null;
+          });
+          if (!hasPressureTarget) {
+            pressureTags.push(
+              (rec.tier === "alternative" ? "ALT " : "") +
+              param.replace("_", " ") + " " + fmt(rec.from, 1) + "→" +
+              fmt(rec.to, 1) + " · " + rec.reason
+            );
+          }
+        });
+        var pressureTag = todo.length
+          ? (left.length ? left.length + " to change" : "changed")
+          : "no change";
+        if (pressureTags.length) pressureTag += " · " + pressureTags.join(" · ");
         setupRow(list, g[0], value, todo.length ? (left.length ? "todo" : "done") : "",
-          todo.length ? (left.length ? left.length + " to change" : "changed") : "no change");
+          pressureTag);
         return;
       }
+      var advised = [], locked = false, needsChange = false;
       var parts = g[1].map(function (f) {
         var v = b.setup[f[0]];
+        var rec = adviceFor(f[0]);
+        if (rec) {
+          advised.push(adviceTag(rec));
+          if (!matchesTarget(rec, v)) needsChange = true;
+          return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || "")) +
+            "→" + fmt(rec.to, f[2]) + (f[3] || "");
+        }
+        locked = locked || isLocked(f[0]);
         return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || ""));
       });
-      setupRow(list, g[0], parts.join("  "), "", "no change");
+      setupRow(
+        list,
+        g[0],
+        parts.join("  "),
+        advised.length ? (needsChange ? "todo" : "done") : "",
+        advised.length ? Array.from(new Set(advised)).join(" · ") : locked ? "locked" : "no change"
+      );
     });
+    if (Array.isArray(b.setup_lock_checklist)) {
+      var labels = {};
+      SETUP_GROUPS.forEach(function (g) {
+        if (g[1]) g[1].forEach(function (f) { labels[f[0]] = f[1]; });
+      });
+      var items = b.setup_lock_checklist.map(function (item) {
+        var format = null;
+        SETUP_GROUPS.forEach(function (g) {
+          if (g[1]) g[1].forEach(function (f) {
+            if (f[0] === item.field) format = f;
+          });
+        });
+        var value = item.value === undefined || item.value === null
+          ? "--"
+          : fmt(item.value, format ? format[2] : 0) + (format ? format[3] || "" : "");
+        var advisedField = setupAdvice.some(function (rec) {
+          return rec.fields.indexOf(item.field) >= 0;
+        });
+        return (advisedField ? "☐ " : "") +
+          (labels[item.field] || item.field) + " " + value;
+      });
+      setupRow(list, "LOCKED", "Locked after this session: " + items.join(", "), "", "");
+    }
   }
 
   function renderPitBoard(b, q, phase) {

@@ -8,7 +8,7 @@ import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pitwall.model.deg import rival_pace_ms
 from pitwall.protocol.enums import DriverStatus, PitStatus, SessionType, VisualCompound
@@ -59,6 +59,9 @@ from pitwall.state.quali import (
 from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
+
+if TYPE_CHECKING:
+    from pitwall.setup.evaluate import Recommendation
 
 
 def thermal_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
@@ -322,8 +325,16 @@ class Snapshot:
     weather: int = 0
     game_mode: int = 0
     parc_ferme: int = -1
+    weekend_structure: tuple[int, ...] = ()
     next_front_wing: float = 0.0
     setup_hash: str = ""
+    setup_advice: tuple[Recommendation, ...] = ()
+    setup_call_param: str = ""
+    setup_call_from: float = 0.0
+    setup_call_to: float = 0.0
+    setup_call_reason: str = ""
+    setup_stop_wing_from: float = 0.0
+    setup_stop_wing_to: float = 0.0
     traction_exits: int = 0
     slip_balance_deg: float = 0.0
     snap_phase: str = ""
@@ -745,6 +756,7 @@ class SessionState:
         self.setup_tyre_pressure = _ZERO_CORNERS
         self.setup: dict[str, float] = {}
         self.setup_hash = ""
+        self.setup_advice: tuple[Recommendation, ...] = ()
         self._pending_setup: tuple[str, dict[str, Any], float, int] | None = None
         self.next_front_wing_value = 0.0
         self._pressure_base: Corners | None = None
@@ -2149,8 +2161,10 @@ class SessionState:
             saves=self.saves.count,
             save_peak_deg=round(self.saves.peak_deg),
             parc_ferme=self.parc_ferme_rules,
+            weekend_structure=self.weekend_structure,
             next_front_wing=self.next_front_wing_value,
             setup_hash=self.setup_hash,
+            setup_advice=self.setup_advice,
             traction_exits=self.traction.count,
             slip_balance_deg=self.slip_balance.mean_deg(),
             snap_phase=self.snap_phase,

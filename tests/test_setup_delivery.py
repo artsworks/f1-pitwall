@@ -1,0 +1,396 @@
+from __future__ import annotations
+
+import io
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+from pitwall.clock import VirtualClock
+from pitwall.config.loader import ConfigStore
+from pitwall.debrief import render_debrief
+from pitwall.engine import build_engine
+from pitwall.setup.evaluate import Recommendation, evaluate
+from pitwall.setup.rules import parse_setup_rules
+from pitwall.setup.signals import RunSignals, session_signals
+from pitwall.state.lap import LapSummary
+from pitwall.state.session import Snapshot
+from pitwall.store.db import Database
+from pitwall.strategy.pitwindow import NO_PLAN
+
+
+def _seed_session(
+    db: Database,
+    uid: int,
+    *,
+    session_type: int,
+    lockups_rear: int = 0,
+    traction_exits: int = 0,
+) -> tuple[int, dict[str, float]]:
+    fields = {
+        "brake_bias": 56.0,
+        "on_throttle": 55.0,
+        "front_wing": 10.0,
+        "rear_anti_roll_bar": 5.0,
+        "rear_suspension_height": 30.0,
+    }
+    state_id = db.setup_state_id(f"sha1:{uid}", fields)
+    db.upsert_session(uid, track_id=7, session_type=session_type, parc_ferme=1)
+    for lap_num in range(1, 4):
+        db.insert_lap(
+            uid,
+            0,
+            LapSummary(
+                lap_num=lap_num,
+                lap_time_ms=90_000,
+                sector1_ms=30_000,
+                sector2_ms=30_000,
+                compound=17,
+                tyre_age_laps=lap_num,
+                fuel_remaining_laps_at_end=2.0,
+                valid=True,
+                lockups_rear=lockups_rear,
+                traction_exits=traction_exits,
+            ),
+            setup_state_id=state_id,
+        )
+    return state_id, fields
+
+
+def _recommendation(
+    *,
+    mode: str = "garage",
+    param: str = "brake_bias",
+    rule_id: str = "entry_instability",
+    from_value: float = 56.0,
+    to_value: float = 57.0,
+    tier: str = "primary",
+    suppressed: tuple[dict[str, str], ...] = (),
+) -> Recommendation:
+    return Recommendation(
+        rec_id="101:setup:garage:entry_instability:brake_bias",
+        rule_id=rule_id,
+        mode=mode,
+        tier=tier,
+        param=param,
+        from_value=from_value,
+        delta=to_value - from_value,
+        to_value=to_value,
+        conf="high",
+        expect="more front braking",
+        tradeoff="fronts lock earlier",
+        evidence={"event_laps": 3},
+        setup_state_id=1,
+        session_type=1,
+        parc_ferme=1,
+        suppressed=suppressed,
+    )
+
+
+def test_race_setup_call_uses_live_bias_and_respects_cooldown() -> None:
+    db = Database(":memory:")
+    uid = 101
+    _, fields = _seed_session(db, uid, session_type=15, lockups_rear=2)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.session_uid = uid
+    engine.state.session_type = 15
+    engine.state.track_id = 7
+    engine.state.lap_num = 3
+    engine.state.setup = fields
+    engine.state.parc_ferme_rules = 1
+    engine.state.front_brake_bias = 56
+    engine.state.setup_on_throttle_diff = 55
+
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == "brake_bias"
+    assert engine._setup_call_from == 56.0
+    assert all(
+        rec.param in {"brake_bias", "on_throttle"}
+        for rec in engine.state.setup_advice
+        if rec.mode == "race"
+    )
+
+    engine.state.lap_num = 4
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == ""
+    engine.state.lap_num = 7
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == ""
+    engine.state.lap_num = 8
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == "brake_bias"
+
+    engine.state.front_brake_bias = engine._setup_call_to
+    engine.state.lap_num = 9
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == ""
+
+
+def test_race_on_throttle_call_uses_race_step() -> None:
+    db = Database(":memory:")
+    uid = 102
+    _, fields = _seed_session(db, uid, session_type=15, traction_exits=10)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.session_uid = uid
+    engine.state.session_type = 15
+    engine.state.track_id = 7
+    engine.state.lap_num = 3
+    engine.state.setup = fields
+    engine.state.parc_ferme_rules = 1
+    engine.state.front_brake_bias = 56
+    engine.state.setup_on_throttle_diff = 55
+    engine._setup_rules = replace(engine._setup_rules, confidence_floor="low")
+
+    engine._evaluate_live_setup(uid)
+    assert engine._setup_call_param == "on_throttle"
+    assert engine._setup_call_from == 55.0
+    assert engine._setup_call_to == 45.0
+
+
+def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
+    db = Database(":memory:")
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    rec = _recommendation(
+        mode="race_stop",
+        param="front_wing",
+        rule_id="understeer_balance",
+        from_value=10.0,
+        to_value=11.0,
+    )
+    engine.state.setup_advice = (rec,)
+    engine.state.next_front_wing_value = 10.0
+    engine.pit_plan = replace(NO_PLAN, plan="box_now")
+    engine._update_setup_stop_wing()
+    assert (engine._setup_stop_wing_from, engine._setup_stop_wing_to) == (10.0, 11.0)
+
+    engine.state.next_front_wing_value = 11.0
+    engine._update_setup_stop_wing()
+    assert engine._setup_stop_wing_to == 0.0
+
+    engine.state.next_front_wing_value = 10.0
+    engine.pit_plan = NO_PLAN
+    engine._update_setup_stop_wing()
+    assert engine._setup_stop_wing_to == 0.0
+
+
+def test_pit_board_payload_includes_advice_locked_fields_and_checklist() -> None:
+    from pitwall.server.app import pit_board_payload
+
+    settings = ConfigStore().current()
+    rec = _recommendation(suppressed=({"param": "rear_anti_roll_bar", "reason": "locked"},))
+    snapshot = Snapshot(
+        now=1.0,
+        session_kind="practice",
+        session_type=1,
+        phase="garage",
+        setup={"brake_bias": 56.0, "rear_anti_roll_bar": 5.0, "rear_wing": 8.0},
+        setup_advice=(rec,),
+        parc_ferme=1,
+        weekend_structure=(1, 5),
+    )
+    board = pit_board_payload(snapshot, settings.thresholds, settings.setup_rules)
+    assert board is not None
+    assert board["setup_advice"] == [
+        {
+            "param": "brake_bias",
+            "fields": ["brake_bias"],
+            "from": 56.0,
+            "to": 57.0,
+            "delta": 1.0,
+            "conf": "high",
+            "tier": "primary",
+            "reason": "rears locking on entry",
+        }
+    ]
+    assert board["setup_locked"] == [
+        {
+            "param": "rear_anti_roll_bar",
+            "fields": ["rear_anti_roll_bar"],
+            "reason": "locked",
+        }
+    ]
+    checklist = board["setup_lock_checklist"]
+    assert checklist is not None
+    assert {"field": "rear_wing", "value": 8.0} in checklist
+    quali_board = pit_board_payload(
+        replace(snapshot, session_type=7, weekend_structure=()),
+        settings.thresholds,
+        settings.setup_rules,
+    )
+    assert quali_board is not None
+    assert quali_board["setup_locked"] == board["setup_locked"]
+
+    assert (
+        pit_board_payload(
+            replace(snapshot, weekend_structure=(1, 15)),
+            settings.thresholds,
+            settings.setup_rules,
+        )["setup_lock_checklist"]
+        is None
+    )
+    assert (
+        pit_board_payload(
+            replace(snapshot, parc_ferme=0),
+            settings.thresholds,
+            settings.setup_rules,
+        )["setup_lock_checklist"]
+        is None
+    )
+    assert (
+        pit_board_payload(
+            replace(snapshot, session_type=5),
+            settings.thresholds,
+            settings.setup_rules,
+        )["setup_lock_checklist"]
+        is None
+    )
+
+
+def test_debrief_renders_stored_setup_recommendations_and_empty_state() -> None:
+    settings = ConfigStore().current()
+    rules = parse_setup_rules(settings.setup_rules)
+    db = Database(":memory:")
+    uid = 103
+    state_id, fields = _seed_session(db, uid, session_type=1, lockups_rear=2)
+    signals = session_signals(db, uid, settings.thresholds)
+    assert signals is not None
+    rec = next(
+        item
+        for item in evaluate(
+            signals,
+            fields,
+            mode="debrief",
+            parc_ferme=1,
+            rules=rules,
+            thresholds=settings.thresholds,
+        )
+        if item.param == "brake_bias"
+    )
+    rec = replace(rec, suppressed=({"param": "rear_anti_roll_bar", "reason": "locked"},))
+    db.insert_setup_rec(rec, track_id=7, compound=17, lap=3)
+
+    report = render_debrief(db, uid, settings)
+    assert "<h3>Setup</h3>" in report
+    assert "<td>brake_bias</td>" in report
+    assert "56 → 57" in report
+    assert "Would suggest rear_anti_roll_bar (entry_instability), locked by parc fermé." in report
+    assert "Source: setup_recs, laps, setup_states." in report
+
+    empty_db = Database(":memory:")
+    empty_uid = 104
+    _seed_session(empty_db, empty_uid, session_type=1)
+    empty_report = render_debrief(empty_db, empty_uid, settings)
+    assert "No setup change suggested: no symptom passed its threshold." in empty_report
+    assert "Run event laps: 3." in empty_report
+
+
+def test_session_end_stores_debrief_setup_recommendations() -> None:
+    db = Database(":memory:")
+    uid = 105
+    _, fields = _seed_session(db, uid, session_type=15, lockups_rear=2)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.session_uid = uid
+    engine.state.session_type = 15
+    engine.state.track_id = 7
+    engine.state.lap_num = 3
+    engine.state.setup = fields
+    engine.state.parc_ferme_rules = 1
+    engine.state.session_ended = True
+
+    engine.tick(1.0)
+    stored = db.setup_recs_for_session(uid)
+    assert any(item["mode"] == "debrief" for item in stored)
+
+
+def test_race_rule_speaks_current_bias_and_shared_lockup_copy_is_garage_safe() -> None:
+    import yaml
+
+    from pitwall.rules.engine import RuleEngine
+
+    settings = ConfigStore().current()
+    engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=settings.resolved_mindset(),
+        staleness_s=settings.engine.staleness_s,
+    )
+    result = engine.evaluate(
+        Snapshot(
+            now=1.0,
+            session_kind="race",
+            session_type=15,
+            lap_num=5,
+            setup_call_param="brake_bias",
+            setup_call_from=56.0,
+            setup_call_to=57.0,
+            setup_call_reason="rears locking on entry",
+            _ages={"lap_data": 0.1, "car_status": 0.1},
+        )
+    )
+    call = next(item for item in result.candidates if item.rule.id == "setup_bias")
+    assert call.text == "Bias is on 56. Try 57, rears locking on entry."
+
+    shared = yaml.safe_load(
+        (Path(__file__).parents[1] / "src/pitwall/config/defaults/rules/shared.yaml").read_text()
+    )
+    lockup = next(rule for rule in shared["rules"] if rule["id"] == "lockup_rear")
+    escalation_phrases = [phrase for tier in lockup["escalate"] for phrase in tier["say"]]
+    assert all("off-throttle" not in phrase.lower() for phrase in escalation_phrases)
+
+
+def test_race_stop_evaluator_result_contains_only_front_wing() -> None:
+    settings = ConfigStore().current()
+    signals = RunSignals(
+        session_uid=106,
+        track_id=7,
+        session_type=15,
+        compound=17,
+        setup_state_id=1,
+        run_laps=6,
+        event_laps=6,
+        traction_exits_per10=0.0,
+        lockups_rear_per10=0.0,
+        lockups_front_per10=0.0,
+        snaps_entry_per10=0.0,
+        snaps_exit_per10=0.0,
+        snap_phase="",
+        slip_balance=1.0,
+        wear_axle_ratio=1.0,
+        z_front=0.0,
+        z_rear=0.0,
+    )
+    setup: dict[str, Any] = {
+        "front_wing": 10.0,
+        "rear_anti_roll_bar": 5.0,
+        "brake_bias": 56.0,
+        "on_throttle": 55.0,
+    }
+    recs = evaluate(
+        signals,
+        setup,
+        mode="race_stop",
+        parc_ferme=1,
+        rules=parse_setup_rules(settings.setup_rules),
+        thresholds=settings.thresholds,
+    )
+    assert recs
+    assert {rec.param for rec in recs} == {"front_wing"}

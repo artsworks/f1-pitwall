@@ -1,4 +1,33 @@
 rules:
+  - id: setup_bias
+    sessions: [race]
+    priority: 3
+    when: "setup_call_param == 'brake_bias'"
+    clear_when: "setup_call_param == ''"
+    cooldown_s: 300
+    requires: [lap_data, car_status]
+    say:
+      - "Bias is on {setup_call_from:.0f}. Try {setup_call_to:.0f}, {setup_call_reason}."
+      - "{setup_call_reason}. Bias from {setup_call_from:.0f} to {setup_call_to:.0f}."
+  - id: setup_on_throttle
+    sessions: [race]
+    priority: 3
+    when: "setup_call_param == 'on_throttle'"
+    clear_when: "setup_call_param == ''"
+    cooldown_s: 300
+    requires: [lap_data, car_setups]
+    say:
+      - "On-throttle diff is on {setup_call_from:.0f}. Try {setup_call_to:.0f}, {setup_call_reason}."
+      - "{setup_call_reason}. On-throttle diff from {setup_call_from:.0f} to {setup_call_to:.0f}."
+  - id: setup_stop_wing
+    sessions: [race]
+    priority: 3
+    when: "setup_stop_wing_to > 0"
+    clear_when: "setup_stop_wing_to <= 0"
+    cooldown_s: 600
+    requires: [lap_data, car_setups]
+    say:
+      - "Front wing {setup_stop_wing_to:.0f} at the stop, from {setup_stop_wing_from:.0f}. Set it in the pit menu."
   # Named strategy plans A/B/C (docs/03 "Strategy plans"). The engine's plan
   # tracker owns the plan state; these rules only phrase it. plan_sc_box sits
   # after box_now in the pit group: it speaks only when box_now is gated out.
