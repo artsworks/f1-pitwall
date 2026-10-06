@@ -1437,6 +1437,10 @@
     ws.onmessage = function (ev) { onFrame(JSON.parse(ev.data)); };
     ws.onclose = function (ev) {
       lastFrameAt = null;
+      if (ev.code === 4003) {
+        location.replace("/pin?next=" + encodeURIComponent(location.pathname + location.search));
+        return;
+      }
       if (ev.code === 4001) { showMismatch(); return; }
       render();
       if (!mismatched) setTimeout(connect, backoff = Math.min(backoff * 2, 5000));

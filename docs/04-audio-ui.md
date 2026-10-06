@@ -115,7 +115,7 @@ visible as a colour and text change on the same frame.
 - Primary banner ≥ 72 px, secondary blocks ≥ 36 px, monospace, high contrast.
 - The radio log shows the last ~12 calls with their ACK / NEG outcome; `/radio` is a
   log-only page in large type for a narrow second screen.
-- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the Piper voice through the phone. The server sends each rendered WAV only to clients that tapped. With SAPI, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. The dashboard has no login, so any device on your network can open it, hear this audio and use its controls. Do not forward port 8000 to the internet.
+- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the Piper voice through the phone. The server sends each rendered WAV only to clients that tapped. With SAPI, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. Other devices need the dashboard PIN. See [getting started](getting-started.md).
 - The mindset (AGGRESSIVE / BALANCED in the pilot) is always visible and switchable in
   one press of its wheel/keyboard binding; it is the control most likely to be used mid-race.
 - Green optimal, amber warning, red act-now — always paired with a word, never colour

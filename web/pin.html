@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <title>Enter PIN</title>
+  <link rel="stylesheet" href="/static/style.css?v=10">
+  <style>
+    body.pin-screen {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      padding: 1rem;
+    }
+    .pin-card {
+      width: min(28rem, 100%);
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .pin-card h1 {
+      margin: 0 0 1rem;
+      color: var(--ok);
+      font-size: 1.4rem;
+      letter-spacing: .12em;
+    }
+    .pin-card p { line-height: 1.5; }
+    .pin-form { display: grid; gap: .8rem; }
+    .pin-form input, .pin-form button {
+      width: 100%;
+      min-height: 3rem;
+      font: inherit;
+    }
+    .pin-form input {
+      border: 1px solid var(--dim);
+      padding: .6rem;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 1.5rem;
+      letter-spacing: .35em;
+      text-align: center;
+    }
+    .pin-form button {
+      border: 1px solid var(--ok);
+      background: var(--panel);
+      color: var(--ok);
+      cursor: pointer;
+    }
+    .pin-error { min-height: 1.5em; color: var(--crit); }
+  </style>
+</head>
+<body class="pin-screen">
+  <main class="pin-card">
+    <h1>ENTER PIN</h1>
+    <p>Enter the 4-digit PIN shown in the Pitwall terminal.</p>
+    <form id="pin-form" class="pin-form">
+      <label for="pin">PIN</label>
+      <input id="pin" name="pin" type="text" inputmode="numeric" pattern="[0-9]*"
+        maxlength="4" autocomplete="one-time-code" autofocus required>
+      <button type="submit">UNLOCK</button>
+      <p id="pin-error" class="pin-error" role="alert" aria-live="polite"></p>
+    </form>
+  </main>
+  <script>
+    (function () {
+      var form = document.getElementById("pin-form");
+      var input = document.getElementById("pin");
+      var error = document.getElementById("pin-error");
+      var busy = false;
+
+      function returnToPage() {
+        var next = new URLSearchParams(location.search).get("next");
+        if (next && next.charAt(0) === "/" && next.slice(0, 2) !== "//") {
+          location.replace(next);
+        } else {
+          location.replace("/");
+        }
+      }
+
+      function submitPin() {
+        if (busy || input.value.length !== 4) return;
+        busy = true;
+        error.textContent = "";
+        fetch("/api/pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin: input.value })
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            return { status: response.status, body: body };
+          });
+        }).then(function (result) {
+          if (result.status === 200 && result.body.ok) {
+            returnToPage();
+            return;
+          }
+          if (result.status === 429) {
+            error.textContent = "Too many tries. Wait " + result.body.retry_after_s + " s.";
+          } else if (result.status === 401 && result.body.error === "wrong") {
+            error.textContent = "Wrong PIN. " + result.body.tries_left + " tries left.";
+          } else {
+            error.textContent = "Can't reach Pitwall.";
+          }
+          input.value = "";
+          busy = false;
+          input.focus();
+        }).catch(function () {
+          error.textContent = "Can't reach Pitwall.";
+          input.value = "";
+          busy = false;
+          input.focus();
+        });
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        submitPin();
+      });
+      input.addEventListener("input", function () {
+        if (input.value.length === 4) submitPin();
+      });
+    })();
+  </script>
+</body>
+</html>
