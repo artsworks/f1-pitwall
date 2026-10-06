@@ -12,7 +12,7 @@ from pitwall.rules.expr import TrackedNamespace
 from pitwall.setup.rules import SetupRules, setup_fields_for_param
 from pitwall.setup.signals import RunSignals, signals_for_run, slip_base_for_session
 from pitwall.setup.states import Run, runs_for_session
-from pitwall.store.db import Database
+from pitwall.store.db import Database, _uid_from_sql, _uid_to_sql
 
 _OBJECTIVE_FLOORS = {
     "w_deg": 20.0,
@@ -330,6 +330,7 @@ def grade_setup_recs(
     rules: SetupRules,
 ) -> list[Outcome]:
     """Grade setup advice whose first qualifying after-run belongs to `uid`."""
+    uid = _uid_from_sql(_uid_to_sql(uid))
     session = db.session_row(uid)
     if session is None:
         return []

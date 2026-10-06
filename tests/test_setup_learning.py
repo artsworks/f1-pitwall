@@ -83,6 +83,7 @@ def _recommendation(
     uid: int,
     state_id: int,
     *,
+    mode: str = "debrief",
     rule_id: str = "entry_instability",
     param: str = "brake_bias",
     from_value: float = 56.0,
@@ -90,9 +91,9 @@ def _recommendation(
     tier: str = "primary",
 ) -> Recommendation:
     return Recommendation(
-        rec_id=f"{uid}:setup:debrief:{rule_id}:{param}",
+        rec_id=f"{uid}:setup:{mode}:{rule_id}:{param}",
         rule_id=rule_id,
-        mode="debrief",
+        mode=mode,
         tier=tier,
         param=param,
         from_value=from_value,
@@ -111,6 +112,7 @@ def _recommendation(
 def _case(
     *,
     uid: int = 801,
+    mode: str = "debrief",
     after_fields: dict[str, float] | None = None,
     after_laps: int | None = 6,
     after_slope_ms: float = 0.0,
@@ -144,7 +146,7 @@ def _case(
             slip=4.0,
             lap_slope_ms=after_slope_ms,
         )
-    rec = _recommendation(uid, before_state)
+    rec = _recommendation(uid, before_state, mode=mode)
     db.insert_setup_rec(rec, track_id=7, compound=18, lap=6)
     return db, before_state
 
@@ -273,6 +275,31 @@ def test_cross_session_after_run_is_graded_in_follow_up_session() -> None:
     assert outcome.label == "good"
     assert detail["before_session"] == first
     assert detail["after_session"] == second
+
+
+@pytest.mark.parametrize(
+    ("uid", "after_laps", "expected_label"),
+    [
+        (2**63 + 710, 4, "censored"),
+        (2**63 + 711, 6, "good"),
+    ],
+)
+def test_setup_grading_handles_unsigned_uid_from_signed_sql_value(
+    uid: int, after_laps: int, expected_label: str
+) -> None:
+    _, thresholds = _config()
+    sql_uid = uid - 2**64
+    db, before_state = _case(uid=uid, mode="race", after_laps=after_laps)
+    db.insert_setup_change(uid, 7, 1.0, None, before_state)
+
+    assert db.session_row(sql_uid)["uid"] == uid
+    assert db.setup_recs_for_session(sql_uid)[0]["session_uid"] == uid
+    assert db.setup_changes_for_session(sql_uid)[0]["session_uid"] == uid
+
+    outcome = _outcome(db, sql_uid, thresholds)
+
+    assert outcome["label"] == expected_label
+    assert outcome["call_id"] == f"{uid}:setup:race:entry_instability:brake_bias"
 
 
 def test_grade_and_store_folds_each_recommendation_and_baseline_once() -> None:
