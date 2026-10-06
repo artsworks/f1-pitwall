@@ -49,7 +49,7 @@ from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import SessionState, Snapshot
+from pitwall.state.session import ErsLapTotals, SessionState, Snapshot
 from pitwall.store.db import LapRow
 from pitwall.strategy.battle import (
     HOLD,
@@ -151,27 +151,18 @@ class _EnergyLapLatch:
 
 
 class _EnergyLapTracker:
-    _COUNTER_RESET_TOLERANCE_J = 1_000.0
-
     def __init__(self) -> None:
-        self._epoch_dep_max: float | None = None
-        self._epoch_harv_max: float | None = None
         self._latch: _EnergyLapLatch | None = None
-        self._pending_lap: _EnergyLapLatch | None = None
-        self._ended_epoch: tuple[float, float] | None = None
+        self._finishing: _EnergyLapLatch | None = None
+        self._graded_seq: int | None = None
         self._partial_next_latch = False
         self.prev_lap: EnergyBudget | None = None
 
     def reset(self) -> None:
-        self._clear(partial_next=True)
-
-    def _clear(self, *, partial_next: bool) -> None:
-        self._epoch_dep_max = None
-        self._epoch_harv_max = None
         self._latch = None
-        self._pending_lap = None
-        self._ended_epoch = None
-        self._partial_next_latch = partial_next
+        self._finishing = None
+        self._graded_seq = None
+        self._partial_next_latch = True
         self.prev_lap = None
 
     def _start_latch(
@@ -179,16 +170,10 @@ class _EnergyLapTracker:
         lap_num: int,
         laps_remaining: int,
         store_j: float,
-        dep: float,
-        harv: float,
         *,
         gradable: bool,
     ) -> None:
-        self._epoch_dep_max = dep
-        self._epoch_harv_max = harv
         self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, gradable)
-        self._pending_lap = None
-        self._ended_epoch = None
         self._partial_next_latch = False
 
     def _grade(
@@ -226,111 +211,68 @@ class _EnergyLapTracker:
         dep: float,
         harv: float,
         *,
+        counters_current: bool,
+        finished: ErsLapTotals | None,
         store_capacity_j: float,
         soc_floor_pct: float,
         over_tolerance_j: float,
         attack_ok: bool,
     ) -> tuple[float, float, float | None, int]:
         if lap_num < 1:
-            if self._latch is not None:
+            if self._latch is not None or self._finishing is not None:
                 self.reset()
-            return dep, harv, None, laps_remaining
+            live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
+            return live_dep, live_harv, None, laps_remaining
 
         if self._latch is None:
             self._start_latch(
                 lap_num,
                 laps_remaining,
                 store_j,
-                dep,
-                harv,
                 gradable=lap_num == 1 and not self._partial_next_latch,
             )
-            return self._live_values(lap_num, laps_remaining, dep, harv)
-
-        lap = self._latch
-        if lap_num not in (lap.lap_num, lap.lap_num + 1):
-            self._clear(partial_next=False)
-            self._start_latch(lap_num, laps_remaining, store_j, dep, harv, gradable=False)
-            return self._live_values(lap_num, laps_remaining, dep, harv)
-
-        ended_epoch: tuple[float, float] | None = None
-        epoch_dep_max = self._epoch_dep_max
-        epoch_harv_max = self._epoch_harv_max
-        if epoch_dep_max is None or epoch_harv_max is None:
-            self._epoch_dep_max = dep
-            self._epoch_harv_max = harv
-        elif (
-            dep < epoch_dep_max - self._COUNTER_RESET_TOLERANCE_J
-            or harv < epoch_harv_max - self._COUNTER_RESET_TOLERANCE_J
-        ):
-            ended_epoch = (epoch_dep_max, epoch_harv_max)
-            self._epoch_dep_max = dep
-            self._epoch_harv_max = harv
-            if self._pending_lap is not None:
-                self._grade(
-                    self._pending_lap,
-                    ended_epoch,
-                    store_j=store_j,
-                    store_capacity_j=store_capacity_j,
-                    soc_floor_pct=soc_floor_pct,
-                    over_tolerance_j=over_tolerance_j,
-                    attack_ok=attack_ok,
-                )
-                self._pending_lap = None
-            else:
-                self._ended_epoch = ended_epoch
-        else:
-            self._epoch_dep_max = max(epoch_dep_max, dep)
-            self._epoch_harv_max = max(epoch_harv_max, harv)
-
-        if lap_num == lap.lap_num + 1:
+        elif lap_num == self._latch.lap_num + 1:
+            self._finishing = self._latch
             self.prev_lap = None
-            if self._ended_epoch is not None:
-                self._grade(
-                    lap,
-                    self._ended_epoch,
-                    store_j=store_j,
-                    store_capacity_j=store_capacity_j,
-                    soc_floor_pct=soc_floor_pct,
-                    over_tolerance_j=over_tolerance_j,
-                    attack_ok=attack_ok,
-                )
-                self._ended_epoch = None
-            elif (
-                self._pending_lap is None
-                and self._epoch_dep_max is not None
-                and self._epoch_harv_max is not None
-                and self._epoch_dep_max <= self._COUNTER_RESET_TOLERANCE_J
-                and self._epoch_harv_max <= self._COUNTER_RESET_TOLERANCE_J
-            ):
-                self._grade(
-                    lap,
-                    (0.0, 0.0),
-                    store_j=store_j,
-                    store_capacity_j=store_capacity_j,
-                    soc_floor_pct=soc_floor_pct,
-                    over_tolerance_j=over_tolerance_j,
-                    attack_ok=attack_ok,
-                )
-            elif self._pending_lap is None:
-                self._pending_lap = lap
-            self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, True)
+            self._start_latch(lap_num, laps_remaining, store_j, gradable=True)
+        elif lap_num != self._latch.lap_num:
+            self._finishing = None
+            self.prev_lap = None
+            self._start_latch(lap_num, laps_remaining, store_j, gradable=False)
 
-        return self._live_values(lap_num, laps_remaining, dep, harv)
+        if finished is not None and finished.seq != self._graded_seq:
+            finishing = self._finishing
+            if finishing is not None and finished.lap_num == finishing.lap_num:
+                self._grade(
+                    finishing,
+                    (finished.deployed_j, finished.harvested_j),
+                    store_j=store_j,
+                    store_capacity_j=store_capacity_j,
+                    soc_floor_pct=soc_floor_pct,
+                    over_tolerance_j=over_tolerance_j,
+                    attack_ok=attack_ok,
+                )
+                self._finishing = None
+            self._graded_seq = finished.seq
+
+        return self._live_values(
+            laps_remaining,
+            dep,
+            harv,
+            counters_current=counters_current,
+        )
 
     def _live_values(
-        self, lap_num: int, laps_remaining: int, dep: float, harv: float
+        self,
+        laps_remaining: int,
+        dep: float,
+        harv: float,
+        *,
+        counters_current: bool,
     ) -> tuple[float, float, float | None, int]:
-        if self._pending_lap is not None:
-            live_dep, live_harv = 0.0, 0.0
-        elif self._ended_epoch is not None:
-            live_dep, live_harv = self._ended_epoch
-        else:
-            live_dep = self._epoch_dep_max if self._epoch_dep_max is not None else dep
-            live_harv = self._epoch_harv_max if self._epoch_harv_max is not None else harv
-
+        live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
         lap = self._latch
-        if lap is not None and lap.lap_num == lap_num and lap.gradable:
+        if lap is not None and lap.gradable:
             return live_dep, live_harv, lap.start_store_j, lap.start_laps_remaining
         return live_dep, live_harv, None, laps_remaining
 
@@ -1206,6 +1148,8 @@ class Engine:
             state.ers_store_energy_j,
             deployed_j,
             harvested_j,
+            counters_current=state.ers_counters_current,
+            finished=state.ers_finished_lap,
             store_capacity_j=energy_capacity_j,
             soc_floor_pct=energy_floor_pct,
             over_tolerance_j=energy_over_tolerance_j,

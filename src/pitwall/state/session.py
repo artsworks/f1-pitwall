@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from statistics import median
@@ -225,6 +226,14 @@ def _lap_kind(driver_status: int) -> str:
         return _PHASE_BY_DRIVER_STATUS[DriverStatus(driver_status)]
     except (ValueError, KeyError):
         return ""
+
+
+@dataclass(frozen=True, slots=True)
+class ErsLapTotals:
+    lap_num: int
+    deployed_j: float
+    harvested_j: float
+    seq: int
 
 
 @dataclass(slots=True)
@@ -744,6 +753,11 @@ class SessionState:
         self.ers_deployed_this_lap_j = 0.0
         self.ers_harvested_mguk_j = 0.0
         self.ers_harvested_mguh_j = 0.0
+        self._ers_samples: deque[tuple[int, float, float]] = deque(maxlen=8)
+        self._ers_lap_frame: int | None = None
+        self._ers_pending: tuple[int, int] | None = None
+        self.ers_finished_lap: ErsLapTotals | None = None
+        self._ers_seq = 0
         self.ers_deploy_mode = 0
         self.drs_allowed = 0
         self.tyres_wear = _ZERO_CORNERS
@@ -946,6 +960,10 @@ class SessionState:
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
         self._last_rewind_t = t
+        self._ers_samples.clear()
+        self._ers_lap_frame = None
+        self._ers_pending = None
+        self.ers_finished_lap = None
         for ema in (
             self.tyre_surface_fast,
             self.tyre_surface_slow,
@@ -1020,6 +1038,13 @@ class SessionState:
     def _on_lap_data(self, pkt: LapDataPacket) -> None:
         self.cars_lap = pkt.cars
         car = pkt.cars[self._player_idx]
+        frame = pkt.header.overall_frame_identifier
+        previous_lap_num = self.lap_num
+        if car.current_lap_num != previous_lap_num:
+            if car.current_lap_num == previous_lap_num + 1 and previous_lap_num >= 1:
+                self._ers_pending = (previous_lap_num, frame)
+            self._ers_lap_frame = frame
+            self._ers_resolve()
         lap_boundary = car.current_lap_num != self.lap_num and self.lap_num != 0
         if lap_boundary:
             self._pitted_lap_snapshot = self._cars_pitted_this_lap
@@ -1594,10 +1619,46 @@ class SessionState:
         self.ers_deployed_this_lap_j = float(car.ers_deployed_this_lap)
         self.ers_harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
         self.ers_harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
+        self._ers_samples.append(
+            (
+                pkt.header.overall_frame_identifier,
+                self.ers_deployed_this_lap_j,
+                self.ers_harvested_mguk_j + self.ers_harvested_mguh_j,
+            )
+        )
+        self._ers_resolve()
         self.ers_deploy_mode = car.ers_deploy_mode
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
+
+    def _ers_resolve(self) -> None:
+        if self._ers_pending is None or not self._ers_samples:
+            return
+        if self._ers_samples[-1][0] < self._ers_pending[1]:
+            return
+        before_boundary = max(
+            (sample for sample in self._ers_samples if sample[0] < self._ers_pending[1]),
+            key=lambda sample: sample[0],
+            default=None,
+        )
+        lap_num, _ = self._ers_pending
+        self._ers_pending = None
+        if before_boundary is None:
+            return
+        self._ers_seq += 1
+        self.ers_finished_lap = ErsLapTotals(
+            lap_num=lap_num,
+            deployed_j=before_boundary[1],
+            harvested_j=before_boundary[2],
+            seq=self._ers_seq,
+        )
+
+    @property
+    def ers_counters_current(self) -> bool:
+        return self._ers_lap_frame is None or bool(
+            self._ers_samples and self._ers_samples[-1][0] >= self._ers_lap_frame
+        )
 
     def _on_tyre_change(self) -> None:
         """A new set is on: restart the tyre EMAs so the old set's heat is not
