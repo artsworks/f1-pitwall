@@ -104,7 +104,7 @@ run the same steps as upkeep on demand. `pitwall tune` also folds A/B results fr
 
 No command is required. Pitwall grades the session when it ends. On the next start,
 upkeep refits pace, tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns.
-Two steps stay manual by design: grading calls at `/debrief/<uid>` and applying the
+Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
 threshold YAML changes that `pitwall propose` writes. Rule thresholds never change
 without your review. Use `pitwall stats --learned` to inspect learned values. Use `pitwall digest`
 only when you want digest JSON or need to ingest external recordings.

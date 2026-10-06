@@ -33,7 +33,7 @@ _Last updated: M4 ([PR #21](https://github.com/artsworks/f1-pitwall/pull/21))._
 
 - Calibration remains `converged: false`.
 - Upkeep grades calls, refits priors and adjusts cooldowns. Grading calls at
-  `/debrief/<uid>` and applying threshold YAML from `pitwall propose` stay manual by
+  `/debrief/latest` and applying threshold YAML from `pitwall propose` stay manual by
   design, so rule thresholds never change without human review.
 - There are no calls-off sessions yet, so `pitwall evaluate` has no on/off comparison.
 - LLM debrief prose is deferred (item 21).
