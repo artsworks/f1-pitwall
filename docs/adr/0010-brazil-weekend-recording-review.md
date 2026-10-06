@@ -33,6 +33,11 @@ capture in [0006](0006-recording-profiles.md) measured 28.7 Hz. The header
 value is the rate Pitwall was configured for. The game does not report its
 send rate in any packet, so the header does not prove what the game sent.
 
+Lap Data and Car Status arrive as separate packets. In all 33 lap crossings
+in the seven files, Car Status reset its per-lap ERS counters on the same
+frame as the Lap Data lap change. `overall_frame_identifier` was equal to
+`frame_identifier` and never went back.
+
 ### What happened in the race
 
 - Strategy M-S, one stop at the end of lap 11. The plan said window 7 to 13,
@@ -97,6 +102,11 @@ input was a prior of 1.04 kg per lap from the live database. The real burn was
   lap as the allowance. `energy_under` grades the finished lap and fires in
   sector 1 of the next lap. `energy_over` still fires in sector 3 of the
   current lap.
+- `SessionState` matches each Car Status sample to a lap by
+  `overall_frame_identifier`. The finished lap's totals are the last sample
+  before the Lap Data frame that changed the lap. Pitwall grades the lap after
+  the first sample at or after that frame arrives, in either packet order. A
+  flashback clears this tracking, and Pitwall does not grade that lap.
 - `boost_left_on` fires only on a lift or brake after 3 s. This replaces the
   12 s rule in [0007](0007-driving-event-signals.md), and the
   `boost_max_s` threshold is gone.
