@@ -65,7 +65,8 @@ def test_migration_1_to_2_keeps_rows(tmp_path: Path) -> None:
 def test_reconcile_adds_columns_missing_from_edited_migration(tmp_path: Path) -> None:
     path = tmp_path / "edited-migration.sqlite"
     conn = sqlite3.connect(path)
-    for migration in MIGRATIONS[:9]:
+    setup_advisor = next(i for i, m in enumerate(MIGRATIONS) if "setup_states" in m)
+    for migration in MIGRATIONS[:setup_advisor]:
         conn.executescript(migration)
     missing_columns = (
         "wear_front_pct",
@@ -73,13 +74,13 @@ def test_reconcile_adds_columns_missing_from_edited_migration(tmp_path: Path) ->
         "tyre_inner_front_c",
         "tyre_inner_rear_c",
     )
-    migration_10 = "\n".join(
+    edited = "\n".join(
         line
-        for line in MIGRATIONS[9].splitlines()
+        for line in MIGRATIONS[setup_advisor].splitlines()
         if not any(column in line for column in missing_columns)
     )
-    conn.executescript(migration_10)
-    conn.execute("PRAGMA user_version=10")
+    conn.executescript(edited)
+    conn.execute(f"PRAGMA user_version={setup_advisor + 1}")
     uid = 101
     conn.execute(
         "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms, valid)"
