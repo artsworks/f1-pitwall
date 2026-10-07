@@ -372,12 +372,21 @@ def test_packaged_menu_is_valid() -> None:
         "silent",
     }
     assert validate_shortcuts(settings.input, settings.menu) == []
-    assert shortcut_warnings(settings.input, settings.menu) == [
-        "menu item 'silent' is shortcut_only but no input.shortcuts binds it"
-    ]
+    assert shortcut_warnings(settings.input, settings.menu) == []
     menu = DriverMenu()
     menu.step(settings.menu, 1, 0.0, {"session_kind": "practice"})
     assert "Fight" in menu.payload(settings.menu, 0.0)["items"]
+
+
+def test_silent_binding_suppresses_shortcut_warning() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    settings = engine.store.current()
+    silent = settings.input.model_copy(update={"long_press": "bookmark", "silent_toggle_bit": 0})
+    assert shortcut_warnings(silent, settings.menu) == [
+        "menu item 'silent' is shortcut_only but no input.shortcuts binds it"
+    ]
+    dedicated = silent.model_copy(update={"silent_toggle_bit": 0x02000000})
+    assert shortcut_warnings(dedicated, settings.menu) == []
 
 
 def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
