@@ -213,6 +213,7 @@ thresholds:
   digest_max_findings: 5
   calib_max_sessions: 20 # sessions included in each track fit
   calib_fuel_ms_per_kg_max: 80 # upper bound on fitted fuel sensitivity
+  calib_fuel_min_resid_kg: 1.0 # fuel must vary this much (kg) apart from tyre age to fit its effect
   fuel_delta_min_kg: 0 # minimum accepted per-lap fuel burn
   fuel_delta_max_kg: 10 # maximum accepted per-lap fuel burn
   calib_thermal_bin_c: 5 # tyre-inner temperature histogram width

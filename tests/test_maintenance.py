@@ -197,7 +197,7 @@ def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> No
 
 def _laps(db: Database, uid: int, *, compound: int, base: int, deg: int) -> None:
     for age in range(1, 8):
-        fuel = 25 - age + 0.2 * (age % 2)
+        fuel = 25 - age + (4.0 if age == 4 else 0.0)
         lap_ms = round(base + deg * age + 35 * fuel)
         db.insert_lap(
             uid,
