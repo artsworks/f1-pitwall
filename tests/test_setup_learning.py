@@ -112,7 +112,7 @@ def _recommendation(
 def _case(
     *,
     uid: int = 801,
-    mode: str = "debrief",
+    mode: str = "garage",
     after_fields: dict[str, float] | None = None,
     after_laps: int | None = 6,
     after_slope_ms: float = 0.0,
@@ -163,7 +163,7 @@ def test_good_brake_bias_outcome_folds_gain() -> None:
     outcome = _outcome(db, 801, thresholds)
 
     detail = json.loads(str(outcome["detail"]))
-    assert outcome["call_id"] == "801:setup:debrief:entry_instability:brake_bias"
+    assert outcome["call_id"] == "801:setup:garage:entry_instability:brake_bias"
     assert outcome["rule_id"] == "setup.entry_instability"
     assert outcome["lap"] == 6
     assert outcome["metric"] == "setup:entry_instability"
@@ -277,6 +277,65 @@ def test_cross_session_after_run_is_graded_in_follow_up_session() -> None:
     assert detail["after_session"] == second
 
 
+def test_debrief_advice_is_not_graded_against_a_later_run_in_its_own_session() -> None:
+    _, thresholds = _config()
+    db = Database(":memory:")
+    first, second = 850, 851
+    db.upsert_session(first, track_id=7, session_type=1, started_at=1.0, parc_ferme=1)
+    before_state = db.setup_state_id("debrief-before", _fields())
+    later_state = db.setup_state_id("debrief-later", _fields(brake_bias=57.0))
+    _insert_run(
+        db,
+        first,
+        state_id=before_state,
+        start_lap=1,
+        start_age=1,
+        count=8,
+        lockups_rear=1,
+        slip=2.0,
+        lap_slope_ms=0.0,
+    )
+    _insert_run(
+        db,
+        first,
+        state_id=later_state,
+        start_lap=9,
+        start_age=9,
+        count=5,
+        lockups_rear=0,
+        slip=4.0,
+        lap_slope_ms=0.0,
+    )
+    db.insert_setup_rec(_recommendation(first, before_state), track_id=7, compound=18, lap=8)
+
+    assert all(
+        item.metric != "setup:entry_instability" for item in grade_and_store(db, first, thresholds)
+    )
+    assert db.setup_rec_by_id(f"{first}:setup:debrief:entry_instability:brake_bias")["folded"] == 0
+
+    db.upsert_session(second, track_id=7, session_type=1, started_at=2.0, parc_ferme=1)
+    after_state = db.setup_state_id("debrief-after", _fields(brake_bias=57.0))
+    _insert_run(
+        db,
+        second,
+        state_id=after_state,
+        start_lap=1,
+        start_age=14,
+        count=6,
+        lockups_rear=0,
+        slip=4.0,
+        lap_slope_ms=0.0,
+    )
+
+    outcomes = grade_and_store(db, second, thresholds)
+
+    outcome = next(item for item in outcomes if item.metric == "setup:entry_instability")
+    detail = json.loads(outcome.detail)
+    assert outcome.label == "good"
+    assert detail["before_session"] == first
+    assert detail["after_session"] == second
+
+
 @pytest.mark.parametrize(
     ("uid", "after_laps", "expected_label"),
     [
@@ -305,13 +364,13 @@ def test_setup_grading_handles_unsigned_uid_from_signed_sql_value(
 def test_grade_and_store_folds_each_recommendation_and_baseline_once() -> None:
     _, thresholds = _config()
     db, before_state = _case(uid=840)
-    rec_id = "840:setup:debrief:entry_instability:brake_bias"
+    rec_id = "840:setup:garage:entry_instability:brake_bias"
 
     grade_and_store(db, 840, thresholds)
     gain_first = db.get_param(7, 18, "setup_gain:entry_instability:brake_bias:+")
     base_first = db.get_param(7, 18, "setup_base:slip_balance_deg")
     db.insert_setup_rec(
-        _recommendation(840, before_state),
+        _recommendation(840, before_state, mode="garage"),
         track_id=7,
         compound=18,
         lap=6,
@@ -397,6 +456,7 @@ def test_digest_counts_setup_outcomes_and_tune_lists_setup_rule() -> None:
     experiment = _recommendation(
         860,
         before_state,
+        mode="garage",
         rule_id="traction_limited",
         param="on_throttle",
         from_value=55.0,

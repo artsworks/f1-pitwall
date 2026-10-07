@@ -495,7 +495,10 @@ live decisions except through the same gates.
 ### 6.1 Applied?
 
 For each `setup_recs` row, find the next run on the same track (same weekend first, then
-later weekends) and compare its setup state with the rec's:
+later weekends) and compare its setup state with the rec's. Debrief advice is issued after
+the session ends, so its after-run comes from a later session only. A later run in the
+same session cannot be a response to it, and the row stays ungraded until the next session
+on that track.
 
 | Next run's change | Label |
 |-------------------|-------|

@@ -197,8 +197,11 @@ def _after_run(
     before_run: Run | None,
     compound: int,
     minimum_laps: int,
+    *,
+    skip_source_session: bool = False,
 ) -> tuple[int, Run] | None:
-    for index in range(session_index, len(sessions)):
+    first_index = session_index + 1 if skip_source_session else session_index
+    for index in range(first_index, len(sessions)):
         candidate_uid = int(sessions[index]["uid"])
         for run in runs_by_session.get(candidate_uid, ()):
             if index == session_index:
@@ -371,7 +374,10 @@ def grade_setup_recs(
         evidence = rec.get("evidence")
         evidence = evidence if isinstance(evidence, dict) else {}
         tier = evidence.get("tier")
-        if tier == "next_visit" and source_index >= len(sessions) - 1:
+        # Debrief advice is issued after the session ends, so a later run in
+        # the same session cannot be a response to it.
+        session_end_advice = str(rec.get("mode") or "") == "debrief"
+        if (tier == "next_visit" or session_end_advice) and source_index >= len(sessions) - 1:
             continue
         lap = int(rec.get("lap") or 0)
         source_runs = runs_by_session.get(source_uid, ())
@@ -384,6 +390,7 @@ def grade_setup_recs(
             before_run,
             int(rec.get("compound") or 0),
             minimum_laps,
+            skip_source_session=session_end_advice,
         )
         if after is None:
             if source_uid != uid:
