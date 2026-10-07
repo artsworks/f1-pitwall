@@ -73,7 +73,7 @@ def question_candidates(
             continue
         fired: dict[str, list[tuple[float, float]]] = {}
         for call in db.calls_for_session(int(uid)):
-            if call.get("outcome") != "fired":
+            if call.get("outcome") != "fired" or "repeat_of" in _inputs(call):
                 continue
             lap = _number(call.get("lap"))
             t = _number(call.get("t"))

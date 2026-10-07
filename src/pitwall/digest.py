@@ -21,25 +21,21 @@ DIGEST_VERSION = 3
 def call_quality(db: Database, uid: int) -> dict[str, Any]:
     calls = db.calls_for_session(uid)
 
-    def tags_for(row: Mapping[str, Any]) -> set[str]:
-        raw = row.get("tags")
-        if isinstance(raw, str):
-            try:
-                raw = json.loads(raw)
-            except json.JSONDecodeError:
-                raw = []
-        return {str(tag) for tag in raw} if isinstance(raw, list) else set()
-
     fired_calls = []
     for row in calls:
         rule_id = str(row.get("rule_id") or "")
-        tags = tags_for(row)
+        inputs = row.get("inputs")
+        if isinstance(inputs, str):
+            try:
+                inputs = json.loads(inputs)
+            except json.JSONDecodeError:
+                inputs = {}
+        inputs = inputs if isinstance(inputs, dict) else {}
         if (
             row.get("outcome") == "fired"
             and rule_id != "reply"
             and not rule_id.startswith("menu:")
-            and "reply" not in tags
-            and "say_again" not in tags
+            and "repeat_of" not in inputs
         ):
             fired_calls.append(row)
 

@@ -384,10 +384,10 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
             "no_time": ["No clean lap on the board yet."],
         },
     )
-    clear = Snapshot(now=0.0, session_kind="race", position=4, laps_remaining=10)
+    clear = Snapshot(now=0.0, session_kind="race", position=4, laps_remaining=12)
     case, values = answer(fight, clear, "b")
     assert case == "none" and values["pos"] == "4"
-    assert ReplyPicker().pick(fight, case, values) == "P4, 10 to go. Clear air."
+    assert ReplyPicker().pick(fight, case, values) == "P4, 12 to go. Clear air."
     practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
     case, values = answer(fight, practice, "b")
     assert case == "no_time"

@@ -461,6 +461,7 @@ class Dispatcher:
                         trigger_t=now,
                         still_true=None,
                         screen_only=last.screen_only,
+                        inputs={**last.inputs, "repeat_of": last.id},
                     )
                     heapq.heappush(self._queue, _Queued((last.priority, now), replay))
                 else:

@@ -271,6 +271,7 @@ def _fight(snap: Snapshot) -> Answer:
         "ahead": "",
         "behind": "",
         "pos": str(snap.position),
+        "laps_left": str(max(0, snap.laps_remaining)),
         "best": spoken_lap_time(round(snap.player_best_lap_ms / 100) * 100)
         if snap.player_best_lap_ms > 0
         else "",

@@ -88,6 +88,29 @@ def test_covered_questions_do_not_meet_recurrence_threshold() -> None:
     assert question_candidates(db, _menu(), [_rule()], thresholds={"limit": 4.0}) == []
 
 
+def test_repeat_calls_do_not_cover_questions() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1)
+    db.insert_call(
+        1,
+        {
+            "outcome": "fired",
+            "call_id": "repeat-call",
+            "rule_id": "test_rule",
+            "t": 9.0,
+            "lap": 4,
+            "inputs": {"repeat_of": "original-call"},
+        },
+    )
+    _ask(db, 1, 5, 10.0, 5.0)
+    _ask(db, 1, 6, 20.0, 7.0)
+
+    candidates = question_candidates(db, _menu(), [_rule()], thresholds={"limit": 4.0})
+
+    assert len(candidates) == 1
+    assert candidates[0]["uncovered"] == 2
+
+
 def test_proposals_keep_question_candidates_review_only() -> None:
     db = Database(":memory:")
 

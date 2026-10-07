@@ -56,6 +56,16 @@ def test_call_quality_counts_fired_grades_questions_and_exclusions() -> None:
                 "text": "Call",
             },
         )
+    db.insert_call(
+        uid,
+        {
+            "outcome": "fired",
+            "call_id": "repeat-call",
+            "rule_id": "tyre_temp",
+            "inputs": {"repeat_of": "call-1"},
+            "text": "Call",
+        },
+    )
     db.grade_call(uid, "call-1", "tyre_temp", "good", source="press")
     db.grade_call(uid, "call-2", "pit_window", "noise")
     db.insert_call(

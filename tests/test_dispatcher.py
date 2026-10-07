@@ -206,9 +206,10 @@ def test_p3_straight_only_disabled() -> None:
 
 
 def test_ack_then_say_again() -> None:
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.submit([_cand("a", text="box box")], _snap(0.0))
     d.drain(0.0)
+    original = next(r for r in _log(buf) if r["outcome"] == "fired")
     from pitwall.input.press import Press
 
     # ack with target -> logged, same-lap resubmission suppressed
@@ -219,6 +220,8 @@ def test_ack_then_say_again() -> None:
     d.on_press(Press("ack", 20.0), _snap(20.0))
     calls = d.drain(20.0)
     assert len(calls) == 1 and "say_again" in calls[0].tags
+    replay = [r for r in _log(buf) if r["outcome"] == "fired"][-1]
+    assert replay["inputs"]["repeat_of"] == original["call_id"]
 
 
 def test_say_again_ignores_stale_calls() -> None:
