@@ -1008,6 +1008,19 @@ class Database:
         ).fetchall()
         return [self._lap_row(r) for r in rows]
 
+    def track_minutes(self) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(lap_time_ms), 0) AS total_ms, COUNT(*) AS laps,"
+            " COUNT(DISTINCT session_uid) AS sessions FROM laps WHERE id IN ("
+            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
+            " GROUP BY session_uid, lap_num)"
+        ).fetchone()
+        return {
+            "minutes": round(int(row["total_ms"]) / 60_000, 1),
+            "laps": int(row["laps"]),
+            "sessions": int(row["sessions"]),
+        }
+
     def _lap_row(self, r: sqlite3.Row) -> LapRow:
         return LapRow(
             id=int(r["id"]),

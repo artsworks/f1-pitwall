@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import statistics
+import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -78,6 +79,66 @@ def call_quality(db: Database, uid: int) -> dict[str, Any]:
         "questions": len(questions),
         "unanswered_questions": unanswered,
     }
+
+
+def quality_trend(db: Database, sessions: int = 10) -> dict[str, Any]:
+    from pitwall.debrief import _session_label, _track_name
+
+    rows = []
+    if sessions > 0:
+        for session in reversed(db.sessions()):
+            quality = call_quality(db, int(session["uid"]))
+            if not quality["fired"]:
+                continue
+            started_at = session.get("started_at")
+            rows.append(
+                {
+                    "uid": session["uid"],
+                    "started_at": started_at,
+                    "date": (
+                        time.strftime("%Y-%m-%d", time.localtime(float(started_at)))
+                        if started_at is not None
+                        else "unknown"
+                    ),
+                    "track": _track_name(session.get("track_id")),
+                    "session_type": _session_label(session.get("session_type")),
+                    **quality,
+                }
+            )
+            if len(rows) >= sessions:
+                break
+    rows.reverse()
+
+    trend = None
+    if len(rows) > 1:
+        midpoint = len(rows) // 2
+        older = statistics.fmean(float(row["good_pct"]) for row in rows[:midpoint])
+        newer = statistics.fmean(float(row["good_pct"]) for row in rows[midpoint:])
+        trend = {
+            "older_mean_good_pct": round(older, 1),
+            "newer_mean_good_pct": round(newer, 1),
+            "delta_pct": round(newer - older, 1),
+            "sessions": len(rows),
+        }
+    return {"sessions": rows, "trend": trend}
+
+
+def startup_scorecard(db: Database) -> str:
+    minutes = db.track_minutes()
+    report = quality_trend(db)
+    rows = report["sessions"]
+    if not rows:
+        quality_text = "n/a"
+    else:
+        good_pct = rows[-1]["good_pct"]
+        quality_text = f"{good_pct:g}% good" if good_pct is not None else "n/a"
+        trend = report["trend"]
+        if trend is not None and good_pct is not None:
+            quality_text += f" ({trend['delta_pct']:+.1f} over last {trend['sessions']})"
+    return (
+        f"pitwall: {round(minutes['minutes']):,} track minutes over "
+        f"{minutes['sessions']:,} sessions · call quality {quality_text}"
+    )
 
 
 def _mean(xs: Sequence[float]) -> float | None:

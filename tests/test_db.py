@@ -229,6 +229,24 @@ def test_insert_lap() -> None:
     assert rows[0]["lap_time_ms"] == 91_234 and rows[0]["valid"] == 0
 
 
+def test_track_minutes_deduplicates_player_laps_and_preserves_uint64_uid() -> None:
+    db = Database(":memory:")
+    uid = 0xACBF76B8C45ADE98
+    db.upsert_session(7)
+    db.upsert_session(uid)
+
+    def lap(lap_num: int, lap_time_ms: int) -> LapSummary:
+        return LapSummary(lap_num, lap_time_ms, 30_000, 31_000, 16, 1, 4.0, True)
+
+    db.insert_lap(7, 0, lap(1, 90_000))
+    db.insert_lap(7, 0, lap(1, 100_000))
+    db.insert_lap(uid, 0, lap(1, 60_000))
+    db.insert_lap(uid, 1, lap(2, 80_000))
+    db.insert_lap(7, 0, lap(2, 0))
+
+    assert db.track_minutes() == {"minutes": 2.7, "laps": 2, "sessions": 2}
+
+
 def test_uint64_session_uid_round_trip() -> None:
     uid = 0xACBF76B8C45ADE98
     db = Database(":memory:")

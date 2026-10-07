@@ -11,7 +11,6 @@ import threading
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from statistics import fmean
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -609,8 +608,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 def cmd_stats(args: argparse.Namespace) -> int:
     if args.quality:
-        from pitwall.debrief import _session_label, _track_name
-        from pitwall.digest import call_quality
+        from pitwall.digest import quality_trend
         from pitwall.store.db import Database, open_configured
 
         if args.sessions < 1:
@@ -621,56 +619,34 @@ def cmd_stats(args: argparse.Namespace) -> int:
         if db is None:
             print("stats --quality: persistence disabled")
             return 1
-        rows = []
-        for session in db.sessions():
-            quality = call_quality(db, int(session["uid"]))
-            if not quality["fired"]:
-                continue
-            started_at = session.get("started_at")
-            rows.append(
-                {
-                    "uid": session["uid"],
-                    "started_at": started_at,
-                    "date": (
-                        time.strftime("%Y-%m-%d", time.localtime(float(started_at)))
-                        if started_at is not None
-                        else "unknown"
-                    ),
-                    "track": _track_name(session.get("track_id")),
-                    "session_type": _session_label(session.get("session_type")),
-                    **quality,
-                }
-            )
-        rows = rows[-args.sessions :]
-        trend = None
-        if len(rows) > 1:
-            midpoint = len(rows) // 2
-            older = fmean(float(row["good_pct"]) for row in rows[:midpoint])
-            newer = fmean(float(row["good_pct"]) for row in rows[midpoint:])
-            trend = {
-                "older_mean_good_pct": round(older, 1),
-                "newer_mean_good_pct": round(newer, 1),
-                "delta_pct": round(newer - older, 1),
-                "sessions": len(rows),
-            }
+        minutes = db.track_minutes()
+        report = quality_trend(db, args.sessions)
+        rows = report["sessions"]
+        trend = report["trend"]
         if args.json:
-            print(json.dumps({"sessions": rows, "trend": trend}, indent=2, default=str))
-        elif not rows:
-            print("No sessions with fired calls.")
+            print(json.dumps({"track_minutes": minutes, **report}, indent=2, default=str))
         else:
-            for row in rows:
-                print(
-                    f"{row['date']} · {row['track']} · {row['session_type']} · "
-                    f"{row['fired']} fired · good {row['good_pct']:g}% · "
-                    f"neg {row['neg_rate_pct']:g}% · "
-                    f"{row['unanswered_questions']} unanswered · {row['ungraded']} ungraded"
-                )
-            if trend is not None:
-                print(
-                    f"trend: good% {trend['older_mean_good_pct']:.1f} -> "
-                    f"{trend['newer_mean_good_pct']:.1f} "
-                    f"({trend['delta_pct']:+.1f}) over {trend['sessions']} sessions"
-                )
+            print(
+                f"track minutes: {minutes['minutes']:,.1f} over "
+                f"{minutes['sessions']:,} sessions ({minutes['laps']:,} laps)"
+            )
+            if not rows:
+                print("No sessions with fired calls.")
+            else:
+                for row in rows:
+                    print(
+                        f"{row['date']} · {row['track']} · {row['session_type']} · "
+                        f"{row['fired']} fired · good {row['good_pct']:g}% · "
+                        f"neg {row['neg_rate_pct']:g}% · "
+                        f"{row['unanswered_questions']} unanswered · "
+                        f"{row['ungraded']} ungraded"
+                    )
+                if trend is not None:
+                    print(
+                        f"trend: good% {trend['older_mean_good_pct']:.1f} -> "
+                        f"{trend['newer_mean_good_pct']:.1f} "
+                        f"({trend['delta_pct']:+.1f}) over {trend['sessions']} sessions"
+                    )
         return 0
     if args.learned:
         from pitwall.store.db import Database, open_configured
@@ -930,6 +906,12 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"learning: {report.summary()}", flush=True)
         except sqlite3.Error as e:
             print(f"learning: upkeep skipped ({e})", flush=True)
+        from pitwall.digest import startup_scorecard
+
+        try:
+            print(startup_scorecard(db), flush=True)
+        except sqlite3.Error as e:
+            print(f"startup scorecard skipped ({e})", flush=True)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,

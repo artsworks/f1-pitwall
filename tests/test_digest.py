@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 
 from pitwall.cli import main
-from pitwall.digest import build_digest, call_quality, format_digest
+from pitwall.digest import (
+    build_digest,
+    call_quality,
+    format_digest,
+    quality_trend,
+    startup_scorecard,
+)
 from pitwall.store.db import Database
 
 
@@ -124,6 +130,77 @@ def test_call_quality_uses_none_percentages_without_fired_calls() -> None:
     assert quality["neg_rate_pct"] is None
 
 
+def test_quality_trend_stops_after_recent_fired_sessions_and_orders_oldest_first(
+    monkeypatch,
+) -> None:
+    db = Database(":memory:")
+    for uid, started_at in ((1, 100.0), (2, 200.0), (3, 300.0)):
+        db.upsert_session(uid, track_id=2, session_type=15, started_at=started_at)
+    called: list[int] = []
+
+    def quality(_db: Database, uid: int) -> dict[str, object]:
+        called.append(uid)
+        return {"fired": 1 if uid > 1 else 0, "good_pct": float(uid * 10)}
+
+    monkeypatch.setattr("pitwall.digest.call_quality", quality)
+
+    report = quality_trend(db, sessions=2)
+
+    assert called == [3, 2]
+    assert [row["uid"] for row in report["sessions"]] == [2, 3]
+    assert report["trend"] == {
+        "older_mean_good_pct": 20.0,
+        "newer_mean_good_pct": 30.0,
+        "delta_pct": 10.0,
+        "sessions": 2,
+    }
+
+
+def test_startup_scorecard_formats_minutes_and_quality_trend(monkeypatch) -> None:
+    db = Database(":memory:")
+    monkeypatch.setattr(
+        db,
+        "track_minutes",
+        lambda: {"minutes": 1_234.4, "sessions": 57, "laps": 2_010},
+    )
+    monkeypatch.setattr(
+        "pitwall.digest.quality_trend",
+        lambda _db: {
+            "sessions": [{"good_pct": 62.0}],
+            "trend": {"delta_pct": 5.0, "sessions": 10},
+        },
+    )
+
+    assert (
+        startup_scorecard(db)
+        == "pitwall: 1,234 track minutes over 57 sessions · call quality 62% good "
+        "(+5.0 over last 10)"
+    )
+
+
+def test_startup_scorecard_without_trend(monkeypatch) -> None:
+    db = Database(":memory:")
+    monkeypatch.setattr(
+        db,
+        "track_minutes",
+        lambda: {"minutes": 1_234.4, "sessions": 57, "laps": 2_010},
+    )
+    monkeypatch.setattr(
+        "pitwall.digest.quality_trend",
+        lambda _db: {"sessions": [{"good_pct": 55.0}], "trend": None},
+    )
+
+    assert (
+        startup_scorecard(db)
+        == "pitwall: 1,234 track minutes over 57 sessions · call quality 55% good"
+    )
+
+
+def test_startup_scorecard_without_quality() -> None:
+    empty = Database(":memory:")
+    assert startup_scorecard(empty) == "pitwall: 0 track minutes over 0 sessions · call quality n/a"
+
+
 def test_format_digest_uses_na_without_fired_calls() -> None:
     db = Database(":memory:")
     db.upsert_session(76, track_id=2, session_type=15)
@@ -155,6 +232,7 @@ def test_stats_quality_cli_prints_sessions_and_trend(tmp_path, capsys) -> None:
 
     assert main(["stats", "--quality", "--db", str(path)]) == 0
     output = capsys.readouterr().out
+    assert output.splitlines()[0] == "track minutes: 0.0 over 0 sessions (0 laps)"
     assert "1 fired · good 0%" in output
     assert "1 fired · good 100%" in output
     assert "trend: good% 0.0 -> 100.0 (+100.0) over 2 sessions" in output
@@ -173,5 +251,6 @@ def test_stats_quality_cli_json_includes_trend(tmp_path, capsys) -> None:
 
     assert main(["stats", "--quality", "--json", "--db", str(path), "--sessions", "2"]) == 0
     report = json.loads(capsys.readouterr().out)
+    assert report["track_minutes"] == {"minutes": 0.0, "laps": 0, "sessions": 0}
     assert [row["uid"] for row in report["sessions"]] == [91, 92]
     assert report["trend"]["sessions"] == 2
