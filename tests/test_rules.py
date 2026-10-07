@@ -394,3 +394,21 @@ def test_one_decimal_call_copy() -> None:
     )
     under_threat = next(c for c in threat.candidates if c.rule.defn.id == "battle_under_threat")
     assert "0.4 laps" in under_threat.text
+
+
+@pytest.mark.parametrize(("lop", "plural"), [(1.03, False), (3.2, True)])
+def test_tyre_life_one_lap_is_singular(lop: float, plural: bool) -> None:
+    """Silverstone race, lap 3: laps_of_pace 1.03 read "About 1 laps left"."""
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            lap_num=6,
+            laps_remaining=10,
+            laps_of_pace=lop,
+            _ages={"lap_data": 0.1, "car_damage": 0.1},
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == "tyre_life")
+    assert ("laps" in text) == plural
+    assert "1 lap" not in text

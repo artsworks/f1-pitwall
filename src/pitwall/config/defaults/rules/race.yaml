@@ -216,6 +216,11 @@ rules:
       - "About {laps_of_pace:.0f} laps left in the tyres"
       - "Tyre check, roughly {laps_of_pace:.0f} laps of pace in them"
       - "About {laps_of_pace:.0f} laps of pace left in this set"
+    severity:
+      - when: "laps_of_pace < 1.5"
+        say:
+          - "About a lap left in the tyres"
+          - "Tyre check, roughly one lap of pace in them"
   - id: tyre_overheat
     sessions: [race]
     priority: 2
