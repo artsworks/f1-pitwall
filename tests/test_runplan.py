@@ -419,7 +419,7 @@ def test_fuel_thresholds_configurable() -> None:
     assert _plan(ers_pct=0.0, fuel_laps=2.0, fuel_cool_laps=2.2) == Plan("push_now", "fuel")
 
 
-def test_run_tracker_flag_first_set_at_the_line_is_the_new_lap_only() -> None:
+def test_run_tracker_flag_first_set_at_the_line_cools_the_new_lap_only() -> None:
     rt = RunTracker()
     _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
     _feed(rt, 1.0, 100, 10.0, 0)
@@ -443,10 +443,10 @@ def test_run_tracker_flag_first_set_at_the_line_is_the_new_lap_only() -> None:
         decide=lambda: PUSH,
     )
     assert done is not None and not done.invalid
-    assert rt.plan == PUSH
-    assert rt.kind == HOT
-    assert not rt.next_lap_invalid
-    # the new lap's own flag still marks it invalid when it completes
+    assert rt.plan == Plan("cool", "invalid")
+    assert rt.kind == COOL
+    assert rt.next_lap_invalid
+    # the cool lap completes clean and the next lap is a normal push
     _feed(rt, 120.0, 70_000, 4100.0, 2)
     done = rt.update(
         t=130.0,
@@ -464,5 +464,7 @@ def test_run_tracker_flag_first_set_at_the_line_is_the_new_lap_only() -> None:
         cool_pace_pct=10.0,
         decide=lambda: PUSH,
     )
-    assert done is not None and done.invalid
+    assert done is None
+    assert rt.plan == Plan("", "")
+    assert rt.kind == HOT
     assert not rt.next_lap_invalid
