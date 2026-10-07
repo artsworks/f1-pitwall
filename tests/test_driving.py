@@ -565,6 +565,45 @@ def test_cool_lap_extends_when_battery_short() -> None:
     assert "cool_hot_mode" in t and "cool_extend" not in t
 
 
+def test_cool_extend_fixed_from_hot_mode_to_the_line() -> None:
+    """Silverstone Q2, 391.8 s at 5283 m (track 5890 m): cool_hot_mode with battery
+    100. Deploying for the line drained it to 68.9 by 396.2 s at 5532 m, so
+    cool_extend fired "Battery 69, need 70. One more cool lap" 4 s later."""
+    from pitwall.state.runplan import COOL
+
+    st = SessionState()
+    st.track_length_m = 5890.0
+    st._ers_need_pct = lambda: 70.0  # type: ignore[method-assign]
+    st._time_for_cool_and_hot = lambda: True  # type: ignore[method-assign]
+    st.run.kind = COOL
+    st.run.cool_start_t = 300.0
+    st.ers_store_pct, st.lap_distance = 100.0, 5300.0
+    assert st._cool_extend() is False
+    st.ers_store_pct, st.lap_distance = 68.9, 5532.0
+    assert st._cool_extend() is False
+    st.lap_distance = 20.0  # line tick: run plan reads the same decision
+    assert st._cool_extend() is False
+    st.run.cool_start_t = 400.0  # next cool lap decides again
+    st.lap_distance = 5300.0
+    assert st._cool_extend() is True
+
+
+def test_push_now_for_fuel_does_not_blame_time() -> None:
+    """Silverstone Q1, 476.7 s: "No fuel for another lap, no time to cool. Push,
+    battery 17"."""
+    t = _texts(
+        _engine(),
+        session_kind="qualifying",
+        sector=0,
+        run_plan="push_now",
+        run_plan_reason="fuel",
+        run_plan_why="No fuel for another lap",
+        ers_store_pct=17.41,
+    )
+    assert t["plan_push_now"].startswith("No fuel for another lap.")
+    assert "time" not in t["plan_push_now"]
+
+
 def test_spin_calls_capped_per_stint_but_traffic_hold_is_not() -> None:
     rules = {r.id: r for r in ConfigStore().current().rules}
     assert rules["spun_rejoin"].max_per_stint == 5

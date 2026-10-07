@@ -170,6 +170,11 @@ rules:
     say:
       - "{run_plan_why}, no time to cool. Push, battery {ers_store_pct:.0f}"
       - "{run_plan_why}. No cool lap, go again"
+    severity:
+      - when: "run_plan_reason == 'fuel'"
+        say:
+          - "{run_plan_why}. Push, battery {ers_store_pct:.0f}"
+          - "{run_plan_why}. Go again"
     on_ack:
       - "Copy. Go get it"
       - "Copy that"

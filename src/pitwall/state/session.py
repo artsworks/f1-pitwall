@@ -771,6 +771,7 @@ class SessionState:
         self._last_rewind_t: float | None = None
         self._was_in_garage = False
         self._pit_exit_t: float | None = None
+        self._cool_latch: tuple[float, bool] | None = None
 
         # player lap data
         self.lap_num = 0
@@ -1118,6 +1119,7 @@ class SessionState:
         self._last_penalty_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
+        self._cool_latch = None
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
@@ -1365,12 +1367,19 @@ class SessionState:
         )
 
     def _cool_extend(self) -> bool:
-        """Cool lap ending with too little battery and time for another cool lap."""
-        return (
-            self.run.kind == COOL
-            and self.ers_store_pct < self._ers_need_pct()
-            and self._time_for_cool_and_hot()
-        )
+        """Cool lap ending with too little battery and time for another cool lap.
+        Fixed from the hot-mode point to the line, so pushing for the line
+        cannot flip "hot lap mode" into "one more cool lap"."""
+        if self.run.kind != COOL:
+            return False
+        latch = self._cool_latch
+        if latch is not None and latch[0] == self.run.cool_start_t:
+            return latch[1]
+        extend = self.ers_store_pct < self._ers_need_pct() and self._time_for_cool_and_hot()
+        hot_mode_m = self.track_length_m - self._th("cool_hot_mode_m", 600.0)
+        if self.track_length_m > 0 and self.lap_distance >= hot_mode_m:
+            self._cool_latch = (self.run.cool_start_t, extend)
+        return extend
 
     def _ers_need_pct(self) -> float:
         """Battery wanted at the line to push: the configured floor, or what the
