@@ -466,3 +466,40 @@ def test_grid_penalty_rule_fires_in_qualifying() -> None:
         _snap(session_kind="qualifying", session_type=10, _ages={"event": 0.1})
     )
     assert "grid_penalty" not in {c.rule.defn.id for c in clear.candidates}
+
+
+def test_rival_pace_drops_steep_gap_trend() -> None:
+    """Silverstone race, L3 205 s: PÉREZ last lap 96.324 s vs ours 94.284 s (over
+    the 1.5 s lap-time band), gap trend -7.23 s read "7.2 seconds slower"."""
+    from pitwall.engine import _rival_pace
+    from pitwall.state.session import CarLap
+
+    snap = _snap(cars=(CarLap(last_lap_time_ms=96_324),), player_last_lap_ms=94_284)
+    assert _rival_pace(snap, 0, -7.23) == ""
+    assert _rival_pace(snap, 0, -0.6) == "six tenths slower"
+
+
+@pytest.mark.parametrize(
+    ("mode", "rule", "extra"),
+    [
+        ("defending", "battle_defend", {"sector": 0, "battle_closing_behind_s": -7.23}),
+        ("defending", "battle_defend", {"sector": 0, "battle_closing_behind_s": 2.0}),
+        ("under_threat", "battle_under_threat", {"sector": 1, "battle_threat_laps": 5.0}),
+    ],
+)
+def test_battle_behind_without_pace_words(mode: str, rule: str, extra: dict[str, object]) -> None:
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            lap_num=3,
+            laps_remaining=10,
+            battle_mode=mode,
+            battle_pace_behind="",
+            rival_behind_name="PÉREZ",
+            gap_behind_s=0.533,
+            **extra,
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == rule)
+    assert "slower" not in text and "faster" not in text
+    assert ", ." not in text and not text.endswith(", ")

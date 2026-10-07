@@ -398,6 +398,10 @@ rules:
       - when: "battle_catch_laps < 0.5"
         say:
           - "Closing fast on {rival_ahead_name}. DRS soon"
+      - when: "battle_pace_ahead == ''"
+        say:
+          - "{rival_ahead_name} ahead, {gap_ahead_s:.1f} to him"
+          - "{gap_ahead_s:.1f} to {rival_ahead_name}. Keep pushing"
       - when: "battle_catch_laps <= 2"
         say:
           - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"
@@ -421,6 +425,10 @@ rules:
         say:
           - "{laps_remaining} to go. It's now or never on {rival_ahead_name}"
           - "Last chance at {rival_ahead_name}. Everything you've got"
+      - when: "battle_pace_ahead == ''"
+        say:
+          - "You're in range of {rival_ahead_name}. Hammer time"
+          - "{gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
   - id: battle_patience
     sessions: [race]
     min_lap: 2
@@ -455,11 +463,19 @@ rules:
         priority: 1
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind on fresher tyres. Battery {ers_store_pct:.0f}"
+      - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_pace_behind == ''"
+        priority: 1
+        say:
+          - "{rival_behind_name} right on you, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5"
         priority: 1
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}. Battery {ers_store_pct:.0f}"
           - "{rival_behind_name} right on you, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
+      - when: "battle_pace_behind == ''"
+        say:
+          - "{rival_behind_name} {gap_behind_s:.1f} behind"
+          - "Car behind, {gap_behind_s:.1f}. Keep the battery for the straight"
   - id: battle_under_threat
     sessions: [race]
     min_lap: 2
@@ -479,6 +495,10 @@ rules:
         say:
           - "{rival_behind_name} in DRS in {battle_threat_laps:.1f} laps. Push"
           - "Gap behind {gap_behind_s:.1f}, falling. Push"
+      - when: "battle_pace_behind == ''"
+        say:
+          - "{rival_behind_name} behind, {gap_behind_s:.1f} gap. Pick it up"
+          - "Gap behind {gap_behind_s:.1f}. Need a bit more pace"
   - id: battle_manage
     sessions: [race]
     min_lap: 3

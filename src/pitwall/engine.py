@@ -130,6 +130,8 @@ def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
         delta_s = (snap.player_last_lap_ms - his) / 1000.0
         if abs(delta_s) <= 1.5:  # beyond that one of the laps was a pit or incident lap
             return pace_words(delta_s)
+    if abs(closing_s) > 1.5:
+        return ""  # a gap trend this steep spans a pass or a pit stop, not pace
     return pace_words(closing_s)
 
 
