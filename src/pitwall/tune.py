@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
+from pitwall.derive import is_synthetic_uid
 from pitwall.store.db import Database
 
 TUNE_TRACK = -1  # model_params namespace for rule tuning (not track-specific)
@@ -49,12 +50,27 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
     cap = _th(th, "param_weight_cap", 50)
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     graded: set[tuple[object, str]] = set()
+    synthetic_uids = {
+        int(session["uid"])
+        for session in db.sessions()
+        if bool(session.get("synthetic")) or is_synthetic_uid(int(session["uid"]))
+    }
+
+    def is_synthetic_session(uid: object) -> bool:
+        if not isinstance(uid, int):
+            return False
+        return uid in synthetic_uids or is_synthetic_uid(uid)
+
     for g in db.all_grades():
+        if g.get("source") == "press" and is_synthetic_session(g["session_uid"]):
+            continue
         counts[str(g["rule_id"])][str(g["grade"])] += 1
         graded.add((g["session_uid"], str(g["call_id"])))
     auto: dict[str, Counter[str]] = defaultdict(Counter)
     seen: set[tuple[object, str]] = set()
     for o in db.all_outcomes():
+        if is_synthetic_session(o["session_uid"]):
+            continue
         label = str(o["label"])
         cid = str(o["call_id"] or "")
         if label not in ("good", "wrong") or cid.startswith("plan:"):
