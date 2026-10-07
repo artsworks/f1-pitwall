@@ -129,7 +129,7 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
     original = _read_records(source)
     derived = _read_records(output)
 
-    assert summary.record_count == len(original) + 4
+    assert summary.record_count == len(original) + 5
     assert summary.header.session_uid != SOURCE_UID
     assert is_synthetic_uid(summary.header.session_uid)
     assert summary.header.metadata == {
@@ -203,6 +203,7 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
 
     latest_lap = None
     session_statuses = []
+    green_sessions = 0
     events = []
     for _, payload in derived:
         if len(payload) < HEADER_SIZE:
@@ -214,8 +215,12 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
             ]
         elif header.packet_id == PacketId.SESSION:
             expected_status = 1 if latest_lap is not None and 3 <= latest_lap <= 4 else 0
-            session_statuses.append(payload[SESSION_SAFETY_CAR_STATUS_OFFSET])
-            assert payload[SESSION_SAFETY_CAR_STATUS_OFFSET] == expected_status
+            status = payload[SESSION_SAFETY_CAR_STATUS_OFFSET]
+            session_statuses.append(status)
+            if latest_lap == 4 and status == 0:
+                green_sessions += 1
+            else:
+                assert status == expected_status
         elif header.packet_id == PacketId.EVENT:
             parsed = parse(PacketId.EVENT, payload, header)
             if parsed.code in {"SCAR", "PENA"}:
@@ -226,6 +231,7 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
     assert [event.detail["safety_car_type"] for event in scars] == [1, 1, 1]
     assert sum(event.code == "PENA" for event in events) == 1
     assert session_statuses and {0, 1} <= set(session_statuses)
+    assert green_sessions == 1
 
 
 def test_malformed_short_and_unrelated_packets_pass_through(tmp_path) -> None:
@@ -254,6 +260,90 @@ def test_malformed_short_and_unrelated_packets_pass_through(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match="session UID 0"):
         derive_recording(zero_source, tmp_path / "zero-derived.f1bin", [WearScale(1.5)])
+
+
+def test_derive_rejects_source_and_output_path_collisions(tmp_path, capsys) -> None:
+    source = write_packet_stream(
+        tmp_path / "source.f1bin",
+        [(0.0, pack_packet(PacketId.SESSION, session_uid=SOURCE_UID))],
+        session_uid=SOURCE_UID,
+        metadata={"synthetic": False},
+    )
+    original = source.read_bytes()
+    for output in (source, source.with_suffix(".f1bin.zst")):
+        with pytest.raises(ValueError, match="output path resolves to the source"):
+            derive_recording(source, output, [WearScale(1.5)])
+    assert source.read_bytes() == original
+
+    assert main(["derive", str(source), str(source), "--wear-scale", "1.5"]) == 1
+    assert "derive: " in capsys.readouterr().out
+    assert source.read_bytes() == original
+
+
+def test_safety_car_ends_before_the_first_lap_after_its_window(tmp_path) -> None:
+    source = write_packet_stream(
+        tmp_path / "source.f1bin",
+        race_stream(
+            RaceSpec(
+                laps=10,
+                session_uid=SOURCE_UID,
+                dt=1.0,
+                send_session_end=True,
+            )
+        ),
+        session_uid=SOURCE_UID,
+        metadata={"synthetic": False},
+    )
+    output = tmp_path / "derived.f1bin"
+    derived = derive_recording(source, output, [InjectSafetyCar(6, 8)])
+    db = Database(":memory:")
+    settings = ConfigStore().current()
+
+    results = ingest_recordings(
+        db,
+        [str(output)],
+        settings,
+        out_dir=tmp_path / "digests",
+    )
+
+    assert results[0].status == "ingested"
+    laps = {lap.lap_num: lap for lap in db.laps_for(derived.header.session_uid) if lap.car_idx == 0}
+    assert laps[8].sc_status == 1
+    assert "safety_car" in laps[8].invalid_reasons
+    assert laps[9].valid
+    assert laps[9].sc_status == 0
+    assert "safety_car" not in laps[9].invalid_reasons
+    assert all("flashback" not in lap.invalid_reasons for lap in laps.values())
+    db.close()
+
+
+def test_ingest_treats_metadata_only_synthetic_recordings_as_synthetic(tmp_path) -> None:
+    recording = write_packet_stream(
+        tmp_path / "metadata-only.f1bin",
+        race_stream(
+            RaceSpec(
+                laps=8,
+                session_uid=SOURCE_UID,
+                dt=1.0,
+                send_session_end=True,
+            )
+        ),
+        session_uid=SOURCE_UID,
+        metadata={"synthetic": True},
+    )
+    db = Database(":memory:")
+    result = ingest_recordings(
+        db,
+        [str(recording)],
+        ConfigStore().current(),
+        out_dir=tmp_path / "digests",
+    )
+
+    assert result[0].status == "ingested"
+    session = db.session_row(SOURCE_UID)
+    assert session is not None and session["synthetic"] == 1
+    assert db.all_params() == []
+    db.close()
 
 
 def test_database_synthetic_origin_and_stint_filters() -> None:
@@ -508,10 +598,53 @@ def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
 
     import pitwall.cli as cli_module
 
+    serve_db_path = tmp_path / "replay-serve.sqlite"
+    serve_origin_at_start = {}
+
+    async def no_serve(_engine, _hub, _store, coro, **_kwargs) -> None:
+        coro.close()
+        serve_db = Database(serve_db_path)
+        serve_origin_at_start.update(serve_db.session_row(cli_uid) or {})
+        serve_db.close()
+
+    monkeypatch.setattr(cli_module, "_serve", no_serve)
+    assert (
+        main(
+            [
+                "replay",
+                str(cli_output),
+                "--seed-db",
+                str(serve_db_path),
+                "--speed",
+                "max",
+                "--serve",
+            ]
+        )
+        == 0
+    )
+    assert serve_origin_at_start["synthetic"] == 1
+    assert serve_origin_at_start["derived_from"] == str(SOURCE_UID)
+    serve_db = Database(serve_db_path)
+    serve_session = serve_db.session_row(cli_uid)
+    assert serve_session is not None and serve_session["synthetic"] == 1
+    assert serve_session["derived_from"] == str(SOURCE_UID)
+    serve_db.close()
+
     monkeypatch.setattr(
         cli_module.ConfigStore,
         "current",
         lambda _self: SimpleNamespace(recording=SimpleNamespace(directory=str(tmp_path))),
     )
+    write_packet_stream(
+        tmp_path / "metadata-only.f1bin",
+        [(0.0, pack_packet(PacketId.SESSION, session_uid=SOURCE_UID))],
+        session_uid=SOURCE_UID,
+        metadata={"synthetic": True},
+    )
     assert main(["recordings"]) == 0
-    assert "synthetic" in capsys.readouterr().out
+    recordings_output = capsys.readouterr().out
+    assert "synthetic" in recordings_output
+    metadata_only_line = next(
+        line for line in recordings_output.splitlines() if "metadata-only.f1bin" in line
+    )
+    assert "synthetic" in metadata_only_line

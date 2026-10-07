@@ -114,6 +114,56 @@ def test_incremental_migration() -> None:
         dbmod.MIGRATIONS.pop()
 
 
+def _seed_database(path, migration_count: int) -> None:
+    conn = sqlite3.connect(path)
+    for version, migration in enumerate(MIGRATIONS[:migration_count], start=1):
+        conn.executescript(migration)
+        conn.execute(f"PRAGMA user_version={version}")
+    conn.close()
+
+
+def _assert_compatibility_columns(path) -> None:
+    expected_version = len(MIGRATIONS)
+    expected_columns = {
+        "sessions": {"synthetic", "derived_from"},
+        "call_grades": {"source"},
+        "bookmarks": {"kind", "context"},
+    }
+    for _ in range(2):
+        db = Database(path)
+        assert db._conn.execute("PRAGMA user_version").fetchone()[0] == expected_version  # noqa: SLF001
+        for table, expected in expected_columns.items():
+            columns = {
+                row["name"]
+                for row in db._conn.execute(f"PRAGMA table_info({table})")  # noqa: SLF001
+            }
+            assert expected <= columns
+        db.close()
+
+
+def test_migration_upgrades_main_layout_and_reopens(tmp_path) -> None:
+    path = tmp_path / "main-layout.sqlite"
+    _seed_database(path, migration_count=10)
+
+    _assert_compatibility_columns(path)
+
+
+def test_migration_upgrades_old_synthetic_layout_and_reopens(tmp_path) -> None:
+    path = tmp_path / "old-synthetic-layout.sqlite"
+    _seed_database(path, migration_count=9)
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
+        ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
+        """
+    )
+    conn.execute("PRAGMA user_version=10")
+    conn.close()
+
+    _assert_compatibility_columns(path)
+
+
 def test_setup_advisor_migration_from_previous_version(tmp_path) -> None:
     path = tmp_path / "previous.sqlite"
     conn = sqlite3.connect(path)

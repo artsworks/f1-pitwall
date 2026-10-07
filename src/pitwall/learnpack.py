@@ -203,7 +203,8 @@ def write_pack(
     grade_rows = [
         row
         for row in grade_rows
-        if row.get("session_uid") is None or not is_synthetic_uid(int(row["session_uid"]))
+        if row.get("session_uid") is None
+        or not (is_synthetic_uid(int(row["session_uid"])) and row.get("source") == "press")
     ]
     pack = {
         "pack_version": PACK_VERSION,

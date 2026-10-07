@@ -213,6 +213,8 @@ def ingest_recordings(
                         overrides={"engine": {"heartbeat_s": 0}},
                         rules_dir=rules_dir,
                         isolated=isolated,
+                        synthetic=bool(header.metadata.get("synthetic"))
+                        or is_synthetic_uid(header.session_uid),
                         sinks=[],
                         db=db,
                         decision_log_fp=io.StringIO(),

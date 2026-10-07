@@ -112,6 +112,9 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
     speed = _parse_speed(args.speed)
     file = _resolve_recording(args.file, ConfigStore().current())
+    with RecordingReader(file) as reader:
+        header = reader.header
+    synthetic = bool(header.metadata.get("synthetic")) or is_synthetic_uid(header.session_uid)
     from_us = args.from_us
     if args.from_lap is not None:
         from_us = _lap_seek_us(file, args.from_lap)
@@ -120,18 +123,18 @@ def cmd_replay(args: argparse.Namespace) -> int:
             return 1
 
     def persist_recording_origin(engine: Engine, db: Database | None) -> None:
-        uid = engine.state.session_uid
-        if db is None or uid is None:
+        if db is None:
             return
-        with RecordingReader(file) as reader:
-            header = reader.header
+        uid = engine.state.session_uid
+        if uid is None:
+            uid = header.session_uid
         session = db.session_row(uid) or {}
         db.set_session_origin(
             uid,
             started_at=header.wall_clock_start_us / 1_000_000.0,
             recording_path=str(file),
             calls_mode=str(session.get("calls_mode") or ""),
-            synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+            synthetic=synthetic,
             derived_from=str(header.metadata.get("derived_from") or ""),
         )
 
@@ -160,6 +163,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 clock=clk,
                 sinks=[hub, LogSink(), _ReplaySpokenSink()],
                 db=seed_db,
+                synthetic=synthetic,
             )
             if args.mask_restricted:
                 eng.ingest.transform = mask_restricted
@@ -175,6 +179,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
             thresholds=ConfigStore().current().thresholds,
         )
         engine = _engine_factory(clock)
+        persist_recording_origin(engine, seed_db)
         review.engine = engine
         review.clock = None  # controller builds its own PausableClock on play
 
@@ -196,7 +201,11 @@ def cmd_replay(args: argparse.Namespace) -> int:
         persist_recording_origin(engine, seed_db)
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
-    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
+    engine = (
+        build_census_engine(clock)
+        if args.no_rules
+        else build_engine(clock=clock, db=db, synthetic=synthetic)
+    )
     if args.mask_restricted:
         engine.ingest.transform = mask_restricted
     replay_coro = run_replay(file, engine, speed, from_us=from_us, to_us=args.to_us)
@@ -599,8 +608,12 @@ def cmd_derive(args: argparse.Namespace) -> int:
 
     settings = ConfigStore().current()
     source = _resolve_recording(args.file, settings)
-    ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
-    summary = derive_recording(source, Path(args.out), ops)
+    try:
+        ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
+        summary = derive_recording(source, Path(args.out), ops)
+    except ValueError as exc:
+        print(f"derive: {exc}")
+        return 1
     print(f"derived session UID: 0x{summary.header.session_uid:016x}")
     print(f"mutations: {', '.join(op.label for op in ops)}")
     print(f"wrote {summary.record_count} records -> {args.out}")
@@ -658,6 +671,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
     rules_dir = Path(args.rules).expanduser() if args.rules else None
     try:
+        all_scenarios = load_scenarios(scenarios_dir)
+        scenario_ids = {scenario.id for scenario in all_scenarios}
         scenarios = load_scenarios(scenarios_dir, args.only)
         settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
         if args.recordings:
@@ -688,16 +703,21 @@ def cmd_bench(args: argparse.Namespace) -> int:
             if not isinstance(loaded, dict):
                 raise ValueError(f"{baseline_path}: baseline must be a JSON object")
             baseline = loaded
-        gate = compare(scorecard, baseline, args.tolerance)
+        gate = compare(scorecard, baseline, args.tolerance, scenario_ids=scenario_ids)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"bench: {exc}")
         return 1
 
+    update_allowed = gate.status == "pass" or (
+        not gate.failures and not gate.incomplete and bool(gate.changed)
+    )
     gate_data = {
         "status": gate.status,
         "failures": gate.failures,
         "incomplete": gate.incomplete,
         "improvements": gate.improvements,
+        "changed": gate.changed,
+        "accepted_changes": (gate.changed if args.update_baseline and update_allowed else []),
     }
     try:
         if args.out:
@@ -749,11 +769,16 @@ def cmd_bench(args: argparse.Namespace) -> int:
             print(f"failure: {failure}")
         for incomplete in gate.incomplete:
             print(f"incomplete: {incomplete}")
+        for changed in gate.changed:
+            print(f"changed: {changed}")
+        if args.update_baseline and update_allowed:
+            for changed in gate.changed:
+                print(f"accepted: {changed}")
         for improvement in gate.improvements:
             print(f"improvement: {improvement}")
 
     if args.update_baseline:
-        if gate.status != "pass":
+        if not update_allowed:
             print(f"bench: baseline not updated, gate is {gate.status}")
         else:
             try:
@@ -1446,6 +1471,8 @@ def _voice_channel(action: str, args: argparse.Namespace) -> int:
 
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
+    from pitwall.derive import is_synthetic_uid
+
     directory = Path(ConfigStore().current().recording.directory)
     found = list_recordings(directory)
     if not found:
@@ -1459,7 +1486,9 @@ def cmd_recordings(args: argparse.Namespace) -> int:
             with RecordingReader(path) as reader:
                 header = reader.header
             uid = str(header.session_uid)
-            synthetic = bool(header.metadata.get("synthetic"))
+            synthetic = bool(header.metadata.get("synthetic")) or is_synthetic_uid(
+                header.session_uid
+            )
             if header.wall_clock_start_us:
                 t = time.localtime(header.wall_clock_start_us / 1e6)
                 start = time.strftime("%Y-%m-%d %H:%M", t)

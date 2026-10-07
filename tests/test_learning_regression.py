@@ -53,6 +53,7 @@ def test_tuned_away_rule_stays_away_after_new_ingest_and_reopen(tmp_path) -> Non
         tmp_path / "baseline.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=baseline_uid)),
         session_uid=baseline_uid,
+        metadata={"synthetic": False},
     )
     baseline_db = Database(":memory:")
     baseline = _run_calls(baseline_db, baseline_path, baseline_uid)
@@ -75,6 +76,7 @@ def test_tuned_away_rule_stays_away_after_new_ingest_and_reopen(tmp_path) -> Non
         tmp_path / "first.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=first_uid)),
         session_uid=first_uid,
+        metadata={"synthetic": False},
     )
     first_count = _rule_count(_run_calls(db, first_path, first_uid), "battle_under_threat")
     assert 0 < first_count < baseline_count
@@ -93,6 +95,7 @@ def test_tuned_away_rule_stays_away_after_new_ingest_and_reopen(tmp_path) -> Non
             )
         ),
         session_uid=training_uid,
+        metadata={"synthetic": False},
     )
     ingest_recordings(db, [str(training_path)], settings, out_dir=tmp_path / "digests")
     tuned_again = tune_from_db(db, settings.thresholds)
@@ -105,6 +108,7 @@ def test_tuned_away_rule_stays_away_after_new_ingest_and_reopen(tmp_path) -> Non
         tmp_path / "second.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=second_uid)),
         session_uid=second_uid,
+        metadata={"synthetic": False},
     )
     second_count = _rule_count(_run_calls(db, second_path, second_uid), "battle_under_threat")
     assert second_count == first_count
@@ -116,6 +120,7 @@ def test_tuned_away_rule_stays_away_after_new_ingest_and_reopen(tmp_path) -> Non
         tmp_path / "persisted.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=persisted_uid)),
         session_uid=persisted_uid,
+        metadata={"synthetic": False},
     )
     persisted_count = _rule_count(
         _run_calls(reopened, persisted_path, persisted_uid), "battle_under_threat"
@@ -150,6 +155,7 @@ def test_calibrated_prior_removes_false_positive_and_memory_replay_isolated(tmp_
         tmp_path / "before.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=before_uid)),
         session_uid=before_uid,
+        metadata={"synthetic": False},
     )
     before = _run_calls(db, before_path, before_uid)
     assert _rule_count(before, "plan_window_open") >= 1
@@ -159,6 +165,7 @@ def test_calibrated_prior_removes_false_positive_and_memory_replay_isolated(tmp_
         tmp_path / "memory.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=memory_uid)),
         session_uid=memory_uid,
+        metadata={"synthetic": False},
     )
     memory_before_db = Database(":memory:")
     memory_before = _run_calls(memory_before_db, memory_path, memory_uid)
@@ -180,6 +187,7 @@ def test_calibrated_prior_removes_false_positive_and_memory_replay_isolated(tmp_
         tmp_path / "after.f1bin",
         race_stream(RaceSpec(**spec_args, session_uid=after_uid)),
         session_uid=after_uid,
+        metadata={"synthetic": False},
     )
     after = _run_calls(db, after_path, after_uid)
     assert _rule_count(after, "plan_window_open") == 0

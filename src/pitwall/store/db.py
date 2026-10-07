@@ -7,6 +7,7 @@ on open, every script with index >= user_version runs in its own transaction.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -18,6 +19,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pitwall.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
+
+_ADD_COLUMN_RE = re.compile(
+    r"^\s*ALTER\s+TABLE\s+([^\s]+)\s+ADD\s+COLUMN\s+([^\s]+)",
+    re.IGNORECASE,
+)
 
 if TYPE_CHECKING:
     from pitwall.model.deg import DegFit
@@ -462,8 +468,33 @@ class Database:
         version = self._version()
         for i in range(version, len(MIGRATIONS)):
             with self._conn:
-                self._conn.executescript(MIGRATIONS[i])
+                pending = ""
+                statements: list[str] = []
+                for char in MIGRATIONS[i]:
+                    pending += char
+                    if char == ";" and sqlite3.complete_statement(pending):
+                        statements.append(pending)
+                        pending = ""
+                if pending.strip():
+                    statements.append(pending)
+                for statement in statements:
+                    match = _ADD_COLUMN_RE.match(statement)
+                    if match:
+                        table = match.group(1).strip('"`[]')
+                        column = match.group(2).strip('"`[]')
+                        columns = {
+                            str(row[1]).casefold()
+                            for row in self._conn.execute(f"PRAGMA table_info({table})")
+                        }
+                        if column.casefold() in columns:
+                            continue
+                    self._conn.execute(statement)
                 self._conn.execute(f"PRAGMA user_version={i + 1}")
+        self._ensure_column("sessions", "synthetic", "INT DEFAULT 0")
+        self._ensure_column("sessions", "derived_from", "TEXT DEFAULT ''")
+        self._ensure_column("call_grades", "source", "TEXT NOT NULL DEFAULT 'human'")
+        self._ensure_column("bookmarks", "kind", "TEXT NOT NULL DEFAULT 'hold'")
+        self._ensure_column("bookmarks", "context", "TEXT")
         self._ensure_column("laps", "visual", "INT DEFAULT 0")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:

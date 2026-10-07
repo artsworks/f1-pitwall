@@ -81,6 +81,38 @@ def _card(
     }
 
 
+def _patch_bench_run(monkeypatch, results: dict[str, str] | None = None) -> None:
+    import pitwall.bench as bench_module
+
+    scenario_results = results or {}
+
+    def fake_run_scenario(scenario, source, settings, *, rules_dir, skip_reason):
+        result = scenario_results.get(scenario.id, "pass")
+        checks = [
+            {
+                "type": check.type,
+                "rules": list(check.rules),
+                "laps": list(check.laps),
+                "ok": result == "pass",
+                "found": [],
+            }
+            for check in scenario.checks
+        ]
+        return (
+            {
+                "title": scenario.title,
+                "status": scenario.status,
+                "kind": scenario.kind,
+                "result": result,
+                "reason": "",
+                "checks": checks,
+            },
+            [],
+        )
+
+    monkeypatch.setattr(bench_module, "run_scenario", fake_run_scenario)
+
+
 def test_parse_scenario_and_sort_by_id(tmp_path: Path) -> None:
     _write_scenario(tmp_path, _scenario_data(id="zeta"))
     _write_scenario(tmp_path, _scenario_data(id="alpha", mutations={}))
@@ -297,6 +329,162 @@ def test_compare_no_baseline() -> None:
     assert result.improvements == ["no baseline"]
 
 
+def test_first_baseline_failing_guard_fails_and_update_is_refused(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    guard = _card({"guard": _scenario("fail", status="guard")})
+    result = compare(guard, None)
+    assert result.status == "fail"
+    assert result.failures == ["guard scenario guard fail"]
+
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    _write_scenario(scenarios, _scenario_data(id="guard", status="guard"))
+    _patch_bench_run(monkeypatch, {"guard": "fail"})
+
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--update-baseline",
+            "--note",
+            "must not update",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "baseline not updated, gate is fail" in capsys.readouterr().out
+    assert not (scenarios / "baseline.json").exists()
+
+
+def test_compare_target_error_is_a_failure() -> None:
+    result = compare(_card({"target": _scenario("error")}), _card())
+
+    assert result.status == "fail"
+    assert result.failures == ["scenario target error"]
+
+
+def test_compare_removed_scenario_is_changed() -> None:
+    result = compare(_card(), _card({"removed": _scenario("pass")}))
+
+    assert result.status == "incomplete"
+    assert result.changed == ["scenario removed removed"]
+
+
+def test_bench_only_against_full_baseline_is_incomplete(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    _write_scenario(scenarios, _scenario_data(id="case-a"))
+    _write_scenario(scenarios, _scenario_data(id="case-b"))
+    (scenarios / "baseline.json").write_text(
+        json.dumps(
+            _card(
+                {
+                    "case-a": _scenario("pass"),
+                    "case-b": _scenario("pass"),
+                }
+            )
+        )
+    )
+    _patch_bench_run(monkeypatch)
+
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--only",
+            "case-a",
+            "--json",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert output["gate"]["status"] == "incomplete"
+    assert output["gate"]["incomplete"] == ["scenario case-b not run"]
+    assert output["gate"]["changed"] == []
+
+
+def test_bench_accepts_changed_passing_check_for_baseline_update(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    _write_scenario(
+        scenarios,
+        _scenario_data(
+            id="case",
+            expect={"fire": [{"rule": "sc_deployed", "laps": [4, 5]}]},
+        ),
+    )
+    (scenarios / "baseline.json").write_text(
+        json.dumps(
+            _card(
+                {
+                    "case": _scenario(
+                        "pass",
+                        checks=[_check(laps=(3, 4))],
+                    )
+                }
+            )
+        )
+    )
+    _patch_bench_run(monkeypatch)
+
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--update-baseline",
+            "--note",
+            "accept changed check",
+            "--json",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    changed = ["passing check removed or changed in case: fire sc_deployed laps 3-4"]
+    assert exit_code == 2
+    assert output["gate"]["status"] == "incomplete"
+    assert output["gate"]["changed"] == changed
+    assert output["gate"]["accepted_changes"] == changed
+    baseline = json.loads((scenarios / "baseline.json").read_text())
+    assert baseline["scenarios"]["case"]["checks"][0]["laps"] == [4, 5]
+
+
+def test_scorecard_accuracy_deduplicates_session_call_pairs() -> None:
+    card = build_scorecard(
+        {},
+        [
+            {"session_uid": 7, "call_id": "call-1", "label": "good", "rule_id": "pit"},
+            {"session_uid": 7, "call_id": "call-1", "label": "wrong", "rule_id": "pit"},
+            {"session_uid": 8, "call_id": "call-1", "label": "wrong", "rule_id": "pit"},
+        ],
+    )
+
+    assert card["metrics"]["real_graded"] == 2
+    assert card["metrics"]["real_good"] == 1
+    assert card["metrics"]["real_accuracy"] == 0.5
+    assert card["metrics"]["by_rule"] == {"pit": {"good": 1, "wrong": 1}}
+
+
 def test_compare_lists_improvements() -> None:
     baseline = _card(
         {"case": _scenario("fail")},
@@ -352,6 +540,14 @@ def test_compare_lists_improvements() -> None:
 )
 def test_trend_verdicts(entries: list[dict[str, Any]], window: int, expected: str) -> None:
     assert trend(entries, window) == expected
+
+
+def test_trend_ignores_outlier_before_recent_window() -> None:
+    entries = [{"score": 100, "targets_passed": 1}] + [
+        {"score": 50, "targets_passed": 1} for _ in range(5)
+    ]
+
+    assert trend(entries, window=5) == "stagnant"
 
 
 def test_ops_from_options_errors() -> None:

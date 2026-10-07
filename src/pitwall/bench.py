@@ -6,8 +6,8 @@ import hashlib
 import math
 import tempfile
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -52,6 +52,7 @@ class GateResult:
     failures: list[str]
     incomplete: list[str]
     improvements: list[str]
+    changed: list[str] = field(default_factory=list)
 
 
 def _mapping(value: object, path: Path, name: str) -> Mapping[str, Any]:
@@ -368,6 +369,7 @@ def _real_metrics(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     by_rule: dict[str, dict[str, int]] = defaultdict(lambda: {"good": 0, "wrong": 0})
     stop_errors: list[float] = []
     pace_errors: list[float] = []
+    seen_call_outcomes: set[tuple[object, str]] = set()
     for outcome in outcomes:
         label = str(outcome.get("label") or "")
         call_id = str(outcome.get("call_id") or "")
@@ -384,6 +386,10 @@ def _real_metrics(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             or metric in _AUTO_SKIP_METRICS
         ):
             continue
+        key = (outcome.get("session_uid"), call_id)
+        if key in seen_call_outcomes:
+            continue
+        seen_call_outcomes.add(key)
         good += label == "good"
         wrong += label == "wrong"
         by_rule[str(outcome.get("rule_id") or "")][label] += 1
@@ -470,21 +476,38 @@ def compare(
     current: Mapping[str, Any],
     baseline: Mapping[str, Any] | None,
     tolerance: float = 0.02,
+    scenario_ids: Collection[str] | None = None,
 ) -> GateResult:
-    if baseline is None:
-        return GateResult("pass", [], [], ["no baseline"])
-
     failures: list[str] = []
     incomplete: set[str] = set()
+    changed: set[str] = set()
     improvements: list[str] = []
     current_scenarios = _scenario_map(current)
-    baseline_scenarios = _scenario_map(baseline)
+    baseline_scenarios = _scenario_map(baseline) if baseline is not None else {}
     for scenario_id, scenario in current_scenarios.items():
         result = scenario.get("result")
-        if scenario.get("status") == "guard" and result in ("fail", "error"):
-            failures.append(f"guard scenario {scenario_id} {result}")
-        if scenario.get("status") == "guard" and result == "skipped":
+        is_guard = scenario.get("status") == "guard"
+        if result == "error":
+            prefix = "guard " if is_guard else ""
+            failures.append(f"{prefix}scenario {scenario_id} error")
+        elif is_guard and result == "fail":
+            failures.append(f"guard scenario {scenario_id} fail")
+        if is_guard and result == "skipped":
             incomplete.add(f"guard scenario {scenario_id} skipped")
+    if baseline is None:
+        no_baseline_status: Literal["pass", "fail", "incomplete"] = (
+            "fail" if failures else "incomplete" if incomplete else "pass"
+        )
+        return GateResult(no_baseline_status, failures, sorted(incomplete), ["no baseline"])
+
+    for scenario_id in sorted(set(baseline_scenarios) - set(current_scenarios)):
+        if scenario_ids is not None and scenario_id in scenario_ids:
+            incomplete.add(f"scenario {scenario_id} not run")
+        else:
+            changed.add(f"scenario {scenario_id} removed")
+
+    for scenario_id, scenario in current_scenarios.items():
+        result = scenario.get("result")
         old = baseline_scenarios.get(scenario_id)
         if not isinstance(old, Mapping):
             continue
@@ -498,11 +521,23 @@ def compare(
             for check in old.get("checks", [])
             if isinstance(check, Mapping)
         }
+        current_checks = {
+            _check_signature(check)
+            for check in scenario.get("checks", [])
+            if isinstance(check, Mapping)
+        }
+        for signature, previous in old_checks.items():
+            if previous.get("ok") and signature not in current_checks:
+                changed.add(
+                    f"passing check removed or changed in {scenario_id}: "
+                    f"{signature[0]} {','.join(signature[1])} "
+                    f"laps {signature[2][0]}-{signature[2][-1]}"
+                )
         for check in scenario.get("checks", []):
             if not isinstance(check, Mapping):
                 continue
-            previous = old_checks.get(_check_signature(check))
-            if previous is not None and previous.get("ok") and not check.get("ok"):
+            old_check = old_checks.get(_check_signature(check))
+            if old_check is not None and old_check.get("ok") and not check.get("ok"):
                 signature = _check_signature(check)
                 failures.append(
                     f"check regressed in {scenario_id}: {signature[0]} {list(signature[1])} "
@@ -592,9 +627,9 @@ def compare(
                 f"({current_value - baseline_value:+.3f})"
             )
     status: Literal["pass", "fail", "incomplete"] = (
-        "fail" if failures else "incomplete" if incomplete else "pass"
+        "fail" if failures else "incomplete" if incomplete or changed else "pass"
     )
-    return GateResult(status, failures, sorted(incomplete), improvements)
+    return GateResult(status, failures, sorted(incomplete), improvements, sorted(changed))
 
 
 def trend(entries: Sequence[Mapping[str, Any]], window: int = 5) -> str:
@@ -603,8 +638,8 @@ def trend(entries: Sequence[Mapping[str, Any]], window: int = 5) -> str:
     if len(entries) < 2:
         return "not enough history"
     latest_score = float(entries[-1]["score"])
-    previous = entries[max(0, len(entries) - 1 - window) : -1]
-    if latest_score < max(float(entry["score"]) for entry in previous) - 0.5:
+    previous = entries[-window:-1]
+    if previous and latest_score < max(float(entry["score"]) for entry in previous) - 0.5:
         return "degrading"
     recent = entries[-window:]
     recent_scores = [float(entry["score"]) for entry in recent]

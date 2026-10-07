@@ -279,6 +279,7 @@ class Engine:
         dispatcher: Dispatcher,
         learning_pack_dir: Path | None = None,
         learning_pack_keep_days: int = 30,
+        synthetic_source: bool = False,
     ) -> None:
         self.store = store
         settings = store.current()
@@ -286,6 +287,7 @@ class Engine:
         self.clock = clock
         self.ingest = ingest
         self.state = state
+        self.synthetic_source = synthetic_source
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
         self.learning_pack_dir = learning_pack_dir
@@ -710,6 +712,10 @@ class Engine:
     def _update_setup_stop_wing(self) -> None:
         self.setup_advisor.update_stop_wing(self.pit_plan.plan in _STOP_PLANS)
 
+    def _synthetic_session(self, uid: int | None = None) -> bool:
+        session_uid = self.state.session_uid if uid is None else uid
+        return self.synthetic_source or (session_uid is not None and is_synthetic_uid(session_uid))
+
     def _reset_energy_lap_tracking(self) -> None:
         self._energy_lap_tracker.reset()
         self.energy_prev_lap = None
@@ -738,7 +744,7 @@ class Engine:
                 else "on"
             ),
             parc_ferme=snap.parc_ferme if snap.parc_ferme >= 0 else None,
-            synthetic=is_synthetic_uid(uid),
+            synthetic=self._synthetic_session(uid),
         )
         self._parc_ferme_written = snap.parc_ferme if snap.parc_ferme >= 0 else None
 
@@ -903,7 +909,7 @@ class Engine:
                         pit.ref_pace_ms,
                     )
                     suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    if track_id >= 0 and not is_synthetic_uid(uid):
+                    if track_id >= 0 and not self._synthetic_session(uid):
                         db.fold_param(
                             track_id,
                             0,
@@ -918,7 +924,7 @@ class Engine:
                 delta = self._fuel_last_kg - lap.fuel_kg
                 if (
                     track_id >= 0
-                    and not is_synthetic_uid(uid)
+                    and not self._synthetic_session(uid)
                     and self._th("fuel_delta_min_kg", 0) < delta < self._th("fuel_delta_max_kg", 10)
                 ):
                     db.fold_param(
@@ -1113,7 +1119,7 @@ class Engine:
         if (
             self.db is None
             or track_id < 0
-            or (self.state.session_uid is not None and is_synthetic_uid(self.state.session_uid))
+            or self._synthetic_session()
             or not fit_is_clean(
                 fit,
                 deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
@@ -1617,11 +1623,7 @@ class Engine:
                 "result": ep.result,
             }
         )
-        if (
-            self.db is None
-            or snap.track_id < 0
-            or (self.state.session_uid is not None and is_synthetic_uid(self.state.session_uid))
-        ):
+        if self.db is None or snap.track_id < 0 or self._synthetic_session():
             return
         name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
         cap = self._th("param_weight_cap", 50.0)
@@ -1873,6 +1875,7 @@ def build_engine(
     overrides: dict[str, Any] | None = None,
     rules_dir: Path | None = None,
     isolated: bool = False,
+    synthetic: bool = False,
     decision_log_path: Path | None = None,
     decision_log_fp: Any = None,
     sinks: list[CallSink] | None = None,
@@ -1941,6 +1944,7 @@ def build_engine(
         dispatcher,
         learning_pack_dir=learning_pack_dir,
         learning_pack_keep_days=learning_pack_keep_days,
+        synthetic_source=synthetic,
     )
     engine.session_origin_started_at = session_started_at
     return engine

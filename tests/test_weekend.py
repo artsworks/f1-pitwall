@@ -80,6 +80,7 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
             )
         ),
         session_uid=race_uid,
+        metadata={"synthetic": False},
     )
     with RecordingReader(race) as reader:
         started_at = reader.header.wall_clock_start_us / 1_000_000
@@ -167,6 +168,7 @@ def test_open_final_stint_folds_once_at_session_end(tmp_path) -> None:
             )
         ),
         session_uid=uid,
+        metadata={"synthetic": False},
     )
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
 

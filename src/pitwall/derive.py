@@ -21,6 +21,7 @@ from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_ID_OFFSET,
     PACKET_SIZES,
+    PACKET_VERSION_OFFSET,
     PLAYER_CAR_INDEX_OFFSET,
     SESSION_UID_OFFSET,
     PacketHeader,
@@ -52,6 +53,7 @@ def is_synthetic_uid(uid: int) -> bool:
 @dataclass(slots=True)
 class DeriveContext:
     player_lap: int | None = None
+    last_session: bytes | None = None
     safety_events: dict[tuple[int, int, bool], set[str]] = field(default_factory=dict)
     penalty_emitted: set[int] = field(default_factory=set)
     penalty_seconds: dict[int, int] = field(default_factory=dict)
@@ -171,8 +173,11 @@ class InjectSafetyCar:
             or len(payload) != PACKET_SIZES[header.packet_id]
         ):
             return [payload]
+        if header.packet_id == PacketId.SESSION:
+            ctx.last_session = payload
         rewritten = bytearray(payload)
         extra: list[bytes] = []
+        session_copy: bytes | None = None
         status = ctx.safety_events.setdefault((self.start_lap, self.end_lap, self.vsc), set())
         if ctx.player_lap is not None and ctx.player_lap >= self.start_lap:
             if "deployed" not in status:
@@ -213,6 +218,17 @@ class InjectSafetyCar:
             header.packet_id == PacketId.LAP_DATA
             and len(payload) == PACKET_SIZES[PacketId.LAP_DATA]
         ):
+            if (
+                ctx.player_lap == self.end_lap + 1
+                and "green_session" not in status
+                and ctx.last_session is not None
+            ):
+                status.add("green_session")
+                session_header = bytearray(payload[:HEADER_SIZE])
+                session_header[PACKET_ID_OFFSET] = PacketId.SESSION
+                if session_header[PACKET_VERSION_OFFSET] != ctx.last_session[PACKET_VERSION_OFFSET]:
+                    session_header[PACKET_VERSION_OFFSET] = ctx.last_session[PACKET_VERSION_OFFSET]
+                session_copy = bytes(session_header) + ctx.last_session[HEADER_SIZE:]
             for car in range(_NUM_CARS):
                 lap_offset = car_field_offset(PacketId.LAP_DATA, car, "current_lap_num")
                 current_lap = (
@@ -228,6 +244,8 @@ class InjectSafetyCar:
                 if lap_time:
                     scaled = round(lap_time * self.lap_time_factor)
                     struct.pack_into("<I", rewritten, time_offset, min(0xFFFF_FFFF, scaled))
+        if session_copy is not None:
+            return [session_copy, bytes(rewritten), *extra]
         return [bytes(rewritten), *extra]
 
 
@@ -330,8 +348,11 @@ class DerivedRecordingSummary:
 def derive_recording(src: Path, out: Path, ops: Sequence[MutationOp]) -> DerivedRecordingSummary:
     source = Path(src)
     destination = Path(out)
-    destination.parent.mkdir(parents=True, exist_ok=True)
     write_path = destination.with_suffix("") if destination.suffix == ".zst" else destination
+    source_resolved = source.resolve()
+    if destination.resolve() == source_resolved or write_path.resolve() == source_resolved:
+        raise ValueError(f"{source}: output path resolves to the source recording")
+    destination.parent.mkdir(parents=True, exist_ok=True)
     with RecordingReader(source) as reader:
         source_header = reader.header
         source_uid = source_header.session_uid
