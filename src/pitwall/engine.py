@@ -1637,6 +1637,26 @@ class Engine:
         )
         self._battle_rates = None
 
+    def _end_session(self, uid: int, now: float) -> None:
+        assert self.db is not None
+        self.fold_open_stint()
+        self._store_debrief_setup(uid)
+        self._session_ended_written = True
+        self.db.end_session(uid, now)
+        grade_and_store(self.db, uid, self.store.current().thresholds)
+        self.db.mark_graded(uid)
+
+    def close_session(self, now: float) -> bool:
+        """Close the open session on shutdown, as the game's session end does.
+
+        False when there is none.
+        """
+        uid = self.state.session_uid
+        if self.db is None or uid is None or self._session_ended_written:
+            return False
+        self._end_session(uid, now)
+        return True
+
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         self.setup_advisor.refresh_rules(self.store.current().setup_rules)
@@ -1663,12 +1683,7 @@ class Engine:
             and self.db is not None
             and uid is not None
         ):
-            self.fold_open_stint()
-            self._store_debrief_setup(uid)
-            self._session_ended_written = True
-            self.db.end_session(uid, now)
-            grade_and_store(self.db, uid, self.store.current().thresholds)
-            self.db.mark_graded(uid)
+            self._end_session(uid, now)
             if self.learning_pack_dir is not None:
                 from pitwall.learnpack import write_pack
 
