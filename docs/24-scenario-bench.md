@@ -74,7 +74,7 @@ Otherwise the gate passes with exit code 0 and lists the improvements.
 
 Without a baseline, the gate still checks rules 1 and 7 and skipped guards.
 
-`pitwall bench --update-baseline --note "..."` writes a new baseline and adds one line to the history. It refuses if the gate fails, or if a scenario was skipped or did not run. It accepts `changed` items and lists them as `accepted`. Run it with `changed` items only after Arthur approves the new expectations.
+`pitwall bench --update-baseline --note "..."` writes a new baseline and adds one line to the history. It refuses if the gate fails, if a scenario was skipped or did not run, or if the gate lists `changed` items. To save `changed` items, add `--accept-changes`. The output then lists them as `accepted`. Use `--accept-changes` only after the repo owner approves the new expectations.
 
 ## Trend
 
@@ -94,7 +94,7 @@ When the trend is stagnant, add new targets or new real recordings. Do not keep 
 3. Write the scenario file. Write the expectations from race logic, not from the calls pitwall makes today.
 4. Run `pitwall bench --only <id> --recordings <dir>`. Read the failed checks and the laps where the rules fired.
 5. If pitwall fails the scenario, set `status: target`. Set `status: guard` only if pitwall passes it and the expectations are correct.
-6. Open a PR with the scenario file only. Arthur approves the expectations before anyone changes rules against the scenario.
+6. Open a PR with the scenario file only. The repo owner approves the expectations before anyone changes rules against the scenario.
 
 ## Improve pitwall against a target
 
@@ -108,9 +108,9 @@ When the trend is stagnant, add new targets or new real recordings. Do not keep 
 
 ## Rules for agents
 
-- Do not edit the `expect` block of a scenario to make it pass. Changes to `expect` need Arthur's approval.
+- Do not edit the `expect` block of a scenario to make it pass. Changes to `expect` need approval from the repo owner.
 - Do not change a guard to a target.
-- If the gate lists `changed` items, stop. Do not update the baseline until Arthur approves the expectation change.
+- If the gate lists `changed` items, stop. Do not use `--accept-changes` until the repo owner approves the expectation change.
 - Do not edit `baseline.json` or `history.jsonl` by hand.
 - Do not commit recordings, indexes or databases.
 - Work on one target in each PR.

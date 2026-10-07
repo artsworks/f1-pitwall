@@ -660,6 +660,9 @@ def cmd_bench(args: argparse.Namespace) -> int:
     )
 
     scenarios_dir = Path(args.scenarios).expanduser()
+    if args.accept_changes and not args.update_baseline:
+        print("bench: --accept-changes requires --update-baseline")
+        return 1
     if args.trend:
         return _bench_history(scenarios_dir, args.window)
     if args.update_baseline and args.note is None:
@@ -708,8 +711,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
         print(f"bench: {exc}")
         return 1
 
-    update_allowed = gate.status == "pass" or (
-        not gate.failures and not gate.incomplete and bool(gate.changed)
+    update_allowed = (
+        not gate.failures and not gate.incomplete and (not gate.changed or args.accept_changes)
     )
     gate_data = {
         "status": gate.status,
@@ -779,7 +782,18 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
     if args.update_baseline:
         if not update_allowed:
-            print(f"bench: baseline not updated, gate is {gate.status}")
+            if (
+                gate.changed
+                and not args.accept_changes
+                and not gate.failures
+                and not gate.incomplete
+            ):
+                print(
+                    "bench: baseline not updated, changed items need --accept-changes "
+                    "after the expectation change is approved"
+                )
+            else:
+                print(f"bench: baseline not updated, gate is {gate.status}")
         else:
             try:
                 baseline_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1775,6 +1789,11 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--baseline", type=Path, default=None, help="baseline scorecard path")
     bench.add_argument("--tolerance", type=float, default=0.02)
     bench.add_argument("--update-baseline", action="store_true")
+    bench.add_argument(
+        "--accept-changes",
+        action="store_true",
+        help="with --update-baseline, accept removed or edited passing checks",
+    )
     bench.add_argument("--note", default=None, help="note for a baseline update")
     bench.add_argument("--out", type=Path, default=None, help="write scorecard JSON")
     bench.add_argument("--json", action="store_true", help="print scorecard and gate as JSON")

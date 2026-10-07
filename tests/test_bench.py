@@ -453,6 +453,7 @@ def test_bench_accepts_changed_passing_check_for_baseline_update(
             "--recordings",
             str(recordings),
             "--update-baseline",
+            "--accept-changes",
             "--note",
             "accept changed check",
             "--json",
@@ -467,6 +468,79 @@ def test_bench_accepts_changed_passing_check_for_baseline_update(
     assert output["gate"]["accepted_changes"] == changed
     baseline = json.loads((scenarios / "baseline.json").read_text())
     assert baseline["scenarios"]["case"]["checks"][0]["laps"] == [4, 5]
+
+
+def test_bench_update_baseline_refuses_changed_without_accept(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    _write_scenario(
+        scenarios,
+        _scenario_data(
+            id="case",
+            expect={"fire": [{"rule": "sc_deployed", "laps": [4, 5]}]},
+        ),
+    )
+    (scenarios / "baseline.json").write_text(
+        json.dumps(
+            _card(
+                {
+                    "case": _scenario(
+                        "pass",
+                        checks=[_check(laps=(3, 4))],
+                    )
+                }
+            )
+        )
+    )
+    _patch_bench_run(monkeypatch)
+
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--update-baseline",
+            "--note",
+            "reject changed check",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr().out
+    json_output, refusal = captured.split("\nbench:", maxsplit=1)
+    output = json.loads(json_output)
+    changed = ["passing check removed or changed in case: fire sc_deployed laps 3-4"]
+    assert exit_code == 2
+    assert output["gate"]["changed"] == changed
+    assert output["gate"]["accepted_changes"] == []
+    assert "bench:" + refusal == (
+        "bench: baseline not updated, changed items need --accept-changes "
+        "after the expectation change is approved\n"
+    )
+    baseline = json.loads((scenarios / "baseline.json").read_text())
+    assert baseline["scenarios"]["case"]["checks"][0]["laps"] == [3, 4]
+    assert not (scenarios / "history.jsonl").exists()
+
+
+def test_bench_accept_changes_requires_update_baseline(tmp_path: Path, capsys) -> None:
+    scenarios = tmp_path / "scenarios"
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--accept-changes",
+        ]
+    )
+
+    assert exit_code == 1
+    assert capsys.readouterr().out.strip() == ("bench: --accept-changes requires --update-baseline")
 
 
 def test_scorecard_accuracy_deduplicates_session_call_pairs() -> None:
