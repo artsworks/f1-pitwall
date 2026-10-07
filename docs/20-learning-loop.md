@@ -100,6 +100,10 @@ for review and does not change active settings. `pitwall calibrate` and `pitwall
 run the same steps as upkeep on demand. `pitwall tune` also folds A/B results from
 `pitwall diff`.
 
+`pitwall propose` also reports menu questions that recur before a related rule fires.
+Each candidate includes median snapshot signals at the ask and current rule thresholds.
+Review these candidates before changing a rule. Proposals never write YAML.
+
 ## After a race
 
 No command is required. Pitwall grades the session when it ends. On the next start,

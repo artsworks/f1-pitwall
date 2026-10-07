@@ -435,6 +435,16 @@ def cmd_propose(args: argparse.Namespace) -> int:
         print(f"propose: review {args.out} before editing YAML")
     else:
         print(output)
+    for candidate in result.get("question_candidates", []):
+        print(
+            f"question candidate {candidate['label']} ({candidate['item_id']}): "
+            f"{candidate['uncovered']} uncovered asks across {candidate['sessions']} sessions"
+        )
+        print(f"  median signals at ask: {json.dumps(candidate['at_ask'], sort_keys=True)}")
+        for rule in candidate["rules"]:
+            print(
+                f"  {rule['rule_id']} thresholds: {json.dumps(rule['thresholds'], sort_keys=True)}"
+            )
     return 0
 
 

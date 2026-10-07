@@ -48,7 +48,7 @@ from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
-from pitwall.rules.expr import namespace_data
+from pitwall.rules.expr import expr_names, namespace_data
 from pitwall.setup.advisor import SetupAdvisor
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
@@ -307,6 +307,7 @@ class Engine:
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
+        self._menu_signal_names: dict[str, frozenset[str]] = {}
         self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
@@ -576,7 +577,7 @@ class Engine:
         outcome: str,
         item: MenuItemModel | None,
         text: str,
-        inputs: dict[str, str] | None = None,
+        inputs: dict[str, Any] | None = None,
     ) -> None:
         self.dispatcher.log.write(
             {
@@ -605,13 +606,41 @@ class Engine:
         if item is not None:
             self._menu_answer(item, t, snapshot, "menu")
 
+    def _menu_signal_values(
+        self, item: MenuItemModel, snapshot: Snapshot
+    ) -> dict[str, int | float]:
+        names = self._menu_signal_names.get(item.id)
+        if names is None:
+            rules = {rule.id: rule for rule in self.store.current().rules}
+            names = frozenset(
+                name
+                for rule_id in item.related_rules
+                if (rule := rules.get(rule_id)) is not None
+                for name in expr_names(rule.when)
+            )
+            self._menu_signal_names[item.id] = names
+        signals: dict[str, int | float] = {}
+        for name in names:
+            if not hasattr(snapshot, name):
+                continue
+            value = getattr(snapshot, name)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                continue
+            if isinstance(value, float) and not math.isfinite(value):
+                continue
+            signals[name] = round(value, 3)
+        return signals
+
     def _menu_answer(self, item: MenuItemModel, t: float, snapshot: Snapshot, via: str) -> None:
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
         if item.action == "budget":
             values["budget"] = str(self.cycle_budget())
         text = self._menu_replies.pick(item, case, values)
-        self._menu_log(t, snap, "driver_input", item, text, {"case": case, "via": via, **values})
+        inputs: dict[str, Any] = {"case": case, "via": via, **values}
+        if item.kind == "question" and item.related_rules:
+            inputs["signals"] = self._menu_signal_values(item, snap)
+        self._menu_log(t, snap, "driver_input", item, text, inputs)
         if item.kind == "opinion" and item.topic:
             self.opinions[item.topic] = (item.id, snapshot.lap_num)
         if item.action == "mindset":

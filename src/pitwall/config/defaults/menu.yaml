@@ -19,6 +19,19 @@ menu:
     - id: tyres
       label: "Tyres gone?"
       rank_when: "laps_of_pace < 4 or wear_max_pct >= 55 or tyre_switch_to != ''"
+      related_rules:
+        - tyre_life
+        - tyre_overheat
+        - tyre_overheat_wet
+        - tyre_switch
+        - tyre_graining
+        - tyre_blister
+        - wear_front_left
+        - wear_front_right
+        - wear_rear_left
+        - wear_rear_right
+        - wear_fronts
+        - wear_rears
       replies:
         switch: ["Field says {to}. Box for {to}.", "{to} are quicker now. Box, box."]
         gone: ["Yes, they're done. Worst one {wear} percent.", "They're gone. Box when you can."]
@@ -29,6 +42,13 @@ menu:
       label: "Pit now?"
       show_when: "session_kind == 'race'"
       rank_when: "pit_window_start > 0 and pit_window_start <= lap_num <= pit_window_end"
+      related_rules:
+        - plan_window_open
+        - plan_target_lap
+        - box_now
+        - box_in_n
+        - overcut_stay_out
+        - plan_sc_box
       replies:
         box_now: ["Yes, box this lap. {reason}.", "Box, box. {reason}."]
         soon:
@@ -48,6 +68,22 @@ menu:
     - id: fight
       label: "Fight"
       rank_when: "battle_mode in ('attacking', 'defending')"
+      related_rules:
+        - overtake_mode
+        - drs_attack
+        - battle_catching
+        - battle_attack
+        - battle_patience
+        - battle_defend
+        - battle_under_threat
+        - battle_manage
+        - battle_passed
+        - battle_held
+        - battle_lost
+        - battle_swap_ahead
+        - battle_swap_behind
+        - battle_scrap
+        - teammate_fight
       replies:
         both: ["{ahead} {behind}"]
         ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind."]
@@ -59,6 +95,10 @@ menu:
       label: "Rain coming?"
       show_when: "rain_pct_in_30 > 0 or weather_crossover != '' or weather_now >= 3"
       rank_when: "tyre_switch_to != '' or (weather_crossover != '' and not ((weather_crossover == 'to_inter' and tyre_compound == 7) or (weather_crossover == 'to_wet' and tyre_compound == 8)))"
+      related_rules:
+        - weather_to_inter
+        - weather_to_wet
+        - weather_to_dry
       replies:
         switch: ["Box for {to}. The field's quicker on them.", "{to} are the tyre now. Box this lap."]
         right_tyre: ["You're on the right tyre. Stay out.", "{tyre} are right. Stay out, we'll call it."]
@@ -69,6 +109,19 @@ menu:
     - id: push
       label: "Push or save?"
       show_when: "session_kind == 'race'"
+      related_rules:
+        - fuel_short
+        - fuel_marginal
+        - fuel_spare
+        - energy_over
+        - energy_under
+        - boost_left_on
+        - ers_fault
+        - plan_push
+        - plan_push_now
+        - plan_cool
+        - cool_recharge
+        - cool_recharge_check
       replies:
         save_fuel: ["Save fuel. Short {margin} laps.", "Save. Lift and coast."]
         save_energy: ["Save battery. Harvest this lap.", "Save energy, you're over."]

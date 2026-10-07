@@ -131,7 +131,9 @@ def test_confirm_answers_from_snapshot_and_skips_ack(tmp_path: Path) -> None:
     assert rec["rule_id"] == "menu:pit" and not engine.menu.open
     menu = engine.store.current().menu
     pit = next(i for i in menu.items if i.id == "pit")
-    case = str(dict(rec["inputs"])["case"])  # type: ignore[call-overload]
+    inputs = dict(rec["inputs"])  # type: ignore[call-overload]
+    assert "lap_num" in dict(inputs["signals"])  # type: ignore[arg-type]
+    case = str(inputs["case"])
     assert case in pit.replies
     reply = next(c for c in calls if c.rule_id == "menu:pit")
     assert reply.priority == 1 and "menu_answer" in reply.tags and reply.text == rec["text"]
