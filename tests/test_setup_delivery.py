@@ -15,7 +15,7 @@ from pitwall.setup.evaluate import Recommendation, evaluate
 from pitwall.setup.rules import parse_setup_rules
 from pitwall.setup.signals import RunSignals, session_signals
 from pitwall.state.lap import LapSummary
-from pitwall.state.session import Snapshot
+from pitwall.state.session import SetupChange, Snapshot
 from pitwall.store.db import Database
 from pitwall.strategy.pitwindow import NO_PLAN
 
@@ -228,6 +228,117 @@ def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
     engine._update_setup_stop_wing()
     assert engine._setup_stop_wing_to == 0.0
 
+    for plan in ("no_stop", "stay"):
+        engine.pit_plan = replace(NO_PLAN, plan=plan)
+        engine._update_setup_stop_wing()
+        assert engine._setup_stop_wing_to == 0.0, plan
+    engine.pit_plan = replace(NO_PLAN, plan="box_in_n")
+    engine._update_setup_stop_wing()
+    assert engine._setup_stop_wing_to == 11.0
+
+
+def test_session_signals_keep_events_inside_the_selected_run() -> None:
+    settings = ConfigStore().current()
+    db = Database(":memory:")
+    uid = 110
+    fields = {"brake_bias": 56.0, "front_wing": 10.0}
+    state_id = db.setup_state_id(f"sha1:{uid}", fields)
+    db.upsert_session(uid, track_id=7, session_type=1, parc_ferme=1)
+    lap_num = 0
+    for compound, lockups_rear in ((18, 2), (16, 0)):
+        for age in range(1, 4):
+            lap_num += 1
+            db.insert_lap(
+                uid,
+                0,
+                LapSummary(
+                    lap_num=lap_num,
+                    lap_time_ms=90_000,
+                    sector1_ms=30_000,
+                    sector2_ms=30_000,
+                    compound=compound,
+                    tyre_age_laps=age,
+                    fuel_remaining_laps_at_end=2.0,
+                    valid=True,
+                    lockups_rear=lockups_rear,
+                ),
+                setup_state_id=state_id,
+            )
+
+    latest = session_signals(db, uid, settings.thresholds)
+    assert latest is not None
+    assert latest.setup_state_id == state_id
+    assert latest.compound == 16
+    assert latest.run_laps == latest.event_laps == 3
+    assert latest.run_end_lap == 6
+    assert latest.lockups_rear == 0
+    assert latest.lockups_rear_per10 == 0.0
+
+
+def _engine_with_setup_change(uid: int, session_type: int, lockups_rear: int) -> Any:
+    db = Database(":memory:")
+    _, fields = _seed_session(db, uid, session_type=session_type, lockups_rear=lockups_rear)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.session_uid = uid
+    engine.state.session_type = session_type
+    engine.state.track_id = 7
+    engine.state.lap_num = 3
+    engine.state.parc_ferme_rules = 1
+    engine.state.setup = fields | {"brake_bias": 57.0}
+    engine.state.setup_advice = (_recommendation(),)
+    engine.state.setup_changes.append(
+        SetupChange(
+            session_time=300.0,
+            lap_num=3,
+            from_hash=f"sha1:{uid}",
+            to_hash=f"sha1:{uid}:changed",
+            fields=engine.state.setup,
+        )
+    )
+    return engine
+
+
+def test_garage_setup_change_drops_stale_advice_without_a_new_lap() -> None:
+    engine = _engine_with_setup_change(111, session_type=1, lockups_rear=2)
+    engine._write_laps()
+    assert engine.state.setup_advice == ()
+    assert len(engine.db.setup_changes_for_session(111)) == 1
+
+
+def test_race_setup_change_refreshes_advice_without_a_new_lap() -> None:
+    engine = _engine_with_setup_change(112, session_type=15, lockups_rear=2)
+    engine._write_laps()
+    assert engine.state.setup_advice
+    assert all(rec.mode in ("race", "race_stop") for rec in engine.state.setup_advice)
+
+
+def test_new_session_resets_parc_ferme_written() -> None:
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=Database(":memory:"),
+        decision_log_fp=io.StringIO(),
+    )
+    engine._parc_ferme_written = 1
+    engine._on_new_session(113)
+    assert engine._parc_ferme_written is None
+
+
+def test_delete_setup_changes_after_rewind_time() -> None:
+    db = Database(":memory:")
+    uid = 114
+    state_a = db.setup_state_id(f"sha1:{uid}:a", {"brake_bias": 56.0})
+    state_b = db.setup_state_id(f"sha1:{uid}:b", {"brake_bias": 55.0})
+    db.insert_setup_change(uid, 1, 10.0, None, state_a)
+    db.insert_setup_change(uid, 3, 200.0, state_a, state_b)
+    db.delete_setup_changes_after(uid, 150.0)
+    assert [row["to_state"] for row in db.setup_changes_for_session(uid)] == [state_a]
+
 
 def test_pit_board_payload_includes_advice_locked_fields_and_checklist() -> None:
     from pitwall.server.app import pit_board_payload
@@ -407,6 +518,15 @@ def test_post_session_advice_uses_longest_run_setup_state(tmp_path: Path, capsys
     )
     assert stored["from_value"] == 56.0
     assert stored["setup_state_id"] == state_a
+    assert stored["lap"] == 9
+
+    assert main(["setup", str(uid), "--mode", "debrief", "--store", "--db", str(db_path)]) == 0
+    cli_stored = [
+        rec
+        for rec in db.setup_recs_for_session(uid)
+        if rec["mode"] == "debrief" and rec["param"] == "brake_bias"
+    ]
+    assert cli_stored and all(rec["lap"] == 9 for rec in cli_stored)
 
 
 def test_session_end_stores_debrief_setup_recommendations() -> None:

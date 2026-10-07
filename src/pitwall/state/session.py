@@ -779,6 +779,12 @@ class SessionState:
         self.setup_hash = ""
         self.setup_advice: tuple[Recommendation, ...] = ()
         self._pending_setup: tuple[str, dict[str, Any], float, int] | None = None
+        # (session_time, hash) of each settled setup state, so a flashback can
+        # restore the hash in force at the rewound time.
+        self._setup_history: list[tuple[float, str]] = []
+        # Session time of the last flashback that undid setup changes; the
+        # Engine drops persisted changes after it and clears the marker.
+        self.setup_rewind_t: float | None = None
         self.next_front_wing_value = 0.0
         self._pressure_base: Corners | None = None
         self.tyre_compound = 0
@@ -1034,6 +1040,16 @@ class SessionState:
             if self.saves.count != saves_before:
                 self.snap_phase = self.saves.last_phase
 
+    def _rewind_setup(self, t: float) -> None:
+        """Forget setup changes the flashback undid and restore the hash at t."""
+        self._pending_setup = None
+        if self.setup_changes and any(change.session_time > t for change in self.setup_changes):
+            self.setup_changes = [c for c in self.setup_changes if c.session_time <= t]
+        if self._setup_history and self._setup_history[-1][0] > t:
+            self._setup_history = [item for item in self._setup_history if item[0] <= t]
+            self.setup_hash = self._setup_history[-1][1] if self._setup_history else ""
+            self.setup_rewind_t = t
+
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
         self._last_rewind_t = t
@@ -1057,6 +1073,17 @@ class SessionState:
         self.traction.reset()
         self.spins.reset()
         self.saves.reset()
+        # Samples and events from the undone segment must not reach the lap
+        # summary. Detector counts are cumulative, so the bases move with them.
+        self.slip_balance.reset()
+        self._lap_event_bases.update(
+            traction_exits=self.traction.count,
+            lockups_front=self.lockups.count_front,
+            lockups_rear=self.lockups.count_rear,
+            snaps_entry=self.spins.count_entry + self.saves.count_entry,
+            snaps_exit=self.spins.count_exit + self.saves.count_exit,
+        )
+        self._rewind_setup(t)
         self.contacts.reset()
         self.off_track.reset()
         self.boost.reset()
@@ -1689,6 +1716,7 @@ class SessionState:
                     )
                 )
                 self.setup_hash = pending[0]
+                self._setup_history.append((pending[2], pending[0]))
                 self._pending_setup = None
         self.setup_tyre_pressure = Corners(
             car.rear_left_tyre_pressure,

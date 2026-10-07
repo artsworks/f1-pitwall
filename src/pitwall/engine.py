@@ -136,6 +136,9 @@ def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
 
 
 _NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
+# Pit plans that end in a stop. "stay" and "no_stop" are plans too, but the
+# wing change at the stop only makes sense when a stop is coming.
+_STOP_PLANS = frozenset({"box_now", "box_in_n", "cheap_stop", "free_stop", "undercut", "overcut"})
 
 
 def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
@@ -694,6 +697,7 @@ class Engine:
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self.session_origin_started_at = None
+        self._parc_ferme_written = None
         self._setup_session_uid = uid
         self._setup_call_last_lap.clear()
         self._clear_setup_call()
@@ -786,7 +790,7 @@ class Engine:
         )
         if (
             rec is None
-            or not self.pit_plan.plan
+            or self.pit_plan.plan not in _STOP_PLANS
             or math.isclose(self.state.next_front_wing_value, rec.to_value, abs_tol=1e-6)
         ):
             self._clear_setup_stop_wing()
@@ -881,7 +885,7 @@ class Engine:
                     rec,
                     track_id=self.state.track_id,
                     compound=signals.compound,
-                    lap=self.state.lap_num,
+                    lap=signals.run_end_lap,
                 )
             self.state.setup_advice = (*self.state.setup_advice, *recommendations)
         except Exception:
@@ -932,6 +936,10 @@ class Engine:
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
             self.db.set_session_parc_ferme(uid, parc_ferme)
             self._parc_ferme_written = parc_ferme
+        if self.state.setup_rewind_t is not None:
+            self.db.delete_setup_changes_after(uid, self.state.setup_rewind_t)
+            self.state.setup_rewind_t = None
+        setup_changed = bool(self.state.setup_changes)
         for change in self.state.setup_changes:
             to_id = self.db.setup_state_id(change.to_hash, change.fields)
             from_id = self.db.setup_state_id(change.from_hash) if change.from_hash else None
@@ -959,14 +967,21 @@ class Engine:
             self.db.set_session_total_laps(uid, self.state.total_laps)
         for lap in new_laps:
             self._on_player_lap(uid, lap)
-        if new_laps:
+        if new_laps or setup_changed:
             if uid != self._setup_session_uid:
                 self._setup_session_uid = uid
                 self._setup_call_last_lap.clear()
                 self._clear_setup_call()
                 self._clear_setup_stop_wing()
                 self.state.setup_advice = ()
-            self._evaluate_live_setup(uid)
+            if new_laps or 15 <= self.state.session_type <= 17:
+                self._evaluate_live_setup(uid)
+            else:
+                # Garage advice was built on the setup the driver just changed.
+                # Drop it until a lap on the new setup exists.
+                self.state.setup_advice = ()
+                self._clear_setup_call()
+                self._clear_setup_stop_wing()
 
     def _on_player_lap(self, uid: int, lap: LapSummary) -> None:
         """M3 persistence hooks (docs/18): refit the stint, measure pit loss

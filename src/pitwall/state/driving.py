@@ -467,9 +467,12 @@ class SlipBalance:
 
     def take(self) -> tuple[float, int]:
         result = (self.mean_deg(), self._samples)
+        self.reset()
+        return result
+
+    def reset(self) -> None:
         self._sum = 0.0
         self._samples = 0
-        return result
 
     def mean_deg(self) -> float:
         return self._sum / self._samples if self._samples else 0.0

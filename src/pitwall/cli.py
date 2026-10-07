@@ -322,7 +322,6 @@ def cmd_setup(args: argparse.Namespace) -> int:
     from pitwall.setup.learn import learned_gains
     from pitwall.setup.rules import parse_setup_rules
     from pitwall.setup.signals import session_signals
-    from pitwall.setup.states import runs_for_session
     from pitwall.store.db import Database, open_configured
 
     settings = ConfigStore().current()
@@ -364,13 +363,12 @@ def cmd_setup(args: argparse.Namespace) -> int:
         learned=learned_gains(db, signals.track_id, signals.compound),
     )
     if args.store:
-        run = runs_for_session(db, uid)[-1]
         for recommendation in recommendations:
             db.insert_setup_rec(
                 recommendation,
                 track_id=signals.track_id,
                 compound=signals.compound,
-                lap=run.end_lap,
+                lap=signals.run_end_lap,
             )
 
     if args.json:

@@ -32,6 +32,7 @@ class RunSignals:
     z_front: float | None
     z_rear: float | None
     slip_raw: float | None = None
+    run_end_lap: int = 0
     lap_slope_ms: float | None = None
     wear_front_slope: float | None = None
     wear_rear_slope: float | None = None
@@ -200,6 +201,7 @@ def signals_for_run(
         z_front=_z_score(run_laps, "tyre_inner_front_c", compound, thresholds),
         z_rear=_z_score(run_laps, "tyre_inner_rear_c", compound, thresholds),
         slip_raw=slip_raw,
+        run_end_lap=run.end_lap,
         lap_slope_ms=_lap_slope_ms(run_laps),
         wear_front_slope=front_rate,
         wear_rear_slope=rear_rate,
@@ -219,7 +221,7 @@ def session_signals(
     run_choice: Literal["latest", "longest"] = "latest",
     learned_slip_base: float | None = None,
 ) -> RunSignals | None:
-    """Build run signals while keeping rates scoped to its setup state."""
+    """Build signals from one run. Events and slip stay inside that run."""
     runs = runs_for_session(db, uid)
     if not runs:
         return None
@@ -238,8 +240,7 @@ def session_signals(
         )[1]
     else:
         raise ValueError(f"unknown run choice: {run_choice}")
-    all_green = [lap for lap in db.laps_for(uid) if _green(lap)]
-    event_laps = [lap for lap in all_green if lap.setup_state_id == selected_run.setup_state_id]
+    event_laps = [lap for lap in selected_run.laps if _green(lap)]
     slip_base = slip_base_for_session(db, uid, selected_run.compound, thresholds, learned_slip_base)
 
     signals = signals_for_run(

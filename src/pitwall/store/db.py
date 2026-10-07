@@ -807,6 +807,14 @@ class Database:
                 (_uid_to_sql(session_uid), lap, session_time, from_state, to_state),
             )
 
+    def delete_setup_changes_after(self, uid: int, session_time: float) -> None:
+        """Drop setup changes a flashback undid (recorded after session_time)."""
+        with self.transaction():
+            self._conn.execute(
+                "DELETE FROM setup_changes WHERE session_uid=? AND session_time>?",
+                (_uid_to_sql(uid), session_time),
+            )
+
     def setup_changes_for_session(self, uid: int) -> list[dict[str, Any]]:
         changes = self._rows(
             "SELECT * FROM setup_changes WHERE session_uid=? ORDER BY session_time, id",
