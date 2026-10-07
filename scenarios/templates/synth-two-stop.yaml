@@ -1,0 +1,16 @@
+# DRAFT. The repo owner approves `expect` before moving this file to `scenarios/`.
+# Run the command in `source.where`, then copy its UID and SHA-256 into `source.session_uid` and `source.sha256`.
+id: synth-two-stop
+title: Two planned player stops
+status: target
+source:
+  session_uid: "0x0000000000000000"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  where: "pitwall generate --track 16 --laps 17 --seed 3 --player-stop 6:18 --player-stop 12:16 --out <recording-directory>/synthetic"
+mutations: {}
+expect:
+  fire:
+    - {rule: plan_target_lap, laps: [5, 6]}
+    - {rule: [box_now, box_in_n], laps: [5, 6]}
+    - {rule: plan_target_lap, laps: [11, 12]}
+why: A two-stop plan tests the player tyre and pit history.

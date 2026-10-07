@@ -6,15 +6,21 @@ values. Flagged synthetic per docs/07 — real recordings remain the fixtures.
 
 from __future__ import annotations
 
-import struct
 import time
 from collections.abc import Iterable
 from pathlib import Path
 
 from pitwall.net.recording import RecordingWriter
 from pitwall.protocol.header import HEADER_STRUCT, PACKET_SIZES, PacketId
-from pitwall.protocol.layouts import Field, Item
-from pitwall.protocol.packets import _PACKET_CLASSES, _compiled  # noqa: SLF001
+from pitwall.protocol.pack import (
+    _field_values as _field_values,
+)
+from pitwall.protocol.pack import (
+    _layout_values as _layout_values,
+)
+from pitwall.protocol.pack import (
+    pack_packet,
+)
 
 
 def make_packet(
@@ -76,57 +82,6 @@ def write_synthetic_recording(
             writer.write_datagram(t, pkt)
             t += spacing_us / 1_000_000
     return path
-
-
-def _field_values(item: Field, value: object) -> list[object]:
-    if item.count == 1:
-        if value is None:
-            return [b"\0" * struct.calcsize("<" + item.fmt) if item.fmt.endswith("s") else 0]
-        if isinstance(value, str):
-            value = value.encode("utf-8")
-        if item.fmt.endswith("s") and not isinstance(value, bytes):
-            return [bytes(value)]  # type: ignore[arg-type]
-        return [value]
-    n = item.count
-    if value is None:
-        return [0] * n
-    seq = list(value)  # type: ignore[arg-type]
-    return (seq + [0] * n)[:n]
-
-
-def _layout_values(layout: tuple[Item, ...], data: dict[str, object]) -> list[object]:
-    vals: list[object] = []
-    for item in layout:
-        if isinstance(item, Field):
-            vals.extend(_field_values(item, data.get(item.name)))
-        else:
-            cars = data.get(item.name, {})
-            for i in range(item.n):
-                sub = cars.get(i, {}) if isinstance(cars, dict) else {}
-                vals.extend(_layout_values(item.layout, sub))
-    return vals
-
-
-def pack_packet(
-    packet_id: int,
-    data: dict[str, object] | None = None,
-    *,
-    session_uid: int = 0xDEADBEEF,
-    session_time: float = 1.0,
-    frame: int = 1,
-    player: int = 0,
-) -> bytes:
-    """Pack a real packet from a layout table. `data` maps field names to
-    values; `data['cars']` maps car index -> per-car field dict."""
-    _cls, layout = _PACKET_CLASSES[packet_id]
-    compiled = _compiled(layout)
-    body = compiled.struct.pack(*_layout_values(layout, data or {}))
-    header = HEADER_STRUCT.pack(
-        2026, 26, 1, 0, 1, packet_id, session_uid, session_time, frame, frame, player, 255
-    )
-    pkt = header + body
-    assert len(pkt) == PACKET_SIZES[packet_id]
-    return pkt
 
 
 def out_lap_scenario(

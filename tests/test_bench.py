@@ -18,7 +18,8 @@ from pitwall.bench import (
     trend,
 )
 from pitwall.cli import main
-from pitwall.derive import ops_from_options
+from pitwall.derive import is_synthetic_uid, ops_from_options, synthetic_uid
+from pitwall.synth.field import FieldSpec, write_field_recording
 
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
@@ -123,6 +124,94 @@ def test_parse_scenario_and_sort_by_id(tmp_path: Path) -> None:
     assert scenarios[0].kind == "real"
     assert scenarios[1].kind == "real"
     assert scenarios[0].checks == (ScenarioCheck("fire", ("sc_deployed",), (3, 4)),)
+
+
+def test_synthetic_uid_makes_scenario_synthetic(tmp_path: Path) -> None:
+    uid = synthetic_uid(b"12345")
+    path = _write_scenario(
+        tmp_path,
+        _scenario_data(source={"session_uid": f"0x{uid:016x}", "sha256": "a" * 64}),
+    )
+
+    scenario = parse_scenario(path)
+
+    assert is_synthetic_uid(scenario.source_uid)
+    assert scenario.kind == "synthetic"
+
+
+def test_all_synthetic_templates_parse() -> None:
+    templates = Path(__file__).parents[1] / "scenarios" / "templates"
+
+    scenarios = [parse_scenario(path) for path in sorted(templates.glob("*.yaml"))]
+
+    assert {scenario.id for scenario in scenarios} == {
+        "synth-sc-in-window",
+        "synth-sc-early",
+        "synth-two-stop",
+        "synth-rival-undercut",
+    }
+    assert all(scenario.source_sha256 == "0" * 64 for scenario in scenarios)
+    assert all(scenario.source_uid == 0 for scenario in scenarios)
+
+
+@pytest.mark.slow
+def test_bench_jobs_keep_scorecard_order_and_results(tmp_path: Path) -> None:
+    from pitwall.net.recording import RecordingReader
+
+    recording_dir = tmp_path / "recordings"
+    race = write_field_recording(
+        FieldSpec(track_id=7, laps=3, cars=4, seed=17, dt=20.0, sc_laps=(2, 2)),
+        recording_dir,
+    )
+    with RecordingReader(race.path) as reader:
+        uid = reader.header.session_uid
+    scenarios_dir = tmp_path / "scenarios"
+    scenarios_dir.mkdir()
+    _write_scenario(
+        scenarios_dir,
+        _scenario_data(
+            id="synthetic",
+            source={"session_uid": f"0x{uid:016x}", "sha256": race.sha256},
+            expect={"fire": [{"rule": "sc_deployed", "laps": [2, 2]}]},
+        ),
+    )
+    serial_path = tmp_path / "serial.json"
+    parallel_path = tmp_path / "parallel.json"
+
+    serial_exit = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios_dir),
+            "--recordings",
+            str(recording_dir),
+            "--jobs",
+            "1",
+            "--out",
+            str(serial_path),
+            "--json",
+        ]
+    )
+    parallel_exit = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios_dir),
+            "--recordings",
+            str(recording_dir),
+            "--jobs",
+            "2",
+            "--out",
+            str(parallel_path),
+            "--json",
+        ]
+    )
+
+    serial = json.loads(serial_path.read_text())
+    parallel = json.loads(parallel_path.read_text())
+    assert serial_exit == parallel_exit
+    assert serial["scenarios"] == parallel["scenarios"]
+    assert serial["metrics"] == parallel["metrics"]
 
 
 @pytest.mark.parametrize(

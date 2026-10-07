@@ -6,7 +6,8 @@ Use the bench to measure each rule or strategy change, and to check that learnin
 ## Terms
 
 - **Scenario.** A YAML file in `scenarios/`. It names a source recording, optional `pitwall derive` mutations and the calls that must or must not fire.
-- **Real scenario.** A scenario with no mutations. The bench replays the source as it was recorded.
+- **Real scenario.** A scenario with no mutations and a non-synthetic source UID.
+- **Synthetic scenario.** A scenario with mutations or a source UID tagged as synthetic.
 - **Guard.** A scenario that must pass. A failed guard fails the gate.
 - **Target.** A scenario that shows a known gap. Pitwall does not pass it yet. A change that makes a target pass is an improvement.
 - **Baseline.** `scenarios/baseline.json`, the last accepted scorecard.
@@ -39,6 +40,9 @@ why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 - The bench finds the source by session UID in the `--recordings` folders and checks its sha256. If the file is missing, the scenario is `skipped`.
 
 Each scenario runs in its own empty database with default priors. The result does not depend on the order of scenarios or on what the database has learned.
+
+Use `pitwall bench --jobs N` to replay scenarios in parallel. The default is `--jobs 1`.
+The scorecard keeps the same scenario order for every job count.
 
 ## Scorecard
 

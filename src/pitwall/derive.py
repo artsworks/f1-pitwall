@@ -41,7 +41,14 @@ def derived_uid(source_uid: int, mutations: Sequence[str]) -> int:
         f"{source_uid}:{json.dumps(list(mutations))}".encode(),
         digest_size=5,
     ).digest()
-    return (SYNTHETIC_UID_TAG << _TAG_SHIFT) | int.from_bytes(digest, "big")
+    return synthetic_uid(digest)
+
+
+def synthetic_uid(digest: bytes) -> int:
+    """Return a UID with the synthetic tag and a 40-bit digest suffix."""
+    if len(digest) < 5:
+        raise ValueError("synthetic UID digest must contain at least five bytes")
+    return (SYNTHETIC_UID_TAG << _TAG_SHIFT) | int.from_bytes(digest[:5], "big")
 
 
 def is_synthetic_uid(uid: int) -> bool:

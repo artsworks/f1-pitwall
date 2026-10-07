@@ -16,7 +16,7 @@ from typing import Any, Literal
 import yaml
 
 from pitwall.config.models import Settings
-from pitwall.derive import MutationOp, derive_recording, ops_from_options
+from pitwall.derive import MutationOp, derive_recording, is_synthetic_uid, ops_from_options
 from pitwall.net.recording import RecordingReader
 from pitwall.store.db import Database
 from pitwall.tune import _AUTO_SKIP_METRICS
@@ -43,7 +43,7 @@ class Scenario:
 
     @property
     def kind(self) -> Literal["real", "synthetic"]:
-        return "synthetic" if self.mutations else "real"
+        return "synthetic" if self.mutations or is_synthetic_uid(self.source_uid) else "real"
 
 
 @dataclass(frozen=True, slots=True)

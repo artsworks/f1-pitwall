@@ -1,7 +1,8 @@
-# Synthetic recordings (spike)
+# Synthetic recordings
 
-This spike tested whether f1-pitwall can turn a real recording into a synthetic one for the learning loop. The synthetic copy adds scenarios for the rules to learn from. It must not change the physics priors.
-It is a proof of concept, not a finished feature.
+This document covers derived recordings and generated field races for rule tests.
+Derived recordings alter a real race. Field generation creates a full field from explicit priors.
+Synthetic recordings must not change the physics priors.
 
 _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 
@@ -125,17 +126,23 @@ A down-weighted variant would also count the source's real laps a second time. K
 
 Keep synthetic sessions in `tune`, with one follow-up. `tune` should discount outcomes that depend on what the driver did, such as `stop_taken`, in synthetic sessions. Today `tune` skips `ignored` outcomes, so this race showed no harm.
 
-## Follow-up: a generator seeded from real priors
+## Field generator
 
-This follow-up is worth a spike. `tests/race_synth.py` has four cars on track 7 with fixed pace. A generator that writes all the physics itself can keep the fields consistent, which `derive` cannot:
+`pitwall generate` writes seeded full-field recordings with consistent car status, pit stops, tyre history, and safety-car gaps.
+Use `--priors-db` or `--priors-json` to supply race pace and pit-loss values.
+Use `--jobs` to generate separate races in parallel.
 
-- 20 cars on a real `track_id`, with degradation and fuel values from `pitwall calibrate`.
-- A safety car that bunches the field and changes gaps.
-- Rival stops with matching pit status, tyres and Session History.
-- Pit loss that matches the timing of the stop.
+The generator is for rule development and replay testing. It does not replace recorded races or calibrate trustworthy priors.
+Keep `pitwall derive` for quick checks of the same race with an event at a different time.
 
-Its output would still be synthetic and would follow the same exclusion policy. The risk is that the generator encodes our own assumptions, so check its output against real recordings before trusting new calls from it.
-Keep `derive` for quick checks of "the same race, with an event at a different time".
+| Trust | Use |
+|---|---|
+| Trust for synthetic replay and packet consistency | Check rule timing, bench order, and recording ingestion. |
+| Treat as an estimate for strategy comparisons | Compare candidate behavior under the generator's stated assumptions. |
+| Do not trust for real pace, tyre wear, or pit-loss values | Calibrate those values from real recordings. |
+| Do not treat synthetic bench results as a real gate | Confirm a change against real recordings before approval. |
+
+See [LOCAL_RUN.md](../LOCAL_RUN.md) for Windows commands and result fields.
 
 The race used here had no safety car and one stop. A longer real race with a safety car and two stops would test these results better. You may need to record one.
 
@@ -153,6 +160,4 @@ uv run python scripts/known_answer.py --races 8 --pooled 4 --jobs 5 --json out.j
 
 The races are synthetic, so they test the estimators and do not supply priors for real races. `scripts/make_synth_race.py` writes one such race to `recordings/` for a manual `pitwall digest`.
 
-## Next step
-
-The [scenario bench](24-scenario-bench.md) turns derived recordings into scored scenarios with a baseline gate.
+The [scenario bench](24-scenario-bench.md) scores real and synthetic scenarios against a baseline gate.
