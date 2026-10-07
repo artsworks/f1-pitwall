@@ -8,6 +8,7 @@ from typing import Any
 from pitwall.calibrate import calibrate
 from pitwall.config.models import Settings
 from pitwall.diff import run_diff
+from pitwall.questions import question_candidates
 from pitwall.store.db import Database
 
 
@@ -64,6 +65,12 @@ def propose_thresholds(
         "review_required": True,
         "applied": False,
         "track_overlays": tracks,
+        "question_candidates": question_candidates(
+            db,
+            settings.menu,
+            settings.rules,
+            thresholds=settings.thresholds,
+        ),
         "note": (
             "Proposals are pace-derived, not measured MFD colour boundaries. "
             "Review alongside in-game colours and replay before editing YAML."

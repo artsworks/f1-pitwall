@@ -8,18 +8,22 @@ than any threshold tuning.
 
 | Input | Primary | Secondary | Meaning |
 |---|---|---|---|
-| Single press | Fanatec wheel **button 2** → UDP Action 1 | **Spacebar** | **Acknowledge** — "copy"; **confirm** while the driver menu is open |
-| Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | **Negative** — "no / not now"; closes the menu while open |
-| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | **Radio silent** on/off (`input.long_press: bookmark` makes it a marker instead) |
+| Single press | Fanatec wheel **button 2** → UDP Action 1 | **Spacebar** | Acknowledge a target or confirm the menu. With no target, add a contextual tap bookmark after quiet-off and say-again checks |
+| Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | Negative: "no / not now". Closes the menu while open |
+| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | Toggle radio silence. Set `input.long_press: bookmark` to add a contextual hold bookmark |
 | Menu up / down | UDP Action 2 / 3 (stick up / down) | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
 | Dashboard page cycle | UDP Action 4 (stick right) | `P` / click the page pill | race → car → track → race; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
 | Mindset toggle | UDP Action 5 (stick left) | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item. **Close** while the menu is open |
-| Shortcuts | UDP Action 6 / 7 / 8 (Stream Deck) | — | ask "Pit now?" / "Race stat" / "Fight" directly |
+| Shortcuts | UDP Action 6 to 12 (Stream Deck) | — | Ask "Pit now?", "Push or save?", "Fight", "Understeer", "Oversteer", "Radio calls", or "Mindset" directly |
 | Menu close | — | `Esc` | close the menu without answering |
 
 Both inputs feed the same press detector, so behaviour is identical whichever is used.
 Mid-race nothing requires clicking the dashboard, which would take focus from a
 fullscreen game. The dashboard shows the last press ("ACK L24 ▸ box lap 26") so a mis-press is visible.
+
+A tap with no target records the current scalar snapshot as a bookmark and replies
+with "Marked." when `input.spoken_replies` is on. A negative press with no target
+still quiets the radio for `input.quiet_minutes`.
 
 ## How each input reaches the backend
 
@@ -76,7 +80,8 @@ down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMA
 
 ## Radio silent
 
-For a battle: the driver wants to concentrate, not listen. Long press (or the "Radio silent" menu item, or `input.silent_toggle_bit` if bound) toggles radio silent:
+Long press toggles radio silence by default. Choose "Radio silent" or bind
+`input.silent_toggle_bit` to use another control.
 
 - Speech stops; every call still reaches the dashboard's banner and radio log as normal.
 - P1 (urgent) calls still speak (`input.silent_keeps_p1`, default on).
@@ -86,14 +91,15 @@ For a battle: the driver wants to concentrate, not listen. Long press (or the "R
   decision log and on the review timeline.
 - It stays on until toggled off, including across sessions.
 
-Settings: `input.long_press` (`silent` | `bookmark`), `input.silent_toggle_bit`
-(default `0`: a dedicated toggle button; Action 6 is a Stream Deck shortcut by default), `input.silent_on_replies`,
+Settings: `input.long_press` (`silent` | `bookmark`, default `silent` in `settings.yaml`),
+`input.silent_toggle_bit`
+(default `0`: a dedicated toggle button), `input.silent_on_replies`,
 `input.silent_off_replies`.
 
 Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
 whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
-If a hold doesn't toggle, use the "Radio silent" menu item or set `input.silent_toggle_bit`
-to a free UDP Action — no code change needed.
+If a hold does not toggle, use the "Radio silent" menu item or set `input.silent_toggle_bit`
+to an unused UDP Action.
 
 ## Mindset and page buttons (M3)
 
@@ -122,35 +128,40 @@ question or state an opinion. Driving, it has to be three buttons and a glance.
 ### Remap (M3 + menu)
 
 Twelve UDP Actions exist (`buttonStatus` bits, UDP Action *n* = `0x00100000 << (n-1)`).
-Before the menu, four were used: 1 ack/neg/silent, 2 mindset, 3 radio silent, 4 page.
-The driver has **five wheel inputs** (Action 1 plus the Fanatec F1 V2.5 left-thumb stick
-up/down/right/left) and **three Stream Deck keys** (Actions 6–8). A Stream Deck key sends
-a tap only (holding it may not hold the game key), so the deck keys have one meaning each.
+Action 1 handles ack, negative, bookmarks, and radio silence. Actions 2 and 3 scroll
+the menu. Action 4 cycles pages. Action 5 toggles mindset.
+
+Action 1 uses the wheel button. Actions 2 to 5 use the Fanatec F1 V2.5 thumb stick.
+The driver can also use seven Stream Deck keys on Actions 6 to 12. Each key sends a tap
+only. Holding it may not hold the game key, so each key has one action.
 
 | UDP Action | Bit | Setting | Input | Menu closed | Menu open |
 |---|---|---|---|---|---|
-| 1 | `0x00100000` | `input.udp_action_bit` | wheel button; Spacebar | tap ack · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
+| 1 | `0x00100000` | `input.udp_action_bit` | wheel button; Spacebar | tap ack or bookmark · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
 | 2 | `0x00200000` | `input.menu_up_bit` | stick up; key `↑` | **open** on the last item | previous item |
 | 3 | `0x00400000` | `input.menu_down_bit` | stick down; key `↓` | **open** on the first item | next item |
 | 4 | `0x00800000` | `input.page_cycle_bit` + `menu_open_actions.page: confirm` | stick right | next dashboard page | **confirm** |
 | 5 | `0x01000000` | `input.mindset_toggle_bit` + `menu_open_actions.mindset: close` | stick left | balanced ⇄ aggressive | **close**, no answer |
-| 6 | `0x02000000` | `input.shortcuts: {item: pit}` | Stream Deck tap | asks "Pit now?" | same (closes the menu first) |
-| 7 | `0x04000000` | `input.shortcuts: {item: race_stat}` | Stream Deck tap | most relevant race stat | same |
-| 8 | `0x08000000` | `input.shortcuts: {item: fight}` | Stream Deck tap | fight + pace briefing | same |
-| 9–12 | `0x10000000`–`0x80000000` | — | free | — | — |
+| 6 | `0x02000000` | `input.shortcuts: {item: pit}` | Stream Deck tap | asks "Pit now?" | same, closes the menu first |
+| 7 | `0x04000000` | `input.shortcuts: {item: push}` | Stream Deck tap | asks "Push or save?" | same, closes the menu first |
+| 8 | `0x08000000` | `input.shortcuts: {item: fight}` | Stream Deck tap | asks "Fight" | same, closes the menu first |
+| 9 | `0x10000000` | `input.shortcuts: {item: understeer}` | Stream Deck tap | records understeer | same, closes the menu first |
+| 10 | `0x20000000` | `input.shortcuts: {item: oversteer}` | Stream Deck tap | records oversteer | same, closes the menu first |
+| 11 | `0x40000000` | `input.shortcuts: {item: budget}` | Stream Deck tap | cycles radio calls per lap | same, closes the menu first |
+| 12 | `0x80000000` | `input.shortcuts: {item: mindset}` | Stream Deck tap | changes mindset | same, closes the menu first |
 
 - The stick works like a d-pad: up/down scroll, right selects, left backs out. The whole
   menu is one thumb; Action 1 also confirms.
-- `Cooldown lap` tells qualifying mode that the driver is deliberately cooling. Select it
-  again to return to automatic hot-lap coaching. Automatic pace detection remains active
-  when the item is not used.
-- Radio silent has no dedicated button: hold Action 1, or pick "Radio silent" in the menu.
+- Radio silent has no separate button. Hold Action 1 or pick "Radio silent" in the menu.
+  Set `input.silent_toggle_bit` to an unused UDP Action for a separate toggle.
   `input.silent_toggle_bit` and `input.menu_close_bit` still exist (default `0`).
 - `input.menu_open_actions` (`page`, `mindset`: `confirm` | `close` | `""`) decides what
   those two buttons do while the menu is open; `""` keeps their usual action.
 - `input.shortcuts` binds a bit to any menu item id; a shortcut answers that item at once
-  (no menu, no scrolling). `pitwall rules check` rejects unknown item ids.
-- Action 1 semantics are unchanged while the menu is closed.
+  (no menu, no scrolling). Shortcut-only items stay out of the scroll list. `pitwall rules
+  check` rejects unknown item ids and warns when a shortcut-only item has no binding.
+- A target call can receive a press grade: ACK means good and NEG means noise. Human
+  grades can replace press grades.
 - All bits are YAML; `0` disables the binding; a duplicate bit (including shortcuts) fails
   to load.
 - Keyboard: `↑` `↓` `Enter` `Esc` on the focused dashboard (`/` or `/radio`); Space still
@@ -185,29 +196,26 @@ or `id`) picks the case from the current snapshot and fills the placeholders; va
 rotate per item and case. No language model is involved (ADR 0008). `pitwall rules
 check` validates ids, handlers and placeholders.
 
-Items may also carry `show_when` / `rank_when` rule expressions evaluated against the
-snapshot when the menu opens: items whose `show_when` fails are hidden, items whose
-`rank_when` holds move to the top, and the list stays frozen while the menu is open.
-There is no "Next page" item: wheel-right (UDP Action 4) cycles dashboard pages.
+The scroll list order is Tyres gone?, Pit now?, Fight, Rain coming?, Push or save?, and
+Radio silent. Items with `shortcut_only: true` do not appear in that list.
+They remain available through a shortcut or voice intent with the same item id.
+
+Items may also carry `show_when` / `rank_when` expressions that use the snapshot:
+`show_when` hides an item, and `rank_when` moves an item to the top.
+The list stays frozen while the menu is open. Wheel-right (UDP Action 4) cycles pages.
 
 | Item | Kind | Cases (from the snapshot) | Example reply |
 |---|---|---|---|
-| Tyres gone? | question | gone / fading / ok / unknown (`laps_of_pace`, `wear_mean_pct`) | "Fading. About 3 laps of pace left." |
-| Pit now? | question | box_now / soon / stay_out / no_stop / unknown (`pit_plan`) | "Not yet. Box in 2, lap 26." |
-| Gap ahead? | question | closing / opening / steady / none (`gap_ahead_s`, `gap_trend_ahead_s`) | "1.4 to Norris, closing 0.3 a lap." |
-| Gap behind? | question | closing / steady / none | "0.9 to Piastri behind, closing 0.2." |
-| Fuel OK? | question | short / tight / ok / spare / unknown (`fuel_margin_laps`) | "Short by 0.4 laps. Lift and coast." |
-| Plan? | question | box_now / stop / to_end / unknown | "Box lap 26. Window open soon." |
-| Push or save? | question | save_fuel / save_energy / save_tyres / attack / push | "Push. 0.8 to the car ahead." |
-| Rain coming? | question | crossover / coming / chance / dry (forecast rain *chance*, `rain_pct_in_10/30`, `weather_crossover`) | "Rain coming. 60 percent chance in ten." |
-| Race stat | question | fuel_short / tyres_gone / energy / box_now / pit_soon / position / unknown (first that applies) | "P4, 12 to go. Best lap 1:32.4." |
-| Fight | question | both / ahead / behind / none (gap, gap trend, laps to catch, model pace) | "Norris 1.2 ahead, closing 0.3 a lap, catch in 4. Pace 1:32.4 to his 1:32.7. Russell 0.9 behind, pulling away 0.2 a lap." |
-| Radio calls | action | default (`budget`) | cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (4 / 8 / 12 / 20), overriding the mindset's `call_budget_per_lap`: "Copy, up to 20 calls a lap." |
-| Understeer | opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
-| Oversteer | opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
-| Mindset | action | — | the usual mindset confirmation ("Copy, aggressive. Pushing.") |
-| Radio silent | action | — | the usual silent on/off confirmation |
-| Cooldown lap | action | — | marks this lap as a cooldown lap (one lap; auto-detection still runs) |
+| Tyres gone? | question | switch / gone / fading / ok / unknown | "Fading. Worst one 55 percent, 3 laps left." |
+| Pit now? | question | box_now / soon / stay_out / no_stop / unknown | "Stay out, box lap 26. Window 24 to 28." |
+| Fight | question | race: both / ahead / behind / none; other sessions: times / no_time | "P4, 12 to go. Clear air." |
+| Rain coming? | question | switch / right_tyre / crossover / coming / chance / dry | "Rain coming. 60 percent in ten." |
+| Push or save? | question | save_fuel / save_energy / save_tyres / fuel_tight / attack / push | "Push, fuel's tight. Plus 0.2 laps." |
+| Radio silent | action | — | Toggles radio silence |
+| Understeer | shortcut-only opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
+| Oversteer | shortcut-only opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
+| Radio calls | shortcut-only action | default (`budget`) | Cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` |
+| Mindset | shortcut-only action | — | Changes mindset and confirms the choice |
 
 ### Opinions and records
 

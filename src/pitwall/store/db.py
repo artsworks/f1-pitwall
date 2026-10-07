@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pitwall.protocol.enums import session_kind
 
@@ -301,6 +301,13 @@ MIGRATIONS: list[str] = [
     ALTER TABLE laps ADD COLUMN tyre_inner_front_c REAL DEFAULT 0;
     ALTER TABLE laps ADD COLUMN tyre_inner_rear_c REAL DEFAULT 0;
     """,
+    # 11: press grades and contextual bookmarks.
+    """
+    ALTER TABLE call_grades ADD COLUMN source TEXT NOT NULL DEFAULT 'human';
+    ALTER TABLE bookmarks ADD COLUMN kind TEXT NOT NULL DEFAULT 'hold';
+    ALTER TABLE bookmarks ADD COLUMN context TEXT;
+    """,
+    # 12: synthetic sessions from pitwall derive.
     """
     ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
     ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
@@ -595,7 +602,7 @@ class Database:
             with self.transaction():
                 self._conn.execute(
                     "INSERT INTO bookmarks(session_uid, t, session_time, lap,"
-                    " lap_distance, note) VALUES(?,?,?,?,?,?)",
+                    " lap_distance, note, kind, context) VALUES(?,?,?,?,?,?,?,?)",
                     (
                         _uid_to_sql(session_uid),
                         record.get("t"),
@@ -603,6 +610,10 @@ class Database:
                         record.get("lap"),
                         record.get("lap_distance"),
                         record.get("note", ""),
+                        record.get("kind") or "hold",
+                        json.dumps(record.get("context"), default=str)
+                        if record.get("context") is not None
+                        else None,
                     ),
                 )
             return
@@ -636,6 +647,15 @@ class Database:
                     record.get("active_plan") or None,
                     _bool_to_sql(record.get("on_plan")),
                 ),
+            )
+        if outcome in ("ack", "neg") and record.get("call_id") and record.get("grade"):
+            grade_call_id = record.get("grade_call_id") or record["call_id"]
+            self.grade_call(
+                session_uid,
+                str(grade_call_id),
+                str(record.get("rule_id") or ""),
+                str(record["grade"]),
+                source="press",
             )
 
     def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
@@ -690,16 +710,44 @@ class Database:
         rule_id: str,
         grade: str,
         note: str = "",
+        source: Literal["human", "press"] = "human",
     ) -> None:
         with self.transaction():
-            self._conn.execute(
-                "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
-                " note, graded_at) VALUES(?,?,?,?,?,?)"
-                " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
-                " grade=excluded.grade, note=excluded.note,"
-                " graded_at=excluded.graded_at",
-                (_uid_to_sql(session_uid), call_id, rule_id, grade, note, time.time()),
-            )
+            if source == "press":
+                self._conn.execute(
+                    "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
+                    " note, graded_at, source) VALUES(?,?,?,?,?,?,?)"
+                    " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
+                    " rule_id=excluded.rule_id, grade=excluded.grade, note=excluded.note,"
+                    " graded_at=excluded.graded_at"
+                    " WHERE call_grades.source='press'",
+                    (
+                        _uid_to_sql(session_uid),
+                        call_id,
+                        rule_id,
+                        grade,
+                        note,
+                        time.time(),
+                        source,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
+                    " note, graded_at, source) VALUES(?,?,?,?,?,?,?)"
+                    " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
+                    " rule_id=excluded.rule_id, grade=excluded.grade, note=excluded.note,"
+                    " graded_at=excluded.graded_at, source='human'",
+                    (
+                        _uid_to_sql(session_uid),
+                        call_id,
+                        rule_id,
+                        grade,
+                        note,
+                        time.time(),
+                        source,
+                    ),
+                )
 
     # -- reads ----------------------------------------------------------------
 
@@ -930,9 +978,16 @@ class Database:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
     def bookmarks_for_session(self, uid: int) -> list[dict[str, Any]]:
-        return self._rows(
+        rows = self._rows(
             "SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
         )
+        for row in rows:
+            try:
+                context = json.loads(str(row["context"] or "{}"))
+            except json.JSONDecodeError:
+                context = {}
+            row["context"] = context if isinstance(context, dict) else {}
+        return rows
 
     def driver_inputs_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows(
@@ -961,6 +1016,33 @@ class Database:
             (_uid_to_sql(session_uid), car_idx),
         ).fetchall()
         return [self._lap_row(r) for r in rows]
+
+    def track_minutes(self) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(lap_time_ms), 0) AS total_ms, COUNT(*) AS laps,"
+            " COUNT(DISTINCT session_uid) AS sessions FROM laps WHERE id IN ("
+            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
+            " GROUP BY session_uid, lap_num)"
+        ).fetchone()
+        return {
+            "minutes": round(int(row["total_ms"]) / 60_000, 1),
+            "laps": int(row["laps"]),
+            "sessions": int(row["sessions"]),
+        }
+
+    def session_track_ms(self) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT l.session_uid AS uid, s.started_at, s.track_id, s.session_type,"
+            " COUNT(*) AS laps, SUM(l.lap_time_ms) AS ms FROM laps l"
+            " LEFT JOIN sessions s ON s.uid=l.session_uid WHERE l.id IN ("
+            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
+            " GROUP BY session_uid, lap_num)"
+            " GROUP BY l.session_uid ORDER BY s.started_at, l.session_uid",
+            (),
+        )
+        for row in rows:
+            row["uid"] = _uid_from_sql(int(row["uid"]))
+        return rows
 
     def _lap_row(self, r: sqlite3.Row) -> LapRow:
         return LapRow(
@@ -1303,9 +1385,31 @@ class Database:
             "SELECT * FROM model_params_quarantine ORDER BY track_id, compound, name, reason", ()
         )
 
+    def insert_quarantine_if_absent(self, row: Mapping[str, Any]) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO model_params_quarantine(track_id, compound, name, reason,"
+                " value, weight, updated_at, quarantined_at) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    row["track_id"],
+                    row["compound"],
+                    row["name"],
+                    row["reason"],
+                    row["value"],
+                    row["weight"],
+                    row.get("updated_at"),
+                    row.get("quarantined_at"),
+                ),
+            )
+        return cursor.rowcount > 0
+
     def maintenance_version(self, key: str) -> int:
         row = self._conn.execute("SELECT version FROM maintenance WHERE key=?", (key,)).fetchone()
         return int(row["version"]) if row is not None else 0
+
+    def maintenance_versions(self) -> dict[str, int]:
+        rows = self._conn.execute("SELECT key, version FROM maintenance ORDER BY key").fetchall()
+        return {str(row["key"]): int(row["version"]) for row in rows}
 
     def set_maintenance_version(self, key: str, version: int) -> None:
         with self.transaction():
@@ -1407,6 +1511,16 @@ class Database:
             return rows
         return self.sessions_for_track(track_id)
 
+    def session(self, uid: int) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),)
+        ).fetchone()
+        if row is None:
+            return None
+        session = dict(row)
+        session["uid"] = _uid_from_sql(int(session["uid"]))
+        return session
+
     def ingested_uids(self) -> set[int]:
         rows = self._conn.execute("SELECT session_uid FROM ingested").fetchall()
         return {_uid_from_sql(int(r[0])) for r in rows}
@@ -1459,6 +1573,23 @@ class Database:
 
     def all_grades(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades ORDER BY graded_at", ())
+
+    def insert_grade_if_absent(self, row: Mapping[str, Any]) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO call_grades(session_uid, call_id, rule_id, grade, note,"
+                " graded_at, source) VALUES(?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(int(row["session_uid"])),
+                    row["call_id"],
+                    row["rule_id"],
+                    row["grade"],
+                    row.get("note", ""),
+                    row.get("graded_at"),
+                    row.get("source", "human"),
+                ),
+            )
+        return cursor.rowcount > 0
 
     def ab_results(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM ab_results ORDER BY recorded_at", ())

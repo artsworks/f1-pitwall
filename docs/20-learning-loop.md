@@ -100,6 +100,12 @@ for review and does not change active settings. `pitwall calibrate` and `pitwall
 run the same steps as upkeep on demand. `pitwall tune` also folds A/B results from
 `pitwall diff`.
 
+`pitwall start` prints ingested track minutes and recent call quality, and `pitwall stats --quality` shows session totals and the trend.
+
+`pitwall propose` also reports menu questions that recur before a related rule fires.
+Each candidate includes median snapshot signals at the ask and current rule thresholds.
+Review these candidates before changing a rule. Proposals never write YAML.
+
 Sessions from `pitwall derive` are synthetic. They feed grading and `pitwall tune`, but
 calibration, upkeep and the replay folds leave them out of physics priors.
 `pitwall calibrate --include-synthetic` adds them to the fit. See
@@ -107,6 +113,16 @@ calibration, upkeep and the replay folds leave them out of physics priors.
 
 To measure whether a change improves pitwall, run `pitwall bench`. See
 [Scenario bench](24-scenario-bench.md).
+
+## Learning pack
+
+By default, Pitwall stores packs in `learnings/` beside `recordings/`. The folder is gitignored.
+Live `pitwall start` writes a pack after each session ends and when Pitwall shuts down.
+The latest pack includes learned parameters, quarantined values, call grades, track overlays and a track ledger.
+Run `pitwall restore learnings/learning-latest.json` to restore a pack.
+Restore keeps active priors and call-quality history for sessions in the ledger.
+Set `learning.pack_dir` to use another drive or synced folder.
+Upload `learning-latest.json` to request promotion into packaged track YAML.
 
 ## After a race
 

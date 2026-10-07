@@ -189,3 +189,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 ## Licence
 
 GPLv3 — see [`LICENSE`](LICENSE).
+
+## Disclaimer
+
+f1-pitwall is an unofficial project for education and experiments. It is not affiliated with, endorsed by or connected to Formula 1, the FIA or the makers of the F1 games. Formula 1, F1 and related marks are trademarks of their owners. The tool reads the game's UDP telemetry on your own PC. Development and tests use previously recorded and synthetic timing and telemetry data.

@@ -44,10 +44,12 @@ def test_packaged_grammar_loads_and_is_valid_srgs() -> None:
     assert root.get("{http://www.w3.org/XML/1998/namespace}lang") == "en-GB"
     items = [i.text for i in root.iter(f"{{{SRGS_NS}}}item")]
     assert items == g.phrases and len(items) >= 40
-    assert g.intent_for("What's the gap?") == "gap"
+    assert g.intent_for("What's the gap?") == "fight"
     assert g.intent_for("Copy that.") == "ack"
     menu_ids = {i.id for i in ConfigStore().current().menu.items}
-    assert {"tyres", "pit", "gap", "fuel", "fight"} <= menu_ids & set(g.intents)
+    assert {"tyres", "pit", "fight", "rain", "push"} <= menu_ids & set(g.intents)
+    assert {"understeer", "oversteer", "budget", "mindset"} <= menu_ids & set(g.intents)
+    assert not {"gap", "gap_behind", "fuel", "plan", "race_stat"} & set(g.intents)
 
 
 def test_grammar_rejects_duplicate_phrase() -> None:

@@ -22,8 +22,14 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
-from pitwall.input.menu import validate as validate_menu
-from pitwall.input.menu import validate_shortcuts
+from pitwall.input.menu import (
+    shortcut_warnings,
+    validate_related_rules,
+    validate_shortcuts,
+)
+from pitwall.input.menu import (
+    validate as validate_menu,
+)
 from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
@@ -448,6 +454,16 @@ def cmd_propose(args: argparse.Namespace) -> int:
         print(f"propose: review {args.out} before editing YAML")
     else:
         print(output)
+    for candidate in result.get("question_candidates", []):
+        print(
+            f"question candidate {candidate['label']} ({candidate['item_id']}): "
+            f"{candidate['uncovered']} uncovered asks across {candidate['sessions']} sessions"
+        )
+        print(f"  median signals at ask: {json.dumps(candidate['at_ask'], sort_keys=True)}")
+        for rule in candidate["rules"]:
+            print(
+                f"  {rule['rule_id']} thresholds: {json.dumps(rule['thresholds'], sort_keys=True)}"
+            )
     return 0
 
 
@@ -519,9 +535,15 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
         mode=store.current().resolved_mindset(),
         staleness_s=settings.engine.staleness_s,
     )
-    menu_errors = validate_menu(settings.menu) + validate_shortcuts(settings.input, settings.menu)
+    menu_errors = (
+        validate_menu(settings.menu)
+        + validate_shortcuts(settings.input, settings.menu)
+        + validate_related_rules(settings.menu, {rule.id for rule in settings.rules})
+    )
     for err in menu_errors:
         print(f"rules check FAILED: {err}")
+    for warning in shortcut_warnings(settings.input, settings.menu):
+        print(f"rules check WARNING: {warning}")
     if menu_errors:
         return 1
     snap = SessionState().snapshot(0.0)
@@ -798,6 +820,49 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
+    if args.quality:
+        from pitwall.digest import quality_trend
+        from pitwall.learnpack import pack_track_minutes
+        from pitwall.store.db import Database, open_configured
+
+        if args.sessions < 1:
+            print("stats --quality: sessions must be positive")
+            return 2
+        settings = ConfigStore().current()
+        db = Database(args.db) if args.db else open_configured(settings)
+        if db is None:
+            print("stats --quality: persistence disabled")
+            return 1
+        pack_dir = Path(settings.learning.pack_dir).expanduser()
+        minutes = pack_track_minutes(db, pack_dir)
+        report = quality_trend(db, args.sessions, pack_dir)
+        rows = report["sessions"]
+        trend = report["trend"]
+        if args.json:
+            print(json.dumps({"track_minutes": minutes, **report}, indent=2, default=str))
+        else:
+            print(
+                f"track minutes: {minutes['minutes']:,.1f} over "
+                f"{minutes['sessions']:,} sessions ({minutes['laps']:,} laps)"
+            )
+            if not rows:
+                print("No sessions with fired calls.")
+            else:
+                for row in rows:
+                    print(
+                        f"{row['date']} · {row['track']} · {row['session_type']} · "
+                        f"{row['fired']} fired · good {row['good_pct']:g}% · "
+                        f"neg {row['neg_rate_pct']:g}% · "
+                        f"{row['unanswered_questions']} unanswered · "
+                        f"{row['ungraded']} ungraded"
+                    )
+                if trend is not None:
+                    print(
+                        f"trend: good% {trend['older_mean_good_pct']:.1f} -> "
+                        f"{trend['newer_mean_good_pct']:.1f} "
+                        f"({trend['delta_pct']:+.1f}) over {trend['sessions']} sessions"
+                    )
+        return 0
     if args.learned:
         from pitwall.store.db import Database, open_configured
 
@@ -828,6 +893,26 @@ def cmd_stats(args: argparse.Namespace) -> int:
         **ingest.census(now=last_t),
     }
     print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    from pitwall.learnpack import restore_pack
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("restore: persistence disabled")
+        return 1
+    counts = restore_pack(
+        db,
+        args.pack,
+        Path(settings.learning.pack_dir).expanduser(),
+        args.overlay_dir,
+    )
+    summary = " ".join(f"{name}={count}" for name, count in counts.items())
+    print(f"restore: {summary}")
     return 0
 
 
@@ -1005,6 +1090,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     set_below_normal_priority()
     store = ConfigStore()
     settings = store.current()
+    pack_dir = Path(settings.learning.pack_dir).expanduser()
     child = bool(args.child)
     if settings.engine.watchdog and not child and not args.no_watchdog:
         return _start_supervised(args, store)
@@ -1056,6 +1142,12 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"learning: {report.summary()}", flush=True)
         except sqlite3.Error as e:
             print(f"learning: upkeep skipped ({e})", flush=True)
+        from pitwall.digest import startup_scorecard
+
+        try:
+            print(startup_scorecard(db, pack_dir), flush=True)
+        except sqlite3.Error as e:
+            print(f"startup scorecard skipped ({e})", flush=True)
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
@@ -1075,7 +1167,16 @@ def cmd_start(args: argparse.Namespace) -> int:
     if isinstance(speaker, PiperSpeaker):
         speaker.on_audio = hub.audio
         hub.streams_audio = True
-    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine = Engine(
+        store,
+        clock,
+        ingest,
+        state,
+        rule_engine,
+        dispatcher,
+        learning_pack_dir=pack_dir,
+        learning_pack_keep_days=settings.learning.pack_keep_days,
+    )
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
     elif child:
@@ -1143,6 +1244,14 @@ def cmd_start(args: argparse.Namespace) -> int:
             if recorder.last_path is not None:
                 print(f"recording: saved {recorder.last_path}")
         dlog.close()
+        if db is not None:
+            from pitwall.learnpack import write_pack
+
+            try:
+                saved = write_pack(db, pack_dir, keep_days=settings.learning.pack_keep_days)
+                print(f"learning pack: saved {saved}", flush=True)
+            except (OSError, sqlite3.Error, ValueError) as e:
+                print(f"learning pack: skipped ({e})", flush=True)
     return 0
 
 
@@ -1646,11 +1755,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file", nargs="?", default=None, help=REC_HELP)
-    st.add_argument("--learned", action="store_true")
+    stats_modes = st.add_mutually_exclusive_group()
+    stats_modes.add_argument("--learned", action="store_true")
+    stats_modes.add_argument("--quality", action="store_true")
+    st.add_argument("--sessions", type=int, default=10)
     st.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     st.add_argument("--track", type=int, default=None)
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_stats)
+
+    restore = sub.add_parser("restore", help="restore learned state from a learning pack")
+    restore.add_argument("pack", type=Path)
+    restore.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    restore.add_argument("--overlay-dir", type=Path, default=None)
+    restore.set_defaults(func=cmd_restore)
 
     vc = sub.add_parser("voice", help="Piper voices, speech check, voice-command channel")
     vc.set_defaults(func=cmd_voice, voice_action=None)

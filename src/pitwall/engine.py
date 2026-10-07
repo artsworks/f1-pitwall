@@ -11,6 +11,7 @@ import contextlib
 import dataclasses
 import logging
 import math
+import sqlite3
 import time
 import traceback
 from collections.abc import Mapping
@@ -49,7 +50,7 @@ from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
-from pitwall.rules.expr import namespace_data
+from pitwall.rules.expr import expr_names, namespace_data
 from pitwall.setup.advisor import SetupAdvisor
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
@@ -276,6 +277,8 @@ class Engine:
         state: SessionState,
         rule_engine: RuleEngine | None,
         dispatcher: Dispatcher,
+        learning_pack_dir: Path | None = None,
+        learning_pack_keep_days: int = 30,
     ) -> None:
         self.store = store
         settings = store.current()
@@ -285,6 +288,8 @@ class Engine:
         self.state = state
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
+        self.learning_pack_dir = learning_pack_dir
+        self.learning_pack_keep_days = learning_pack_keep_days
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
@@ -308,8 +313,8 @@ class Engine:
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
-        self._manual_cooldown = False
-        self._manual_cooldown_lap = 0
+        self._menu_signal_names: dict[str, frozenset[str]] = {}
+        self._menu_signal_hash = self.store.hash
         self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
@@ -563,7 +568,6 @@ class Engine:
             staleness_age=snapshot.age,
             staleness_limit=lambda n: limits.get(n, STALENESS_DEFAULT_S),
         )
-        ns["manual_cooldown"] = self._manual_cooldown
         return ns
 
     def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
@@ -580,7 +584,7 @@ class Engine:
         outcome: str,
         item: MenuItemModel | None,
         text: str,
-        inputs: dict[str, str] | None = None,
+        inputs: dict[str, Any] | None = None,
     ) -> None:
         self.dispatcher.log.write(
             {
@@ -609,17 +613,45 @@ class Engine:
         if item is not None:
             self._menu_answer(item, t, snapshot, "menu")
 
+    def _menu_signal_values(
+        self, item: MenuItemModel, snapshot: Snapshot
+    ) -> dict[str, int | float]:
+        current_hash = self.store.hash
+        if self._menu_signal_hash != current_hash:
+            self._menu_signal_names.clear()
+            self._menu_signal_hash = current_hash
+        names = self._menu_signal_names.get(item.id)
+        if names is None:
+            rules = {rule.id: rule for rule in self.store.current().rules}
+            names = frozenset(
+                name
+                for rule_id in item.related_rules
+                if (rule := rules.get(rule_id)) is not None
+                for name in expr_names(rule.when)
+            )
+            self._menu_signal_names[item.id] = names
+        signals: dict[str, int | float] = {}
+        for name in names:
+            if not hasattr(snapshot, name):
+                continue
+            value = getattr(snapshot, name)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                continue
+            if isinstance(value, float) and not math.isfinite(value):
+                continue
+            signals[name] = round(value, 3)
+        return signals
+
     def _menu_answer(self, item: MenuItemModel, t: float, snapshot: Snapshot, via: str) -> None:
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
         if item.action == "budget":
             values["budget"] = str(self.cycle_budget())
-        elif item.action == "cooldown":
-            self._manual_cooldown = not self._manual_cooldown
-            case = "on" if self._manual_cooldown else "off"
-            self._manual_cooldown_lap = snapshot.lap_num + (snapshot.phase == "out_lap")
         text = self._menu_replies.pick(item, case, values)
-        self._menu_log(t, snap, "driver_input", item, text, {"case": case, "via": via, **values})
+        inputs: dict[str, Any] = {"case": case, "via": via, **values}
+        if item.kind == "question" and item.related_rules:
+            inputs["signals"] = self._menu_signal_values(item, snap)
+        self._menu_log(t, snap, "driver_input", item, text, inputs)
         if item.kind == "opinion" and item.topic:
             self.opinions[item.topic] = (item.id, snapshot.lap_num)
         if item.action == "mindset":
@@ -645,7 +677,6 @@ class Engine:
         self.menu.close()
         self._menu_replies.reset()
         self.opinions.clear()
-        self._manual_cooldown = False
         self._laps_written = len(self.state.laps)
         self._session_ended_written = False
         self._pit_in_lap = None
@@ -1623,33 +1654,31 @@ class Engine:
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
         self._update_setup_stop_wing()
         snapshot = dataclasses.replace(snapshot, **self.setup_advisor.snapshot_fields())
-        if self._manual_cooldown and (
-            snapshot.lap_num > self._manual_cooldown_lap
-            or snapshot.phase in ("in_lap", "pitting", "garage")
-        ):
-            self._manual_cooldown = False
-        if self._manual_cooldown and snapshot.phase == "flying":
-            snapshot = dataclasses.replace(
-                snapshot,
-                cool_lap=True,
-                cool_prep=False,
-                run_lap_kind="cool",
-                run_plan="manual_cool",
-                run_plan_reason="driver",
-                run_plan_why="Your call",
-            )
+        uid = self.state.session_uid
         if (
             snapshot.session_ended
             and not self._session_ended_written
             and self.db is not None
-            and self.state.session_uid is not None
+            and uid is not None
         ):
             self.fold_open_stint()
-            self._store_debrief_setup(self.state.session_uid)
+            self._store_debrief_setup(uid)
             self._session_ended_written = True
-            self.db.end_session(self.state.session_uid, now)
-            grade_and_store(self.db, self.state.session_uid, self.store.current().thresholds)
-            self.db.mark_graded(self.state.session_uid)
+            self.db.end_session(uid, now)
+            grade_and_store(self.db, uid, self.store.current().thresholds)
+            self.db.mark_graded(uid)
+            if self.learning_pack_dir is not None:
+                from pitwall.learnpack import write_pack
+
+                try:
+                    write_pack(
+                        self.db,
+                        self.learning_pack_dir,
+                        keep_days=self.learning_pack_keep_days,
+                        refresh_quality=[uid],
+                    )
+                except (OSError, sqlite3.Error, ValueError) as e:
+                    log.warning("learning pack skipped at session end: %s", e)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
@@ -1850,6 +1879,8 @@ def build_engine(
     record_to: Path | None = None,
     db: Any = None,
     session_started_at: float | None = None,
+    learning_pack_dir: Path | None = None,
+    learning_pack_keep_days: int = 30,
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
@@ -1901,7 +1932,16 @@ def build_engine(
         budget_override=mode.get("call_budget_per_lap"),
         input=settings.input,
     )
-    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine = Engine(
+        store,
+        clock,
+        ingest,
+        state,
+        rule_engine,
+        dispatcher,
+        learning_pack_dir=learning_pack_dir,
+        learning_pack_keep_days=learning_pack_keep_days,
+    )
     engine.session_origin_started_at = session_started_at
     return engine
 

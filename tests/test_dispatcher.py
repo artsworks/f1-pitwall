@@ -7,8 +7,10 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
+from pitwall.digest import call_quality
 from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot
+from pitwall.store.db import Database
 
 
 class CollectSink:
@@ -206,9 +208,10 @@ def test_p3_straight_only_disabled() -> None:
 
 
 def test_ack_then_say_again() -> None:
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.submit([_cand("a", text="box box")], _snap(0.0))
     d.drain(0.0)
+    original = next(r for r in _log(buf) if r["outcome"] == "fired")
     from pitwall.input.press import Press
 
     # ack with target -> logged, same-lap resubmission suppressed
@@ -219,6 +222,50 @@ def test_ack_then_say_again() -> None:
     d.on_press(Press("ack", 20.0), _snap(20.0))
     calls = d.drain(20.0)
     assert len(calls) == 1 and "say_again" in calls[0].tags
+    replay = [r for r in _log(buf) if r["outcome"] == "fired"][-1]
+    assert replay["inputs"]["repeat_of"] == original["call_id"]
+
+
+def test_replay_press_grades_original_call_and_quality_counts_it_once() -> None:
+    from pitwall.input.press import Press
+
+    db = Database(":memory:")
+    uid = 870
+    db.upsert_session(uid)
+    sink = CollectSink()
+    buf = io.StringIO()
+    d = Dispatcher(
+        PolicySettings(min_gap_s=0.0),
+        VirtualClock(),
+        decision_log=DecisionLog(fp=buf, db=db, session_uid_source=lambda: uid),
+        sinks=[sink],
+        input=InputSettings(
+            say_again=True,
+            say_again_window_s=30.0,
+            response_window_s=3.0,
+            spoken_replies=True,
+        ),
+    )
+    d.submit([_cand("a", text="box box")], _snap(0.0))
+    original, *_ = d.drain(0.0)
+    assert original is not None
+
+    d.on_press(Press("ack", 20.0), _snap(20.0))
+    d.submit([], _snap(20.0))
+    (replay,) = d.drain(20.0)
+    assert "say_again" in replay.tags
+    assert sink.spoken == ["box box", "box box"]
+    d.on_press(Press("ack", 20.5), _snap(20.5))
+
+    grades = db.grades_for_session(uid)
+    assert len(grades) == 1
+    assert grades[0]["call_id"] == original.id
+    assert grades[0]["source"] == "press"
+    calls = db.calls_for_session(uid)
+    ack = next(row for row in calls if row["outcome"] == "ack")
+    assert ack["call_id"] == replay.id and ack["rule_id"] == original.rule_id
+    quality = call_quality(db, uid)
+    assert quality["fired"] == 1 and quality["good"] == 1
 
 
 def test_say_again_ignores_stale_calls() -> None:
@@ -232,16 +279,18 @@ def test_say_again_ignores_stale_calls() -> None:
     assert d.drain(100.0) == []
 
 
-def test_late_press_does_nothing_without_say_again() -> None:
+def test_late_press_bookmarks_without_say_again() -> None:
     from pitwall.input.press import Press
 
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(say_again=False, spoken_replies=True)
     d.submit([_cand("a", text="pit exit clear")], _snap(0.0))
     d.drain(0.0)
     d.on_press(Press("ack", 20.0), _snap(20.0))  # past the response window
-    assert d.drain(20.0) == []
+    assert [call.text for call in d.drain(20.0)] == ["Marked."]
     assert d.quiet_until is None
+    bookmark = next(r for r in _log(buf) if r["outcome"] == "bookmark")
+    assert bookmark["kind"] == "tap"
 
 
 def test_negative_backoff_mutes_not_p1() -> None:
@@ -305,15 +354,33 @@ def test_budget_resets_per_quali_run_on_same_lap() -> None:
 def test_press_gets_spoken_reply() -> None:
     from pitwall.input.press import Press
 
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(spoken_replies=True)
     d.submit([_cand("a", text="box box")], _snap(0.0))
     d.drain(0.0)
     d.on_press(Press("ack", 1.0), _snap(1.0))
     calls = d.drain(1.0)
     assert len(calls) == 1 and calls[0].rule_id == "reply" and calls[0].text == "Copy."
+    ack = next(r for r in _log(buf) if r["outcome"] == "ack")
+    assert ack["grade"] == "good" and ack["grade_source"] == "press"
     d.on_press(Press("neg", 2.0), _snap(2.0))
     assert [c.text for c in d.drain(2.0)] == ["Noted."]
+    neg = next(r for r in _log(buf) if r["outcome"] == "neg")
+    assert neg["grade"] == "noise" and neg["grade_source"] == "press"
+
+
+def test_ack_without_target_bookmarks_with_snapshot_context() -> None:
+    from pitwall.input.press import Press
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(spoken_replies=True, say_again=False)
+    d.on_press(Press("ack", 10.0), Snapshot(now=10.0, lap_num=4, fuel_remaining_laps=3.12345))
+
+    bookmark = next(r for r in _log(buf) if r["outcome"] == "bookmark")
+    assert bookmark["kind"] == "tap"
+    assert bookmark["context"]["lap_num"] == 4
+    assert bookmark["context"]["fuel_remaining_laps"] == 3.123
+    assert d.drain(10.0)[0].text == "Marked."
 
 
 def test_neg_without_target_announces_quiet_and_ack_ends_it() -> None:
@@ -376,7 +443,9 @@ def test_long_press_still_bookmarks_by_default() -> None:
 
     d, _, buf = _dispatcher()
     d.on_press(Press("bookmark", 0.0), _snap(0.0))
-    assert d.silent is False and _log(buf)[-1]["outcome"] == "bookmark"
+    bookmark = _log(buf)[-1]
+    assert d.silent is False and bookmark["outcome"] == "bookmark"
+    assert bookmark["kind"] == "hold" and bookmark["context"]["lap_num"] == 1
 
 
 def test_min_gap_defers_instead_of_dropping() -> None:
