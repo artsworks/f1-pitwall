@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from math import degrees, hypot
 
 from pitwall.protocol.layouts import Corners
 
@@ -43,6 +44,8 @@ class LockupDetector:
         self.reset()
         self.count_lap = 0
         self.count = 0  # this session
+        self.count_front = 0
+        self.count_rear = 0
         self._lap = 0
 
     def reset(self) -> None:
@@ -88,6 +91,10 @@ class LockupDetector:
                 self.wheel = self._worst_wheel
                 self.count_lap += 1
                 self.count += 1
+                if self._worst_wheel < 2:
+                    self.count_rear += 1
+                else:
+                    self.count_front += 1
                 self._note_spot(lap, self._start_dist)
             self._start = None
 
@@ -133,20 +140,27 @@ class SpinDetector:
         self.rejoin_kmh = rejoin_kmh
         self.hold_s = hold_s
         self.count = 0
+        self.count_entry = 0
+        self.count_exit = 0
+        self.last_phase = ""
         self.reset()
 
     def reset(self) -> None:
         self._start: float | None = None
         self._lost = False
         self._at: float | None = None
+        self._phase = ""
 
-    def update(self, t: float, local_velocity: tuple[float, float, float]) -> None:
+    def update(
+        self, t: float, local_velocity: tuple[float, float, float], *, phase: str = ""
+    ) -> None:
         vx, _, vz = local_velocity
         speed_kmh = math.hypot(vx, vz) * 3.6
         slip_deg = math.degrees(math.atan2(abs(vx), vz)) if speed_kmh > 5 else 0.0
         if speed_kmh >= self.min_speed_kmh and slip_deg >= self.slide_deg:
             if self._start is None:
                 self._start = t
+                self._phase = phase
             if t - self._start >= self.min_s:
                 self._lost = True
             return
@@ -156,6 +170,11 @@ class SpinDetector:
             if speed_kmh < self.rejoin_kmh:
                 self._at = t
                 self.count += 1
+                self.last_phase = self._phase
+                if self._phase == "entry":
+                    self.count_entry += 1
+                elif self._phase == "exit":
+                    self.count_exit += 1
 
     def recent(self, t: float) -> bool:
         return self._at is not None and 0 <= t - self._at <= self.hold_s
@@ -302,6 +321,9 @@ class SaveDetector:
         self.settle_s = settle_s
         self.hold_s = hold_s
         self.count = 0
+        self.count_entry = 0
+        self.count_exit = 0
+        self.last_phase = ""
         self.peak_deg = 0.0
         self.reset()
 
@@ -311,14 +333,18 @@ class SaveDetector:
         self._spun = False
         self._straight: float | None = None
         self._at: float | None = None
+        self._phase = ""
 
-    def update(self, t: float, local_velocity: tuple[float, float, float]) -> None:
+    def update(
+        self, t: float, local_velocity: tuple[float, float, float], *, phase: str = ""
+    ) -> None:
         vx, _, vz = local_velocity
         speed_kmh = math.hypot(vx, vz) * 3.6
         slip_deg = math.degrees(math.atan2(abs(vx), vz)) if speed_kmh > 5 else 0.0
         if self._start is None:
             if speed_kmh >= self.min_speed_kmh and slip_deg >= self.save_deg:
                 self._start, self._peak, self._spun, self._straight = t, slip_deg, False, None
+                self._phase = phase
             return
         self._peak = max(self._peak, slip_deg)
         if slip_deg >= self.spin_deg or speed_kmh < 5:
@@ -334,11 +360,122 @@ class SaveDetector:
         if caught and speed_kmh >= self.min_speed_kmh / 2:
             self._at = t
             self.count += 1
+            self.last_phase = self._phase
+            if self._phase == "entry":
+                self.count_entry += 1
+            elif self._phase == "exit":
+                self.count_exit += 1
             self.peak_deg = self._peak
         self._start = None
 
     def recent(self, t: float) -> bool:
         return self._at is not None and 0 <= t - self._at <= self.hold_s
+
+
+class TractionDetector:
+    """Counts sustained rear-wheel slip under throttle, once the episode ends."""
+
+    def __init__(
+        self,
+        *,
+        slip: float = 0.08,
+        min_throttle: float = 0.7,
+        min_speed_kmh: float = 60.0,
+        max_speed_kmh: float = 200.0,
+        min_s: float = 0.15,
+        release_s: float = 0.1,
+    ) -> None:
+        self.slip = slip
+        self.min_throttle = min_throttle
+        self.min_speed_kmh = min_speed_kmh
+        self.max_speed_kmh = max_speed_kmh
+        self.min_s = min_s
+        self.release_s = release_s
+        self.count = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self._start: float | None = None
+        self._last_spinning = 0.0
+
+    def update(self, t: float, slip: Corners, speed_kmh: float, throttle: float) -> None:
+        spinning = (
+            max(slip.rl, slip.rr) > self.slip
+            and throttle > self.min_throttle
+            and self.min_speed_kmh <= speed_kmh <= self.max_speed_kmh
+        )
+        if spinning:
+            if self._start is None:
+                self._start = t
+            self._last_spinning = t
+            return
+        if self._start is not None and t - self._last_spinning >= self.release_s:
+            if self._last_spinning - self._start >= self.min_s:
+                self.count += 1
+            self.reset()
+
+
+class SlipBalance:
+    """Accumulates front-minus-rear wheel slip angles during steady cornering.
+
+    Wheel slip angle is in radians by its measured magnitude. Real sessions on
+    tracks 10 and 17 show a +2 to +5 degree offset, so compare against a baseline.
+    Positive is assumed to mean understeer and negative oversteer, but the sign
+    convention remains unconfirmed.
+    """
+
+    def __init__(
+        self,
+        *,
+        min_lat_g: float = 1.5,
+        min_throttle: float = 0.2,
+        max_throttle: float = 0.8,
+        max_brake: float = 0.05,
+        min_speed_kmh: float = 60.0,
+    ) -> None:
+        self.min_lat_g = min_lat_g
+        self.min_throttle = min_throttle
+        self.max_throttle = max_throttle
+        self.max_brake = max_brake
+        self.min_speed_kmh = min_speed_kmh
+        self._sum = 0.0
+        self._samples = 0
+
+    def update(
+        self,
+        slip_angle: Corners,
+        local_velocity: tuple[float, float, float],
+        angular_velocity: tuple[float, float, float],
+        throttle: float,
+        brake: float,
+    ) -> None:
+        vx, _, vz = local_velocity
+        speed_mps = hypot(vx, vz)
+        speed_kmh = speed_mps * 3.6
+        lat_g = abs(angular_velocity[1]) * speed_mps / 9.81
+        if (
+            lat_g <= self.min_lat_g
+            or not self.min_throttle <= throttle <= self.max_throttle
+            or brake > self.max_brake
+            or speed_kmh < self.min_speed_kmh
+        ):
+            return
+        front = (abs(slip_angle.fl) + abs(slip_angle.fr)) / 2
+        rear = (abs(slip_angle.rl) + abs(slip_angle.rr)) / 2
+        self._sum += degrees(front - rear)
+        self._samples += 1
+
+    def take(self) -> tuple[float, int]:
+        result = (self.mean_deg(), self._samples)
+        self.reset()
+        return result
+
+    def reset(self) -> None:
+        self._sum = 0.0
+        self._samples = 0
+
+    def mean_deg(self) -> float:
+        return self._sum / self._samples if self._samples else 0.0
 
 
 OFF_SURFACES = frozenset(range(2, 11))  # concrete run-off, rock, gravel, mud, sand, grass, ...

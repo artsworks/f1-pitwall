@@ -496,8 +496,10 @@ lock-up advice (rear lock → bias forward; the same front lock-up on 3+ laps �
 earlier or bias rearward). The differential comes from Car Setups
 (`setup_on_throttle_diff` / `setup_off_throttle_diff`), which the game rebroadcasts after
 in-race MFD changes (the reviewed race recording shows on-throttle 60 → 50 and bias
-57 → 56 mid-race); repeated rear lock-ups on entry also suggest more off-throttle diff.
-There is no wheelspin/traction detector yet, so no on-throttle diff advice is given.
+57 → 56 mid-race). Race setup calls come from the setup advisor (`22-setup-advisor.md`):
+`setup_bias` and `setup_on_throttle` quote the live value and the target, and
+`setup_stop_wing` asks for a front-wing value when a stop is planned. Off-throttle diff is
+never advised in a race, because it can't change on track.
 
 `mindset` remains a first-class field of every decision-log record; `Engine.apply_settings()`
 propagates a live mindset change to the rule engine (`mode`), dispatcher (`budget_override`)

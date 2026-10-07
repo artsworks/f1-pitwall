@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from pitwall.model.deg import fuel_burned_laps
+from pitwall.setup.rules import SetupRules, parse_setup_rules
 from pitwall.store.db import Database, LapRow
 from pitwall.strategy.plans import LETTERS
 
@@ -44,6 +46,27 @@ def _th(th: Mapping[str, object], name: str, default: float) -> float:
 def _num(inputs: Mapping[str, object], name: str) -> float | None:
     v = inputs.get(name)
     return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else None
+
+
+def _setup_rules(value: SetupRules | Mapping[str, Any] | None) -> SetupRules:
+    if isinstance(value, SetupRules):
+        return value
+    if value:
+        return parse_setup_rules(value)
+    try:
+        from pitwall.config.loader import ConfigStore
+
+        configured = ConfigStore().current().setup_rules
+        if configured:
+            return parse_setup_rules(configured)
+    except (AssertionError, OSError, ValueError):
+        pass
+    import yaml
+
+    from pitwall.config.loader import DEFAULTS_DIR
+
+    defaults = yaml.safe_load((DEFAULTS_DIR / "setup_rules.yaml").read_text())
+    return parse_setup_rules(defaults)
 
 
 def _new_set(prev: LapRow, cur: LapRow) -> bool:
@@ -190,7 +213,13 @@ def _cliff_laps(
     return base, None
 
 
-def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outcome]:
+def grade_session(
+    db: Database,
+    uid: int,
+    th: Mapping[str, object],
+    *,
+    setup_rules: SetupRules | Mapping[str, Any] | None = None,
+) -> list[Outcome]:
     laps = db.laps_for(uid, 0)
     if not laps:
         return []
@@ -384,10 +413,23 @@ def grade_session(db: Database, uid: int, th: Mapping[str, object]) -> list[Outc
                 f"plan {ev.get('to_plan')} {'-'.join(seq)}, ran {'-'.join(run_seq)}",
             )
         )
+    from pitwall.setup.grade import grade_setup_recs
+
+    out.extend(grade_setup_recs(db, uid, th, _setup_rules(setup_rules)))
     return out
 
 
-def grade_and_store(db: Database, uid: int, th: Mapping[str, object]) -> list[Outcome]:
-    outcomes = grade_session(db, uid, th)
+def grade_and_store(
+    db: Database,
+    uid: int,
+    th: Mapping[str, object],
+    *,
+    setup_rules: SetupRules | Mapping[str, Any] | None = None,
+) -> list[Outcome]:
+    rules = _setup_rules(setup_rules)
+    outcomes = grade_session(db, uid, th, setup_rules=rules)
     db.replace_outcomes(uid, [o.row() for o in outcomes])
+    from pitwall.setup.learn import fold_setup_learning
+
+    fold_setup_learning(db, uid, outcomes, th, rules=rules)
     return outcomes

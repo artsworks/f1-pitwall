@@ -1,0 +1,217 @@
+setup_rules:
+  version: 1
+  defaults:
+    max_alternatives: 2
+    confidence_floor: medium
+  # Symmetry, repeatability, and pace terms are not computed yet.
+  objective:
+    w_deg: 0.30
+    w_lim: 0.25
+    w_th: 0.10
+    w_ev: 0.10
+  # A Q3 recording showed off-throttle remains adjustable with parc fermé on.
+  quali_locked:
+    - rear_wing
+    - engine_braking
+    - front_camber
+    - rear_camber
+    - front_toe
+    - rear_toe
+    - front_suspension
+    - rear_suspension
+    - front_anti_roll_bar
+    - rear_anti_roll_bar
+    - front_suspension_height
+    - rear_suspension_height
+    - brake_pressure
+  # Context access follows docs/22-setup-advisor.md §1.3.
+  params:
+    front_wing:
+      setup_field: front_wing
+      step: 1
+      min: 0
+      max: 50
+      contexts: [practice_garage, quali_garage, race_garage, race_stop, next_visit]
+    rear_wing:
+      setup_field: rear_wing
+      step: 1
+      min: 0
+      max: 50
+      contexts: [practice_garage, next_visit]
+    on_throttle:
+      setup_field: on_throttle
+      step: 5
+      race_step: 10
+      min: 10
+      max: 100
+      contexts:
+        [
+          practice_garage,
+          practice_track,
+          quali_garage,
+          quali_track,
+          race_garage,
+          race_track,
+          next_visit,
+        ]
+    off_throttle:
+      setup_field: off_throttle
+      step: 5
+      min: 10
+      max: 100
+      contexts: [practice_garage, quali_garage, next_visit]
+    brake_bias:
+      setup_field: brake_bias
+      step: 1
+      min: 50
+      max: 70
+      contexts:
+        [
+          practice_garage,
+          practice_track,
+          quali_garage,
+          quali_track,
+          race_garage,
+          race_track,
+          next_visit,
+        ]
+    front_pressure:
+      setup_field: front_left_tyre_pressure
+      step: 0.2
+      contexts: [practice_garage, quali_garage, race_garage, next_visit]
+    rear_pressure:
+      setup_field: rear_left_tyre_pressure
+      step: 0.2
+      contexts: [practice_garage, quali_garage, race_garage, next_visit]
+    rear_anti_roll_bar:
+      setup_field: rear_anti_roll_bar
+      step: 1
+      contexts: [practice_garage, next_visit]
+    front_anti_roll_bar:
+      setup_field: front_anti_roll_bar
+      step: 1
+      contexts: [practice_garage, next_visit]
+    rear_ride_height:
+      setup_field: rear_suspension_height
+      step: 1
+      contexts: [practice_garage, next_visit]
+    rear_suspension:
+      setup_field: rear_suspension
+      step: 1
+      contexts: [practice_garage, next_visit]
+  symptoms:
+    entry_instability:
+      when: "(lockups_rear is not None and lockups_rear >= setup_min_events and lockups_rear_per10 >= setup_lockups_rear_per10) or (snaps_entry is not None and snaps_entry >= setup_min_events and snaps_entry_per10 >= setup_snaps_per10 and snap_phase == 'entry')"
+      candidates:
+        - param: brake_bias
+          dir: 1
+          mag: 1
+          conf: high
+          expect: more front braking, rear stays planted
+          tradeoff: fronts lock earlier
+        - param: off_throttle
+          dir: 1
+          mag: 1
+          conf: medium
+          expect: more stable on entry and coasting
+          tradeoff: less rotation mid-corner
+        - param: rear_ride_height
+          dir: -1
+          mag: 1
+          conf: low
+          expect: less rear pitch under braking
+          tradeoff: kerb strikes
+    traction_limited:
+      when: "(traction_exits is not None and traction_exits >= setup_min_events and traction_exits_per10 >= setup_trac_per10) or (snaps_exit is not None and snaps_exit >= setup_min_events and snaps_exit_per10 >= setup_snaps_per10 and snap_phase == 'exit')"
+      candidates:
+        - param: on_throttle
+          dir: -1
+          mag: 1
+          conf: low
+          expect: less wheelspin on exit
+          tradeoff: less drive if it is not the diff
+        - param: rear_anti_roll_bar
+          dir: -1
+          mag: 1
+          conf: medium
+          expect: more rear grip on exit
+          tradeoff: more understeer
+    rear_wear_limited:
+      when: "run_laps >= setup_min_run_laps and wear_axle_ratio is not None and wear_axle_ratio >= setup_wear_axle_ratio"
+      candidates:
+        - param: rear_pressure
+          dir: 1
+          mag: by_z
+          if: "z_rear is not None and z_rear > setup_z_band"
+          conf: high
+          expect: lower rear tyre temperature and wear
+          tradeoff: less rear grip and traction
+        - param: on_throttle
+          dir: -1
+          mag: 1
+          conf: low
+          expect: reduce rear wheelspin under power
+          tradeoff: slower exits
+        - param: rear_anti_roll_bar
+          dir: -1
+          mag: 1
+          conf: medium
+          expect: add rear grip
+          tradeoff: more understeer
+      contra: ["slip_balance is not None and slip_balance > setup_slip_us_deg"]
+    understeer_balance:
+      when: "slip_balance is not None and slip_balance > setup_slip_us_deg"
+      candidates:
+        - param: front_wing
+          dir: 1
+          mag: 1
+          conf: high
+          expect: add front grip through corners
+          tradeoff: more drag on straights
+        - param: rear_anti_roll_bar
+          dir: 1
+          mag: 1
+          conf: medium
+          expect: help the car rotate mid-corner
+          tradeoff: less rear grip over kerbs
+        - param: rear_pressure
+          dir: 1
+          mag: 1
+          if: "z_rear is not None and z_rear >= -setup_z_band"
+          conf: medium
+          expect: rear rotates more
+          tradeoff: rears run cooler, less traction
+      contra: ["traction_exits is not None and traction_exits >= setup_min_events and traction_exits_per10 >= setup_trac_per10"]
+    oversteer_balance:
+      when: "slip_balance is not None and slip_balance < -setup_slip_os_deg"
+      candidates:
+        - param: front_wing
+          dir: -1
+          mag: 1
+          conf: high
+          expect: reduce front grip and calm the rear
+          tradeoff: more understeer
+        - param: rear_wing
+          dir: 1
+          mag: 1
+          conf: high
+          expect: add rear stability
+          tradeoff: more drag on straights
+        - param: rear_anti_roll_bar
+          dir: -1
+          mag: 1
+          conf: medium
+          expect: add rear mechanical grip
+          tradeoff: more understeer
+        - param: rear_pressure
+          dir: -1
+          mag: 1
+          if: "z_rear is not None and z_rear <= setup_z_band"
+          conf: medium
+          expect: more rear grip
+          tradeoff: rears run hotter
+  magnitudes:
+    by_z:
+      - {z: 0.3, steps: 1}
+      - {z: 0.6, steps: 2}
+      - {z: 1.0, steps: 4}

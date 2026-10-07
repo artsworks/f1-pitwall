@@ -280,7 +280,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
     if uid is None:
         print("digest: no sessions in the database")
         return 1
-    digest = build_digest(db, uid, settings.thresholds)
+    digest = build_digest(db, uid, settings.thresholds, setup_rules=settings.setup_rules)
     if args.json:
         print(json.dumps(digest, indent=2, default=str))
     else:
@@ -312,6 +312,94 @@ def cmd_debrief(args: argparse.Namespace) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_debrief(db, uid, settings))
     print(f"debrief: {path}")
+    return 0
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
+    from pitwall.setup.evaluate import evaluate, explain
+    from pitwall.setup.learn import learned_gains
+    from pitwall.setup.rules import parse_setup_rules
+    from pitwall.setup.signals import session_signals
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("setup: persistence disabled")
+        return 1
+    uid = db.latest_session_with_laps_uid() if args.session is None else int(args.session)
+    if uid is None:
+        print("setup: no session with player laps")
+        return 1
+    session = db.session_row(uid)
+    if session is None:
+        print(f"setup: session {uid} not found")
+        return 1
+    signals = session_signals(
+        db,
+        uid,
+        settings.thresholds,
+        run_choice="longest" if args.mode == "debrief" else "latest",
+    )
+    if signals is None:
+        print(f"setup: session {uid} has no player laps")
+        return 1
+    rules = parse_setup_rules(settings.setup_rules)
+    setup = (
+        db.setup_state_fields(signals.setup_state_id)
+        if signals.setup_state_id is not None
+        else None
+    ) or {}
+    parc_ferme = int(session["parc_ferme"]) if session.get("parc_ferme") is not None else -1
+    recommendations = evaluate(
+        signals,
+        setup,
+        mode=args.mode,
+        parc_ferme=parc_ferme,
+        rules=rules,
+        thresholds=settings.thresholds,
+        learned=learned_gains(db, signals.track_id, signals.compound),
+    )
+    if args.store:
+        for recommendation in recommendations:
+            db.insert_setup_rec(
+                recommendation,
+                track_id=signals.track_id,
+                compound=signals.compound,
+                lap=signals.run_end_lap,
+            )
+
+    if args.json:
+        print(json.dumps([asdict(rec) for rec in recommendations], indent=2, default=str))
+        return 0
+
+    print("tier | parameter | current → proposed | confidence | rule | evidence | suppressed")
+    for rec in recommendations:
+        evidence = ", ".join(f"{key}={value}" for key, value in list(rec.evidence.items())[:4])
+        suppressed_text = ", ".join(f"{item['param']}:{item['reason']}" for item in rec.suppressed)
+        print(
+            f"{rec.tier} | {rec.param} | {rec.from_value:g} → {rec.to_value:g} | "
+            f"{rec.conf} | {rec.rule_id} | {evidence} | {suppressed_text}"
+        )
+    if not recommendations:
+        print("No setup recommendations.")
+    suppression_explanations = explain(
+        signals,
+        setup,
+        mode=args.mode,
+        parc_ferme=parc_ferme,
+        rules=rules,
+        thresholds=settings.thresholds,
+        learned=learned_gains(db, signals.track_id, signals.compound),
+    )
+    if suppression_explanations:
+        items = ", ".join(
+            f"{item.get('rule_id', item.get('param', 'candidate'))}:{item['reason']}"
+            for item in suppression_explanations
+        )
+        print(f"Suppressed: {items}")
     return 0
 
 
@@ -634,7 +722,11 @@ async def _serve(
     from pitwall.server.pin import PinGate
 
     settings = store.current()
-    gate = PinGate() if settings.connection.require_pin else None
+    gate = (
+        PinGate(trust_local=settings.connection.pin_trust_localhost)
+        if settings.connection.require_pin
+        else None
+    )
     if sys.platform == "win32" and settings.connection.https_cert and settings.connection.https_key:
         asyncio.get_running_loop().set_exception_handler(_handle_https_disconnect)
 
@@ -1263,6 +1355,19 @@ def build_parser() -> argparse.ArgumentParser:
     debrief.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     debrief.add_argument("--out", default=None, help="HTML output path")
     debrief.set_defaults(func=cmd_debrief)
+
+    setup = sub.add_parser("setup", help="recommend setup changes for a recorded run")
+    setup.add_argument("session", nargs="?", default=None, help="session uid (default: latest)")
+    setup.add_argument(
+        "--mode",
+        choices=["debrief", "garage"],
+        default="debrief",
+        help="evaluation context (default: debrief)",
+    )
+    setup.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    setup.add_argument("--json", action="store_true", help="print recommendation JSON")
+    setup.add_argument("--store", action="store_true", help="store recommendations in SQLite")
+    setup.set_defaults(func=cmd_setup)
 
     ev = sub.add_parser("evaluate", help="compare recorded calls-on and calls-off outcomes")
     ev.add_argument("--db", default=None)

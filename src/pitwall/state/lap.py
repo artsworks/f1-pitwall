@@ -22,13 +22,25 @@ class LapSummary:
     valid: bool
     invalid_reasons: list[str] = field(default_factory=list)
     wear_pct: float = 0.0  # mean of the 4 corner wear values at lap end
+    wear_front_pct: float = 0.0
+    wear_rear_pct: float = 0.0
     fuel_kg: float = 0.0  # fuel_in_tank at lap end
     ers_deployed_j: float = 0.0  # ers_deployed_this_lap at lap end
     sc_status: int = 0  # max safety_car_status seen during the lap
     weather: int = 0
     tyre_inner_c: float = 0.0
+    tyre_inner_front_c: float = 0.0
+    tyre_inner_rear_c: float = 0.0
     tyre_surface_c: float = 0.0
     visual: int = 0  # visual compound (soft/medium/hard) beside the C-number compound
+    traction_exits: int = 0
+    lockups_front: int = 0
+    lockups_rear: int = 0
+    snaps_entry: int = 0
+    snaps_exit: int = 0
+    slip_balance_deg: float = 0.0
+    slip_samples: int = 0
+    setup_hash: str = ""
 
 
 class LapAccumulator:
@@ -46,6 +58,8 @@ class LapAccumulator:
         self._sc_max = 0
         self._last_driver_status = 0
         self._tyre_inner_sum = 0.0
+        self._tyre_inner_front_sum = 0.0
+        self._tyre_inner_rear_sum = 0.0
         self._tyre_surface_sum = 0.0
         self._tyre_samples = 0
 
@@ -66,6 +80,8 @@ class LapAccumulator:
         surface_corners: tuple[float, float, float, float],
     ) -> None:
         self._tyre_inner_sum += sum(inner_corners) / 4.0
+        self._tyre_inner_rear_sum += (inner_corners[0] + inner_corners[1]) / 2.0
+        self._tyre_inner_front_sum += (inner_corners[2] + inner_corners[3]) / 2.0
         self._tyre_surface_sum += sum(surface_corners) / 4.0
         self._tyre_samples += 1
 
@@ -84,6 +100,8 @@ class LapAccumulator:
         tyre_age_laps: int,
         fuel_remaining_laps: float,
         wear_mean_pct: float = 0.0,
+        wear_front_mean_pct: float = 0.0,
+        wear_rear_mean_pct: float = 0.0,
         fuel_in_tank: float = 0.0,
         ers_deployed_this_lap: float = 0.0,
         weather: int = 0,
@@ -109,8 +127,14 @@ class LapAccumulator:
             self._sc_max,
         )
         inner_c = self._tyre_inner_sum / self._tyre_samples if self._tyre_samples else 0.0
+        inner_front_c = (
+            self._tyre_inner_front_sum / self._tyre_samples if self._tyre_samples else 0.0
+        )
+        inner_rear_c = self._tyre_inner_rear_sum / self._tyre_samples if self._tyre_samples else 0.0
         surface_c = self._tyre_surface_sum / self._tyre_samples if self._tyre_samples else 0.0
         self._tyre_inner_sum = 0.0
+        self._tyre_inner_front_sum = 0.0
+        self._tyre_inner_rear_sum = 0.0
         self._tyre_surface_sum = 0.0
         self._tyre_samples = 0
         self.reset_stint_flags()
@@ -147,11 +171,15 @@ class LapAccumulator:
             valid=not reasons,
             invalid_reasons=reasons,
             wear_pct=wear_mean_pct,
+            wear_front_pct=wear_front_mean_pct,
+            wear_rear_pct=wear_rear_mean_pct,
             fuel_kg=fuel_in_tank,
             ers_deployed_j=ers_deployed_this_lap,
             sc_status=sc_max,
             weather=weather,
             tyre_inner_c=inner_c,
+            tyre_inner_front_c=inner_front_c,
+            tyre_inner_rear_c=inner_rear_c,
             tyre_surface_c=surface_c,
             visual=visual,
         )

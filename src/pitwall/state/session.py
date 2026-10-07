@@ -9,7 +9,7 @@ from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pitwall.model.deg import rival_pace_ms
 from pitwall.protocol.enums import DriverStatus, PitStatus, SessionType, VisualCompound
@@ -32,6 +32,7 @@ from pitwall.protocol.packets import (
     Zone,
     parse,
 )
+from pitwall.setup.states import setup_hash
 from pitwall.state.driving import (
     WHEEL_NAMES,
     BoostTimer,
@@ -39,7 +40,9 @@ from pitwall.state.driving import (
     LockupDetector,
     OffTrackTracker,
     SaveDetector,
+    SlipBalance,
     SpinDetector,
+    TractionDetector,
     YellowTracker,
 )
 from pitwall.state.ema import CornersEma
@@ -57,6 +60,9 @@ from pitwall.state.quali import (
 from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
+
+if TYPE_CHECKING:
+    from pitwall.setup.evaluate import Recommendation
 
 
 def thermal_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:
@@ -193,6 +199,15 @@ class Participant:
 
 
 @dataclass(frozen=True, slots=True)
+class SetupChange:
+    session_time: float
+    lap_num: int
+    from_hash: str
+    to_hash: str
+    fields: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class TyreSet:
     """One tyre set from the player's tyre-sets packet."""
 
@@ -322,6 +337,20 @@ class Snapshot:
     rewinds: int = 0
     weather: int = 0
     game_mode: int = 0
+    parc_ferme: int = -1
+    weekend_structure: tuple[int, ...] = ()
+    next_front_wing: float = 0.0
+    setup_hash: str = ""
+    setup_advice: tuple[Recommendation, ...] = ()
+    setup_call_param: str = ""
+    setup_call_from: float = 0.0
+    setup_call_to: float = 0.0
+    setup_call_reason: str = ""
+    setup_stop_wing_from: float = 0.0
+    setup_stop_wing_to: float = 0.0
+    traction_exits: int = 0
+    slip_balance_deg: float = 0.0
+    snap_phase: str = ""
     since_rewind_s: float = math.inf
     # M3 race engine (docs/18). Model fields mirror ModelView; set_model()
     # fills them.
@@ -709,6 +738,8 @@ class SessionState:
         self.total_laps = 0
         self.weekend_structure: tuple[int, ...] = ()
         self.safety_car_status = 0
+        self.parc_ferme_rules = -1
+        self.snap_phase = ""
         self.session_time_left = 0.0
         self.session_duration = 0.0
         self.track_length_m = 0.0
@@ -745,6 +776,16 @@ class SessionState:
         self.run_temps = RunTemps()
         self.setup_tyre_pressure = _ZERO_CORNERS
         self.setup: dict[str, float] = {}
+        self.setup_hash = ""
+        self.setup_advice: tuple[Recommendation, ...] = ()
+        self._pending_setup: tuple[str, dict[str, Any], float, int] | None = None
+        # (session_time, hash) of each settled setup state, so a flashback can
+        # restore the hash in force at the rewound time.
+        self._setup_history: list[tuple[float, str]] = []
+        # Session time of the last flashback that undid setup changes; the
+        # Engine drops persisted changes after it and clears the marker.
+        self.setup_rewind_t: float | None = None
+        self.next_front_wing_value = 0.0
         self._pressure_base: Corners | None = None
         self.tyre_compound = 0
         self.tyre_visual = 0
@@ -776,6 +817,18 @@ class SessionState:
         self.s3_entry_coldest_c = 0.0
 
         self.lockups = LockupDetector()
+        self.traction = TractionDetector(
+            slip=self._th("trac_slip", 0.08),
+            min_throttle=self._th("trac_throttle", 0.7),
+            min_speed_kmh=self._th("trac_min_kmh", 60.0),
+            max_speed_kmh=self._th("trac_max_kmh", 200.0),
+            min_s=self._th("trac_min_s", 0.15),
+        )
+        self.slip_balance = SlipBalance(
+            min_lat_g=self._th("slip_bal_lat_g", 1.5),
+            min_throttle=self._th("slip_bal_throttle_min", 0.2),
+            max_throttle=self._th("slip_bal_throttle_max", 0.8),
+        )
         self.spins = SpinDetector()
         self.contacts = ContactTracker()
         self.saves = SaveDetector()
@@ -796,6 +849,14 @@ class SessionState:
         # Newly completed rival laps from Session History (car_idx, lap);
         # drained by Engine._write_laps into SQLite.
         self.rival_laps: list[tuple[int, LapSummary]] = []
+        self.setup_changes: list[SetupChange] = []
+        self._lap_event_bases = {
+            "traction_exits": 0,
+            "lockups_front": 0,
+            "lockups_rear": 0,
+            "snaps_entry": 0,
+            "snaps_exit": 0,
+        }
         self._rival_laps_emitted: dict[int, int] = {}
 
         self.cars_lap: tuple[Any, ...] | None = None
@@ -961,8 +1022,33 @@ class SessionState:
             self.lockups.update(
                 st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num, dist
             )
-            self.spins.update(st, pkt.local_velocity)
-            self.saves.update(st, pkt.local_velocity)
+            self.traction.update(st, pkt.wheel_slip_ratio, self.speed_kmh, self.throttle)
+            self.slip_balance.update(
+                pkt.wheel_slip_angle,
+                pkt.local_velocity,
+                pkt.angular_velocity,
+                self.throttle,
+                self.brake,
+            )
+            corner_phase = self._corner_phase()
+            spins_before = self.spins.count
+            saves_before = self.saves.count
+            self.spins.update(st, pkt.local_velocity, phase=corner_phase)
+            self.saves.update(st, pkt.local_velocity, phase=corner_phase)
+            if self.spins.count != spins_before:
+                self.snap_phase = self.spins.last_phase
+            if self.saves.count != saves_before:
+                self.snap_phase = self.saves.last_phase
+
+    def _rewind_setup(self, t: float) -> None:
+        """Forget setup changes the flashback undid and restore the hash at t."""
+        self._pending_setup = None
+        if self.setup_changes and any(change.session_time > t for change in self.setup_changes):
+            self.setup_changes = [c for c in self.setup_changes if c.session_time <= t]
+        if self._setup_history and self._setup_history[-1][0] > t:
+            self._setup_history = [item for item in self._setup_history if item[0] <= t]
+            self.setup_hash = self._setup_history[-1][1] if self._setup_history else ""
+            self.setup_rewind_t = t
 
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
@@ -984,8 +1070,20 @@ class SessionState:
         ):
             ema.reset()
         self.lockups.reset()
+        self.traction.reset()
         self.spins.reset()
         self.saves.reset()
+        # Samples and events from the undone segment must not reach the lap
+        # summary. Detector counts are cumulative, so the bases move with them.
+        self.slip_balance.reset()
+        self._lap_event_bases.update(
+            traction_exits=self.traction.count,
+            lockups_front=self.lockups.count_front,
+            lockups_rear=self.lockups.count_rear,
+            snaps_entry=self.spins.count_entry + self.saves.count_entry,
+            snaps_exit=self.spins.count_exit + self.saves.count_exit,
+        )
+        self._rewind_setup(t)
         self.contacts.reset()
         self.off_track.reset()
         self.boost.reset()
@@ -1021,6 +1119,7 @@ class SessionState:
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
         self.weekend_link_identifier = pkt.weekend_link_identifier
         self.safety_car_status = pkt.safety_car_status
+        self.parc_ferme_rules = pkt.parc_ferme_rules
         self.session_time_left = float(pkt.session_time_left)
         self.session_duration = float(pkt.session_duration)
         self.track_length_m = float(pkt.track_length)
@@ -1157,12 +1256,35 @@ class SessionState:
             tyre_age_laps=self.tyre_age_laps,
             fuel_remaining_laps=self.fuel_remaining_laps,
             wear_mean_pct=sum(self.tyres_wear.as_tuple()) / 4.0,
+            wear_front_mean_pct=(self.tyres_wear.fl + self.tyres_wear.fr) / 2.0,
+            wear_rear_mean_pct=(self.tyres_wear.rl + self.tyres_wear.rr) / 2.0,
             fuel_in_tank=self.fuel_in_tank,
             ers_deployed_this_lap=self.ers_deployed_this_lap_j,
             weather=self.weather,
             visual=self.tyre_visual,
         )
         if summary is not None:
+            counts = {
+                "traction_exits": self.traction.count,
+                "lockups_front": self.lockups.count_front,
+                "lockups_rear": self.lockups.count_rear,
+                "snaps_entry": self.spins.count_entry + self.saves.count_entry,
+                "snaps_exit": self.spins.count_exit + self.saves.count_exit,
+            }
+            deltas = {name: value - self._lap_event_bases[name] for name, value in counts.items()}
+            self._lap_event_bases.update(counts)
+            slip_balance_deg, slip_samples = self.slip_balance.take()
+            summary = dataclasses.replace(
+                summary,
+                traction_exits=deltas["traction_exits"],
+                lockups_front=deltas["lockups_front"],
+                lockups_rear=deltas["lockups_rear"],
+                snaps_entry=deltas["snaps_entry"],
+                snaps_exit=deltas["snaps_exit"],
+                slip_balance_deg=slip_balance_deg,
+                slip_samples=slip_samples,
+                setup_hash=self.setup_hash,
+            )
             self.laps.append(summary)
             self._gap_lines = [*self._gap_lines[-1:], dict(self._gap_now)]
         if self._kind() == "qualifying":
@@ -1567,6 +1689,7 @@ class SessionState:
 
     def _on_car_setups(self, pkt: CarSetupsPacket) -> None:
         car = pkt.cars[self._player_idx]
+        self.next_front_wing_value = pkt.next_front_wing_value
         self.setup_fuel_load = car.fuel_load
         self.setup_front_wing = car.front_wing
         self.setup_rear_wing = car.rear_wing
@@ -1574,6 +1697,27 @@ class SessionState:
         self.setup_on_throttle_diff = car.on_throttle
         self.setup_off_throttle_diff = car.off_throttle
         self.setup = dataclasses.asdict(car)
+        new_hash = setup_hash(self.setup)
+        if not new_hash or new_hash == self.setup_hash:
+            self._pending_setup = None
+        else:
+            now = self._last_session_time or 0.0
+            pending = self._pending_setup
+            if pending is None or pending[0] != new_hash:
+                self._pending_setup = (new_hash, dict(self.setup), now, self.lap_num)
+            elif now - pending[2] >= self._th("setup_settle_s", 3.0):
+                self.setup_changes.append(
+                    SetupChange(
+                        session_time=pending[2],
+                        lap_num=pending[3],
+                        from_hash=self.setup_hash,
+                        to_hash=pending[0],
+                        fields=pending[1],
+                    )
+                )
+                self.setup_hash = pending[0]
+                self._setup_history.append((pending[2], pending[0]))
+                self._pending_setup = None
         self.setup_tyre_pressure = Corners(
             car.rear_left_tyre_pressure,
             car.rear_right_tyre_pressure,
@@ -2179,6 +2323,14 @@ class SessionState:
             saved=self.saves.recent(st) and not self.spins.recent(st),
             saves=self.saves.count,
             save_peak_deg=round(self.saves.peak_deg),
+            parc_ferme=self.parc_ferme_rules,
+            weekend_structure=self.weekend_structure,
+            next_front_wing=self.next_front_wing_value,
+            setup_hash=self.setup_hash,
+            setup_advice=self.setup_advice,
+            traction_exits=self.traction.count,
+            slip_balance_deg=self.slip_balance.mean_deg(),
+            snap_phase=self.snap_phase,
             off_track_lost=self.off_track.lost_recent(st),
             off_track_recovered=self.off_track.recovered_recent(st),
             is_sprint=self._is_sprint(),
@@ -2785,6 +2937,13 @@ class SessionState:
             return _PHASE_BY_DRIVER_STATUS[DriverStatus(self.driver_status)]
         except (ValueError, KeyError):
             return "on_track"
+
+    def _corner_phase(self) -> str:
+        if self.throttle < self._th("snap_entry_throttle", 0.2):
+            return "entry"
+        if self.throttle >= self._th("snap_exit_throttle", 0.5):
+            return "exit"
+        return "mid"
 
     @staticmethod
     def _ema_or_zero(ema: CornersEma) -> Corners:

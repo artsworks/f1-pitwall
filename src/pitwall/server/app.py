@@ -19,7 +19,8 @@ from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
-from pitwall.server.pin import PIN_COOKIE, PinGate
+from pitwall.server.pin import PIN_COOKIE, PinGate, forwarded
+from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
 
@@ -54,13 +55,16 @@ PIT_BOARD_PHASES = ("pitting", "garage")
 
 
 def pit_board_payload(
-    snapshot: Snapshot, thresholds: Mapping[str, Any] | None = None
+    snapshot: Snapshot,
+    thresholds: Mapping[str, Any] | None = None,
+    setup_rules: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Full-screen pit board while pitting / in the garage: pressure target per
     corner, car setup as the game reports it, and what the next run has."""
     if snapshot.phase not in PIT_BOARD_PHASES:
         return None
     th = thresholds or {}
+    rules = setup_rules or {}
     advice = {c.corner: c for c in snapshot.pressure_advice} if snapshot.run_flying_s > 0 else {}
     tyres: dict[str, dict[str, Any]] = {}
     for name in ("fl", "fr", "rl", "rr"):
@@ -82,11 +86,67 @@ def pit_board_payload(
                 and abs(now_psi - target) < 0.05
             ),
         }
+    garage_recs = (
+        [
+            rec
+            for rec in snapshot.setup_advice
+            if rec.mode == "garage" and rec.tier in {"primary", "alternative"}
+        ]
+        if 1 <= snapshot.session_type <= 14
+        else []
+    )
+    setup_advice = [
+        {
+            "param": rec.param,
+            "fields": list(setup_fields_for_param(rec.param, rules)),
+            "from": rec.from_value,
+            "to": rec.to_value,
+            "delta": rec.delta,
+            "conf": rec.conf,
+            "tier": rec.tier,
+            "reason": reason_for_symptom(rec.rule_id),
+        }
+        for rec in garage_recs
+    ]
+    locked_by_param: dict[str, dict[str, Any]] = {}
+    for rec in garage_recs:
+        for item in rec.suppressed:
+            param = item.get("param", "")
+            if item.get("reason") != "locked" or not param:
+                continue
+            fields = setup_fields_for_param(param, rules)
+            if fields:
+                locked_by_param.setdefault(
+                    param,
+                    {"param": param, "fields": list(fields), "reason": item["reason"]},
+                )
+    checklist: list[dict[str, Any]] | None = None
+    if (
+        1 <= snapshot.session_type <= 4
+        and snapshot.parc_ferme != 0
+        and snapshot.session_type in snapshot.weekend_structure
+    ):
+        session_index = snapshot.weekend_structure.index(snapshot.session_type)
+        next_session = (
+            snapshot.weekend_structure[session_index + 1]
+            if session_index + 1 < len(snapshot.weekend_structure)
+            else 0
+        )
+        rule_data = rules.get("setup_rules", rules)
+        locked_fields = rule_data.get("quali_locked", []) if isinstance(rule_data, Mapping) else []
+        if 5 <= next_session <= 14 and isinstance(locked_fields, list):
+            checklist = [
+                {"field": str(field_name), "value": snapshot.setup.get(str(field_name))}
+                for field_name in locked_fields
+            ]
     return {
         "has_advice": bool(advice),
         "advice_text": snapshot.pressure_advice_text if advice else "",
         "tyres": tyres,
         "setup": dict(snapshot.setup) or None,
+        "setup_advice": setup_advice,
+        "setup_locked": list(locked_by_param.values()),
+        "setup_lock_checklist": checklist,
         "fuel_laps": snapshot.fuel_remaining_laps,
         "fuel_need_laps": th.get("fuel_push_need_laps", 0.9),
         "ers_pct": snapshot.ers_store_pct,
@@ -519,7 +579,7 @@ def state_payload(
             "overcut_s": snapshot.overcut_s,
             "predicted_lap_ms": snapshot.predicted_lap_ms,
         },
-        "pit_board": pit_board_payload(snapshot, settings.thresholds),
+        "pit_board": pit_board_payload(snapshot, settings.thresholds, settings.setup_rules),
         "strategy": strategy_payload(snapshot, settings.thresholds),
         "track_info": track_payload(snapshot),
         "setup": setup_payload(snapshot),
@@ -557,7 +617,9 @@ def create_app(
         @app.middleware("http")
         async def require_pin(request: Request, call_next: Any) -> Any:
             host = request.client.host if request.client else None
-            if pin_gate.allowed(host, request.cookies.get(PIN_COOKIE)):
+            if pin_gate.allowed(
+                host, request.cookies.get(PIN_COOKIE), proxied=forwarded(request.headers)
+            ):
                 return await call_next(request)
 
             path = request.url.path
@@ -606,6 +668,7 @@ def create_app(
                 max_age=86400,
                 httponly=True,
                 samesite="strict",
+                secure=request.url.scheme == "https",
                 path="/",
             )
             return response
@@ -687,6 +750,7 @@ def create_app(
         if pin_gate is not None and not pin_gate.allowed(
             websocket.client.host if websocket.client else None,
             websocket.cookies.get(PIN_COOKIE),
+            proxied=forwarded(websocket.headers),
         ):
             await websocket.accept()
             await websocket.close(code=4003, reason="pin required")

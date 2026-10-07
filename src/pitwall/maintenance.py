@@ -28,6 +28,7 @@ from pitwall.config.models import Settings
 from pitwall.hindsight import grade_and_store
 from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
 from pitwall.protocol.enums import SessionType
+from pitwall.setup.states import majority_state
 from pitwall.store.db import Database, ModelParam
 from pitwall.tune import (
     AB_PREFIX,
@@ -163,7 +164,15 @@ def rebuild_stint_params(db: Database, th: Mapping[str, object]) -> tuple[int, l
                 deg_rmse_bad_ms=_th(th, "deg_rmse_bad_ms", 800),
             )
             n = fit.n
-            db.upsert_stint(uid, 0, compound, start, end, fit)
+            db.upsert_stint(
+                uid,
+                0,
+                compound,
+                start,
+                end,
+                fit,
+                setup_state_id=majority_state(laps),
+            )
         if n <= 0 or not fit_is_clean(
             fit,
             deg_max_ms_per_lap=_th(th, "deg_max_ms_per_lap", 600),

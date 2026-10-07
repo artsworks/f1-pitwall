@@ -199,10 +199,11 @@ class RunTracker:
             assert prev_ms is not None
             done: HotLap | None = None
             self.crossings += 1
-            # Track limits can delete this lap and the next: the flag was set
-            # before the line and is still set on the first tick of the new lap.
-            # A flag that first appears on this tick belongs to the new lap only.
-            carried = invalid and self._invalid
+            # A flag set on the first tick of the new lap deletes that lap, whether
+            # it carried over the line or first appeared here. The completed lap
+            # keeps its own state (_invalid), so a flag that first appears on this
+            # tick never invalidates the lap just finished.
+            starts_invalid = invalid
             if self.kind == HOT:
                 done = HotLap(
                     lap_time_ms=prev_ms,
@@ -219,11 +220,11 @@ class RunTracker:
                 self.plan = decide()
             elif not (self.kind == COOL and extend_cool):
                 self.plan = Plan("", "")
-            if carried and self.plan.plan != "box":
+            if starts_invalid and self.plan.plan != "box":
                 self.plan = Plan("cool", "invalid")
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
             self._invalid = invalid
-            self.next_lap_invalid = carried
+            self.next_lap_invalid = starts_invalid
             return done
         if sector == 1 and prev_sector == 0 and sector1_ms > 0:
             self._s1 = sector1_ms

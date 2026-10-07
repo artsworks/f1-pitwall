@@ -226,7 +226,9 @@ def ingest_recordings(
                     recording_path=str(path),
                     calls_mode=origin_mode,
                 )
-                digest = build_digest(db, uid, settings.thresholds)
+                digest = build_digest(
+                    db, uid, settings.thresholds, setup_rules=settings.setup_rules
+                )
                 (digest_dir / f"{uid}.json").write_text(json.dumps(digest, indent=2, default=str))
                 db.mark_ingested(uid, DIGEST_VERSION, str(path))
             findings = [str(item) for item in digest.get("findings", [])]
