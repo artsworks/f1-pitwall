@@ -105,30 +105,10 @@ _MENU_CLIENT_OPS = {
 
 
 def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
+    # Every PlanFields field must also exist on ModelView and Snapshot.
     return dataclasses.replace(
         obj,
-        plans=f.plans,
-        active_plan=f.active_plan,
-        on_plan=f.on_plan,
-        plan_label=f.plan_label,
-        plan_spoken=f.plan_spoken,
-        plan_stops_left=f.plan_stops_left,
-        plan_target_lap=f.plan_target_lap,
-        plan_window_start=f.plan_window_start,
-        plan_window_end=f.plan_window_end,
-        plan_window_text=f.plan_window_text,
-        plan_window_open=f.plan_window_open,
-        plan_next_compound=f.plan_next_compound,
-        plan_off_s=f.plan_off_s,
-        plan_switch_count=f.plan_switch_count,
-        plan_switched_from=f.plan_switched_from,
-        plan_switch_reason=f.plan_switch_reason,
-        plan_switch_lap=f.plan_switch_lap,
-        plan_target_shift=f.plan_target_shift,
-        plan_b_spoken=f.plan_b_spoken,
-        plan_b_delta_s=f.plan_b_delta_s,
-        plan_c_spoken=f.plan_c_spoken,
-        plan_c_delta_s=f.plan_c_delta_s,
+        **{field.name: getattr(f, field.name) for field in dataclasses.fields(PlanFields)},
     )
 
 
@@ -362,7 +342,7 @@ class Engine:
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
-        # Battle state + learned pass model (docs/20 L3).
+        # Battle state + learned pass model (docs/18 Battle state).
         self.battle_tracker = BattleTracker()
         self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
@@ -1633,15 +1613,7 @@ class Engine:
         self._update_model()
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
         self._update_setup_stop_wing()
-        snapshot = dataclasses.replace(
-            snapshot,
-            setup_call_param=self.setup_advisor.call_param,
-            setup_call_from=self.setup_advisor.call_from,
-            setup_call_to=self.setup_advisor.call_to,
-            setup_call_reason=self.setup_advisor.call_reason,
-            setup_stop_wing_from=self.setup_advisor.stop_wing_from,
-            setup_stop_wing_to=self.setup_advisor.stop_wing_to,
-        )
+        snapshot = dataclasses.replace(snapshot, **self.setup_advisor.snapshot_fields())
         if self._manual_cooldown and (
             snapshot.lap_num > self._manual_cooldown_lap
             or snapshot.phase in ("in_lap", "pitting", "garage")

@@ -139,6 +139,17 @@ class SetupAdvisor:
         self.stop_wing_from = 0.0
         self.stop_wing_to = 0.0
 
+    def snapshot_fields(self) -> dict[str, Any]:
+        """The six setup-call fields grafted onto each tick's Snapshot."""
+        return {
+            "setup_call_param": self.call_param,
+            "setup_call_from": self.call_from,
+            "setup_call_to": self.call_to,
+            "setup_call_reason": self.call_reason,
+            "setup_stop_wing_from": self.stop_wing_from,
+            "setup_stop_wing_to": self.stop_wing_to,
+        }
+
     def _live_setup_value(self, param: str) -> float:
         return (
             float(self.state.front_brake_bias)

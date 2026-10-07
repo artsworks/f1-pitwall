@@ -3,11 +3,16 @@
 *.f1idx
 *.f1bin.zst
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.db
+*.db-wal
+*.db-shm
 recordings/
 __pycache__/
 .venv/
 .mypy_cache/
+.pytest_cache/
 .ruff_cache/
 dist/
 *.egg-info/

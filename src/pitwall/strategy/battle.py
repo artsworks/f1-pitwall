@@ -1,4 +1,4 @@
-"""Battle state and racecraft coaching (docs/20 L3).
+"""Battle state and racecraft coaching (docs/18 Battle state).
 
 A deterministic per-tick classification of the fight around the player:
 

@@ -509,7 +509,7 @@ class Snapshot:
     plan_b_delta_s: float = 0.0
     plan_c_spoken: str = ""
     plan_c_delta_s: float = 0.0
-    # Battle state (docs/20 L3, pitwall.strategy.battle), filled by the engine.
+    # Battle state (docs/18 Battle state, pitwall.strategy.battle), filled by the engine.
     battle_mode: str = "free_air"
     battle_mode_laps: int = 0
     battle_catch_laps: float = math.inf
