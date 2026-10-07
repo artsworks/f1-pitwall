@@ -730,3 +730,11 @@ def test_fuel_tight_only_at_or_below_tenth_and_urgent_late() -> None:
     late = _texts(_engine(), fuel_margin_laps=-0.1, lap_num=12, **fuel)["fuel_marginal"]
     assert early != late and ("Early days" in early or "Long way" in early)
     assert "now" in late
+
+
+@pytest.mark.parametrize("rule_id", ["lockup_front", "saved_moment"])
+def test_driving_advice_skips_the_straight_wait(rule_id: str) -> None:
+    """Silverstone sprint L1 and Q1 L3: lockup_front waited 9.4 s and 8.1 s for a
+    straight at priority 3, race L3 saved_moment 8.6 s."""
+    rules = {r.id: r for r in ConfigStore().current().rules}
+    assert rules[rule_id].priority == 2

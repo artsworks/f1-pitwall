@@ -193,7 +193,7 @@ rules:
           - "{lockup_spot_laps} laps same spot. New marker, or bias back from {front_brake_bias}."
   - id: lockup_front
     sessions: [practice, qualifying, race]
-    priority: 3
+    priority: 2
     when: "lockup == 'front' and lockup_spot_laps == 0"
     clear_when: "lockup == ''"
     cooldown_s: 60
@@ -251,7 +251,7 @@ rules:
   # A slide the driver caught without spinning.
   - id: saved_moment
     sessions: [practice, qualifying, race]
-    priority: 3
+    priority: 2
     when: "saved and phase not in ('finished', 'red_flag', 'sc', 'vsc')"
     clear_when: "not saved"
     requires: [motion_ex]
