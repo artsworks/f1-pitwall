@@ -474,7 +474,7 @@ class Database:
         self._reconcile_schema()
 
     def _reconcile_schema(self) -> None:
-        """Restore schema objects omitted when an applied migration changed later."""
+        """Restore missing tables, columns, and indexes, deduplicating before unique indexes."""
         reference = _reference_schema()
         try:
             tables = reference.execute(
@@ -513,6 +513,51 @@ class Database:
                     if default is not None:
                         decl += f" DEFAULT {default}"
                     self._ensure_column(table, column, decl)
+
+                live_indexes = {
+                    row[0]
+                    for row in self._conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                        (table,),
+                    )
+                }
+                reference_indexes = reference.execute(
+                    "SELECT name, sql FROM sqlite_master"
+                    " WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+                    (table,),
+                ).fetchall()
+                index_options = {
+                    row[1]: (bool(row[2]), bool(row[4]))
+                    for row in reference.execute(f'PRAGMA index_list("{table}")')
+                }
+                quoted_table = '"' + table.replace('"', '""') + '"'
+                for index_name, index_sql in reference_indexes:
+                    if index_name in live_indexes:
+                        continue
+                    unique, partial = index_options[index_name]
+                    with self._conn:
+                        if unique and not partial:
+                            index_columns = [
+                                row[2]
+                                for row in reference.execute(f'PRAGMA index_info("{index_name}")')
+                            ]
+                            if index_columns and all(
+                                column is not None for column in index_columns
+                            ):
+                                quoted_columns = [
+                                    '"' + column.replace('"', '""') + '"'
+                                    for column in index_columns
+                                ]
+                                not_null = " AND ".join(
+                                    f"{column} IS NOT NULL" for column in quoted_columns
+                                )
+                                group_by = ", ".join(quoted_columns)
+                                self._conn.execute(
+                                    f"DELETE FROM {quoted_table} WHERE {not_null}"
+                                    f" AND rowid NOT IN (SELECT MIN(rowid) FROM {quoted_table}"
+                                    f" WHERE {not_null} GROUP BY {group_by})"
+                                )
+                        self._conn.execute(index_sql)
         finally:
             reference.close()
 

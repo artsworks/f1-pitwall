@@ -129,6 +129,80 @@ def test_reconcile_creates_missing_table(tmp_path: Path) -> None:
     db.close()
 
 
+def test_reconcile_restores_unique_index_and_drops_duplicates(tmp_path: Path) -> None:
+    path = tmp_path / "missing-unique-index.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS)}")
+    conn.execute("DROP INDEX setup_changes_key")
+    uid = 101
+    session_time = 12.5
+    conn.executemany(
+        "INSERT INTO setup_changes"
+        "(id, session_uid, lap, session_time, from_state, to_state)"
+        " VALUES(?, ?, ?, ?, ?, ?)",
+        [
+            (21, uid, 1, session_time, 1, 7),
+            (22, uid, 1, session_time, 2, 7),
+            (23, uid, 1, session_time, 1, 8),
+            (24, uid, 1, session_time, None, None),
+            (25, uid, 2, session_time, None, None),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    index = db._conn.execute(  # noqa: SLF001
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='setup_changes_key'"
+    ).fetchone()
+    assert index is not None
+    duplicate_ids = db._conn.execute(  # noqa: SLF001
+        "SELECT id FROM setup_changes"
+        " WHERE session_uid=? AND session_time=? AND to_state=? ORDER BY id",
+        (uid, session_time, 7),
+    ).fetchall()
+    assert [row[0] for row in duplicate_ids] == [21]
+    distinct_count = db._conn.execute(  # noqa: SLF001
+        "SELECT COUNT(*) FROM setup_changes WHERE session_uid=? AND session_time=? AND to_state=?",
+        (uid, session_time, 8),
+    ).fetchone()[0]
+    assert distinct_count == 1
+    null_ids = db._conn.execute(  # noqa: SLF001
+        "SELECT id FROM setup_changes"
+        " WHERE session_uid=? AND session_time=? AND to_state IS NULL ORDER BY id",
+        (uid, session_time),
+    ).fetchall()
+    assert [row[0] for row in null_ids] == [24, 25]
+
+    db.insert_setup_change(uid, 1, session_time, None, 7)
+    duplicate_count = db._conn.execute(  # noqa: SLF001
+        "SELECT COUNT(*) FROM setup_changes WHERE session_uid=? AND session_time=? AND to_state=?",
+        (uid, session_time, 7),
+    ).fetchone()[0]
+    assert duplicate_count == 1
+    db.close()
+
+
+def test_reconcile_restores_plain_index(tmp_path: Path) -> None:
+    path = tmp_path / "missing-plain-index.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS)}")
+    conn.execute("DROP INDEX calls_session_t")
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    index = db._conn.execute(  # noqa: SLF001
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='calls_session_t'"
+    ).fetchone()
+    assert index is not None
+    db.close()
+
+
 def test_new_apis_round_trip() -> None:
     db = Database(":memory:")
     db.upsert_session(5, track_id=7, session_type=15, game_mode=3)
