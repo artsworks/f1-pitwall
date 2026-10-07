@@ -704,15 +704,18 @@
       if (s.tyres.graining) f.push("GRAINING");
       if (s.tyres.blister_max_pct) f.push("BLISTER " + s.tyres.blister_max_pct + "%");
     }
+    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
+    var cliff = lop !== null && lop !== undefined && lop < 1;
+    if (cliff) f.push("PAST THE CLIFF");
+    else if (lop !== null && lop !== undefined && lop < 3 && lop < togo) f.push("CLIFF IN " + Math.ceil(lop) + " LAPS");
     setText("cp-flags", f.length ? "⚠ " + f.join(" · ") : "✓ tyres healthy");
     meter("cp-energy-bar", p.ers_pct === null || p.ers_pct === undefined ? null : p.ers_pct / 100,
       p.ers_pct < 20 ? "short" : "");
     meter("cp-fuel-bar", fd === null || fd === undefined ? null : Math.max(0, Math.min(1, 0.5 + fd / 4)),
       fd < 0 ? "crit" : fd < 0.5 ? "short" : "");
-    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
     meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
       lop !== null && lop !== undefined && togo && lop < togo ? (lop < togo - 3 ? "crit" : "short") : "");
-    setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " ok"));
+    setClass("cp-flags", "cp-flags" + (cliff ? " crit" : f.length ? " warn" : " ok"));
   }
 
   function meter(id, frac, cls) {

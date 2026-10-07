@@ -416,6 +416,7 @@ class WeekendStint:
     n_valid_laps: int
     deg_ms_per_lap: float
     fuel_ms_per_lap: float | None = None  # prior fuel slope the fit assumed; None if fitted
+    rmse_ms: float = 0.0
 
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
@@ -1366,6 +1367,7 @@ class Database:
                         if "fuel_ms_per_lap" in params and not params.get("fuel_fitted")
                         else None
                     ),
+                    rmse_ms=float(params.get("rmse_ms", 0.0)),
                 )
             )
         return result

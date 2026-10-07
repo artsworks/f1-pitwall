@@ -18,7 +18,9 @@ from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
 
-def _prior_db(db: Database, *, link: int, started_at: float, laps: int = 8) -> None:
+def _prior_db(
+    db: Database, *, link: int, started_at: float, laps: int = 8, rmse_ms: float = 0.0
+) -> None:
     uid = 0xF1262001
     db.upsert_session(
         uid,
@@ -33,7 +35,7 @@ def _prior_db(db: Database, *, link: int, started_at: float, laps: int = 8) -> N
         17,
         1,
         laps,
-        DegFit(90_000.0, 140.0, 0.0, laps, 0.0, 1.0, "fit"),
+        DegFit(90_000.0, 140.0, 0.0, laps, rmse_ms, 1.0, "fit"),
     )
 
 
@@ -132,6 +134,20 @@ def test_different_weekend_link_and_utc_day_do_not_match(tmp_path) -> None:
 
         assert prior.source != "weekend"
         assert db.weekend_stints(current_uid, 7, 17) == []
+
+
+def test_noisy_practice_fit_is_not_a_weekend_prior() -> None:
+    db = Database(":memory:")
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=0, started_at=day, rmse_ms=1180.0)
+    current_uid = 0xF1262002
+    db.upsert_session(current_uid, track_id=7, session_type=15, started_at=day + 3_600)
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    engine.state.session_uid = current_uid
+
+    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+
+    assert prior.source != "weekend"
 
 
 def test_zero_weekend_link_falls_back_to_same_utc_date() -> None:

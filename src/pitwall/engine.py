@@ -1000,7 +1000,12 @@ class Engine:
             cache_key = (uid, compound)
             weekend = self._weekend_prior_cache.get(cache_key)
             if weekend is None:
-                stints = self.db.weekend_stints(uid, track_id, compound)
+                rmse_bad = self._th("deg_rmse_bad_ms", 800)
+                stints = [
+                    stint
+                    for stint in self.db.weekend_stints(uid, track_id, compound)
+                    if stint.rmse_ms <= rmse_bad
+                ]
                 n = sum(stint.n_valid_laps for stint in stints)
                 if n:
                     value = (
