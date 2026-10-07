@@ -2,6 +2,7 @@
 
 Migrations are an ordered list of SQL scripts tracked by PRAGMA user_version:
 on open, every script with index >= user_version runs in its own transaction.
+Schema reconciliation restores objects missing because an applied migration changed later.
 """
 
 from __future__ import annotations
@@ -428,6 +429,17 @@ def _uid_from_sql(value: int) -> int:
     return value + _U64 if value < 0 else value
 
 
+def _reference_schema() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    try:
+        for migration in MIGRATIONS:
+            conn.executescript(migration)
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
 class Database:
     def __init__(self, path: Path | str) -> None:
         self.path = str(path)
@@ -459,6 +471,95 @@ class Database:
                 self._conn.executescript(MIGRATIONS[i])
                 self._conn.execute(f"PRAGMA user_version={i + 1}")
         self._ensure_column("laps", "visual", "INT DEFAULT 0")
+        self._reconcile_schema()
+
+    def _reconcile_schema(self) -> None:
+        """Restore missing tables, columns, and indexes, deduplicating before unique indexes."""
+        reference = _reference_schema()
+        try:
+            tables = reference.execute(
+                "SELECT name, sql FROM sqlite_master"
+                " WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            live_tables = {
+                row[0]
+                for row in self._conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            for table, create_sql in tables:
+                if table not in live_tables:
+                    with self._conn:
+                        self._conn.execute(create_sql)
+                        indexes = reference.execute(
+                            "SELECT sql FROM sqlite_master"
+                            " WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+                            (table,),
+                        ).fetchall()
+                        for (index_sql,) in indexes:
+                            self._conn.execute(index_sql)
+                    continue
+
+                live_columns = {
+                    row[1] for row in self._conn.execute(f'PRAGMA table_info("{table}")')
+                }
+                for column_info in reference.execute(f'PRAGMA table_info("{table}")'):
+                    _, column, declared_type, not_null, default, primary_key = column_info
+                    if column in live_columns or primary_key:
+                        continue
+                    decl = declared_type
+                    if not_null and default is not None:
+                        decl += " NOT NULL"
+                    if default is not None:
+                        decl += f" DEFAULT {default}"
+                    self._ensure_column(table, column, decl)
+
+                live_indexes = {
+                    row[0]
+                    for row in self._conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                        (table,),
+                    )
+                }
+                reference_indexes = reference.execute(
+                    "SELECT name, sql FROM sqlite_master"
+                    " WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+                    (table,),
+                ).fetchall()
+                index_options = {
+                    row[1]: (bool(row[2]), bool(row[4]))
+                    for row in reference.execute(f'PRAGMA index_list("{table}")')
+                }
+                quoted_table = '"' + table.replace('"', '""') + '"'
+                for index_name, index_sql in reference_indexes:
+                    if index_name in live_indexes:
+                        continue
+                    unique, partial = index_options[index_name]
+                    with self._conn:
+                        if unique and not partial:
+                            index_columns = [
+                                row[2]
+                                for row in reference.execute(f'PRAGMA index_info("{index_name}")')
+                            ]
+                            if index_columns and all(
+                                column is not None for column in index_columns
+                            ):
+                                quoted_columns = [
+                                    '"' + column.replace('"', '""') + '"'
+                                    for column in index_columns
+                                ]
+                                not_null = " AND ".join(
+                                    f"{column} IS NOT NULL" for column in quoted_columns
+                                )
+                                group_by = ", ".join(quoted_columns)
+                                self._conn.execute(
+                                    f"DELETE FROM {quoted_table} WHERE {not_null}"
+                                    f" AND rowid NOT IN (SELECT MIN(rowid) FROM {quoted_table}"
+                                    f" WHERE {not_null} GROUP BY {group_by})"
+                                )
+                        self._conn.execute(index_sql)
+        finally:
+            reference.close()
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         """Add a nullable column when it is missing. Idempotent, so a database
