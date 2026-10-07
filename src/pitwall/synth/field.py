@@ -20,33 +20,9 @@ from pitwall.protocol.header import PacketId
 from pitwall.protocol.pack import pack_packet
 
 _DEFAULT_DEG = {16: 110.0, 17: 70.0, 18: 45.0}
-_DRIVER_NAMES = (
-    "PLAYER",
-    "Norris",
-    "Leclerc",
-    "Verstappen",
-    "Piastri",
-    "Sainz",
-    "Hamilton",
-    "Russell",
-    "Alonso",
-    "Gasly",
-    "Ocon",
-    "Albon",
-    "Tsunoda",
-    "Stroll",
-    "Hulkenberg",
-    "Bearman",
-    "Antonelli",
-    "Lawson",
-    "Doohan",
-    "Bortoleto",
-    "Perez",
-    "Magnussen",
-    "Zhou",
-    "Ricciardo",
-)
+_DRIVER_NAMES = ("PLAYER", *(f"DRIVER {number:02}" for number in range(2, 25)))
 _TEAM_IDS = (0, 1, 3, 0, 2, 4, 5, 5, 6, 7, 7, 8, 9, 6, 10, 10, 2, 9, 11, 11, 3, 4, 8, 1)
+_GRID_SLOT_STAGGER_S = 0.3
 
 
 @dataclass(frozen=True)
@@ -348,7 +324,19 @@ def _pace_offsets(spec: FieldSpec, rng: np.random.Generator) -> np.ndarray:
         player_offset = np.float32(offsets[-1] + spec.pace_spread_ms * 0.1)
     else:
         player_offset = np.float32((offsets[slot - 1] + offsets[slot]) / 2)
-    return np.insert(offsets, slot, player_offset).astype(np.float32)
+    return np.concatenate((np.array([player_offset], dtype=np.float32), offsets))
+
+
+def _grid_positions(spec: FieldSpec) -> list[int]:
+    positions = [spec.player_grid_position]
+    positions.extend(
+        position for position in range(1, spec.cars + 1) if position != spec.player_grid_position
+    )
+    return positions
+
+
+def _grid_start_offsets(spec: FieldSpec) -> list[float]:
+    return [(position - 1) * _GRID_SLOT_STAGGER_S for position in _grid_positions(spec)]
 
 
 def _build_lap_times(spec: FieldSpec) -> tuple[np.ndarray, list[list[tuple[int, int]]]]:
@@ -357,6 +345,7 @@ def _build_lap_times(spec: FieldSpec) -> tuple[np.ndarray, list[list[tuple[int, 
     stops = _strategy_stops(spec, rng)
     lap_times = np.zeros((spec.cars, spec.laps), dtype=np.float32)
     noise = rng.normal(0.0, spec.lap_noise_ms, (spec.cars, spec.laps)).astype(np.float32)
+    start_offsets_ms = np.asarray(_grid_start_offsets(spec), dtype=np.float32) * 1000.0
     for car in range(spec.cars):
         current_stops = stops[car]
         for lap_idx in range(spec.laps):
@@ -390,7 +379,10 @@ def _build_lap_times(spec: FieldSpec) -> tuple[np.ndarray, list[list[tuple[int, 
             lap_times[car, lap_idx] = max(1.0, value)
     if spec.sc_laps is not None and not spec.vsc:
         for lap_idx in range(spec.sc_laps[0] - 1, spec.sc_laps[1]):
-            cumulative = np.cumsum(lap_times[:, : lap_idx + 1], axis=1, dtype=np.float32)[:, -1]
+            cumulative = (
+                start_offsets_ms
+                + np.cumsum(lap_times[:, : lap_idx + 1], axis=1, dtype=np.float32)[:, -1]
+            )
             order = np.argsort(cumulative, kind="stable")
             target = np.minimum(
                 cumulative[order],
@@ -399,9 +391,10 @@ def _build_lap_times(spec: FieldSpec) -> tuple[np.ndarray, list[list[tuple[int, 
             adjusted = np.empty_like(cumulative)
             adjusted[order] = target
             previous = (
-                np.cumsum(lap_times[:, :lap_idx], axis=1, dtype=np.float32)[:, -1]
+                start_offsets_ms
+                + np.cumsum(lap_times[:, :lap_idx], axis=1, dtype=np.float32)[:, -1]
                 if lap_idx
-                else np.zeros(spec.cars, dtype=np.float32)
+                else start_offsets_ms
             )
             lap_times[:, lap_idx] = np.maximum(adjusted - previous, 1.0)
     return lap_times, stops
@@ -422,10 +415,8 @@ def _session_history(
 ) -> dict[str, object]:
     lap_entries: dict[int, dict[str, int]] = {}
     for idx in range(min(completed_laps, lap_times.shape[1], 100)):
-        lap = idx + 1
         sector = int(lap_times[car, idx] / 3)
         ms_part, minutes = _split_time(sector)
-        sc = sc_laps is not None and sc_laps[0] <= lap <= sc_laps[1]
         lap_entries[idx] = {
             "lap_time_ms": int(lap_times[car, idx]),
             "sector1_ms_part": ms_part,
@@ -434,7 +425,7 @@ def _session_history(
             "sector2_minutes": minutes,
             "sector3_ms_part": ms_part,
             "sector3_minutes": minutes,
-            "lap_valid_bit_flags": 0 if sc else 1,
+            "lap_valid_bit_flags": 1,
         }
     completed_stops = [(lap, compound) for lap, compound in stops if lap <= completed_laps]
     compounds = [start_compound, *(compound for _, compound in completed_stops)]
@@ -476,8 +467,16 @@ def _frame_packets(
     frame_index: int,
 ) -> list[bytes]:
     cumulative = np.cumsum(lap_times, axis=1, dtype=np.float32)
+    grid_positions = _grid_positions(spec)
+    start_offsets_s = _grid_start_offsets(spec)
     completed = [
-        int(np.searchsorted(cumulative[car], elapsed_s * 1000, side="right"))
+        int(
+            np.searchsorted(
+                cumulative[car],
+                max(0.0, elapsed_s - start_offsets_s[car]) * 1000,
+                side="right",
+            )
+        )
         for car in range(spec.cars)
     ]
     lap_numbers = [min(spec.laps + 1, count + 1) for count in completed]
@@ -491,12 +490,13 @@ def _frame_packets(
         else:
             prior = float(cumulative[car, count - 1]) if count else 0.0
             duration = float(lap_times[car, count])
-            fraction = min(1.0, max(0.0, (elapsed_s * 1000 - prior) / duration))
+            car_elapsed_ms = max(0.0, elapsed_s - start_offsets_s[car]) * 1000
+            fraction = min(1.0, max(0.0, (car_elapsed_ms - prior) / duration))
             completed_dist = count
         fractions.append(fraction)
         distances.append(fraction * spec.track_length_m)
         total_distances.append((completed_dist + fraction) * spec.track_length_m)
-    order = sorted(range(spec.cars), key=lambda car: (-total_distances[car], car))
+    order = sorted(range(spec.cars), key=lambda car: (-total_distances[car], grid_positions[car]))
     positions = [0] * spec.cars
     for pos, car in enumerate(order, 1):
         positions[car] = pos
@@ -552,7 +552,7 @@ def _frame_packets(
         cars_data[car] = {
             "current_lap_num": lap,
             "car_position": positions[car],
-            "grid_position": spec.player_grid_position if car == 0 else positions[car],
+            "grid_position": grid_positions[car],
             "lap_distance": distances[car],
             "total_distance": total_distances[car],
             "last_lap_time_ms": previous_lap_ms,
@@ -689,12 +689,18 @@ def _recording_packets(spec: FieldSpec, uid: int) -> list[tuple[float, bytes]]:
 
     events: set[str] = set()
     total_ms = float(np.max(np.sum(lap_times, axis=1, dtype=np.float32)))
-    duration_ms = total_ms + (4_000.0 if spec.finish else 0.0)
+    start_offsets_s = _grid_start_offsets(spec)
+    duration_ms = (
+        total_ms + max(start_offsets_s, default=0.0) * 1000 + (4_000.0 if spec.finish else 0.0)
+    )
     frame_count = int(math.ceil(duration_ms / (spec.dt * 1000.0))) + 1
     for frame_index in range(frame_count):
         elapsed_s = frame_index * spec.dt
         player_cumulative = np.cumsum(lap_times[0], dtype=np.float32)
-        player_completed = int(np.searchsorted(player_cumulative, elapsed_s * 1000, side="right"))
+        player_elapsed_s = max(0.0, elapsed_s - start_offsets_s[0])
+        player_completed = int(
+            np.searchsorted(player_cumulative, player_elapsed_s * 1000, side="right")
+        )
         player_lap = min(spec.laps + 1, player_completed + 1)
         if spec.sc_laps is not None:
             start, end = spec.sc_laps

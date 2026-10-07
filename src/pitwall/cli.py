@@ -788,9 +788,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
         build_recording_index,
         build_scorecard,
         compare,
-        find_source,
         load_scenarios,
-        run_scenario,
+        run_scenarios,
     )
 
     scenarios_dir = Path(args.scenarios).expanduser()
@@ -817,32 +816,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         else:
             recording_dirs = [Path(ConfigStore().current().recording.directory).expanduser()]
         index = build_recording_index(recording_dirs)
-        scenario_rows: dict[str, dict[str, Any]] = {}
-        outcomes: list[dict[str, Any]] = []
-        jobs = [
-            (
-                scenario,
-                *find_source(scenario, index),
-            )
-            for scenario in scenarios
-        ]
-        if args.jobs > 1:
-            from concurrent.futures import ProcessPoolExecutor
-
-            with ProcessPoolExecutor(max_workers=args.jobs) as executor:
-                futures = [
-                    executor.submit(run_scenario, scenario, source, settings, rules_dir, reason)
-                    for scenario, source, reason in jobs
-                ]
-                results = [future.result() for future in futures]
-        else:
-            results = [
-                run_scenario(scenario, source, settings, rules_dir=rules_dir, skip_reason=reason)
-                for scenario, source, reason in jobs
-            ]
-        for scenario, (row, scenario_outcomes) in zip(scenarios, results, strict=True):
-            scenario_rows[scenario.id] = row
-            outcomes.extend(scenario_outcomes)
+        scenario_rows, outcomes = run_scenarios(scenarios, index, settings, rules_dir, args.jobs)
         scorecard = build_scorecard(scenario_rows, outcomes)
         baseline_path = (
             Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
@@ -1947,8 +1921,9 @@ def build_parser() -> argparse.ArgumentParser:
     rollout.add_argument("--sims", type=_positive_int, default=100_000)
     rollout.add_argument("--seed", type=int, default=1)
     rollout.add_argument("--device", choices=["cpu", "cuda", "auto"], default="cpu")
-    rollout.add_argument("--priors-db", type=Path, default=None)
-    rollout.add_argument("--priors-json", type=Path, default=None)
+    rollout_priors = rollout.add_mutually_exclusive_group()
+    rollout_priors.add_argument("--priors-db", type=Path, default=None)
+    rollout_priors.add_argument("--priors-json", type=Path, default=None)
     rollout.add_argument("--set", dest="set_threshold", action="append", default=[])
     rollout.add_argument("--grid", type=_positive_int, default=10)
     rollout.add_argument("--player-stop", type=_positive_int, default=None)

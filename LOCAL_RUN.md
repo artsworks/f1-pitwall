@@ -16,6 +16,12 @@ Run the CUDA installation when you want GPU rollouts:
 uv sync --extra gpu
 ```
 
+Check that Torch can access the GPU:
+
+```powershell
+uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
 ## Close the game
 
 Close the game before you run pitwall. The offline commands need no game session.
@@ -83,12 +89,13 @@ Training runtime: fill in after the first run.
 
 ## Update the baseline
 
-Update the baseline only when the bench gate passes and a person approves the change:
-
+Do not pass `--accept-changes`.
+If the gate lists `changed` items, the run stops until the repo owner approves the expectation change.
+Update the baseline only after the gate passes and the repo owner approves the change.
 Review every rule change found only on synthetic races against real recordings.
 
 ```powershell
-uv run pitwall bench --jobs 14 --scenarios .\scenarios --recordings .\recordings --update-baseline --accept-changes --note "Reviewed local run"
+uv run pitwall bench --jobs 14 --scenarios .\scenarios --recordings .\recordings --update-baseline --note "Reviewed local run"
 ```
 
 Do not update the baseline after a failed or incomplete gate.

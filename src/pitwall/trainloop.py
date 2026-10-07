@@ -9,7 +9,7 @@ import math
 import random
 import tempfile
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
@@ -22,7 +22,7 @@ from pitwall.bench import (
     compare,
     find_source,
     load_scenarios,
-    run_scenario,
+    run_scenarios,
 )
 from pitwall.config.loader import ConfigStore
 from pitwall.rollout import RolloutSpec, run_rollouts
@@ -100,49 +100,6 @@ def _rollout_spec(path: Path) -> RolloutSpec:
         )
 
 
-def _run_scenarios(
-    scenarios: list[Any],
-    index: Mapping[int, list[Path]],
-    settings: Any,
-    rules_dir: Path,
-    jobs: int,
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-    from concurrent.futures import ProcessPoolExecutor
-
-    work = [(scenario, *find_source(scenario, index)) for scenario in scenarios]
-    if jobs > 1:
-        with ProcessPoolExecutor(max_workers=jobs) as executor:
-            futures = [
-                executor.submit(
-                    run_scenario,
-                    scenario,
-                    source,
-                    settings,
-                    rules_dir,
-                    reason,
-                )
-                for scenario, source, reason in work
-            ]
-            results = [future.result() for future in futures]
-    else:
-        results = [
-            run_scenario(
-                scenario,
-                source,
-                settings,
-                rules_dir=rules_dir,
-                skip_reason=reason,
-            )
-            for scenario, source, reason in work
-        ]
-    rows: dict[str, dict[str, Any]] = {}
-    outcomes: list[dict[str, Any]] = []
-    for scenario, (row, scenario_outcomes) in zip(scenarios, results, strict=True):
-        rows[scenario.id] = row
-        outcomes.extend(scenario_outcomes)
-    return rows, outcomes
-
-
 def run_training_loop(
     args: argparse.Namespace,
     *,
@@ -204,7 +161,7 @@ def run_training_loop(
                 settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
                 if len(settings.rules) != rule_count:
                     raise RuntimeError("temporary thresholds changed the packaged rule count")
-                rows, outcomes = _run_scenarios(scenarios, index, settings, rules_dir, args.jobs)
+                rows, outcomes = run_scenarios(scenarios, index, settings, rules_dir, args.jobs)
                 scorecard = build_scorecard(rows, outcomes)
                 gate = compare(
                     scorecard,

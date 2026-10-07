@@ -34,7 +34,7 @@ def _fake_bench(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     )
     monkeypatch.setattr(
         trainloop,
-        "_run_scenarios",
+        "run_scenarios",
         lambda scenarios, _index, _settings, _rules, _jobs: (
             {
                 current.id: {

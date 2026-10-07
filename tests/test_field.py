@@ -60,6 +60,9 @@ def test_field_packets_keep_grid_stops_status_history_and_track_consistent(tmp_p
     track_ids: set[int] = set()
     player_rows: list[tuple[int, int, int, int]] = []
     history_stints: tuple[int, int, int] | None = None
+    sc_lap_validity: set[int] = set()
+    first_positions: dict[int, int] = {}
+    grid_positions: dict[int, set[int]] = {}
     event_codes: set[str] = set()
     with RecordingReader(race.path) as reader:
         for _, payload in reader:
@@ -70,6 +73,10 @@ def test_field_packets_keep_grid_stops_status_history_and_track_consistent(tmp_p
             elif header.packet_id == PacketId.SESSION:
                 track_ids.add(packet.track_id)
             elif header.packet_id == PacketId.LAP_DATA:
+                for car_index in range(active_cars):
+                    car_data = packet.cars[car_index]
+                    first_positions.setdefault(car_index, car_data.car_position)
+                    grid_positions.setdefault(car_index, set()).add(car_data.grid_position)
                 car = packet.cars[0]
                 player_rows.append(
                     (
@@ -85,6 +92,13 @@ def test_field_packets_keep_grid_stops_status_history_and_track_consistent(tmp_p
                 assert car.actual_tyre_compound == car.visual_tyre_compound
                 assert car.tyres_age_laps <= 255
             elif header.packet_id == PacketId.SESSION_HISTORY and packet.car_idx == 0:
+                if packet.num_laps >= 3:
+                    sc_lap_validity.update(
+                        (
+                            packet.laps[1].lap_valid_bit_flags,
+                            packet.laps[2].lap_valid_bit_flags,
+                        )
+                    )
                 if packet.num_tyre_stints >= 2:
                     stop = packet.tyre_stints[0]
                     next_stint = packet.tyre_stints[1]
@@ -98,6 +112,12 @@ def test_field_packets_keep_grid_stops_status_history_and_track_consistent(tmp_p
 
     assert active_cars == 20
     assert track_ids == {12}
+    assert len(first_positions) == 20
+    assert all(len(positions) == 1 for positions in grid_positions.values())
+    assert first_positions == {
+        car_index: next(iter(positions)) for car_index, positions in grid_positions.items()
+    }
+    assert sc_lap_validity == {1}
     assert any(pit == 1 for _, pit, _, _ in player_rows)
     assert any(pit == 2 and count == 1 for _, pit, count, _ in player_rows)
     assert any(lap > 2 and count == 1 for lap, _, count, _ in player_rows)

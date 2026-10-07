@@ -54,6 +54,25 @@ def test_rollout_cli_returns_json(capsys: pytest.CaptureFixture[str]) -> None:
     assert output["mean_race_time_s"] > 0
 
 
+def test_rollout_prior_sources_are_mutually_exclusive() -> None:
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "rollout",
+                "--track",
+                "7",
+                "--laps",
+                "6",
+                "--priors-db",
+                "priors.db",
+                "--priors-json",
+                "priors.json",
+            ]
+        )
+
+    assert error.value.code == 2
+
+
 def test_cuda_request_reports_missing_backend_or_device() -> None:
     if importlib.util.find_spec("torch") is not None:
         torch = pytest.importorskip("torch")

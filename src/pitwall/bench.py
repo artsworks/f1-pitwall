@@ -363,6 +363,42 @@ def run_scenario(
         return _scenario_row(scenario, "error", str(exc)), []
 
 
+def run_scenarios(
+    scenarios: Sequence[Scenario],
+    index: Mapping[int, Sequence[Path]],
+    settings: Settings,
+    rules_dir: Path | None,
+    jobs: int,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    work = [(scenario, *find_source(scenario, index)) for scenario in scenarios]
+    if jobs > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            futures = [
+                executor.submit(run_scenario, scenario, source, settings, rules_dir, reason)
+                for scenario, source, reason in work
+            ]
+            results = [future.result() for future in futures]
+    else:
+        results = [
+            run_scenario(
+                scenario,
+                source,
+                settings,
+                rules_dir=rules_dir,
+                skip_reason=reason,
+            )
+            for scenario, source, reason in work
+        ]
+    rows: dict[str, dict[str, Any]] = {}
+    outcomes: list[dict[str, Any]] = []
+    for scenario, (row, scenario_outcomes) in zip(scenarios, results, strict=True):
+        rows[scenario.id] = row
+        outcomes.extend(scenario_outcomes)
+    return rows, outcomes
+
+
 def _real_metrics(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     good = 0
     wrong = 0
