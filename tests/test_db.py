@@ -16,6 +16,62 @@ def test_fresh_db_is_migrated(tmp_path) -> None:
     assert db2._conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)  # noqa: SLF001
 
 
+def test_press_grades_yield_to_human_and_preserve_unsigned_uid() -> None:
+    db = Database(":memory:")
+    uid = (1 << 63) + 42
+
+    db.grade_call(uid, "call-1", "rule", "good", source="press")
+    grade = db.grades_for_session(uid)[0]
+    assert grade["source"] == "press" and grade["grade"] == "good"
+
+    db.grade_call(uid, "call-1", "rule", "noise", source="press")
+    assert db.grades_for_session(uid)[0]["grade"] == "noise"
+
+    db.grade_call(uid, "call-1", "rule", "wrong")
+    db.grade_call(uid, "call-1", "rule", "good", source="press")
+    grade = db.grades_for_session(uid)[0]
+    assert grade["grade"] == "wrong" and grade["source"] == "human"
+
+    db.grade_call(uid, "call-1", "rule", "good")
+    assert db.grades_for_session(uid)[0]["grade"] == "good"
+
+
+def test_bookmark_persists_kind_and_context() -> None:
+    db = Database(":memory:")
+    uid = 21
+    db.insert_call(
+        uid,
+        {
+            "t": 2.0,
+            "lap": 3,
+            "outcome": "bookmark",
+            "kind": "tap",
+            "context": {"lap_num": 3, "fuel_remaining_laps": 4.2357},
+        },
+    )
+
+    bookmark = db.bookmarks_for_session(uid)[0]
+    assert bookmark["kind"] == "tap"
+    assert bookmark["context"] == {"lap_num": 3, "fuel_remaining_laps": 4.2357}
+
+
+def test_insert_call_stores_press_grade() -> None:
+    db = Database(":memory:")
+    db.insert_call(
+        22,
+        {
+            "outcome": "ack",
+            "call_id": "call-1",
+            "rule_id": "tyre_temp",
+            "grade": "good",
+            "grade_source": "press",
+        },
+    )
+
+    grade = db.grades_for_session(22)[0]
+    assert grade["grade"] == "good" and grade["source"] == "press"
+
+
 def test_incremental_migration() -> None:
     import pitwall.store.db as dbmod
 
@@ -171,6 +227,24 @@ def test_insert_lap() -> None:
     rows = db._rows("SELECT * FROM laps WHERE session_uid=?", (7,))  # noqa: SLF001
     assert len(rows) == 1
     assert rows[0]["lap_time_ms"] == 91_234 and rows[0]["valid"] == 0
+
+
+def test_track_minutes_deduplicates_player_laps_and_preserves_uint64_uid() -> None:
+    db = Database(":memory:")
+    uid = 0xACBF76B8C45ADE98
+    db.upsert_session(7)
+    db.upsert_session(uid)
+
+    def lap(lap_num: int, lap_time_ms: int) -> LapSummary:
+        return LapSummary(lap_num, lap_time_ms, 30_000, 31_000, 16, 1, 4.0, True)
+
+    db.insert_lap(7, 0, lap(1, 90_000))
+    db.insert_lap(7, 0, lap(1, 100_000))
+    db.insert_lap(uid, 0, lap(1, 60_000))
+    db.insert_lap(uid, 1, lap(2, 80_000))
+    db.insert_lap(7, 0, lap(2, 0))
+
+    assert db.track_minutes() == {"minutes": 2.7, "laps": 2, "sessions": 2}
 
 
 def test_uint64_session_uid_round_trip() -> None:

@@ -9,6 +9,7 @@
 *.db-wal
 *.db-shm
 recordings/
+learnings/
 __pycache__/
 .venv/
 .mypy_cache/

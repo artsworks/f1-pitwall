@@ -96,6 +96,17 @@ def spoken_lap_time(ms: float) -> str:
     return f"{int(minutes)} {unit} {seconds_text} seconds"
 
 
+def snapshot_scalars(snap: Snapshot) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for item in dataclasses.fields(snap):
+        value = getattr(snap, item.name)
+        if isinstance(value, bool | int | str):
+            values[item.name] = value
+        elif isinstance(value, float) and math.isfinite(value):
+            values[item.name] = round(value, 3)
+    return values
+
+
 PACKET_NAMES: dict[int, str] = {
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",

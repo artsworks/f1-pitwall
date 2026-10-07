@@ -14,7 +14,7 @@ from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.input.press import Press
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Snapshot, snapshot_scalars
 
 _VERBOSITY_PRIORITIES = {
     "silent": set(),
@@ -424,7 +424,14 @@ class Dispatcher:
             "text": target.text if target else "",
         }
         if press.kind == "bookmark":
-            self._log_press(now, snapshot, "bookmark", None, None)
+            self._log_press(
+                now,
+                snapshot,
+                "bookmark",
+                None,
+                None,
+                extra={"kind": "hold", "context": snapshot_scalars(snapshot)},
+            )
             self._broadcast_press(payload)
             return
         if target is None:
@@ -454,8 +461,20 @@ class Dispatcher:
                         trigger_t=now,
                         still_true=None,
                         screen_only=last.screen_only,
+                        inputs={**last.inputs, "repeat_of": last.id},
                     )
                     heapq.heappush(self._queue, _Queued((last.priority, now), replay))
+                else:
+                    payload["kind"] = "bookmark"
+                    self._log_press(
+                        now,
+                        snapshot,
+                        "bookmark",
+                        None,
+                        None,
+                        extra={"kind": "tap", "context": snapshot_scalars(snapshot)},
+                    )
+                    self._reply(self.input.bookmark_replies, snapshot)
             else:  # neg with no target: quiet for quiet_minutes
                 self.quiet_until = now + self.input.quiet_minutes * 60
                 self._log_press(now, snapshot, "quiet_until", None, None)
@@ -466,7 +485,19 @@ class Dispatcher:
                 )
             self._broadcast_press(payload)
             return
-        self._log_press(now, snapshot, press.kind, target, press.kind)
+        grade = "good" if press.kind == "ack" else "noise"
+        self._log_press(
+            now,
+            snapshot,
+            press.kind,
+            target,
+            press.kind,
+            extra={
+                "grade": grade,
+                "grade_source": "press",
+                "grade_call_id": target.inputs.get("repeat_of") or target.id,
+            },
+        )
         d = self._defs.get(target.rule_id)
         own = (d.on_ack if press.kind == "ack" else d.on_neg) if d is not None else ""
         pool = [own] if isinstance(own, str) and own else list(own) if own else []
@@ -514,21 +545,22 @@ class Dispatcher:
         outcome: str,
         call: Call | None,
         by: str | None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
-        self.log.write(
-            {
-                "t": now,
-                "session_time": snap.session_time,
-                "lap": snap.lap_num,
-                "lap_distance": snap.lap_distance,
-                "rule_id": call.rule_id if call else None,
-                "call_id": call.id if call else None,
-                "outcome": outcome,
-                "suppressed_by": by,
-                "inputs": {},
-                "text": call.text if call else "",
-            }
-        )
+        record: dict[str, Any] = {
+            "t": now,
+            "session_time": snap.session_time,
+            "lap": snap.lap_num,
+            "lap_distance": snap.lap_distance,
+            "rule_id": call.rule_id if call else None,
+            "call_id": call.id if call else None,
+            "outcome": outcome,
+            "suppressed_by": by,
+            "inputs": {},
+            "text": call.text if call else "",
+        }
+        record.update(extra or {})
+        self.log.write(record)
 
     def _broadcast_press(self, payload: dict[str, Any]) -> None:
         if self.on_press_event is not None:

@@ -8,6 +8,7 @@ time. Names resolve against the snapshot attributes plus `th` (thresholds),
 from __future__ import annotations
 
 import ast
+import builtins
 from collections.abc import Iterator, Mapping
 from typing import Any
 
@@ -51,6 +52,7 @@ _ALLOWED_NODES = (
 )
 
 _ALLOWED_FUNCS = {"abs", "min", "max", "round", "fresh"}
+_EXPR_NAME_EXCLUSIONS = {"th", "mode", *dir(builtins), *_ALLOWED_FUNCS}
 
 
 class ExprError(ValueError):
@@ -76,6 +78,20 @@ def compile_expr(source: str) -> Any:
         raise ExprError(f"bad rule expression {source!r}: {e}") from e
     _check(tree, source)
     return compile(tree, "<rule>", "eval")
+
+
+def expr_names(source: str) -> set[str]:
+    """Return snapshot names referenced by a validated rule expression."""
+    try:
+        tree = ast.parse(source, mode="eval")
+    except SyntaxError as e:
+        raise ExprError(f"bad rule expression {source!r}: {e}") from e
+    _check(tree, source)
+    return {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id not in _EXPR_NAME_EXCLUSIONS
+    }
 
 
 class AttrView(Mapping[str, Any]):

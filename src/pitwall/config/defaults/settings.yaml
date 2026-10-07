@@ -30,6 +30,8 @@ persistence:
   path: ~/.pitwall/pitwall.sqlite
 learning:
   auto_calibrate: true  # upkeep refits priors and tunes cooldowns; YAML stays review-only
+  pack_dir: learnings  # Learning pack and track ledger. Use another drive or synced folder.
+  pack_keep_days: 30  # Number of dated learning packs to retain.
 
   ema_fast_s: 3.0
   ema_slow_s: 30.0
@@ -238,9 +240,10 @@ input:
   say_again_window_s: 30.0  # "say again" only repeats a call spoken this recently
   quiet_minutes: 5
   spoken_replies: true      # pit wall answers a press: "Copy." / "Noted." or the rule's on_ack/on_neg
+  bookmark_replies: ["Marked."]
   udp_action_bit: 0x00100000
   long_press: silent        # hold UDP Action 1 (>= long_press_ms): radio silent on/off; "bookmark" to mark instead
-  silent_toggle_bit: 0            # dedicated radio-silent toggle; hold Action 1 or the menu instead
+  silent_toggle_bit: 0            # dedicated radio-silent toggle; 0 disables
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
   mindset_toggle_bit: 0x01000000  # UDP Action 5 (stick left): balanced <-> aggressive; 0 disables
   page_cycle_bit: 0x00800000      # UDP Action 4 (stick right): next dashboard page; 0 disables
@@ -253,6 +256,10 @@ input:
     mindset: close
   shortcuts:                      # Stream Deck taps: ask one menu item directly
     - {bit: 0x02000000, item: pit}        # UDP Action 6: Pit now?
-    - {bit: 0x04000000, item: race_stat}  # UDP Action 7: most relevant race stat
+    - {bit: 0x04000000, item: push}       # UDP Action 7: push or save
     - {bit: 0x08000000, item: fight}      # UDP Action 8: fight + pace briefing
+    - {bit: 0x10000000, item: understeer} # UDP Action 9: understeer
+    - {bit: 0x20000000, item: oversteer}  # UDP Action 10: oversteer
+    - {bit: 0x40000000, item: budget}     # UDP Action 11: radio calls
+    - {bit: 0x80000000, item: mindset}    # UDP Action 12: mindset
   negative_mute_laps: 3

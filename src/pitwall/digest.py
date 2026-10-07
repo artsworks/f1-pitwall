@@ -5,16 +5,268 @@ rebuilt and two digests can be diffed."""
 
 from __future__ import annotations
 
+import json
+import math
 import statistics
+import time
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
-DIGEST_VERSION = 2
+DIGEST_VERSION = 3
+
+
+def _record_inputs(row: Mapping[str, Any]) -> dict[str, Any]:
+    raw = row.get("inputs")
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str):
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _finite_time(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _repeat_call_ids(db: Database, uid: int) -> set[str]:
+    calls = db.calls_for_session(uid)
+    repeat_ids: set[str] = set()
+    marked_replays: list[tuple[str, str, float]] = []
+    legacy_fired: dict[str, list[tuple[float, str]]] = defaultdict(list)
+    say_again: list[tuple[float, str, str]] = []
+
+    for row in calls:
+        outcome = row.get("outcome")
+        call_id = row.get("call_id")
+        rule_id = str(row.get("rule_id") or "")
+        row_time = _finite_time(row.get("t"))
+        if outcome == "fired":
+            repeat_of = _record_inputs(row).get("repeat_of")
+            if repeat_of is not None:
+                if call_id is not None:
+                    repeat_ids.add(str(call_id))
+                if row_time is not None:
+                    marked_replays.append((str(repeat_of), rule_id, row_time))
+            elif call_id is not None and rule_id and row_time is not None:
+                legacy_fired[rule_id].append((row_time, str(call_id)))
+        elif outcome == "say_again" and call_id is not None and rule_id and row_time is not None:
+            say_again.append((row_time, str(call_id), rule_id))
+
+    claimed: set[str] = set()
+    for press_time, original_id, rule_id in say_again:
+        if any(
+            target_id == original_id
+            and replay_rule == rule_id
+            and press_time <= replay_time <= press_time + 30
+            for target_id, replay_rule, replay_time in marked_replays
+        ):
+            continue
+        candidates = [
+            (fired_time, call_id)
+            for fired_time, call_id in legacy_fired.get(rule_id, [])
+            if call_id not in claimed and press_time <= fired_time <= press_time + 30
+        ]
+        if candidates:
+            _, replay_id = min(candidates)
+            repeat_ids.add(replay_id)
+            claimed.add(replay_id)
+    return repeat_ids
+
+
+def call_quality(db: Database, uid: int) -> dict[str, Any]:
+    calls = db.calls_for_session(uid)
+    repeat_ids = _repeat_call_ids(db, uid)
+    fired_calls = []
+    for row in calls:
+        rule_id = str(row.get("rule_id") or "")
+        call_id = row.get("call_id")
+        if (
+            row.get("outcome") == "fired"
+            and rule_id != "reply"
+            and not rule_id.startswith("menu:")
+            and (call_id is None or str(call_id) not in repeat_ids)
+        ):
+            fired_calls.append(row)
+
+    grades = {
+        str(grade.get("call_id")): grade
+        for grade in db.grades_for_session(uid)
+        if grade.get("call_id") is not None
+    }
+    fired_ids = {
+        str(call.get("call_id")) for call in fired_calls if call.get("call_id") is not None
+    }
+    fired_grades = {call_id: grades[call_id] for call_id in fired_ids if call_id in grades}
+    fired = len(fired_calls)
+    questions = [row for row in db.driver_inputs_for_session(uid) if row.get("kind") == "question"]
+    unanswered = 0
+    for row in questions:
+        inputs = row.get("inputs")
+        if isinstance(inputs, str):
+            try:
+                inputs = json.loads(inputs)
+            except json.JSONDecodeError:
+                inputs = {}
+        case = inputs.get("case") if isinstance(inputs, dict) else None
+        if case == "unknown" or not str(row.get("reply") or "").strip():
+            unanswered += 1
+    neg = sum(row.get("outcome") == "neg" for row in calls)
+    return {
+        "fired": fired,
+        "graded": len(fired_grades),
+        "ungraded": fired - len(fired_grades),
+        "good": sum(grade.get("grade") == "good" for grade in fired_grades.values()),
+        "good_pct": round(
+            100 * sum(grade.get("grade") == "good" for grade in fired_grades.values()) / fired, 1
+        )
+        if fired
+        else None,
+        "neg": neg,
+        "neg_rate_pct": round(100 * neg / fired, 1) if fired else None,
+        "press_graded": sum(grade.get("source") == "press" for grade in fired_grades.values()),
+        "questions": len(questions),
+        "unanswered_questions": unanswered,
+    }
+
+
+def quality_trend(
+    db: Database,
+    sessions: int = 10,
+    pack_dir: Path | None = None,
+) -> dict[str, Any]:
+    from pitwall.debrief import _session_label, _track_name
+
+    db_sessions = db.sessions()
+    db_uids = {int(session["uid"]) for session in db_sessions}
+    rows = []
+    if sessions > 0:
+        for session in reversed(db_sessions):
+            quality = call_quality(db, int(session["uid"]))
+            if not quality["fired"]:
+                continue
+            rows.append(
+                _quality_session_row(
+                    int(session["uid"]),
+                    session.get("started_at"),
+                    session.get("track_id"),
+                    session.get("session_type"),
+                    quality,
+                    _track_name,
+                    _session_label,
+                )
+            )
+            if len(rows) >= sessions:
+                break
+    if sessions > 0 and pack_dir is not None:
+        from pitwall.learnpack import LEDGER_NAME, read_ledger
+
+        for uid, session in read_ledger(pack_dir / LEDGER_NAME).items():
+            if uid in db_uids:
+                continue
+            ledger_quality = session.get("quality")
+            if not isinstance(ledger_quality, dict):
+                continue
+            fired = ledger_quality.get("fired")
+            if isinstance(fired, bool) or not isinstance(fired, int) or fired <= 0:
+                continue
+            rows.append(
+                _quality_session_row(
+                    uid,
+                    session.get("started_at"),
+                    session.get("track_id"),
+                    session.get("session_type"),
+                    ledger_quality,
+                    _track_name,
+                    _session_label,
+                )
+            )
+    rows.sort(key=_quality_sort_key)
+    rows = rows[-sessions:] if sessions > 0 else []
+
+    trend = None
+    if len(rows) > 1:
+        midpoint = len(rows) // 2
+        older = statistics.fmean(float(row["good_pct"]) for row in rows[:midpoint])
+        newer = statistics.fmean(float(row["good_pct"]) for row in rows[midpoint:])
+        trend = {
+            "older_mean_good_pct": round(older, 1),
+            "newer_mean_good_pct": round(newer, 1),
+            "delta_pct": round(newer - older, 1),
+            "sessions": len(rows),
+        }
+    return {"sessions": rows, "trend": trend}
+
+
+def _quality_session_row(
+    uid: int,
+    started_at: object,
+    track_id: object,
+    session_type: object,
+    quality: Mapping[str, Any],
+    track_name: Callable[[Any], str],
+    session_label: Callable[[Any], str],
+) -> dict[str, Any]:
+    timestamp = _finite_time(started_at)
+    return {
+        "uid": uid,
+        "started_at": started_at,
+        "date": (
+            time.strftime("%Y-%m-%d", time.localtime(timestamp))
+            if timestamp is not None
+            else "unknown"
+        ),
+        "track": track_name(track_id),
+        "session_type": session_label(session_type),
+        **quality,
+    }
+
+
+def _quality_sort_key(row: Mapping[str, Any]) -> tuple[bool, float, int]:
+    started_at = _finite_time(row.get("started_at"))
+    return (
+        started_at is None,
+        started_at if started_at is not None else 0.0,
+        int(row["uid"]),
+    )
+
+
+def startup_scorecard(db: Database, pack_dir: Path | None = None) -> str:
+    if pack_dir is None:
+        minutes = db.track_minutes()
+    else:
+        from pitwall.learnpack import pack_track_minutes
+
+        minutes = pack_track_minutes(db, pack_dir)
+    report = quality_trend(db, pack_dir=pack_dir) if pack_dir is not None else quality_trend(db)
+    rows = report["sessions"]
+    if not rows:
+        quality_text = "n/a"
+    else:
+        good_pct = rows[-1]["good_pct"]
+        quality_text = f"{good_pct:g}% good" if good_pct is not None else "n/a"
+        trend = report["trend"]
+        if trend is not None and good_pct is not None:
+            quality_text += f" ({trend['delta_pct']:+.1f} over last {trend['sessions']})"
+    return (
+        f"pitwall: {round(minutes['minutes']):,} track minutes over "
+        f"{minutes['sessions']:,} sessions · call quality {quality_text}"
+    )
 
 
 def _mean(xs: Sequence[float]) -> float | None:
@@ -76,6 +328,7 @@ def build_digest(
     setup_rules: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     outcomes = grade_and_store(db, uid, th, setup_rules=setup_rules)
+    quality = call_quality(db, uid)
     laps = db.laps_for(uid, 0)
     stops = stop_laps(laps)
     parts = stints(laps, stops)
@@ -94,6 +347,8 @@ def build_digest(
             "neg": 0,
             "human_good": 0,
             "human_bad": 0,
+            "press_good": 0,
+            "press_noise": 0,
             "auto_good": 0,
             "auto_wrong": 0,
         }
@@ -103,7 +358,11 @@ def build_digest(
         if outcome in ("fired", "suppressed", "ack", "neg"):
             calls[str(c.get("rule_id") or "")][outcome] += 1
     for g in db.grades_for_session(uid):
-        key = "human_good" if g["grade"] == "good" else "human_bad"
+        source = str(g.get("source") or "human")
+        if source == "press":
+            key = "press_good" if g["grade"] == "good" else "press_noise"
+        else:
+            key = "human_good" if g["grade"] == "good" else "human_bad"
         calls[str(g["rule_id"])][key] += 1
     for o in outcomes:
         if o.label == "good":
@@ -182,17 +441,29 @@ def build_digest(
             ),
         },
         "calls": dict(sorted(calls.items())),
-        "bookmarks": [{"lap": b.get("lap"), "note": b.get("note") or ""} for b in bookmarks],
+        "quality": quality,
+        "bookmarks": [
+            {"lap": b.get("lap"), "kind": b.get("kind") or "hold", "note": b.get("note") or ""}
+            for b in bookmarks
+        ],
         "findings": findings(outcomes, calls, len(bookmarks), th),
     }
 
 
 def format_digest(d: Mapping[str, Any]) -> str:
     s = d["session"]
+    quality = d.get("quality", {})
+    good_pct = quality.get("good_pct")
+    neg_pct = quality.get("neg_rate_pct")
+    good_text = f"{good_pct:g}%" if good_pct is not None else "n/a"
+    neg_text = f"{neg_pct:g}%" if neg_pct is not None else "n/a"
     lines = [
         f"session {s['uid']} track {s['track_id']} laps {s['laps']}"
         f"  strategy {d['strategy']['executed'] or '-'}  stops {d['stops']}",
         f"outcomes {d['outcomes']}",
+        f"quality {good_text} good · neg {neg_text} · "
+        f"{quality.get('unanswered_questions', 0)} unanswered questions · "
+        f"{quality.get('ungraded', 0)} ungraded",
         "findings:",
     ]
     lines += [f"  - {f}" for f in d["findings"]] or ["  (none)"]

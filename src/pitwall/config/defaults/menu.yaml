@@ -1,13 +1,13 @@
 # Driver -> pit wall menu (docs/12). Up/Down (UDP Action 2/3) open and scroll,
-# UDP Action 1 confirms, Action 7 (or a double press) closes.
+# UDP Action 1 confirms, and a double press closes.
 # Down from closed opens on the first item, Up from closed on the last one,
-# so the driver's own switches sit one Up-press away at the bottom.
+# so the last scroll item sits one Up-press away.
 # Replies are deterministic templates (ADR 0008): the case is picked from the
 # snapshot, variants rotate. Placeholders: see pitwall.input.menu.TEMPLATE_KEYS.
 # The list is situational: on open, items whose `show_when` is false are hidden
 # and those whose `rank_when` holds move to the top (rule expressions on the
-# snapshot, plus `manual_cooldown`). The driver switches at the bottom never
-# move, so they stay one Up-press away. Stick right still cycles pages.
+# snapshot). Shortcut-only items use a dedicated button or voice command.
+# Stick right still cycles pages.
 menu:
   enabled: true
   timeout_s: 6.0
@@ -19,6 +19,19 @@ menu:
     - id: tyres
       label: "Tyres gone?"
       rank_when: "laps_of_pace < 4 or wear_max_pct >= 55 or tyre_switch_to != ''"
+      related_rules:
+        - tyre_life
+        - tyre_overheat
+        - tyre_overheat_wet
+        - tyre_switch
+        - tyre_graining
+        - tyre_blister
+        - wear_front_left
+        - wear_front_right
+        - wear_rear_left
+        - wear_rear_right
+        - wear_fronts
+        - wear_rears
       replies:
         switch: ["Field says {to}. Box for {to}.", "{to} are quicker now. Box, box."]
         gone: ["Yes, they're done. Worst one {wear} percent.", "They're gone. Box when you can."]
@@ -29,65 +42,69 @@ menu:
       label: "Pit now?"
       show_when: "session_kind == 'race'"
       rank_when: "pit_window_start > 0 and pit_window_start <= lap_num <= pit_window_end"
+      related_rules:
+        - plan_announce
+        - plan_announce_no_stop
+        - plan_status
+        - plan_switch
+        - plan_switch_no_stop
+        - plan_window_open
+        - plan_target_lap
+        - box_now
+        - box_in_n
+        - overcut_stay_out
+        - plan_sc_box
       replies:
         box_now: ["Yes, box this lap. {reason}.", "Box, box. {reason}."]
-        soon: ["Not yet. Box in {in_laps}, lap {plan_lap}.", "Stay out, box lap {plan_lap}."]
+        soon:
+          - "Not yet. Box in {in_laps}, lap {plan_lap}."
+          - "Stay out, box lap {plan_lap}."
+          - "Stay out, box lap {plan_lap}. Window {window}."
         stay_out: ["No, stay out. {reason}.", "Negative, stay out."]
-        no_stop: ["No stop. Tyres make the end.", "Stay out to the end."]
+        no_stop:
+          - "No stop. Tyres make the end."
+          - "Stay out to the end. {laps_left} to go."
         tyres_short: ["Yes, box. Tyres have {pace_laps} laps, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, won't last."]
         box_fight: ["Box. Stop costs {loss}, fresh tyres gain {gain}.", "Yes, box. {gain} back for {loss}. Then attack."]
         damage_review: ["Wing {wing} percent. Box if it won't turn.", "Wing {wing} percent. Stay out unless it won't turn."]
         damage_nurse: ["Wing {wing} percent. Too late to stop, nurse it.", "Wing {wing} percent. Stay out, protect the car."]
         hold: ["Stay out. Stop costs {loss}, only {gain} back. Hold P{pos}.", "Negative, hold P{pos}. Tyres make the end."]
         unknown: ["No plan yet. Stay out.", "Still working on it. Stay out."]
-    - id: gap
-      label: "Gap ahead?"
-      show_when: "session_kind == 'race'"
-      rank_when: "battle_mode in ('attacking', 'catching')"
+    - id: fight
+      label: "Fight"
+      rank_when: "battle_mode in ('attacking', 'defending')"
+      related_rules:
+        - overtake_mode
+        - drs_attack
+        - battle_catching
+        - battle_attack
+        - battle_patience
+        - battle_defend
+        - battle_under_threat
+        - battle_manage
+        - battle_passed
+        - battle_held
+        - battle_lost
+        - battle_swap_ahead
+        - battle_swap_behind
+        - battle_scrap
+        - teammate_fight
       replies:
-        closing: ["{gap} to {name}, closing {trend} a lap.", "{name}, {gap}. You're gaining {trend}."]
-        opening: ["{gap} to {name}, losing {trend} a lap.", "{name}, {gap}. He's pulling {trend}."]
-        steady: ["{gap} to {name}, steady.", "{name}, {gap}. Holding."]
-        none: ["Nobody ahead. Clear air.", "You're leading. Clear air."]
-    - id: gap_behind
-      label: "Gap behind?"
-      show_when: "session_kind == 'race'"
-      rank_when: "battle_mode in ('defending', 'under_threat')"
-      replies:
-        closing: ["{gap} to {name} behind, closing {trend}.", "{name} behind, {gap}. He's coming."]
-        steady: ["{gap} to {name} behind.", "{name}, {gap} behind. Covered."]
-        none: ["Nobody behind.", "Clear behind."]
-    - id: fuel
-      label: "Fuel OK?"
-      show_when: "session_kind == 'race'"
-      rank_when: "fuel_margin_laps < 0.5"
-      replies:
-        short: ["Short by {margin} laps. Lift and coast.", "Fuel's short, {margin} laps. Save."]
-        tight: ["Tight. Plus {margin}. Keep an eye on it.", "Just about. Small margin."]
-        ok: ["Fuel's fine.", "Fuel OK, plus {margin} laps."]
-        spare: ["Plenty. Plus {margin} laps, push.", "Spare fuel, use it."]
-        unknown: ["No fuel read yet.", "Not enough data yet."]
-    - id: plan
-      label: "Plan?"
-      show_when: "session_kind == 'race'"
-      replies:
-        box_now: ["Box this lap. {reason}.", "Plan is box now."]
-        stop: ["Box lap {plan_lap}. {reason}.", "Plan, box lap {plan_lap}. Window {window}."]
-        to_end: ["No more stops. {laps_left} to go.", "Go to the end. {laps_left} laps."]
-        unknown: ["Plan's open. {laps_left} to go.", "Still working on it."]
-    - id: push
-      label: "Push or save?"
-      show_when: "session_kind == 'race'"
-      replies:
-        save_fuel: ["Save fuel. Short {margin} laps.", "Save. Lift and coast."]
-        save_energy: ["Save battery. Harvest this lap.", "Save energy, you're over."]
-        save_tyres: ["Save the tyres.", "Manage tyres, long way to go."]
-        attack: ["Push. {gap} to the car ahead.", "Attack now."]
-        push: ["Push. Nothing to save.", "Free to push."]
+        both: ["{ahead} {behind}"]
+        ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind."]
+        behind: ["Clear ahead. {behind}", "Nobody ahead. {behind}"]
+        none: ["P{pos}, {laps_left} to go. Clear air."]
+        times: ["P{pos} on the times. Best lap {best}."]
+        no_time: ["No clean lap on the board yet."]
+        unknown: ["No timing yet.", "Still waiting on timing."]
     - id: rain
       label: "Rain coming?"
       show_when: "rain_pct_in_30 > 0 or weather_crossover != '' or weather_now >= 3"
       rank_when: "tyre_switch_to != '' or (weather_crossover != '' and not ((weather_crossover == 'to_inter' and tyre_compound == 7) or (weather_crossover == 'to_wet' and tyre_compound == 8)))"
+      related_rules:
+        - weather_to_inter
+        - weather_to_wet
+        - weather_to_dry
       replies:
         switch: ["Box for {to}. The field's quicker on them.", "{to} are the tyre now. Box this lap."]
         right_tyre: ["You're on the right tyre. Stay out.", "{tyre} are right. Stay out, we'll call it."]
@@ -95,35 +112,39 @@ menu:
         coming: ["Rain coming. {in10} percent in ten.", "Yes, {in30} percent in thirty."]
         chance: ["Maybe. {in10} percent in ten.", "Small chance, {in30} percent."]
         dry: ["No, staying dry.", "Dry. No rain expected."]
-    - id: race_stat
-      label: "Race stat"
+    - id: push
+      label: "Push or save?"
+      show_when: "session_kind == 'race'"
+      related_rules:
+        - fuel_short
+        - fuel_marginal
+        - fuel_spare
+        - energy_over
+        - energy_under
+        - boost_left_on
+        - ers_fault
+        - plan_push
+        - plan_push_now
+        - plan_cool
+        - cool_recharge
+        - cool_recharge_check
       replies:
-        fuel_short: ["Fuel short {margin} laps. Lift and coast.", "Fuel first. Short {margin}, save."]
-        tyres_gone: ["Tyres done, {wear} percent.", "Tyres gone, {wear} percent worn."]
-        energy: ["Battery over budget. Harvest.", "Energy over, save battery."]
-        box_now: ["Box this lap. {reason}.", "It's box now. {reason}."]
-        pit_soon: ["P{pos}, box lap {plan_lap}. {laps_left} to go.", "Box in {in_laps}. P{pos}, {laps_left} left."]
-        position: ["P{pos}, {laps_left} to go. Best lap {best}.", "P{pos}. {laps_left} left, best {best}."]
-        practice: ["P{pos} on the times. Best lap {best}.", "Best lap {best}, that's P{pos}."]
-        practice_no_best: ["No clean lap on the board yet.", "No valid lap yet. Get one in."]
-        unknown: ["No race read yet.", "Not enough data yet."]
-    - id: fight
-      label: "Fight"
-      show_when: "session_kind == 'race' and (rival_ahead_idx >= 0 or rival_behind_idx >= 0)"
-      rank_when: "battle_mode in ('attacking', 'defending')"
-      replies:
-        both: ["{ahead} {behind}"]
-        ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind."]
-        behind: ["Clear ahead. {behind}", "Nobody ahead. {behind}"]
-        none: ["Nobody near. Clear air.", "Clear air, both ways."]
+        save_fuel: ["Save fuel. Short {margin} laps.", "Save. Lift and coast."]
+        save_energy: ["Save battery. Harvest this lap.", "Save energy, you're over."]
+        save_tyres: ["Save the tyres.", "Manage tyres, long way to go."]
+        fuel_tight: ["Push, fuel's tight. Plus {margin} laps."]
+        attack: ["Push. {gap} to the car ahead.", "Attack now."]
+        push: ["Push. Nothing to save.", "Free to push."]
     - id: budget
       label: "Radio calls"
+      shortcut_only: true
       kind: action
       action: budget
       replies:
         default: ["Copy, up to {budget} calls a lap.", "Understood, {budget} calls a lap."]
     - id: understeer
       label: "Understeer"
+      shortcut_only: true
       kind: opinion
       topic: balance
       replies:
@@ -131,6 +152,7 @@ menu:
         no_bias: ["Copy, understeer. Try bias back one.", "Understeer noted."]
     - id: oversteer
       label: "Oversteer"
+      shortcut_only: true
       kind: opinion
       topic: balance
       replies:
@@ -138,6 +160,7 @@ menu:
         no_bias: ["Copy, oversteer. Try bias forward one.", "Oversteer noted."]
     - id: mindset
       label: "Mindset"
+      shortcut_only: true
       show_when: "session_kind == 'race'"
       kind: action
       action: mindset
@@ -145,10 +168,3 @@ menu:
       label: "Radio silent"
       kind: action
       action: silent
-    - id: cooldown
-      label: "Cooldown lap"
-      kind: action
-      action: cooldown
-      replies:
-        "on": ["Copy, cooldown lap.", "Cool lap. Recharge, reset."]
-        "off": ["Copy, back to hot-lap mode.", "Understood. Hot-lap coaching is back."]

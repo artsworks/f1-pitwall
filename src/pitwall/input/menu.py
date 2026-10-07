@@ -33,11 +33,12 @@ def _holds(source: str, ns: Mapping[str, object]) -> bool:
 def situational(items: list[MenuItemModel], ns: Mapping[str, object] | None) -> list[MenuItemModel]:
     """Items relevant to the situation in `ns` (a rule namespace), most
     relevant first. Everything, in YAML order, when `ns` is None."""
+    scroll_items = [item for item in items if not item.shortcut_only]
     if ns is None:
-        return list(items)
-    shown = [i for i in items if not i.show_when or _holds(i.show_when, ns)]
+        return scroll_items
+    shown = [i for i in scroll_items if not i.show_when or _holds(i.show_when, ns)]
     top = [i for i in shown if i.rank_when and _holds(i.rank_when, ns)]
-    return top + [i for i in shown if i not in top] or list(items)
+    return top + [i for i in shown if i not in top] or scroll_items
 
 
 class DriverMenu:
@@ -60,6 +61,8 @@ class DriverMenu:
             return None
         if not self.open:
             self.items = situational(settings.items, ns)
+            if not self.items:
+                return None
         items = self.items
         n = len(items)
         if not self.open:
@@ -148,6 +151,7 @@ def _pit(snap: Snapshot) -> Answer:
     loss = snap.pit_loss_s if snap.pit_loss_s > 0 else PIT_LOSS_FALLBACK_S
     gain = snap.deg_ms_per_lap * snap.tyre_age_laps * left / 1000.0
     v = {
+        "laps_left": str(max(0, left)),
         "plan_lap": str(snap.pit_plan_lap),
         "in_laps": str(max(0, snap.pit_plan_lap - snap.lap_num)),
         "reason": snap.pit_plan_reason,
@@ -187,34 +191,6 @@ def _pit(snap: Snapshot) -> Answer:
     return "hold", v
 
 
-def _gap(snap: Snapshot) -> Answer:
-    v = {
-        "gap": _n(snap.gap_ahead_s),
-        "name": snap.rival_ahead_name or "the car ahead",
-        "trend": _n(abs(snap.gap_trend_ahead_s)),
-    }
-    if snap.rival_ahead_idx < 0 or not math.isfinite(snap.gap_ahead_s):
-        return "none", v
-    if snap.gap_trend_ahead_s > 0.1:
-        return "closing", v
-    if snap.gap_trend_ahead_s < -0.1:
-        return "opening", v
-    return "steady", v
-
-
-def _gap_behind(snap: Snapshot) -> Answer:
-    v = {
-        "gap": _n(snap.gap_behind_s),
-        "name": snap.rival_behind_name or "the car behind",
-        "trend": _n(abs(snap.gap_trend_behind_s)),
-    }
-    if snap.rival_behind_idx < 0 or not math.isfinite(snap.gap_behind_s):
-        return "none", v
-    if snap.gap_trend_behind_s > 0.1:
-        return "closing", v
-    return "steady", v
-
-
 def _fuel(snap: Snapshot) -> Answer:
     m = snap.fuel_margin_laps
     v = {"margin": _n(abs(m))}
@@ -227,18 +203,6 @@ def _fuel(snap: Snapshot) -> Answer:
     if m > 1.0:
         return "spare", v
     return "ok", v
-
-
-def _plan(snap: Snapshot) -> Answer:
-    case, v = _pit(snap)
-    v["compound_sets"] = str(snap.fresh_sets_medium + snap.fresh_sets_hard)
-    if case == "box_now":
-        return "box_now", v
-    if case in ("soon", "stay_out") and snap.pit_plan_lap > snap.lap_num:
-        return "stop", v
-    if case == "no_stop":
-        return "to_end", v
-    return "unknown", v
 
 
 _CROSSOVER_TYRE = {"to_inter": 7, "to_wet": 8}
@@ -275,50 +239,18 @@ def _rain(snap: Snapshot) -> Answer:
 
 def _push(snap: Snapshot) -> Answer:
     v = {"margin": _n(abs(snap.fuel_margin_laps)), "gap": _n(snap.gap_ahead_s)}
-    if snap.fuel_source and snap.fuel_margin_laps < -0.2:
-        return "save_fuel", v
+    fuel_case, fuel_values = _fuel(snap)
+    if fuel_case == "short":
+        return "save_fuel", fuel_values
     if snap.energy_mode == "over":
         return "save_energy", v
     if snap.laps_remaining > 0 and snap.laps_of_pace < min(snap.laps_remaining, 4):
         return "save_tyres", v
+    if fuel_case == "tight":
+        return "fuel_tight", fuel_values
     if 0 < snap.gap_ahead_s <= 1.0:
         return "attack", v
     return "push", v
-
-
-def _lap_time(ms: float) -> str:
-    return spoken_lap_time(round(ms / 100) * 100)
-
-
-def _race_stat(snap: Snapshot) -> Answer:
-    """The one fact that matters most right now: a critical fuel, tyre or
-    energy problem, then the pit call, else position and laps left."""
-    pit_case, v = _pit(snap)
-    v.update(
-        {
-            "pos": str(snap.position),
-            "best": _lap_time(snap.player_best_lap_ms),
-            "margin": _n(abs(snap.fuel_margin_laps)),
-            "wear": _n(snap.wear_max_pct, 0),
-        }
-    )
-    if snap.fuel_source and snap.fuel_margin_laps < -0.2:
-        return "fuel_short", v
-    if snap.session_kind == "practice":
-        if snap.wear_max_pct >= 70:
-            return "tyres_gone", v
-        return ("practice" if snap.player_best_lap_ms > 0 else "practice_no_best"), v
-    if snap.wear_max_pct >= 70 or (snap.tyre_age_laps > 0 and snap.laps_of_pace < 1):
-        return "tyres_gone", v
-    if snap.energy_mode == "over":
-        return "energy", v
-    if pit_case == "box_now":
-        return "box_now", v
-    if pit_case == "soon":
-        return "pit_soon", v
-    if snap.position <= 0:
-        return "unknown", v
-    return "position", v
 
 
 def _side(name: str, gap: float, trend: float, ahead: bool) -> str:
@@ -335,24 +267,36 @@ def _side(name: str, gap: float, trend: float, ahead: bool) -> str:
 
 
 def _fight(snap: Snapshot) -> Answer:
+    values = {
+        "ahead": "",
+        "behind": "",
+        "pos": str(snap.position),
+        "laps_left": str(max(0, snap.laps_remaining)),
+        "best": spoken_lap_time(round(snap.player_best_lap_ms / 100) * 100)
+        if snap.player_best_lap_ms > 0
+        else "",
+    }
+    if snap.position <= 0:
+        return "unknown", values
+    if snap.session_kind != "race":
+        return ("times" if snap.player_best_lap_ms > 0 else "no_time"), values
     has_ahead = snap.rival_ahead_idx >= 0 and math.isfinite(snap.gap_ahead_s)
     has_behind = snap.rival_behind_idx >= 0 and math.isfinite(snap.gap_behind_s)
-    v = {"ahead": "", "behind": ""}
     if has_ahead:
-        v["ahead"] = _side(
+        values["ahead"] = _side(
             snap.rival_ahead_name or "Car", snap.gap_ahead_s, snap.gap_trend_ahead_s, True
         )
     if has_behind:
-        v["behind"] = _side(
+        values["behind"] = _side(
             snap.rival_behind_name or "Car", snap.gap_behind_s, snap.gap_trend_behind_s, False
         )
     if has_ahead and has_behind:
-        return "both", v
+        return "both", values
     if has_ahead:
-        return "ahead", v
+        return "ahead", values
     if has_behind:
-        return "behind", v
-    return "none", v
+        return "behind", values
+    return "none", values
 
 
 def _balance(snap: Snapshot, step: int) -> Answer:
@@ -365,13 +309,8 @@ def _balance(snap: Snapshot, step: int) -> Answer:
 ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
     "tyres": _tyres,
     "pit": _pit,
-    "gap": _gap,
-    "gap_behind": _gap_behind,
-    "fuel": _fuel,
-    "plan": _plan,
     "rain": _rain,
     "push": _push,
-    "race_stat": _race_stat,
     "fight": _fight,
     "understeer": lambda s: _balance(s, -1),  # bias rearward frees the front
     "oversteer": lambda s: _balance(s, +1),  # bias forward calms the rear
@@ -486,4 +425,24 @@ def validate_shortcuts(inp: InputSettings, settings: MenuSettings) -> list[str]:
         f"input.shortcuts: unknown menu item {sc.item!r}"
         for sc in inp.shortcuts
         if sc.item not in ids
+    ]
+
+
+def shortcut_warnings(inp: InputSettings, settings: MenuSettings) -> list[str]:
+    """Warn when a shortcut-only item has no dedicated input binding."""
+    bound = {shortcut.item for shortcut in inp.shortcuts}
+    return [
+        f"menu item {item.id!r} is shortcut_only but no input.shortcuts binds it"
+        for item in settings.items
+        if item.shortcut_only and item.id not in bound
+    ]
+
+
+def validate_related_rules(settings: MenuSettings, rule_ids: set[str]) -> list[str]:
+    """Reject menu references to rules that are not loaded."""
+    return [
+        f"menu item {item.id!r}: unknown related rule {rule_id!r}"
+        for item in settings.items
+        for rule_id in item.related_rules
+        if rule_id not in rule_ids
     ]
