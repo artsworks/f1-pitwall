@@ -645,7 +645,9 @@ class Snapshot:
 
     @property
     def fuel_margin_r(self) -> float:
-        return round(self.fuel_margin_laps, 1) + 0.0
+        """Margin rounded for speech. A deficit never reads as +0.0."""
+        r = round(self.fuel_margin_laps, 1) + 0.0
+        return min(r, -0.1) if self.fuel_margin_laps < 0 else r
 
     @property
     def positions_lost(self) -> int:
