@@ -355,3 +355,14 @@ rules:
     say:
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Push from the line"
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Go"
+  # Grid drop picked up in quali or a sprint shootout: it moves the race start.
+  - id: grid_penalty
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "grid_penalty_recent and grid_penalty_places > 0"
+    clear_when: "not grid_penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "Grid penalty. {grid_penalty_places} places back for the race"
+      - "{grid_penalty_places} place grid penalty for the race"

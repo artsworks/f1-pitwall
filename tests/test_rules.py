@@ -432,3 +432,37 @@ def test_battle_catching_never_says_zero_laps() -> None:
     text = next(c.text for c in result.candidates if c.rule.defn.id == "battle_catching")
     assert "0.0 laps" not in text
     assert "HAMILTON" in text
+
+
+def test_qualifying_rules_run_in_sprint_shootout() -> None:
+    base = {
+        "session_kind": "qualifying",
+        "session_type": 10,
+        "phase": "in_lap",
+        "_ages": {"lap_data": 0.1, "session_history": 0.1},
+    }
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine()
+        .evaluate(_snap(**base, quali_margin_ms=1_200, quali_margin_s=1.2, quali_margin_kind="cut"))
+        .candidates
+    }
+    assert "quali_safe_cut" in ids
+
+
+def test_grid_penalty_rule_fires_in_qualifying() -> None:
+    result = _default_rule_engine().evaluate(
+        _snap(
+            session_kind="qualifying",
+            session_type=10,
+            grid_penalty_recent=True,
+            grid_penalty_places=5,
+            _ages={"event": 0.1},
+        )
+    )
+    texts = {c.rule.defn.id: c.text for c in result.candidates}
+    assert "5" in texts["grid_penalty"]
+    clear = _default_rule_engine().evaluate(
+        _snap(session_kind="qualifying", session_type=10, _ages={"event": 0.1})
+    )
+    assert "grid_penalty" not in {c.rule.defn.id for c in clear.candidates}

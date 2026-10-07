@@ -134,6 +134,7 @@ SECTOR3_VALID = 0x08
 # PENA penalty_type -> announced kind. Other types (warning 5, lap invalidated
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
+PENALTY_TYPE_GRID = 2
 PENALTY_TYPE_WARNING = 5
 
 
@@ -461,6 +462,8 @@ class Snapshot:
     penalty_infringement: int = 0
     penalty_time_s: int = 0
     penalty_kind: str = ""  # 'time' | 'drive_through' | 'stop_go' for the latest real penalty
+    grid_penalty_places: int = 0  # places the player drops on the race grid
+    grid_penalty_recent: bool = False
     unserved_drive_through: int = 0
     unserved_stop_go: int = 0
     warnings: int = 0
@@ -920,6 +923,8 @@ class SessionState:
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
+        self.grid_penalty_places = 0
+        self._last_grid_penalty_st: float | None = None
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
@@ -1468,6 +1473,9 @@ class SessionState:
                             self._penalty_pending_s = (
                                 max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
                             )
+                if ptype == PENALTY_TYPE_GRID:
+                    self.grid_penalty_places += int(pkt.detail.get("places_gained", 0))
+                    self._last_grid_penalty_st = pkt.header.session_time
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -2210,6 +2218,11 @@ class SessionState:
             penalty_recent=(
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            grid_penalty_places=self.grid_penalty_places,
+            grid_penalty_recent=(
+                self._last_grid_penalty_st is not None
+                and 0.0 <= st - self._last_grid_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
             track_warning_kind=self.track_warning_kind,
             track_warning_count=self._track_warnings.get(

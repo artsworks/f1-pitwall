@@ -258,3 +258,29 @@ def test_weather_crossover_ignores_forecast_after_the_flag() -> None:
     assert snap.weather_crossover == ""
     assert (snap.weather_crossover_pct, snap.weather_crossover_min) == (6, 10)
     assert snap.rain_pct_in_30 == 70
+
+
+def test_grid_penalty_places_from_pena_event() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 2, 7, 0, 255, 0, 5, 5)  # type 2, places_gained 5
+    snap = state.snapshot(2.0)
+    assert snap.grid_penalty_places == 5 and snap.grid_penalty_recent
+    _lap(ingest, 30.0)
+    snap = state.snapshot(30.0)
+    assert snap.grid_penalty_places == 5 and not snap.grid_penalty_recent
+
+
+def test_grid_penalty_from_another_car_is_ignored() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 2, 7, 1, 255, 0, 5, 5)  # vehicle_idx 1, not the player
+    snap = state.snapshot(2.0)
+    assert snap.grid_penalty_places == 0 and not snap.grid_penalty_recent
+
+
+def test_positions_gained_uses_post_penalty_grid() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, grid_position=15, car_position=17)
+    snap = state.snapshot(1.0)
+    assert snap.grid_position == 15 and snap.positions_gained == -2
