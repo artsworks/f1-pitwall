@@ -136,7 +136,7 @@ rules:
   - id: boost_left_on
     sessions: [practice, qualifying, race]
     priority: 1
-    when: "boost_on_s >= th.boost_warn_s and (brake >= th.boost_warn_brake or throttle <= th.boost_warn_lift or boost_on_s >= th.boost_max_s)"
+    when: "boost_on_s >= th.boost_warn_s and (brake >= th.boost_warn_brake or throttle <= th.boost_warn_lift)"
     clear_when: "boost_on_s == 0"
     still_true: "boost_on_s > 0"
     requires: [car_status, car_telemetry]

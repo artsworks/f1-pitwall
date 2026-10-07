@@ -283,7 +283,7 @@ rules:
     cooldown_group: car_behind
     requires: [lap_data]
     say:
-      - "Hot lap behind, {hot_car_behind_s:.0f} seconds. Off the line"
+      - "Hot lap behind, {hot_car_behind_s:.1f} seconds. Off the line"
       - "Hot lap behind. Move over"
   - id: cool_extend
     sessions: [qualifying]

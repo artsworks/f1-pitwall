@@ -77,3 +77,17 @@ def test_energy_not_draining_is_inf() -> None:
         over_tolerance_j=200_000.0,
     )
     assert math.isinf(b.laps_to_floor)
+
+
+def test_energy_allowance_uses_lap_start_store() -> None:
+    b = energy_budget(
+        store_j=500_000.0,
+        store_capacity_j=4_000_000.0,
+        laps_remaining=5,
+        allowance_store_j=3_000_000.0,
+        deployed_this_lap_j=100_000.0,
+        harvested_this_lap_j=0.0,
+    )
+    assert b.per_lap_j == 600_000.0
+    assert b.store_pct == 12.5
+    assert b.laps_to_floor == 5.0

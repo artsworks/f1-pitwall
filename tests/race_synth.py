@@ -95,9 +95,21 @@ def _history(i: int, laps: list[int]) -> dict[str, object]:
 def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     pkts: list[tuple[float, bytes]] = []
     t = 0.0
+    frame = 1
 
     def emit(pid: int, data: dict[str, object]) -> None:
-        pkts.append((t, pack_packet(pid, data, session_uid=spec.session_uid, session_time=t)))
+        pkts.append(
+            (
+                t,
+                pack_packet(
+                    pid,
+                    data,
+                    session_uid=spec.session_uid,
+                    session_time=t,
+                    frame=frame,
+                ),
+            )
+        )
 
     def event(code: bytes, detail: bytes = b"") -> None:
         emit(PacketId.EVENT, {"event_string_code": code, "event_data": detail.ljust(12, b"\0")})
@@ -135,6 +147,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         frames = max(1, int(lap_ms / 1000 / spec.dt))
         wear = player_wear0 + spec.wear_pct_per_lap * age
         for f in range(frames):
+            frame += 1
             frac = f / frames
             d = frac * TRACK_M
             player_pitting = spec.player_pit_lap == lap and frac > 0.85
@@ -253,6 +266,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     if spec.finish:
         event(b"CHQF")
         for f in range(int(4 / spec.dt)):
+            frame += 1
             d = f * spec.dt * TRACK_M / (spec.base_ms / 1000.0)
             emit(
                 PacketId.LAP_DATA,

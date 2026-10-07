@@ -49,7 +49,7 @@ from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import SessionState, Snapshot
+from pitwall.state.session import ErsLapTotals, SessionState, Snapshot
 from pitwall.store.db import LapRow
 from pitwall.strategy.battle import (
     HOLD,
@@ -142,6 +142,141 @@ def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
     return pace_words(closing_s)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _EnergyLapLatch:
+    lap_num: int
+    start_store_j: float
+    start_laps_remaining: int
+    gradable: bool
+
+
+class _EnergyLapTracker:
+    def __init__(self) -> None:
+        self._latch: _EnergyLapLatch | None = None
+        self._finishing: _EnergyLapLatch | None = None
+        self._graded_seq: int | None = None
+        self._partial_next_latch = False
+        self.prev_lap: EnergyBudget | None = None
+
+    def reset(self) -> None:
+        self._latch = None
+        self._finishing = None
+        self._graded_seq = None
+        self._partial_next_latch = True
+        self.prev_lap = None
+
+    def _start_latch(
+        self,
+        lap_num: int,
+        laps_remaining: int,
+        store_j: float,
+        *,
+        gradable: bool,
+    ) -> None:
+        self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, gradable)
+        self._partial_next_latch = False
+
+    def _grade(
+        self,
+        lap: _EnergyLapLatch,
+        counters: tuple[float, float],
+        *,
+        store_j: float,
+        store_capacity_j: float,
+        soc_floor_pct: float,
+        over_tolerance_j: float,
+        attack_ok: bool,
+    ) -> None:
+        self.prev_lap = None
+        if not lap.gradable:
+            return
+        deployed_j, harvested_j = counters
+        self.prev_lap = energy_budget(
+            store_j=store_j,
+            allowance_store_j=lap.start_store_j,
+            store_capacity_j=store_capacity_j,
+            laps_remaining=lap.start_laps_remaining,
+            deployed_this_lap_j=deployed_j,
+            harvested_this_lap_j=harvested_j,
+            soc_floor_pct=soc_floor_pct,
+            over_tolerance_j=over_tolerance_j,
+            attack_ok=attack_ok,
+        )
+
+    def observe(
+        self,
+        lap_num: int,
+        laps_remaining: int,
+        store_j: float,
+        dep: float,
+        harv: float,
+        *,
+        counters_current: bool,
+        finished: ErsLapTotals | None,
+        store_capacity_j: float,
+        soc_floor_pct: float,
+        over_tolerance_j: float,
+        attack_ok: bool,
+    ) -> tuple[float, float, float | None, int]:
+        if lap_num < 1:
+            if self._latch is not None or self._finishing is not None:
+                self.reset()
+            live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
+            return live_dep, live_harv, None, laps_remaining
+
+        if self._latch is None:
+            self._start_latch(
+                lap_num,
+                laps_remaining,
+                store_j,
+                gradable=lap_num == 1 and not self._partial_next_latch,
+            )
+        elif lap_num == self._latch.lap_num + 1:
+            self._finishing = self._latch
+            self.prev_lap = None
+            self._start_latch(lap_num, laps_remaining, store_j, gradable=True)
+        elif lap_num != self._latch.lap_num:
+            self._finishing = None
+            self.prev_lap = None
+            self._start_latch(lap_num, laps_remaining, store_j, gradable=False)
+
+        if finished is not None and finished.seq != self._graded_seq:
+            finishing = self._finishing
+            if finishing is not None and finished.lap_num == finishing.lap_num:
+                self._grade(
+                    finishing,
+                    (finished.deployed_j, finished.harvested_j),
+                    store_j=store_j,
+                    store_capacity_j=store_capacity_j,
+                    soc_floor_pct=soc_floor_pct,
+                    over_tolerance_j=over_tolerance_j,
+                    attack_ok=attack_ok,
+                )
+                self._finishing = None
+            self._graded_seq = finished.seq
+
+        return self._live_values(
+            laps_remaining,
+            dep,
+            harv,
+            counters_current=counters_current,
+        )
+
+    def _live_values(
+        self,
+        laps_remaining: int,
+        dep: float,
+        harv: float,
+        *,
+        counters_current: bool,
+    ) -> tuple[float, float, float | None, int]:
+        live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
+        lap = self._latch
+        if lap is not None and lap.gradable:
+            return live_dep, live_harv, lap.start_store_j, lap.start_laps_remaining
+        return live_dep, live_harv, None, laps_remaining
+
+
 class Engine:
     def __init__(
         self,
@@ -220,6 +355,8 @@ class Engine:
         self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
         self.energy_budget: EnergyBudget | None = None
+        self.energy_prev_lap: EnergyBudget | None = None
+        self._energy_lap_tracker = _EnergyLapTracker()
         self._pit_in_lap: LapSummary | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
@@ -237,6 +374,7 @@ class Engine:
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
+            self._reset_energy_lap_tracking()
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
@@ -510,6 +648,7 @@ class Engine:
 
     def _on_new_session(self, uid: int) -> None:
         self.dispatcher.reset_session()
+        self._reset_energy_lap_tracking()
         self.menu.close()
         self._menu_replies.reset()
         self.opinions.clear()
@@ -533,6 +672,10 @@ class Engine:
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self.session_origin_started_at = None
+
+    def _reset_energy_lap_tracking(self) -> None:
+        self._energy_lap_tracker.reset()
+        self.energy_prev_lap = None
 
     def _upsert_session(self, uid: int) -> None:
         if self.db is None:
@@ -987,6 +1130,32 @@ class Engine:
             )
 
         laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
+        lap_num = state.lap_num
+        deployed_j = state.ers_deployed_this_lap_j
+        harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
+        energy_capacity_j = self._th("ers_store_capacity_j", 4_000_000)
+        energy_floor_pct = float(mode.get("ers_soc_floor_pct", 0) or 0)
+        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 200_000)
+        energy_attack_ok = mode.get("ers_policy") == "attack_rival"
+        (
+            live_deployed_j,
+            live_harvested_j,
+            allowance_store_j,
+            live_laps_remaining,
+        ) = self._energy_lap_tracker.observe(
+            lap_num,
+            laps_remaining,
+            state.ers_store_energy_j,
+            deployed_j,
+            harvested_j,
+            counters_current=state.ers_counters_current,
+            finished=state.ers_finished_lap,
+            store_capacity_j=energy_capacity_j,
+            soc_floor_pct=energy_floor_pct,
+            over_tolerance_j=energy_over_tolerance_j,
+            attack_ok=energy_attack_ok,
+        )
+        self.energy_prev_lap = self._energy_lap_tracker.prev_lap
         per_lap_kg, fuel_source = self._fuel_per_lap(laps_remaining)
         self.fuel_budget = fuel_budget(
             laps_remaining=laps_remaining,
@@ -999,13 +1168,14 @@ class Engine:
         )
         self.energy_budget = energy_budget(
             store_j=state.ers_store_energy_j,
-            store_capacity_j=self._th("ers_store_capacity_j", 4_000_000),
-            laps_remaining=laps_remaining,
-            deployed_this_lap_j=state.ers_deployed_this_lap_j,
-            harvested_this_lap_j=state.ers_harvested_mguk_j + state.ers_harvested_mguh_j,
-            soc_floor_pct=float(mode.get("ers_soc_floor_pct", 0) or 0),
-            over_tolerance_j=self._th("energy_over_tolerance_j", 200_000),
-            attack_ok=mode.get("ers_policy") == "attack_rival",
+            store_capacity_j=energy_capacity_j,
+            laps_remaining=live_laps_remaining,
+            deployed_this_lap_j=live_deployed_j,
+            harvested_this_lap_j=live_harvested_j,
+            allowance_store_j=allowance_store_j,
+            soc_floor_pct=energy_floor_pct,
+            over_tolerance_j=energy_over_tolerance_j,
+            attack_ok=energy_attack_ok,
         )
 
         fit = self.deg_fit
@@ -1074,6 +1244,14 @@ class Engine:
                 fuel_source=fb.source if fb is not None else "",
                 energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
                 energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
+                energy_prev_lap_delta_mj=(
+                    self.energy_prev_lap.lap_delta_j / 1e6
+                    if self.energy_prev_lap is not None
+                    else 0.0
+                ),
+                energy_prev_lap_mode=(
+                    self.energy_prev_lap.mode if self.energy_prev_lap is not None else ""
+                ),
                 energy_laps_to_floor=eb.laps_to_floor if eb is not None else math.inf,
                 energy_mode=eb.mode if eb is not None else "",
                 predicted_lap_ms=predicted,
