@@ -1037,6 +1037,7 @@ async def _serve(
 
     from pitwall.server.app import create_app
     from pitwall.server.pin import PinGate
+    from pitwall.server.serve import PitwallServer, serve_with
 
     settings = store.current()
     gate = (
@@ -1094,7 +1095,7 @@ async def _serve(
         if settings.connection.https_cert and settings.connection.https_key
         else None,
     )
-    server = uvicorn.Server(config)
+    server = PitwallServer(config)
     host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
     print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")
@@ -1102,7 +1103,7 @@ async def _serve(
         print(f"dashboard PIN: {gate.pin}  (other devices only)")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
-    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
+    await serve_with(server, _state_broadcast(engine, hub, store, active), coro)
 
 
 def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, object]:
