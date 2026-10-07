@@ -24,6 +24,7 @@ from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
 from pitwall.config.thresholds import threshold
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import grade_and_store
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
@@ -706,6 +707,7 @@ class Engine:
                 else "on"
             ),
             parc_ferme=snap.parc_ferme if snap.parc_ferme >= 0 else None,
+            synthetic=is_synthetic_uid(uid),
         )
         self._parc_ferme_written = snap.parc_ferme if snap.parc_ferme >= 0 else None
 
@@ -870,7 +872,7 @@ class Engine:
                         pit.ref_pace_ms,
                     )
                     suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    if track_id >= 0:
+                    if track_id >= 0 and not is_synthetic_uid(uid):
                         db.fold_param(
                             track_id,
                             0,
@@ -883,8 +885,10 @@ class Engine:
         if lap.valid and lap.fuel_kg > 0:
             if self._fuel_last_kg is not None:
                 delta = self._fuel_last_kg - lap.fuel_kg
-                if track_id >= 0 and self._th("fuel_delta_min_kg", 0) < delta < self._th(
-                    "fuel_delta_max_kg", 10
+                if (
+                    track_id >= 0
+                    and not is_synthetic_uid(uid)
+                    and self._th("fuel_delta_min_kg", 0) < delta < self._th("fuel_delta_max_kg", 10)
                 ):
                     db.fold_param(
                         track_id,
@@ -1078,6 +1082,7 @@ class Engine:
         if (
             self.db is None
             or track_id < 0
+            or (self.state.session_uid is not None and is_synthetic_uid(self.state.session_uid))
             or not fit_is_clean(
                 fit,
                 deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),

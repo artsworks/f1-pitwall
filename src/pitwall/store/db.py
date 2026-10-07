@@ -301,6 +301,10 @@ MIGRATIONS: list[str] = [
     ALTER TABLE laps ADD COLUMN tyre_inner_front_c REAL DEFAULT 0;
     ALTER TABLE laps ADD COLUMN tyre_inner_rear_c REAL DEFAULT 0;
     """,
+    """
+    ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
+    """,
 ]
 
 
@@ -496,13 +500,14 @@ class Database:
         weekend_link: int = 0,
         calls_mode: str = "",
         parc_ferme: int | None = None,
+        synthetic: bool = False,
     ) -> None:
         with self.transaction():
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
                 " game_version, config_hash, weather, recording_path, game_mode,"
-                " weekend_link, calls_mode, parc_ferme)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
+                " weekend_link, calls_mode, parc_ferme, synthetic)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
@@ -510,7 +515,8 @@ class Database:
                 " recording_path=excluded.recording_path,"
                 " game_mode=excluded.game_mode, weekend_link=excluded.weekend_link,"
                 " calls_mode=excluded.calls_mode,"
-                " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme)",
+                " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme),"
+                " synthetic=MAX(COALESCE(sessions.synthetic, 0), excluded.synthetic)",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -524,6 +530,7 @@ class Database:
                     weekend_link,
                     calls_mode,
                     parc_ferme,
+                    int(synthetic),
                 ),
             )
 
@@ -1106,6 +1113,7 @@ class Database:
             " st.n_valid_laps, st.deg_params FROM stints st"
             " JOIN sessions se ON se.uid=st.session_uid"
             " WHERE se.track_id=? AND st.compound=? AND se.uid<>?"
+            " AND COALESCE(se.synthetic, 0)=0"
             " AND se.started_at<? ORDER BY se.started_at, st.start_lap",
             (track_id, compound, _uid_to_sql(uid), started_at),
         ).fetchall()
@@ -1318,7 +1326,8 @@ class Database:
             "SELECT se.track_id, se.session_type, se.total_laps, st.session_uid,"
             " st.compound, st.start_lap, st.end_lap, st.n_valid_laps, st.deg_params"
             " FROM stints st"
-            " JOIN sessions se ON se.uid=st.session_uid WHERE st.car_idx=0"
+            " JOIN sessions se ON se.uid=st.session_uid"
+            " WHERE st.car_idx=0 AND COALESCE(se.synthetic, 0)=0"
             " ORDER BY se.started_at, se.uid, st.start_lap",
             (),
         )
@@ -1341,11 +1350,23 @@ class Database:
         started_at: float,
         recording_path: str,
         calls_mode: str,
+        synthetic: bool = False,
+        derived_from: str = "",
     ) -> None:
         with self.transaction():
             self._conn.execute(
-                "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=? WHERE uid=?",
-                (started_at, recording_path, calls_mode, _uid_to_sql(uid)),
+                "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=?,"
+                " synthetic=MAX(COALESCE(synthetic, 0), ?),"
+                " derived_from=CASE WHEN ?<>'' THEN ? ELSE derived_from END WHERE uid=?",
+                (
+                    started_at,
+                    recording_path,
+                    calls_mode,
+                    int(synthetic),
+                    derived_from,
+                    derived_from,
+                    _uid_to_sql(uid),
+                ),
             )
 
     def mark_ingested(self, uid: int, digest_version: int, path: str) -> None:

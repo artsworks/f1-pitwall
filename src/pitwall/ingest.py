@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
+from pitwall.derive import is_synthetic_uid
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -161,6 +162,8 @@ def _relabel_calls_mode(
         started_at=header.wall_clock_start_us / 1_000_000.0,
         recording_path=str(path),
         calls_mode=mode,
+        synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+        derived_from=str(header.metadata.get("derived_from") or ""),
     )
 
 
@@ -225,6 +228,8 @@ def ingest_recordings(
                     started_at=header.wall_clock_start_us / 1_000_000.0,
                     recording_path=str(path),
                     calls_mode=origin_mode,
+                    synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+                    derived_from=str(header.metadata.get("derived_from") or ""),
                 )
                 digest = build_digest(
                     db, uid, settings.thresholds, setup_rules=settings.setup_rules

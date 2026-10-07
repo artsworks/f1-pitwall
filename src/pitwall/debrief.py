@@ -14,6 +14,7 @@ from typing import Any
 
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
@@ -705,8 +706,13 @@ def _provenance(session: dict[str, Any], calls: list[dict[str, Any]], settings: 
     matches = resolved_hash == current
     mindsets = Counter(str(call["mindset"]) for call in calls if call.get("mindset"))
     mindset = mindsets.most_common(1)[0][0] if calls and mindsets else "unknown"
+    is_synthetic = bool(session.get("synthetic")) or is_synthetic_uid(int(session.get("uid") or 0))
+    origin = ["synthetic"] if is_synthetic else []
+    if is_synthetic and session.get("derived_from"):
+        origin.append(f"derived from session UID {session['derived_from']}")
     lines = (
         recording,
+        *origin,
         f"profile {settings.recording.profile if matches else 'unknown'}",
         f"config {resolved_hash}",
         f"rules {rules_version(settings) if matches else 'unknown'}",
@@ -1452,6 +1458,14 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
             else "—"
         )
         session_link = _Markup(f"<a href='/debrief/{_esc(uid)}'>{_esc(uid)}</a>")
+        is_synthetic = bool(row.get("synthetic")) or is_synthetic_uid(uid)
+        origin: object = "-"
+        if is_synthetic:
+            derived_from = str(row.get("derived_from") or "")
+            origin = _Markup(
+                str(_chip("warn", "synthetic"))
+                + (f"<br>derived from {_esc(derived_from)}" if derived_from else "")
+            )
         body_rows.append(
             (
                 session_link,
@@ -1459,12 +1473,13 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
                 track,
                 _session_label(row.get("session_type")),
                 len(db.laps_for(uid)),
+                origin,
                 recording,
             )
         )
     table = (
         _table(
-            ("Session", "Start", "Track", "Type", "Laps", "Recording"),
+            ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording"),
             body_rows,
             "sessions and laps",
         )

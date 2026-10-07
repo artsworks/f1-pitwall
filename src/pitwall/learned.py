@@ -11,6 +11,7 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
+from pitwall.derive import is_synthetic_uid
 from pitwall.model.deg import Prior, resolve_prior
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database
@@ -91,6 +92,10 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
     min_weight = _th(settings.thresholds, "prior_min_weight", 2.0)
     for current_track in sorted(tracks):
         track_sessions = db.sessions_for_track(current_track)
+        synthetic_count = sum(
+            bool(session.get("synthetic")) or is_synthetic_uid(int(session["uid"]))
+            for session in track_sessions
+        )
         packaged, overlay = _track_overlays(current_track)
         name = str(packaged.get("name") or overlay.get("name") or f"track-{current_track}")
         compounds = {
@@ -243,6 +248,7 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
                 "track_id": current_track,
                 "name": name,
                 "session_count": len(track_sessions),
+                "synthetic_count": synthetic_count,
                 "ingested_count": db.ingested_count(current_track),
                 "compounds": compound_values,
                 "race_distances": distance_values,
@@ -286,7 +292,8 @@ def format_learned(state: Mapping[str, Any]) -> str:
     lines: list[str] = []
     for track in state.get("tracks", []):
         lines.append(
-            f"Track {track['track_id']} {track['name']}: {track['session_count']} sessions, "
+            f"Track {track['track_id']} {track['name']}: {track['session_count']} sessions "
+            f"({track['synthetic_count']} synthetic, excluded from priors), "
             f"{track['ingested_count']} ingested"
         )
         for compound, values in sorted(track["compounds"].items()):

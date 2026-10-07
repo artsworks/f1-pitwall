@@ -200,7 +200,12 @@ def test_calibration_fits_intermediate_window_and_fuel_without_compound_zero(tmp
         dt=1.0,
         send_session_end=True,
     )
-    path = write_packet_stream(tmp_path / "inter.f1bin", race_stream(spec), session_uid=9026)
+    path = write_packet_stream(
+        tmp_path / "inter.f1bin",
+        race_stream(spec),
+        session_uid=9026,
+        metadata={"synthetic": False},
+    )
     result = ingest_recordings(db, [str(path)], settings, out_dir=tmp_path / "digests")
     assert result[0].status == "ingested"
 

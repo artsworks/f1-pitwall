@@ -14,6 +14,7 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import linear_deg, stints, stop_laps
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
 from pitwall.protocol.enums import session_kind
@@ -304,10 +305,16 @@ def calibrate_track(
     *,
     dry_run: bool = False,
     accept: WriteFilter | None = None,
+    include_synthetic: bool = False,
 ) -> dict[str, Any]:
     """Fit one track and optionally write only sufficiently supported values.
     `accept(track_id, compound, name, value)` can veto individual writes."""
     rows = db.sessions_for_track(track_id)
+    synthetic_rows = [
+        row for row in rows if bool(row.get("synthetic")) or is_synthetic_uid(int(row["uid"]))
+    ]
+    if not include_synthetic:
+        rows = [row for row in rows if row not in synthetic_rows]
     max_sessions = int(_th(settings.thresholds, "calib_max_sessions", 20))
     ordered = sorted(rows, key=lambda row: (float(row.get("started_at") or 0.0), int(row["uid"])))
     recent = ordered[-max_sessions:]
@@ -322,6 +329,7 @@ def calibrate_track(
     output: dict[str, Any] = {
         "track_id": track_id,
         "sessions": len(sessions),
+        "synthetic_skipped": 0 if include_synthetic else len(synthetic_rows),
         "n_laps": fit["n"],
         "need": need,
         "k_identifiable": fit["k_identifiable"],
@@ -469,17 +477,33 @@ def calibrate(
     track_id: int | None = None,
     dry_run: bool = False,
     accept: WriteFilter | None = None,
+    include_synthetic: bool = False,
 ) -> dict[str, Any]:
+    allowed_sessions = [
+        row
+        for row in db.sessions()
+        if include_synthetic
+        or not bool(row.get("synthetic"))
+        and not is_synthetic_uid(int(row["uid"]))
+    ]
     tracks = (
         [track_id]
         if track_id is not None
         else sorted(
-            {int(row["track_id"]) for row in db.sessions() if row.get("track_id") is not None}
+            {int(row["track_id"]) for row in allowed_sessions if row.get("track_id") is not None}
         )
     )
     return {
         "tracks": [
-            calibrate_track(db, track, settings, dry_run=dry_run, accept=accept) for track in tracks
+            calibrate_track(
+                db,
+                track,
+                settings,
+                dry_run=dry_run,
+                accept=accept,
+                include_synthetic=include_synthetic,
+            )
+            for track in tracks
         ],
         "dry_run": dry_run,
     }

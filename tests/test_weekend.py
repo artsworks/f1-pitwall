@@ -59,6 +59,7 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
             )
         ),
         session_uid=practice_uid,
+        metadata={"synthetic": False},
     )
     result = ingest_recordings(db, [str(practice)], settings, out_dir=tmp_path / "digests")
     assert result[0].status == "ingested"

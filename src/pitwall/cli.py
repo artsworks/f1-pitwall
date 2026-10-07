@@ -100,6 +100,7 @@ def _lap_seek_us(path: Path, lap: int) -> int | None:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
+    from pitwall.derive import is_synthetic_uid
     from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
 
@@ -111,6 +112,23 @@ def cmd_replay(args: argparse.Namespace) -> int:
         if from_us is None:
             print(f"replay: lap {args.from_lap} not found in index of {file}")
             return 1
+
+    def persist_recording_origin(engine: Engine, db: Database | None) -> None:
+        uid = engine.state.session_uid
+        if db is None or uid is None:
+            return
+        with RecordingReader(file) as reader:
+            header = reader.header
+        session = db.session_row(uid) or {}
+        db.set_session_origin(
+            uid,
+            started_at=header.wall_clock_start_us / 1_000_000.0,
+            recording_path=str(file),
+            calls_mode=str(session.get("calls_mode") or ""),
+            synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+            derived_from=str(header.metadata.get("derived_from") or ""),
+        )
+
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.serve:
         from pitwall.audio.dispatcher import LogSink
@@ -169,6 +187,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         store = ConfigStore()
         asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
+        persist_recording_origin(engine, seed_db)
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
     engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
@@ -176,6 +195,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         engine.ingest.transform = mask_restricted
     replay_coro = run_replay(file, engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
+    persist_recording_origin(engine, db)
     print(f"replayed {delivered} datagrams from {file}; {len(calls)} calls")
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
@@ -552,6 +572,34 @@ def cmd_trim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_derive(args: argparse.Namespace) -> int:
+    from pitwall.derive import InjectSafetyCar, Penalty, WearScale, derive_recording
+
+    settings = ConfigStore().current()
+    source = _resolve_recording(args.file, settings)
+    ops: list[WearScale | InjectSafetyCar | Penalty] = []
+    if args.wear_scale is not None:
+        ops.append(WearScale(args.wear_scale))
+    if args.inject_sc is not None:
+        start, separator, end = args.inject_sc.partition("-")
+        start_lap = int(start)
+        end_lap = int(end) if separator else start_lap + 2
+        if start_lap < 1 or end_lap < start_lap:
+            raise ValueError("--inject-sc requires positive, ascending lap numbers")
+        ops.append(InjectSafetyCar(start_lap, end_lap, vsc=args.vsc))
+    elif args.vsc:
+        raise ValueError("--vsc requires --inject-sc")
+    if args.penalty is not None:
+        ops.append(Penalty(args.penalty))
+    if not ops:
+        raise ValueError("derive requires at least one mutation")
+    summary = derive_recording(source, Path(args.out), ops)
+    print(f"derived session UID: 0x{summary.header.session_uid:016x}")
+    print(f"mutations: {', '.join(op.label for op in ops)}")
+    print(f"wrote {summary.record_count} records -> {args.out}")
+    return 0
+
+
 def cmd_calibrate(args: argparse.Namespace) -> int:
     from pitwall.calibrate import calibrate, format_calibration, write_overlays
     from pitwall.store.db import Database, open_configured
@@ -570,7 +618,13 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
             if result.status == "error":
                 errors = True
                 print(f"ingest error {result.path}: {result.error}")
-    report = calibrate(db, settings, track_id=args.track, dry_run=args.dry_run)
+    report = calibrate(
+        db,
+        settings,
+        track_id=args.track,
+        dry_run=args.dry_run,
+        include_synthetic=args.include_synthetic,
+    )
     if args.write_overlay and not args.dry_run:
         report["overlays"] = [
             str(path) for path in write_overlays(report, settings, args.overlay_dir)
@@ -1132,22 +1186,25 @@ def cmd_recordings(args: argparse.Namespace) -> int:
     print(f"recordings in {directory}, newest first:")
     print(f"{'#':>3}  {'file':<44} {'start':<16} {'size':>9}  session_uid")
     for i, path in enumerate(found):
-        start, uid = "?", "?"
+        start, uid, synthetic = "?", "?", False
         try:
             with RecordingReader(path) as reader:
                 header = reader.header
             uid = str(header.session_uid)
+            synthetic = bool(header.metadata.get("synthetic"))
             if header.wall_clock_start_us:
                 t = time.localtime(header.wall_clock_start_us / 1e6)
                 start = time.strftime("%Y-%m-%d %H:%M", t)
         except Exception:
             pass
-        print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}")
+        marker = " synthetic" if synthetic else ""
+        print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}{marker}")
     return 0
 
 
 def cmd_sessions(args: argparse.Namespace) -> int:
     """List stored sessions newest first, with their debrief link."""
+    from pitwall.derive import is_synthetic_uid
     from pitwall.store.db import Database, open_configured
 
     settings = ConfigStore().current()
@@ -1159,16 +1216,22 @@ def cmd_sessions(args: argparse.Namespace) -> int:
     if not rows:
         print("sessions: none in the database")
         return 0
-    print(f"{'session_uid':<20} {'start':<16} {'track':>5} {'type':>4} {'laps':>4}  recording")
+    print(
+        f"{'session_uid':<20} {'start':<16} {'track':>5} {'type':>4} {'laps':>4} "
+        "syn  derived_from  recording"
+    )
     for row in rows:
         uid = int(row["uid"])
         started = row.get("started_at")
         start = time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else "?"
         rec = Path(row["recording_path"]).name if row.get("recording_path") else "-"
+        synthetic = "yes" if row.get("synthetic") or is_synthetic_uid(uid) else ""
+        derived_from = str(row.get("derived_from") or "")
         laps = len(db.laps_for(uid))
         print(
             f"{uid:<20} {start:<16} {row.get('track_id', '?'):>5} "
-            f"{row.get('session_type', '?'):>4} {laps:>4}  {rec}"
+            f"{row.get('session_type', '?'):>4} {laps:>4}  {synthetic:<3} "
+            f"{derived_from:<20} {rec}"
         )
     print("debrief: /debrief on the dashboard, or pitwall debrief --session <uid>")
     return 0
@@ -1365,6 +1428,7 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     cal.add_argument("--track", type=int, default=None)
     cal.add_argument("--dry-run", action="store_true")
+    cal.add_argument("--include-synthetic", action="store_true")
     cal.add_argument("--write-overlay", action="store_true")
     cal.add_argument("--overlay-dir", type=Path, default=None)
     cal.add_argument("--json", action="store_true")
@@ -1390,6 +1454,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trim.add_argument("--out", required=True)
     trim.set_defaults(func=cmd_trim)
+
+    derive = sub.add_parser("derive", help="derive a synthetic recording from a real session")
+    derive.add_argument("file", help=REC_HELP)
+    derive.add_argument("out", help="output .f1bin or .f1bin.zst path")
+    derive.add_argument("--wear-scale", type=float, default=None)
+    derive.add_argument("--inject-sc", metavar="START[-END]", default=None)
+    derive.add_argument("--vsc", action="store_true")
+    derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
+    derive.set_defaults(func=cmd_derive)
 
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file", nargs="?", default=None, help=REC_HELP)
