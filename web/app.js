@@ -1071,16 +1071,11 @@
   function setupValue(f, v) {
     return v === undefined || v === null ? "--" : fmt(v, f ? f[2] : 0) + (f ? f[3] || "" : "");
   }
-  function span(cls, txt) {
-    var n = document.createElement("span");
-    n.className = cls; n.textContent = txt;
-    return n;
-  }
   function changeRow(list, done, name, from, to, why) {
     var li = document.createElement("li");
     li.className = done ? "done" : "todo";
-    [span("box", done ? "☑" : "☐"), span("nm", name),
-      span("val", done ? to + " ✓" : from + " → " + to), span("why", why || "")]
+    [span(done ? "☑" : "☐", "box"), span(name, "nm"),
+      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why")]
       .forEach(function (n) { li.appendChild(n); });
     list.appendChild(li);
   }
@@ -1138,17 +1133,17 @@
       list.appendChild(e);
     } else {
       SETUP_GROUPS.forEach(function (g) {
-        var li = document.createElement("li"), chips = span("chips", "");
-        li.appendChild(span("grp", g[0]));
+        var li = document.createElement("li"), chips = span("", "chips");
+        li.appendChild(span(g[0], "grp"));
         var fields = g[1] || CORNERS.map(function (k) {
           return [k, k.toUpperCase(), 1, "", b.tyres[k].psi];
         });
         fields.forEach(function (f) {
           var v = g[1] ? setup[f[0]] : f[4];
           var rec = g[1] ? adviceFor(f[0]) : null;
-          var c = span("c" + (rec && !matchesTarget(rec, v) ? " todo" : "") +
-            (g[1] && isLocked(f[0]) ? " lk" : ""), "");
-          c.appendChild(span("k", f[1] + " "));
+          var c = span("", "c" + (rec && !matchesTarget(rec, v) ? " todo" : "") +
+            (g[1] && isLocked(f[0]) ? " lk" : ""));
+          c.appendChild(span(f[1] + " ", "k"));
           var val = document.createElement("b");
           val.textContent = setupValue(f, v);
           c.appendChild(val);
