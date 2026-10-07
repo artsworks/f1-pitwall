@@ -395,6 +395,9 @@ rules:
       - "Car ahead is {battle_pace_ahead}. {gap_ahead_s:.1f}, keep pushing"
       - "{rival_ahead_name} is {battle_pace_ahead}. Reel him in"
     severity:
+      - when: "battle_catch_laps < 0.5"
+        say:
+          - "Closing fast on {rival_ahead_name}. DRS soon"
       - when: "battle_catch_laps <= 2"
         say:
           - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"

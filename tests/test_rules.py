@@ -412,3 +412,23 @@ def test_tyre_life_one_lap_is_singular(lop: float, plural: bool) -> None:
     text = next(c.text for c in result.candidates if c.rule.defn.id == "tyre_life")
     assert ("laps" in text) == plural
     assert "1 lap" not in text
+
+
+def test_battle_catching_never_says_zero_laps() -> None:
+    """Silverstone sprint, lap 2: battle_catch_laps 0.0 read "On him in 0.0 laps"."""
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            lap_num=2,
+            laps_remaining=3,
+            battle_mode="catching",
+            battle_catch_laps=0.0,
+            rival_ahead_name="HAMILTON",
+            battle_pace_ahead="1.5 seconds faster",
+            gap_ahead_s=1.2,
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == "battle_catching")
+    assert "0.0 laps" not in text
+    assert "HAMILTON" in text
