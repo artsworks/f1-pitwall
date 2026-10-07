@@ -106,8 +106,9 @@ run the same steps as upkeep on demand. `pitwall tune` also folds A/B results fr
 Each candidate includes median snapshot signals at the ask and current rule thresholds.
 Review these candidates before changing a rule. Proposals never write YAML.
 
-Sessions from `pitwall derive` are synthetic. They feed grading and `pitwall tune`, but
-calibration, upkeep and the replay folds leave them out of physics priors.
+Sessions from `pitwall derive` are synthetic. They feed `pitwall digest` and hindsight
+grading. `pitwall tune` skips their auto outcomes and press grades, but keeps human grades.
+Calibration, upkeep and the replay folds leave them out of physics priors.
 `pitwall calibrate --include-synthetic` adds them to the fit. See
 [Synthetic recordings](23-synthetic-recordings.md).
 

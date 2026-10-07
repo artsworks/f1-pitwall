@@ -39,7 +39,8 @@ A new migration adds `synthetic` and `derived_from` columns to `sessions`. Inges
 
 | Path | Synthetic sessions |
 |---|---|
-| `pitwall digest`, hindsight grading, `pitwall tune` | Included |
+| `pitwall digest`, hindsight grading | Included |
+| `pitwall tune` | Auto outcomes and press grades skipped. Human grades kept |
 | `pitwall calibrate` | Excluded. `--include-synthetic` includes them |
 | Live folds during replay: pit loss, fuel burn, stint degradation and base pace, battle pass and hold rates | Skipped |
 | Stint rebuild in upkeep (`learning_stints`) and the weekend practice prior (`weekend_stints`) | Excluded |
