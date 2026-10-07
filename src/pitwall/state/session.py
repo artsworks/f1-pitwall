@@ -929,6 +929,7 @@ class SessionState:
         self._last_penalty_st: float | None = None
         self.grid_penalty_places = 0
         self._last_grid_penalty_st: float | None = None
+        self._grid_penalty_events: list[tuple[float, int]] = []
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
@@ -1116,6 +1117,13 @@ class SessionState:
             self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
         self.track_warning_kind = self._warning_events[-1][1] if self._warning_events else ""
         self._last_track_warning_st = self._warning_events[-1][0] if self._warning_events else None
+        self._grid_penalty_events = [
+            (when, places) for when, places in self._grid_penalty_events if when <= t
+        ]
+        self.grid_penalty_places = sum(places for _, places in self._grid_penalty_events)
+        self._last_grid_penalty_st = (
+            self._grid_penalty_events[-1][0] if self._grid_penalty_events else None
+        )
         self._penalty_pending_s = 0
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st = None
@@ -1486,8 +1494,13 @@ class SessionState:
                                 max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
                             )
                 if ptype == PENALTY_TYPE_GRID:
-                    self.grid_penalty_places += int(pkt.detail.get("places_gained", 0))
-                    self._last_grid_penalty_st = pkt.header.session_time
+                    self._grid_penalty_events.append(
+                        (pkt.header.session_time, int(pkt.detail.get("places_gained", 0)))
+                    )
+                    self.grid_penalty_places = sum(
+                        places for _, places in self._grid_penalty_events
+                    )
+                    self._last_grid_penalty_st = self._grid_penalty_events[-1][0]
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
