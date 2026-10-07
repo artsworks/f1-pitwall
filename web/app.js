@@ -1108,11 +1108,11 @@
     });
     setupAdvice.forEach(function (rec) {
       if (rec.param === "front_pressure" || rec.param === "rear_pressure") {
-      var axle = rec.param === "front_pressure" ? ["fl", "fr"] : ["rl", "rr"];
-      if (axle.some(function (k) { return b.tyres[k].target_psi !== null; })) return;
-      var done = rec.fields.every(function (f) { return matchesTarget(rec, setup[f]); });
-      changeRow(change, done, rec.param === "front_pressure" ? "F psi" : "R psi",
-        fmt(rec.from, 1), fmt(rec.to, 1), why(rec));
+        var axle = rec.param === "front_pressure" ? ["fl", "fr"] : ["rl", "rr"];
+        if (axle.some(function (k) { return b.tyres[k].target_psi !== null; })) return;
+        var done = rec.fields.every(function (f) { return matchesTarget(rec, setup[f]); });
+        changeRow(change, done, rec.param === "front_pressure" ? "F psi" : "R psi",
+          fmt(rec.from, 1), fmt(rec.to, 1), why(rec));
         return;
       }
       var f = setupFormat(rec.fields[0]);
