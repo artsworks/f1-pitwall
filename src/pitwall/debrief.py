@@ -355,13 +355,13 @@ def _track_name(track_id: object) -> str:
     return _TRACK_NAMES.get(key, f"Track {key}")
 
 
-def _session_label(session_type: object) -> str:
+def _session_label(session_type: object, weekend_structure: Sequence[int] = ()) -> str:
     if session_type is None:
         return "Session —"
     key = _as_int(session_type)
     if key is None:
         return f"Session {session_type}"
-    return session_label(key)
+    return session_label(key, weekend_structure)
 
 
 def _lap_time(lap_time_ms: int) -> str:
@@ -1381,7 +1381,12 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         outcomes.setdefault(str(row["call_id"]), []).append(row)
     inputs = db.driver_inputs_for_session(uid)
     track = _track_name(session.get("track_id")).upper()
-    session_label = _session_label(session.get("session_type")).upper()
+    session_label = _session_label(
+        session.get("session_type"),
+        db.weekend_session_types(
+            int(session.get("weekend_link") or 0), int(session.get("track_id") or -1)
+        ),
+    ).upper()
     start_date = (
         time.strftime("%a %d %b %Y, %H:%M", time.localtime(session["started_at"]))
         if session.get("started_at")
@@ -1447,6 +1452,7 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
     """HTML list of stored sessions, newest first, each linking to its debrief."""
     rows = db.sessions()[::-1][:limit]
     body_rows = []
+    structures: dict[tuple[int, int], tuple[int, ...]] = {}
     for row in rows:
         uid = int(row["uid"])
         track_id = row.get("track_id")
@@ -1472,7 +1478,15 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
                 session_link,
                 start,
                 track,
-                _session_label(row.get("session_type")),
+                _session_label(
+                    row.get("session_type"),
+                    structures.setdefault(
+                        (int(row.get("weekend_link") or 0), int(row.get("track_id") or -1)),
+                        db.weekend_session_types(
+                            int(row.get("weekend_link") or 0), int(row.get("track_id") or -1)
+                        ),
+                    ),
+                ),
                 len(db.laps_for(uid)),
                 origin,
                 recording,

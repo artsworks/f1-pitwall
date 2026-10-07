@@ -157,6 +157,14 @@ def quality_trend(
     db_uids = {int(session["uid"]) for session in db_sessions}
     db_sessions = [session for session in db_sessions if not is_synthetic_uid(int(session["uid"]))]
     rows = []
+    structures: dict[tuple[int, int], tuple[int, ...]] = {}
+
+    def structure_for(session: Mapping[str, Any]) -> tuple[int, ...]:
+        key = (int(session.get("weekend_link") or 0), int(session.get("track_id") or -1))
+        if key not in structures:
+            structures[key] = db.weekend_session_types(*key)
+        return structures[key]
+
     if sessions > 0:
         for session in reversed(db_sessions):
             quality = call_quality(db, int(session["uid"]))
@@ -171,6 +179,7 @@ def quality_trend(
                     quality,
                     _track_name,
                     _session_label,
+                    structure_for(session),
                 )
             )
             if len(rows) >= sessions:
@@ -196,6 +205,7 @@ def quality_trend(
                     ledger_quality,
                     _track_name,
                     _session_label,
+                    structure_for(session),
                 )
             )
     rows.sort(key=_quality_sort_key)
@@ -222,7 +232,8 @@ def _quality_session_row(
     session_type: object,
     quality: Mapping[str, Any],
     track_name: Callable[[Any], str],
-    session_label: Callable[[Any], str],
+    session_label: Callable[[Any, Sequence[int]], str],
+    weekend_structure: Sequence[int] = (),
 ) -> dict[str, Any]:
     timestamp = _finite_time(started_at)
     return {
@@ -234,7 +245,7 @@ def _quality_session_row(
             else "unknown"
         ),
         "track": track_name(track_id),
-        "session_type": session_label(session_type),
+        "session_type": session_label(session_type, weekend_structure),
         **quality,
     }
 

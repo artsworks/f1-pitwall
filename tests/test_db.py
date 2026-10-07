@@ -437,3 +437,23 @@ def test_lap_temperature_accumulator_averages_samples_and_corners() -> None:
     assert lap.tyre_surface_c == 125.0
     assert lap.tyre_inner_front_c == 115.0
     assert lap.tyre_inner_rear_c == 95.0
+
+
+def test_weekend_session_types() -> None:
+    db = Database(":memory:")
+    link = 0x1234
+    for index, session_type in enumerate((1, 10, 15, 5, 16)):
+        db.upsert_session(
+            200 + index,
+            track_id=7,
+            session_type=session_type,
+            started_at=100.0 + index,
+            weekend_link=link,
+        )
+    db.upsert_session(
+        300, track_id=7, session_type=15, started_at=104.5, weekend_link=link, synthetic=True
+    )
+    db.upsert_session(301, track_id=7, session_type=15, started_at=105.0, weekend_link=0x9999)
+    db.upsert_session(302, track_id=10, session_type=15, started_at=106.0, weekend_link=link)
+    assert db.weekend_session_types(link, 7) == (1, 10, 15, 5, 16)
+    assert db.weekend_session_types(0, 7) == ()

@@ -14,6 +14,7 @@ from pitwall.debrief import (
     _pit_laps,
     _sc_runs,
     render_debrief,
+    render_debrief_index,
     rules_version,
 )
 from pitwall.metrics import Metrics
@@ -452,3 +453,24 @@ def test_debrief_layout_hooks() -> None:
     assert "class='on bad' data-call='fired-1' data-grade='wrong'" in editable
     assert "tr class='sup'" in editable
     db.close()
+
+
+def test_debrief_labels_sprint_and_race_by_weekend_link() -> None:
+    db = Database(":memory:")
+    link = 0x2345
+    db.upsert_session(160, track_id=7, session_type=1, started_at=1.0, weekend_link=link)
+    db.upsert_session(161, track_id=7, session_type=15, started_at=2.0, weekend_link=link)
+    db.upsert_session(162, track_id=7, session_type=16, started_at=3.0, weekend_link=link)
+    db.upsert_session(163, track_id=7, session_type=15, started_at=4.0, weekend_link=0)
+
+    settings = ConfigStore().current()
+    sprint_page = render_debrief(db, 161, settings)
+    race_page = render_debrief(db, 162, settings)
+    lone_page = render_debrief(db, 163, settings)
+    assert " · SPRINT · " in sprint_page
+    assert " · RACE · " in race_page
+    assert " · RACE · " in lone_page
+
+    index = render_debrief_index(db)
+    assert "<td>Sprint</td>" in index
+    assert "<td>Race</td>" in index

@@ -1651,6 +1651,18 @@ class Database:
             return rows
         return self.sessions_for_track(track_id)
 
+    def weekend_session_types(self, weekend_link: int, track_id: int) -> tuple[int, ...]:
+        """Session types of the non-synthetic sessions sharing a weekend link,
+        in started order. Drives the Sprint/Race label in stored views."""
+        if not weekend_link:
+            return ()
+        rows = self._conn.execute(
+            "SELECT session_type FROM sessions WHERE weekend_link=? AND track_id=?"
+            " AND COALESCE(synthetic, 0)=0 ORDER BY started_at",
+            (weekend_link, track_id),
+        ).fetchall()
+        return tuple(int(row[0]) for row in rows)
+
     def session(self, uid: int) -> dict[str, Any] | None:
         row = self._conn.execute(
             "SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),)
