@@ -17,10 +17,8 @@ from pitwall.config.models import Settings
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
-from pitwall.setup.evaluate import evaluate, explain
-from pitwall.setup.learn import learned_gains
-from pitwall.setup.rules import parse_setup_rules
-from pitwall.setup.signals import session_signals
+from pitwall.setup.advisor import recommend_for_session
+from pitwall.setup.evaluate import explain
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, PitEventRow, StintRow
 
@@ -1223,37 +1221,30 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                     if isinstance(item, dict) and item.get("reason") == "locked"
                 )
     else:
-        signals = session_signals(db, uid, settings.thresholds, run_choice="longest")
-        if signals is not None:
-            event_laps = signals.event_laps
-            setup = (
-                db.setup_state_fields(signals.setup_state_id)
-                if signals.setup_state_id is not None
-                else None
-            )
-            setup = setup or {}
-            parc_ferme_value = session.get("parc_ferme")
-            parc_ferme = int(parc_ferme_value) if parc_ferme_value is not None else -1
-            rules = parse_setup_rules(settings.setup_rules)
-            learned = learned_gains(db, signals.track_id, signals.compound)
-            recommendations = evaluate(
-                signals,
-                setup,
-                mode="debrief",
-                parc_ferme=parc_ferme,
-                rules=rules,
-                thresholds=settings.thresholds,
-                learned=learned,
-            )
+        parc_ferme_value = session.get("parc_ferme")
+        parc_ferme = int(parc_ferme_value) if parc_ferme_value is not None else -1
+        advice = recommend_for_session(
+            db,
+            uid,
+            settings,
+            "debrief",
+            run_choice="longest",
+            parc_ferme=parc_ferme,
+            lap=None,
+            store=False,
+        )
+        if advice is not None:
+            event_laps = advice.signals.event_laps
             suppressions = explain(
-                signals,
-                setup,
+                advice.signals,
+                advice.setup,
                 mode="debrief",
                 parc_ferme=parc_ferme,
-                rules=rules,
+                rules=advice.rules,
                 thresholds=settings.thresholds,
-                learned=learned,
+                learned=advice.learned,
             )
+            recommendations = advice.recommendations
             locked.update(
                 (item.get("param", ""), item.get("rule_id", ""))
                 for item in suppressions

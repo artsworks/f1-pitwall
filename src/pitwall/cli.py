@@ -318,10 +318,8 @@ def cmd_debrief(args: argparse.Namespace) -> int:
 def cmd_setup(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from pitwall.setup.evaluate import evaluate, explain
-    from pitwall.setup.learn import learned_gains
-    from pitwall.setup.rules import parse_setup_rules
-    from pitwall.setup.signals import session_signals
+    from pitwall.setup.advisor import recommend_for_session
+    from pitwall.setup.evaluate import explain
     from pitwall.store.db import Database, open_configured
 
     settings = ConfigStore().current()
@@ -337,39 +335,21 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if session is None:
         print(f"setup: session {uid} not found")
         return 1
-    signals = session_signals(
+    parc_ferme = int(session["parc_ferme"]) if session.get("parc_ferme") is not None else -1
+    advice = recommend_for_session(
         db,
         uid,
-        settings.thresholds,
+        settings,
+        args.mode,
         run_choice="longest" if args.mode == "debrief" else "latest",
+        parc_ferme=parc_ferme,
+        lap=None,
+        store=args.store,
     )
-    if signals is None:
+    if advice is None:
         print(f"setup: session {uid} has no player laps")
         return 1
-    rules = parse_setup_rules(settings.setup_rules)
-    setup = (
-        db.setup_state_fields(signals.setup_state_id)
-        if signals.setup_state_id is not None
-        else None
-    ) or {}
-    parc_ferme = int(session["parc_ferme"]) if session.get("parc_ferme") is not None else -1
-    recommendations = evaluate(
-        signals,
-        setup,
-        mode=args.mode,
-        parc_ferme=parc_ferme,
-        rules=rules,
-        thresholds=settings.thresholds,
-        learned=learned_gains(db, signals.track_id, signals.compound),
-    )
-    if args.store:
-        for recommendation in recommendations:
-            db.insert_setup_rec(
-                recommendation,
-                track_id=signals.track_id,
-                compound=signals.compound,
-                lap=signals.run_end_lap,
-            )
+    recommendations = advice.recommendations
 
     if args.json:
         print(json.dumps([asdict(rec) for rec in recommendations], indent=2, default=str))
@@ -386,13 +366,13 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if not recommendations:
         print("No setup recommendations.")
     suppression_explanations = explain(
-        signals,
-        setup,
+        advice.signals,
+        advice.setup,
         mode=args.mode,
         parc_ferme=parc_ferme,
-        rules=rules,
+        rules=advice.rules,
         thresholds=settings.thresholds,
-        learned=learned_gains(db, signals.track_id, signals.compound),
+        learned=advice.learned,
     )
     if suppression_explanations:
         items = ", ".join(
