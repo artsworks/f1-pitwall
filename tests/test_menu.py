@@ -175,6 +175,51 @@ def test_action_items_run_their_action(tmp_path: Path) -> None:
     assert engine2.dispatcher.silent is True
 
 
+def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
+    log_path = tmp_path / "signals.jsonl"
+    overrides: dict[str, object] = {
+        "menu": {
+            "items": [
+                {
+                    "id": "signal_test",
+                    "label": "Signals",
+                    "related_rules": ["signal_rule"],
+                    "replies": {"default": ["Noted."]},
+                }
+            ]
+        },
+        "rules": [{"id": "signal_rule", "priority": 1, "when": "lap_num > 1", "say": "Call"}],
+    }
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        decision_log_path=log_path,
+        overrides=overrides,
+    )
+    item = engine.store.current().menu.items[0]
+    snapshot = Snapshot(now=1.0, lap_num=3, fuel_remaining_laps=4.2)
+
+    engine._menu_answer(item, 1.0, snapshot, "test")
+    engine.store.set_override(
+        ("rules",),
+        [
+            {
+                "id": "signal_rule",
+                "priority": 1,
+                "when": "fuel_remaining_laps > 1",
+                "say": "Call",
+            }
+        ],
+    )
+    engine._menu_answer(engine.store.current().menu.items[0], 2.0, snapshot, "test")
+    engine.dispatcher.log.close()
+
+    rows = [json.loads(line) for line in log_path.read_text().splitlines()]
+    signals = [row["inputs"]["signals"] for row in rows]
+    assert "lap_num" in signals[0] and "fuel_remaining_laps" not in signals[0]
+    assert "fuel_remaining_laps" in signals[1] and "lap_num" not in signals[1]
+
+
 def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
     engine, calls, rows = _run(tmp_path, [(SD11, 20.0)])
     (rec,) = _inputs(rows)
@@ -298,6 +343,8 @@ def test_packaged_menu_is_valid() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[])
     settings = engine.store.current()
     assert validate(settings.menu) == []
+    fight = next(item for item in settings.menu.items if item.id == "fight")
+    assert ReplyPicker().pick(fight, "unknown", {}) == "No timing yet."
     assert [i.id for i in settings.menu.items if not i.shortcut_only] == [
         "tyres",
         "pit",
@@ -382,6 +429,7 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
             "none": ["P{pos}, {laps_left} to go. Clear air."],
             "times": ["P{pos} on the times. Best lap {best}."],
             "no_time": ["No clean lap on the board yet."],
+            "unknown": ["No timing yet.", "Still waiting on timing."],
         },
     )
     clear = Snapshot(now=0.0, session_kind="race", position=4, laps_remaining=12)
@@ -402,6 +450,7 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
     snap = Snapshot(
         now=0.0,
         session_kind="race",
+        position=4,
         laps_remaining=10,
         rival_ahead_idx=2,
         rival_ahead_name="Norris",
@@ -418,6 +467,29 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
     assert case == "both"
     assert values["ahead"] == "Norris 1.2 ahead, we're catching 0.3 a lap."
     assert values["behind"] == "Russell 0.9 behind, we're pulling 0.2 a lap."
+
+
+@pytest.mark.parametrize("session_kind", ["race", "qualifying"])
+def test_fight_reports_unknown_position_before_timing(session_kind: str) -> None:
+    fight = MenuItemModel(
+        id="fight",
+        label="Fight",
+        replies={"unknown": ["No timing yet.", "Still waiting on timing."]},
+    )
+    snapshot = Snapshot(
+        now=0.0,
+        session_kind=session_kind,
+        position=0,
+        player_best_lap_ms=81_000,
+    )
+
+    case, values = answer(fight, snapshot, "balanced")
+
+    assert case == "unknown"
+    assert ReplyPicker().pick(fight, case, values) in [
+        "No timing yet.",
+        "Still waiting on timing.",
+    ]
 
 
 def test_shortcut_validation() -> None:

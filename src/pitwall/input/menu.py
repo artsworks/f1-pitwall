@@ -276,6 +276,8 @@ def _fight(snap: Snapshot) -> Answer:
         if snap.player_best_lap_ms > 0
         else "",
     }
+    if snap.position <= 0:
+        return "unknown", values
     if snap.session_kind != "race":
         return ("times" if snap.player_best_lap_ms > 0 else "no_time"), values
     has_ahead = snap.rival_ahead_idx >= 0 and math.isfinite(snap.gap_ahead_s)

@@ -7,8 +7,10 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
+from pitwall.digest import call_quality
 from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot
+from pitwall.store.db import Database
 
 
 class CollectSink:
@@ -222,6 +224,48 @@ def test_ack_then_say_again() -> None:
     assert len(calls) == 1 and "say_again" in calls[0].tags
     replay = [r for r in _log(buf) if r["outcome"] == "fired"][-1]
     assert replay["inputs"]["repeat_of"] == original["call_id"]
+
+
+def test_replay_press_grades_original_call_and_quality_counts_it_once() -> None:
+    from pitwall.input.press import Press
+
+    db = Database(":memory:")
+    uid = 870
+    db.upsert_session(uid)
+    sink = CollectSink()
+    buf = io.StringIO()
+    d = Dispatcher(
+        PolicySettings(min_gap_s=0.0),
+        VirtualClock(),
+        decision_log=DecisionLog(fp=buf, db=db, session_uid_source=lambda: uid),
+        sinks=[sink],
+        input=InputSettings(
+            say_again=True,
+            say_again_window_s=30.0,
+            response_window_s=3.0,
+            spoken_replies=True,
+        ),
+    )
+    d.submit([_cand("a", text="box box")], _snap(0.0))
+    original, *_ = d.drain(0.0)
+    assert original is not None
+
+    d.on_press(Press("ack", 20.0), _snap(20.0))
+    d.submit([], _snap(20.0))
+    (replay,) = d.drain(20.0)
+    assert "say_again" in replay.tags
+    assert sink.spoken == ["box box", "box box"]
+    d.on_press(Press("ack", 20.5), _snap(20.5))
+
+    grades = db.grades_for_session(uid)
+    assert len(grades) == 1
+    assert grades[0]["call_id"] == original.id
+    assert grades[0]["source"] == "press"
+    calls = db.calls_for_session(uid)
+    ack = next(row for row in calls if row["outcome"] == "ack")
+    assert ack["call_id"] == replay.id and ack["rule_id"] == original.rule_id
+    quality = call_quality(db, uid)
+    assert quality["fired"] == 1 and quality["good"] == 1
 
 
 def test_say_again_ignores_stale_calls() -> None:

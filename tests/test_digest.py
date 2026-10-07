@@ -130,6 +130,31 @@ def test_call_quality_uses_none_percentages_without_fired_calls() -> None:
     assert quality["neg_rate_pct"] is None
 
 
+def test_call_quality_excludes_legacy_say_again_replay() -> None:
+    db = Database(":memory:")
+    uid = 76
+    db.upsert_session(uid)
+    db.insert_call(
+        uid,
+        {"outcome": "fired", "call_id": "original", "rule_id": "tyre_life", "t": 1.0},
+    )
+    db.insert_call(
+        uid,
+        {"outcome": "say_again", "call_id": "original", "rule_id": "tyre_life", "t": 10.0},
+    )
+    db.insert_call(
+        uid,
+        {"outcome": "fired", "call_id": "legacy-replay", "rule_id": "tyre_life", "t": 11.0},
+    )
+    db.grade_call(uid, "original", "tyre_life", "good", source="press")
+
+    quality = call_quality(db, uid)
+
+    assert quality["fired"] == 1
+    assert quality["good"] == 1
+    assert quality["good_pct"] == 100.0
+
+
 def test_quality_trend_stops_after_recent_fired_sessions_and_orders_oldest_first(
     monkeypatch,
 ) -> None:

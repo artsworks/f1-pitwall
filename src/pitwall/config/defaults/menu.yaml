@@ -43,6 +43,11 @@ menu:
       show_when: "session_kind == 'race'"
       rank_when: "pit_window_start > 0 and pit_window_start <= lap_num <= pit_window_end"
       related_rules:
+        - plan_announce
+        - plan_announce_no_stop
+        - plan_status
+        - plan_switch
+        - plan_switch_no_stop
         - plan_window_open
         - plan_target_lap
         - box_now
@@ -91,6 +96,7 @@ menu:
         none: ["P{pos}, {laps_left} to go. Clear air."]
         times: ["P{pos} on the times. Best lap {best}."]
         no_time: ["No clean lap on the board yet."]
+        unknown: ["No timing yet.", "Still waiting on timing."]
     - id: rain
       label: "Rain coming?"
       show_when: "rain_pct_in_30 > 0 or weather_crossover != '' or weather_now >= 3"

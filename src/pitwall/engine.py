@@ -313,6 +313,7 @@ class Engine:
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
         self._menu_signal_names: dict[str, frozenset[str]] = {}
+        self._menu_signal_hash = self.store.hash
         self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
@@ -614,6 +615,10 @@ class Engine:
     def _menu_signal_values(
         self, item: MenuItemModel, snapshot: Snapshot
     ) -> dict[str, int | float]:
+        current_hash = self.store.hash
+        if self._menu_signal_hash != current_hash:
+            self._menu_signal_names.clear()
+            self._menu_signal_hash = current_hash
         names = self._menu_signal_names.get(item.id)
         if names is None:
             rules = {rule.id: rule for rule in self.store.current().rules}

@@ -6,6 +6,7 @@ rebuilt and two digests can be diffed."""
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import time
 from collections import Counter, defaultdict
@@ -20,24 +21,86 @@ from pitwall.store.db import Database
 DIGEST_VERSION = 3
 
 
+def _record_inputs(row: Mapping[str, Any]) -> dict[str, Any]:
+    raw = row.get("inputs")
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str):
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _finite_time(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _repeat_call_ids(db: Database, uid: int) -> set[str]:
+    calls = db.calls_for_session(uid)
+    repeat_ids: set[str] = set()
+    marked_replays: list[tuple[str, str, float]] = []
+    legacy_fired: dict[str, list[tuple[float, str]]] = defaultdict(list)
+    say_again: list[tuple[float, str, str]] = []
+
+    for row in calls:
+        outcome = row.get("outcome")
+        call_id = row.get("call_id")
+        rule_id = str(row.get("rule_id") or "")
+        row_time = _finite_time(row.get("t"))
+        if outcome == "fired":
+            repeat_of = _record_inputs(row).get("repeat_of")
+            if repeat_of is not None:
+                if call_id is not None:
+                    repeat_ids.add(str(call_id))
+                if row_time is not None:
+                    marked_replays.append((str(repeat_of), rule_id, row_time))
+            elif call_id is not None and rule_id and row_time is not None:
+                legacy_fired[rule_id].append((row_time, str(call_id)))
+        elif outcome == "say_again" and call_id is not None and rule_id and row_time is not None:
+            say_again.append((row_time, str(call_id), rule_id))
+
+    claimed: set[str] = set()
+    for press_time, original_id, rule_id in say_again:
+        if any(
+            target_id == original_id
+            and replay_rule == rule_id
+            and press_time <= replay_time <= press_time + 30
+            for target_id, replay_rule, replay_time in marked_replays
+        ):
+            continue
+        candidates = [
+            (fired_time, call_id)
+            for fired_time, call_id in legacy_fired.get(rule_id, [])
+            if call_id not in claimed and press_time <= fired_time <= press_time + 30
+        ]
+        if candidates:
+            _, replay_id = min(candidates)
+            repeat_ids.add(replay_id)
+            claimed.add(replay_id)
+    return repeat_ids
+
+
 def call_quality(db: Database, uid: int) -> dict[str, Any]:
     calls = db.calls_for_session(uid)
-
+    repeat_ids = _repeat_call_ids(db, uid)
     fired_calls = []
     for row in calls:
         rule_id = str(row.get("rule_id") or "")
-        inputs = row.get("inputs")
-        if isinstance(inputs, str):
-            try:
-                inputs = json.loads(inputs)
-            except json.JSONDecodeError:
-                inputs = {}
-        inputs = inputs if isinstance(inputs, dict) else {}
+        call_id = row.get("call_id")
         if (
             row.get("outcome") == "fired"
             and rule_id != "reply"
             and not rule_id.startswith("menu:")
-            and "repeat_of" not in inputs
+            and (call_id is None or str(call_id) not in repeat_ids)
         ):
             fired_calls.append(row)
 

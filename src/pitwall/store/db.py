@@ -641,9 +641,10 @@ class Database:
                 ),
             )
         if outcome in ("ack", "neg") and record.get("call_id") and record.get("grade"):
+            grade_call_id = record.get("grade_call_id") or record["call_id"]
             self.grade_call(
                 session_uid,
-                str(record["call_id"]),
+                str(grade_call_id),
                 str(record.get("rule_id") or ""),
                 str(record["grade"]),
                 source="press",

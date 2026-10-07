@@ -11,6 +11,7 @@ from typing import Any
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, RuleDefModel
+from pitwall.digest import _repeat_call_ids
 from pitwall.store.db import Database
 
 
@@ -71,9 +72,13 @@ def question_candidates(
         uid = session.get("uid")
         if uid is None:
             continue
+        repeat_ids = _repeat_call_ids(db, int(uid))
         fired: dict[str, list[tuple[float, float]]] = {}
         for call in db.calls_for_session(int(uid)):
-            if call.get("outcome") != "fired" or "repeat_of" in _inputs(call):
+            call_id = call.get("call_id")
+            if call.get("outcome") != "fired" or (
+                call_id is not None and str(call_id) in repeat_ids
+            ):
                 continue
             lap = _number(call.get("lap"))
             t = _number(call.get("t"))

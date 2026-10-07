@@ -24,14 +24,14 @@ def _menu() -> MenuSettings:
     )
 
 
-def _ask(db: Database, uid: int, lap: int, t: float, value: float) -> None:
+def _ask(db: Database, uid: int, lap: int, t: float, value: float, item_id: str = "tyres") -> None:
     db.insert_call(
         uid,
         {
             "outcome": "driver_input",
             "t": t,
             "lap": lap,
-            "item_id": "tyres",
+            "item_id": item_id,
             "kind": "question",
             "inputs": {"signals": {"lap_num": value}},
         },
@@ -109,6 +109,83 @@ def test_repeat_calls_do_not_cover_questions() -> None:
 
     assert len(candidates) == 1
     assert candidates[0]["uncovered"] == 2
+
+
+def test_legacy_say_again_replay_does_not_cover_questions() -> None:
+    db = Database(":memory:")
+    db.upsert_session(1)
+    db.insert_call(
+        1,
+        {
+            "outcome": "fired",
+            "call_id": "original",
+            "rule_id": "test_rule",
+            "t": 1.0,
+            "lap": 1,
+        },
+    )
+    db.insert_call(
+        1,
+        {
+            "outcome": "say_again",
+            "call_id": "original",
+            "rule_id": "test_rule",
+            "t": 10.0,
+            "lap": 4,
+        },
+    )
+    db.insert_call(
+        1,
+        {
+            "outcome": "fired",
+            "call_id": "legacy-replay",
+            "rule_id": "test_rule",
+            "t": 11.0,
+            "lap": 4,
+        },
+    )
+    _ask(db, 1, 5, 12.0, 5.0)
+    _ask(db, 1, 6, 13.0, 7.0)
+
+    candidates = question_candidates(db, _menu(), [_rule()], thresholds={"limit": 4.0})
+
+    assert len(candidates) == 1
+    assert candidates[0]["uncovered"] == 2
+
+
+def test_plan_announcement_covers_pit_questions() -> None:
+    settings = ConfigStore().current()
+    db = Database(":memory:")
+    db.upsert_session(1)
+    db.insert_call(
+        1,
+        {
+            "outcome": "fired",
+            "call_id": "plan-call",
+            "rule_id": "plan_announce",
+            "t": 9.0,
+            "lap": 4,
+        },
+    )
+    _ask(db, 1, 5, 10.0, 5.0, item_id="pit")
+    _ask(db, 1, 6, 11.0, 6.0, item_id="pit")
+
+    candidates = question_candidates(
+        db,
+        settings.menu,
+        settings.rules,
+        thresholds=settings.thresholds,
+    )
+
+    pit = next(item for item in settings.menu.items if item.id == "pit")
+    assert {
+        "plan_announce",
+        "plan_announce_no_stop",
+        "plan_status",
+        "plan_switch",
+        "plan_switch_no_stop",
+    } <= set(pit.related_rules)
+    assert candidates == []
 
 
 def test_proposals_keep_question_candidates_review_only() -> None:

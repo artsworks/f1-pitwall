@@ -492,7 +492,11 @@ class Dispatcher:
             press.kind,
             target,
             press.kind,
-            extra={"grade": grade, "grade_source": "press"},
+            extra={
+                "grade": grade,
+                "grade_source": "press",
+                "grade_call_id": target.inputs.get("repeat_of") or target.id,
+            },
         )
         d = self._defs.get(target.rule_id)
         own = (d.on_ack if press.kind == "ack" else d.on_neg) if d is not None else ""
