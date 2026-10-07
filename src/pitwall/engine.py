@@ -332,6 +332,7 @@ class Engine:
         self._laps_written = 0
         self._session_upserted: int | None = None
         self._parc_ferme_written: int | None = None
+        self._weekend_structure_written: tuple[int, ...] = ()
         self.session_origin_started_at: float | None = None
         self._track_loaded: int | None = None
         self._session_ended_written = False
@@ -699,6 +700,7 @@ class Engine:
         self._prev_race_phase = ""
         self.session_origin_started_at = None
         self._parc_ferme_written = None
+        self._weekend_structure_written = ()
         self.setup_advisor.reset(uid)
 
     def _evaluate_live_setup(self, uid: int) -> None:
@@ -738,6 +740,7 @@ class Engine:
             weather=snap.weather,
             game_mode=snap.game_mode,
             weekend_link=snap.weekend_link,
+            weekend_structure=snap.weekend_structure,
             calls_mode=(
                 "off"
                 if self.store.current().policy.quiet or not self.store.current().speech.enabled
@@ -747,6 +750,7 @@ class Engine:
             synthetic=self._synthetic_session(uid),
         )
         self._parc_ferme_written = snap.parc_ferme if snap.parc_ferme >= 0 else None
+        self._weekend_structure_written = tuple(snap.weekend_structure)
 
     def _write_laps(self) -> None:
         if self.db is None or self.state.session_uid is None:
@@ -762,6 +766,10 @@ class Engine:
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
             self.db.set_session_parc_ferme(uid, parc_ferme)
             self._parc_ferme_written = parc_ferme
+        structure = tuple(self.state.weekend_structure)
+        if structure and structure != self._weekend_structure_written:
+            self.db.set_weekend_structure(uid, structure)
+            self._weekend_structure_written = structure
         if self.state.setup_rewind_t is not None:
             self.db.delete_setup_changes_after(uid, self.state.setup_rewind_t)
             self.state.setup_rewind_t = None

@@ -157,12 +157,16 @@ def quality_trend(
     db_uids = {int(session["uid"]) for session in db_sessions}
     db_sessions = [session for session in db_sessions if not is_synthetic_uid(int(session["uid"]))]
     rows = []
-    structures: dict[tuple[int, int], tuple[int, ...]] = {}
+    structures: dict[tuple[int, int, str], tuple[int, ...]] = {}
 
     def structure_for(session: Mapping[str, Any]) -> tuple[int, ...]:
-        key = (int(session.get("weekend_link") or 0), int(session.get("track_id") or -1))
+        key = (
+            int(session.get("weekend_link") or 0),
+            int(session.get("track_id") or -1),
+            str(session.get("weekend_structure") or ""),
+        )
         if key not in structures:
-            structures[key] = db.weekend_session_types(*key)
+            structures[key] = db.stored_weekend_structure(session)
         return structures[key]
 
     if sessions > 0:

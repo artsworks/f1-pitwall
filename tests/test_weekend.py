@@ -19,13 +19,19 @@ from .synth import write_packet_stream
 
 
 def _prior_db(
-    db: Database, *, link: int, started_at: float, laps: int = 8, rmse_ms: float = 0.0
+    db: Database,
+    *,
+    link: int,
+    started_at: float,
+    laps: int = 8,
+    rmse_ms: float = 0.0,
+    session_type: int = 1,
 ) -> None:
     uid = 0xF1262001
     db.upsert_session(
         uid,
         track_id=7,
-        session_type=1,
+        session_type=session_type,
         started_at=started_at,
         weekend_link=link,
     )
@@ -202,3 +208,18 @@ def test_open_final_stint_folds_once_at_session_end(tmp_path) -> None:
     assert stints[0]["end_lap"] >= stints[0]["start_lap"]
     fitted = db.get_param(7, 17, "deg_ms_per_lap@8L")
     assert fitted is not None and fitted.weight == stints[0]["n_valid_laps"]
+
+
+def test_engine_stores_weekend_structure_arriving_after_upsert() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    engine.state.session_uid = 0xF1262009
+    engine.state.track_id = 7
+    engine.state.session_type = 15
+    engine._upsert_session(0xF1262009)  # noqa: SLF001
+    assert db.session_row(0xF1262009)["weekend_structure"] == ""
+
+    engine.state.weekend_structure = (1, 10, 15, 5, 16)
+    engine._write_laps()  # noqa: SLF001
+
+    assert db.session_row(0xF1262009)["weekend_structure"] == "1,10,15,5,16"

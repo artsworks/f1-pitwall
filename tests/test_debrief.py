@@ -474,3 +474,26 @@ def test_debrief_labels_sprint_and_race_by_weekend_link() -> None:
     index = render_debrief_index(db)
     assert "<td>Sprint</td>" in index
     assert "<td>Race</td>" in index
+
+
+def test_debrief_labels_from_stored_weekend_structure() -> None:
+    db = Database(":memory:")
+    db.upsert_session(
+        164,
+        track_id=7,
+        session_type=15,
+        started_at=1.0,
+        weekend_structure=(1, 10, 11, 12, 15, 5, 6, 7, 16),
+    )
+    db.upsert_session(
+        165,
+        track_id=7,
+        session_type=15,
+        started_at=2.0,
+        weekend_structure=(1, 2, 3, 5, 6, 7, 15),
+    )
+    settings = ConfigStore().current()
+    assert " · SPRINT · " in render_debrief(db, 164, settings)
+    assert " · RACE · " in render_debrief(db, 165, settings)
+    index = render_debrief_index(db)
+    assert "<td>Sprint</td>" in index

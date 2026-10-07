@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -320,6 +320,10 @@ MIGRATIONS: list[str] = [
     ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
     ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
     """,
+    # 13: weekend structure per session.
+    """
+    ALTER TABLE sessions ADD COLUMN weekend_structure TEXT DEFAULT '';
+    """,
 ]
 
 
@@ -509,6 +513,7 @@ class Database:
         self._ensure_column("bookmarks", "kind", "TEXT NOT NULL DEFAULT 'hold'")
         self._ensure_column("bookmarks", "context", "TEXT")
         self._ensure_column("laps", "visual", "INT DEFAULT 0")
+        self._ensure_column("sessions", "weekend_structure", "TEXT DEFAULT ''")
         self._reconcile_schema()
 
     def _reconcile_schema(self) -> None:
@@ -639,6 +644,7 @@ class Database:
         recording_path: str = "",
         game_mode: int = 0,
         weekend_link: int = 0,
+        weekend_structure: Sequence[int] = (),
         calls_mode: str = "",
         parc_ferme: int | None = None,
         synthetic: bool = False,
@@ -647,8 +653,8 @@ class Database:
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
                 " game_version, config_hash, weather, recording_path, game_mode,"
-                " weekend_link, calls_mode, parc_ferme, synthetic)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " weekend_link, calls_mode, parc_ferme, synthetic, weekend_structure)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
@@ -657,7 +663,10 @@ class Database:
                 " game_mode=excluded.game_mode, weekend_link=excluded.weekend_link,"
                 " calls_mode=excluded.calls_mode,"
                 " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme),"
-                " synthetic=MAX(COALESCE(sessions.synthetic, 0), excluded.synthetic)",
+                " synthetic=MAX(COALESCE(sessions.synthetic, 0), excluded.synthetic),"
+                " weekend_structure=CASE WHEN excluded.weekend_structure<>''"
+                " THEN excluded.weekend_structure"
+                " ELSE COALESCE(sessions.weekend_structure,'') END",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -672,6 +681,7 @@ class Database:
                     calls_mode,
                     parc_ferme,
                     int(synthetic),
+                    ",".join(str(t) for t in weekend_structure),
                 ),
             )
 
@@ -948,6 +958,13 @@ class Database:
         with self.transaction():
             self._conn.execute(
                 "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
+            )
+
+    def set_weekend_structure(self, uid: int, structure: Sequence[int]) -> None:
+        with self.transaction():
+            self._conn.execute(
+                "UPDATE sessions SET weekend_structure=? WHERE uid=?",
+                (",".join(str(t) for t in structure), _uid_to_sql(uid)),
             )
 
     def set_session_parc_ferme(self, uid: int, value: int) -> None:
@@ -1653,7 +1670,7 @@ class Database:
 
     def weekend_session_types(self, weekend_link: int, track_id: int) -> tuple[int, ...]:
         """Session types of the non-synthetic sessions sharing a weekend link,
-        in started order. Drives the Sprint/Race label in stored views."""
+        in started order. Fallback for rows with no stored structure."""
         if not weekend_link:
             return ()
         rows = self._conn.execute(
@@ -1662,6 +1679,23 @@ class Database:
             (weekend_link, track_id),
         ).fetchall()
         return tuple(int(row[0]) for row in rows)
+
+    def stored_weekend_structure(self, row: Mapping[str, Any]) -> tuple[int, ...]:
+        """A session row's stored weekend structure, else the sibling lookup.
+        Drives the Sprint/Race label in stored views."""
+        stored = str(row.get("weekend_structure") or "")
+        if stored:
+            parsed: list[int] = []
+            for token in stored.split(","):
+                try:
+                    parsed.append(int(token))
+                except ValueError:
+                    continue
+            if parsed:
+                return tuple(parsed)
+        return self.weekend_session_types(
+            int(row.get("weekend_link") or 0), int(row.get("track_id") or -1)
+        )
 
     def session(self, uid: int) -> dict[str, Any] | None:
         row = self._conn.execute(

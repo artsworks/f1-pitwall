@@ -457,3 +457,32 @@ def test_weekend_session_types() -> None:
     db.upsert_session(302, track_id=10, session_type=15, started_at=106.0, weekend_link=link)
     assert db.weekend_session_types(link, 7) == (1, 10, 15, 5, 16)
     assert db.weekend_session_types(0, 7) == ()
+
+
+def test_weekend_structure_migration_and_storage(tmp_path) -> None:
+    path = tmp_path / "v12.sqlite"
+    _seed_database(path, migration_count=12)
+    conn = sqlite3.connect(path)
+    conn.execute("INSERT INTO sessions(uid, track_id, session_type) VALUES(210, 7, 15)")
+    conn.commit()
+    conn.close()
+
+    for _ in range(2):
+        db = Database(path)
+        columns = {
+            row["name"]
+            for row in db._conn.execute("PRAGMA table_info(sessions)")  # noqa: SLF001
+        }
+        assert "weekend_structure" in columns
+        assert db.session_row(210)["weekend_structure"] == ""
+        db.close()
+
+
+def test_weekend_structure_upsert_and_set() -> None:
+    db = Database(":memory:")
+    db.upsert_session(211, track_id=7, session_type=15, weekend_structure=(1, 10, 15))
+    assert db.session_row(211)["weekend_structure"] == "1,10,15"
+    db.upsert_session(211, track_id=7, session_type=15)  # empty doesn't overwrite
+    assert db.session_row(211)["weekend_structure"] == "1,10,15"
+    db.set_weekend_structure(211, (5, 15))
+    assert db.session_row(211)["weekend_structure"] == "5,15"
