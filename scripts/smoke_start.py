@@ -158,23 +158,31 @@ def main() -> int:
                     ("127.0.0.1", udp_port),
                 )
 
-            telemetry_deadline = time.monotonic() + 10
-            while time.monotonic() < telemetry_deadline:
-                if proc.poll() is not None:
-                    raise RuntimeError(
-                        f"child exited before telemetry became live with code {proc.returncode}"
+                telemetry_deadline = time.monotonic() + 10
+                frame = 3
+                session_time = 1.2
+                while time.monotonic() < telemetry_deadline:
+                    if proc.poll() is not None:
+                        raise RuntimeError(
+                            f"child exited before telemetry became live with code {proc.returncode}"
+                        )
+                    sender.sendto(
+                        _packet(PacketId.LAP_DATA, session_time, frame),
+                        ("127.0.0.1", udp_port),
                     )
-                payload = _health(health_url)
-                if (
-                    payload is not None
-                    and payload.get("live") is True
-                    and payload.get("packet_age_ms") is not None
-                ):
-                    telemetry_elapsed = time.monotonic() - started
-                    break
-                time.sleep(0.2)
-            else:
-                raise RuntimeError("telemetry did not become live within 10 seconds")
+                    frame += 1
+                    session_time += 0.1
+                    payload = _health(health_url)
+                    if (
+                        payload is not None
+                        and payload.get("live") is True
+                        and payload.get("packet_age_ms") is not None
+                    ):
+                        telemetry_elapsed = time.monotonic() - started
+                        break
+                    time.sleep(0.2)
+                else:
+                    raise RuntimeError("telemetry did not become live within 10 seconds")
 
             shutdown_started = time.monotonic()
             proc.send_signal(signal.SIGINT)
