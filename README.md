@@ -57,7 +57,6 @@ optionally another to **UDP Action 3**). The pit wall answers every press by voi
 | UDP 1 single | Acknowledge the last call ("Copy.") |
 | UDP 1 double | Negative ("Noted."); with no recent call, quiet for 5 minutes |
 | UDP 1 held ≥ 0.8 s | **Radio silent** on/off: no speech (urgent P1 calls still speak), dashboard keeps the radio |
-| UDP 3 single | Radio silent on/off (use this if the hold doesn't register on your wheel) |
 
 To update later: `git pull; uv sync`.
 
