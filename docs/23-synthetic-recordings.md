@@ -139,6 +139,20 @@ Keep `derive` for quick checks of "the same race, with an event at a different t
 
 The race used here had no safety car and one stop. A longer real race with a safety car and two stops would test these results better. You may need to record one.
 
+## Known-answer check
+
+`scripts/known_answer.py` tests the estimators against races whose physics we set. It builds each race with `tests/race_synth.py`, ingests it into its own temp database and runs `calibrate`. Then it prints each learned value next to the true value. Nothing touches the configured `pitwall.sqlite` or `recordings/`.
+
+```text
+uv run python scripts/known_answer.py --races 8 --pooled 4 --jobs 5 --json out.json
+```
+
+- Each single run is one race with one stint on C17 and one on C18, with pit-lane time, lap noise and tyre temperatures that cross the thermal window.
+- The pooled run puts 4 races with the same physics and different pit laps into one database. Different pit laps put the same tyre age at different fuel loads, so calibrate can separate fuel from tyre wear.
+- `deg*_net` is deg minus the fuel slope the fit assumed. A single stint can only measure this lap-time slope, so compare live fits on it.
+
+The races are synthetic, so they test the estimators and do not supply priors for real races. `scripts/make_synth_race.py` writes one such race to `recordings/` for a manual `pitwall digest`.
+
 ## Next step
 
 The [scenario bench](24-scenario-bench.md) turns derived recordings into scored scenarios with a baseline gate.
