@@ -16,6 +16,62 @@ def test_fresh_db_is_migrated(tmp_path) -> None:
     assert db2._conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)  # noqa: SLF001
 
 
+def test_press_grades_yield_to_human_and_preserve_unsigned_uid() -> None:
+    db = Database(":memory:")
+    uid = (1 << 63) + 42
+
+    db.grade_call(uid, "call-1", "rule", "good", source="press")
+    grade = db.grades_for_session(uid)[0]
+    assert grade["source"] == "press" and grade["grade"] == "good"
+
+    db.grade_call(uid, "call-1", "rule", "noise", source="press")
+    assert db.grades_for_session(uid)[0]["grade"] == "noise"
+
+    db.grade_call(uid, "call-1", "rule", "wrong")
+    db.grade_call(uid, "call-1", "rule", "good", source="press")
+    grade = db.grades_for_session(uid)[0]
+    assert grade["grade"] == "wrong" and grade["source"] == "human"
+
+    db.grade_call(uid, "call-1", "rule", "good")
+    assert db.grades_for_session(uid)[0]["grade"] == "good"
+
+
+def test_bookmark_persists_kind_and_context() -> None:
+    db = Database(":memory:")
+    uid = 21
+    db.insert_call(
+        uid,
+        {
+            "t": 2.0,
+            "lap": 3,
+            "outcome": "bookmark",
+            "kind": "tap",
+            "context": {"lap_num": 3, "fuel_remaining_laps": 4.2357},
+        },
+    )
+
+    bookmark = db.bookmarks_for_session(uid)[0]
+    assert bookmark["kind"] == "tap"
+    assert bookmark["context"] == {"lap_num": 3, "fuel_remaining_laps": 4.2357}
+
+
+def test_insert_call_stores_press_grade() -> None:
+    db = Database(":memory:")
+    db.insert_call(
+        22,
+        {
+            "outcome": "ack",
+            "call_id": "call-1",
+            "rule_id": "tyre_temp",
+            "grade": "good",
+            "grade_source": "press",
+        },
+    )
+
+    grade = db.grades_for_session(22)[0]
+    assert grade["grade"] == "good" and grade["source"] == "press"
+
+
 def test_incremental_migration() -> None:
     import pitwall.store.db as dbmod
 

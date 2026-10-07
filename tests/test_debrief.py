@@ -72,6 +72,27 @@ def test_debrief_empty_hindsight() -> None:
     assert _hindsight([]) == "—"
 
 
+def test_debrief_marks_press_grades() -> None:
+    db = Database(":memory:")
+    uid = 141
+    db.upsert_session(uid, track_id=7, session_type=15)
+    db.insert_call(
+        uid,
+        {
+            "outcome": "fired",
+            "call_id": "press-call",
+            "rule_id": "box_now",
+            "lap": 2,
+            "text": "Box now",
+        },
+    )
+    db.grade_call(uid, "press-call", "box_now", "good", source="press")
+
+    report = render_debrief(db, uid, ConfigStore().current())
+
+    assert "<span class='chip'>press</span>" in report
+
+
 def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> None:
     db = Database(tmp_path / "session.sqlite")
     db.upsert_session(140, track_id=7, session_type=15, started_at=1.0, config_hash="old")

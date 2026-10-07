@@ -684,6 +684,12 @@ def _grade_buttons(call_id: str, grade: str | None) -> str:
     return "<div class='grade'>" + "".join(buttons) + "</div>"
 
 
+def _press_grade_label(grade: dict[str, Any] | None) -> str:
+    if grade is None or grade.get("source") != "press":
+        return ""
+    return " <span class='chip'>press</span>"
+
+
 def _provenance(session: dict[str, Any], calls: list[dict[str, Any]], settings: Settings) -> str:
     recording_path = str(session.get("recording_path") or "")
     basename = os.path.basename(recording_path) if recording_path else ""
@@ -1110,8 +1116,9 @@ def _radio_section(
         )
         grade_cell = (
             _grade_buttons(call_id, str(human.get("grade")) if human else None)
+            + _press_grade_label(human)
             if editable and call_id
-            else _verdict(verdict)
+            else _verdict(verdict) + _press_grade_label(human)
         )
         row_class = " class='sup'" if outcome == "suppressed" else ""
         lap_value = call.get("lap") if call.get("lap") is not None else "—"

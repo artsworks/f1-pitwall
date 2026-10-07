@@ -107,6 +107,7 @@ class InputSettings(BaseModel):
     spoken_replies: bool = False  # packaged settings.yaml turns this on
     ack_replies: list[str] = Field(default_factory=lambda: ["Copy.", "Copy that.", "Understood."])
     neg_replies: list[str] = Field(default_factory=lambda: ["Noted.", "Copy, noted."])
+    bookmark_replies: list[str] = Field(default_factory=lambda: ["Marked."])
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
     long_press: Literal["bookmark", "silent"] = "bookmark"

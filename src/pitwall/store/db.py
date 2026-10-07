@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pitwall.protocol.enums import session_kind
 
@@ -300,6 +300,12 @@ MIGRATIONS: list[str] = [
     ALTER TABLE laps ADD COLUMN wear_rear_pct REAL DEFAULT 0;
     ALTER TABLE laps ADD COLUMN tyre_inner_front_c REAL DEFAULT 0;
     ALTER TABLE laps ADD COLUMN tyre_inner_rear_c REAL DEFAULT 0;
+    """,
+    # 11: press grades and contextual bookmarks.
+    """
+    ALTER TABLE call_grades ADD COLUMN source TEXT NOT NULL DEFAULT 'human';
+    ALTER TABLE bookmarks ADD COLUMN kind TEXT NOT NULL DEFAULT 'hold';
+    ALTER TABLE bookmarks ADD COLUMN context TEXT;
     """,
 ]
 
@@ -588,7 +594,7 @@ class Database:
             with self.transaction():
                 self._conn.execute(
                     "INSERT INTO bookmarks(session_uid, t, session_time, lap,"
-                    " lap_distance, note) VALUES(?,?,?,?,?,?)",
+                    " lap_distance, note, kind, context) VALUES(?,?,?,?,?,?,?,?)",
                     (
                         _uid_to_sql(session_uid),
                         record.get("t"),
@@ -596,6 +602,10 @@ class Database:
                         record.get("lap"),
                         record.get("lap_distance"),
                         record.get("note", ""),
+                        record.get("kind") or "hold",
+                        json.dumps(record.get("context"), default=str)
+                        if record.get("context") is not None
+                        else None,
                     ),
                 )
             return
@@ -629,6 +639,18 @@ class Database:
                     record.get("active_plan") or None,
                     _bool_to_sql(record.get("on_plan")),
                 ),
+            )
+        if (
+            outcome in ("ack", "neg")
+            and record.get("call_id")
+            and record.get("grade")
+        ):
+            self.grade_call(
+                session_uid,
+                str(record["call_id"]),
+                str(record.get("rule_id") or ""),
+                str(record["grade"]),
+                source="press",
             )
 
     def insert_plan_event(self, session_uid: int, record: dict[str, Any]) -> None:
@@ -683,16 +705,44 @@ class Database:
         rule_id: str,
         grade: str,
         note: str = "",
+        source: Literal["human", "press"] = "human",
     ) -> None:
         with self.transaction():
-            self._conn.execute(
-                "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
-                " note, graded_at) VALUES(?,?,?,?,?,?)"
-                " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
-                " grade=excluded.grade, note=excluded.note,"
-                " graded_at=excluded.graded_at",
-                (_uid_to_sql(session_uid), call_id, rule_id, grade, note, time.time()),
-            )
+            if source == "press":
+                self._conn.execute(
+                    "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
+                    " note, graded_at, source) VALUES(?,?,?,?,?,?,?)"
+                    " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
+                    " rule_id=excluded.rule_id, grade=excluded.grade, note=excluded.note,"
+                    " graded_at=excluded.graded_at"
+                    " WHERE call_grades.source='press'",
+                    (
+                        _uid_to_sql(session_uid),
+                        call_id,
+                        rule_id,
+                        grade,
+                        note,
+                        time.time(),
+                        source,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO call_grades(session_uid, call_id, rule_id, grade,"
+                    " note, graded_at, source) VALUES(?,?,?,?,?,?,?)"
+                    " ON CONFLICT(session_uid, call_id) DO UPDATE SET"
+                    " rule_id=excluded.rule_id, grade=excluded.grade, note=excluded.note,"
+                    " graded_at=excluded.graded_at, source='human'",
+                    (
+                        _uid_to_sql(session_uid),
+                        call_id,
+                        rule_id,
+                        grade,
+                        note,
+                        time.time(),
+                        source,
+                    ),
+                )
 
     # -- reads ----------------------------------------------------------------
 
@@ -923,9 +973,16 @@ class Database:
         return self._rows("SELECT * FROM call_grades WHERE session_uid=?", (_uid_to_sql(uid),))
 
     def bookmarks_for_session(self, uid: int) -> list[dict[str, Any]]:
-        return self._rows(
+        rows = self._rows(
             "SELECT * FROM bookmarks WHERE session_uid=? ORDER BY t", (_uid_to_sql(uid),)
         )
+        for row in rows:
+            try:
+                context = json.loads(str(row["context"] or "{}"))
+            except json.JSONDecodeError:
+                context = {}
+            row["context"] = context if isinstance(context, dict) else {}
+        return rows
 
     def driver_inputs_for_session(self, uid: int) -> list[dict[str, Any]]:
         return self._rows(

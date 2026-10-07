@@ -14,7 +14,7 @@ from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
-DIGEST_VERSION = 2
+DIGEST_VERSION = 3
 
 
 def _mean(xs: Sequence[float]) -> float | None:
@@ -94,6 +94,8 @@ def build_digest(
             "neg": 0,
             "human_good": 0,
             "human_bad": 0,
+            "press_good": 0,
+            "press_noise": 0,
             "auto_good": 0,
             "auto_wrong": 0,
         }
@@ -103,7 +105,11 @@ def build_digest(
         if outcome in ("fired", "suppressed", "ack", "neg"):
             calls[str(c.get("rule_id") or "")][outcome] += 1
     for g in db.grades_for_session(uid):
-        key = "human_good" if g["grade"] == "good" else "human_bad"
+        source = str(g.get("source") or "human")
+        if source == "press":
+            key = "press_good" if g["grade"] == "good" else "press_noise"
+        else:
+            key = "human_good" if g["grade"] == "good" else "human_bad"
         calls[str(g["rule_id"])][key] += 1
     for o in outcomes:
         if o.label == "good":
@@ -182,7 +188,10 @@ def build_digest(
             ),
         },
         "calls": dict(sorted(calls.items())),
-        "bookmarks": [{"lap": b.get("lap"), "note": b.get("note") or ""} for b in bookmarks],
+        "bookmarks": [
+            {"lap": b.get("lap"), "kind": b.get("kind") or "hold", "note": b.get("note") or ""}
+            for b in bookmarks
+        ],
         "findings": findings(outcomes, calls, len(bookmarks), th),
     }
 

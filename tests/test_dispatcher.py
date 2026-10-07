@@ -232,16 +232,18 @@ def test_say_again_ignores_stale_calls() -> None:
     assert d.drain(100.0) == []
 
 
-def test_late_press_does_nothing_without_say_again() -> None:
+def test_late_press_bookmarks_without_say_again() -> None:
     from pitwall.input.press import Press
 
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(say_again=False, spoken_replies=True)
     d.submit([_cand("a", text="pit exit clear")], _snap(0.0))
     d.drain(0.0)
     d.on_press(Press("ack", 20.0), _snap(20.0))  # past the response window
-    assert d.drain(20.0) == []
+    assert [call.text for call in d.drain(20.0)] == ["Marked."]
     assert d.quiet_until is None
+    bookmark = next(r for r in _log(buf) if r["outcome"] == "bookmark")
+    assert bookmark["kind"] == "tap"
 
 
 def test_negative_backoff_mutes_not_p1() -> None:
@@ -305,15 +307,33 @@ def test_budget_resets_per_quali_run_on_same_lap() -> None:
 def test_press_gets_spoken_reply() -> None:
     from pitwall.input.press import Press
 
-    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(spoken_replies=True)
     d.submit([_cand("a", text="box box")], _snap(0.0))
     d.drain(0.0)
     d.on_press(Press("ack", 1.0), _snap(1.0))
     calls = d.drain(1.0)
     assert len(calls) == 1 and calls[0].rule_id == "reply" and calls[0].text == "Copy."
+    ack = next(r for r in _log(buf) if r["outcome"] == "ack")
+    assert ack["grade"] == "good" and ack["grade_source"] == "press"
     d.on_press(Press("neg", 2.0), _snap(2.0))
     assert [c.text for c in d.drain(2.0)] == ["Noted."]
+    neg = next(r for r in _log(buf) if r["outcome"] == "neg")
+    assert neg["grade"] == "noise" and neg["grade_source"] == "press"
+
+
+def test_ack_without_target_bookmarks_with_snapshot_context() -> None:
+    from pitwall.input.press import Press
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(spoken_replies=True, say_again=False)
+    d.on_press(Press("ack", 10.0), Snapshot(now=10.0, lap_num=4, fuel_remaining_laps=3.12345))
+
+    bookmark = next(r for r in _log(buf) if r["outcome"] == "bookmark")
+    assert bookmark["kind"] == "tap"
+    assert bookmark["context"]["lap_num"] == 4
+    assert bookmark["context"]["fuel_remaining_laps"] == 3.123
+    assert d.drain(10.0)[0].text == "Marked."
 
 
 def test_neg_without_target_announces_quiet_and_ack_ends_it() -> None:
@@ -376,7 +396,9 @@ def test_long_press_still_bookmarks_by_default() -> None:
 
     d, _, buf = _dispatcher()
     d.on_press(Press("bookmark", 0.0), _snap(0.0))
-    assert d.silent is False and _log(buf)[-1]["outcome"] == "bookmark"
+    bookmark = _log(buf)[-1]
+    assert d.silent is False and bookmark["outcome"] == "bookmark"
+    assert bookmark["kind"] == "hold" and bookmark["context"]["lap_num"] == 1
 
 
 def test_min_gap_defers_instead_of_dropping() -> None:
