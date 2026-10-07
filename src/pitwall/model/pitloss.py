@@ -1,5 +1,4 @@
-"""Measured pit loss and its priors (docs/18). loss_ms = (in_lap - ref) +
-(out_lap - ref); lane time lives inside the lap times already."""
+"""Measured pit loss and its priors (docs/18). Lane time lives inside the lap times."""
 
 from __future__ import annotations
 
@@ -30,6 +29,7 @@ class PitLoss:
     in_lap_ms: int
     out_lap_ms: int
     ref_pace_ms: int
+    ref_after_ms: int
     neutralised: int
 
 
@@ -39,14 +39,19 @@ def measure(
     lane_ms: int,
     ref_pace_ms: int,
     neutralised: int,
+    *,
+    ref_after_ms: int | None = None,
 ) -> PitLoss:
-    loss = (in_lap.lap_time_ms - ref_pace_ms) + (out_lap.lap_time_ms - ref_pace_ms)
+    loss = (in_lap.lap_time_ms - ref_pace_ms) + (
+        out_lap.lap_time_ms - (ref_after_ms or ref_pace_ms)
+    )
     return PitLoss(
         loss_ms=int(loss),
         lane_ms=lane_ms,
         in_lap_ms=in_lap.lap_time_ms,
         out_lap_ms=out_lap.lap_time_ms,
         ref_pace_ms=ref_pace_ms,
+        ref_after_ms=ref_after_ms or 0,
         neutralised=neutralised,
     )
 
@@ -59,6 +64,16 @@ def ref_pace_ms(laps: list[LapRow], before_lap_num: int) -> int:
         if lap.lap_num < before_lap_num and lap.valid == 1 and lap.lap_time_ms > 0
     ]
     return int(median(times[-3:])) if times else 0
+
+
+def ref_pace_after_ms(laps: list[LapRow], after_lap_num: int, n: int) -> int:
+    """Median of the first `n` valid laps after `after_lap_num`; 0 if none."""
+    times = [
+        lap.lap_time_ms
+        for lap in sorted(laps, key=lambda row: row.lap_num)
+        if lap.lap_num > after_lap_num and lap.valid == 1 and lap.lap_time_ms > 0
+    ][: max(0, n)]
+    return int(median(times)) if times else 0
 
 
 def current_pit_loss(

@@ -23,7 +23,7 @@ BASE_MS = 90_000
 SLOPE = 100.0
 
 
-def _race_stream() -> list[tuple[float, bytes]]:
+def _race_stream(post_laps: int = 0) -> list[tuple[float, bytes]]:
     """10 player laps on a 5 km race (session_type 15, track 7). Lap 8 pits
     (slow in-lap), lap 9 is the out-lap flagged after_in_lap. Rival session
     history for car 1 with two completed laps."""
@@ -47,7 +47,7 @@ def _race_stream() -> list[tuple[float, bytes]]:
             return BASE_MS + 8_000  # out-lap
         return int(BASE_MS + SLOPE * finished_lap)
 
-    for lap in range(1, 11):
+    for lap in range(1, 11 + post_laps):
         driver_status = 2 if lap == 9 else 4  # lap 9 starts as IN_LAP -> after_in_lap
         pit_status = 1 if lap == 8 else 0
         for _ in range(3):
@@ -113,8 +113,8 @@ def _race_stream() -> list[tuple[float, bytes]]:
     return pkts
 
 
-def _run(tmp_path: Path) -> tuple[VirtualClock, object, Database]:
-    rec = write_packet_stream(tmp_path / "race.f1bin", _race_stream())
+def _run(tmp_path: Path, *, post_laps: int = 0) -> tuple[VirtualClock, object, Database]:
+    rec = write_packet_stream(tmp_path / "race.f1bin", _race_stream(post_laps))
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
     asyncio.run(run_replay(rec, engine, None))
@@ -224,7 +224,7 @@ def test_stint_refit_writes_stints_row(tmp_path: Path) -> None:
 
 
 def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
-    engine, state, db = _run(tmp_path)
+    engine, state, db = _run(tmp_path, post_laps=3)
     uid = state.session_uid
     assert uid is not None
     events = db.pit_events_for_session(uid)
@@ -232,7 +232,7 @@ def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
     ev = events[0]
     assert ev.lap_num == 8  # the in-lap
     assert ev.ref_pace_ms > 0
-    # loss = (in - ref) + (out - ref) = 15000 + 8000 (minus slope drift)
+    # The out-lap uses the fresh-tyre reference.
     assert 20_000 < ev.loss_ms < 26_000
     p = db.get_param(7, 0, "pit_loss_green_ms")
     assert p is not None and p.value == float(ev.loss_ms)
@@ -260,7 +260,7 @@ def test_race_synth_pit_loss_and_compound_change_replay(tmp_path: Path) -> None:
     assert uid is not None
     events = db.pit_events_for_session(uid)
     assert len(events) == 1
-    assert events[0].loss_ms == pytest.approx(20_000, abs=3_000)
+    assert events[0].loss_ms == pytest.approx(20_000, abs=1_000)
     laps = db.laps_for(uid, 0)
     assert "pitted" in laps[5].invalid_reasons
     assert "after_in_lap" in laps[6].invalid_reasons

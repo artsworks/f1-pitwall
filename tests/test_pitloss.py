@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pitwall.config.models import TrackOverlay
-from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
+from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_after_ms, ref_pace_ms
 from pitwall.store.db import Database, LapRow
 
 
@@ -35,6 +35,21 @@ def test_measure() -> None:
     )
     assert pit.loss_ms == (16_000 + 8_000)
     assert pit.lane_ms == 19_500 and pit.ref_pace_ms == 90_000
+    assert pit.ref_after_ms == 0
+
+
+def test_measure_uses_after_stop_reference() -> None:
+    pit = measure(
+        _lap(8, 106_000),
+        _lap(9, 98_000),
+        lane_ms=19_500,
+        ref_pace_ms=90_000,
+        neutralised=0,
+        ref_after_ms=92_000,
+    )
+    assert pit.loss_ms == 22_000
+    assert pit.ref_pace_ms == 90_000
+    assert pit.ref_after_ms == 92_000
 
 
 def test_ref_pace_median_of_last_3_valid() -> None:
@@ -43,6 +58,20 @@ def test_ref_pace_median_of_last_3_valid() -> None:
     # before lap 6: valid = 1,2,4,5 -> last 3 = 2,4,5 -> median = lap 4
     assert ref_pace_ms(laps, 6) == 90_040
     assert ref_pace_ms([], 6) == 0
+
+
+def test_ref_pace_after_uses_first_valid_laps() -> None:
+    laps = [
+        _lap(1, 89_000),
+        _lap(3, 91_000),
+        _lap(4, 0),
+        _lap(5, 92_000),
+        _lap(6, 93_000, valid=0),
+        _lap(7, 93_000),
+    ]
+    assert ref_pace_after_ms(laps, 2, 2) == 91_500
+    assert ref_pace_after_ms(laps, 2, 3) == 92_000
+    assert ref_pace_after_ms(laps, 7, 3) == 0
 
 
 def test_current_pit_loss_resolution_order() -> None:
