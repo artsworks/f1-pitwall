@@ -278,7 +278,7 @@
     var phase = (p.phase || "--").replace("_", " ").toUpperCase();
     setText("phase", phase);
     setClass("phase", p.phase === "out_lap" ? "amber" : "");
-    setText("session", (p.session_kind || "--").toUpperCase() + " · " +
+    setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
     setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");

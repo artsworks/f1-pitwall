@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
-from pitwall.protocol.enums import session_kind
+from pitwall.protocol.enums import session_kind, session_label, weekend_order
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
 from pitwall.server.pin import PIN_COOKIE, PinGate, forwarded
 from pitwall.setup.evaluate import setup_modes
@@ -136,9 +136,7 @@ def pit_board_payload(
         )
         rule_data = rules.get("setup_rules", rules)
         locked_fields = rule_data.get("quali_locked", []) if isinstance(rule_data, Mapping) else []
-        if session_kind(next_session) in ("qualifying", "sprint_shootout") and isinstance(
-            locked_fields, list
-        ):
+        if session_kind(next_session) == "qualifying" and isinstance(locked_fields, list):
             checklist = [
                 {"field": str(field_name), "value": snapshot.setup.get(str(field_name))}
                 for field_name in locked_fields
@@ -490,6 +488,8 @@ def state_payload(
         "rate_hz": None,
         "session_kind": snapshot.session_kind,
         "session_type": snapshot.session_type,
+        "session_label": session_label(snapshot.session_type, snapshot.weekend_structure),
+        "weekend": weekend_order(snapshot.weekend_structure),
         "track": track,
         "lap_num": snapshot.lap_num,
         "total_laps": snapshot.total_laps,

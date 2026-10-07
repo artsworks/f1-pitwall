@@ -106,7 +106,7 @@ def _learned_candidates(
 def setup_modes(session_type: int) -> tuple[str, ...]:
     """Advice modes evaluated live for a session type."""
     kind = session_kind(session_type)
-    if kind in ("practice", "qualifying", "sprint_shootout"):
+    if kind in ("practice", "qualifying"):
         return ("garage",)
     if kind == "race":
         return ("race", "race_stop")
@@ -117,7 +117,6 @@ def _session_kind(session_type: int) -> str | None:
     return {
         "practice": "practice",
         "qualifying": "quali",
-        "sprint_shootout": "quali",
         "race": "race",
     }.get(session_kind(session_type))
 

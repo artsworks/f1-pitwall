@@ -642,3 +642,25 @@ def test_race_stop_evaluator_result_contains_only_front_wing() -> None:
 )
 def test_setup_modes(session_type: int, expected: tuple[str, ...]) -> None:
     assert setup_modes(session_type) == expected
+
+
+def test_pit_board_checklist_before_sprint_shootout() -> None:
+    from pitwall.server.app import pit_board_payload
+
+    settings = ConfigStore().current()
+    rec = _recommendation(suppressed=({"param": "rear_anti_roll_bar", "reason": "locked"},))
+    snapshot = Snapshot(
+        now=1.0,
+        session_kind="practice",
+        session_type=1,
+        phase="garage",
+        setup={"brake_bias": 56.0, "rear_anti_roll_bar": 5.0, "rear_wing": 8.0},
+        setup_advice=(rec,),
+        parc_ferme=1,
+        weekend_structure=(1, 10, 11, 12, 15, 5, 6, 7, 16),
+    )
+    board = pit_board_payload(snapshot, settings.thresholds, settings.setup_rules)
+    assert board is not None
+    checklist = board["setup_lock_checklist"]
+    assert checklist is not None
+    assert {"field": "rear_wing", "value": 8.0} in checklist

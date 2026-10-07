@@ -19,7 +19,7 @@ from pitwall.digest import call_quality
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
-from pitwall.protocol.enums import session_kind
+from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
 from pitwall.state.session import thermal_window
@@ -255,21 +255,6 @@ _TRACK_NAMES = {
     40: "Austria reverse",
     41: "Zandvoort reverse",
 }
-_SESSION_LABELS = {
-    1: "P1",
-    2: "P2",
-    3: "P3",
-    4: "Short practice",
-    5: "Q1",
-    6: "Q2",
-    7: "Q3",
-    8: "Short qualifying",
-    9: "One-shot qualifying",
-    15: "Race",
-    16: "Race 2",
-    17: "Race 3",
-    18: "Time trial",
-}
 _SECTIONS = (
     ("summary", "00", "Summary"),
     ("pace", "01", "Pace and stints"),
@@ -376,7 +361,7 @@ def _session_label(session_type: object) -> str:
     key = _as_int(session_type)
     if key is None:
         return f"Session {session_type}"
-    return _SESSION_LABELS.get(key, f"Session {key}")
+    return session_label(key)
 
 
 def _lap_time(lap_time_ms: int) -> str:
