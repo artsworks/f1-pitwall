@@ -1021,6 +1021,20 @@ class Database:
             "sessions": int(row["sessions"]),
         }
 
+    def session_track_ms(self) -> list[dict[str, Any]]:
+        rows = self._rows(
+            "SELECT l.session_uid AS uid, s.started_at, s.track_id, s.session_type,"
+            " COUNT(*) AS laps, SUM(l.lap_time_ms) AS ms FROM laps l"
+            " LEFT JOIN sessions s ON s.uid=l.session_uid WHERE l.id IN ("
+            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
+            " GROUP BY session_uid, lap_num)"
+            " GROUP BY l.session_uid ORDER BY s.started_at, l.session_uid",
+            (),
+        )
+        for row in rows:
+            row["uid"] = _uid_from_sql(int(row["uid"]))
+        return rows
+
     def _lap_row(self, r: sqlite3.Row) -> LapRow:
         return LapRow(
             id=int(r["id"]),
@@ -1361,6 +1375,24 @@ class Database:
             "SELECT * FROM model_params_quarantine ORDER BY track_id, compound, name, reason", ()
         )
 
+    def insert_quarantine_if_absent(self, row: Mapping[str, Any]) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO model_params_quarantine(track_id, compound, name, reason,"
+                " value, weight, updated_at, quarantined_at) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    row["track_id"],
+                    row["compound"],
+                    row["name"],
+                    row["reason"],
+                    row["value"],
+                    row["weight"],
+                    row.get("updated_at"),
+                    row.get("quarantined_at"),
+                ),
+            )
+        return cursor.rowcount > 0
+
     def maintenance_version(self, key: str) -> int:
         row = self._conn.execute("SELECT version FROM maintenance WHERE key=?", (key,)).fetchone()
         return int(row["version"]) if row is not None else 0
@@ -1504,6 +1536,23 @@ class Database:
 
     def all_grades(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM call_grades ORDER BY graded_at", ())
+
+    def insert_grade_if_absent(self, row: Mapping[str, Any]) -> bool:
+        with self.transaction():
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO call_grades(session_uid, call_id, rule_id, grade, note,"
+                " graded_at, source) VALUES(?,?,?,?,?,?,?)",
+                (
+                    _uid_to_sql(int(row["session_uid"])),
+                    row["call_id"],
+                    row["rule_id"],
+                    row["grade"],
+                    row.get("note", ""),
+                    row.get("graded_at"),
+                    row.get("source", "human"),
+                ),
+            )
+        return cursor.rowcount > 0
 
     def ab_results(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM ab_results ORDER BY recorded_at", ())

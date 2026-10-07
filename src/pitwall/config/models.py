@@ -231,6 +231,8 @@ class PersistenceSettings(BaseModel):
 
 class LearningSettings(BaseModel):
     auto_calibrate: bool = True  # maintain() refits priors and tunes cooldowns
+    pack_dir: str = "learnings"
+    pack_keep_days: int = 30
 
 
 class SpeechSettings(BaseModel):

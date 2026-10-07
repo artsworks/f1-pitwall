@@ -30,6 +30,8 @@ persistence:
   path: ~/.pitwall/pitwall.sqlite
 learning:
   auto_calibrate: true  # upkeep refits priors and tunes cooldowns; YAML stays review-only
+  pack_dir: learnings  # Learning pack and track ledger. Use another drive or synced folder.
+  pack_keep_days: 30  # Number of dated learning packs to retain.
 
   ema_fast_s: 3.0
   ema_slow_s: 30.0

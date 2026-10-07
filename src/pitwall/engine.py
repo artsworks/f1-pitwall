@@ -11,6 +11,7 @@ import contextlib
 import dataclasses
 import logging
 import math
+import sqlite3
 import time
 import traceback
 from collections.abc import Mapping
@@ -275,6 +276,8 @@ class Engine:
         state: SessionState,
         rule_engine: RuleEngine | None,
         dispatcher: Dispatcher,
+        learning_pack_dir: Path | None = None,
+        learning_pack_keep_days: int = 30,
     ) -> None:
         self.store = store
         settings = store.current()
@@ -284,6 +287,8 @@ class Engine:
         self.state = state
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
+        self.learning_pack_dir = learning_pack_dir
+        self.learning_pack_keep_days = learning_pack_keep_days
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
@@ -1647,6 +1652,17 @@ class Engine:
             self.db.end_session(self.state.session_uid, now)
             grade_and_store(self.db, self.state.session_uid, self.store.current().thresholds)
             self.db.mark_graded(self.state.session_uid)
+            if self.learning_pack_dir is not None:
+                from pitwall.learnpack import write_pack
+
+                try:
+                    write_pack(
+                        self.db,
+                        self.learning_pack_dir,
+                        keep_days=self.learning_pack_keep_days,
+                    )
+                except (OSError, sqlite3.Error, ValueError) as e:
+                    log.warning("learning pack skipped at session end: %s", e)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
@@ -1846,6 +1862,8 @@ def build_engine(
     record_to: Path | None = None,
     db: Any = None,
     session_started_at: float | None = None,
+    learning_pack_dir: Path | None = None,
+    learning_pack_keep_days: int = 30,
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
@@ -1897,7 +1915,16 @@ def build_engine(
         budget_override=mode.get("call_budget_per_lap"),
         input=settings.input,
     )
-    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine = Engine(
+        store,
+        clock,
+        ingest,
+        state,
+        rule_engine,
+        dispatcher,
+        learning_pack_dir=learning_pack_dir,
+        learning_pack_keep_days=learning_pack_keep_days,
+    )
     engine.session_origin_started_at = session_started_at
     return engine
 

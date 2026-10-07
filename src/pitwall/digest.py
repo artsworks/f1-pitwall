@@ -10,6 +10,7 @@ import statistics
 import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
@@ -123,8 +124,13 @@ def quality_trend(db: Database, sessions: int = 10) -> dict[str, Any]:
     return {"sessions": rows, "trend": trend}
 
 
-def startup_scorecard(db: Database) -> str:
-    minutes = db.track_minutes()
+def startup_scorecard(db: Database, pack_dir: Path | None = None) -> str:
+    if pack_dir is None:
+        minutes = db.track_minutes()
+    else:
+        from pitwall.learnpack import pack_track_minutes
+
+        minutes = pack_track_minutes(db, pack_dir)
     report = quality_trend(db)
     rows = report["sessions"]
     if not rows:

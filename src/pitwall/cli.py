@@ -609,6 +609,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 def cmd_stats(args: argparse.Namespace) -> int:
     if args.quality:
         from pitwall.digest import quality_trend
+        from pitwall.learnpack import pack_track_minutes
         from pitwall.store.db import Database, open_configured
 
         if args.sessions < 1:
@@ -619,7 +620,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         if db is None:
             print("stats --quality: persistence disabled")
             return 1
-        minutes = db.track_minutes()
+        minutes = pack_track_minutes(db, Path(settings.learning.pack_dir).expanduser())
         report = quality_trend(db, args.sessions)
         rows = report["sessions"]
         trend = report["trend"]
@@ -678,6 +679,26 @@ def cmd_stats(args: argparse.Namespace) -> int:
         **ingest.census(now=last_t),
     }
     print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    from pitwall.learnpack import restore_pack
+    from pitwall.store.db import Database, open_configured
+
+    settings = ConfigStore().current()
+    db = Database(args.db) if args.db else open_configured(settings)
+    if db is None:
+        print("restore: persistence disabled")
+        return 1
+    counts = restore_pack(
+        db,
+        args.pack,
+        Path(settings.learning.pack_dir).expanduser(),
+        args.overlay_dir,
+    )
+    summary = " ".join(f"{name}={count}" for name, count in counts.items())
+    print(f"restore: {summary}")
     return 0
 
 
@@ -855,6 +876,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     set_below_normal_priority()
     store = ConfigStore()
     settings = store.current()
+    pack_dir = Path(settings.learning.pack_dir).expanduser()
     child = bool(args.child)
     if settings.engine.watchdog and not child and not args.no_watchdog:
         return _start_supervised(args, store)
@@ -909,7 +931,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         from pitwall.digest import startup_scorecard
 
         try:
-            print(startup_scorecard(db), flush=True)
+            print(startup_scorecard(db, pack_dir), flush=True)
         except sqlite3.Error as e:
             print(f"startup scorecard skipped ({e})", flush=True)
     dlog = DecisionLog(
@@ -931,7 +953,16 @@ def cmd_start(args: argparse.Namespace) -> int:
     if isinstance(speaker, PiperSpeaker):
         speaker.on_audio = hub.audio
         hub.streams_audio = True
-    engine = Engine(store, clock, ingest, state, rule_engine, dispatcher)
+    engine = Engine(
+        store,
+        clock,
+        ingest,
+        state,
+        rule_engine,
+        dispatcher,
+        learning_pack_dir=pack_dir,
+        learning_pack_keep_days=settings.learning.pack_keep_days,
+    )
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
     elif child:
@@ -999,6 +1030,14 @@ def cmd_start(args: argparse.Namespace) -> int:
             if recorder.last_path is not None:
                 print(f"recording: saved {recorder.last_path}")
         dlog.close()
+        if db is not None:
+            from pitwall.learnpack import write_pack
+
+            try:
+                saved = write_pack(db, pack_dir, keep_days=settings.learning.pack_keep_days)
+                print(f"learning pack: saved {saved}", flush=True)
+            except (OSError, sqlite3.Error, ValueError) as e:
+                print(f"learning pack: skipped ({e})", flush=True)
     return 0
 
 
@@ -1470,6 +1509,12 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--track", type=int, default=None)
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_stats)
+
+    restore = sub.add_parser("restore", help="restore learned state from a learning pack")
+    restore.add_argument("pack", type=Path)
+    restore.add_argument("--db", default=None, help="SQLite path (default: configured database)")
+    restore.add_argument("--overlay-dir", type=Path, default=None)
+    restore.set_defaults(func=cmd_restore)
 
     vc = sub.add_parser("voice", help="Piper voices, speech check, voice-command channel")
     vc.set_defaults(func=cmd_voice, voice_action=None)
