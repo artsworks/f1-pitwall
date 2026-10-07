@@ -61,11 +61,20 @@ The gate fails, and `pitwall bench` exits with code 1, if one of these is true:
 4. `real_accuracy` drops by more than `--tolerance` (default 0.02). This applies only when both runs have 5 or more graded outcomes.
 5. The accuracy of one rule drops by more than 0.10. This applies only when that rule has 5 or more graded outcomes in both runs.
 6. A median error rises by more than 10%.
+7. A scenario has a replay error. An error says nothing about the expected calls.
 
-The gate is incomplete, and the exit code is 2, if a scenario from the baseline or a guard is skipped. This usually means a recording is missing.
+The gate is incomplete, and the exit code is 2, if one of these is true:
+
+- A guard or a scenario from the baseline is skipped. This usually means a recording is missing.
+- A scenario from the baseline did not run, for example because of `--only`.
+- A scenario from the baseline was removed.
+- A check that passed in the baseline was removed or changed. The output lists it as `changed`.
+
 Otherwise the gate passes with exit code 0 and lists the improvements.
 
-`pitwall bench --update-baseline --note "..."` writes a new baseline and adds one line to the history. It refuses if the gate does not pass.
+Without a baseline, the gate still checks rules 1 and 7 and skipped guards.
+
+`pitwall bench --update-baseline --note "..."` writes a new baseline and adds one line to the history. It refuses if the gate fails, or if a scenario was skipped or did not run. It accepts `changed` items and lists them as `accepted`. Run it with `changed` items only after Arthur approves the new expectations.
 
 ## Trend
 
@@ -74,7 +83,7 @@ Otherwise the gate passes with exit code 0 and lists the improvements.
 - **improving.** The latest score is higher than the first score in the window.
 - **flat.** The score did not change.
 - **stagnant.** Five or more entries moved the score by less than 0.5 points and no new target passed.
-- **degrading.** The latest score is more than 0.5 points below the best of the previous entries.
+- **degrading.** The latest score is more than 0.5 points below the best of the other entries in the window.
 
 When the trend is stagnant, add new targets or new real recordings. Do not keep tuning against the same targets.
 
@@ -101,6 +110,7 @@ When the trend is stagnant, add new targets or new real recordings. Do not keep 
 
 - Do not edit the `expect` block of a scenario to make it pass. Changes to `expect` need Arthur's approval.
 - Do not change a guard to a target.
+- If the gate lists `changed` items, stop. Do not update the baseline until Arthur approves the expectation change.
 - Do not edit `baseline.json` or `history.jsonl` by hand.
 - Do not commit recordings, indexes or databases.
 - Work on one target in each PR.

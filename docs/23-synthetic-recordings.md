@@ -44,9 +44,18 @@ A new migration adds `synthetic` and `derived_from` columns to `sessions`. Inges
 | Live folds during replay: pit loss, fuel burn, stint degradation and base pace, battle pass and hold rates | Skipped |
 | Stint rebuild in upkeep (`learning_stints`) and the weekend practice prior (`weekend_stints`) | Excluded |
 | Setup learning (`fold_setup_learning`) | Skipped |
+| Press grades from replayed presses | Skipped. The decision log still has the presses |
+| `pitwall stats --quality` and the quality line in `pitwall start` | Excluded. The debrief CALL QUALITY card still shows |
+| Learning pack track ledger and track minutes | Excluded |
+| Learning pack grades | Human grades kept. Press grades dropped |
+| Question mining (`pitwall propose`) | Excluded |
 
 `calibrate` is not the only way into the priors. The engine folds pit loss, fuel, degradation and battle rates while it replays a session, so those folds also check the synthetic flag.
 A derived recording keeps the source's real physics. Without these checks, each variant would fold the same real laps again.
+
+A replayed press answers a call from the real race. In a synthetic session it can land on a call that only the mutation created, so pitwall does not grade from it.
+
+The engine treats a session as synthetic if the recording metadata has `synthetic`, or if the UID has the reserved tag. It reads the metadata before the first packet. A generator that keeps a plain UID still cannot fold priors.
 
 ### Where the flag shows
 
@@ -84,6 +93,7 @@ The exclusion policy blocks the other direction: a synthetic session never chang
 - **Safety car status, events and lap times.** Session status, the three `SCAR` events and the longer lap times agree with each other. The lap rows for the window have `sc_status` 1 and are not valid laps, so green-lap fits skip them. The `sc_*` rules fired in order.
 - **Penalty.** The `PENA` event and the Lap Data `penalties` value agree. Only unit tests cover this. The real-data run did not use it.
 - **UID rewrite.** Every packet carries the new UID, so the engine, the database and the debrief see one session.
+- **Lap after the window.** `derive` sends a green Session packet before the first Lap Data packet of the next lap. With `--inject-sc 6-8`, lap 8 is a safety-car lap and lap 9 is valid and green.
 
 ### Breaking mutations
 
@@ -93,7 +103,6 @@ Safety car injection leaves these fields at their green-flag values:
 - Telemetry, tyre temperatures, fuel burn and ERS. Car Status keeps the same fuel mix and ERS mode, so the driver does not seem to react to the `SCAR` events.
 - Session History lap times. Rival pace still reads as green.
 - The field does not bunch up and nobody pits under the safety car.
-- The first lap after the window (lap 9 for `--inject-sc 6-8`) also got `sc_status` 1. That costs one green lap. The cause was not traced.
 - A real stop that now falls inside the window measures green-flag pit loss but would be labelled as safety-car pit loss. That is why the pit-loss fold is skipped.
 
 Wear scaling has these problems:
