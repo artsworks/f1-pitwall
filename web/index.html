@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=13">
+  <link rel="stylesheet" href="/static/style.css?v=14">
 </head>
 <body class="dash connecting">
   <header class="status">
@@ -155,6 +155,7 @@
 
   <section id="carpage" class="zone carpage">
     <h2>CAR</h2>
+    <div id="cp-rivals" class="rivals" hidden><div></div><div></div></div>
     <div class="cp-grid">
       <div class="cp-tile"><h2>⚡ BATTERY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
       <div class="cp-tile"><h2>FUEL AT FINISH</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
@@ -209,7 +210,7 @@
     <div id="qr-session" class="b-foot">--</div>
   </section>
 
-  <section class="log"><ol id="log"></ol></section>
+  <section class="log"><div id="tp-rivals" class="rivals" hidden><div></div><div></div></div><ol id="log"></ol></section>
 
   <footer class="footer">
     <span id="ers">⚡ BATTERY --</span><span id="sc">--</span><span id="rate"></span><span id="latency"></span>
@@ -218,7 +219,7 @@
     <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=13"></script>
-  <script src="/static/review.js?v=13"></script>
+  <script src="/static/app.js?v=14"></script>
+  <script src="/static/review.js?v=14"></script>
 </body>
 </html>
