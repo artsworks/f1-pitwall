@@ -120,10 +120,62 @@ def test_ers_lap_attribution_waits_for_status_after_lap_data() -> None:
     assert engine.state.snapshot(0.6).energy_prev_lap_mode == ""
 
     status(0.7, 2_200_000.0, 300_000.0, 0.0, frame=101)
+    assert engine.energy_prev_lap is None
+    status(1.11, 2_200_000.0, 300_000.0, 0.0, frame=102)
+
     assert engine.energy_prev_lap is not None
     assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(1_800_000.0)
     assert engine.energy_budget is not None
     assert engine.energy_budget.deployed_this_lap_j == pytest.approx(300_000.0)
+
+
+def test_ers_lap_attribution_waits_until_settle_window() -> None:
+    engine, race_lap, status = _at_lap3()
+    status(0.5, 2_200_000.0, 1_800_000.0, 0.0, frame=100)
+    race_lap(0.6, 4, 0, 0.0, frame=101)
+
+    status(0.9, 2_200_000.0, 300_000.0, 0.0, frame=102)
+    assert engine.energy_prev_lap is None
+
+    status(1.11, 2_200_000.0, 300_000.0, 0.0, frame=103)
+    assert engine.energy_prev_lap is not None
+    assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(1_800_000.0)
+
+
+def test_ers_late_pre_boundary_status_does_not_replace_live_counters() -> None:
+    engine, race_lap, status = _at_lap3()
+    status(0.5, 2_200_000.0, 0.0, 0.0, frame=99)
+    race_lap(0.6, 4, 0, 0.0, frame=101)
+    status(0.8, 2_200_000.0, 0.0, 0.0, frame=102)
+    status(0.9, 2_200_000.0, 1_800_000.0, 0.0, frame=100, packet_time=0.75)
+
+    assert engine.energy_budget is not None
+    assert engine.energy_budget.deployed_this_lap_j == 0.0
+    assert engine.energy_prev_lap is None
+
+    status(1.11, 2_200_000.0, 300_000.0, 0.0, frame=103)
+
+    assert engine.energy_prev_lap is not None
+    assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(1_800_000.0)
+    assert engine.energy_budget is not None
+    assert engine.energy_budget.deployed_this_lap_j == pytest.approx(300_000.0)
+
+
+def test_ers_history_keeps_pre_boundary_status_after_delayed_lap_data() -> None:
+    engine, race_lap, status = _at_lap3()
+    status(0.5, 2_200_000.0, 1_800_000.0, 0.0, frame=100)
+    for frame in range(101, 111):
+        session_time = 0.55 + (frame - 101) * 0.05
+        status(session_time, 2_200_000.0, 100_000.0, 0.0, frame=frame)
+
+    race_lap(1.01, 4, 0, 0.0, frame=101, packet_time=0.6)
+    assert engine.energy_prev_lap is None
+    status(1.11, 2_200_000.0, 200_000.0, 0.0, frame=111)
+
+    assert engine.energy_prev_lap is not None
+    assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(1_800_000.0)
+    assert engine.energy_budget is not None
+    assert engine.energy_budget.deployed_this_lap_j == pytest.approx(200_000.0)
 
 
 def test_ers_lap_attribution_handles_status_before_lap_data() -> None:
@@ -131,7 +183,8 @@ def test_ers_lap_attribution_handles_status_before_lap_data() -> None:
     status(0.5, 2_200_000.0, 1_800_000.0, 0.0, frame=100)
     status(0.6, 2_200_000.0, 200_000.0, 0.0, frame=101)
 
-    race_lap(0.7, 4, 0, 0.0, frame=101)
+    race_lap(0.61, 4, 0, 0.0, frame=101)
+    status(1.12, 2_200_000.0, 200_000.0, 0.0, frame=102)
 
     assert engine.energy_prev_lap is not None
     assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(1_800_000.0)
@@ -144,6 +197,7 @@ def test_ers_attribution_uses_prior_lap_when_new_counter_is_higher() -> None:
     status(0.5, 3_600_000.0, 400_000.0, 0.0, frame=100)
     race_lap(0.6, 4, 0, 0.0, frame=101)
     status(0.7, 3_100_000.0, 500_000.0, 0.0, frame=105)
+    status(1.11, 3_100_000.0, 500_000.0, 0.0, frame=106)
 
     assert engine.energy_prev_lap is not None
     assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(400_000.0)
@@ -159,6 +213,8 @@ def test_ers_attribution_waits_for_late_pre_boundary_status() -> None:
     assert engine.state.snapshot(0.7).energy_prev_lap_mode == ""
 
     status(0.8, 3_500_000.0, 0.0, 0.0, frame=101)
+    assert engine.energy_prev_lap is None
+    status(1.11, 3_500_000.0, 0.0, 0.0, frame=102)
 
     assert engine.energy_prev_lap is not None
     assert engine.energy_prev_lap.deployed_this_lap_j == pytest.approx(500_000.0)
@@ -172,6 +228,8 @@ def test_ers_attribution_grades_a_genuine_zero_use_lap() -> None:
     assert engine.state.snapshot(0.6).energy_prev_lap_mode == ""
 
     status(0.7, 4_000_000.0, 0.0, 0.0, frame=101)
+    assert engine.energy_prev_lap is None
+    status(1.11, 4_000_000.0, 0.0, 0.0, frame=102)
 
     assert engine.energy_prev_lap is not None
     assert engine.energy_prev_lap.deployed_this_lap_j == 0.0
@@ -192,19 +250,22 @@ def test_energy_budget_uses_full_lap_counters_and_reports_under_lap() -> None:
     race_lap(29.0, 1, 2, 4_900.0, frame=10)
     status(29.5, 100_000.0, 0.0, 0.0, frame=11)
     race_lap(30.0, 2, 0, 0.0, frame=11)
-    assert engine.state.snapshot(30.0).energy_prev_lap_mode == "over"
+    status(30.6, 100_000.0, 0.0, 0.0, frame=12)
+    assert engine.state.snapshot(30.6).energy_prev_lap_mode == "over"
 
-    status(50.0, 100_000.0, 0.0, 0.0, frame=12)
-    race_lap(50.0, 2, 2, 4_900.0, frame=13)
-    status(59.5, 400_000.0, 0.0, 0.0, frame=14)
-    race_lap(60.0, 3, 0, 0.0, frame=14)
+    status(50.0, 100_000.0, 0.0, 0.0, frame=13)
+    race_lap(50.0, 2, 2, 4_900.0, frame=14)
+    status(59.5, 400_000.0, 0.0, 0.0, frame=15)
+    race_lap(60.0, 3, 0, 0.0, frame=15)
 
-    status(80.0, 400_000.0, 0.0, 300_000.0, frame=15)
-    race_lap(80.0, 3, 2, 4_900.0, frame=16)
-    status(89.9, 700_000.0, 0.0, 0.0, frame=17)
-    calls = race_lap(90.0, 4, 0, 0.0, frame=17)
+    status(80.0, 400_000.0, 0.0, 300_000.0, frame=16)
+    race_lap(80.0, 3, 2, 4_900.0, frame=17)
+    status(89.9, 700_000.0, 0.0, 300_000.0, frame=17)
+    status(89.95, 700_000.0, 0.0, 0.0, frame=18)
+    race_lap(90.0, 4, 0, 0.0, frame=18)
+    calls = status(90.6, 700_000.0, 0.0, 0.0, frame=19)
 
-    snapshot = engine.state.snapshot(90.0)
+    snapshot = engine.state.snapshot(90.6)
     assert snapshot.energy_prev_lap_mode == "under"
     assert snapshot.energy_prev_under_mj > 0.2
     assert any(call.rule_id == "energy_under" for call in calls)

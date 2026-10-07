@@ -236,6 +236,10 @@ class ErsLapTotals:
     seq: int
 
 
+ERS_SETTLE_S = 0.5
+ERS_HISTORY_S = 2.0
+
+
 @dataclass(slots=True)
 class Snapshot:
     """Frozen per-tick view; everything rules read lives here."""
@@ -753,9 +757,12 @@ class SessionState:
         self.ers_deployed_this_lap_j = 0.0
         self.ers_harvested_mguk_j = 0.0
         self.ers_harvested_mguh_j = 0.0
-        self._ers_samples: deque[tuple[int, float, float]] = deque(maxlen=8)
+        self._ers_samples: deque[tuple[int, float, float, float]] = deque()
         self._ers_lap_frame: int | None = None
-        self._ers_pending: tuple[int, int] | None = None
+        self._ers_pending: tuple[int, int, float] | None = None
+        self._ers_newest_frame_seen: int | None = None
+        self._ers_newest_frame_session_time: float | None = None
+        self._ers_newest_session_time: float | None = None
         self.ers_finished_lap: ErsLapTotals | None = None
         self._ers_seq = 0
         self.ers_deploy_mode = 0
@@ -963,6 +970,9 @@ class SessionState:
         self._ers_samples.clear()
         self._ers_lap_frame = None
         self._ers_pending = None
+        self._ers_newest_frame_seen = None
+        self._ers_newest_frame_session_time = None
+        self._ers_newest_session_time = None
         self.ers_finished_lap = None
         for ema in (
             self.tyre_surface_fast,
@@ -1041,10 +1051,17 @@ class SessionState:
         frame = pkt.header.overall_frame_identifier
         previous_lap_num = self.lap_num
         if car.current_lap_num != previous_lap_num:
+            if self._ers_pending is not None:
+                self._ers_resolve(force=True)
             if car.current_lap_num == previous_lap_num + 1 and previous_lap_num >= 1:
-                self._ers_pending = (previous_lap_num, frame)
+                self._ers_pending = (
+                    previous_lap_num,
+                    frame,
+                    pkt.header.session_time,
+                )
             self._ers_lap_frame = frame
             self._ers_resolve()
+            self._ers_prune()
         lap_boundary = car.current_lap_num != self.lap_num and self.lap_num != 0
         if lap_boundary:
             self._pitted_lap_snapshot = self._cars_pitted_this_lap
@@ -1616,48 +1633,97 @@ class SessionState:
         cap = 4_000_000.0  # nominal 4 MJ ERS store
         self.ers_store_energy_j = float(car.ers_store_energy)
         self.ers_store_pct = min(100.0, car.ers_store_energy / cap * 100.0)
-        self.ers_deployed_this_lap_j = float(car.ers_deployed_this_lap)
-        self.ers_harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
-        self.ers_harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
+        frame = pkt.header.overall_frame_identifier
+        session_time = pkt.header.session_time
+        deployed_j = float(car.ers_deployed_this_lap)
+        harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
+        harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
         self._ers_samples.append(
             (
-                pkt.header.overall_frame_identifier,
-                self.ers_deployed_this_lap_j,
-                self.ers_harvested_mguk_j + self.ers_harvested_mguh_j,
+                frame,
+                session_time,
+                deployed_j,
+                harvested_mguk_j + harvested_mguh_j,
             )
         )
+        if self._ers_newest_session_time is None or session_time > self._ers_newest_session_time:
+            self._ers_newest_session_time = session_time
+        if self._ers_newest_frame_seen is None or frame > self._ers_newest_frame_seen:
+            self._ers_newest_frame_session_time = session_time
+            self._ers_newest_frame_seen = frame
+            self.ers_deployed_this_lap_j = deployed_j
+            self.ers_harvested_mguk_j = harvested_mguk_j
+            self.ers_harvested_mguh_j = harvested_mguh_j
+        elif frame == self._ers_newest_frame_seen:
+            if (
+                self._ers_newest_frame_session_time is None
+                or session_time > self._ers_newest_frame_session_time
+            ):
+                self._ers_newest_frame_session_time = session_time
+            self._ers_newest_frame_seen = frame
+            self.ers_deployed_this_lap_j = deployed_j
+            self.ers_harvested_mguk_j = harvested_mguk_j
+            self.ers_harvested_mguh_j = harvested_mguh_j
+        self._ers_prune()
         self._ers_resolve()
         self.ers_deploy_mode = car.ers_deploy_mode
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
 
-    def _ers_resolve(self) -> None:
-        if self._ers_pending is None or not self._ers_samples:
+    def _ers_prune(self) -> None:
+        if not self._ers_samples or self._ers_newest_session_time is None:
             return
-        if self._ers_samples[-1][0] < self._ers_pending[1]:
+        cutoff = self._ers_newest_session_time - ERS_HISTORY_S
+        pending_boundary = self._ers_pending[1] if self._ers_pending is not None else None
+        newest_before_boundary = (
+            max(
+                (sample for sample in self._ers_samples if sample[0] < pending_boundary),
+                key=lambda sample: (sample[0], sample[1]),
+                default=None,
+            )
+            if pending_boundary is not None
+            else None
+        )
+        self._ers_samples = deque(
+            sample
+            for sample in self._ers_samples
+            if sample[1] >= cutoff or sample is newest_before_boundary
+        )
+
+    def _ers_resolve(self, *, force: bool = False) -> None:
+        pending = self._ers_pending
+        if pending is None:
+            return
+        lap_num, boundary_frame, boundary_session_time = pending
+        if not force and (
+            self._ers_newest_frame_seen is None
+            or self._ers_newest_frame_seen < boundary_frame
+            or self._ers_newest_frame_session_time is None
+            or self._ers_newest_frame_session_time < boundary_session_time + ERS_SETTLE_S
+        ):
             return
         before_boundary = max(
-            (sample for sample in self._ers_samples if sample[0] < self._ers_pending[1]),
-            key=lambda sample: sample[0],
+            (sample for sample in self._ers_samples if sample[0] < boundary_frame),
+            key=lambda sample: (sample[0], sample[1]),
             default=None,
         )
-        lap_num, _ = self._ers_pending
         self._ers_pending = None
         if before_boundary is None:
             return
         self._ers_seq += 1
         self.ers_finished_lap = ErsLapTotals(
             lap_num=lap_num,
-            deployed_j=before_boundary[1],
-            harvested_j=before_boundary[2],
+            deployed_j=before_boundary[2],
+            harvested_j=before_boundary[3],
             seq=self._ers_seq,
         )
 
     @property
     def ers_counters_current(self) -> bool:
-        return self._ers_lap_frame is None or bool(
-            self._ers_samples and self._ers_samples[-1][0] >= self._ers_lap_frame
+        return self._ers_lap_frame is None or (
+            self._ers_newest_frame_seen is not None
+            and self._ers_newest_frame_seen >= self._ers_lap_frame
         )
 
     def _on_tyre_change(self) -> None:
