@@ -1274,10 +1274,6 @@ def cmd_start(args: argparse.Namespace) -> int:
         clean = True
     finally:
         if clean and db is not None:
-            try:
-                engine.close_session(clock.now())
-            except (sqlite3.Error, ValueError) as e:
-                print(f"session close skipped ({e})", flush=True)
             db.clear_heartbeat()  # a later start is a fresh session, not a crash
         speaker.close()
         if recorder is not None:

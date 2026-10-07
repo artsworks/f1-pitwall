@@ -1651,17 +1651,6 @@ class Engine:
         grade_and_store(self.db, uid, self.store.current().thresholds)
         self.db.mark_graded(uid)
 
-    def close_session(self, now: float) -> bool:
-        """Close the open session on shutdown, as the game's session end does.
-
-        False when there is none.
-        """
-        uid = self.state.session_uid
-        if self.db is None or uid is None or self._session_ended_written:
-            return False
-        self._end_session(uid, now)
-        return True
-
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
         self.setup_advisor.refresh_rules(self.store.current().setup_rules)

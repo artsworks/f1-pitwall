@@ -14,9 +14,9 @@ from pitwall.engine import build_engine, run_replay
 from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PacketId
 from pitwall.state.lap import LapSummary
-from pitwall.store.db import Database, _uid_to_sql
+from pitwall.store.db import Database
 
-from .synth import pack_packet, write_packet_stream
+from .synth import make_event_packet, pack_packet, write_packet_stream
 
 BASE_MS = 90_000
 SLOPE = 100.0
@@ -299,39 +299,43 @@ def test_session_end_writes_learning_pack_after_grading(
     engine.tick(1.0)
 
     assert calls == [(db, pack_dir, 9, [uid])]
-    assert engine.close_session(5.0) is False
     assert db.session_row(uid)["ended_at"] == 1.0
 
 
-def test_close_session_on_shutdown_ends_and_folds_tail_stint(tmp_path: Path) -> None:
-    engine, state, db = _run(tmp_path)
-    uid = state.session_uid
-    assert uid is not None
-    session = db.session_row(uid)
+def test_restart_mid_session_on_same_uid_folds_stints_once(tmp_path: Path) -> None:
+    uid = 0xDEADBEEF
+    packets = _race_stream()
+    cut = int(len(packets) * 0.8)
+    t_end = packets[-1][0] + 0.1
+    send = (t_end, make_event_packet(b"SEND", session_uid=uid, session_time=t_end))
+    full = [*packets, send]
+    resumed = [(packets[cut][0], packets[0][1]), *packets[cut:], send]
+
+    def replay(name: str, stream: list[tuple[float, bytes]], db: Database) -> None:
+        rec = write_packet_stream(tmp_path / f"{name}.f1bin", stream)
+        engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+        asyncio.run(run_replay(rec, engine, None))
+
+    baseline_db = Database(tmp_path / "baseline.sqlite")
+    replay("baseline", full, baseline_db)
+    baseline_deg = baseline_db.get_param(7, 18, "deg_ms_per_lap@12L")
+    baseline_base = baseline_db.get_param(7, 18, "base_ms@12L")
+    assert baseline_deg is not None and baseline_deg.weight == 6.0
+    assert baseline_base is not None and baseline_base.weight == 6.0
+
+    restart_db = Database(tmp_path / "restart.sqlite")
+    replay("first", packets[:cut], restart_db)
+    session = restart_db.session_row(uid)
     assert session is not None and session["ended_at"] is None
-    laps = db.laps_for(uid, 0)
-    assert laps
-    t = 123.0
+    assert restart_db.get_param(7, 18, "deg_ms_per_lap@12L") is None
 
-    assert engine.close_session(t) is True
-
-    session = db.session_row(uid)
-    assert session is not None and session["ended_at"] == t
-    stints = db.stints_for_session(uid)
-    assert stints
-    assert max(stint.end_lap for stint in stints) >= max(lap.lap_num for lap in laps)
-    assert db.maintenance_version(f"graded:{_uid_to_sql(uid)}") == 1
-
-    assert engine.close_session(t + 1.0) is False
-    assert db.session_row(uid)["ended_at"] == t
-
-
-def test_close_session_without_database_or_uid() -> None:
-    without_db = build_engine(clock=VirtualClock(), sinks=[])
-    assert without_db.close_session(1.0) is False
-
-    without_uid = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
-    assert without_uid.close_session(1.0) is False
+    replay("resumed", resumed, restart_db)
+    restart_deg = restart_db.get_param(7, 18, "deg_ms_per_lap@12L")
+    restart_base = restart_db.get_param(7, 18, "base_ms@12L")
+    assert restart_deg is not None and restart_deg.weight == baseline_deg.weight
+    assert restart_base is not None and restart_base.weight == baseline_base.weight
+    session = restart_db.session_row(uid)
+    assert session is not None and session["ended_at"] is not None
 
 
 def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:

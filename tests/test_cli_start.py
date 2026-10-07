@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from pitwall import cli
-from pitwall.store.db import Database
+from pitwall.store.db import Database, _uid_to_sql
 
 
-def test_start_closes_session_and_clears_heartbeat_on_clean_ctrl_c(
+def test_start_leaves_session_open_and_clears_heartbeat_on_clean_ctrl_c(
     tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
     db_path = tmp_path / "pitwall.sqlite"
@@ -45,5 +45,6 @@ def test_start_closes_session_and_clears_heartbeat_on_clean_ctrl_c(
 
     db = Database(db_path)
     session = db.session_row(uid)
-    assert session is not None and session["ended_at"] is not None
+    assert session is not None and session["ended_at"] is None
     assert db.read_heartbeat() is None
+    assert db.maintenance_version(f"graded:{_uid_to_sql(uid)}") == 0
