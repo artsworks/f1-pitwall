@@ -62,6 +62,72 @@ def test_migration_1_to_2_keeps_rows(tmp_path: Path) -> None:
     assert len(events) == 1 and events[0].loss_ms == 21_000
 
 
+def test_reconcile_adds_columns_missing_from_edited_migration(tmp_path: Path) -> None:
+    path = tmp_path / "edited-migration.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS[:9]:
+        conn.executescript(migration)
+    missing_columns = (
+        "wear_front_pct",
+        "wear_rear_pct",
+        "tyre_inner_front_c",
+        "tyre_inner_rear_c",
+    )
+    migration_10 = "\n".join(
+        line
+        for line in MIGRATIONS[9].splitlines()
+        if not any(column in line for column in missing_columns)
+    )
+    conn.executescript(migration_10)
+    conn.execute("PRAGMA user_version=10")
+    uid = 101
+    conn.execute(
+        "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms, valid)"
+        " VALUES(?, 0, 1, 90000, 1)",
+        (uid,),
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    laps = db.laps_for(uid)
+    assert len(laps) == 1
+    assert laps[0].wear_front_pct == 0.0
+    assert laps[0].wear_rear_pct == 0.0
+    assert laps[0].tyre_inner_front_c == 0.0
+    assert laps[0].tyre_inner_rear_c == 0.0
+    assert laps[0].visual == 0
+    columns = {
+        row[1]
+        for row in db._conn.execute("PRAGMA table_info(laps)")  # noqa: SLF001
+    }
+    assert set(missing_columns) | {"visual"} <= columns
+    db.close()
+
+    db = Database(path)
+    assert len(db.laps_for(uid)) == 1
+    db.close()
+
+
+def test_reconcile_creates_missing_table(tmp_path: Path) -> None:
+    path = tmp_path / "missing-table.sqlite"
+    conn = sqlite3.connect(path)
+    for version, migration in enumerate(MIGRATIONS, start=1):
+        conn.executescript(migration)
+        conn.execute(f"PRAGMA user_version={version}")
+    conn.execute("DROP TABLE setup_recs")
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    columns = {
+        row[1]
+        for row in db._conn.execute("PRAGMA table_info(setup_recs)")  # noqa: SLF001
+    }
+    assert {"id", "session_uid", "rec_id", "rule_id", "folded"} <= columns
+    db.close()
+
+
 def test_new_apis_round_trip() -> None:
     db = Database(":memory:")
     db.upsert_session(5, track_id=7, session_type=15, game_mode=3)
