@@ -7,6 +7,7 @@ from pitwall.config.loader import ConfigStore
 from pitwall.model.deg import DegFit
 from pitwall.strategy.plans import (
     CompoundModel,
+    PlanFields,
     PlanInputs,
     PlanTracker,
     derive,
@@ -206,3 +207,12 @@ def test_spoken_forms() -> None:
     assert a is not None
     assert a.label.startswith("1-stop")
     assert spoken(None) == ""
+
+
+def test_plan_fields_mirrored_on_snapshot_and_model_view() -> None:
+    from pitwall.state.model_view import ModelView
+    from pitwall.state.session import Snapshot
+
+    plan_names = {x.name for x in dataclasses.fields(PlanFields)}
+    assert plan_names <= {x.name for x in dataclasses.fields(Snapshot)}
+    assert plan_names <= {x.name for x in dataclasses.fields(ModelView)}

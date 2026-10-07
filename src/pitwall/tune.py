@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from pitwall.config.thresholds import threshold as _th
 from pitwall.store.db import Database
 
 TUNE_TRACK = -1  # model_params namespace for rule tuning (not track-specific)
@@ -32,11 +33,6 @@ class RuleTune:
     cooldown_mult: float
     ab_net: int  # sum over A/B runs of (only_b - only_a) fires
     auto: int = 0  # hindsight outcomes used where no human grade exists
-
-
-def _th(th: Mapping[str, Any], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:

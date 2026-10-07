@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import fields
 from typing import Any
 
+from pitwall.config.thresholds import threshold as _threshold
 from pitwall.hindsight import CENSORED, GOOD, IGNORED, NA, WRONG, Outcome
 from pitwall.rules.expr import TrackedNamespace
 from pitwall.setup.rules import SetupRules, setup_fields_for_param
@@ -20,11 +21,6 @@ _OBJECTIVE_FLOORS = {
     "w_th": 0.3,
     "w_ev": 1.0,
 }
-
-
-def _threshold(th: Mapping[str, Any], name: str, default: float) -> float:
-    value = th.get(name, default)
-    return float(value) if isinstance(value, int | float) else default
 
 
 def _green_count(run: Run) -> int:

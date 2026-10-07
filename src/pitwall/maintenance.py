@@ -25,9 +25,10 @@ from dataclasses import dataclass, field
 
 from pitwall.calibrate import calibrate
 from pitwall.config.models import Settings
+from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import grade_and_store
 from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
-from pitwall.protocol.enums import SessionType
+from pitwall.protocol.enums import session_kind
 from pitwall.setup.states import majority_state
 from pitwall.store.db import Database, ModelParam
 from pitwall.tune import (
@@ -64,11 +65,6 @@ class MaintenanceReport:
         if self.tuned:
             parts.append(f"{self.tuned} rule cooldowns adjusted")
         return ", ".join(parts) if parts else "learned state clean"
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def _stint_param(name: str) -> str:
@@ -108,10 +104,7 @@ def quarantine_bad(db: Database, th: Mapping[str, object]) -> list[str]:
 
 
 def _race_laps(session_type: int, total_laps: int) -> int:
-    try:
-        kind = SessionType(session_type).kind()
-    except ValueError:
-        return 0
+    kind = session_kind(session_type)
     return total_laps if kind == "race" and total_laps > 0 else 0
 
 

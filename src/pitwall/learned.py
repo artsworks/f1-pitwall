@@ -10,16 +10,12 @@ from typing import Any
 import yaml
 
 from pitwall.config.models import Settings
+from pitwall.config.thresholds import threshold as _th
 from pitwall.model.deg import Prior, resolve_prior
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database
 from pitwall.strategy.battle import HOLD, PASS_COMPOUND, PASS_DRS, PASS_NODRS
 from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
-
-
-def _th(thresholds: Mapping[str, object], name: str, default: float) -> float:
-    value = thresholds.get(name, default)
-    return float(value) if isinstance(value, int | float) else default
 
 
 def _yaml(path: Path) -> dict[str, Any]:

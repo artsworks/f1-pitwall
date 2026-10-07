@@ -42,6 +42,14 @@ class SessionType(IntEnum):
         return "unknown"
 
 
+def session_kind(session_type: int) -> str:
+    """SessionType.kind() for a raw value; "unknown" when it is not a known type."""
+    try:
+        return SessionType(session_type).kind()
+    except ValueError:
+        return "unknown"
+
+
 # Sparse: 1, 8, 18, 21-25, 28 and 33-38 are absent in F1 26.
 class TrackId(IntEnum):
     MELBOURNE = 0

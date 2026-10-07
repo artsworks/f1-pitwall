@@ -18,8 +18,10 @@ from pydantic import BaseModel
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
+from pitwall.protocol.enums import session_kind
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
 from pitwall.server.pin import PIN_COOKIE, PinGate, forwarded
+from pitwall.setup.evaluate import setup_modes
 from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
@@ -92,7 +94,7 @@ def pit_board_payload(
             for rec in snapshot.setup_advice
             if rec.mode == "garage" and rec.tier in {"primary", "alternative"}
         ]
-        if 1 <= snapshot.session_type <= 14
+        if "garage" in setup_modes(snapshot.session_type)
         else []
     )
     setup_advice = [
@@ -122,7 +124,7 @@ def pit_board_payload(
                 )
     checklist: list[dict[str, Any]] | None = None
     if (
-        1 <= snapshot.session_type <= 4
+        session_kind(snapshot.session_type) == "practice"
         and snapshot.parc_ferme != 0
         and snapshot.session_type in snapshot.weekend_structure
     ):
@@ -134,7 +136,9 @@ def pit_board_payload(
         )
         rule_data = rules.get("setup_rules", rules)
         locked_fields = rule_data.get("quali_locked", []) if isinstance(rule_data, Mapping) else []
-        if 5 <= next_session <= 14 and isinstance(locked_fields, list):
+        if session_kind(next_session) in ("qualifying", "sprint_shootout") and isinstance(
+            locked_fields, list
+        ):
             checklist = [
                 {"field": str(field_name), "value": snapshot.setup.get(str(field_name))}
                 for field_name in locked_fields

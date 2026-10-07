@@ -17,6 +17,7 @@ from pitwall.config.models import Settings
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
+from pitwall.protocol.enums import session_kind
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
 from pitwall.state.session import thermal_window
@@ -388,7 +389,8 @@ def _pit_laps(
     session_type: object,
 ) -> list[int]:
     found = {pit.lap_num for pit in pits}
-    if _as_int(session_type) in (15, 16, 17):
+    value = _as_int(session_type)
+    if value is not None and session_kind(value) == "race":
         found.update(stop_laps(laps))
     return sorted(found)
 

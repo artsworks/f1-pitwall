@@ -882,9 +882,6 @@ def cmd_start(args: argparse.Namespace) -> int:
         finally:
             transport.close()
 
-    async def shutdown() -> None:
-        pass
-
     engine.speaker_name = speaker.name
     engine.recording_desc = (
         f"{profile} -> {settings.recording.directory}/"

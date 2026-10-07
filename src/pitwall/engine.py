@@ -23,6 +23,7 @@ from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
+from pitwall.config.thresholds import threshold
 from pitwall.hindsight import grade_and_store
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
@@ -45,11 +46,10 @@ from pitwall.model.deg import (
 )
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
-from pitwall.protocol.enums import SessionType
+from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.setup.advisor import SetupAdvisor
-from pitwall.setup.evaluate import setup_modes
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
@@ -105,30 +105,10 @@ _MENU_CLIENT_OPS = {
 
 
 def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
+    # Every PlanFields field must also exist on ModelView and Snapshot.
     return dataclasses.replace(
         obj,
-        plans=f.plans,
-        active_plan=f.active_plan,
-        on_plan=f.on_plan,
-        plan_label=f.plan_label,
-        plan_spoken=f.plan_spoken,
-        plan_stops_left=f.plan_stops_left,
-        plan_target_lap=f.plan_target_lap,
-        plan_window_start=f.plan_window_start,
-        plan_window_end=f.plan_window_end,
-        plan_window_text=f.plan_window_text,
-        plan_window_open=f.plan_window_open,
-        plan_next_compound=f.plan_next_compound,
-        plan_off_s=f.plan_off_s,
-        plan_switch_count=f.plan_switch_count,
-        plan_switched_from=f.plan_switched_from,
-        plan_switch_reason=f.plan_switch_reason,
-        plan_switch_lap=f.plan_switch_lap,
-        plan_target_shift=f.plan_target_shift,
-        plan_b_spoken=f.plan_b_spoken,
-        plan_b_delta_s=f.plan_b_delta_s,
-        plan_c_spoken=f.plan_c_spoken,
-        plan_c_delta_s=f.plan_c_delta_s,
+        **{field.name: getattr(f, field.name) for field in dataclasses.fields(PlanFields)},
     )
 
 
@@ -362,7 +342,7 @@ class Engine:
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
-        # Battle state + learned pass model (docs/20 L3).
+        # Battle state + learned pass model (docs/18 Battle state).
         self.battle_tracker = BattleTracker()
         self._battle_rates: tuple[int, BattleRates] | None = None
         self.fuel_budget: FuelBudget | None = None
@@ -777,7 +757,7 @@ class Engine:
         if new_laps or setup_changed:
             if uid != self.setup_advisor.session_uid:
                 self.setup_advisor.reset(uid)
-            if new_laps or "race" in setup_modes(self.state.session_type):
+            if new_laps or session_kind(self.state.session_type) == "race":
                 self._evaluate_live_setup(uid)
             else:
                 # Garage advice was built on the setup the driver just changed.
@@ -1135,15 +1115,11 @@ class Engine:
 
     def _race_laps(self) -> int:
         """Race distance the stint-derived priors are scoped to; 0 outside races."""
-        try:
-            kind = SessionType(self.state.session_type).kind()
-        except ValueError:
-            return 0
+        kind = session_kind(self.state.session_type)
         return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
 
     def _th(self, name: str, default: float) -> float:
-        v = self.store.current().thresholds.get(name, default)
-        return float(v) if isinstance(v, int | float) else default
+        return threshold(self.store.current().thresholds, name, default)
 
     def _lap_fraction(self) -> float:
         state = self.state
@@ -1637,15 +1613,7 @@ class Engine:
         self._update_model()
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
         self._update_setup_stop_wing()
-        snapshot = dataclasses.replace(
-            snapshot,
-            setup_call_param=self.setup_advisor.call_param,
-            setup_call_from=self.setup_advisor.call_from,
-            setup_call_to=self.setup_advisor.call_to,
-            setup_call_reason=self.setup_advisor.call_reason,
-            setup_stop_wing_from=self.setup_advisor.stop_wing_from,
-            setup_stop_wing_to=self.setup_advisor.stop_wing_to,
-        )
+        snapshot = dataclasses.replace(snapshot, **self.setup_advisor.snapshot_fields())
         if self._manual_cooldown and (
             snapshot.lap_num > self._manual_cooldown_lap
             or snapshot.phase in ("in_lap", "pitting", "garage")

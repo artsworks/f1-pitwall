@@ -177,7 +177,7 @@ def evaluate(
         m = models[c]
         cliff = math.inf if m.deg_ms_per_lap <= 0 else cliff_ms / m.deg_ms_per_lap
         fresh.append(_cum(m.base_ms, m.deg_ms_per_lap, 0, r, cliff, pen))
-    k1s = [0] if stop_now else list(range(0, last_k + 1))
+    k1s = [0] if stop_now else list(range(last_k + 1))
     per_k1: dict[int, tuple[float, tuple[int, ...]]] = {}
     for k1 in k1s:
         if k1 > last_k:

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields, replace
 from typing import Any
 
+from pitwall.protocol.enums import session_kind
 from pitwall.rules.expr import Predicate, TrackedNamespace
 from pitwall.setup.rules import Candidate, SetupRules, Symptom
 from pitwall.setup.signals import RunSignals
@@ -104,21 +105,21 @@ def _learned_candidates(
 
 def setup_modes(session_type: int) -> tuple[str, ...]:
     """Advice modes evaluated live for a session type."""
-    if 1 <= session_type <= 14:
+    kind = session_kind(session_type)
+    if kind in ("practice", "qualifying", "sprint_shootout"):
         return ("garage",)
-    if 15 <= session_type <= 17:
+    if kind == "race":
         return ("race", "race_stop")
     return ()
 
 
 def _session_kind(session_type: int) -> str | None:
-    if 1 <= session_type <= 4:
-        return "practice"
-    if 5 <= session_type <= 14:
-        return "quali"
-    if 15 <= session_type <= 17:
-        return "race"
-    return None
+    return {
+        "practice": "practice",
+        "qualifying": "quali",
+        "sprint_shootout": "quali",
+        "race": "race",
+    }.get(session_kind(session_type))
 
 
 def _predicate_result(
