@@ -50,6 +50,19 @@ def test_invalid_override_keeps_last_good(tmp_path: Path, monkeypatch) -> None: 
     assert store.current().policy.calls_per_lap == 2  # last good kept
 
 
+def test_isolated_config_skips_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("thresholds:\n  tyre_inner_cold_c: 42\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    configured = ConfigStore()
+    isolated = ConfigStore(isolated=True)
+
+    assert configured.current().thresholds["tyre_inner_cold_c"] == 42
+    assert isolated.current().thresholds["tyre_inner_cold_c"] == 80
+    assert profile not in isolated._sources()  # noqa: SLF001
+
+
 def test_hash_stable() -> None:
     a = ConfigStore()
     b = ConfigStore()

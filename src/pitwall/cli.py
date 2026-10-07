@@ -573,31 +573,190 @@ def cmd_trim(args: argparse.Namespace) -> int:
 
 
 def cmd_derive(args: argparse.Namespace) -> int:
-    from pitwall.derive import InjectSafetyCar, Penalty, WearScale, derive_recording
+    from pitwall.derive import derive_recording, ops_from_options
 
     settings = ConfigStore().current()
     source = _resolve_recording(args.file, settings)
-    ops: list[WearScale | InjectSafetyCar | Penalty] = []
-    if args.wear_scale is not None:
-        ops.append(WearScale(args.wear_scale))
-    if args.inject_sc is not None:
-        start, separator, end = args.inject_sc.partition("-")
-        start_lap = int(start)
-        end_lap = int(end) if separator else start_lap + 2
-        if start_lap < 1 or end_lap < start_lap:
-            raise ValueError("--inject-sc requires positive, ascending lap numbers")
-        ops.append(InjectSafetyCar(start_lap, end_lap, vsc=args.vsc))
-    elif args.vsc:
-        raise ValueError("--vsc requires --inject-sc")
-    if args.penalty is not None:
-        ops.append(Penalty(args.penalty))
-    if not ops:
-        raise ValueError("derive requires at least one mutation")
+    ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
     summary = derive_recording(source, Path(args.out), ops)
     print(f"derived session UID: 0x{summary.header.session_uid:016x}")
     print(f"mutations: {', '.join(op.label for op in ops)}")
     print(f"wrote {summary.record_count} records -> {args.out}")
     return 0
+
+
+def _positive_int(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if result < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return result
+
+
+def _bench_history(scenarios_dir: Path, window: int) -> int:
+    from pitwall.bench import trend
+
+    history = scenarios_dir / "history.jsonl"
+    try:
+        lines = history.read_text().splitlines() if history.exists() else []
+        entries = [json.loads(line) for line in lines if line.strip()]
+        history_lines = [line for line in lines if line.strip()]
+        for line in history_lines[-window:]:
+            print(line)
+        print(f"trend: {trend(entries, window)}")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"bench: {exc}")
+        return 1
+    return 0
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    from pitwall.bench import (
+        build_recording_index,
+        build_scorecard,
+        compare,
+        find_source,
+        load_scenarios,
+        run_scenario,
+    )
+
+    scenarios_dir = Path(args.scenarios).expanduser()
+    if args.trend:
+        return _bench_history(scenarios_dir, args.window)
+    if args.update_baseline and args.note is None:
+        print("bench: --update-baseline requires --note")
+        return 1
+    if args.update_baseline and args.only:
+        print("bench: --update-baseline cannot be used with --only")
+        return 1
+
+    rules_dir = Path(args.rules).expanduser() if args.rules else None
+    try:
+        scenarios = load_scenarios(scenarios_dir, args.only)
+        settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
+        if args.recordings:
+            recording_dirs = [Path(directory).expanduser() for directory in args.recordings]
+        else:
+            recording_dirs = [Path(ConfigStore().current().recording.directory).expanduser()]
+        index = build_recording_index(recording_dirs)
+        scenario_rows: dict[str, dict[str, Any]] = {}
+        outcomes: list[dict[str, Any]] = []
+        for scenario in scenarios:
+            source, reason = find_source(scenario, index)
+            row, scenario_outcomes = run_scenario(
+                scenario,
+                source,
+                settings,
+                rules_dir=rules_dir,
+                skip_reason=reason,
+            )
+            scenario_rows[scenario.id] = row
+            outcomes.extend(scenario_outcomes)
+        scorecard = build_scorecard(scenario_rows, outcomes)
+        baseline_path = (
+            Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
+        )
+        baseline: dict[str, Any] | None = None
+        if baseline_path.exists():
+            loaded = json.loads(baseline_path.read_text())
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{baseline_path}: baseline must be a JSON object")
+            baseline = loaded
+        gate = compare(scorecard, baseline, args.tolerance)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"bench: {exc}")
+        return 1
+
+    gate_data = {
+        "status": gate.status,
+        "failures": gate.failures,
+        "incomplete": gate.incomplete,
+        "improvements": gate.improvements,
+    }
+    try:
+        if args.out:
+            output = Path(args.out).expanduser()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+    except OSError as exc:
+        print(f"bench: {exc}")
+        return 1
+    if args.json:
+        print(json.dumps({"scorecard": scorecard, "gate": gate_data}, indent=2, sort_keys=True))
+    else:
+        for scenario_id, scenario in scorecard["scenarios"].items():
+            failed = [check for check in scenario["checks"] if not check["ok"]]
+            line = f"{scenario_id} {scenario['status']} {scenario['result']}"
+            if scenario["reason"]:
+                line += f": {scenario['reason']}"
+            if failed:
+                details = [
+                    f"{check['type']} {','.join(check['rules'])} "
+                    f"laps {check['laps'][0]}-{check['laps'][1]} found {check['found']}"
+                    for check in failed
+                ]
+                line += f" | failed: {'; '.join(details)}"
+            print(line)
+        metrics = scorecard["metrics"]
+        pass_rate = (
+            "n/a" if metrics["check_pass_rate"] is None else f"{metrics['check_pass_rate']:.1%}"
+        )
+        score = "n/a" if metrics["score"] is None else f"{metrics['score']:.1f}"
+        print(
+            f"checks {metrics['checks_passed']}/{metrics['checks_total']} "
+            f"({pass_rate}), score {score}"
+        )
+        print(
+            f"guards {metrics['guards_passed']}/{metrics['guards_total']}, "
+            f"targets {metrics['targets_passed']}/{metrics['targets_total']}"
+        )
+        print(
+            f"real accuracy {metrics['real_accuracy']}, good {metrics['real_good']}, "
+            f"graded {metrics['real_graded']}, "
+            f"stop cost MAE {metrics['stop_cost_mae_s']}, "
+            f"pace MAE {metrics['laps_of_pace_mae']}"
+        )
+        for rule, counts in metrics["by_rule"].items():
+            print(f"rule {rule}: {counts['good']} good, {counts['wrong']} wrong")
+        print(f"gate: {gate.status}")
+        for failure in gate.failures:
+            print(f"failure: {failure}")
+        for incomplete in gate.incomplete:
+            print(f"incomplete: {incomplete}")
+        for improvement in gate.improvements:
+            print(f"improvement: {improvement}")
+
+    if args.update_baseline:
+        if gate.status != "pass":
+            print(f"bench: baseline not updated, gate is {gate.status}")
+        else:
+            try:
+                baseline_path.parent.mkdir(parents=True, exist_ok=True)
+                baseline_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+                metrics = scorecard["metrics"]
+                history_entry = {
+                    "date": datetime.now(UTC).date().isoformat(),
+                    "note": args.note,
+                    "score": metrics["score"],
+                    "check_pass_rate": metrics["check_pass_rate"],
+                    "guards": f"{metrics['guards_passed']}/{metrics['guards_total']}",
+                    "targets": f"{metrics['targets_passed']}/{metrics['targets_total']}",
+                    "targets_passed": metrics["targets_passed"],
+                    "real_accuracy": metrics["real_accuracy"],
+                    "real_graded": metrics["real_graded"],
+                }
+                history_path = scenarios_dir / "history.jsonl"
+                history_path.parent.mkdir(parents=True, exist_ok=True)
+                with history_path.open("a") as stream:
+                    stream.write(json.dumps(history_entry, sort_keys=True) + "\n")
+            except OSError as exc:
+                print(f"bench: {exc}")
+                return 1
+    return {"pass": 0, "fail": 1, "incomplete": 2}[gate.status]
 
 
 def cmd_calibrate(args: argparse.Namespace) -> int:
@@ -1463,6 +1622,27 @@ def build_parser() -> argparse.ArgumentParser:
     derive.add_argument("--vsc", action="store_true")
     derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
     derive.set_defaults(func=cmd_derive)
+
+    bench = sub.add_parser("bench", help="replay scenarios and compare scorecards")
+    bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
+    bench.add_argument(
+        "--recordings",
+        action="append",
+        default=None,
+        metavar="DIR",
+        help="recording directory to search (repeatable)",
+    )
+    bench.add_argument("--rules", type=Path, default=None, help="rules directory")
+    bench.add_argument("--only", nargs="+", default=None, metavar="ID")
+    bench.add_argument("--baseline", type=Path, default=None, help="baseline scorecard path")
+    bench.add_argument("--tolerance", type=float, default=0.02)
+    bench.add_argument("--update-baseline", action="store_true")
+    bench.add_argument("--note", default=None, help="note for a baseline update")
+    bench.add_argument("--out", type=Path, default=None, help="write scorecard JSON")
+    bench.add_argument("--json", action="store_true", help="print scorecard and gate as JSON")
+    bench.add_argument("--trend", action="store_true", help="show history trend without replay")
+    bench.add_argument("--window", type=_positive_int, default=5)
+    bench.set_defaults(func=cmd_bench)
 
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file", nargs="?", default=None, help=REC_HELP)

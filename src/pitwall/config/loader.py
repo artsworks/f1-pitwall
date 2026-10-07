@@ -64,10 +64,12 @@ class ConfigStore:
         self,
         overrides: dict[str, Any] | None = None,
         rules_dir: Path | None = None,
+        isolated: bool = False,
     ) -> None:
         self._overrides = overrides or {}
         self._rules_dir = rules_dir
-        self._profile = profile_path()
+        self._isolated = isolated
+        self._profile = None if isolated else profile_path()
         self._track_id: int | None = None
         self._mtimes: dict[Path, float] = {}
         self._last_poll = 0.0
@@ -79,7 +81,7 @@ class ConfigStore:
         srcs = sorted(DEFAULTS_DIR.rglob("*.yaml"))
         if self._rules_dir is not None and self._rules_dir.is_dir():
             srcs += sorted(self._rules_dir.rglob("*.yaml"))
-        if self._profile is not None:
+        if not self._isolated and self._profile is not None:
             srcs.append(self._profile)
         return srcs
 
@@ -93,9 +95,9 @@ class ConfigStore:
             merged = _deep_merge(merged, custom)
             if custom_rules is not None:
                 merged["rules"] = custom_rules
-        if self._profile is not None and self._profile.exists():
+        if not self._isolated and self._profile is not None and self._profile.exists():
             merged = _deep_merge(merged, yaml.safe_load(self._profile.read_text()) or {})
-        overlay = self._load_track_overlay()
+        overlay = None if self._isolated else self._load_track_overlay()
         if overlay is not None:
             th = overlay.get("thresholds")
             if isinstance(th, dict) and th:

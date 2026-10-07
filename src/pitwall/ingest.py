@@ -184,6 +184,8 @@ def ingest_recordings(
     *,
     calls_mode: str | None = None,
     out_dir: Path | None = None,
+    rules_dir: Path | None = None,
+    isolated: bool = False,
 ) -> list[IngestResult]:
     """Replay or digest a recording batch, isolating errors to each file."""
     from pitwall.digest import DIGEST_VERSION, build_digest
@@ -209,6 +211,8 @@ def ingest_recordings(
                     engine = build_engine(
                         clock=VirtualClock(),
                         overrides={"engine": {"heartbeat_s": 0}},
+                        rules_dir=rules_dir,
+                        isolated=isolated,
                         sinks=[],
                         db=db,
                         decision_log_fp=io.StringIO(),

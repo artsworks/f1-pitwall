@@ -278,6 +278,31 @@ class Penalty:
         payload[offset] = min(255, payload[offset] + seconds)
 
 
+def ops_from_options(
+    wear_scale: float | None,
+    inject_sc: str | None,
+    vsc: bool,
+    penalty: int | None,
+) -> list[MutationOp]:
+    ops: list[MutationOp] = []
+    if wear_scale is not None:
+        ops.append(WearScale(wear_scale))
+    if inject_sc is not None:
+        start, separator, end = inject_sc.partition("-")
+        start_lap = int(start)
+        end_lap = int(end) if separator else start_lap + 2
+        if start_lap < 1 or end_lap < start_lap:
+            raise ValueError("--inject-sc requires positive, ascending lap numbers")
+        ops.append(InjectSafetyCar(start_lap, end_lap, vsc=vsc))
+    elif vsc:
+        raise ValueError("--vsc requires --inject-sc")
+    if penalty is not None:
+        ops.append(Penalty(penalty))
+    if not ops:
+        raise ValueError("derive requires at least one mutation")
+    return ops
+
+
 def derive_records(
     records: Iterable[tuple[int, bytes]],
     ops: Sequence[MutationOp],

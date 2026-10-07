@@ -1843,6 +1843,7 @@ def build_engine(
     clock: Clock | None = None,
     overrides: dict[str, Any] | None = None,
     rules_dir: Path | None = None,
+    isolated: bool = False,
     decision_log_path: Path | None = None,
     decision_log_fp: Any = None,
     sinks: list[CallSink] | None = None,
@@ -1852,7 +1853,7 @@ def build_engine(
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
-    store = ConfigStore(overrides=overrides, rules_dir=rules_dir)
+    store = ConfigStore(overrides=overrides, rules_dir=rules_dir, isolated=isolated)
     settings = store.current()
     clock = clock or WallClock()
     recorder = None
