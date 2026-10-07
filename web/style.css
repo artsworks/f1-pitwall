@@ -334,8 +334,8 @@ body.dash.pit .banner .text { font-size: 1.8rem; }
 .s-row .crit, .b-card .crit { color: var(--crit); font-weight: bold; }
 .s-row .ok, .b-card .ok { color: var(--ok); }
 .s-stint { font-size: 1.1rem; line-height: 1.35; white-space: nowrap; overflow: hidden; display: flex;
-  flex-wrap: wrap; align-items: center; gap: .25rem 1rem; min-height: 1.9rem; }
-.s-stint .plan { display: inline-flex; align-items: center; gap: .4rem; flex: none; }
+  flex-direction: column; align-items: flex-start; gap: .3rem; min-height: 1.9rem; }
+.s-stint .plan { display: flex; width: 100%; align-items: center; gap: .6rem; flex: none; }
 .s-stint .plan .pid { font-weight: bold; font-size: 1.25rem; color: var(--fg); border: 2px solid var(--fg);
   border-radius: .3rem; padding: 0 .4rem; line-height: 1.3; }
 .s-stint .plan.alt .pid { color: var(--dim); border-color: var(--dim); }
