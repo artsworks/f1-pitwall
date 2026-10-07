@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from pitwall.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
 
 if TYPE_CHECKING:
@@ -648,7 +649,12 @@ class Database:
                     _bool_to_sql(record.get("on_plan")),
                 ),
             )
-        if outcome in ("ack", "neg") and record.get("call_id") and record.get("grade"):
+        if (
+            outcome in ("ack", "neg")
+            and record.get("call_id")
+            and record.get("grade")
+            and not is_synthetic_uid(session_uid)
+        ):
             grade_call_id = record.get("grade_call_id") or record["call_id"]
             self.grade_call(
                 session_uid,

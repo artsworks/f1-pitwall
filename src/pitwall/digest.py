@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
@@ -154,6 +155,7 @@ def quality_trend(
 
     db_sessions = db.sessions()
     db_uids = {int(session["uid"]) for session in db_sessions}
+    db_sessions = [session for session in db_sessions if not is_synthetic_uid(int(session["uid"]))]
     rows = []
     if sessions > 0:
         for session in reversed(db_sessions):
@@ -177,7 +179,7 @@ def quality_trend(
         from pitwall.learnpack import LEDGER_NAME, read_ledger
 
         for uid, session in read_ledger(pack_dir / LEDGER_NAME).items():
-            if uid in db_uids:
+            if is_synthetic_uid(uid) or uid in db_uids:
                 continue
             ledger_quality = session.get("quality")
             if not isinstance(ledger_quality, dict):

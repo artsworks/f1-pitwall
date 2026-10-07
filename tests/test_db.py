@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from pitwall.derive import derived_uid
 from pitwall.model.deg import DegFit
 from pitwall.state.lap import LapAccumulator, LapSummary
 from pitwall.store.db import MIGRATIONS, Database
@@ -70,6 +71,31 @@ def test_insert_call_stores_press_grade() -> None:
 
     grade = db.grades_for_session(22)[0]
     assert grade["grade"] == "good" and grade["source"] == "press"
+
+
+def test_insert_call_skips_press_grades_for_synthetic_sessions() -> None:
+    db = Database(":memory:")
+    real_uid = 22
+    synthetic_uid = derived_uid(real_uid, ["wear_scale:3"])
+    db.upsert_session(real_uid)
+    db.upsert_session(synthetic_uid)
+
+    for uid in (real_uid, synthetic_uid):
+        db.insert_call(
+            uid,
+            {
+                "outcome": "ack",
+                "call_id": "call-1",
+                "rule_id": "tyre_temp",
+                "grade": "good",
+                "grade_source": "press",
+            },
+        )
+
+    grades = db.grades_for_session(real_uid)
+    assert len(grades) == 1 and grades[0]["source"] == "press"
+    assert db.grades_for_session(synthetic_uid) == []
+    assert db.calls_for_session(synthetic_uid)[0]["outcome"] == "ack"
 
 
 def test_incremental_migration() -> None:

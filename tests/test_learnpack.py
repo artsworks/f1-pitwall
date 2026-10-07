@@ -9,6 +9,7 @@ import yaml
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
+from pitwall.derive import derived_uid
 from pitwall.digest import quality_trend, startup_scorecard
 from pitwall.learnpack import (
     LATEST_NAME,
@@ -127,6 +128,35 @@ def test_merged_sessions_uses_max_ms_and_counts_ledger_only_rows(tmp_path: Path)
         "quality": {"fired": 1},
     }
     assert pack_track_minutes(db, pack_dir) == {"minutes": 5.7, "laps": 4, "sessions": 2}
+
+
+def test_write_pack_excludes_synthetic_sessions_and_grades(tmp_path: Path) -> None:
+    db = Database(":memory:")
+    real_uid = 91
+    synthetic_uid = derived_uid(real_uid, ["wear_scale:3"])
+    for uid, started_at in ((real_uid, 10.0), (synthetic_uid, 20.0)):
+        db.upsert_session(uid, track_id=7, session_type=15, started_at=started_at)
+        db.insert_lap(uid, 0, _lap(1, 90_000))
+        db.insert_call(
+            uid,
+            {"outcome": "fired", "call_id": "call-1", "rule_id": "tyre_temp"},
+        )
+        db.grade_call(uid, "call-1", "tyre_temp", "good", source="press")
+
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    (pack_dir / LEDGER_NAME).write_text(
+        json.dumps({"uid": synthetic_uid, "laps": 10, "ms": 900_000}) + "\n",
+        encoding="utf-8",
+    )
+
+    latest = write_pack(db, pack_dir, now=datetime(2025, 4, 5, 12))
+    pack = json.loads(latest.read_text(encoding="utf-8"))
+
+    assert [session["uid"] for session in pack["sessions"]] == [real_uid]
+    assert pack["track_minutes"] == {"minutes": 1.5, "laps": 1, "sessions": 1}
+    assert {row["session_uid"] for row in pack["call_grades"]} == {real_uid}
+    assert set(read_ledger(pack_dir / LEDGER_NAME)) == {real_uid}
 
 
 def test_startup_scorecard_counts_ledger_only_sessions(tmp_path: Path) -> None:
