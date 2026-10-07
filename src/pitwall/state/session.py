@@ -98,12 +98,12 @@ def spoken_lap_time(ms: float) -> str:
 
 def snapshot_scalars(snap: Snapshot) -> dict[str, Any]:
     values: dict[str, Any] = {}
-    for field in dataclasses.fields(snap):
-        value = getattr(snap, field.name)
+    for item in dataclasses.fields(snap):
+        value = getattr(snap, item.name)
         if isinstance(value, bool | int | str):
-            values[field.name] = value
+            values[item.name] = value
         elif isinstance(value, float) and math.isfinite(value):
-            values[field.name] = round(value, 3)
+            values[item.name] = round(value, 3)
     return values
 
 

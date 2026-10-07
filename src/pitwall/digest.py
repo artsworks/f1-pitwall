@@ -48,12 +48,12 @@ def call_quality(db: Database, uid: int) -> dict[str, Any]:
         for grade in db.grades_for_session(uid)
         if grade.get("call_id") is not None
     }
-    fired_ids = {str(call.get("call_id")) for call in fired_calls if call.get("call_id") is not None}
+    fired_ids = {
+        str(call.get("call_id")) for call in fired_calls if call.get("call_id") is not None
+    }
     fired_grades = {call_id: grades[call_id] for call_id in fired_ids if call_id in grades}
     fired = len(fired_calls)
-    questions = [
-        row for row in db.driver_inputs_for_session(uid) if row.get("kind") == "question"
-    ]
+    questions = [row for row in db.driver_inputs_for_session(uid) if row.get("kind") == "question"]
     unanswered = 0
     for row in questions:
         inputs = row.get("inputs")

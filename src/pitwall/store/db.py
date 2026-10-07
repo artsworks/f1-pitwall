@@ -640,11 +640,7 @@ class Database:
                     _bool_to_sql(record.get("on_plan")),
                 ),
             )
-        if (
-            outcome in ("ack", "neg")
-            and record.get("call_id")
-            and record.get("grade")
-        ):
+        if outcome in ("ack", "neg") and record.get("call_id") and record.get("grade"):
             self.grade_call(
                 session_uid,
                 str(record["call_id"]),
