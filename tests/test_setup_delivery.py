@@ -6,12 +6,14 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from pitwall.cli import main
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief
 from pitwall.engine import build_engine
-from pitwall.setup.evaluate import Recommendation, evaluate
+from pitwall.setup.evaluate import Recommendation, evaluate, setup_modes
 from pitwall.setup.rules import parse_setup_rules
 from pitwall.setup.signals import RunSignals, session_signals
 from pitwall.state.lap import LapSummary
@@ -148,8 +150,8 @@ def test_race_setup_call_uses_live_bias_and_respects_cooldown() -> None:
     engine.state.setup_on_throttle_diff = 55
 
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == "brake_bias"
-    assert engine._setup_call_from == 56.0
+    assert engine.setup_advisor.call_param == "brake_bias"
+    assert engine.setup_advisor.call_from == 56.0
     assert all(
         rec.param in {"brake_bias", "on_throttle"}
         for rec in engine.state.setup_advice
@@ -158,18 +160,18 @@ def test_race_setup_call_uses_live_bias_and_respects_cooldown() -> None:
 
     engine.state.lap_num = 4
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == ""
+    assert engine.setup_advisor.call_param == ""
     engine.state.lap_num = 7
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == ""
+    assert engine.setup_advisor.call_param == ""
     engine.state.lap_num = 8
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == "brake_bias"
+    assert engine.setup_advisor.call_param == "brake_bias"
 
-    engine.state.front_brake_bias = engine._setup_call_to
+    engine.state.front_brake_bias = engine.setup_advisor.call_to
     engine.state.lap_num = 9
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == ""
+    assert engine.setup_advisor.call_param == ""
 
 
 def test_race_on_throttle_call_uses_race_step() -> None:
@@ -190,12 +192,12 @@ def test_race_on_throttle_call_uses_race_step() -> None:
     engine.state.parc_ferme_rules = 1
     engine.state.front_brake_bias = 56
     engine.state.setup_on_throttle_diff = 55
-    engine._setup_rules = replace(engine._setup_rules, confidence_floor="low")
+    engine.setup_advisor.rules = replace(engine.setup_advisor.rules, confidence_floor="low")
 
     engine._evaluate_live_setup(uid)
-    assert engine._setup_call_param == "on_throttle"
-    assert engine._setup_call_from == 55.0
-    assert engine._setup_call_to == 45.0
+    assert engine.setup_advisor.call_param == "on_throttle"
+    assert engine.setup_advisor.call_from == 55.0
+    assert engine.setup_advisor.call_to == 45.0
 
 
 def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
@@ -217,24 +219,24 @@ def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
     engine.state.next_front_wing_value = 10.0
     engine.pit_plan = replace(NO_PLAN, plan="box_now")
     engine._update_setup_stop_wing()
-    assert (engine._setup_stop_wing_from, engine._setup_stop_wing_to) == (10.0, 11.0)
+    assert (engine.setup_advisor.stop_wing_from, engine.setup_advisor.stop_wing_to) == (10.0, 11.0)
 
     engine.state.next_front_wing_value = 11.0
     engine._update_setup_stop_wing()
-    assert engine._setup_stop_wing_to == 0.0
+    assert engine.setup_advisor.stop_wing_to == 0.0
 
     engine.state.next_front_wing_value = 10.0
     engine.pit_plan = NO_PLAN
     engine._update_setup_stop_wing()
-    assert engine._setup_stop_wing_to == 0.0
+    assert engine.setup_advisor.stop_wing_to == 0.0
 
     for plan in ("no_stop", "stay"):
         engine.pit_plan = replace(NO_PLAN, plan=plan)
         engine._update_setup_stop_wing()
-        assert engine._setup_stop_wing_to == 0.0, plan
+        assert engine.setup_advisor.stop_wing_to == 0.0, plan
     engine.pit_plan = replace(NO_PLAN, plan="box_in_n")
     engine._update_setup_stop_wing()
-    assert engine._setup_stop_wing_to == 11.0
+    assert engine.setup_advisor.stop_wing_to == 11.0
 
 
 def test_session_signals_keep_events_inside_the_selected_run() -> None:
@@ -625,3 +627,18 @@ def test_race_stop_evaluator_result_contains_only_front_wing() -> None:
     )
     assert recs
     assert {rec.param for rec in recs} == {"front_wing"}
+
+
+@pytest.mark.parametrize(
+    ("session_type", "expected"),
+    [
+        (0, ()),
+        (1, ("garage",)),
+        (14, ("garage",)),
+        (15, ("race", "race_stop")),
+        (17, ("race", "race_stop")),
+        (18, ()),
+    ],
+)
+def test_setup_modes(session_type: int, expected: tuple[str, ...]) -> None:
+    assert setup_modes(session_type) == expected

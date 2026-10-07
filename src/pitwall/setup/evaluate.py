@@ -102,6 +102,15 @@ def _learned_candidates(
     return [(candidate, gain, weight, flipped) for _, candidate, gain, weight, flipped in ranked]
 
 
+def setup_modes(session_type: int) -> tuple[str, ...]:
+    """Advice modes evaluated live for a session type."""
+    if 1 <= session_type <= 14:
+        return ("garage",)
+    if 15 <= session_type <= 17:
+        return ("race", "race_stop")
+    return ()
+
+
 def _session_kind(session_type: int) -> str | None:
     if 1 <= session_type <= 4:
         return "practice"

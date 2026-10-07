@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import collections
 import contextlib
-import copy
 import dataclasses
 import logging
 import math
@@ -49,10 +48,8 @@ from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import SessionType
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
-from pitwall.setup.evaluate import Recommendation, evaluate
-from pitwall.setup.learn import learned_gains
-from pitwall.setup.rules import parse_setup_rules, reason_for_symptom
-from pitwall.setup.signals import session_signals
+from pitwall.setup.advisor import SetupAdvisor
+from pitwall.setup.evaluate import setup_modes
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
@@ -301,17 +298,7 @@ class Engine:
     ) -> None:
         self.store = store
         settings = store.current()
-        self._setup_rules = parse_setup_rules(settings.setup_rules)
-        self._setup_rules_source = copy.deepcopy(settings.setup_rules)
-        self._setup_session_uid: int | None = None
-        self._setup_call_last_lap: dict[str, int] = {}
-        self._setup_call_param = ""
-        self._setup_call_from = 0.0
-        self._setup_call_to = 0.0
-        self._setup_call_reason = ""
-        self._setup_call_set_lap: int | None = None
-        self._setup_stop_wing_from = 0.0
-        self._setup_stop_wing_to = 0.0
+        self.setup_advisor = SetupAdvisor(state, settings.setup_rules)
         self.clock = clock
         self.ingest = ingest
         self.state = state
@@ -698,198 +685,18 @@ class Engine:
         self._prev_race_phase = ""
         self.session_origin_started_at = None
         self._parc_ferme_written = None
-        self._setup_session_uid = uid
-        self._setup_call_last_lap.clear()
-        self._clear_setup_call()
-        self._clear_setup_stop_wing()
-        self.state.setup_advice = ()
-
-    def _refresh_setup_rules(self) -> None:
-        settings = self.store.current()
-        if settings.setup_rules == self._setup_rules_source:
-            return
-        self._setup_rules_source = copy.deepcopy(settings.setup_rules)
-        try:
-            self._setup_rules = parse_setup_rules(settings.setup_rules)
-        except Exception:
-            log.exception("setup rules reload failed; keeping the last valid rules")
-
-    def _clear_setup_call(self) -> None:
-        self._setup_call_param = ""
-        self._setup_call_from = 0.0
-        self._setup_call_to = 0.0
-        self._setup_call_reason = ""
-        self._setup_call_set_lap = None
-
-    def _clear_setup_stop_wing(self) -> None:
-        self._setup_stop_wing_from = 0.0
-        self._setup_stop_wing_to = 0.0
-
-    def _update_setup_call(
-        self, recommendations: tuple[Recommendation, ...], lap: int, cooldown_laps: int
-    ) -> None:
-        candidate = next(
-            (
-                rec
-                for rec in sorted(
-                    (item for item in recommendations if item.mode == "race"),
-                    key=lambda item: item.tier != "primary",
-                )
-                if rec.param in {"brake_bias", "on_throttle"}
-            ),
-            None,
-        )
-        if candidate is None:
-            self._clear_setup_call()
-            return
-
-        param = candidate.param
-        live_value = (
-            float(self.state.front_brake_bias)
-            if param == "brake_bias"
-            else float(self.state.setup_on_throttle_diff)
-        )
-        if math.isclose(live_value, candidate.to_value, abs_tol=1e-6):
-            self._clear_setup_call()
-            return
-
-        if self._setup_call_param:
-            current_live = (
-                float(self.state.front_brake_bias)
-                if self._setup_call_param == "brake_bias"
-                else float(self.state.setup_on_throttle_diff)
-            )
-            if math.isclose(current_live, self._setup_call_to, abs_tol=1e-6):
-                self._clear_setup_call()
-            elif self._setup_call_set_lap is not None and lap > self._setup_call_set_lap:
-                self._clear_setup_call()
-                return
-            elif self._setup_call_param == param:
-                return
-            else:
-                self._clear_setup_call()
-
-        previous_lap = self._setup_call_last_lap.get(param)
-        if previous_lap is not None and lap - previous_lap < cooldown_laps:
-            return
-        self._setup_call_param = param
-        self._setup_call_from = live_value
-        self._setup_call_to = candidate.to_value
-        self._setup_call_reason = reason_for_symptom(candidate.rule_id)
-        self._setup_call_set_lap = lap
-        self._setup_call_last_lap[param] = lap
-
-    def _update_setup_stop_wing(self) -> None:
-        rec = next(
-            (
-                item
-                for item in self.state.setup_advice
-                if item.mode == "race_stop" and item.param == "front_wing"
-            ),
-            None,
-        )
-        if (
-            rec is None
-            or self.pit_plan.plan not in _STOP_PLANS
-            or math.isclose(self.state.next_front_wing_value, rec.to_value, abs_tol=1e-6)
-        ):
-            self._clear_setup_stop_wing()
-            return
-        self._setup_stop_wing_from = rec.from_value
-        self._setup_stop_wing_to = rec.to_value
+        self.setup_advisor.reset(uid)
 
     def _evaluate_live_setup(self, uid: int) -> None:
-        settings = self.store.current()
-        thresholds = settings.thresholds
-        try:
-            signals = session_signals(self.db, uid, thresholds)
-            if signals is None:
-                self.state.setup_advice = ()
-                self._clear_setup_call()
-                self._clear_setup_stop_wing()
-                return
-            modes: tuple[str, ...]
-            if 1 <= signals.session_type <= 14:
-                modes = ("garage",)
-            elif 15 <= signals.session_type <= 17:
-                modes = ("race", "race_stop")
-            else:
-                modes = ()
-            recommendations = tuple(
-                rec
-                for mode in modes
-                for rec in evaluate(
-                    signals,
-                    self.state.setup,
-                    mode=mode,
-                    parc_ferme=self.state.parc_ferme_rules,
-                    rules=self._setup_rules,
-                    thresholds=thresholds,
-                    learned=learned_gains(self.db, signals.track_id, signals.compound),
-                )
-            )
-            for rec in recommendations:
-                self.db.insert_setup_rec(
-                    rec,
-                    track_id=self.state.track_id,
-                    compound=signals.compound,
-                    lap=self.state.lap_num,
-                )
-            self.state.setup_advice = recommendations
-            if 15 <= signals.session_type <= 17:
-                cooldown = thresholds.get("setup_rec_cooldown_laps", 5)
-                cooldown_laps = int(cooldown) if isinstance(cooldown, int | float) else 5
-                self._update_setup_call(
-                    recommendations,
-                    self.state.lap_num,
-                    cooldown_laps,
-                )
-            else:
-                self._clear_setup_call()
-                self._clear_setup_stop_wing()
-        except Exception:
-            self.state.setup_advice = ()
-            self._clear_setup_call()
-            self._clear_setup_stop_wing()
-            log.exception("live setup advice failed; skipping this lap")
+        self.setup_advisor.evaluate_live(self.db, uid, self.store.current())
 
     def _store_debrief_setup(self, uid: int) -> None:
         if self.db is None:
             return
-        settings = self.store.current()
-        try:
-            signals = session_signals(
-                self.db,
-                uid,
-                settings.thresholds,
-                run_choice="longest",
-            )
-            if signals is None:
-                return
-            setup = (
-                self.db.setup_state_fields(signals.setup_state_id)
-                if signals.setup_state_id is not None
-                else None
-            ) or {}
-            recommendations = evaluate(
-                signals,
-                setup,
-                mode="debrief",
-                parc_ferme=self.state.parc_ferme_rules,
-                rules=self._setup_rules,
-                thresholds=settings.thresholds,
-                learned=learned_gains(self.db, signals.track_id, signals.compound),
-            )
-            for rec in recommendations:
-                self.db.insert_setup_rec(
-                    rec,
-                    track_id=self.state.track_id,
-                    compound=signals.compound,
-                    lap=signals.run_end_lap,
-                )
-            self.state.setup_advice = (*self.state.setup_advice, *recommendations)
-        except Exception:
-            log.exception("debrief setup advice failed; skipping")
+        self.setup_advisor.store_debrief(self.db, uid, self.store.current())
+
+    def _update_setup_stop_wing(self) -> None:
+        self.setup_advisor.update_stop_wing(self.pit_plan.plan in _STOP_PLANS)
 
     def _reset_energy_lap_tracking(self) -> None:
         self._energy_lap_tracker.reset()
@@ -968,20 +775,14 @@ class Engine:
         for lap in new_laps:
             self._on_player_lap(uid, lap)
         if new_laps or setup_changed:
-            if uid != self._setup_session_uid:
-                self._setup_session_uid = uid
-                self._setup_call_last_lap.clear()
-                self._clear_setup_call()
-                self._clear_setup_stop_wing()
-                self.state.setup_advice = ()
-            if new_laps or 15 <= self.state.session_type <= 17:
+            if uid != self.setup_advisor.session_uid:
+                self.setup_advisor.reset(uid)
+            if new_laps or "race" in setup_modes(self.state.session_type):
                 self._evaluate_live_setup(uid)
             else:
                 # Garage advice was built on the setup the driver just changed.
                 # Drop it until a lap on the new setup exists.
-                self.state.setup_advice = ()
-                self._clear_setup_call()
-                self._clear_setup_stop_wing()
+                self.setup_advisor.clear()
 
     def _on_player_lap(self, uid: int, lap: LapSummary) -> None:
         """M3 persistence hooks (docs/18): refit the stint, measure pit loss
@@ -1820,7 +1621,7 @@ class Engine:
 
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
-        self._refresh_setup_rules()
+        self.setup_advisor.refresh_rules(self.store.current().setup_rules)
         if self.state.track_id != self._track_loaded:
             self._track_loaded = self.state.track_id
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
@@ -1838,12 +1639,12 @@ class Engine:
         self._update_setup_stop_wing()
         snapshot = dataclasses.replace(
             snapshot,
-            setup_call_param=self._setup_call_param,
-            setup_call_from=self._setup_call_from,
-            setup_call_to=self._setup_call_to,
-            setup_call_reason=self._setup_call_reason,
-            setup_stop_wing_from=self._setup_stop_wing_from,
-            setup_stop_wing_to=self._setup_stop_wing_to,
+            setup_call_param=self.setup_advisor.call_param,
+            setup_call_from=self.setup_advisor.call_from,
+            setup_call_to=self.setup_advisor.call_to,
+            setup_call_reason=self.setup_advisor.call_reason,
+            setup_stop_wing_from=self.setup_advisor.stop_wing_from,
+            setup_stop_wing_to=self.setup_advisor.stop_wing_to,
         )
         if self._manual_cooldown and (
             snapshot.lap_num > self._manual_cooldown_lap
