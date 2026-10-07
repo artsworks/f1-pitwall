@@ -1339,7 +1339,7 @@ class Database:
         return [self._stint_row(row) for row in rows]
 
     def weekend_stints(self, uid: int, track_id: int, compound: int) -> list[WeekendStint]:
-        """Earlier fitted practice and sprint stints in the same track weekend."""
+        """Earlier fitted practice and Sprint stints in the same track weekend."""
         current = self.session_row(uid)
         if current is None:
             return []
@@ -1358,9 +1358,11 @@ class Database:
         result: list[WeekendStint] = []
         for row in rows:
             try:
-                if session_kind(int(row["session_type"])) not in ("practice", "race"):
-                    continue
+                session_type = int(row["session_type"])
             except ValueError:
+                continue
+            kind = session_kind(session_type)
+            if kind != "practice" and not (kind == "race" and session_type == 15):
                 continue
             prior_link = int(row["weekend_link"] or 0)
             if weekend_link and prior_link:

@@ -227,6 +227,19 @@ def test_sprint_stint_is_a_weekend_prior_for_the_main_race() -> None:
     assert prior.source == "weekend"
 
 
+def test_race_2_stint_is_not_a_weekend_prior_for_race_3() -> None:
+    db = Database(":memory:")
+    link = 0x26000009
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=link, started_at=day, session_type=16)
+    race_uid = 0xF1262003
+    db.upsert_session(
+        race_uid, track_id=7, session_type=17, started_at=day + 3_600, weekend_link=link
+    )
+
+    assert db.weekend_stints(race_uid, 7, 17) == []
+
+
 def test_noisy_sprint_fit_is_not_a_weekend_prior() -> None:
     db = Database(":memory:")
     link = 0x26000008
