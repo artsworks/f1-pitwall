@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pitwall.protocol.enums import SessionType
+from pitwall.protocol.enums import session_kind
 
 if TYPE_CHECKING:
     from pitwall.model.deg import DegFit
@@ -1112,7 +1112,7 @@ class Database:
         result: list[WeekendStint] = []
         for row in rows:
             try:
-                if SessionType(int(row["session_type"])).kind() != "practice":
+                if session_kind(int(row["session_type"])) != "practice":
                     continue
             except ValueError:
                 continue

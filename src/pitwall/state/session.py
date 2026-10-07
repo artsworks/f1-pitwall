@@ -12,7 +12,7 @@ from statistics import median
 from typing import TYPE_CHECKING, Any
 
 from pitwall.model.deg import rival_pace_ms
-from pitwall.protocol.enums import DriverStatus, PitStatus, SessionType, VisualCompound
+from pitwall.protocol.enums import DriverStatus, PitStatus, VisualCompound, session_kind
 from pitwall.protocol.header import PacketHeader, PacketId
 from pitwall.protocol.layouts import CAR_SLOTS, Corners
 from pitwall.protocol.packets import (
@@ -1310,13 +1310,10 @@ class SessionState:
         if self._kind() != "race" or self.session_type not in self.weekend_structure:
             return False
         later = self.weekend_structure[self.weekend_structure.index(self.session_type) + 1 :]
-        return any(15 <= t <= 17 for t in later)
+        return any(session_kind(t) == "race" for t in later)
 
     def _kind(self) -> str:
-        try:
-            return SessionType(self.session_type).kind()
-        except ValueError:
-            return "unknown"
+        return session_kind(self.session_type)
 
     def _decide_plan(self) -> Plan:
         field_best = tuple(self._best_laps.get(i, 0) for i in range(CAR_SLOTS))
@@ -1972,10 +1969,7 @@ class SessionState:
 
     def snapshot(self, now: float) -> Snapshot:
         st = self._last_session_time or 0.0
-        try:
-            kind = SessionType(self.session_type).kind()
-        except ValueError:
-            kind = "unknown"
+        kind = session_kind(self.session_type)
         phase = self._phase()
         inner = self._ema_or_zero(self.tyre_inner_fast)
         coldest = min(range(4), key=lambda i: inner.as_tuple()[i])
@@ -2922,11 +2916,8 @@ class SessionState:
         return default
 
     def _phase(self) -> str:
-        try:
-            if SessionType(self.session_type).kind() == "race":
-                return "red_flag" if self.red_flag else self.race_phase
-        except ValueError:
-            pass
+        if session_kind(self.session_type) == "race":
+            return "red_flag" if self.red_flag else self.race_phase
         if self.red_flag:
             return "red_flag"
         if self.driver_status == DriverStatus.IN_GARAGE:

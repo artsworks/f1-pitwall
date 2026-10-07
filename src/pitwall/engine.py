@@ -45,11 +45,10 @@ from pitwall.model.deg import (
 )
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
 from pitwall.net.recording import RecordingReader
-from pitwall.protocol.enums import SessionType
+from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
 from pitwall.rules.expr import namespace_data
 from pitwall.setup.advisor import SetupAdvisor
-from pitwall.setup.evaluate import setup_modes
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
@@ -777,7 +776,7 @@ class Engine:
         if new_laps or setup_changed:
             if uid != self.setup_advisor.session_uid:
                 self.setup_advisor.reset(uid)
-            if new_laps or "race" in setup_modes(self.state.session_type):
+            if new_laps or session_kind(self.state.session_type) == "race":
                 self._evaluate_live_setup(uid)
             else:
                 # Garage advice was built on the setup the driver just changed.
@@ -1135,10 +1134,7 @@ class Engine:
 
     def _race_laps(self) -> int:
         """Race distance the stint-derived priors are scoped to; 0 outside races."""
-        try:
-            kind = SessionType(self.state.session_type).kind()
-        except ValueError:
-            return 0
+        kind = session_kind(self.state.session_type)
         return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
 
     def _th(self, name: str, default: float) -> float:

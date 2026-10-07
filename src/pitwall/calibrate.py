@@ -15,7 +15,7 @@ import yaml
 from pitwall.config.models import Settings
 from pitwall.hindsight import linear_deg, stints, stop_laps
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
-from pitwall.protocol.enums import SessionType
+from pitwall.protocol.enums import session_kind
 from pitwall.store.db import Database, LapRow
 
 WriteFilter = Callable[[int, int, str, float], bool]
@@ -179,10 +179,7 @@ def _energy_map(
 
 
 def _is_race(session_type: int) -> bool:
-    try:
-        return SessionType(session_type).kind() == "race"
-    except ValueError:
-        return False
+    return session_kind(session_type) == "race"
 
 
 def _race_laps(session: Mapping[str, object]) -> int:

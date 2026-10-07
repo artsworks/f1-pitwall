@@ -4,6 +4,7 @@ import struct
 
 import pytest
 
+from pitwall.protocol.enums import session_kind
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.protocol.layouts import Corners
 from pitwall.protocol.packets import (
@@ -339,3 +340,24 @@ def test_car_telemetry_2_parse() -> None:
     assert c.overtake_active == 1
     assert c.active_aero_activation_distance == 250
     assert c.regulations_2026 == 1
+
+
+@pytest.mark.parametrize(
+    ("session_type", "expected"),
+    [
+        (-1, "unknown"),
+        (0, "unknown"),
+        (1, "practice"),
+        (4, "practice"),
+        (5, "qualifying"),
+        (9, "qualifying"),
+        (10, "sprint_shootout"),
+        (14, "sprint_shootout"),
+        (15, "race"),
+        (17, "race"),
+        (18, "time_trial"),
+        (99, "unknown"),
+    ],
+)
+def test_session_kind(session_type: int, expected: str) -> None:
+    assert session_kind(session_type) == expected
