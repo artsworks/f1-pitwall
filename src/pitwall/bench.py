@@ -16,7 +16,7 @@ from typing import Any, Literal
 import yaml
 
 from pitwall.config.models import Settings
-from pitwall.derive import MutationOp, derive_recording, ops_from_options
+from pitwall.derive import MutationOp, derive_recording, is_synthetic_uid, ops_from_options
 from pitwall.net.recording import RecordingReader
 from pitwall.store.db import Database
 from pitwall.tune import _AUTO_SKIP_METRICS
@@ -43,7 +43,7 @@ class Scenario:
 
     @property
     def kind(self) -> Literal["real", "synthetic"]:
-        return "synthetic" if self.mutations else "real"
+        return "synthetic" if self.mutations or is_synthetic_uid(self.source_uid) else "real"
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,6 +361,42 @@ def run_scenario(
                 db.close()
     except Exception as exc:
         return _scenario_row(scenario, "error", str(exc)), []
+
+
+def run_scenarios(
+    scenarios: Sequence[Scenario],
+    index: Mapping[int, Sequence[Path]],
+    settings: Settings,
+    rules_dir: Path | None,
+    jobs: int,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    work = [(scenario, *find_source(scenario, index)) for scenario in scenarios]
+    if jobs > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            futures = [
+                executor.submit(run_scenario, scenario, source, settings, rules_dir, reason)
+                for scenario, source, reason in work
+            ]
+            results = [future.result() for future in futures]
+    else:
+        results = [
+            run_scenario(
+                scenario,
+                source,
+                settings,
+                rules_dir=rules_dir,
+                skip_reason=reason,
+            )
+            for scenario, source, reason in work
+        ]
+    rows: dict[str, dict[str, Any]] = {}
+    outcomes: list[dict[str, Any]] = []
+    for scenario, (row, scenario_outcomes) in zip(scenarios, results, strict=True):
+        rows[scenario.id] = row
+        outcomes.extend(scenario_outcomes)
+    return rows, outcomes
 
 
 def _real_metrics(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

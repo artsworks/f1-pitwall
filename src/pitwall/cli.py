@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sqlite3
 import sys
 import threading
@@ -620,6 +621,139 @@ def cmd_derive(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_generate(args: argparse.Namespace) -> int:
+    from random import Random
+
+    from pitwall.synth.corpus import generate_corpus
+    from pitwall.synth.field import FieldSpec, load_priors, load_priors_json
+
+    settings = ConfigStore().current()
+    out_dir = (
+        Path(args.out).expanduser()
+        if args.out
+        else Path(settings.recording.directory).expanduser() / "synthetic"
+    )
+    jobs = args.jobs if args.jobs is not None else max(1, (os.cpu_count() or 2) - 2)
+    if args.vsc and not (args.inject_sc or args.random_sc):
+        print("generate: --vsc requires --inject-sc or --random-sc")
+        return 2
+    if args.random_sc and args.inject_sc:
+        print("generate: use either --inject-sc or --random-sc")
+        return 2
+    if args.priors_db:
+        priors, defaulted = load_priors(args.priors_db, args.track, args.laps)
+    elif args.priors_json:
+        priors, defaulted = load_priors_json(args.priors_json)
+    else:
+        from pitwall.synth.field import Priors
+
+        priors, defaulted = Priors(), []
+    player_stops: list[tuple[int, int]] = []
+    try:
+        for raw in args.player_stop:
+            lap_text, separator, compound_text = raw.partition(":")
+            if not separator:
+                raise ValueError(f"invalid player stop {raw!r}, expected LAP:COMPOUND")
+            player_stops.append((int(lap_text), int(compound_text)))
+        specs: list[FieldSpec] = []
+        for offset in range(args.races):
+            race_seed = args.seed + offset
+            sc_laps: tuple[int, int] | None = None
+            if args.inject_sc:
+                start_text, separator, end_text = args.inject_sc.partition("-")
+                start = int(start_text)
+                end = int(end_text) if separator else start + 2
+                sc_laps = (start, end)
+            elif args.random_sc:
+                rng = Random(race_seed ^ 0xF1DE57)
+                if rng.random() < 0.6 and args.laps >= 2:
+                    start = rng.randint(1, args.laps - 1)
+                    end = min(args.laps, start + rng.randint(0, 2))
+                    sc_laps = (start, end)
+            specs.append(
+                FieldSpec(
+                    track_id=args.track,
+                    laps=args.laps,
+                    cars=args.cars,
+                    seed=race_seed,
+                    priors=priors,
+                    sc_laps=sc_laps,
+                    vsc=args.vsc,
+                    player_stops=tuple(player_stops),
+                )
+            )
+        results = generate_corpus(specs, out_dir, jobs)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"generate: {exc}")
+        return 2
+    if defaulted:
+        print(f"generate: warning, defaulted prior fields: {', '.join(defaulted)}")
+    for race in results:
+        print(f"uid=0x{race.session_uid:016x} sha256={race.sha256} path={race.path}")
+    return 0
+
+
+def cmd_rollout(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
+    from pitwall.rollout import RolloutSpec, run_rollouts
+    from pitwall.synth.field import Priors, load_priors, load_priors_json
+
+    try:
+        if args.priors_db:
+            priors, defaulted = load_priors(args.priors_db, args.track, args.laps)
+        elif args.priors_json:
+            priors, defaulted = load_priors_json(args.priors_json)
+        else:
+            priors, defaulted = Priors(), []
+        thresholds = {
+            key: value
+            for key, value in ConfigStore().current().thresholds.items()
+            if isinstance(value, int | float)
+        }
+        for assignment in args.set_threshold:
+            name, separator, raw_value = assignment.partition("=")
+            if not separator or not name:
+                raise ValueError(f"invalid threshold {assignment!r}, expected NAME=VALUE")
+            thresholds[name] = float(raw_value)
+        spec = RolloutSpec(
+            laps=args.laps,
+            cars=args.cars,
+            priors=priors,
+            player_grid=min(args.grid, args.cars),
+            player_green_stop_lap=args.player_stop,
+        )
+        result = run_rollouts(
+            spec,
+            thresholds,
+            sims=args.sims,
+            seed=args.seed,
+            device=args.device,
+            chunk=args.chunk,
+        )
+    except (OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
+        print(f"rollout: {exc}")
+        return 2
+    if args.json:
+        print(
+            json.dumps(
+                {"track_id": args.track, "defaulted_priors": defaulted, **asdict(result)},
+                sort_keys=True,
+            )
+        )
+    else:
+        if defaulted:
+            print(f"rollout: warning, defaulted prior fields: {', '.join(defaulted)}")
+        print(
+            f"finish={result.mean_finish_position:.2f} ± {result.std_finish_position:.2f}, "
+            f"race_time={result.mean_race_time_s:.1f}s, "
+            f"gain_probability={result.gain_probability:.1%}, "
+            f"SC_stop_rate={result.sc_stop_rate:.1%}, "
+            f"sims={result.sims}, device={result.device}, elapsed={result.elapsed_s:.2f}s"
+        )
+    return 0
+
+
 def _positive_int(value: str) -> int:
     try:
         result = int(value)
@@ -654,9 +788,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
         build_recording_index,
         build_scorecard,
         compare,
-        find_source,
         load_scenarios,
-        run_scenario,
+        run_scenarios,
     )
 
     scenarios_dir = Path(args.scenarios).expanduser()
@@ -683,19 +816,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         else:
             recording_dirs = [Path(ConfigStore().current().recording.directory).expanduser()]
         index = build_recording_index(recording_dirs)
-        scenario_rows: dict[str, dict[str, Any]] = {}
-        outcomes: list[dict[str, Any]] = []
-        for scenario in scenarios:
-            source, reason = find_source(scenario, index)
-            row, scenario_outcomes = run_scenario(
-                scenario,
-                source,
-                settings,
-                rules_dir=rules_dir,
-                skip_reason=reason,
-            )
-            scenario_rows[scenario.id] = row
-            outcomes.extend(scenario_outcomes)
+        scenario_rows, outcomes = run_scenarios(scenarios, index, settings, rules_dir, args.jobs)
         scorecard = build_scorecard(scenario_rows, outcomes)
         baseline_path = (
             Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
@@ -1776,6 +1897,40 @@ def build_parser() -> argparse.ArgumentParser:
     derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
     derive.set_defaults(func=cmd_derive)
 
+    generate = sub.add_parser("generate", help="generate synthetic full-field recordings")
+    generate.add_argument("--track", type=int, required=True)
+    generate.add_argument("--laps", type=_positive_int, required=True)
+    generate.add_argument("--cars", type=_positive_int, default=20)
+    generate.add_argument("--seed", type=int, default=1)
+    generate.add_argument("--races", type=_positive_int, default=1)
+    generate.add_argument("--jobs", type=_positive_int, default=None)
+    generate.add_argument("--out", type=Path, default=None)
+    generate_priors = generate.add_mutually_exclusive_group()
+    generate_priors.add_argument("--priors-db", type=Path, default=None)
+    generate_priors.add_argument("--priors-json", type=Path, default=None)
+    generate.add_argument("--inject-sc", metavar="START[-END]", default=None)
+    generate.add_argument("--vsc", action="store_true")
+    generate.add_argument("--random-sc", action="store_true")
+    generate.add_argument("--player-stop", action="append", default=[], metavar="LAP:COMPOUND")
+    generate.set_defaults(func=cmd_generate)
+
+    rollout = sub.add_parser("rollout", help="run offline Monte Carlo race rollouts")
+    rollout.add_argument("--track", type=int, required=True)
+    rollout.add_argument("--laps", type=_positive_int, required=True)
+    rollout.add_argument("--cars", type=_positive_int, default=20)
+    rollout.add_argument("--sims", type=_positive_int, default=100_000)
+    rollout.add_argument("--seed", type=int, default=1)
+    rollout.add_argument("--device", choices=["cpu", "cuda", "auto"], default="cpu")
+    rollout_priors = rollout.add_mutually_exclusive_group()
+    rollout_priors.add_argument("--priors-db", type=Path, default=None)
+    rollout_priors.add_argument("--priors-json", type=Path, default=None)
+    rollout.add_argument("--set", dest="set_threshold", action="append", default=[])
+    rollout.add_argument("--grid", type=_positive_int, default=10)
+    rollout.add_argument("--player-stop", type=_positive_int, default=None)
+    rollout.add_argument("--chunk", type=_positive_int, default=None)
+    rollout.add_argument("--json", action="store_true")
+    rollout.set_defaults(func=cmd_rollout)
+
     bench = sub.add_parser("bench", help="replay scenarios and compare scorecards")
     bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
     bench.add_argument(
@@ -1786,6 +1941,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="recording directory to search (repeatable)",
     )
     bench.add_argument("--rules", type=Path, default=None, help="rules directory")
+    bench.add_argument("--jobs", type=_positive_int, default=1)
     bench.add_argument("--only", nargs="+", default=None, metavar="ID")
     bench.add_argument("--baseline", type=Path, default=None, help="baseline scorecard path")
     bench.add_argument("--tolerance", type=float, default=0.02)

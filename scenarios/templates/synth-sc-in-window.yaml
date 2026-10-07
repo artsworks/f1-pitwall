@@ -1,0 +1,16 @@
+# DRAFT. The repo owner approves `expect` before moving this file to `scenarios/`.
+# Run the command in `source.where`, then copy its UID and SHA-256 into `source.session_uid` and `source.sha256`.
+id: synth-sc-in-window
+title: Safety car inside the pit window
+status: target
+source:
+  session_uid: "0x0000000000000000"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  where: "pitwall generate --track 16 --laps 17 --seed 1 --inject-sc 10-11 --out <recording-directory>/synthetic"
+mutations: {}
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [10, 10]}
+    - {rule: sc_ending, laps: [11, 11]}
+    - {rule: [plan_sc_box, box_now], laps: [10, 11]}
+why: A safety car inside the stop window lowers pit loss.

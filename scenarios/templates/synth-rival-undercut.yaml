@@ -1,0 +1,14 @@
+# DRAFT. The repo owner approves `expect` before moving this file to `scenarios/`.
+# Run the command in `source.where`, then copy its UID and SHA-256 into `source.session_uid` and `source.sha256`.
+id: synth-rival-undercut
+title: Rival pit stop undercut
+status: target
+source:
+  session_uid: "0x0000000000000000"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  where: "pitwall generate --track 16 --laps 17 --seed 4 --out <recording-directory>/synthetic"
+mutations: {}
+expect:
+  fire:
+    - {rule: rival_behind_pitted, laps: [5, 15]}
+why: A rival stop tests whether pitwall reports a nearby undercut.
