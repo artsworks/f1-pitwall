@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from pitwall.derive import derived_uid
 from pitwall.model.deg import DegFit
 from pitwall.state.lap import LapAccumulator, LapSummary
 from pitwall.store.db import MIGRATIONS, Database
@@ -72,6 +73,31 @@ def test_insert_call_stores_press_grade() -> None:
     assert grade["grade"] == "good" and grade["source"] == "press"
 
 
+def test_insert_call_skips_press_grades_for_synthetic_sessions() -> None:
+    db = Database(":memory:")
+    real_uid = 22
+    synthetic_uid = derived_uid(real_uid, ["wear_scale:3"])
+    db.upsert_session(real_uid)
+    db.upsert_session(synthetic_uid)
+
+    for uid in (real_uid, synthetic_uid):
+        db.insert_call(
+            uid,
+            {
+                "outcome": "ack",
+                "call_id": "call-1",
+                "rule_id": "tyre_temp",
+                "grade": "good",
+                "grade_source": "press",
+            },
+        )
+
+    grades = db.grades_for_session(real_uid)
+    assert len(grades) == 1 and grades[0]["source"] == "press"
+    assert db.grades_for_session(synthetic_uid) == []
+    assert db.calls_for_session(synthetic_uid)[0]["outcome"] == "ack"
+
+
 def test_incremental_migration() -> None:
     import pitwall.store.db as dbmod
 
@@ -86,6 +112,56 @@ def test_incremental_migration() -> None:
         db._conn.execute("SELECT uid FROM sessions")  # earlier tables intact
     finally:
         dbmod.MIGRATIONS.pop()
+
+
+def _seed_database(path, migration_count: int) -> None:
+    conn = sqlite3.connect(path)
+    for version, migration in enumerate(MIGRATIONS[:migration_count], start=1):
+        conn.executescript(migration)
+        conn.execute(f"PRAGMA user_version={version}")
+    conn.close()
+
+
+def _assert_compatibility_columns(path) -> None:
+    expected_version = len(MIGRATIONS)
+    expected_columns = {
+        "sessions": {"synthetic", "derived_from"},
+        "call_grades": {"source"},
+        "bookmarks": {"kind", "context"},
+    }
+    for _ in range(2):
+        db = Database(path)
+        assert db._conn.execute("PRAGMA user_version").fetchone()[0] == expected_version  # noqa: SLF001
+        for table, expected in expected_columns.items():
+            columns = {
+                row["name"]
+                for row in db._conn.execute(f"PRAGMA table_info({table})")  # noqa: SLF001
+            }
+            assert expected <= columns
+        db.close()
+
+
+def test_migration_upgrades_main_layout_and_reopens(tmp_path) -> None:
+    path = tmp_path / "main-layout.sqlite"
+    _seed_database(path, migration_count=10)
+
+    _assert_compatibility_columns(path)
+
+
+def test_migration_upgrades_old_synthetic_layout_and_reopens(tmp_path) -> None:
+    path = tmp_path / "old-synthetic-layout.sqlite"
+    _seed_database(path, migration_count=9)
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
+        ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
+        """
+    )
+    conn.execute("PRAGMA user_version=10")
+    conn.close()
+
+    _assert_compatibility_columns(path)
 
 
 def test_setup_advisor_migration_from_previous_version(tmp_path) -> None:
@@ -361,3 +437,64 @@ def test_lap_temperature_accumulator_averages_samples_and_corners() -> None:
     assert lap.tyre_surface_c == 125.0
     assert lap.tyre_inner_front_c == 115.0
     assert lap.tyre_inner_rear_c == 95.0
+
+
+def test_weekend_session_types() -> None:
+    db = Database(":memory:")
+    link = 0x1234
+    for index, session_type in enumerate((1, 10, 15, 5, 16)):
+        db.upsert_session(
+            200 + index,
+            track_id=7,
+            session_type=session_type,
+            started_at=100.0 + index,
+            weekend_link=link,
+        )
+    db.upsert_session(
+        300, track_id=7, session_type=15, started_at=104.5, weekend_link=link, synthetic=True
+    )
+    db.upsert_session(301, track_id=7, session_type=15, started_at=105.0, weekend_link=0x9999)
+    db.upsert_session(302, track_id=10, session_type=15, started_at=106.0, weekend_link=link)
+    assert db.weekend_session_types(link, 7) == (1, 10, 15, 5, 16)
+    assert db.weekend_session_types(0, 7) == ()
+
+
+def test_stored_weekend_structure_keeps_melbourne_track_id_zero() -> None:
+    db = Database(":memory:")
+    link = 0x1235
+    sprint_uid = 210
+    db.upsert_session(sprint_uid, track_id=0, session_type=15, started_at=100.0, weekend_link=link)
+    db.upsert_session(211, track_id=0, session_type=16, started_at=200.0, weekend_link=link)
+
+    row = db.session_row(sprint_uid)
+    assert row is not None
+    assert db.stored_weekend_structure(row) == (15, 16)
+
+
+def test_weekend_structure_migration_and_storage(tmp_path) -> None:
+    path = tmp_path / "v12.sqlite"
+    _seed_database(path, migration_count=12)
+    conn = sqlite3.connect(path)
+    conn.execute("INSERT INTO sessions(uid, track_id, session_type) VALUES(210, 7, 15)")
+    conn.commit()
+    conn.close()
+
+    for _ in range(2):
+        db = Database(path)
+        columns = {
+            row["name"]
+            for row in db._conn.execute("PRAGMA table_info(sessions)")  # noqa: SLF001
+        }
+        assert "weekend_structure" in columns
+        assert db.session_row(210)["weekend_structure"] == ""
+        db.close()
+
+
+def test_weekend_structure_upsert_and_set() -> None:
+    db = Database(":memory:")
+    db.upsert_session(211, track_id=7, session_type=15, weekend_structure=(1, 10, 15))
+    assert db.session_row(211)["weekend_structure"] == "1,10,15"
+    db.upsert_session(211, track_id=7, session_type=15)  # empty doesn't overwrite
+    assert db.session_row(211)["weekend_structure"] == "1,10,15"
+    db.set_weekend_structure(211, (5, 15))
+    assert db.session_row(211)["weekend_structure"] == "5,15"

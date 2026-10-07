@@ -106,6 +106,14 @@ run the same steps as upkeep on demand. `pitwall tune` also folds A/B results fr
 Each candidate includes median snapshot signals at the ask and current rule thresholds.
 Review these candidates before changing a rule. Proposals never write YAML.
 
+Sessions from `pitwall derive` are synthetic. They feed grading and `pitwall tune`, but
+calibration, upkeep and the replay folds leave them out of physics priors.
+`pitwall calibrate --include-synthetic` adds them to the fit. See
+[Synthetic recordings](23-synthetic-recordings.md).
+
+To measure whether a change improves pitwall, run `pitwall bench`. See
+[Scenario bench](24-scenario-bench.md).
+
 ## Learning pack
 
 By default, Pitwall stores packs in `learnings/` beside `recordings/`. The folder is gitignored.

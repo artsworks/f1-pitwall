@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=12">
+  <link rel="stylesheet" href="/static/style.css?v=18">
 </head>
 <body class="dash connecting">
   <header class="status">
@@ -140,21 +140,27 @@
       </div>
       <div class="pb-next">
         <h2>NEXT RUN</h2>
-        <div id="pb-plan" class="pb-row">--</div>
-        <div id="pb-fuel" class="pb-row">--</div>
-        <div id="pb-ers" class="pb-row">--</div>
-        <div id="pb-time" class="pb-row">--</div>
-        <div id="pb-pole" class="pb-row">--</div>
+        <div class="pb-tiles">
+          <div id="pb-plan" class="pb-tile" hidden><div class="k">PLAN</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-fuel" class="pb-tile"><div class="k">FUEL</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-ers" class="pb-tile"><div class="k">⚡ BATTERY</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-time" class="pb-tile" hidden><div class="k">TIME LEFT</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-pole" class="pb-tile" hidden><div class="k">VS CUT</div><div class="v">--</div><div class="s"></div></div>
+        </div>
       </div>
     </div>
     <div class="pb-setup">
-      <h2>SETUP</h2>
-      <ol id="pb-setup"><li class="dim">no setup packet yet</li></ol>
+      <h2>SETUP CHANGES</h2>
+      <ol id="pb-change" class="pb-change"></ol>
+      <h2>CURRENT SETUP</h2>
+      <ol id="pb-setup" class="pb-ref"><li class="dim">no setup packet yet</li></ol>
+      <div id="pb-locked" class="pb-locked" hidden></div>
     </div>
   </section>
 
   <section id="carpage" class="zone carpage">
     <h2>CAR</h2>
+    <div id="cp-rivals" class="rivals" hidden><div></div><div></div></div>
     <div class="cp-grid">
       <div class="cp-tile"><h2>⚡ BATTERY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
       <div class="cp-tile"><h2>FUEL AT FINISH</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
@@ -175,7 +181,6 @@
       <div id="tp-cross" class="tp-row">--</div>
       <div id="tp-flags" class="tp-row">--</div>
       <div id="tp-pens" class="tp-row">--</div>
-      <div id="tp-traffic" class="tp-row">--</div>
       <div id="tp-exit" class="tp-row">--</div>
     </div>
   </section>
@@ -209,7 +214,7 @@
     <div id="qr-session" class="b-foot">--</div>
   </section>
 
-  <section class="log"><ol id="log"></ol></section>
+  <section class="log"><div id="tp-rivals" class="rivals" hidden><div></div><div></div></div><ol id="log"></ol></section>
 
   <footer class="footer">
     <span id="ers">⚡ BATTERY --</span><span id="sc">--</span><span id="rate"></span><span id="latency"></span>
@@ -218,7 +223,7 @@
     <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=12"></script>
-  <script src="/static/review.js?v=12"></script>
+  <script src="/static/app.js?v=18"></script>
+  <script src="/static/review.js?v=18"></script>
 </body>
 </html>

@@ -662,3 +662,28 @@ def test_strategy_payload_named_plans() -> None:
     assert s["active_plan"] == "B" and s["on_plan"] is False and s["plan_off_s"] == 4.2
     assert s["plan_target_lap"] == 18
     assert s["plan_switch"] == {"from": "A", "reason": "pace", "lap": 15}
+
+
+def test_state_payload_session_label_and_weekend() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    structure = (1, 10, 11, 12, 15, 5, 6, 7, 16)
+    sprint = state_payload(
+        Snapshot(now=1.0, session_kind="race", session_type=15, weekend_structure=structure),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert sprint["session_label"] == "Sprint"
+    assert sprint["weekend"] == ["FP1", "SQ1", "SQ2", "SQ3", "Sprint", "Q1", "Q2", "Q3", "Race"]
+    race = state_payload(
+        Snapshot(now=1.0, session_kind="race", session_type=16, weekend_structure=structure),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert race["session_label"] == "Race"

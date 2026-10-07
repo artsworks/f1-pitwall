@@ -9,16 +9,17 @@ import os
 import statistics
 import time
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
+from pitwall.derive import is_synthetic_uid
 from pitwall.digest import call_quality
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
-from pitwall.protocol.enums import session_kind
+from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
 from pitwall.state.session import thermal_window
@@ -254,21 +255,6 @@ _TRACK_NAMES = {
     40: "Austria reverse",
     41: "Zandvoort reverse",
 }
-_SESSION_LABELS = {
-    1: "P1",
-    2: "P2",
-    3: "P3",
-    4: "Short practice",
-    5: "Q1",
-    6: "Q2",
-    7: "Q3",
-    8: "Short qualifying",
-    9: "One-shot qualifying",
-    15: "Race",
-    16: "Race 2",
-    17: "Race 3",
-    18: "Time trial",
-}
 _SECTIONS = (
     ("summary", "00", "Summary"),
     ("pace", "01", "Pace and stints"),
@@ -369,13 +355,13 @@ def _track_name(track_id: object) -> str:
     return _TRACK_NAMES.get(key, f"Track {key}")
 
 
-def _session_label(session_type: object) -> str:
+def _session_label(session_type: object, weekend_structure: Sequence[int] = ()) -> str:
     if session_type is None:
         return "Session —"
     key = _as_int(session_type)
     if key is None:
         return f"Session {session_type}"
-    return _SESSION_LABELS.get(key, f"Session {key}")
+    return session_label(key, weekend_structure)
 
 
 def _lap_time(lap_time_ms: int) -> str:
@@ -712,8 +698,13 @@ def _provenance(session: dict[str, Any], calls: list[dict[str, Any]], settings: 
     matches = resolved_hash == current
     mindsets = Counter(str(call["mindset"]) for call in calls if call.get("mindset"))
     mindset = mindsets.most_common(1)[0][0] if calls and mindsets else "unknown"
+    is_synthetic = bool(session.get("synthetic")) or is_synthetic_uid(int(session.get("uid") or 0))
+    origin = ["synthetic"] if is_synthetic else []
+    if is_synthetic and session.get("derived_from"):
+        origin.append(f"derived from session UID {session['derived_from']}")
     lines = (
         recording,
+        *origin,
         f"profile {settings.recording.profile if matches else 'unknown'}",
         f"config {resolved_hash}",
         f"rules {rules_version(settings) if matches else 'unknown'}",
@@ -1390,7 +1381,9 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         outcomes.setdefault(str(row["call_id"]), []).append(row)
     inputs = db.driver_inputs_for_session(uid)
     track = _track_name(session.get("track_id")).upper()
-    session_label = _session_label(session.get("session_type")).upper()
+    session_label = _session_label(
+        session.get("session_type"), db.stored_weekend_structure(session)
+    ).upper()
     start_date = (
         time.strftime("%a %d %b %Y, %H:%M", time.localtime(session["started_at"]))
         if session.get("started_at")
@@ -1456,6 +1449,18 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
     """HTML list of stored sessions, newest first, each linking to its debrief."""
     rows = db.sessions()[::-1][:limit]
     body_rows = []
+    structures: dict[tuple[int, int, str], tuple[int, ...]] = {}
+
+    def _structure(row: Mapping[str, Any]) -> tuple[int, ...]:
+        key = (
+            int(row.get("weekend_link") or 0),
+            -1 if row.get("track_id") is None else int(row["track_id"]),
+            str(row.get("weekend_structure") or ""),
+        )
+        if key not in structures:
+            structures[key] = db.stored_weekend_structure(row)
+        return structures[key]
+
     for row in rows:
         uid = int(row["uid"])
         track_id = row.get("track_id")
@@ -1468,19 +1473,28 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
             else "—"
         )
         session_link = _Markup(f"<a href='/debrief/{_esc(uid)}'>{_esc(uid)}</a>")
+        is_synthetic = bool(row.get("synthetic")) or is_synthetic_uid(uid)
+        origin: object = "-"
+        if is_synthetic:
+            derived_from = str(row.get("derived_from") or "")
+            origin = _Markup(
+                str(_chip("warn", "synthetic"))
+                + (f"<br>derived from {_esc(derived_from)}" if derived_from else "")
+            )
         body_rows.append(
             (
                 session_link,
                 start,
                 track,
-                _session_label(row.get("session_type")),
+                _session_label(row.get("session_type"), _structure(row)),
                 len(db.laps_for(uid)),
+                origin,
                 recording,
             )
         )
     table = (
         _table(
-            ("Session", "Start", "Track", "Type", "Laps", "Recording"),
+            ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording"),
             body_rows,
             "sessions and laps",
         )

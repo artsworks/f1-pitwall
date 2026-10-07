@@ -11,6 +11,7 @@ from typing import Any
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, RuleDefModel
+from pitwall.derive import is_synthetic_uid
 from pitwall.digest import _repeat_call_ids
 from pitwall.store.db import Database
 
@@ -70,8 +71,9 @@ def question_candidates(
 
     for session in db.sessions():
         uid = session.get("uid")
-        if uid is None:
+        if uid is None or is_synthetic_uid(int(uid)):
             continue
+        uid = int(uid)
         repeat_ids = _repeat_call_ids(db, int(uid))
         fired: dict[str, list[tuple[float, float]]] = {}
         for call in db.calls_for_session(int(uid)):

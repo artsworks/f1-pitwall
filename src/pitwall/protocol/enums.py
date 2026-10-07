@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import IntEnum, StrEnum
 
 
@@ -28,13 +29,11 @@ class SessionType(IntEnum):
 
     def kind(self) -> str:
         """docs/03 mapping: 1-4 practice, 5-9 qualifying, 10-14 sprint shootout
-        (quali rule set), 15-17 race, 18 time trial."""
+        uses the quali rule set, 15-17 race, 18 time trial."""
         if 1 <= self <= 4:
             return "practice"
-        if 5 <= self <= 9:
+        if 5 <= self <= 14:
             return "qualifying"
-        if 10 <= self <= 14:
-            return "sprint_shootout"
         if 15 <= self <= 17:
             return "race"
         if self == 18:
@@ -48,6 +47,48 @@ def session_kind(session_type: int) -> str:
         return SessionType(session_type).kind()
     except ValueError:
         return "unknown"
+
+
+_LABELS = {
+    1: "FP1",
+    2: "FP2",
+    3: "FP3",
+    4: "Short practice",
+    5: "Q1",
+    6: "Q2",
+    7: "Q3",
+    8: "Short qualifying",
+    9: "One-shot qualifying",
+    10: "SQ1",
+    11: "SQ2",
+    12: "SQ3",
+    13: "Short sprint shootout",
+    14: "One-shot sprint shootout",
+    15: "Race",
+    16: "Race 2",
+    17: "Race 3",
+    18: "Time trial",
+}
+
+
+def session_label(session_type: int, weekend_structure: Sequence[int] = ()) -> str:
+    """Display name for a session type. A race with another race later in the
+    weekend structure is a sprint."""
+    if (
+        session_kind(session_type) == "race"
+        and session_type in weekend_structure
+        and sum(1 for t in weekend_structure if session_kind(t) == "race") > 1
+    ):
+        later = weekend_structure[weekend_structure.index(session_type) + 1 :]
+        if any(session_kind(t) == "race" for t in later):
+            return "Sprint"
+        return "Race"
+    return _LABELS.get(session_type, f"Session {session_type}")
+
+
+def weekend_order(weekend_structure: Sequence[int]) -> list[str]:
+    """Display labels for each session in the weekend structure."""
+    return [session_label(t, weekend_structure) for t in weekend_structure]
 
 
 # Sparse: 1, 8, 18, 21-25, 28 and 33-38 are absent in F1 26.

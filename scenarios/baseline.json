@@ -1,0 +1,329 @@
+{
+  "created_at": "2026-10-07T08:53:05.515458+00:00",
+  "metrics": {
+    "by_rule": {},
+    "check_pass_rate": 0.8823529411764706,
+    "checks_passed": 15,
+    "checks_total": 17,
+    "guards_passed": 5,
+    "guards_total": 5,
+    "laps_of_pace_mae": null,
+    "real_accuracy": null,
+    "real_good": 0,
+    "real_graded": 0,
+    "score": 88.2,
+    "stop_cost_mae_s": null,
+    "targets_passed": 0,
+    "targets_total": 2
+  },
+  "scenarios": {
+    "brazil-penalty": {
+      "checks": [
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_corner_cut"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Five second corner-cutting penalty on lap 5"
+    },
+    "brazil-race-real": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "plan_announce"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            9
+          ],
+          "laps": [
+            7,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "plan_window_open"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "vsc_deployed",
+            "sc_ending",
+            "vsc_ending",
+            "sc_restart",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Brazil race as recorded"
+    },
+    "brazil-sc-early": {
+      "checks": [
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            6,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            8,
+            8
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            9
+          ],
+          "laps": [
+            9,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed",
+            "vsc_ending",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Safety car on laps 6 to 8, before the window"
+    },
+    "brazil-sc-in-window": {
+      "checks": [
+        {
+          "found": [
+            10
+          ],
+          "laps": [
+            10,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            11
+          ],
+          "laps": [
+            11,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            10,
+            11
+          ],
+          "ok": false,
+          "rules": [
+            "plan_sc_box",
+            "box_now"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "fail",
+      "status": "target",
+      "title": "Safety car on laps 10 and 11, inside the window"
+    },
+    "brazil-vsc-early": {
+      "checks": [
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            6,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            7
+          ],
+          "laps": [
+            7,
+            7
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "sc_ending",
+            "sc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Virtual safety car on laps 6 and 7"
+    },
+    "brazil-worn-tyres": {
+      "checks": [
+        {
+          "found": [
+            3,
+            6,
+            15
+          ],
+          "laps": [
+            1,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "tyre_life"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            8,
+            16
+          ],
+          "laps": [
+            7,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "box_now"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Tyre wear three times faster"
+    },
+    "brazil-worn-tyres-late-stop": {
+      "checks": [
+        {
+          "found": [
+            8,
+            16
+          ],
+          "laps": [
+            15,
+            17
+          ],
+          "ok": false,
+          "rules": [
+            "box_now"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "fail",
+      "status": "target",
+      "title": "No second stop with two laps left"
+    }
+  },
+  "version": 1
+}

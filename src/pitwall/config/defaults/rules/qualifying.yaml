@@ -4,7 +4,7 @@ rules:
   - id: release_go
     sessions: [practice, qualifying]
     priority: 2
-    when: "phase == 'garage' and release_clean and time_for_out_lap and session_time_left > 60"
+    when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and release_clean and time_for_out_lap and session_time_left > 60"
     clear_when: "not release_clean or phase != 'garage'"
     cooldown_s: 30
     cooldown_group: release
@@ -16,7 +16,7 @@ rules:
   - id: release_hold
     sessions: [practice, qualifying]
     priority: 2
-    when: "phase == 'garage' and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and time_for_out_lap and session_time_left > 60"
+    when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and time_for_out_lap and session_time_left > 60"
     clear_when: "release_clean or phase != 'garage'"
     cooldown_s: 30
     cooldown_group: release
@@ -170,6 +170,11 @@ rules:
     say:
       - "{run_plan_why}, no time to cool. Push, battery {ers_store_pct:.0f}"
       - "{run_plan_why}. No cool lap, go again"
+    severity:
+      - when: "run_plan_reason == 'fuel'"
+        say:
+          - "{run_plan_why}. Push, battery {ers_store_pct:.0f}"
+          - "{run_plan_why}. Go again"
     on_ack:
       - "Copy. Go get it"
       - "Copy that"
@@ -355,3 +360,14 @@ rules:
     say:
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Push from the line"
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Go"
+  # Grid drop picked up in quali or a sprint shootout: it moves the race start.
+  - id: grid_penalty
+    sessions: [practice, qualifying]
+    priority: 2
+    when: "grid_penalty_recent and grid_penalty_places > 0"
+    clear_when: "not grid_penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "Grid penalty. {grid_penalty_places} places back for the race"
+      - "{grid_penalty_places} place grid penalty for the race"

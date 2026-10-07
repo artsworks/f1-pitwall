@@ -8,16 +8,23 @@ Schema reconciliation restores objects missing because an applied migration chan
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from pitwall.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
+
+_ADD_COLUMN_RE = re.compile(
+    r"^\s*ALTER\s+TABLE\s+([^\s]+)\s+ADD\s+COLUMN\s+([^\s]+)",
+    re.IGNORECASE,
+)
 
 if TYPE_CHECKING:
     from pitwall.model.deg import DegFit
@@ -308,6 +315,15 @@ MIGRATIONS: list[str] = [
     ALTER TABLE bookmarks ADD COLUMN kind TEXT NOT NULL DEFAULT 'hold';
     ALTER TABLE bookmarks ADD COLUMN context TEXT;
     """,
+    # 12: synthetic sessions from pitwall derive.
+    """
+    ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';
+    """,
+    # 13: weekend structure per session.
+    """
+    ALTER TABLE sessions ADD COLUMN weekend_structure TEXT DEFAULT '';
+    """,
 ]
 
 
@@ -404,6 +420,7 @@ class WeekendStint:
     n_valid_laps: int
     deg_ms_per_lap: float
     fuel_ms_per_lap: float | None = None  # prior fuel slope the fit assumed; None if fitted
+    rmse_ms: float = 0.0
 
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
@@ -468,9 +485,35 @@ class Database:
         version = self._version()
         for i in range(version, len(MIGRATIONS)):
             with self._conn:
-                self._conn.executescript(MIGRATIONS[i])
+                pending = ""
+                statements: list[str] = []
+                for char in MIGRATIONS[i]:
+                    pending += char
+                    if char == ";" and sqlite3.complete_statement(pending):
+                        statements.append(pending)
+                        pending = ""
+                if pending.strip():
+                    statements.append(pending)
+                for statement in statements:
+                    match = _ADD_COLUMN_RE.match(statement)
+                    if match:
+                        table = match.group(1).strip('"`[]')
+                        column = match.group(2).strip('"`[]')
+                        columns = {
+                            str(row[1]).casefold()
+                            for row in self._conn.execute(f"PRAGMA table_info({table})")
+                        }
+                        if column.casefold() in columns:
+                            continue
+                    self._conn.execute(statement)
                 self._conn.execute(f"PRAGMA user_version={i + 1}")
+        self._ensure_column("sessions", "synthetic", "INT DEFAULT 0")
+        self._ensure_column("sessions", "derived_from", "TEXT DEFAULT ''")
+        self._ensure_column("call_grades", "source", "TEXT NOT NULL DEFAULT 'human'")
+        self._ensure_column("bookmarks", "kind", "TEXT NOT NULL DEFAULT 'hold'")
+        self._ensure_column("bookmarks", "context", "TEXT")
         self._ensure_column("laps", "visual", "INT DEFAULT 0")
+        self._ensure_column("sessions", "weekend_structure", "TEXT DEFAULT ''")
         self._reconcile_schema()
 
     def _reconcile_schema(self) -> None:
@@ -601,15 +644,17 @@ class Database:
         recording_path: str = "",
         game_mode: int = 0,
         weekend_link: int = 0,
+        weekend_structure: Sequence[int] = (),
         calls_mode: str = "",
         parc_ferme: int | None = None,
+        synthetic: bool = False,
     ) -> None:
         with self.transaction():
             self._conn.execute(
                 "INSERT INTO sessions(uid, track_id, session_type, started_at,"
                 " game_version, config_hash, weather, recording_path, game_mode,"
-                " weekend_link, calls_mode, parc_ferme)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)"
+                " weekend_link, calls_mode, parc_ferme, synthetic, weekend_structure)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(uid) DO UPDATE SET"
                 " track_id=excluded.track_id, session_type=excluded.session_type,"
                 " game_version=excluded.game_version,"
@@ -617,7 +662,11 @@ class Database:
                 " recording_path=excluded.recording_path,"
                 " game_mode=excluded.game_mode, weekend_link=excluded.weekend_link,"
                 " calls_mode=excluded.calls_mode,"
-                " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme)",
+                " parc_ferme=COALESCE(excluded.parc_ferme, sessions.parc_ferme),"
+                " synthetic=MAX(COALESCE(sessions.synthetic, 0), excluded.synthetic),"
+                " weekend_structure=CASE WHEN excluded.weekend_structure<>''"
+                " THEN excluded.weekend_structure"
+                " ELSE COALESCE(sessions.weekend_structure,'') END",
                 (
                     _uid_to_sql(uid),
                     track_id,
@@ -631,6 +680,8 @@ class Database:
                     weekend_link,
                     calls_mode,
                     parc_ferme,
+                    int(synthetic),
+                    ",".join(str(t) for t in weekend_structure),
                 ),
             )
 
@@ -741,7 +792,12 @@ class Database:
                     _bool_to_sql(record.get("on_plan")),
                 ),
             )
-        if outcome in ("ack", "neg") and record.get("call_id") and record.get("grade"):
+        if (
+            outcome in ("ack", "neg")
+            and record.get("call_id")
+            and record.get("grade")
+            and not is_synthetic_uid(session_uid)
+        ):
             grade_call_id = record.get("grade_call_id") or record["call_id"]
             self.grade_call(
                 session_uid,
@@ -902,6 +958,13 @@ class Database:
         with self.transaction():
             self._conn.execute(
                 "UPDATE sessions SET total_laps=? WHERE uid=?", (total_laps, _uid_to_sql(uid))
+            )
+
+    def set_weekend_structure(self, uid: int, structure: Sequence[int]) -> None:
+        with self.transaction():
+            self._conn.execute(
+                "UPDATE sessions SET weekend_structure=? WHERE uid=?",
+                (",".join(str(t) for t in structure), _uid_to_sql(uid)),
             )
 
     def set_session_parc_ferme(self, uid: int, value: int) -> None:
@@ -1276,7 +1339,7 @@ class Database:
         return [self._stint_row(row) for row in rows]
 
     def weekend_stints(self, uid: int, track_id: int, compound: int) -> list[WeekendStint]:
-        """Earlier fitted practice stints in the same track weekend."""
+        """Earlier fitted practice and Sprint stints in the same track weekend."""
         current = self.session_row(uid)
         if current is None:
             return []
@@ -1288,15 +1351,18 @@ class Database:
             " st.n_valid_laps, st.deg_params FROM stints st"
             " JOIN sessions se ON se.uid=st.session_uid"
             " WHERE se.track_id=? AND st.compound=? AND se.uid<>?"
+            " AND COALESCE(se.synthetic, 0)=0"
             " AND se.started_at<? ORDER BY se.started_at, st.start_lap",
             (track_id, compound, _uid_to_sql(uid), started_at),
         ).fetchall()
         result: list[WeekendStint] = []
         for row in rows:
             try:
-                if session_kind(int(row["session_type"])) != "practice":
-                    continue
+                session_type = int(row["session_type"])
             except ValueError:
+                continue
+            kind = session_kind(session_type)
+            if kind != "practice" and not (kind == "race" and session_type == 15):
                 continue
             prior_link = int(row["weekend_link"] or 0)
             if weekend_link and prior_link:
@@ -1320,6 +1386,7 @@ class Database:
                         if "fuel_ms_per_lap" in params and not params.get("fuel_fitted")
                         else None
                     ),
+                    rmse_ms=float(params.get("rmse_ms", 0.0)),
                 )
             )
         return result
@@ -1522,7 +1589,8 @@ class Database:
             "SELECT se.track_id, se.session_type, se.total_laps, st.session_uid,"
             " st.compound, st.start_lap, st.end_lap, st.n_valid_laps, st.deg_params"
             " FROM stints st"
-            " JOIN sessions se ON se.uid=st.session_uid WHERE st.car_idx=0"
+            " JOIN sessions se ON se.uid=st.session_uid"
+            " WHERE st.car_idx=0 AND COALESCE(se.synthetic, 0)=0"
             " ORDER BY se.started_at, se.uid, st.start_lap",
             (),
         )
@@ -1545,11 +1613,23 @@ class Database:
         started_at: float,
         recording_path: str,
         calls_mode: str,
+        synthetic: bool = False,
+        derived_from: str = "",
     ) -> None:
         with self.transaction():
             self._conn.execute(
-                "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=? WHERE uid=?",
-                (started_at, recording_path, calls_mode, _uid_to_sql(uid)),
+                "UPDATE sessions SET started_at=?, recording_path=?, calls_mode=?,"
+                " synthetic=MAX(COALESCE(synthetic, 0), ?),"
+                " derived_from=CASE WHEN ?<>'' THEN ? ELSE derived_from END WHERE uid=?",
+                (
+                    started_at,
+                    recording_path,
+                    calls_mode,
+                    int(synthetic),
+                    derived_from,
+                    derived_from,
+                    _uid_to_sql(uid),
+                ),
             )
 
     def mark_ingested(self, uid: int, digest_version: int, path: str) -> None:
@@ -1589,6 +1669,36 @@ class Database:
                 row["uid"] = _uid_from_sql(int(row["uid"]))
             return rows
         return self.sessions_for_track(track_id)
+
+    def weekend_session_types(self, weekend_link: int, track_id: int) -> tuple[int, ...]:
+        """Session types of the non-synthetic sessions sharing a weekend link,
+        in started order. Fallback for rows with no stored structure."""
+        if not weekend_link:
+            return ()
+        rows = self._conn.execute(
+            "SELECT session_type FROM sessions WHERE weekend_link=? AND track_id=?"
+            " AND COALESCE(synthetic, 0)=0 ORDER BY started_at",
+            (weekend_link, track_id),
+        ).fetchall()
+        return tuple(int(row[0]) for row in rows)
+
+    def stored_weekend_structure(self, row: Mapping[str, Any]) -> tuple[int, ...]:
+        """A session row's stored weekend structure, else the sibling lookup.
+        Drives the Sprint/Race label in stored views."""
+        stored = str(row.get("weekend_structure") or "")
+        if stored:
+            parsed: list[int] = []
+            for token in stored.split(","):
+                try:
+                    parsed.append(int(token))
+                except ValueError:
+                    continue
+            if parsed:
+                return tuple(parsed)
+        return self.weekend_session_types(
+            int(row.get("weekend_link") or 0),
+            -1 if row.get("track_id") is None else int(row["track_id"]),
+        )
 
     def session(self, uid: int) -> dict[str, Any] | None:
         row = self._conn.execute(

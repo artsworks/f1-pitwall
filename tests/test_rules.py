@@ -349,12 +349,53 @@ def test_race_pit_exit_traffic_is_gated_and_shares_cooldown() -> None:
     )
     result = engine.evaluate(at_exit)
     ids = {c.rule.defn.id for c in result.candidates}
-    assert {"pit_exit_traffic", "pit_exit_traffic_race"} <= ids
+    assert "pit_exit_traffic_race" in ids and "pit_exit_traffic" not in ids
     dispatcher = Dispatcher(PolicySettings(min_gap_s=0.0), VirtualClock(), sinks=[])
     dispatcher.submit(result.candidates, at_exit)
     calls = dispatcher.drain(1.0)
     assert len(calls) == 1
-    assert calls[0].rule_id == "pit_exit_traffic"
+    assert calls[0].rule_id == "pit_exit_traffic_race"
+
+
+@pytest.mark.parametrize("name", ["HAMILTON", ""])
+def test_race_pit_exit_holds_the_line(name: str) -> None:
+    """Silverstone race L10, 891.0 s: out of the pits with a car 0.4 s behind on
+    track. pit_exit_traffic said "Traffic at exit. Let it go." The race rule
+    missed: its pit-exit rival (LAWSON) was the stop projection, 7.1 s back."""
+    snap = _snap(
+        lap_num=10,
+        phase="out_lap",
+        pit_exit_s=0.07,
+        rival_pit_exit_name="LAWSON",
+        pit_exit_rival_gap_s=-7.11,
+        traffic_behind_s=0.4,
+        traffic_behind_name=name,
+    )
+    cands = {c.rule.defn.id: c for c in _default_rule_engine().evaluate(snap).candidates}
+    assert "pit_exit_traffic" not in cands
+    text = cands["pit_exit_traffic_race"].text
+    assert "Hold" in text and "LAWSON" not in text and (name or "Car") in text
+    from pitwall.config.loader import ConfigStore
+
+    rule = next(r for r in ConfigStore().current().rules if r.id == "pit_exit_traffic_race")
+    lines = [*rule.say, *(line for tier in rule.severity for line in tier.say)]
+    assert not any(
+        w in line.lower()
+        for line in lines
+        for w in ("let it go", "off the line", "give way", "yield")
+    )
+
+
+def test_quali_pit_exit_traffic_still_gives_way() -> None:
+    snap = _snap(
+        session_kind="qualifying",
+        session_type=5,
+        phase="out_lap",
+        pit_exit_s=1.0,
+        traffic_behind_s=0.4,
+    )
+    ids = {c.rule.defn.id for c in _default_rule_engine().evaluate(snap).candidates}
+    assert "pit_exit_traffic" in ids and "pit_exit_traffic_race" not in ids
 
 
 def test_one_decimal_call_copy() -> None:
@@ -394,3 +435,150 @@ def test_one_decimal_call_copy() -> None:
     )
     under_threat = next(c for c in threat.candidates if c.rule.defn.id == "battle_under_threat")
     assert "0.4 laps" in under_threat.text
+
+
+@pytest.mark.parametrize(("lop", "plural"), [(1.03, False), (3.2, True)])
+def test_tyre_life_one_lap_is_singular(lop: float, plural: bool) -> None:
+    """Silverstone race, lap 3: laps_of_pace 1.03 read "About 1 laps left"."""
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            lap_num=6,
+            laps_remaining=10,
+            laps_of_pace=lop,
+            _ages={"lap_data": 0.1, "car_damage": 0.1},
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == "tyre_life")
+    assert ("laps" in text) == plural
+    assert "1 lap" not in text
+
+
+def test_battle_catching_never_says_zero_laps() -> None:
+    """Silverstone sprint, lap 2: battle_catch_laps 0.0 read "On him in 0.0 laps"."""
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            lap_num=2,
+            laps_remaining=3,
+            battle_mode="catching",
+            battle_catch_laps=0.0,
+            rival_ahead_name="HAMILTON",
+            battle_pace_ahead="1.5 seconds faster",
+            gap_ahead_s=1.2,
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == "battle_catching")
+    assert "0.0 laps" not in text
+    assert "HAMILTON" in text
+
+
+def test_qualifying_rules_run_in_sprint_shootout() -> None:
+    base = {
+        "session_kind": "qualifying",
+        "session_type": 10,
+        "phase": "in_lap",
+        "_ages": {"lap_data": 0.1, "session_history": 0.1},
+    }
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine()
+        .evaluate(_snap(**base, quali_margin_ms=1_200, quali_margin_s=1.2, quali_margin_kind="cut"))
+        .candidates
+    }
+    assert "quali_safe_cut" in ids
+
+
+def test_grid_penalty_rule_fires_in_qualifying() -> None:
+    result = _default_rule_engine().evaluate(
+        _snap(
+            session_kind="qualifying",
+            session_type=10,
+            grid_penalty_recent=True,
+            grid_penalty_places=5,
+            _ages={"event": 0.1},
+        )
+    )
+    texts = {c.rule.defn.id: c.text for c in result.candidates}
+    assert "5" in texts["grid_penalty"]
+    clear = _default_rule_engine().evaluate(
+        _snap(session_kind="qualifying", session_type=10, _ages={"event": 0.1})
+    )
+    assert "grid_penalty" not in {c.rule.defn.id for c in clear.candidates}
+
+
+def test_rival_pace_drops_steep_gap_trend() -> None:
+    """Silverstone race, L3 205 s: PÉREZ last lap 96.324 s vs ours 94.284 s (over
+    the 1.5 s lap-time band), gap trend -7.23 s read "7.2 seconds slower"."""
+    from pitwall.engine import _rival_pace
+    from pitwall.state.session import CarLap
+
+    snap = _snap(cars=(CarLap(last_lap_time_ms=96_324),), player_last_lap_ms=94_284)
+    assert _rival_pace(snap, 0, -7.23) == ""
+    assert _rival_pace(snap, 0, -0.6) == "six tenths slower"
+
+
+@pytest.mark.parametrize(
+    ("mode", "rule", "extra"),
+    [
+        ("defending", "battle_defend", {"sector": 0, "battle_closing_behind_s": -7.23}),
+        ("defending", "battle_defend", {"sector": 0, "battle_closing_behind_s": 2.0}),
+        ("under_threat", "battle_under_threat", {"sector": 1, "battle_threat_laps": 5.0}),
+    ],
+)
+def test_battle_behind_without_pace_words(mode: str, rule: str, extra: dict[str, object]) -> None:
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            lap_num=3,
+            laps_remaining=10,
+            battle_mode=mode,
+            battle_pace_behind="",
+            rival_behind_name="PÉREZ",
+            gap_behind_s=0.533,
+            **extra,
+        )
+    )
+    text = next(c.text for c in result.candidates if c.rule.defn.id == rule)
+    assert "slower" not in text and "faster" not in text
+    assert ", ." not in text and not text.endswith(", ")
+
+
+def test_release_calls_wait_for_the_garage_settle() -> None:
+    """Silverstone Q1: the car went from flying (lap 4) to the garage at 495.9 s
+    and release_hold fired at 496.2 s, 0.3 s after the return."""
+    base: dict[str, object] = {
+        "session_kind": "qualifying",
+        "session_type": 5,
+        "phase": "garage",
+        "release_clean": False,
+        "release_wait_s": 8.0,
+        "time_for_out_lap": True,
+        "session_time_left": 600.0,
+        "_ages": {"lap_data": 0.1, "session": 0.1, "car_telemetry": 0.1},
+    }
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine().evaluate(_snap(**base, garage_s=0.3)).candidates
+    }
+    assert "release_hold" not in ids
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine().evaluate(_snap(**base, garage_s=10.0)).candidates
+    }
+    assert "release_hold" in ids
+
+
+def test_garage_s_counts_engine_time_since_garage_entry() -> None:
+    from pitwall.protocol.enums import DriverStatus
+    from pitwall.state.session import SessionState
+
+    st = SessionState()
+    st.session_type = 5
+    st.driver_status = DriverStatus.IN_GARAGE
+    assert st.snapshot(100.0).garage_s == 0.0
+    assert st.snapshot(110.5).garage_s == pytest.approx(10.5)
+    st.driver_status = DriverStatus.OUT_LAP
+    assert st.snapshot(111.0).garage_s == 0.0

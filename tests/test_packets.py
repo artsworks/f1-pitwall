@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from pitwall.protocol.enums import session_kind
+from pitwall.protocol.enums import session_kind, session_label, weekend_order
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.protocol.layouts import Corners
 from pitwall.protocol.packets import (
@@ -351,8 +351,8 @@ def test_car_telemetry_2_parse() -> None:
         (4, "practice"),
         (5, "qualifying"),
         (9, "qualifying"),
-        (10, "sprint_shootout"),
-        (14, "sprint_shootout"),
+        (10, "qualifying"),
+        (14, "qualifying"),
         (15, "race"),
         (17, "race"),
         (18, "time_trial"),
@@ -361,3 +361,33 @@ def test_car_telemetry_2_parse() -> None:
 )
 def test_session_kind(session_type: int, expected: str) -> None:
     assert session_kind(session_type) == expected
+
+
+def test_session_label_without_weekend_structure() -> None:
+    assert session_label(15) == "Race"
+    assert session_label(16) == "Race 2"
+    assert session_label(10) == "SQ1"
+    assert session_label(99) == "Session 99"
+
+
+def test_weekend_order_labels_sprint_race() -> None:
+    assert weekend_order((1, 10, 11, 12, 15, 5, 6, 7, 16)) == [
+        "FP1",
+        "SQ1",
+        "SQ2",
+        "SQ3",
+        "Sprint",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Race",
+    ]
+    assert weekend_order((1, 2, 3, 5, 6, 7, 15)) == [
+        "FP1",
+        "FP2",
+        "FP3",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Race",
+    ]

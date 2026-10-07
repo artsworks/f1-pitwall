@@ -77,7 +77,12 @@ def _recording(path: Path, uid: int) -> Path:
         dt=1.0,
         send_session_end=True,
     )
-    return write_packet_stream(path, race_stream(spec), session_uid=uid)
+    return write_packet_stream(
+        path,
+        race_stream(spec),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
 
 
 def _counts(db: Database) -> tuple[int, ...]:
@@ -122,7 +127,7 @@ def test_ingest_relabels_legacy_off_header(tmp_path: Path) -> None:
         tmp_path / "legacy.f1bin",
         race_stream(spec),
         session_uid=uid,
-        metadata={"calls_mode": "off"},
+        metadata={"calls_mode": "off", "synthetic": False},
     )
     settings = ConfigStore().current()
     ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
@@ -236,7 +241,7 @@ def test_ingest_relabels_already_ingested_legacy_session(tmp_path: Path) -> None
         tmp_path / "legacy.f1bin",
         race_stream(spec),
         session_uid=uid,
-        metadata={"calls_mode": "off"},
+        metadata={"calls_mode": "off", "synthetic": False},
     )
     settings = ConfigStore().current()
     ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")

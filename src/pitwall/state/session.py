@@ -134,6 +134,7 @@ SECTOR3_VALID = 0x08
 # PENA penalty_type -> announced kind. Other types (warning 5, lap invalidated
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
+PENALTY_TYPE_GRID = 2
 PENALTY_TYPE_WARNING = 5
 
 
@@ -461,6 +462,8 @@ class Snapshot:
     penalty_infringement: int = 0
     penalty_time_s: int = 0
     penalty_kind: str = ""  # 'time' | 'drive_through' | 'stop_go' for the latest real penalty
+    grid_penalty_places: int = 0  # places the player drops on the race grid
+    grid_penalty_recent: bool = False
     unserved_drive_through: int = 0
     unserved_stop_go: int = 0
     warnings: int = 0
@@ -609,6 +612,7 @@ class Snapshot:
     cool_extend: bool = False  # cool lap ending short of battery, time for another
     time_for_cool_and_hot: bool = False  # finish this lap slow, then one more hot lap
     time_for_out_lap: bool = True  # leaving the garage now still starts a hot lap
+    garage_s: float = 0.0  # engine-clock seconds since the car last entered the garage
     dist_to_hot_mode_m: float = 0.0
     last_hot: HotLap | None = None
     last_hot_mistakes: str = ""
@@ -635,6 +639,7 @@ class Snapshot:
     traffic_behind_m: float = math.inf
     traffic_behind_s: float = math.inf
     traffic_behind_kind: str = ""
+    traffic_behind_name: str = ""
     dist_to_line_m: float = math.inf
     pit_exit_s: float = math.inf  # since the player left the pit lane
     _ages: dict[str, float] = field(default_factory=dict)
@@ -645,7 +650,9 @@ class Snapshot:
 
     @property
     def fuel_margin_r(self) -> float:
-        return round(self.fuel_margin_laps, 1) + 0.0
+        """Margin rounded for speech. A deficit never reads as +0.0."""
+        r = round(self.fuel_margin_laps, 1) + 0.0
+        return min(r, -0.1) if self.fuel_margin_laps < 0 else r
 
     @property
     def positions_lost(self) -> int:
@@ -766,6 +773,8 @@ class SessionState:
         self._last_rewind_t: float | None = None
         self._was_in_garage = False
         self._pit_exit_t: float | None = None
+        self._cool_latch: tuple[float, bool] | None = None
+        self._garage_since: float | None = None
 
         # player lap data
         self.lap_num = 0
@@ -918,6 +927,9 @@ class SessionState:
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
+        self.grid_penalty_places = 0
+        self._last_grid_penalty_st: float | None = None
+        self._grid_penalty_events: list[tuple[float, int]] = []
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
@@ -1105,12 +1117,20 @@ class SessionState:
             self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
         self.track_warning_kind = self._warning_events[-1][1] if self._warning_events else ""
         self._last_track_warning_st = self._warning_events[-1][0] if self._warning_events else None
+        self._grid_penalty_events = [
+            (when, places) for when, places in self._grid_penalty_events if when <= t
+        ]
+        self.grid_penalty_places = sum(places for _, places in self._grid_penalty_events)
+        self._last_grid_penalty_st = (
+            self._grid_penalty_events[-1][0] if self._grid_penalty_events else None
+        )
         self._penalty_pending_s = 0
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st = None
         self._last_penalty_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
+        self._cool_latch = None
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
@@ -1358,12 +1378,19 @@ class SessionState:
         )
 
     def _cool_extend(self) -> bool:
-        """Cool lap ending with too little battery and time for another cool lap."""
-        return (
-            self.run.kind == COOL
-            and self.ers_store_pct < self._ers_need_pct()
-            and self._time_for_cool_and_hot()
-        )
+        """Cool lap ending with too little battery and time for another cool lap.
+        Fixed from the hot-mode point to the line, so pushing for the line
+        cannot flip "hot lap mode" into "one more cool lap"."""
+        if self.run.kind != COOL:
+            return False
+        latch = self._cool_latch
+        if latch is not None and latch[0] == self.run.cool_start_t:
+            return latch[1]
+        extend = self.ers_store_pct < self._ers_need_pct() and self._time_for_cool_and_hot()
+        hot_mode_m = self.track_length_m - self._th("cool_hot_mode_m", 600.0)
+        if self.track_length_m > 0 and self.lap_distance >= hot_mode_m:
+            self._cool_latch = (self.run.cool_start_t, extend)
+        return extend
 
     def _ers_need_pct(self) -> float:
         """Battery wanted at the line to push: the configured floor, or what the
@@ -1466,6 +1493,14 @@ class SessionState:
                             self._penalty_pending_s = (
                                 max(self.penalty_s, self._penalty_pending_s) + self.penalty_time_s
                             )
+                if ptype == PENALTY_TYPE_GRID:
+                    self._grid_penalty_events.append(
+                        (pkt.header.session_time, int(pkt.detail.get("places_gained", 0)))
+                    )
+                    self.grid_penalty_places = sum(
+                        places for _, places in self._grid_penalty_events
+                    )
+                    self._last_grid_penalty_st = self._grid_penalty_events[-1][0]
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -1982,6 +2017,11 @@ class SessionState:
         st = self._last_session_time or 0.0
         kind = session_kind(self.session_type)
         phase = self._phase()
+        # engine clock, not session time: session time can jump while in the garage
+        if phase != "garage":
+            self._garage_since = None
+        elif self._garage_since is None:
+            self._garage_since = now
         inner = self._ema_or_zero(self.tyre_inner_fast)
         coldest = min(range(4), key=lambda i: inner.as_tuple()[i])
         lockup, lockup_wheel = self.lockups.recent(st)
@@ -2209,6 +2249,11 @@ class SessionState:
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
+            grid_penalty_places=self.grid_penalty_places,
+            grid_penalty_recent=(
+                self._last_grid_penalty_st is not None
+                and 0.0 <= st - self._last_grid_penalty_st <= self._th("penalty_recent_s", 10.0)
+            ),
             track_warning_kind=self.track_warning_kind,
             track_warning_count=self._track_warnings.get(
                 _warning_family(self.track_warning_kind), 0
@@ -2268,6 +2313,7 @@ class SessionState:
             release_gap_ahead_s=release.gap_ahead_s,
             release_gap_behind_s=release.gap_behind_s,
             release_clean=release.clean,
+            garage_s=0.0 if self._garage_since is None else now - self._garage_since,
             release_wait_s=0.0 if math.isinf(release.wait_s) else release.wait_s,
             cars_on_track=release.cars_on_track,
             quali_cutoff_ms=cutoff_ms,
@@ -2892,6 +2938,9 @@ class SessionState:
                 traffic_behind_m=round(behind[0]),
                 traffic_behind_s=round(behind[0] / max(speed, 30.0), 1),
                 traffic_behind_kind=_lap_kind(self.cars_lap[behind[1]].driver_status),
+                traffic_behind_name=(
+                    self.participants[behind[1]].name if behind[1] < len(self.participants) else ""
+                ),
             )
         return out
 

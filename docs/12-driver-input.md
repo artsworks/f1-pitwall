@@ -80,8 +80,9 @@ down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMA
 
 ## Radio silent
 
-Long press toggles radio silence by default. Choose "Radio silent" or bind
-`input.silent_toggle_bit` to use another control.
+Long press toggles radio silence by default. Bind `input.silent_toggle_bit` to use another control.
+
+A double press is always negative. It never toggles radio silence.
 
 - Speech stops; every call still reaches the dashboard's banner and radio log as normal.
 - P1 (urgent) calls still speak (`input.silent_keeps_p1`, default on).
@@ -96,10 +97,8 @@ Settings: `input.long_press` (`silent` | `bookmark`, default `silent` in `settin
 (default `0`: a dedicated toggle button), `input.silent_on_replies`,
 `input.silent_off_replies`.
 
-Unconfirmed on the wheel: recorded sessions so far only contain short taps (≤ 0.25 s), so
-whether F1 26 reports a *held* UDP Action as held (down … up after release) is untested.
-If a hold does not toggle, use the "Radio silent" menu item or set `input.silent_toggle_bit`
-to an unused UDP Action.
+The repo owner recorded a hold of about 1.1 s on UDP Action 1. The wheel reported down, then
+up, and radio silent toggled.
 
 ## Mindset and page buttons (M3)
 
@@ -152,8 +151,8 @@ only. Holding it may not hold the game key, so each key has one action.
 
 - The stick works like a d-pad: up/down scroll, right selects, left backs out. The whole
   menu is one thumb; Action 1 also confirms.
-- Radio silent has no separate button. Hold Action 1 or pick "Radio silent" in the menu.
-  Set `input.silent_toggle_bit` to an unused UDP Action for a separate toggle.
+- Hold Action 1 to toggle radio silent. Set `input.silent_toggle_bit` to an unused UDP Action
+  for a separate toggle.
   `input.silent_toggle_bit` and `input.menu_close_bit` still exist (default `0`).
 - `input.menu_open_actions` (`page`, `mindset`: `confirm` | `close` | `""`) decides what
   those two buttons do while the menu is open; `""` keeps their usual action.
@@ -196,8 +195,8 @@ or `id`) picks the case from the current snapshot and fills the placeholders; va
 rotate per item and case. No language model is involved (ADR 0008). `pitwall rules
 check` validates ids, handlers and placeholders.
 
-The scroll list order is Tyres gone?, Pit now?, Fight, Rain coming?, Push or save?, and
-Radio silent. Items with `shortcut_only: true` do not appear in that list.
+The scroll list order is Tyres gone?, Pit now?, Fight, Rain coming?, and Push or save?.
+Radio silent is shortcut-only. Items with `shortcut_only: true` do not appear in that list.
 They remain available through a shortcut or voice intent with the same item id.
 
 Items may also carry `show_when` / `rank_when` expressions that use the snapshot:
@@ -211,7 +210,7 @@ The list stays frozen while the menu is open. Wheel-right (UDP Action 4) cycles 
 | Fight | question | race: both / ahead / behind / none; other sessions: times / no_time | "P4, 12 to go. Clear air." |
 | Rain coming? | question | switch / right_tyre / crossover / coming / chance / dry | "Rain coming. 60 percent in ten." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / fuel_tight / attack / push | "Push, fuel's tight. Plus 0.2 laps." |
-| Radio silent | action | — | Toggles radio silence |
+| Radio silent | shortcut-only action | — | Toggles radio silence |
 | Understeer | shortcut-only opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
 | Oversteer | shortcut-only opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
 | Radio calls | shortcut-only action | default (`budget`) | Cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` |

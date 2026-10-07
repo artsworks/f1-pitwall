@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from pitwall.cli import main
+from pitwall.derive import derived_uid
 from pitwall.digest import (
     build_digest,
     call_quality,
@@ -179,6 +180,32 @@ def test_quality_trend_stops_after_recent_fired_sessions_and_orders_oldest_first
         "delta_pct": 10.0,
         "sessions": 2,
     }
+
+
+def test_quality_trend_excludes_synthetic_db_and_ledger_sessions(tmp_path) -> None:
+    db = Database(":memory:")
+    real_uid = 81
+    synthetic_uid = derived_uid(real_uid, ["wear_scale:3"])
+    ledger_uid = derived_uid(82, ["wear_scale:3"])
+    for uid, started_at in ((real_uid, 100.0), (synthetic_uid, 200.0)):
+        db.upsert_session(uid, track_id=2, session_type=15, started_at=started_at)
+        db.insert_call(
+            uid,
+            {"outcome": "fired", "call_id": "call-1", "rule_id": "tyre_temp"},
+        )
+        db.grade_call(uid, "call-1", "tyre_temp", "good")
+
+    pack_dir = tmp_path / "pack"
+    pack_dir.mkdir()
+    ledger_quality = {"fired": 1, "good_pct": 100.0}
+    (pack_dir / "track_ledger.jsonl").write_text(
+        json.dumps({"uid": ledger_uid, "quality": ledger_quality}) + "\n",
+        encoding="utf-8",
+    )
+
+    report = quality_trend(db, pack_dir=pack_dir)
+
+    assert [row["uid"] for row in report["sessions"]] == [real_uid]
 
 
 def test_startup_scorecard_formats_minutes_and_quality_trend(monkeypatch) -> None:

@@ -1,7 +1,7 @@
 # Driver -> pit wall menu (docs/12). Up/Down (UDP Action 2/3) open and scroll,
 # UDP Action 1 confirms, and a double press closes.
-# Down from closed opens on the first item, Up from closed on the last one,
-# so the last scroll item sits one Up-press away.
+# Down from closed opens on the first item. Up opens on the last scroll item.
+# Shortcut-only items stay out of the scroll list.
 # Replies are deterministic templates (ADR 0008): the case is picked from the
 # snapshot, variants rotate. Placeholders: see pitwall.input.menu.TEMPLATE_KEYS.
 # The list is situational: on open, items whose `show_when` is false are hidden
@@ -166,5 +166,6 @@ menu:
       action: mindset
     - id: silent
       label: "Radio silent"
+      shortcut_only: true
       kind: action
       action: silent

@@ -366,6 +366,9 @@ _assert_sizes()
 
 # Byte offsets of named fields inside a packet body (index/seek helpers).
 SESSION_TYPE_OFFSET = HEADER_SIZE + _compiled(SESSION_LAYOUT).offsets["session_type"]
+SESSION_SAFETY_CAR_STATUS_OFFSET = (
+    HEADER_SIZE + _compiled(SESSION_LAYOUT).offsets["safety_car_status"]
+)
 
 
 def car_field_offset(packet_id: int, car_idx: int, field_name: str) -> int:

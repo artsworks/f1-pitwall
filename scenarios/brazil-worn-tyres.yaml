@@ -1,0 +1,14 @@
+id: brazil-worn-tyres
+title: Tyre wear three times faster
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  wear_scale: 3.0
+expect:
+  fire:
+    - {rule: tyre_life, laps: [1, 6]}
+    - {rule: box_now, laps: [7, 11]}
+why: With wear three times faster, the first set is past 45 percent by lap 6. Pitwall must warn and call the stop inside the window.

@@ -43,6 +43,26 @@ def test_set_track_merges_overlay_thresholds(
     assert s.thresholds["deg_min_laps"] == 5
 
 
+def test_isolated_store_skips_track_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    overlays = home / ".pitwall" / "tracks"
+    overlays.mkdir(parents=True)
+    (overlays / "7.yaml").write_text("pit_loss_s: {green: 19.0}\n")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing-profile.yaml"))
+
+    configured = ConfigStore()
+    configured.set_track(7)
+    assert configured.current().track is not None
+    assert configured.current().track.pit_loss_s["green"] == 19.0
+
+    isolated = ConfigStore(isolated=True)
+    isolated.set_track(7)
+    assert isolated.current().track is None
+
+
 def test_missing_track_overlay_gives_none() -> None:
     store = ConfigStore()
     store.set_track(7)

@@ -1,0 +1,17 @@
+id: brazil-sc-early
+title: Safety car on laps 6 to 8, before the window
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "6-8"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [6, 6]}
+    - {rule: sc_ending, laps: [8, 8]}
+    - {rule: sc_restart, laps: [9, 9]}
+  absent:
+    - {rule: [vsc_deployed, vsc_ending, vsc_restart], laps: [1, 17]}
+why: The safety car calls must fire in order, on the laps the safety car is out.

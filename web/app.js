@@ -278,7 +278,7 @@
     var phase = (p.phase || "--").replace("_", " ").toUpperCase();
     setText("phase", phase);
     setClass("phase", p.phase === "out_lap" ? "amber" : "");
-    setText("session", (p.session_kind || "--").toUpperCase() + " · " +
+    setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
     setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");
@@ -331,6 +331,7 @@
     renderQRail(p.quali, p);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
+    renderRivals(p.strategy, p.position);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -460,6 +461,42 @@
     rivalRow("s-ahead", s.ahead, "ahead", s);
     rivalRow("s-behind", s.behind, "behind", s);
     renderStint(el("s-stint"), s, ap);
+  }
+
+  // Car and Track pages: one block per car. Colours follow the driver: green
+  // when the gap moves his way, red when it moves against him.
+  function rivalBlock(n, r, side, pos) {
+    n.innerHTML = "";
+    n.className = "rv";
+    n.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "rv-side"));
+    if (!r) {
+      n.appendChild(span(side === "ahead" && pos === 1 ? "leading" : "nobody close", "rv-none"));
+      return;
+    }
+    var nogap = r.gap_s === null || r.gap_s === undefined;
+    var gap = nogap ? null : side === "ahead" ? r.gap_s : -r.gap_s;
+    var gcls = !nogap && Math.abs(r.gap_s) <= 1 ? (side === "behind" ? "crit" : "ok") : "";
+    if (gcls) n.className += " " + gcls;
+    n.appendChild(span((r.pos ? "P" + r.pos + " " : "") + String(r.name || "--").toUpperCase(), "rv-name"));
+    var t = r.gap_trend_s;
+    if (!t || Math.abs(t) < 0.05) {
+      n.appendChild(span("steady", "rv-trend dim"));
+    } else {
+      var closing = t > 0, good = side === "ahead" ? closing : !closing;
+      var word = closing ? "closing" : side === "ahead" ? "pulling away" : "dropping back";
+      n.appendChild(span((closing ? "▲ " : "▼ ") + word, "rv-trend " + (good ? "ok" : "crit")));
+    }
+    n.appendChild(span(gapText(gap), "rv-gap " + gcls));
+  }
+  function renderRivals(s, pos) {
+    ["cp-rivals", "tp-rivals"].forEach(function (id) {
+      var box = el(id);
+      if (!box) return;
+      box.hidden = !s;
+      if (!s) return;
+      rivalBlock(box.children[0], s.ahead, "ahead", pos);
+      rivalBlock(box.children[1], s.behind, "behind", pos);
+    });
   }
 
   // BOX L33–35: white while far off, amber inside two laps, red once open.
@@ -704,15 +741,18 @@
       if (s.tyres.graining) f.push("GRAINING");
       if (s.tyres.blister_max_pct) f.push("BLISTER " + s.tyres.blister_max_pct + "%");
     }
+    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
+    var cliff = lop !== null && lop !== undefined && lop < 1;
+    if (cliff) f.push("PAST THE CLIFF");
+    else if (lop !== null && lop !== undefined && lop < 3 && lop < togo) f.push("CLIFF IN " + Math.ceil(lop) + " LAPS");
     setText("cp-flags", f.length ? "⚠ " + f.join(" · ") : "✓ tyres healthy");
     meter("cp-energy-bar", p.ers_pct === null || p.ers_pct === undefined ? null : p.ers_pct / 100,
       p.ers_pct < 20 ? "short" : "");
     meter("cp-fuel-bar", fd === null || fd === undefined ? null : Math.max(0, Math.min(1, 0.5 + fd / 4)),
       fd < 0 ? "crit" : fd < 0.5 ? "short" : "");
-    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
     meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
       lop !== null && lop !== undefined && togo && lop < togo ? (lop < togo - 3 ? "crit" : "short") : "");
-    setClass("cp-flags", "cp-flags" + (f.length ? " warn" : " ok"));
+    setClass("cp-flags", "cp-flags" + (cliff ? " crit" : f.length ? " warn" : " ok"));
   }
 
   function meter(id, frac, cls) {
@@ -780,8 +820,6 @@
     if (t.warnings) pens.push(t.warnings + (t.warnings === 1 ? " warning" : " warnings"));
     if (t.corner_cut_warnings) pens.push(t.corner_cut_warnings + (t.corner_cut_warnings === 1 ? " cut" : " cuts"));
     tpRow("tp-pens", "⚠ PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
-    tpRow("tp-traffic", "GAPS", "ahead " + gapText(t.gap_ahead_s) + " · behind " +
-      gapText(t.gap_behind_s === null || t.gap_behind_s === undefined ? null : -t.gap_behind_s), "");
     tpRow("tp-exit", "PIT EXIT", t.pit_exit_clean ? "CLEAR AIR" : "TRAFFIC", t.pit_exit_clean ? "ok" : "warn");
   }
 
@@ -1023,126 +1061,123 @@
     det.textContent = t.avg_c !== null ? "run avg " + Math.round(t.avg_c) + "°" : "no run data";
   }
 
-  function setupRow(list, group, value, state, tag) {
+  function setupFormat(field) {
+    var out = null;
+    SETUP_GROUPS.forEach(function (g) {
+      if (g[1]) g[1].forEach(function (f) { if (f[0] === field) out = f; });
+    });
+    return out;
+  }
+  function setupValue(f, v) {
+    return v === undefined || v === null ? "--" : fmt(v, f ? f[2] : 0) + (f ? f[3] || "" : "");
+  }
+  function changeRow(list, done, name, from, to, why) {
     var li = document.createElement("li");
-    if (state) li.className = state;
-    var box = document.createElement("span");
-    box.className = "box"; box.textContent = state === "todo" ? "☐" : state === "done" ? "☑" : "·";
-    var g = document.createElement("span");
-    g.className = "grp"; g.textContent = group;
-    var v = document.createElement("span");
-    v.textContent = value;
-    var t = document.createElement("span");
-    t.className = "tag"; t.textContent = tag;
-    [box, g, v, t].forEach(function (n) { li.appendChild(n); });
+    li.className = done ? "done" : "todo";
+    [span(done ? "☑" : "☐", "box"), span(name, "nm"),
+      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why")]
+      .forEach(function (n) { li.appendChild(n); });
     list.appendChild(li);
   }
 
+  // Garage setup: what to change first, in large type, then the full setup for reference.
   function renderSetup(b) {
-    var list = el("pb-setup");
-    if (!list) return;
-    list.innerHTML = "";
-    if (!b.setup) {
-      var e = document.createElement("li");
-      e.className = "dim"; e.textContent = "no setup packet yet";
-      list.appendChild(e);
-      return;
-    }
+    var change = el("pb-change"), list = el("pb-setup"), lockBox = el("pb-locked");
+    if (!change || !list) return;
+    change.innerHTML = ""; list.innerHTML = "";
     var setupAdvice = b.setup_advice || [], setupLocked = b.setup_locked || [];
+    var setup = b.setup || {};
     function adviceFor(field) {
       return setupAdvice.find(function (rec) { return rec.fields.indexOf(field) >= 0; });
     }
     function isLocked(field) {
       return setupLocked.some(function (rec) { return rec.fields.indexOf(field) >= 0; });
     }
-    function adviceTag(rec) {
-      return (rec.tier === "alternative" ? "ALT " : "") + rec.reason;
+    function why(rec) {
+      return (rec.tier === "alternative" ? "alt · " : "") + rec.reason;
     }
     function matchesTarget(rec, current) {
       if (current === undefined || current === null) return false;
       var tolerance = rec.param.indexOf("pressure") >= 0 ? 0.05 : 0;
       return Math.abs(Number(current) - Number(rec.to)) <= tolerance;
     }
-    SETUP_GROUPS.forEach(function (g) {
-      if (g[1] === null) {
-        var todo = CORNERS.filter(function (k) {
-          var t = b.tyres[k];
-          return t.target_psi !== null && t.delta_psi && !t.limited;
-        });
-        var left = todo.filter(function (k) { return !b.tyres[k].applied; });
-        var value = CORNERS.map(function (k) {
-          var t = b.tyres[k];
-          return k.toUpperCase() + " " + fmt(t.psi, 1) +
-            (todo.indexOf(k) >= 0 && !t.applied ? "→" + fmt(t.target_psi, 1) : "");
-        }).join("  ");
-        var pressureTags = [];
-        ["front_pressure", "rear_pressure"].forEach(function (param) {
-          var rec = setupAdvice.find(function (item) { return item.param === param; });
-          if (!rec) return;
-          var axle = param === "front_pressure" ? ["fl", "fr"] : ["rl", "rr"];
-          var hasPressureTarget = axle.some(function (k) {
-            return b.tyres[k].target_psi !== null;
-          });
-          if (!hasPressureTarget) {
-            pressureTags.push(
-              (rec.tier === "alternative" ? "ALT " : "") +
-              param.replace("_", " ") + " " + fmt(rec.from, 1) + "→" +
-              fmt(rec.to, 1) + " · " + rec.reason
-            );
-          }
-        });
-        var pressureTag = todo.length
-          ? (left.length ? left.length + " to change" : "changed")
-          : "no change";
-        if (pressureTags.length) pressureTag += " · " + pressureTags.join(" · ");
-        setupRow(list, g[0], value, todo.length ? (left.length ? "todo" : "done") : "",
-          pressureTag);
+    CORNERS.forEach(function (k) {
+      var t = b.tyres[k];
+      if (t.target_psi === null || !t.delta_psi || t.limited) return;
+      changeRow(change, !!t.applied, k.toUpperCase() + " psi", fmt(t.psi, 1), fmt(t.target_psi, 1), "");
+    });
+    setupAdvice.forEach(function (rec) {
+      if (rec.param === "front_pressure" || rec.param === "rear_pressure") {
+        var axle = rec.param === "front_pressure" ? ["fl", "fr"] : ["rl", "rr"];
+        if (axle.some(function (k) { return b.tyres[k].target_psi !== null; })) return;
+        var done = rec.fields.every(function (f) { return matchesTarget(rec, setup[f]); });
+        changeRow(change, done, rec.param === "front_pressure" ? "F psi" : "R psi",
+          fmt(rec.from, 1), fmt(rec.to, 1), why(rec));
         return;
       }
-      var advised = [], locked = false, needsChange = false;
-      var parts = g[1].map(function (f) {
-        var v = b.setup[f[0]];
-        var rec = adviceFor(f[0]);
-        if (rec) {
-          advised.push(adviceTag(rec));
-          if (!matchesTarget(rec, v)) needsChange = true;
-          return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || "")) +
-            "→" + fmt(rec.to, f[2]) + (f[3] || "");
-        }
-        locked = locked || isLocked(f[0]);
-        return f[1] + " " + (v === undefined ? "--" : fmt(v, f[2]) + (f[3] || ""));
-      });
-      setupRow(
-        list,
-        g[0],
-        parts.join("  "),
-        advised.length ? (needsChange ? "todo" : "done") : "",
-        advised.length ? Array.from(new Set(advised)).join(" · ") : locked ? "locked" : "no change"
-      );
+      var f = setupFormat(rec.fields[0]);
+      var name = rec.fields.map(function (field) {
+        var ff = setupFormat(field);
+        return ff ? ff[1] : field.replace(/_/g, " ");
+      }).join(" + ");
+      changeRow(change, matchesTarget(rec, setup[rec.fields[0]]), name,
+        setupValue(f, rec.from), setupValue(f, rec.to), why(rec));
     });
-    if (Array.isArray(b.setup_lock_checklist)) {
-      var labels = {};
-      SETUP_GROUPS.forEach(function (g) {
-        if (g[1]) g[1].forEach(function (f) { labels[f[0]] = f[1]; });
-      });
-      var items = b.setup_lock_checklist.map(function (item) {
-        var format = null;
-        SETUP_GROUPS.forEach(function (g) {
-          if (g[1]) g[1].forEach(function (f) {
-            if (f[0] === item.field) format = f;
-          });
-        });
-        var value = item.value === undefined || item.value === null
-          ? "--"
-          : fmt(item.value, format ? format[2] : 0) + (format ? format[3] || "" : "");
-        var advisedField = setupAdvice.some(function (rec) {
-          return rec.fields.indexOf(item.field) >= 0;
-        });
-        return (advisedField ? "☐ " : "") +
-          (labels[item.field] || item.field) + " " + value;
-      });
-      setupRow(list, "LOCKED", "Locked after this session: " + items.join(", "), "", "");
+    if (!change.children.length) {
+      var none = document.createElement("li");
+      none.className = "none"; none.textContent = "✓ No changes";
+      change.appendChild(none);
     }
+    if (!b.setup) {
+      var e = document.createElement("li");
+      e.className = "dim"; e.textContent = "no setup packet yet";
+      list.appendChild(e);
+    } else {
+      SETUP_GROUPS.forEach(function (g) {
+        var li = document.createElement("li"), chips = span("", "chips");
+        li.appendChild(span(g[0], "grp"));
+        var fields = g[1] || CORNERS.map(function (k) {
+          return [k, k.toUpperCase(), 1, "", b.tyres[k].psi];
+        });
+        fields.forEach(function (f) {
+          var v = g[1] ? setup[f[0]] : f[4];
+          var rec = g[1] ? adviceFor(f[0]) : null;
+          var c = span("", "c" + (rec && !matchesTarget(rec, v) ? " todo" : "") +
+            (g[1] && isLocked(f[0]) ? " lk" : ""));
+          c.appendChild(span(f[1] + " ", "k"));
+          var val = document.createElement("b");
+          val.textContent = setupValue(f, v);
+          c.appendChild(val);
+          chips.appendChild(c);
+        });
+        li.appendChild(chips);
+        list.appendChild(li);
+      });
+    }
+    if (lockBox) {
+      var lockList = Array.isArray(b.setup_lock_checklist) ? b.setup_lock_checklist : null;
+      lockBox.hidden = !lockList;
+      if (lockList) {
+        lockBox.textContent = "Locked after this session: " + lockList.map(function (item) {
+          var f = setupFormat(item.field);
+          return f ? f[1] : item.field.replace(/_/g, " ");
+        }).join(", ");
+      }
+    }
+  }
+
+  var PLAN_TEXT = { push: "PUSH", cool: "COOL", box: "BOX", push_now: "PUSH NOW" };
+  var PLAN_WHY = { ready: "ready", battery: "battery low", tyres: "tyres hot", safe: "you're through",
+    time: "no time to cool", fuel: "fuel low", flag: "flag", invalid: "lap invalid" };
+  function pbTile(id, show, cls, v, s, k) {
+    var n = el(id);
+    if (!n) return;
+    n.hidden = !show;
+    if (!show) return;
+    n.className = "pb-tile " + (cls || "");
+    if (k) n.querySelector(".k").textContent = k;
+    n.querySelector(".v").textContent = v;
+    n.querySelector(".s").textContent = s || "";
   }
 
   function renderPitBoard(b, q, phase) {
@@ -1157,27 +1192,24 @@
     setText("pb-release-sub", rel.sub || (b.has_advice ? "" : "no run data yet"));
     setText("pb-press-note", b.has_advice ? "" : "· no flying laps this run");
     CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k]); });
-    var plan = q && q.plan;
-    setText("pb-plan", plan ? "PLAN " + plan.plan.toUpperCase() +
-      (plan.reason ? " · " + plan.reason : "") : "PLAN --");
-    var fuelOk = b.fuel_laps >= b.fuel_need_laps;
-    setText("pb-fuel", "FUEL " + fmt(b.fuel_laps, 1) + " laps · need " + fmt(b.fuel_need_laps, 1));
-    setClass("pb-fuel", "pb-row " + (fuelOk ? "ok" : "crit"));
-    setText("pb-ers", "BATTERY " + fmt(b.ers_pct, 0) + "% · want " + fmt(b.ers_need_pct, 0) + "%");
-    setClass("pb-ers", "pb-row " + (b.ers_pct >= b.ers_need_pct ? "ok" : "warn"));
-    setText("pb-time", q ? clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh set" +
-      (q.fresh_sets === 1 ? "" : "s") : "--");
-    var pole = el("pb-pole");
-    if (pole) {
-      pole.hidden = !q;
-      if (q) {
-        pole.textContent = "BEST " + lapTime(q.best_lap_ms) +
-          (q.margin_ms !== null && q.margin_ms !== undefined ?
-            (q.margin_kind === "pole" ? " · vs P2 " : " · vs cut ") + signed(-q.margin_ms) : "") +
-          (q.through ? " · THROUGH" : "");
-        pole.className = "pb-row " + (q.through || (q.margin_ms > 0) ? "ok" : "");
-      }
-    }
+    var plan = q && q.plan && q.plan.plan;
+    pbTile("pb-plan", !!plan, plan === "box" || plan === "cool" ? "warn" : "ok",
+      PLAN_TEXT[plan] || String(plan).toUpperCase(), plan ? PLAN_WHY[q.plan.reason] || q.plan.reason : "");
+    var hasFuel = b.fuel_laps !== null && b.fuel_laps !== undefined;
+    pbTile("pb-fuel", hasFuel, b.fuel_laps >= b.fuel_need_laps ? "ok" : "crit",
+      fmt(b.fuel_laps, 1) + " laps", "push lap needs " + fmt(b.fuel_need_laps, 1));
+    var hasErs = b.ers_pct !== null && b.ers_pct !== undefined;
+    pbTile("pb-ers", hasErs, b.ers_pct >= b.ers_need_pct ? "ok" : "warn",
+      fmt(b.ers_pct, 0) + "%", "want " + fmt(b.ers_need_pct, 0) + "%");
+    pbTile("pb-time", !!q, q && q.fresh_sets === 0 ? "warn" : "",
+      q ? clock(q.session_time_left) : "", q ? q.fresh_sets + " fresh set" + (q.fresh_sets === 1 ? "" : "s") : "");
+    var hasGap = !!q && q.margin_ms !== null && q.margin_ms !== undefined;
+    var through = !!q && q.through;
+    pbTile("pb-pole", !!q && (hasGap || !!q.best_lap_ms),
+      through || (hasGap && q.margin_ms > 0) ? "ok" : hasGap ? "crit" : "",
+      hasGap ? signed(-q.margin_ms) : q ? lapTime(q.best_lap_ms) : "",
+      hasGap ? "best " + lapTime(q.best_lap_ms) + (through ? " · through" : "") : through ? "through" : "",
+      hasGap ? (q.margin_kind === "pole" ? "VS P2" : "VS CUT") : "BEST");
     renderSetup(b);
   }
 

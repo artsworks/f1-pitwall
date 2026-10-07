@@ -26,6 +26,7 @@ from pitwall.input.menu import (
     validate_related_rules,
     validate_shortcuts,
 )
+from pitwall.input.press import Press
 from pitwall.protocol.header import PacketId
 from pitwall.state.session import Damage, Snapshot
 from pitwall.store.db import Database
@@ -171,8 +172,16 @@ def test_action_items_run_their_action(tmp_path: Path) -> None:
     engine, _, rows = _run(tmp_path, [(SD12, 20.0)])
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "mindset" and engine.mindset == "aggressive"
-    engine2, _, _ = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)], name="s")
-    assert engine2.dispatcher.silent is True
+    engine2, _, rows2 = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)], name="s")
+    assert engine2.dispatcher.silent is False
+    assert [r["item_id"] for r in _inputs(rows2)] == ["push"]
+    engine3, _, _ = _run(
+        tmp_path,
+        [(SD6, 20.0)],
+        name="silent",
+        overrides={"input": {"shortcuts": [{"bit": SD6, "item": "silent"}]}},
+    )
+    assert engine3.dispatcher.silent is True
 
 
 def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
@@ -351,7 +360,6 @@ def test_packaged_menu_is_valid() -> None:
         "fight",
         "rain",
         "push",
-        "silent",
     ]
     labels = [i.label for i in settings.menu.items]
     assert "Next page" not in labels
@@ -361,12 +369,85 @@ def test_packaged_menu_is_valid() -> None:
         "oversteer",
         "budget",
         "mindset",
+        "silent",
     }
     assert validate_shortcuts(settings.input, settings.menu) == []
     assert shortcut_warnings(settings.input, settings.menu) == []
     menu = DriverMenu()
     menu.step(settings.menu, 1, 0.0, {"session_kind": "practice"})
     assert "Fight" in menu.payload(settings.menu, 0.0)["items"]
+
+
+def test_silent_binding_suppresses_shortcut_warning() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    settings = engine.store.current()
+    silent = settings.input.model_copy(update={"long_press": "bookmark", "silent_toggle_bit": 0})
+    assert shortcut_warnings(silent, settings.menu) == [
+        "menu item 'silent' is shortcut_only but no input.shortcuts binds it"
+    ]
+    dedicated = silent.model_copy(update={"silent_toggle_bit": 0x02000000})
+    assert shortcut_warnings(dedicated, settings.menu) == []
+
+
+def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
+    log_path = tmp_path / "race.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    events = [
+        ("a1", 233.295, True),
+        ("a1", 233.363, False),
+        ("a1", 233.486, True),
+        ("a1", 233.553, False),
+        ("menu_up", 235.724, True),
+        ("menu_up", 235.780, False),
+        ("a1", 235.803, True),
+        ("a1", 235.926, False),
+        ("a1", 239.368, True),
+        ("a1", 239.480, False),
+        ("menu_down", 243.573, True),
+        ("menu_down", 243.708, False),
+        ("menu_up", 244.580, True),
+        ("menu_up", 244.714, False),
+        ("a1", 246.017, True),
+        ("a1", 246.163, False),
+    ]
+    previous = events[0][1]
+    for kind, t, down in events:
+        tick_t = previous + 0.01
+        while tick_t < t:
+            engine.tick(tick_t)
+            tick_t += 0.01
+        if kind == "a1":
+            engine._on_press_edge(t, down)
+        elif down:
+            engine._press_queue.append(Press(kind, t))
+        engine.tick(t)
+        if kind == "menu_up" and down:
+            assert "Radio silent" not in engine.menu_payload(t)["items"]
+        assert engine.dispatcher.silent is False
+        previous = t
+    end = events[-1][1] + 0.5
+    tick_t = previous + 0.01
+    while tick_t <= end:
+        engine.tick(tick_t)
+        tick_t += 0.01
+    assert engine.dispatcher.silent is False
+
+    for start, expected in ((250.0, True), (253.0, False)):
+        hold_events = [("a1", start, True), ("a1", start + 1.144, False)]
+        previous = hold_events[0][1]
+        for _kind, t, down in hold_events:
+            tick_t = previous + 0.01
+            while tick_t < t:
+                engine.tick(tick_t)
+                tick_t += 0.01
+            engine._on_press_edge(t, down)
+            engine.tick(t)
+            previous = t
+        tick_t = previous + 0.01
+        while tick_t <= previous + 0.5:
+            engine.tick(tick_t)
+            tick_t += 0.01
+        assert engine.dispatcher.silent is expected
 
 
 def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None:

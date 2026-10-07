@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from pitwall.derive import is_synthetic_uid
 from pitwall.setup.rules import SetupRules
 from pitwall.setup.signals import signals_for_run
 from pitwall.setup.states import runs_for_session
@@ -37,6 +38,10 @@ def fold_setup_learning(
     *,
     rules: SetupRules | None = None,
 ) -> None:
+    session = db.session_row(uid)
+    if is_synthetic_uid(uid) or (session is not None and bool(session.get("synthetic"))):
+        return
+    session = session or {}
     if rules is None:
         from pitwall.hindsight import _setup_rules
 
@@ -96,8 +101,7 @@ def fold_setup_learning(
                 )
                 handled.add(rec_id)
 
-        session = db.session_row(uid)
-        if session is None or int(session.get("setup_folded") or 0):
+        if int(session.get("setup_folded") or 0):
             return
         baseline_folded = False
         for run in runs_for_session(db, uid):

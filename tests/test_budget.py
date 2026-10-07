@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 from pitwall.model.budget import energy_budget, fuel_budget
+from pitwall.state.session import Snapshot
 
 
 def test_fuel_margin_sign() -> None:
@@ -14,6 +15,13 @@ def test_fuel_margin_sign() -> None:
     short = fuel_budget(laps_remaining=15, fuel_in_tank_kg=20.0, per_lap_kg=1.7, source="overlay")
     assert short.margin_laps < 0
     assert short.source == "overlay"
+
+
+def test_spoken_fuel_margin_keeps_deficit_sign() -> None:
+    assert Snapshot(now=0.0, fuel_margin_laps=-0.011).fuel_margin_r == -0.1
+    assert Snapshot(now=0.0, fuel_margin_laps=-0.26).fuel_margin_r == -0.3
+    assert Snapshot(now=0.0, fuel_margin_laps=0.014).fuel_margin_r == 0.0
+    assert Snapshot(now=0.0, fuel_margin_laps=0.07).fuel_margin_r == 0.1
 
 
 def test_energy_over_budget() -> None:

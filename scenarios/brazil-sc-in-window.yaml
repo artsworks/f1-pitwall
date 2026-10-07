@@ -1,0 +1,18 @@
+id: brazil-sc-in-window
+title: Safety car on laps 10 and 11, inside the window
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "10-11"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [10, 10]}
+    - {rule: sc_ending, laps: [11, 11]}
+    - {rule: [plan_sc_box, box_now], laps: [10, 11]}
+why: >-
+  The mediums are 9 laps old, the plan window is laps 7 to 13 and 7 laps remain.
+  A safety car in the window makes the stop cheap, so pitwall should call the box.
+  Today it calls nothing. The optimiser does not return cheap_stop, so Plan C never starts.

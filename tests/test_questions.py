@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuItemModel, MenuSettings, RuleDefModel
+from pitwall.derive import derived_uid
 from pitwall.propose import propose_thresholds
 from pitwall.questions import question_candidates
 from pitwall.rules.expr import expr_names
@@ -67,6 +68,27 @@ def test_recurring_uncovered_questions_group_sessions_and_median_signals() -> No
             "suggestion": "fire earlier: review these thresholds",
         }
     ]
+
+
+def test_synthetic_questions_do_not_meet_minimum_ask_count() -> None:
+    db = Database(":memory:")
+    real_uid = 91
+    synthetic_uid = derived_uid(real_uid, ["wear_scale:3"])
+    db.upsert_session(real_uid, started_at=1.0)
+    db.upsert_session(synthetic_uid, started_at=2.0)
+    _ask(db, real_uid, 5, 10.0, 5.0)
+    _ask(db, synthetic_uid, 5, 10.0, 5.0)
+    _ask(db, synthetic_uid, 6, 20.0, 7.0)
+
+    candidates = question_candidates(
+        db,
+        _menu(),
+        [_rule()],
+        min_asks=2,
+        thresholds={"limit": 4.0},
+    )
+
+    assert candidates == []
 
 
 def test_covered_questions_do_not_meet_recurrence_threshold() -> None:

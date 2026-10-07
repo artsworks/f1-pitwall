@@ -429,12 +429,18 @@ def validate_shortcuts(inp: InputSettings, settings: MenuSettings) -> list[str]:
 
 
 def shortcut_warnings(inp: InputSettings, settings: MenuSettings) -> list[str]:
-    """Warn when a shortcut-only item has no dedicated input binding."""
+    """Warn when a shortcut-only item has no input binding."""
     bound = {shortcut.item for shortcut in inp.shortcuts}
     return [
         f"menu item {item.id!r} is shortcut_only but no input.shortcuts binds it"
         for item in settings.items
-        if item.shortcut_only and item.id not in bound
+        if item.shortcut_only
+        and item.id not in bound
+        and not (
+            item.kind == "action"
+            and item.action == "silent"
+            and (inp.long_press == "silent" or inp.silent_toggle_bit != 0)
+        )
     ]
 
 

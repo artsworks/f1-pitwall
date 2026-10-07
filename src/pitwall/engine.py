@@ -25,6 +25,7 @@ from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
 from pitwall.config.thresholds import threshold
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import grade_and_store
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
@@ -129,6 +130,8 @@ def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
         delta_s = (snap.player_last_lap_ms - his) / 1000.0
         if abs(delta_s) <= 1.5:  # beyond that one of the laps was a pit or incident lap
             return pace_words(delta_s)
+    if abs(closing_s) > 1.5:
+        return ""  # a gap trend this steep spans a pass or a pit stop, not pace
     return pace_words(closing_s)
 
 
@@ -278,6 +281,7 @@ class Engine:
         dispatcher: Dispatcher,
         learning_pack_dir: Path | None = None,
         learning_pack_keep_days: int = 30,
+        synthetic_source: bool = False,
     ) -> None:
         self.store = store
         settings = store.current()
@@ -285,6 +289,7 @@ class Engine:
         self.clock = clock
         self.ingest = ingest
         self.state = state
+        self.synthetic_source = synthetic_source
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
         self.learning_pack_dir = learning_pack_dir
@@ -329,6 +334,7 @@ class Engine:
         self._laps_written = 0
         self._session_upserted: int | None = None
         self._parc_ferme_written: int | None = None
+        self._weekend_structure_written: tuple[int, ...] = ()
         self.session_origin_started_at: float | None = None
         self._track_loaded: int | None = None
         self._session_ended_written = False
@@ -696,6 +702,7 @@ class Engine:
         self._prev_race_phase = ""
         self.session_origin_started_at = None
         self._parc_ferme_written = None
+        self._weekend_structure_written = ()
         self.setup_advisor.reset(uid)
 
     def _evaluate_live_setup(self, uid: int) -> None:
@@ -708,6 +715,10 @@ class Engine:
 
     def _update_setup_stop_wing(self) -> None:
         self.setup_advisor.update_stop_wing(self.pit_plan.plan in _STOP_PLANS)
+
+    def _synthetic_session(self, uid: int | None = None) -> bool:
+        session_uid = self.state.session_uid if uid is None else uid
+        return self.synthetic_source or (session_uid is not None and is_synthetic_uid(session_uid))
 
     def _reset_energy_lap_tracking(self) -> None:
         self._energy_lap_tracker.reset()
@@ -731,14 +742,17 @@ class Engine:
             weather=snap.weather,
             game_mode=snap.game_mode,
             weekend_link=snap.weekend_link,
+            weekend_structure=snap.weekend_structure,
             calls_mode=(
                 "off"
                 if self.store.current().policy.quiet or not self.store.current().speech.enabled
                 else "on"
             ),
             parc_ferme=snap.parc_ferme if snap.parc_ferme >= 0 else None,
+            synthetic=self._synthetic_session(uid),
         )
         self._parc_ferme_written = snap.parc_ferme if snap.parc_ferme >= 0 else None
+        self._weekend_structure_written = tuple(snap.weekend_structure)
 
     def _write_laps(self) -> None:
         if self.db is None or self.state.session_uid is None:
@@ -754,6 +768,10 @@ class Engine:
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
             self.db.set_session_parc_ferme(uid, parc_ferme)
             self._parc_ferme_written = parc_ferme
+        structure = tuple(self.state.weekend_structure)
+        if structure and structure != self._weekend_structure_written:
+            self.db.set_weekend_structure(uid, structure)
+            self._weekend_structure_written = structure
         if self.state.setup_rewind_t is not None:
             self.db.delete_setup_changes_after(uid, self.state.setup_rewind_t)
             self.state.setup_rewind_t = None
@@ -901,7 +919,7 @@ class Engine:
                         pit.ref_pace_ms,
                     )
                     suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    if track_id >= 0:
+                    if track_id >= 0 and not self._synthetic_session(uid):
                         db.fold_param(
                             track_id,
                             0,
@@ -914,8 +932,10 @@ class Engine:
         if lap.valid and lap.fuel_kg > 0:
             if self._fuel_last_kg is not None:
                 delta = self._fuel_last_kg - lap.fuel_kg
-                if track_id >= 0 and self._th("fuel_delta_min_kg", 0) < delta < self._th(
-                    "fuel_delta_max_kg", 10
+                if (
+                    track_id >= 0
+                    and not self._synthetic_session(uid)
+                    and self._th("fuel_delta_min_kg", 0) < delta < self._th("fuel_delta_max_kg", 10)
                 ):
                     db.fold_param(
                         track_id,
@@ -990,7 +1010,12 @@ class Engine:
             cache_key = (uid, compound)
             weekend = self._weekend_prior_cache.get(cache_key)
             if weekend is None:
-                stints = self.db.weekend_stints(uid, track_id, compound)
+                rmse_bad = self._th("deg_rmse_bad_ms", 800)
+                stints = [
+                    stint
+                    for stint in self.db.weekend_stints(uid, track_id, compound)
+                    if stint.rmse_ms <= rmse_bad
+                ]
                 n = sum(stint.n_valid_laps for stint in stints)
                 if n:
                     value = (
@@ -1109,6 +1134,7 @@ class Engine:
         if (
             self.db is None
             or track_id < 0
+            or self._synthetic_session()
             or not fit_is_clean(
                 fit,
                 deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
@@ -1612,7 +1638,7 @@ class Engine:
                 "result": ep.result,
             }
         )
-        if self.db is None or snap.track_id < 0:
+        if self.db is None or snap.track_id < 0 or self._synthetic_session():
             return
         name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
         cap = self._th("param_weight_cap", 50.0)
@@ -1625,6 +1651,15 @@ class Engine:
             param_weight_cap=cap,
         )
         self._battle_rates = None
+
+    def _end_session(self, uid: int, now: float) -> None:
+        assert self.db is not None
+        self.fold_open_stint()
+        self._store_debrief_setup(uid)
+        self._session_ended_written = True
+        self.db.end_session(uid, now)
+        grade_and_store(self.db, uid, self.store.current().thresholds)
+        self.db.mark_graded(uid)
 
     def tick(self, now: float) -> list[Call]:
         self.store.poll(now)
@@ -1652,12 +1687,7 @@ class Engine:
             and self.db is not None
             and uid is not None
         ):
-            self.fold_open_stint()
-            self._store_debrief_setup(uid)
-            self._session_ended_written = True
-            self.db.end_session(uid, now)
-            grade_and_store(self.db, uid, self.store.current().thresholds)
-            self.db.mark_graded(uid)
+            self._end_session(uid, now)
             if self.learning_pack_dir is not None:
                 from pitwall.learnpack import write_pack
 
@@ -1863,6 +1893,8 @@ def build_engine(
     clock: Clock | None = None,
     overrides: dict[str, Any] | None = None,
     rules_dir: Path | None = None,
+    isolated: bool = False,
+    synthetic: bool = False,
     decision_log_path: Path | None = None,
     decision_log_fp: Any = None,
     sinks: list[CallSink] | None = None,
@@ -1874,7 +1906,7 @@ def build_engine(
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
-    store = ConfigStore(overrides=overrides, rules_dir=rules_dir)
+    store = ConfigStore(overrides=overrides, rules_dir=rules_dir, isolated=isolated)
     settings = store.current()
     clock = clock or WallClock()
     recorder = None
@@ -1931,6 +1963,7 @@ def build_engine(
         dispatcher,
         learning_pack_dir=learning_pack_dir,
         learning_pack_keep_days=learning_pack_keep_days,
+        synthetic_source=synthetic,
     )
     engine.session_origin_started_at = session_started_at
     return engine

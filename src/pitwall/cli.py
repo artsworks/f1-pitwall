@@ -106,17 +106,38 @@ def _lap_seek_us(path: Path, lap: int) -> int | None:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
+    from pitwall.derive import is_synthetic_uid
     from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
 
     speed = _parse_speed(args.speed)
     file = _resolve_recording(args.file, ConfigStore().current())
+    with RecordingReader(file) as reader:
+        header = reader.header
+    synthetic = bool(header.metadata.get("synthetic")) or is_synthetic_uid(header.session_uid)
     from_us = args.from_us
     if args.from_lap is not None:
         from_us = _lap_seek_us(file, args.from_lap)
         if from_us is None:
             print(f"replay: lap {args.from_lap} not found in index of {file}")
             return 1
+
+    def persist_recording_origin(engine: Engine, db: Database | None) -> None:
+        if db is None:
+            return
+        uid = engine.state.session_uid
+        if uid is None:
+            uid = header.session_uid
+        session = db.session_row(uid) or {}
+        db.set_session_origin(
+            uid,
+            started_at=header.wall_clock_start_us / 1_000_000.0,
+            recording_path=str(file),
+            calls_mode=str(session.get("calls_mode") or ""),
+            synthetic=synthetic,
+            derived_from=str(header.metadata.get("derived_from") or ""),
+        )
+
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.serve:
         from pitwall.audio.dispatcher import LogSink
@@ -142,6 +163,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 clock=clk,
                 sinks=[hub, LogSink(), _ReplaySpokenSink()],
                 db=seed_db,
+                synthetic=synthetic,
             )
             if args.mask_restricted:
                 eng.ingest.transform = mask_restricted
@@ -157,6 +179,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
             thresholds=ConfigStore().current().thresholds,
         )
         engine = _engine_factory(clock)
+        persist_recording_origin(engine, seed_db)
         review.engine = engine
         review.clock = None  # controller builds its own PausableClock on play
 
@@ -175,13 +198,19 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
         store = ConfigStore()
         asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
+        persist_recording_origin(engine, seed_db)
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
-    engine = build_census_engine(clock) if args.no_rules else build_engine(clock=clock, db=db)
+    engine = (
+        build_census_engine(clock)
+        if args.no_rules
+        else build_engine(clock=clock, db=db, synthetic=synthetic)
+    )
     if args.mask_restricted:
         engine.ingest.transform = mask_restricted
     replay_coro = run_replay(file, engine, speed, from_us=from_us, to_us=args.to_us)
     delivered, calls = asyncio.run(replay_coro)
+    persist_recording_origin(engine, db)
     print(f"replayed {delivered} datagrams from {file}; {len(calls)} calls")
     if args.stats:
         print(json.dumps(engine.ingest.census(now=engine.clock.now()), indent=2))
@@ -574,6 +603,223 @@ def cmd_trim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_derive(args: argparse.Namespace) -> int:
+    from pitwall.derive import derive_recording, ops_from_options
+
+    settings = ConfigStore().current()
+    source = _resolve_recording(args.file, settings)
+    try:
+        ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
+        summary = derive_recording(source, Path(args.out), ops)
+    except ValueError as exc:
+        print(f"derive: {exc}")
+        return 1
+    print(f"derived session UID: 0x{summary.header.session_uid:016x}")
+    print(f"mutations: {', '.join(op.label for op in ops)}")
+    print(f"wrote {summary.record_count} records -> {args.out}")
+    return 0
+
+
+def _positive_int(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if result < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return result
+
+
+def _bench_history(scenarios_dir: Path, window: int) -> int:
+    from pitwall.bench import trend
+
+    history = scenarios_dir / "history.jsonl"
+    try:
+        lines = history.read_text().splitlines() if history.exists() else []
+        entries = [json.loads(line) for line in lines if line.strip()]
+        history_lines = [line for line in lines if line.strip()]
+        for line in history_lines[-window:]:
+            print(line)
+        print(f"trend: {trend(entries, window)}")
+    except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
+        print(f"bench: {exc}")
+        return 1
+    return 0
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    from pitwall.bench import (
+        build_recording_index,
+        build_scorecard,
+        compare,
+        find_source,
+        load_scenarios,
+        run_scenario,
+    )
+
+    scenarios_dir = Path(args.scenarios).expanduser()
+    if args.accept_changes and not args.update_baseline:
+        print("bench: --accept-changes requires --update-baseline")
+        return 1
+    if args.trend:
+        return _bench_history(scenarios_dir, args.window)
+    if args.update_baseline and args.note is None:
+        print("bench: --update-baseline requires --note")
+        return 1
+    if args.update_baseline and args.only:
+        print("bench: --update-baseline cannot be used with --only")
+        return 1
+
+    rules_dir = Path(args.rules).expanduser() if args.rules else None
+    try:
+        all_scenarios = load_scenarios(scenarios_dir)
+        scenario_ids = {scenario.id for scenario in all_scenarios}
+        scenarios = load_scenarios(scenarios_dir, args.only)
+        settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
+        if args.recordings:
+            recording_dirs = [Path(directory).expanduser() for directory in args.recordings]
+        else:
+            recording_dirs = [Path(ConfigStore().current().recording.directory).expanduser()]
+        index = build_recording_index(recording_dirs)
+        scenario_rows: dict[str, dict[str, Any]] = {}
+        outcomes: list[dict[str, Any]] = []
+        for scenario in scenarios:
+            source, reason = find_source(scenario, index)
+            row, scenario_outcomes = run_scenario(
+                scenario,
+                source,
+                settings,
+                rules_dir=rules_dir,
+                skip_reason=reason,
+            )
+            scenario_rows[scenario.id] = row
+            outcomes.extend(scenario_outcomes)
+        scorecard = build_scorecard(scenario_rows, outcomes)
+        baseline_path = (
+            Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
+        )
+        baseline: dict[str, Any] | None = None
+        if baseline_path.exists():
+            loaded = json.loads(baseline_path.read_text())
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{baseline_path}: baseline must be a JSON object")
+            baseline = loaded
+        gate = compare(scorecard, baseline, args.tolerance, scenario_ids=scenario_ids)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"bench: {exc}")
+        return 1
+
+    update_allowed = (
+        not gate.failures and not gate.incomplete and (not gate.changed or args.accept_changes)
+    )
+    gate_data = {
+        "status": gate.status,
+        "failures": gate.failures,
+        "incomplete": gate.incomplete,
+        "improvements": gate.improvements,
+        "changed": gate.changed,
+        "accepted_changes": (gate.changed if args.update_baseline and update_allowed else []),
+    }
+    try:
+        if args.out:
+            output = Path(args.out).expanduser()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+    except OSError as exc:
+        print(f"bench: {exc}")
+        return 1
+    if args.json:
+        print(json.dumps({"scorecard": scorecard, "gate": gate_data}, indent=2, sort_keys=True))
+    else:
+        for scenario_id, scenario in scorecard["scenarios"].items():
+            failed = [check for check in scenario["checks"] if not check["ok"]]
+            line = f"{scenario_id} {scenario['status']} {scenario['result']}"
+            if scenario["reason"]:
+                line += f": {scenario['reason']}"
+            if failed:
+                details = [
+                    f"{check['type']} {','.join(check['rules'])} "
+                    f"laps {check['laps'][0]}-{check['laps'][1]} found {check['found']}"
+                    for check in failed
+                ]
+                line += f" | failed: {'; '.join(details)}"
+            print(line)
+        metrics = scorecard["metrics"]
+        pass_rate = (
+            "n/a" if metrics["check_pass_rate"] is None else f"{metrics['check_pass_rate']:.1%}"
+        )
+        score = "n/a" if metrics["score"] is None else f"{metrics['score']:.1f}"
+        print(
+            f"checks {metrics['checks_passed']}/{metrics['checks_total']} "
+            f"({pass_rate}), score {score}"
+        )
+        print(
+            f"guards {metrics['guards_passed']}/{metrics['guards_total']}, "
+            f"targets {metrics['targets_passed']}/{metrics['targets_total']}"
+        )
+        print(
+            f"real accuracy {metrics['real_accuracy']}, good {metrics['real_good']}, "
+            f"graded {metrics['real_graded']}, "
+            f"stop cost MAE {metrics['stop_cost_mae_s']}, "
+            f"pace MAE {metrics['laps_of_pace_mae']}"
+        )
+        for rule, counts in metrics["by_rule"].items():
+            print(f"rule {rule}: {counts['good']} good, {counts['wrong']} wrong")
+        print(f"gate: {gate.status}")
+        for failure in gate.failures:
+            print(f"failure: {failure}")
+        for incomplete in gate.incomplete:
+            print(f"incomplete: {incomplete}")
+        for changed in gate.changed:
+            print(f"changed: {changed}")
+        if args.update_baseline and update_allowed:
+            for changed in gate.changed:
+                print(f"accepted: {changed}")
+        for improvement in gate.improvements:
+            print(f"improvement: {improvement}")
+
+    if args.update_baseline:
+        if not update_allowed:
+            if (
+                gate.changed
+                and not args.accept_changes
+                and not gate.failures
+                and not gate.incomplete
+            ):
+                print(
+                    "bench: baseline not updated, changed items need --accept-changes "
+                    "after the expectation change is approved"
+                )
+            else:
+                print(f"bench: baseline not updated, gate is {gate.status}")
+        else:
+            try:
+                baseline_path.parent.mkdir(parents=True, exist_ok=True)
+                baseline_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+                metrics = scorecard["metrics"]
+                history_entry = {
+                    "date": datetime.now(UTC).date().isoformat(),
+                    "note": args.note,
+                    "score": metrics["score"],
+                    "check_pass_rate": metrics["check_pass_rate"],
+                    "guards": f"{metrics['guards_passed']}/{metrics['guards_total']}",
+                    "targets": f"{metrics['targets_passed']}/{metrics['targets_total']}",
+                    "targets_passed": metrics["targets_passed"],
+                    "real_accuracy": metrics["real_accuracy"],
+                    "real_graded": metrics["real_graded"],
+                }
+                history_path = scenarios_dir / "history.jsonl"
+                history_path.parent.mkdir(parents=True, exist_ok=True)
+                with history_path.open("a") as stream:
+                    stream.write(json.dumps(history_entry, sort_keys=True) + "\n")
+            except OSError as exc:
+                print(f"bench: {exc}")
+                return 1
+    return {"pass": 0, "fail": 1, "incomplete": 2}[gate.status]
+
+
 def cmd_calibrate(args: argparse.Namespace) -> int:
     from pitwall.calibrate import calibrate, format_calibration, write_overlays
     from pitwall.store.db import Database, open_configured
@@ -592,7 +838,13 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
             if result.status == "error":
                 errors = True
                 print(f"ingest error {result.path}: {result.error}")
-    report = calibrate(db, settings, track_id=args.track, dry_run=args.dry_run)
+    report = calibrate(
+        db,
+        settings,
+        track_id=args.track,
+        dry_run=args.dry_run,
+        include_synthetic=args.include_synthetic,
+    )
     if args.write_overlay and not args.dry_run:
         report["overlays"] = [
             str(path) for path in write_overlays(report, settings, args.overlay_dir)
@@ -785,6 +1037,7 @@ async def _serve(
 
     from pitwall.server.app import create_app
     from pitwall.server.pin import PinGate
+    from pitwall.server.serve import PitwallServer, serve_with
 
     settings = store.current()
     gate = (
@@ -842,7 +1095,7 @@ async def _serve(
         if settings.connection.https_cert and settings.connection.https_key
         else None,
     )
-    server = uvicorn.Server(config)
+    server = PitwallServer(config)
     host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
     print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")
@@ -850,7 +1103,7 @@ async def _serve(
         print(f"dashboard PIN: {gate.pin}  (other devices only)")
     print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
     print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
-    await asyncio.gather(server.serve(), _state_broadcast(engine, hub, store, active), coro)
+    await serve_with(server, _state_broadcast(engine, hub, store, active), coro)
 
 
 def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, object]:
@@ -1233,6 +1486,8 @@ def _voice_channel(action: str, args: argparse.Namespace) -> int:
 
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
+    from pitwall.derive import is_synthetic_uid
+
     directory = Path(ConfigStore().current().recording.directory)
     found = list_recordings(directory)
     if not found:
@@ -1241,22 +1496,27 @@ def cmd_recordings(args: argparse.Namespace) -> int:
     print(f"recordings in {directory}, newest first:")
     print(f"{'#':>3}  {'file':<44} {'start':<16} {'size':>9}  session_uid")
     for i, path in enumerate(found):
-        start, uid = "?", "?"
+        start, uid, synthetic = "?", "?", False
         try:
             with RecordingReader(path) as reader:
                 header = reader.header
             uid = str(header.session_uid)
+            synthetic = bool(header.metadata.get("synthetic")) or is_synthetic_uid(
+                header.session_uid
+            )
             if header.wall_clock_start_us:
                 t = time.localtime(header.wall_clock_start_us / 1e6)
                 start = time.strftime("%Y-%m-%d %H:%M", t)
         except Exception:
             pass
-        print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}")
+        marker = " synthetic" if synthetic else ""
+        print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}{marker}")
     return 0
 
 
 def cmd_sessions(args: argparse.Namespace) -> int:
     """List stored sessions newest first, with their debrief link."""
+    from pitwall.derive import is_synthetic_uid
     from pitwall.store.db import Database, open_configured
 
     settings = ConfigStore().current()
@@ -1268,16 +1528,22 @@ def cmd_sessions(args: argparse.Namespace) -> int:
     if not rows:
         print("sessions: none in the database")
         return 0
-    print(f"{'session_uid':<20} {'start':<16} {'track':>5} {'type':>4} {'laps':>4}  recording")
+    print(
+        f"{'session_uid':<20} {'start':<16} {'track':>5} {'type':>4} {'laps':>4} "
+        "syn  derived_from  recording"
+    )
     for row in rows:
         uid = int(row["uid"])
         started = row.get("started_at")
         start = time.strftime("%Y-%m-%d %H:%M", time.localtime(started)) if started else "?"
         rec = Path(row["recording_path"]).name if row.get("recording_path") else "-"
+        synthetic = "yes" if row.get("synthetic") or is_synthetic_uid(uid) else ""
+        derived_from = str(row.get("derived_from") or "")
         laps = len(db.laps_for(uid))
         print(
             f"{uid:<20} {start:<16} {row.get('track_id', '?'):>5} "
-            f"{row.get('session_type', '?'):>4} {laps:>4}  {rec}"
+            f"{row.get('session_type', '?'):>4} {laps:>4}  {synthetic:<3} "
+            f"{derived_from:<20} {rec}"
         )
     print("debrief: /debrief on the dashboard, or pitwall debrief --session <uid>")
     return 0
@@ -1474,6 +1740,7 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     cal.add_argument("--track", type=int, default=None)
     cal.add_argument("--dry-run", action="store_true")
+    cal.add_argument("--include-synthetic", action="store_true")
     cal.add_argument("--write-overlay", action="store_true")
     cal.add_argument("--overlay-dir", type=Path, default=None)
     cal.add_argument("--json", action="store_true")
@@ -1499,6 +1766,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trim.add_argument("--out", required=True)
     trim.set_defaults(func=cmd_trim)
+
+    derive = sub.add_parser("derive", help="derive a synthetic recording from a real session")
+    derive.add_argument("file", help=REC_HELP)
+    derive.add_argument("out", help="output .f1bin or .f1bin.zst path")
+    derive.add_argument("--wear-scale", type=float, default=None)
+    derive.add_argument("--inject-sc", metavar="START[-END]", default=None)
+    derive.add_argument("--vsc", action="store_true")
+    derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
+    derive.set_defaults(func=cmd_derive)
+
+    bench = sub.add_parser("bench", help="replay scenarios and compare scorecards")
+    bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
+    bench.add_argument(
+        "--recordings",
+        action="append",
+        default=None,
+        metavar="DIR",
+        help="recording directory to search (repeatable)",
+    )
+    bench.add_argument("--rules", type=Path, default=None, help="rules directory")
+    bench.add_argument("--only", nargs="+", default=None, metavar="ID")
+    bench.add_argument("--baseline", type=Path, default=None, help="baseline scorecard path")
+    bench.add_argument("--tolerance", type=float, default=0.02)
+    bench.add_argument("--update-baseline", action="store_true")
+    bench.add_argument(
+        "--accept-changes",
+        action="store_true",
+        help="with --update-baseline, accept removed or edited passing checks",
+    )
+    bench.add_argument("--note", default=None, help="note for a baseline update")
+    bench.add_argument("--out", type=Path, default=None, help="write scorecard JSON")
+    bench.add_argument("--json", action="store_true", help="print scorecard and gate as JSON")
+    bench.add_argument("--trend", action="store_true", help="show history trend without replay")
+    bench.add_argument("--window", type=_positive_int, default=5)
+    bench.set_defaults(func=cmd_bench)
 
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file", nargs="?", default=None, help=REC_HELP)

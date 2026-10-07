@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from pitwall.derive import is_synthetic_uid
 from pitwall.digest import call_quality
 from pitwall.store.db import Database, _uid_from_sql
 
@@ -76,10 +77,14 @@ def read_ledger(path: Path) -> dict[int, dict[str, Any]]:
 
 
 def merged_sessions(db: Database, pack_dir: Path) -> dict[int, dict[str, Any]]:
-    rows = read_ledger(Path(pack_dir) / LEDGER_NAME)
+    rows = {
+        uid: row
+        for uid, row in read_ledger(Path(pack_dir) / LEDGER_NAME).items()
+        if not is_synthetic_uid(uid)
+    }
     for row in db.session_track_ms():
         uid = _row_uid(row)
-        if uid is None:
+        if uid is None or is_synthetic_uid(uid):
             continue
         previous = rows.get(uid)
         old_ms = _number(previous.get("ms")) if previous is not None else None
@@ -149,12 +154,18 @@ def write_pack(
     root.mkdir(parents=True, exist_ok=True)
     sessions = merged_sessions(db, root)
     db_sessions = (
-        {int(session["uid"]): session for session in db.sessions()}
+        {
+            int(session["uid"]): session
+            for session in db.sessions()
+            if not is_synthetic_uid(int(session["uid"]))
+        }
         if refresh_quality is None
         else {}
     )
     quality_uids = (
-        set(db_sessions) if refresh_quality is None else {int(uid) for uid in refresh_quality}
+        set(db_sessions)
+        if refresh_quality is None
+        else {int(uid) for uid in refresh_quality if not is_synthetic_uid(int(uid))}
     )
     for uid in quality_uids:
         row = sessions.get(uid)
@@ -189,6 +200,12 @@ def write_pack(
     for row in grade_rows:
         if row.get("session_uid") is not None:
             row["session_uid"] = _uid_from_sql(int(row["session_uid"]))
+    grade_rows = [
+        row
+        for row in grade_rows
+        if row.get("session_uid") is None
+        or not (is_synthetic_uid(int(row["session_uid"])) and row.get("source") == "press")
+    ]
     pack = {
         "pack_version": PACK_VERSION,
         "written_at": current.isoformat(),

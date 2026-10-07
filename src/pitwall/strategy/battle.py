@@ -276,6 +276,8 @@ class BattleTracker:
         for p in self.pending:
             if p.episode.rival_idx in undone:
                 continue
+            if p.episode.rival_idx in inp.pitting:
+                continue  # he boxed before the result held: a pit cycle, not a pass
             if inp.now - p.t >= wait:
                 self.episodes.append(p.episode)
                 self._announce(p.episode, inp.now, th, inp.laps_remaining <= 1)

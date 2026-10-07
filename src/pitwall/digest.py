@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
+from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
@@ -154,7 +155,20 @@ def quality_trend(
 
     db_sessions = db.sessions()
     db_uids = {int(session["uid"]) for session in db_sessions}
+    db_sessions = [session for session in db_sessions if not is_synthetic_uid(int(session["uid"]))]
     rows = []
+    structures: dict[tuple[int, int, str], tuple[int, ...]] = {}
+
+    def structure_for(session: Mapping[str, Any]) -> tuple[int, ...]:
+        key = (
+            int(session.get("weekend_link") or 0),
+            -1 if session.get("track_id") is None else int(session["track_id"]),
+            str(session.get("weekend_structure") or ""),
+        )
+        if key not in structures:
+            structures[key] = db.stored_weekend_structure(session)
+        return structures[key]
+
     if sessions > 0:
         for session in reversed(db_sessions):
             quality = call_quality(db, int(session["uid"]))
@@ -169,6 +183,7 @@ def quality_trend(
                     quality,
                     _track_name,
                     _session_label,
+                    structure_for(session),
                 )
             )
             if len(rows) >= sessions:
@@ -177,7 +192,7 @@ def quality_trend(
         from pitwall.learnpack import LEDGER_NAME, read_ledger
 
         for uid, session in read_ledger(pack_dir / LEDGER_NAME).items():
-            if uid in db_uids:
+            if is_synthetic_uid(uid) or uid in db_uids:
                 continue
             ledger_quality = session.get("quality")
             if not isinstance(ledger_quality, dict):
@@ -194,6 +209,7 @@ def quality_trend(
                     ledger_quality,
                     _track_name,
                     _session_label,
+                    structure_for(session),
                 )
             )
     rows.sort(key=_quality_sort_key)
@@ -220,7 +236,8 @@ def _quality_session_row(
     session_type: object,
     quality: Mapping[str, Any],
     track_name: Callable[[Any], str],
-    session_label: Callable[[Any], str],
+    session_label: Callable[[Any, Sequence[int]], str],
+    weekend_structure: Sequence[int] = (),
 ) -> dict[str, Any]:
     timestamp = _finite_time(started_at)
     return {
@@ -232,7 +249,7 @@ def _quality_session_row(
             else "unknown"
         ),
         "track": track_name(track_id),
-        "session_type": session_label(session_type),
+        "session_type": session_label(session_type, weekend_structure),
         **quality,
     }
 

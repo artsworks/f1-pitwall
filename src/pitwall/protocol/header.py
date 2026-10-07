@@ -25,6 +25,8 @@ assert HEADER_SIZE == 29, HEADER_SIZE
 
 # Offset of m_packetId inside the header (used for cheap pre-parse peeking).
 PACKET_ID_OFFSET = 6
+# Offset of m_packetVersion inside the header.
+PACKET_VERSION_OFFSET = 5
 # Offset of m_sessionUID inside the header.
 SESSION_UID_OFFSET = 7
 # Offset of m_playerCarIndex inside the header.

@@ -55,7 +55,12 @@ def generate_learning_corpus(
             send_session_end=True,
         )
         path = output_dir / f"m4-learning-{index:02d}.f1bin"
-        write_packet_stream(path, race_stream(spec), session_uid=uid)
+        write_packet_stream(
+            path,
+            race_stream(spec),
+            session_uid=uid,
+            metadata={"synthetic": False},
+        )
         paths.append(path)
     return paths
 

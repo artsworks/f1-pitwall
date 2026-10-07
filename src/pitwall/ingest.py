@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
+from pitwall.derive import is_synthetic_uid
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -161,6 +162,8 @@ def _relabel_calls_mode(
         started_at=header.wall_clock_start_us / 1_000_000.0,
         recording_path=str(path),
         calls_mode=mode,
+        synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+        derived_from=str(header.metadata.get("derived_from") or ""),
     )
 
 
@@ -181,6 +184,8 @@ def ingest_recordings(
     *,
     calls_mode: str | None = None,
     out_dir: Path | None = None,
+    rules_dir: Path | None = None,
+    isolated: bool = False,
 ) -> list[IngestResult]:
     """Replay or digest a recording batch, isolating errors to each file."""
     from pitwall.digest import DIGEST_VERSION, build_digest
@@ -206,6 +211,10 @@ def ingest_recordings(
                     engine = build_engine(
                         clock=VirtualClock(),
                         overrides={"engine": {"heartbeat_s": 0}},
+                        rules_dir=rules_dir,
+                        isolated=isolated,
+                        synthetic=bool(header.metadata.get("synthetic"))
+                        or is_synthetic_uid(header.session_uid),
                         sinks=[],
                         db=db,
                         decision_log_fp=io.StringIO(),
@@ -225,6 +234,8 @@ def ingest_recordings(
                     started_at=header.wall_clock_start_us / 1_000_000.0,
                     recording_path=str(path),
                     calls_mode=origin_mode,
+                    synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+                    derived_from=str(header.metadata.get("derived_from") or ""),
                 )
                 digest = build_digest(
                     db, uid, settings.thresholds, setup_rules=settings.setup_rules

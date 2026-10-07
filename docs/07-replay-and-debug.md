@@ -108,6 +108,9 @@ particular weather crossover). Two answers:
 
 - **Trim tool**: `pitwall trim <recording> --from-us N --to-us N --out fixtures/sc.f1bin`
   — small local slices for replay. Recordings stay out of git (ADR 0005).
+- **Derive tool**: `pitwall derive <recording> <out> --inject-sc 6-8 --wear-scale 1.5`
+  writes a synthetic copy of a real recording with a tagged session UID. Synthetic sessions feed
+  grading and tuning but not physics priors. See [Synthetic recordings](23-synthetic-recordings.md).
 - **Synthetic generator**: build valid packets from the layout tables to script an exact
   scenario. Used only for cases real recordings do not cover, and always flagged as
   synthetic, because synthetic data quietly encodes your assumptions.
