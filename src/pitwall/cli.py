@@ -23,8 +23,14 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
-from pitwall.input.menu import validate as validate_menu
-from pitwall.input.menu import validate_shortcuts
+from pitwall.input.menu import (
+    shortcut_warnings,
+    validate_related_rules,
+    validate_shortcuts,
+)
+from pitwall.input.menu import (
+    validate as validate_menu,
+)
 from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
@@ -500,9 +506,15 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
         mode=store.current().resolved_mindset(),
         staleness_s=settings.engine.staleness_s,
     )
-    menu_errors = validate_menu(settings.menu) + validate_shortcuts(settings.input, settings.menu)
+    menu_errors = (
+        validate_menu(settings.menu)
+        + validate_shortcuts(settings.input, settings.menu)
+        + validate_related_rules(settings.menu, {rule.id for rule in settings.rules})
+    )
     for err in menu_errors:
         print(f"rules check FAILED: {err}")
+    for warning in shortcut_warnings(settings.input, settings.menu):
+        print(f"rules check WARNING: {warning}")
     if menu_errors:
         return 1
     snap = SessionState().snapshot(0.0)

@@ -176,18 +176,14 @@ The grammar is a YAML file, one intent per entry, each with a list of phrasings.
 Intents map onto the menu: most are existing `menu.items` ids, so the answer path is
 unchanged. A few are new because they are natural to say and awkward to scroll to.
 
-| Intent | Maps to | Phrasings (examples; the file has 3–6 each) | Kind |
+| Intent | Maps to | Phrasings (examples) | Kind |
 |---|---|---|---|
 | `tyres` | menu `tyres` | "tyres gone", "how are the tyres", "tyre check" | question |
-| `pit` | menu `pit` | "pit now", "should I box", "box this lap?" | question |
-| `gap` | menu `gap` | "gap ahead", "gap to the car ahead", "where's the car ahead" | question |
-| `gap_behind` | menu `gap_behind` | "gap behind", "who's behind", "car behind" | question |
-| `fuel` | menu `fuel` | "fuel", "fuel check", "how's the fuel" | question |
-| `plan` | menu `plan` | "what's the plan", "plan", "strategy" | question |
-| `push` | menu `push` | "push or save", "can I push", "do I save" | question |
+| `pit` | menu `pit` | "pit now", "should I box", "what's the plan" | question |
+| `fight` | menu `fight` | "fight", "gap ahead", "gap behind", "race stat" | question |
+| `push` | menu `push` | "push or save", "can I push", "fuel check" | question |
 | `rain` | menu `rain` | "rain coming", "weather", "is it going to rain" | question |
-| `race_stat` | menu `race_stat` | "race stat", "status", "where are we" | question |
-| `fight` | menu `fight` | "fight", "who am I racing", "battle" | question |
+| `budget` | menu `budget` | "radio calls", "call budget", "calls per lap" | action |
 | `laps_left` | new question | "laps left", "how many laps", "how long to go" | question |
 | `position` | new question | "position", "what position", "where am I" | question |
 | `understeer` | menu `understeer` | "understeer", "I've got understeer", "front's washing out" | opinion |
@@ -197,9 +193,8 @@ unchanged. A few are new because they are natural to say and awkward to scroll t
 | `ack` | press ACK | "copy", "understood", "got it" | acts on the open response window; also the outcome of a silent tap while a window is open (see binding) |
 | `negative` | press NEG | "negative", "no", "not now" | same as a double press |
 | `say_again` | say again | "say again", "repeat", "what was that" | re-speaks the last call inside `say_again_window_s` |
-| `mindset` | menu `mindset` | "aggressive", "go aggressive", "balanced", "calm it down" | action; the word chooses the mindset rather than toggling |
+| `mindset` | menu `mindset` | "mindset", "change mindset", "toggle mindset" | action |
 | `silent` | menu `silent` | "radio silent", "leave me alone", "radio on", "talk to me" | action; on/off chosen by the phrase |
-| `budget` | menu `budget` | "less radio", "more radio" | action; steps down/up instead of cycling |
 | `page` | menu `page` | "next page", "battle page", "car page", "track page" | action; a named page jumps straight to it |
 
 Rules for the grammar:

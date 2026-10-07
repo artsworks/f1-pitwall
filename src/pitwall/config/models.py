@@ -111,7 +111,7 @@ class InputSettings(BaseModel):
     quiet_minutes: float = 5.0
     udp_action_bit: int = 0x00100000
     long_press: Literal["bookmark", "silent"] = "bookmark"
-    silent_toggle_bit: int = 0  # e.g. 0x02000000 = UDP Action 6; any press toggles
+    silent_toggle_bit: int = 0  # an unused UDP Action bit toggles radio silence
     silent_keeps_p1: bool = True
     mindset_toggle_bit: int = 0  # e.g. 0x01000000 = UDP Action 5; balanced <-> aggressive
     mindset_cycle: list[str] = Field(default_factory=lambda: ["balanced", "aggressive"])
@@ -171,14 +171,14 @@ class InputSettings(BaseModel):
         return self
 
 
-MenuAction = Literal["mindset", "silent", "page", "budget", "cooldown"]
+MenuAction = Literal["mindset", "silent", "page", "budget"]
 
 
 class MenuItemModel(BaseModel):
     """One driver-menu entry (docs/12). `kind`:
     question -> answered from the snapshot by the `answer` handler (defaults to id);
     opinion  -> recorded (decision log + SQLite) and acknowledged from `replies`;
-    action   -> runs `action` (mindset / silent / page / budget / cooldown)."""
+    action   -> runs `action` (mindset / silent / page / budget)."""
 
     id: str
     label: str  # shown on the overlay and spoken on scroll; keep it 2-3 words
@@ -190,6 +190,8 @@ class MenuItemModel(BaseModel):
     # `show_when`, float to the top while `rank_when` (YAML order otherwise).
     show_when: str = ""
     rank_when: str = ""
+    shortcut_only: bool = False
+    related_rules: list[str] = Field(default_factory=list)
     # case -> reply templates (variants rotate). Opinions and actions use "default".
     replies: dict[str, list[str]] = Field(default_factory=dict)
 

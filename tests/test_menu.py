@@ -17,7 +17,15 @@ from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
 from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
 from pitwall.engine import Engine, build_engine, run_replay
-from pitwall.input.menu import DriverMenu, ReplyPicker, answer, validate, validate_shortcuts
+from pitwall.input.menu import (
+    DriverMenu,
+    ReplyPicker,
+    answer,
+    shortcut_warnings,
+    validate,
+    validate_related_rules,
+    validate_shortcuts,
+)
 from pitwall.protocol.header import PacketId
 from pitwall.state.session import Damage, Snapshot
 from pitwall.store.db import Database
@@ -32,6 +40,7 @@ CLOSE = 0x04000000
 RIGHT = 0x00800000  # page cycle; confirms while the menu is open
 LEFT = 0x01000000  # mindset; closes while the menu is open
 SD6, SD7, SD8 = 0x02000000, 0x04000000, 0x08000000
+SD9, SD10, SD11, SD12 = 0x10000000, 0x20000000, 0x40000000, 0x80000000
 
 
 def _butn(status: int, t: float) -> bytes:
@@ -140,8 +149,7 @@ def test_double_press_and_close_button_cancel(tmp_path: Path) -> None:
 
 def test_opinion_persisted_and_biases_snapshot(tmp_path: Path) -> None:
     db = Database(":memory:")
-    # Up opens on the last item (page); four more Ups reach "Understeer".
-    presses = [(UP, 20.0 + 0.5 * i) for i in range(5)] + [(ACK, 23.0)]
+    presses = [(SD9, 20.0)]
     engine, calls, rows = _run(tmp_path, presses, db=db)
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "understeer" and rec["topic"] == "balance"
@@ -158,18 +166,15 @@ def test_opinion_persisted_and_biases_snapshot(tmp_path: Path) -> None:
 
 
 def test_action_items_run_their_action(tmp_path: Path) -> None:
-    presses = [(UP, 20.0), (UP, 20.5), (UP, 21.0), (ACK, 22.0)]  # cooldown, silent, mindset
-    engine, _, rows = _run(tmp_path, presses)
+    engine, _, rows = _run(tmp_path, [(SD12, 20.0)])
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "mindset" and engine.mindset == "aggressive"
-    engine2, _, _ = _run(tmp_path, [(UP, 20.0), (UP, 20.5), (ACK, 22.0)], name="s")
+    engine2, _, _ = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)], name="s")
     assert engine2.dispatcher.silent is True
 
 
 def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
-    # page, silent, mindset, oversteer, understeer, budget
-    presses = [(UP, 20.0 + 0.5 * i) for i in range(6)] + [(ACK, 23.5)]
-    engine, calls, rows = _run(tmp_path, presses)
+    engine, calls, rows = _run(tmp_path, [(SD11, 20.0)])
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "budget"
     assert engine.budget_live == 20 and engine.dispatcher.budget_override == 20
@@ -208,6 +213,8 @@ def test_client_menu_messages_and_state_payload() -> None:
     engine.tick(engine.clock.now())
     payload = engine.menu_payload(engine.clock.now())
     assert payload["open"] is True and payload["index"] == 1
+    assert "Understeer" not in payload["items"]
+    assert "Mindset" not in payload["items"]
     engine.client_message({"type": "menu", "op": "close"})
     engine.tick(engine.clock.now())
     assert engine.menu_payload(engine.clock.now()) == {"open": False}
@@ -215,26 +222,56 @@ def test_client_menu_messages_and_state_payload() -> None:
 
 def test_answers_and_reply_variants_rotate() -> None:
     item = MenuItemModel(
-        id="gap",
-        label="Gap ahead?",
-        replies={"closing": ["{gap} to {name}, closing {trend}.", "{name}, {gap}."]},
+        id="push",
+        label="Push or save?",
+        replies={
+            "attack": ["Push. {gap} to the car ahead.", "Attack at {gap}."],
+            "fuel_tight": ["Push, fuel's tight. Plus {margin} laps."],
+        },
     )
-    snap = Snapshot(
-        now=0.0, rival_ahead_idx=3, gap_ahead_s=1.43, gap_trend_ahead_s=0.31, rival_ahead_name="NOR"
-    )
+    snap = Snapshot(now=0.0, gap_ahead_s=0.8)
     case, values = answer(item, snap, "balanced")
-    assert case == "closing"
+    assert case == "attack"
     picker = ReplyPicker()
-    assert picker.pick(item, case, values) == "1.4 to NOR, closing 0.3."
-    assert picker.pick(item, case, values) == "NOR, 1.4."
-    assert picker.pick(item, case, values) == "1.4 to NOR, closing 0.3."
-    assert answer(item, Snapshot(now=0.0, gap_ahead_s=math.inf), "balanced")[0] == "none"
-    fuel = MenuItemModel(id="fuel", label="Fuel OK?")
-    short = Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.5)
-    case, values = answer(fuel, short, "balanced")
-    assert case == "short" and values["margin"] == "0.5"
+    assert picker.pick(item, case, values) == "Push. 0.8 to the car ahead."
+    assert picker.pick(item, case, values) == "Attack at 0.8."
+    assert picker.pick(item, case, values) == "Push. 0.8 to the car ahead."
+    assert answer(item, Snapshot(now=0.0, gap_ahead_s=math.inf), "balanced")[0] == "push"
+    case, values = answer(
+        item, Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.5), "balanced"
+    )
+    assert case == "save_fuel" and values["margin"] == "0.5"
+    case, values = answer(
+        item, Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=0.2), "balanced"
+    )
+    assert case == "fuel_tight" and values["margin"] == "0.2"
+    assert picker.pick(item, case, values) == "Push, fuel's tight. Plus 0.2 laps."
     under = MenuItemModel(id="understeer", label="Understeer", kind="opinion", topic="balance")
     assert answer(under, Snapshot(now=0.0, front_brake_bias=57), "b")[1]["bias_to"] == "56"
+    pit = MenuItemModel(
+        id="pit",
+        label="Pit now?",
+        replies={
+            "soon": ["Stay out, box lap {plan_lap}. Window {window}."],
+            "no_stop": ["Stay out to the end. {laps_left} to go."],
+        },
+    )
+    soon = Snapshot(
+        now=0.0,
+        pit_plan="box_in_n",
+        pit_plan_lap=26,
+        lap_num=24,
+        pit_window_start=24,
+        pit_window_end=28,
+        laps_remaining=8,
+    )
+    case, values = answer(pit, soon, "balanced")
+    assert case == "soon"
+    assert ReplyPicker().pick(pit, case, values) == "Stay out, box lap 26. Window 24 to 28."
+    no_stop = Snapshot(now=0.0, pit_plan="no_stop", laps_remaining=5)
+    case, values = answer(pit, no_stop, "balanced")
+    assert case == "no_stop"
+    assert ReplyPicker().pick(pit, case, values) == "Stay out to the end. 5 to go."
 
 
 def test_validate_and_duplicate_bits() -> None:
@@ -259,27 +296,28 @@ def test_packaged_menu_is_valid() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[])
     settings = engine.store.current()
     assert validate(settings.menu) == []
+    assert [i.id for i in settings.menu.items if not i.shortcut_only] == [
+        "tyres",
+        "pit",
+        "fight",
+        "rain",
+        "push",
+        "silent",
+    ]
     labels = [i.label for i in settings.menu.items]
-    assert labels[0] == "Tyres gone?" and labels[-1] == "Cooldown lap"
     assert "Next page" not in labels
     assert all(len(label.split()) <= 3 for label in labels)
-
-
-def test_cooldown_menu_action_overrides_hot_lap_coaching(tmp_path: Path) -> None:
-    engine, calls, rows = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)])
-    (rec,) = _inputs(rows)
-    assert rec["item_id"] == "cooldown"
-    assert dict(rec["inputs"])["case"] == "on"  # type: ignore[call-overload]
-    assert any("cooldown lap" in c.text.lower() for c in calls)
-    # the override covers one lap; the replay runs on past it
-    assert engine._manual_cooldown is False
-
-
-def test_cooldown_menu_toggles_back_to_hot_lap(tmp_path: Path) -> None:
-    _, calls, rows = _run(tmp_path, [(UP, 20.0), (ACK, 21.0), (UP, 23.0), (ACK, 24.0)])
-    cases = [dict(r["inputs"])["case"] for r in _inputs(rows)]  # type: ignore[call-overload]
-    assert cases == ["on", "off"]
-    assert any("hot-lap" in c.text.lower() for c in calls)
+    assert {i.id for i in settings.menu.items if i.shortcut_only} == {
+        "understeer",
+        "oversteer",
+        "budget",
+        "mindset",
+    }
+    assert validate_shortcuts(settings.input, settings.menu) == []
+    assert shortcut_warnings(settings.input, settings.menu) == []
+    menu = DriverMenu()
+    menu.step(settings.menu, 1, 0.0, {"session_kind": "practice"})
+    assert "Fight" in menu.payload(settings.menu, 0.0)["items"]
 
 
 def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None:
@@ -301,44 +339,67 @@ def test_stick_right_left_keep_page_and_mindset_when_closed(tmp_path: Path) -> N
 
 def test_stream_deck_shortcuts_answer_directly(tmp_path: Path) -> None:
     db = Database(":memory:")
-    engine, calls, rows = _run(tmp_path, [(SD6, 20.0), (SD7, 25.0), (SD8, 30.0)], db=db)
+    engine, calls, rows = _run(
+        tmp_path,
+        [
+            (SD6, 20.0),
+            (SD7, 25.0),
+            (SD8, 30.0),
+            (SD9, 35.0),
+            (SD10, 40.0),
+            (SD11, 45.0),
+            (SD12, 50.0),
+        ],
+        db=db,
+    )
     recs = _inputs(rows)
-    assert [r["item_id"] for r in recs] == ["pit", "race_stat", "fight"]
-    assert all(dict(r["inputs"])["via"] == "shortcut" for r in recs)  # type: ignore[call-overload]
+    item_ids = ["pit", "push", "fight", "understeer", "oversteer", "budget", "mindset"]
+    assert [r["item_id"] for r in recs] == item_ids
+    via_values = [dict(r["inputs"])["via"] for r in recs]  # type: ignore[call-overload]
+    assert via_values == ["shortcut"] * len(recs)
     assert not [r for r in rows if r["outcome"] == "menu_open"] and not engine.menu.open
-    for item in ("pit", "race_stat", "fight"):
+    for item in item_ids[:-1]:
         assert any(c.rule_id == f"menu:{item}" and c.priority == 1 for c in calls)
+    assert engine.mindset == "aggressive"
     uid = engine.state.session_uid
     assert uid is not None
-    assert [r["item_id"] for r in db.driver_inputs_for_session(uid)] == [
-        "pit",
-        "race_stat",
-        "fight",
-    ]
+    assert [r["item_id"] for r in db.driver_inputs_for_session(uid)] == item_ids
 
 
 def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
     _, _, rows = _run(tmp_path, [(DOWN, 20.0), (SD7, 21.0)])
     assert [r["text"] for r in rows if r["outcome"] == "menu_close"] == ["shortcut"]
-    assert [r["item_id"] for r in _inputs(rows)] == ["race_stat"]
+    assert [r["item_id"] for r in _inputs(rows)] == ["push"]
 
 
-def test_race_stat_and_fight_answers() -> None:
-    stat = MenuItemModel(id="race_stat", label="Race stat")
-    short = Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.6, position=4)
-    assert answer(stat, short, "b")[0] == "fuel_short"
-    plain = Snapshot(now=0.0, position=4, laps_remaining=12, player_best_lap_ms=92_412)
-    case, values = answer(stat, plain, "b")
-    assert case == "position" and values["pos"] == "4" and values["best"] == "1 minute 32.4 seconds"
-    assert answer(stat, Snapshot(now=0.0), "b")[0] == "unknown"
+def test_fight_answers_in_race_and_non_race_sessions() -> None:
+    fight = MenuItemModel(
+        id="fight",
+        label="Fight",
+        replies={
+            "none": ["P{pos}, {laps_left} to go. Clear air."],
+            "times": ["P{pos} on the times. Best lap {best}."],
+            "no_time": ["No clean lap on the board yet."],
+        },
+    )
+    clear = Snapshot(now=0.0, session_kind="race", position=4, laps_remaining=10)
+    case, values = answer(fight, clear, "b")
+    assert case == "none" and values["pos"] == "4"
+    assert ReplyPicker().pick(fight, case, values) == "P4, 10 to go. Clear air."
     practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
-    assert answer(stat, practice, "b")[0] == "practice_no_best"
-    timed = dataclasses.replace(practice, player_best_lap_ms=81_298, tyre_age_laps=5)
-    case, values = answer(stat, timed, "b")
-    assert case == "practice" and values["best"] == "1 minute 21.3 seconds"
-    fight = MenuItemModel(id="fight", label="Fight")
+    case, values = answer(fight, practice, "b")
+    assert case == "no_time"
+    assert ReplyPicker().pick(fight, case, values) == "No clean lap on the board yet."
+    timed = dataclasses.replace(practice, player_best_lap_ms=81_298)
+    case, values = answer(fight, timed, "b")
+    assert case == "times" and values["best"] == "1 minute 21.3 seconds"
+    assert (
+        ReplyPicker().pick(fight, case, values)
+        == "P4 on the times. Best lap 1 minute 21.3 seconds."
+    )
     snap = Snapshot(
         now=0.0,
+        session_kind="race",
         laps_remaining=10,
         rival_ahead_idx=2,
         rival_ahead_name="Norris",
@@ -355,7 +416,6 @@ def test_race_stat_and_fight_answers() -> None:
     assert case == "both"
     assert values["ahead"] == "Norris 1.2 ahead, we're catching 0.3 a lap."
     assert values["behind"] == "Russell 0.9 behind, we're pulling 0.2 a lap."
-    assert answer(fight, Snapshot(now=0.0), "b")[0] == "none"
 
 
 def test_shortcut_validation() -> None:
@@ -366,6 +426,19 @@ def test_shortcut_validation() -> None:
     inp = InputSettings(shortcuts=[{"bit": 1, "item": "nope"}])
     menu = MenuSettings(items=[MenuItemModel(id="pit", label="Pit now?")])
     assert validate_shortcuts(inp, menu) == ["input.shortcuts: unknown menu item 'nope'"]
+    shortcut_only = MenuSettings(
+        items=[
+            MenuItemModel(
+                id="balance", label="Balance", shortcut_only=True, related_rules=["missing"]
+            )
+        ]
+    )
+    assert shortcut_warnings(InputSettings(), shortcut_only) == [
+        "menu item 'balance' is shortcut_only but no input.shortcuts binds it"
+    ]
+    assert validate_related_rules(shortcut_only, set()) == [
+        "menu item 'balance': unknown related rule 'missing'"
+    ]
 
 
 def test_menu_is_situational() -> None:
