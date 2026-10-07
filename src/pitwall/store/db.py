@@ -1694,7 +1694,8 @@ class Database:
             if parsed:
                 return tuple(parsed)
         return self.weekend_session_types(
-            int(row.get("weekend_link") or 0), int(row.get("track_id") or -1)
+            int(row.get("weekend_link") or 0),
+            -1 if row.get("track_id") is None else int(row["track_id"]),
         )
 
     def session(self, uid: int) -> dict[str, Any] | None:

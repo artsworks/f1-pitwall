@@ -162,7 +162,7 @@ def quality_trend(
     def structure_for(session: Mapping[str, Any]) -> tuple[int, ...]:
         key = (
             int(session.get("weekend_link") or 0),
-            int(session.get("track_id") or -1),
+        -1 if session.get("track_id") is None else int(session["track_id"]),
             str(session.get("weekend_structure") or ""),
         )
         if key not in structures:
