@@ -13,17 +13,13 @@ import numpy as np
 import yaml
 
 from pitwall.config.models import Settings
+from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import linear_deg, stints, stop_laps
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
 from pitwall.protocol.enums import session_kind
 from pitwall.store.db import Database, LapRow
 
 WriteFilter = Callable[[int, int, str, float], bool]
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    value = th.get(name, default)
-    return float(value) if isinstance(value, int | float) else default
 
 
 def _green(lap: LapRow) -> bool:

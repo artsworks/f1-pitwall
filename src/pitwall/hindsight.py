@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from pitwall.config.thresholds import threshold as _th
 from pitwall.model.deg import fuel_burned_laps
 from pitwall.setup.rules import SetupRules, parse_setup_rules
 from pitwall.store.db import Database, LapRow
@@ -36,11 +37,6 @@ class Outcome:
 
     def row(self) -> dict[str, object]:
         return asdict(self)
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def _num(inputs: Mapping[str, object], name: str) -> float | None:

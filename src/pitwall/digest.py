@@ -10,15 +10,11 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.store.db import Database
 
 DIGEST_VERSION = 2
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def _mean(xs: Sequence[float]) -> float | None:

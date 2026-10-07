@@ -14,6 +14,8 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from pitwall.config.thresholds import threshold as _th
+
 FREE, CATCHING, ATTACKING, DEFENDING, THREAT, MANAGING = (
     "free_air",
     "catching",
@@ -25,11 +27,6 @@ FREE, CATCHING, ATTACKING, DEFENDING, THREAT, MANAGING = (
 
 PASS_DRS, PASS_NODRS, HOLD = "battle_pass_drs", "battle_pass_nodrs", "battle_hold"
 PASS_COMPOUND = 0  # model_params compound slot for battle params (per track)
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 @dataclass(frozen=True, slots=True)

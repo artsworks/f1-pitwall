@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from statistics import median
 from typing import TYPE_CHECKING
 
+from pitwall.config.thresholds import threshold as _th
 from pitwall.model.deg import Prior, resolve_prior
 
 if TYPE_CHECKING:
@@ -58,11 +59,6 @@ def ref_pace_ms(laps: list[LapRow], before_lap_num: int) -> int:
         if lap.lap_num < before_lap_num and lap.valid == 1 and lap.lap_time_ms > 0
     ]
     return int(median(times[-3:])) if times else 0
-
-
-def _th(th: Mapping[str, object], name: str, default: float) -> float:
-    v = th.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def current_pit_loss(

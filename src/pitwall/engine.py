@@ -23,6 +23,7 @@ from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
+from pitwall.config.thresholds import threshold
 from pitwall.hindsight import grade_and_store
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
@@ -1138,8 +1139,7 @@ class Engine:
         return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
 
     def _th(self, name: str, default: float) -> float:
-        v = self.store.current().thresholds.get(name, default)
-        return float(v) if isinstance(v, int | float) else default
+        return threshold(self.store.current().thresholds, name, default)
 
     def _lap_fraction(self) -> float:
         state = self.state
