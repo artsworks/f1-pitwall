@@ -104,9 +104,12 @@ input was a prior of 1.04 kg per lap from the live database. The real burn was
   current lap.
 - `SessionState` matches each Car Status sample to a lap by
   `overall_frame_identifier`. The finished lap's totals are the last sample
-  before the Lap Data frame that changed the lap. Pitwall grades the lap after
-  the first sample at or after that frame arrives, in either packet order. A
-  flashback clears this tracking, and Pitwall does not grade that lap.
+  before the Lap Data frame that changed the lap. Pitwall grades the lap 0.5 s
+  of session time after the lap change, so a late old-lap sample still counts.
+  Pitwall ignores old-lap samples that arrive after that. An older frame never
+  overwrites the live counters. Pitwall keeps the last 2 s of samples, and
+  always keeps the last one before a pending lap change. A flashback clears
+  this tracking, and Pitwall does not grade that lap.
 - `boost_left_on` fires only on a lift or brake after 3 s. This replaces the
   12 s rule in [0007](0007-driving-event-signals.md), and the
   `boost_max_s` threshold is gone.
