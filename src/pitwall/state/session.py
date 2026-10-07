@@ -639,6 +639,7 @@ class Snapshot:
     traffic_behind_m: float = math.inf
     traffic_behind_s: float = math.inf
     traffic_behind_kind: str = ""
+    traffic_behind_name: str = ""
     dist_to_line_m: float = math.inf
     pit_exit_s: float = math.inf  # since the player left the pit lane
     _ages: dict[str, float] = field(default_factory=dict)
@@ -2924,6 +2925,9 @@ class SessionState:
                 traffic_behind_m=round(behind[0]),
                 traffic_behind_s=round(behind[0] / max(speed, 30.0), 1),
                 traffic_behind_kind=_lap_kind(self.cars_lap[behind[1]].driver_status),
+                traffic_behind_name=(
+                    self.participants[behind[1]].name if behind[1] < len(self.participants) else ""
+                ),
             )
         return out
 

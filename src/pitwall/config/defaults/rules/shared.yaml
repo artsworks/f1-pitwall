@@ -306,7 +306,7 @@ rules:
       - "Lap deleted. Reset, clean one next."
   # Just out of the pit lane: a car closing on the merge.
   - id: pit_exit_traffic
-    sessions: [practice, qualifying, race]
+    sessions: [practice, qualifying]
     priority: 1
     when: "pit_exit_s <= 3 and traffic_behind_s <= th.pit_exit_traffic_s"
     clear_when: "pit_exit_s > 10"

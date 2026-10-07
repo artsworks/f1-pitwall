@@ -349,12 +349,53 @@ def test_race_pit_exit_traffic_is_gated_and_shares_cooldown() -> None:
     )
     result = engine.evaluate(at_exit)
     ids = {c.rule.defn.id for c in result.candidates}
-    assert {"pit_exit_traffic", "pit_exit_traffic_race"} <= ids
+    assert "pit_exit_traffic_race" in ids and "pit_exit_traffic" not in ids
     dispatcher = Dispatcher(PolicySettings(min_gap_s=0.0), VirtualClock(), sinks=[])
     dispatcher.submit(result.candidates, at_exit)
     calls = dispatcher.drain(1.0)
     assert len(calls) == 1
-    assert calls[0].rule_id == "pit_exit_traffic"
+    assert calls[0].rule_id == "pit_exit_traffic_race"
+
+
+@pytest.mark.parametrize("name", ["HAMILTON", ""])
+def test_race_pit_exit_holds_the_line(name: str) -> None:
+    """Silverstone race L10, 891.0 s: out of the pits with a car 0.4 s behind on
+    track. pit_exit_traffic said "Traffic at exit. Let it go." The race rule
+    missed: its pit-exit rival (LAWSON) was the stop projection, 7.1 s back."""
+    snap = _snap(
+        lap_num=10,
+        phase="out_lap",
+        pit_exit_s=0.07,
+        rival_pit_exit_name="LAWSON",
+        pit_exit_rival_gap_s=-7.11,
+        traffic_behind_s=0.4,
+        traffic_behind_name=name,
+    )
+    cands = {c.rule.defn.id: c for c in _default_rule_engine().evaluate(snap).candidates}
+    assert "pit_exit_traffic" not in cands
+    text = cands["pit_exit_traffic_race"].text
+    assert "Hold" in text and "LAWSON" not in text and (name or "Car") in text
+    from pitwall.config.loader import ConfigStore
+
+    rule = next(r for r in ConfigStore().current().rules if r.id == "pit_exit_traffic_race")
+    lines = [*rule.say, *(line for tier in rule.severity for line in tier.say)]
+    assert not any(
+        w in line.lower()
+        for line in lines
+        for w in ("let it go", "off the line", "give way", "yield")
+    )
+
+
+def test_quali_pit_exit_traffic_still_gives_way() -> None:
+    snap = _snap(
+        session_kind="qualifying",
+        session_type=5,
+        phase="out_lap",
+        pit_exit_s=1.0,
+        traffic_behind_s=0.4,
+    )
+    ids = {c.rule.defn.id for c in _default_rule_engine().evaluate(snap).candidates}
+    assert "pit_exit_traffic" in ids and "pit_exit_traffic_race" not in ids
 
 
 def test_one_decimal_call_copy() -> None:

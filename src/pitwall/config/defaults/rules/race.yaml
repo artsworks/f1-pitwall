@@ -1059,7 +1059,8 @@ rules:
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
-    when: "phase == 'out_lap' and pit_exit_s <= 3 and rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s"
+    # In a race the driver holds position at the exit. Giving way is for practice and quali.
+    when: "phase == 'out_lap' and pit_exit_s <= 3 and (traffic_behind_s <= th.pit_exit_traffic_s or (rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s))"
     clear_when: "pit_exit_s > 10"
     cooldown_s: 30
     cooldown_group: car_behind
@@ -1068,6 +1069,15 @@ rules:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
       - "Careful at the exit, {rival_pit_exit_name} is right there"
       - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
+    severity:
+      - when: "traffic_behind_s <= th.pit_exit_traffic_s and traffic_behind_name != ''"
+        say:
+          - "{traffic_behind_name} right there at the pit exit. Hold the line"
+          - "{traffic_behind_name} coming at the pit exit. Hold your line"
+      - when: "traffic_behind_s <= th.pit_exit_traffic_s"
+        say:
+          - "Car right there at the pit exit. Hold the line"
+          - "Car coming at the pit exit, {traffic_behind_s:.1f} behind. Hold your line"
   # Team fight: free to race, keep it clean.
   - id: teammate_fight
     sessions: [race]

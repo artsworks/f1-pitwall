@@ -503,9 +503,10 @@ def test_out_lap_gap_calls() -> None:
 
 
 def test_pit_exit_traffic() -> None:
-    fired = _texts(_engine(), phase="out_lap", pit_exit_s=1.0, traffic_behind_s=2.5)
+    q = {"session_kind": "qualifying", "phase": "out_lap", "traffic_behind_s": 2.5}
+    fired = _texts(_engine(), **q, pit_exit_s=1.0)
     assert "pit_exit_traffic" in fired
-    late = _texts(_engine(), phase="out_lap", pit_exit_s=20.0, traffic_behind_s=2.5)
+    late = _texts(_engine(), **q, pit_exit_s=20.0)
     assert "pit_exit_traffic" not in late
 
 
