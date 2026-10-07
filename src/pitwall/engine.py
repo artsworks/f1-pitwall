@@ -1586,7 +1586,11 @@ class Engine:
                 "result": ep.result,
             }
         )
-        if self.db is None or snap.track_id < 0:
+        if (
+            self.db is None
+            or snap.track_id < 0
+            or (self.state.session_uid is not None and is_synthetic_uid(self.state.session_uid))
+        ):
             return
         name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
         cap = self._th("param_weight_cap", 50.0)

@@ -42,7 +42,9 @@ from pitwall.protocol.packets import (
     parse,
 )
 from pitwall.state.lap import LapSummary
+from pitwall.state.session import Snapshot
 from pitwall.store.db import Database, _uid_to_sql
+from pitwall.strategy.battle import Episode
 from pitwall.tune import tune_from_db
 
 from .race_synth import RaceSpec, race_stream
@@ -395,6 +397,31 @@ def test_engine_skips_physics_folds_for_tagged_session(tmp_path) -> None:
     assert not any(
         name.startswith(("deg_ms_per_lap", "base_ms", "deg_fuel_ref")) for name in synthetic_names
     )
+
+
+def test_persist_episode_skips_battle_param_folds_for_synthetic_session() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    snapshot = Snapshot(now=1.0, track_id=7)
+    episode = Episode(
+        kind="defend",
+        rival_idx=1,
+        start_lap=3,
+        end_lap=4,
+        drs=False,
+        result="held",
+    )
+
+    engine.state.session_uid = derived_uid(SOURCE_UID, ["inject_sc=3-4"])
+    engine._persist_episode(snapshot, episode)
+    assert db.params_for_track(7) == []
+
+    engine.state.session_uid = SOURCE_UID
+    engine._persist_episode(snapshot, episode)
+    params = db.params_for_track(7)
+    assert len(params) == 1
+    assert params[0].name == "battle_hold"
+    db.close()
 
 
 def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
