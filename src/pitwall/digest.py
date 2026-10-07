@@ -5,6 +5,7 @@ rebuilt and two digests can be diffed."""
 
 from __future__ import annotations
 
+import json
 import statistics
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
@@ -15,6 +16,72 @@ from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, 
 from pitwall.store.db import Database
 
 DIGEST_VERSION = 3
+
+
+def call_quality(db: Database, uid: int) -> dict[str, Any]:
+    calls = db.calls_for_session(uid)
+
+    def tags_for(row: Mapping[str, Any]) -> set[str]:
+        raw = row.get("tags")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = []
+        return {str(tag) for tag in raw} if isinstance(raw, list) else set()
+
+    fired_calls = []
+    for row in calls:
+        rule_id = str(row.get("rule_id") or "")
+        tags = tags_for(row)
+        if (
+            row.get("outcome") == "fired"
+            and rule_id != "reply"
+            and not rule_id.startswith("menu:")
+            and "reply" not in tags
+            and "say_again" not in tags
+        ):
+            fired_calls.append(row)
+
+    grades = {
+        str(grade.get("call_id")): grade
+        for grade in db.grades_for_session(uid)
+        if grade.get("call_id") is not None
+    }
+    fired_ids = {str(call.get("call_id")) for call in fired_calls if call.get("call_id") is not None}
+    fired_grades = {call_id: grades[call_id] for call_id in fired_ids if call_id in grades}
+    fired = len(fired_calls)
+    questions = [
+        row for row in db.driver_inputs_for_session(uid) if row.get("kind") == "question"
+    ]
+    unanswered = 0
+    for row in questions:
+        inputs = row.get("inputs")
+        if isinstance(inputs, str):
+            try:
+                inputs = json.loads(inputs)
+            except json.JSONDecodeError:
+                inputs = {}
+        case = inputs.get("case") if isinstance(inputs, dict) else None
+        if case == "unknown" or not str(row.get("reply") or "").strip():
+            unanswered += 1
+    neg = sum(row.get("outcome") == "neg" for row in calls)
+    return {
+        "fired": fired,
+        "graded": len(fired_grades),
+        "ungraded": fired - len(fired_grades),
+        "good": sum(grade.get("grade") == "good" for grade in fired_grades.values()),
+        "good_pct": round(
+            100 * sum(grade.get("grade") == "good" for grade in fired_grades.values()) / fired, 1
+        )
+        if fired
+        else None,
+        "neg": neg,
+        "neg_rate_pct": round(100 * neg / fired, 1) if fired else None,
+        "press_graded": sum(grade.get("source") == "press" for grade in fired_grades.values()),
+        "questions": len(questions),
+        "unanswered_questions": unanswered,
+    }
 
 
 def _mean(xs: Sequence[float]) -> float | None:
@@ -76,6 +143,7 @@ def build_digest(
     setup_rules: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     outcomes = grade_and_store(db, uid, th, setup_rules=setup_rules)
+    quality = call_quality(db, uid)
     laps = db.laps_for(uid, 0)
     stops = stop_laps(laps)
     parts = stints(laps, stops)
@@ -188,6 +256,7 @@ def build_digest(
             ),
         },
         "calls": dict(sorted(calls.items())),
+        "quality": quality,
         "bookmarks": [
             {"lap": b.get("lap"), "kind": b.get("kind") or "hold", "note": b.get("note") or ""}
             for b in bookmarks
@@ -198,10 +267,18 @@ def build_digest(
 
 def format_digest(d: Mapping[str, Any]) -> str:
     s = d["session"]
+    quality = d.get("quality", {})
+    good_pct = quality.get("good_pct")
+    neg_pct = quality.get("neg_rate_pct")
+    good_text = f"{good_pct:g}%" if good_pct is not None else "n/a"
+    neg_text = f"{neg_pct:g}%" if neg_pct is not None else "n/a"
     lines = [
         f"session {s['uid']} track {s['track_id']} laps {s['laps']}"
         f"  strategy {d['strategy']['executed'] or '-'}  stops {d['stops']}",
         f"outcomes {d['outcomes']}",
+        f"quality {good_text} good · neg {neg_text} · "
+        f"{quality.get('unanswered_questions', 0)} unanswered questions · "
+        f"{quality.get('ungraded', 0)} ungraded",
         "findings:",
     ]
     lines += [f"  - {f}" for f in d["findings"]] or ["  (none)"]

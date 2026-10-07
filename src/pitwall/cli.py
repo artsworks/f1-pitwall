@@ -11,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
+from statistics import fmean
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -585,6 +586,70 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
+    if args.quality:
+        from pitwall.debrief import _session_label, _track_name
+        from pitwall.digest import call_quality
+        from pitwall.store.db import Database, open_configured
+
+        if args.sessions < 1:
+            print("stats --quality: sessions must be positive")
+            return 2
+        settings = ConfigStore().current()
+        db = Database(args.db) if args.db else open_configured(settings)
+        if db is None:
+            print("stats --quality: persistence disabled")
+            return 1
+        rows = []
+        for session in db.sessions():
+            quality = call_quality(db, int(session["uid"]))
+            if not quality["fired"]:
+                continue
+            started_at = session.get("started_at")
+            rows.append(
+                {
+                    "uid": session["uid"],
+                    "started_at": started_at,
+                    "date": (
+                        time.strftime("%Y-%m-%d", time.localtime(float(started_at)))
+                        if started_at is not None
+                        else "unknown"
+                    ),
+                    "track": _track_name(session.get("track_id")),
+                    "session_type": _session_label(session.get("session_type")),
+                    **quality,
+                }
+            )
+        rows = rows[-args.sessions :]
+        trend = None
+        if len(rows) > 1:
+            midpoint = len(rows) // 2
+            older = fmean(float(row["good_pct"]) for row in rows[:midpoint])
+            newer = fmean(float(row["good_pct"]) for row in rows[midpoint:])
+            trend = {
+                "older_mean_good_pct": round(older, 1),
+                "newer_mean_good_pct": round(newer, 1),
+                "delta_pct": round(newer - older, 1),
+                "sessions": len(rows),
+            }
+        if args.json:
+            print(json.dumps({"sessions": rows, "trend": trend}, indent=2, default=str))
+        elif not rows:
+            print("No sessions with fired calls.")
+        else:
+            for row in rows:
+                print(
+                    f"{row['date']} · {row['track']} · {row['session_type']} · "
+                    f"{row['fired']} fired · good {row['good_pct']:g}% · "
+                    f"neg {row['neg_rate_pct']:g}% · "
+                    f"{row['unanswered_questions']} unanswered · {row['ungraded']} ungraded"
+                )
+            if trend is not None:
+                print(
+                    f"trend: good% {trend['older_mean_good_pct']:.1f} -> "
+                    f"{trend['newer_mean_good_pct']:.1f} "
+                    f"({trend['delta_pct']:+.1f}) over {trend['sessions']} sessions"
+                )
+        return 0
     if args.learned:
         from pitwall.store.db import Database, open_configured
 
@@ -1393,7 +1458,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("stats", help="packet census of a recording")
     st.add_argument("file", nargs="?", default=None, help=REC_HELP)
-    st.add_argument("--learned", action="store_true")
+    stats_modes = st.add_mutually_exclusive_group()
+    stats_modes.add_argument("--learned", action="store_true")
+    stats_modes.add_argument("--quality", action="store_true")
+    st.add_argument("--sessions", type=int, default=10)
     st.add_argument("--db", default=None, help="SQLite path (default: configured database)")
     st.add_argument("--track", type=int, default=None)
     st.add_argument("--json", action="store_true")

@@ -14,6 +14,7 @@ from typing import Any
 
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
+from pitwall.digest import call_quality
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
@@ -736,6 +737,7 @@ def _summary_section(
     pit_laps: list[int],
     calls: list[dict[str, Any]],
     grades: dict[str, dict[str, Any]],
+    quality: dict[str, Any],
 ) -> str:
     clean = [lap for lap in laps if lap.valid and lap.sc_status == 0 and lap.lap_time_ms > 0]
     fired = [call for call in calls if call.get("outcome") == "fired"]
@@ -758,17 +760,23 @@ def _summary_section(
     summary_text = (
         f"{len(laps)} laps · {len(clean)} clean green laps · {stop_count} "
         f"{'stop' if stop_count == 1 else 'stops'} · "
-        f"{len(fired)} calls · {judged['good']} graded good · {judged['wrong']} graded wrong. "
+        f"{len(fired)} calls · {judged['good']} graded good · {judged['noise']} noise · "
+        f"{judged['too_late']} late · {judged['wrong']} wrong. "
         f"Mean clean pace {mean}, spread {spread}."
     )
+    good_pct = quality.get("good_pct")
+    neg_pct = quality.get("neg_rate_pct")
+    quality_value = f"{good_pct:g}% good" if good_pct is not None else "n/a"
+    neg_text = f"{neg_pct:g}%" if neg_pct is not None else "n/a"
     stats = (
         ("RACE PACE", mean, f"mean clean lap · {len(clean)} laps", ""),
         ("CONSISTENCY", spread, "σ across clean laps", ""),
         ("PIT STOP", pit_value, pit_note, "warn" if pit_value != "none" else ""),
         (
-            "CALLS",
-            f"{len(fired)} / {judged['good']} good",
-            f"{judged['noise']} noise · {judged['too_late']} late · {judged['wrong']} wrong",
+            "CALL QUALITY",
+            quality_value,
+            f"{quality.get('fired', 0)} calls · neg {neg_text} · "
+            f"{quality.get('unanswered_questions', 0)} unanswered",
             "",
         ),
     )
@@ -1373,6 +1381,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     laps = db.laps_for(uid)
     stints = db.stints_for_session(uid)
     pits = db.pit_events_for_session(uid)
+    quality = call_quality(db, uid)
     pit_laps = _pit_laps(pits, laps, session.get("session_type"))
     calls = db.calls_for_session(uid)
     grades = {str(row["call_id"]): row for row in db.grades_for_session(uid)}
@@ -1419,7 +1428,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + "</nav>"
     )
     sections = (
-        _summary_section(session, laps, pits, pit_laps, calls, grades)
+        _summary_section(session, laps, pits, pit_laps, calls, grades, quality)
         + _pace_section(laps, stints, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)

@@ -90,6 +90,8 @@ def test_debrief_marks_press_grades() -> None:
 
     report = render_debrief(db, uid, ConfigStore().current())
 
+    assert "CALL QUALITY" in report
+    assert "100% good" in report
     assert "<span class='chip'>press</span>" in report
 
 
