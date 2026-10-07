@@ -331,7 +331,7 @@
     renderQRail(p.quali, p);
     renderCarPage(p, p.strategy);
     renderTrackPage(p.track_info);
-    renderRivals(p.strategy);
+    renderRivals(p.strategy, p.position);
 
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     var compEl = el("compound");
@@ -465,12 +465,12 @@
 
   // Car and Track pages: one block per car. Colours follow the driver: green
   // when the gap moves his way, red when it moves against him.
-  function rivalBlock(n, r, side) {
+  function rivalBlock(n, r, side, pos) {
     n.innerHTML = "";
     n.className = "rv";
     n.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "rv-side"));
     if (!r) {
-      n.appendChild(span(side === "ahead" ? "no car ahead" : "no car behind", "rv-none"));
+      n.appendChild(span(side === "ahead" && pos === 1 ? "leading" : "nobody close", "rv-none"));
       return;
     }
     var nogap = r.gap_s === null || r.gap_s === undefined;
@@ -488,14 +488,14 @@
     }
     n.appendChild(span(gapText(gap), "rv-gap " + gcls));
   }
-  function renderRivals(s) {
+  function renderRivals(s, pos) {
     ["cp-rivals", "tp-rivals"].forEach(function (id) {
       var box = el(id);
       if (!box) return;
       box.hidden = !s;
       if (!s) return;
-      rivalBlock(box.children[0], s.ahead, "ahead");
-      rivalBlock(box.children[1], s.behind, "behind");
+      rivalBlock(box.children[0], s.ahead, "ahead", pos);
+      rivalBlock(box.children[1], s.behind, "behind", pos);
     });
   }
 
