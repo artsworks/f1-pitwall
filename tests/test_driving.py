@@ -265,7 +265,8 @@ def test_boost_rule_fires_on_lift_not_on_straight() -> None:
     assert _texts(e, boost_on_s=8.0, throttle=0.2)["boost_left_on"].startswith("Boost still on")
     assert "boost_left_on" not in _texts(e, boost_on_s=9.0, brake=0.9)  # not re-armed
     _texts(e, boost_on_s=0.0)
-    assert "boost_left_on" in _texts(e, boost_on_s=13.0)
+    assert "boost_left_on" not in _texts(e, boost_on_s=14.0, throttle=1.0, brake=0.0)
+    assert "boost_left_on" in _texts(e, boost_on_s=4.0, throttle=1.0, brake=0.5)
 
 
 def test_lockup_rules_text() -> None:

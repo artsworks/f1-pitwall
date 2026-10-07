@@ -94,7 +94,7 @@ rules:
   - id: plan_announce_no_stop
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left == 0 and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
+    when: "phase == 'racing' and active_plan == 'A' and plan_switch_count == 0 and plan_stops_left == 0 and num_pit_stops == 0 and (lap_num > 1 or lap_distance > th.plan_announce_after_m)"
     clear_when: "active_plan == ''"
     cooldown_s: 30
     cooldown_group: plan
@@ -339,17 +339,17 @@ rules:
       - "Over energy budget, {energy_lap_delta_mj:+.1f} MJ. Harvest"
   - id: energy_under
     sessions: [race]
-    min_lap: 3  # lap 1-2 spend the full launch charge
+    min_lap: 4  # grades the lap before; laps 1-2 spend the launch charge
     priority: 3
-    when: "phase == 'racing' and energy_mode == 'under' and sector == 2"
-    clear_when: "energy_mode != 'under'"
+    when: "phase == 'racing' and energy_prev_lap_mode == 'under' and sector == 0"
+    clear_when: "sector != 0"
     cooldown_s: 180
     cooldown_group: energy
     requires: [car_status]
     say:
-      - "{energy_under_mj:.1f} MJ unused. Deploy more"
-      - "{energy_under_mj:.1f} MJ left that lap. Use it"
-      - "Battery spare, {energy_under_mj:.1f} MJ. Deploy"
+      - "{energy_prev_under_mj:.1f} MJ unused last lap. Deploy more"
+      - "{energy_prev_under_mj:.1f} MJ left last lap. Use it"
+      - "Battery spare last lap, {energy_prev_under_mj:.1f} MJ. Deploy"
   - id: overtake_mode
     sessions: [race]
     priority: 2
@@ -392,7 +392,7 @@ rules:
     severity:
       - when: "battle_catch_laps <= 2"
         say:
-          - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.0f} laps"
+          - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"
           - "Closing fast on {rival_ahead_name}. DRS soon"
   - id: battle_attack
     sessions: [race]
@@ -469,7 +469,7 @@ rules:
       - when: "battle_threat_laps <= 2"
         priority: 2
         say:
-          - "{rival_behind_name} in DRS in {battle_threat_laps:.0f} laps. Push"
+          - "{rival_behind_name} in DRS in {battle_threat_laps:.1f} laps. Push"
           - "Gap behind {gap_behind_s:.1f}, falling. Push"
   - id: battle_manage
     sessions: [race]
@@ -903,6 +903,11 @@ rules:
     say:
       - "Last lap. P{position}, bring it home"
       - "Final lap, P{position}. Nice and clean to the flag"
+    severity:
+      - when: "penalty_places > 0"
+        say:
+          - "Last lap. P{position} on the road, P{penalty_position} with the penalty. {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "Final lap. Penalty puts us P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
   # Fastest lap (FTLP event). The player's is always worth a word; a rival's
   # only late on, when the player's best is close enough to take it back.
   - id: fastest_lap_mine
@@ -940,7 +945,6 @@ rules:
     when: "phase == 'racing' and penalty_s > 0 and penalty_places > 0 and laps_remaining <= th.penalty_standing_laps"
     clear_when: "penalty_places == 0"
     cooldown_s: 120
-    cooldown_group: penalty_standing
     requires: [lap_data]
     say:
       - "With penalty, P{penalty_position}. Need {penalty_need_s:.1f} on {penalty_threat_name}"
@@ -1027,8 +1031,10 @@ rules:
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
-    when: "phase == 'out_lap' and rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s"
-    clear_when: "phase != 'out_lap'"
+    when: "phase == 'out_lap' and pit_exit_s <= 3 and rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s"
+    clear_when: "pit_exit_s > 10"
+    cooldown_s: 30
+    cooldown_group: car_behind
     requires: [lap_data]
     say:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"

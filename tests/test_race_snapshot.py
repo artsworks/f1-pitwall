@@ -47,6 +47,12 @@ def test_gaps_and_laps_remaining() -> None:
     assert snap.laps_remaining == 16
 
 
+def test_player_pit_stop_count() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, num_pit_stops=1)
+    assert state.snapshot(1.0).num_pit_stops == 1
+
+
 def test_penalty_recent_from_pena_event() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0)

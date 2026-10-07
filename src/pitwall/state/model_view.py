@@ -25,6 +25,8 @@ class ModelView:
     fuel_source: str = ""
     energy_per_lap_mj: float = 0.0
     energy_lap_delta_mj: float = 0.0
+    energy_prev_lap_delta_mj: float = 0.0
+    energy_prev_lap_mode: str = ""
     energy_laps_to_floor: float = math.inf
     energy_mode: str = ""
     predicted_lap_ms: int = 0

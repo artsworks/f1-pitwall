@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from pitwall.config.models import RuleDefModel
+from pitwall.audio.dispatcher import Dispatcher
+from pitwall.clock import VirtualClock
+from pitwall.config.models import PolicySettings, RuleDefModel
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.rules.expr import ExprError, Predicate
@@ -259,3 +261,136 @@ def test_last_lap_rules_share_one_cooldown() -> None:
     ids = ("last_lap", "last_lap_defend", "last_lap_attack")
     assert {defs[i].cooldown_group for i in ids} == {"last_lap"}
     assert all(defs[i].cooldown_s >= 60 for i in ids)
+
+
+def test_penalty_covered_then_penalty_cost_both_speak() -> None:
+    engine = _default_rule_engine()
+    dispatcher = Dispatcher(
+        PolicySettings(min_gap_s=0.0, p3_straight_only=False), VirtualClock(), sinks=[]
+    )
+    covered = _snap(
+        now=0.0,
+        phase="racing",
+        laps_remaining=2,
+        position=2,
+        penalty_s=5,
+        penalty_position=2,
+    )
+    result = engine.evaluate(covered)
+    dispatcher.submit(result.candidates, covered)
+    first = dispatcher.drain(0.0)
+    assert [call.rule_id for call in first] == ["penalty_covered"]
+
+    penalty = _snap(
+        now=30.0,
+        phase="racing",
+        laps_remaining=2,
+        position=2,
+        penalty_s=5,
+        penalty_position=4,
+        penalty_margin_s=-1.2,
+        penalty_threat_name="NORRIS",
+    )
+    result = engine.evaluate(penalty)
+    dispatcher.submit(result.candidates, penalty)
+    second = dispatcher.drain(30.0)
+    assert [call.rule_id for call in second] == ["penalty_cost"]
+
+
+def test_last_lap_uses_penalty_severity_copy() -> None:
+    snap = _snap(
+        phase="racing",
+        total_laps=10,
+        laps_remaining=1,
+        sector=0,
+        position=4,
+        penalty_position=5,
+        penalty_margin_s=-1.4,
+        penalty_threat_name="NORRIS",
+    )
+    result = _default_rule_engine().evaluate(snap)
+    call = next(c for c in result.candidates if c.rule.defn.id == "last_lap")
+    assert "P4 on the road, P5 with the penalty" in call.text or ("Penalty puts us P5" in call.text)
+
+
+def test_plan_no_stop_only_speaks_before_a_pit_stop() -> None:
+    base = {
+        "phase": "racing",
+        "lap_num": 5,
+        "active_plan": "A",
+        "plan_switch_count": 0,
+        "plan_stops_left": 0,
+    }
+    no_stop = _default_rule_engine().evaluate(_snap(**base, num_pit_stops=0))
+    assert "plan_announce_no_stop" in {c.rule.defn.id for c in no_stop.candidates}
+    after_stop = _default_rule_engine().evaluate(_snap(**base, num_pit_stops=1))
+    assert "plan_announce_no_stop" not in {c.rule.defn.id for c in after_stop.candidates}
+
+
+def test_race_pit_exit_traffic_is_gated_and_shares_cooldown() -> None:
+    engine = _default_rule_engine()
+    late = _snap(
+        phase="out_lap",
+        pit_exit_s=13.0,
+        rival_pit_exit_name="LAWSON",
+        pit_exit_rival_gap_s=-3.98,
+        traffic_behind_s=2.0,
+    )
+    late_ids = {c.rule.defn.id for c in engine.evaluate(late).candidates}
+    assert "pit_exit_traffic_race" not in late_ids
+
+    at_exit = _snap(
+        now=1.0,
+        phase="out_lap",
+        pit_exit_s=1.0,
+        rival_pit_exit_name="LAWSON",
+        pit_exit_rival_gap_s=-2.0,
+        traffic_behind_s=2.0,
+    )
+    result = engine.evaluate(at_exit)
+    ids = {c.rule.defn.id for c in result.candidates}
+    assert {"pit_exit_traffic", "pit_exit_traffic_race"} <= ids
+    dispatcher = Dispatcher(PolicySettings(min_gap_s=0.0), VirtualClock(), sinks=[])
+    dispatcher.submit(result.candidates, at_exit)
+    calls = dispatcher.drain(1.0)
+    assert len(calls) == 1
+    assert calls[0].rule_id == "pit_exit_traffic"
+
+
+def test_one_decimal_call_copy() -> None:
+    qualifying = _default_rule_engine().evaluate(
+        _snap(
+            session_kind="qualifying",
+            phase="out_lap",
+            hot_car_behind_s=0.33,
+        )
+    )
+    behind = next(c for c in qualifying.candidates if c.rule.defn.id == "cool_car_behind")
+    assert "0.3 seconds" in behind.text
+
+    catching = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            battle_mode="catching",
+            battle_catch_laps=1.2,
+            laps_remaining=5,
+            rival_ahead_name="NORRIS",
+            battle_pace_ahead="faster",
+        )
+    )
+    catch = next(c for c in catching.candidates if c.rule.defn.id == "battle_catching")
+    assert "1.2 laps" in catch.text
+
+    threat = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            sector=1,
+            battle_mode="under_threat",
+            battle_threat_laps=0.4,
+            laps_remaining=5,
+            rival_behind_name="LECLERC",
+        )
+    )
+    under_threat = next(c for c in threat.candidates if c.rule.defn.id == "battle_under_threat")
+    assert "0.4 laps" in under_threat.text
