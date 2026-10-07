@@ -1645,18 +1645,19 @@ class Engine:
         snapshot = self._battle(self._plan(self.state.snapshot(now)))
         self._update_setup_stop_wing()
         snapshot = dataclasses.replace(snapshot, **self.setup_advisor.snapshot_fields())
+        uid = self.state.session_uid
         if (
             snapshot.session_ended
             and not self._session_ended_written
             and self.db is not None
-            and self.state.session_uid is not None
+            and uid is not None
         ):
             self.fold_open_stint()
-            self._store_debrief_setup(self.state.session_uid)
+            self._store_debrief_setup(uid)
             self._session_ended_written = True
-            self.db.end_session(self.state.session_uid, now)
-            grade_and_store(self.db, self.state.session_uid, self.store.current().thresholds)
-            self.db.mark_graded(self.state.session_uid)
+            self.db.end_session(uid, now)
+            grade_and_store(self.db, uid, self.store.current().thresholds)
+            self.db.mark_graded(uid)
             if self.learning_pack_dir is not None:
                 from pitwall.learnpack import write_pack
 
@@ -1665,6 +1666,7 @@ class Engine:
                         self.db,
                         self.learning_pack_dir,
                         keep_days=self.learning_pack_keep_days,
+                        refresh_quality=[uid],
                     )
                 except (OSError, sqlite3.Error, ValueError) as e:
                     log.warning("learning pack skipped at session end: %s", e)

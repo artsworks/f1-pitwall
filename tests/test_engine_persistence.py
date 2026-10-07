@@ -270,11 +270,17 @@ def test_session_end_writes_learning_pack_after_grading(
     uid = 205
     db.upsert_session(uid, track_id=7, session_type=15, started_at=1.0)
     pack_dir = tmp_path / "learnings"
-    calls: list[tuple[Database, Path, int]] = []
+    calls: list[tuple[Database, Path, int, list[int] | None]] = []
 
-    def write_pack(db_arg: Database, directory: Path, *, keep_days: int) -> Path:
+    def write_pack(
+        db_arg: Database,
+        directory: Path,
+        *,
+        keep_days: int,
+        refresh_quality: list[int] | None = None,
+    ) -> Path:
         assert db_arg.maintenance_version(f"graded:{uid}") == 1
-        calls.append((db_arg, directory, keep_days))
+        calls.append((db_arg, directory, keep_days, refresh_quality))
         return directory / "learning-latest.json"
 
     monkeypatch.setattr("pitwall.learnpack.write_pack", write_pack)
@@ -292,7 +298,7 @@ def test_session_end_writes_learning_pack_after_grading(
 
     engine.tick(1.0)
 
-    assert calls == [(db, pack_dir, 9)]
+    assert calls == [(db, pack_dir, 9, [uid])]
 
 
 def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:

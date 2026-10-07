@@ -10,7 +10,7 @@ import math
 import statistics
 import time
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -145,33 +145,59 @@ def call_quality(db: Database, uid: int) -> dict[str, Any]:
     }
 
 
-def quality_trend(db: Database, sessions: int = 10) -> dict[str, Any]:
+def quality_trend(
+    db: Database,
+    sessions: int = 10,
+    pack_dir: Path | None = None,
+) -> dict[str, Any]:
     from pitwall.debrief import _session_label, _track_name
 
+    db_sessions = db.sessions()
+    db_uids = {int(session["uid"]) for session in db_sessions}
     rows = []
     if sessions > 0:
-        for session in reversed(db.sessions()):
+        for session in reversed(db_sessions):
             quality = call_quality(db, int(session["uid"]))
             if not quality["fired"]:
                 continue
-            started_at = session.get("started_at")
             rows.append(
-                {
-                    "uid": session["uid"],
-                    "started_at": started_at,
-                    "date": (
-                        time.strftime("%Y-%m-%d", time.localtime(float(started_at)))
-                        if started_at is not None
-                        else "unknown"
-                    ),
-                    "track": _track_name(session.get("track_id")),
-                    "session_type": _session_label(session.get("session_type")),
-                    **quality,
-                }
+                _quality_session_row(
+                    int(session["uid"]),
+                    session.get("started_at"),
+                    session.get("track_id"),
+                    session.get("session_type"),
+                    quality,
+                    _track_name,
+                    _session_label,
+                )
             )
             if len(rows) >= sessions:
                 break
-    rows.reverse()
+    if sessions > 0 and pack_dir is not None:
+        from pitwall.learnpack import LEDGER_NAME, read_ledger
+
+        for uid, session in read_ledger(pack_dir / LEDGER_NAME).items():
+            if uid in db_uids:
+                continue
+            ledger_quality = session.get("quality")
+            if not isinstance(ledger_quality, dict):
+                continue
+            fired = ledger_quality.get("fired")
+            if isinstance(fired, bool) or not isinstance(fired, int) or fired <= 0:
+                continue
+            rows.append(
+                _quality_session_row(
+                    uid,
+                    session.get("started_at"),
+                    session.get("track_id"),
+                    session.get("session_type"),
+                    ledger_quality,
+                    _track_name,
+                    _session_label,
+                )
+            )
+    rows.sort(key=_quality_sort_key)
+    rows = rows[-sessions:] if sessions > 0 else []
 
     trend = None
     if len(rows) > 1:
@@ -187,6 +213,39 @@ def quality_trend(db: Database, sessions: int = 10) -> dict[str, Any]:
     return {"sessions": rows, "trend": trend}
 
 
+def _quality_session_row(
+    uid: int,
+    started_at: object,
+    track_id: object,
+    session_type: object,
+    quality: Mapping[str, Any],
+    track_name: Callable[[Any], str],
+    session_label: Callable[[Any], str],
+) -> dict[str, Any]:
+    timestamp = _finite_time(started_at)
+    return {
+        "uid": uid,
+        "started_at": started_at,
+        "date": (
+            time.strftime("%Y-%m-%d", time.localtime(timestamp))
+            if timestamp is not None
+            else "unknown"
+        ),
+        "track": track_name(track_id),
+        "session_type": session_label(session_type),
+        **quality,
+    }
+
+
+def _quality_sort_key(row: Mapping[str, Any]) -> tuple[bool, float, int]:
+    started_at = _finite_time(row.get("started_at"))
+    return (
+        started_at is None,
+        started_at if started_at is not None else 0.0,
+        int(row["uid"]),
+    )
+
+
 def startup_scorecard(db: Database, pack_dir: Path | None = None) -> str:
     if pack_dir is None:
         minutes = db.track_minutes()
@@ -194,7 +253,7 @@ def startup_scorecard(db: Database, pack_dir: Path | None = None) -> str:
         from pitwall.learnpack import pack_track_minutes
 
         minutes = pack_track_minutes(db, pack_dir)
-    report = quality_trend(db)
+    report = quality_trend(db, pack_dir=pack_dir) if pack_dir is not None else quality_trend(db)
     rows = report["sessions"]
     if not rows:
         quality_text = "n/a"

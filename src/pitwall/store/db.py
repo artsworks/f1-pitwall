@@ -1398,6 +1398,10 @@ class Database:
         row = self._conn.execute("SELECT version FROM maintenance WHERE key=?", (key,)).fetchone()
         return int(row["version"]) if row is not None else 0
 
+    def maintenance_versions(self) -> dict[str, int]:
+        rows = self._conn.execute("SELECT key, version FROM maintenance ORDER BY key").fetchall()
+        return {str(row["key"]): int(row["version"]) for row in rows}
+
     def set_maintenance_version(self, key: str, version: int) -> None:
         with self.transaction():
             self._conn.execute(
@@ -1484,6 +1488,16 @@ class Database:
                 row["uid"] = _uid_from_sql(int(row["uid"]))
             return rows
         return self.sessions_for_track(track_id)
+
+    def session(self, uid: int) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM sessions WHERE uid=?", (_uid_to_sql(uid),)
+        ).fetchone()
+        if row is None:
+            return None
+        session = dict(row)
+        session["uid"] = _uid_from_sql(int(session["uid"]))
+        return session
 
     def ingested_uids(self) -> set[int]:
         rows = self._conn.execute("SELECT session_uid FROM ingested").fetchall()

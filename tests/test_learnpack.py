@@ -8,7 +8,8 @@ import pytest
 import yaml
 
 from pitwall.cli import main
-from pitwall.digest import startup_scorecard
+from pitwall.config.loader import ConfigStore
+from pitwall.digest import quality_trend, startup_scorecard
 from pitwall.learnpack import (
     LATEST_NAME,
     LEDGER_NAME,
@@ -19,6 +20,7 @@ from pitwall.learnpack import (
     restore_pack,
     write_pack,
 )
+from pitwall.maintenance import LEARN_VERSION, maintain
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database, ModelParam
 
@@ -64,6 +66,7 @@ def test_write_pack_creates_latest_dated_and_ledger_files_without_temps(tmp_path
     assert pack["model_params"][0]["name"] == "deg_ms_per_lap"
     assert pack["call_grades"][0]["session_uid"] == uid
     assert pack["call_grades"][0]["source"] == "press"
+    assert pack["maintenance"] == {}
     assert pack["track_overlays"] == {"7": {"track_id": 7, "track": {"base_pace_ms": 90_000}}}
     assert not [path for path in pack_dir.iterdir() if path.suffix == ".tmp"]
 
@@ -106,7 +109,8 @@ def test_merged_sessions_uses_max_ms_and_counts_ledger_only_rows(tmp_path: Path)
     pack_dir.mkdir()
     (pack_dir / LEDGER_NAME).write_text(
         '{"uid":55,"started_at":10,"track_id":3,"session_type":10,"laps":2,"ms":120000}\n'
-        f'{{"uid":{db_uid},"started_at":19,"track_id":8,"session_type":15,"laps":1,"ms":180000}}\n'
+        f'{{"uid":{db_uid},"started_at":19,"track_id":8,"session_type":15,"laps":1,"ms":180000,'
+        '"quality":{"fired":1}}\n'
         "{broken\n",
         encoding="utf-8",
     )
@@ -120,6 +124,7 @@ def test_merged_sessions_uses_max_ms_and_counts_ledger_only_rows(tmp_path: Path)
         "session_type": 15,
         "laps": 2,
         "ms": 220_000,
+        "quality": {"fired": 1},
     }
     assert pack_track_minutes(db, pack_dir) == {"minutes": 5.7, "laps": 4, "sessions": 2}
 
@@ -136,6 +141,75 @@ def test_startup_scorecard_counts_ledger_only_sessions(tmp_path: Path) -> None:
     assert startup_scorecard(db, pack_dir) == (
         "pitwall: 2 track minutes over 1 sessions · call quality n/a"
     )
+
+
+def test_restored_quality_history_feeds_trend_and_startup(tmp_path: Path) -> None:
+    source = Database(":memory:")
+    uids = (301, 302, 303)
+    for index, uid in enumerate(uids):
+        source.upsert_session(uid, track_id=7, session_type=15, started_at=100.0 + index)
+        if index < 2:
+            source.insert_lap(uid, 0, _lap(1, 90_000))
+        call_id = f"call-{uid}"
+        source.insert_call(
+            uid,
+            {"outcome": "fired", "call_id": call_id, "rule_id": "tyre_life", "t": 10.0},
+        )
+        source.grade_call(uid, call_id, "tyre_life", "good")
+    pack_path = write_pack(source, tmp_path / "source-pack")
+
+    target = Database(":memory:")
+    ledger_dir = tmp_path / "restored-ledger"
+    restore_pack(target, pack_path, ledger_dir)
+    target.upsert_session(uids[0], track_id=7, session_type=15, started_at=100.0)
+    target.insert_call(
+        uids[0],
+        {
+            "outcome": "fired",
+            "call_id": f"call-{uids[0]}",
+            "rule_id": "tyre_life",
+            "t": 10.0,
+        },
+    )
+
+    report = quality_trend(target, pack_dir=ledger_dir)
+
+    assert [row["uid"] for row in report["sessions"]] == list(uids)
+    assert sum(row["uid"] == uids[0] for row in report["sessions"]) == 1
+    assert startup_scorecard(target, ledger_dir).endswith(
+        "call quality 100% good (+0.0 over last 3)"
+    )
+
+
+def test_session_end_quality_refresh_only_recomputes_requested_uid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = Database(":memory:")
+    for uid in (401, 402):
+        db.upsert_session(uid, track_id=7, session_type=15, started_at=float(uid))
+        db.insert_lap(uid, 0, _lap(1, 90_000))
+        db.insert_call(uid, {"outcome": "fired", "call_id": str(uid), "rule_id": "r", "t": 1.0})
+    pack_dir = tmp_path / "learnings"
+    pack_dir.mkdir()
+    (pack_dir / LEDGER_NAME).write_text(
+        '{"uid":402,"started_at":402,"track_id":7,"session_type":15,"laps":1,"ms":1000,'
+        '"quality":{"fired":8}}\n',
+        encoding="utf-8",
+    )
+    called: list[int] = []
+
+    def quality(_db: Database, uid: int) -> dict[str, int]:
+        called.append(uid)
+        return {"fired": 1, "good": uid}
+
+    monkeypatch.setattr("pitwall.learnpack.call_quality", quality)
+
+    write_pack(db, pack_dir, refresh_quality=[401])
+
+    ledger = read_ledger(pack_dir)
+    assert called == [401]
+    assert ledger[401]["quality"] == {"fired": 1, "good": 401}
+    assert ledger[402]["quality"] == {"fired": 8}
 
 
 def test_restore_merges_state_without_overwriting_stronger_values(tmp_path: Path) -> None:
@@ -176,6 +250,7 @@ def test_restore_merges_state_without_overwriting_stronger_values(tmp_path: Path
         "model_params": 3,
         "model_params_quarantine": 1,
         "call_grades": 2,
+        "maintenance": 0,
         "track_overlays": 2,
         "sessions": 1,
     }
@@ -205,6 +280,7 @@ def test_restore_merges_state_without_overwriting_stronger_values(tmp_path: Path
         "model_params": 2,
         "model_params_quarantine": 1,
         "call_grades": 1,
+        "maintenance": 0,
         "track_overlays": 1,
         "sessions": 1,
     }
@@ -224,6 +300,53 @@ def test_restore_merges_state_without_overwriting_stronger_values(tmp_path: Path
         "track_id": 8,
         "track": {"base_pace_ms": 90_000},
     }
+
+
+def test_restore_keeps_stint_priors_active_after_maintenance(tmp_path: Path) -> None:
+    source = Database(":memory:")
+    source.set_param(7, 17, "deg_ms_per_lap", 120.0, 20.0)
+    source.set_maintenance_version("learn_rebuild", LEARN_VERSION)
+    pack_path = write_pack(source, tmp_path / "source-pack")
+
+    target = Database(":memory:")
+    counts = restore_pack(target, pack_path, tmp_path / "restored")
+    report = maintain(target, ConfigStore().current(), refit=False)
+
+    param = target.get_param(7, 17, "deg_ms_per_lap")
+    assert counts["maintenance"] == 1
+    assert report.quarantined == []
+    assert param is not None and param.value == 120.0
+    assert target.quarantined_params() == []
+
+
+def test_restore_breaks_equal_weight_ties_by_updated_at(tmp_path: Path) -> None:
+    source = Database(":memory:")
+    source.set_param(7, 17, "deg_ms_per_lap", 110.0, 50.0)
+    source_pack = write_pack(source, tmp_path / "source-pack")
+    original = json.loads(source_pack.read_text(encoding="utf-8"))
+
+    for name, pack_time, db_time, expected in (
+        ("pack-newer", 200.0, 100.0, 110.0),
+        ("db-newer", 100.0, 200.0, 80.0),
+    ):
+        pack = json.loads(json.dumps(original))
+        pack["model_params"][0]["updated_at"] = pack_time
+        pack_path = tmp_path / f"{name}.json"
+        pack_path.write_text(json.dumps(pack), encoding="utf-8")
+
+        target = Database(":memory:")
+        target.set_param(7, 17, "deg_ms_per_lap", 80.0, 50.0)
+        with target.transaction():
+            target._conn.execute(
+                "UPDATE model_params SET updated_at=? WHERE track_id=7 AND compound=17"
+                " AND name='deg_ms_per_lap'",
+                (db_time,),
+            )
+
+        restore_pack(target, pack_path, tmp_path / f"{name}-ledger")
+
+        restored = target.get_param(7, 17, "deg_ms_per_lap")
+        assert restored is not None and restored.value == expected
 
 
 def test_restore_rejects_newer_pack_version(tmp_path: Path) -> None:

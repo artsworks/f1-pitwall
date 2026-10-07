@@ -112,6 +112,7 @@ By default, Pitwall stores packs in `learnings/` beside `recordings/`. The folde
 Live `pitwall start` writes a pack after each session ends and when Pitwall shuts down.
 The latest pack includes learned parameters, quarantined values, call grades, track overlays and a track ledger.
 Run `pitwall restore learnings/learning-latest.json` to restore a pack.
+Restore keeps active priors and call-quality history for sessions in the ledger.
 Set `learning.pack_dir` to use another drive or synced folder.
 Upload `learning-latest.json` to request promotion into packaged track YAML.
 

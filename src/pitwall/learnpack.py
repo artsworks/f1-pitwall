@@ -5,12 +5,14 @@ import json
 import math
 import os
 import tempfile
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from pitwall.digest import call_quality
 from pitwall.store.db import Database, _uid_from_sql
 
 PACK_VERSION = 1
@@ -21,7 +23,10 @@ LATEST_NAME = "learning-latest.json"
 def _number(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        return None
     return result if math.isfinite(result) else None
 
 
@@ -80,13 +85,15 @@ def merged_sessions(db: Database, pack_dir: Path) -> dict[int, dict[str, Any]]:
         old_ms = _number(previous.get("ms")) if previous is not None else None
         new_ms = _number(row.get("ms"))
         if previous is None or (new_ms is not None and (old_ms is None or new_ms > old_ms)):
+            if previous is not None and "quality" in previous:
+                row["quality"] = previous["quality"]
             rows[uid] = row
     return rows
 
 
 def pack_track_minutes(db: Database, pack_dir: Path) -> dict[str, Any]:
     merged = merged_sessions(db, pack_dir)
-    sessions = merged.values()
+    sessions = [row for row in merged.values() if (_number(row.get("laps")) or 0) > 0]
     total_ms = sum(_number(row.get("ms")) or 0.0 for row in sessions)
     laps = sum(int(_number(row.get("laps")) or 0) for row in sessions)
     return {
@@ -136,10 +143,39 @@ def write_pack(
     keep_days: int = 30,
     now: datetime | float | None = None,
     overlay_dir: Path | None = None,
+    refresh_quality: Iterable[int] | None = None,
 ) -> Path:
     root = Path(pack_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
     sessions = merged_sessions(db, root)
+    db_sessions = (
+        {int(session["uid"]): session for session in db.sessions()}
+        if refresh_quality is None
+        else {}
+    )
+    quality_uids = (
+        set(db_sessions) if refresh_quality is None else {int(uid) for uid in refresh_quality}
+    )
+    for uid in quality_uids:
+        row = sessions.get(uid)
+        quality = call_quality(db, uid)
+        if quality["fired"] > 0:
+            if row is None:
+                session = db_sessions.get(uid) or db.session(uid)
+                if session is None:
+                    continue
+                row = {
+                    "uid": uid,
+                    "started_at": session.get("started_at"),
+                    "track_id": session.get("track_id"),
+                    "session_type": session.get("session_type"),
+                    "laps": 0,
+                    "ms": 0,
+                }
+                sessions[uid] = row
+            row["quality"] = quality
+        elif row is not None:
+            row.pop("quality", None)
     _atomic_write(root / LEDGER_NAME, _ledger_text(sessions))
 
     if now is None:
@@ -162,6 +198,7 @@ def write_pack(
         "model_params": [dataclasses.asdict(row) for row in db.all_params()],
         "model_params_quarantine": db.quarantined_params(),
         "call_grades": grade_rows,
+        "maintenance": db.maintenance_versions(),
         "track_overlays": _overlays(overlay_dir),
     }
     latest_path = root / LATEST_NAME
@@ -197,6 +234,7 @@ def restore_pack(
         "model_params": 0,
         "model_params_quarantine": 0,
         "call_grades": 0,
+        "maintenance": 0,
         "track_overlays": 0,
         "sessions": 0,
     }
@@ -205,7 +243,11 @@ def restore_pack(
             continue
         current = db.get_param(int(row["track_id"]), int(row["compound"]), str(row["name"]))
         weight = float(row["weight"])
-        if current is None or current.weight < weight:
+        pack_updated_at = _number(row.get("updated_at")) or 0.0
+        replace = current is None or weight > current.weight
+        if current is not None and math.isclose(weight, current.weight):
+            replace = pack_updated_at > current.updated_at
+        if replace:
             db.set_param(
                 int(row["track_id"]),
                 int(row["compound"]),
@@ -220,6 +262,21 @@ def restore_pack(
     for row in pack.get("call_grades", []):
         if isinstance(row, dict) and db.insert_grade_if_absent(row):
             counts["call_grades"] += 1
+
+    maintenance = pack.get("maintenance", {})
+    if isinstance(maintenance, dict):
+        for key, version in maintenance.items():
+            if (
+                not isinstance(key, str)
+                or isinstance(version, bool)
+                or not isinstance(version, int)
+            ):
+                continue
+            maintenance_current = db.maintenance_version(key)
+            restored = max(maintenance_current, version)
+            if restored != maintenance_current:
+                db.set_maintenance_version(key, restored)
+                counts["maintenance"] += 1
 
     overlays = pack.get("track_overlays", {})
     if isinstance(overlays, dict):
@@ -247,6 +304,8 @@ def restore_pack(
         old_ms = _number(previous.get("ms")) if previous is not None else None
         new_ms = _number(row.get("ms"))
         if previous is None or (new_ms is not None and (old_ms is None or new_ms > old_ms)):
+            if previous is not None and "quality" in previous and "quality" not in row:
+                row["quality"] = previous["quality"]
             sessions[uid] = row
             counts["sessions"] += 1
     root.mkdir(parents=True, exist_ok=True)

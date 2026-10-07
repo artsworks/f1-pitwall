@@ -620,8 +620,9 @@ def cmd_stats(args: argparse.Namespace) -> int:
         if db is None:
             print("stats --quality: persistence disabled")
             return 1
-        minutes = pack_track_minutes(db, Path(settings.learning.pack_dir).expanduser())
-        report = quality_trend(db, args.sessions)
+        pack_dir = Path(settings.learning.pack_dir).expanduser()
+        minutes = pack_track_minutes(db, pack_dir)
+        report = quality_trend(db, args.sessions, pack_dir)
         rows = report["sessions"]
         trend = report["trend"]
         if args.json:
