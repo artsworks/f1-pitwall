@@ -612,6 +612,7 @@ class Snapshot:
     cool_extend: bool = False  # cool lap ending short of battery, time for another
     time_for_cool_and_hot: bool = False  # finish this lap slow, then one more hot lap
     time_for_out_lap: bool = True  # leaving the garage now still starts a hot lap
+    garage_s: float = 0.0  # engine-clock seconds since the car last entered the garage
     dist_to_hot_mode_m: float = 0.0
     last_hot: HotLap | None = None
     last_hot_mistakes: str = ""
@@ -772,6 +773,7 @@ class SessionState:
         self._was_in_garage = False
         self._pit_exit_t: float | None = None
         self._cool_latch: tuple[float, bool] | None = None
+        self._garage_since: float | None = None
 
         # player lap data
         self.lap_num = 0
@@ -2001,6 +2003,11 @@ class SessionState:
         st = self._last_session_time or 0.0
         kind = session_kind(self.session_type)
         phase = self._phase()
+        # engine clock, not session time: session time can jump while in the garage
+        if phase != "garage":
+            self._garage_since = None
+        elif self._garage_since is None:
+            self._garage_since = now
         inner = self._ema_or_zero(self.tyre_inner_fast)
         coldest = min(range(4), key=lambda i: inner.as_tuple()[i])
         lockup, lockup_wheel = self.lockups.recent(st)
@@ -2292,6 +2299,7 @@ class SessionState:
             release_gap_ahead_s=release.gap_ahead_s,
             release_gap_behind_s=release.gap_behind_s,
             release_clean=release.clean,
+            garage_s=0.0 if self._garage_since is None else now - self._garage_since,
             release_wait_s=0.0 if math.isinf(release.wait_s) else release.wait_s,
             cars_on_track=release.cars_on_track,
             quali_cutoff_ms=cutoff_ms,

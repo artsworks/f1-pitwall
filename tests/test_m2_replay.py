@@ -286,7 +286,8 @@ def test_release_hold_then_go(tmp_path: Path) -> None:
     # Rival positioned so it reaches pit exit just as the player would arrive
     # -> hold; then far away -> go. The rules share the "release" cooldown
     # group (30 s), so the clean phase must start after hold's cooldown.
-    stream = _quali_stream(3400.0, 0.0, 31.0) + _quali_stream(2500.0, 31.0, 40.0)
+    # Hold fires at 10 s (release_garage_settle_s), so clean starts at 41 s.
+    stream = _quali_stream(3400.0, 0.0, 41.0) + _quali_stream(2500.0, 41.0, 50.0)
     rec = write_packet_stream(tmp_path / "rel.f1bin", stream)
     log_path = tmp_path / "rel.jsonl"
     engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
@@ -404,18 +405,21 @@ def test_abort_lap_fires_once(tmp_path: Path) -> None:
 def test_butn_ack_and_neg(tmp_path: Path) -> None:
     # release_hold fires early; single BUTN press -> ack; double -> neg; the
     # rule is then suppressed with negative_backoff when it retriggers.
-    stream = _quali_stream(3400.0, 0.0, 2.0)
-    # single press at 1.0 -> ack ~1.45 s (outside the 350 ms double window)
-    stream.append((1.0, _butn(True, 1.0)))
-    stream.append((1.1, _butn(False, 1.1)))
-    # double press at 1.6/1.7 + 1.9 -> neg on the second down
-    stream.append((1.6, _butn(True, 1.6)))
-    stream.append((1.7, _butn(False, 1.7)))
-    stream.append((1.9, _butn(True, 1.9)))
-    stream.append((2.0, _butn(False, 2.0)))
-    stream += _quali_stream(2500.0, 2.0, 8.0)  # clean -> release_hold re-arms
+    # release calls wait release_garage_settle_s (10 s) in the garage, so the
+    # presses start at T
+    T = 10.5
+    stream = _quali_stream(3400.0, 0.0, T + 2.0)
+    # single press at T+1.0 -> ack ~T+1.45 s (outside the 350 ms double window)
+    stream.append((T + 1.0, _butn(True, T + 1.0)))
+    stream.append((T + 1.1, _butn(False, T + 1.1)))
+    # double press at T+1.6/T+1.7 + T+1.9 -> neg on the second down
+    stream.append((T + 1.6, _butn(True, T + 1.6)))
+    stream.append((T + 1.7, _butn(False, T + 1.7)))
+    stream.append((T + 1.9, _butn(True, T + 1.9)))
+    stream.append((T + 2.0, _butn(False, T + 2.0)))
+    stream += _quali_stream(2500.0, T + 2.0, T + 8.0)  # clean -> release_hold re-arms
     # same situation on lap 2 -> retrigger, but the neg muted the rule
-    stream += _quali_stream(3400.0, 8.0, 14.0, lap=2)
+    stream += _quali_stream(3400.0, T + 8.0, T + 14.0, lap=2)
     stream.sort(key=lambda p: p[0])
     rec = write_packet_stream(tmp_path / "butn.f1bin", stream)
     log_path = tmp_path / "butn.jsonl"

@@ -503,3 +503,41 @@ def test_battle_behind_without_pace_words(mode: str, rule: str, extra: dict[str,
     text = next(c.text for c in result.candidates if c.rule.defn.id == rule)
     assert "slower" not in text and "faster" not in text
     assert ", ." not in text and not text.endswith(", ")
+
+
+def test_release_calls_wait_for_the_garage_settle() -> None:
+    """Silverstone Q1: the car went from flying (lap 4) to the garage at 495.9 s
+    and release_hold fired at 496.2 s, 0.3 s after the return."""
+    base: dict[str, object] = {
+        "session_kind": "qualifying",
+        "session_type": 5,
+        "phase": "garage",
+        "release_clean": False,
+        "release_wait_s": 8.0,
+        "time_for_out_lap": True,
+        "session_time_left": 600.0,
+        "_ages": {"lap_data": 0.1, "session": 0.1, "car_telemetry": 0.1},
+    }
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine().evaluate(_snap(**base, garage_s=0.3)).candidates
+    }
+    assert "release_hold" not in ids
+    ids = {
+        c.rule.defn.id
+        for c in _default_rule_engine().evaluate(_snap(**base, garage_s=10.0)).candidates
+    }
+    assert "release_hold" in ids
+
+
+def test_garage_s_counts_engine_time_since_garage_entry() -> None:
+    from pitwall.protocol.enums import DriverStatus
+    from pitwall.state.session import SessionState
+
+    st = SessionState()
+    st.session_type = 5
+    st.driver_status = DriverStatus.IN_GARAGE
+    assert st.snapshot(100.0).garage_s == 0.0
+    assert st.snapshot(110.5).garage_s == pytest.approx(10.5)
+    st.driver_status = DriverStatus.OUT_LAP
+    assert st.snapshot(111.0).garage_s == 0.0
