@@ -100,6 +100,11 @@ for review and does not change active settings. `pitwall calibrate` and `pitwall
 run the same steps as upkeep on demand. `pitwall tune` also folds A/B results from
 `pitwall diff`.
 
+Sessions from `pitwall derive` are synthetic. They feed grading and `pitwall tune`, but
+calibration, upkeep and the replay folds leave them out of physics priors.
+`pitwall calibrate --include-synthetic` adds them to the fit. See
+[Synthetic recordings](23-synthetic-recordings.md).
+
 ## After a race
 
 No command is required. Pitwall grades the session when it ends. On the next start,
