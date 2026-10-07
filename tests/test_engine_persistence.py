@@ -16,6 +16,7 @@ from pitwall.protocol.header import PacketId
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 
+from .race_synth import RaceSpec, race_stream
 from .synth import make_event_packet, pack_packet, write_packet_stream
 
 BASE_MS = 90_000
@@ -235,6 +236,42 @@ def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
     assert 20_000 < ev.loss_ms < 26_000
     p = db.get_param(7, 0, "pit_loss_green_ms")
     assert p is not None and p.value == float(ev.loss_ms)
+
+
+def test_race_synth_pit_loss_and_compound_change_replay(tmp_path: Path) -> None:
+    spec = RaceSpec(
+        laps=14,
+        player_pit_lap=6,
+        pit_lane_loss_ms=20_000,
+        compound_after_stop=18,
+        deg_ms_after_stop=40,
+        lap_noise_ms=0,
+    )
+    rec = write_packet_stream(
+        tmp_path / "race-synth.f1bin",
+        race_stream(spec),
+        metadata={"synthetic": False},
+    )
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(rec, engine, None))
+
+    uid = engine.state.session_uid
+    assert uid is not None
+    events = db.pit_events_for_session(uid)
+    assert len(events) == 1
+    assert events[0].loss_ms == pytest.approx(20_000, abs=3_000)
+    laps = db.laps_for(uid, 0)
+    assert "pitted" in laps[5].invalid_reasons
+    assert "after_in_lap" in laps[6].invalid_reasons
+    assert [stint.compound for stint in db.stints_for_session(uid)] == [17, 18]
+
+
+def test_race_synth_lap_noise_is_seeded() -> None:
+    spec = RaceSpec(laps=8, lap_noise_ms=250.0, seed=17)
+
+    assert race_stream(spec) == race_stream(spec)
+    assert race_stream(spec) != race_stream(RaceSpec(laps=8))
 
 
 def test_fuel_kg_per_lap_folded(tmp_path: Path) -> None:
