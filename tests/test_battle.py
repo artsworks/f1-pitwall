@@ -192,6 +192,26 @@ def test_rival_pitting_is_not_a_result() -> None:
     assert b.result == "" and tr.drain() == []
 
 
+def test_pending_pass_dropped_when_he_boxes() -> None:
+    """Silverstone race L7: the car ahead was passed at 665.6 s, then entered the
+    pit lane (pit_status 1) at 667.5 s, before the confirm at 670.2 s."""
+    tr, rates = BattleTracker(), BattleRates()
+    th = {"battle_result_confirm_s": 3.0}
+    tr.update(_inp(now=0.0, gap_ahead_s=0.5, positions=_pos(c1=4)), th, rates)
+    passed = _inp(
+        now=10.0,
+        position=4,
+        ahead_idx=3,
+        behind_idx=1,
+        gap_ahead_s=4.0,
+        gap_behind_s=0.4,
+        positions=_pos(c1=5, c3=3),
+    )
+    assert tr.update(passed, th, rates).result == ""
+    b = tr.update(dataclasses.replace(passed, now=13.5, pitting=frozenset({1})), th, rates)
+    assert b.result == "" and tr.drain() == []
+
+
 def test_short_failed_attack_not_learned() -> None:
     tr = BattleTracker()
     tr.update(_inp(now=0.0, gap_ahead_s=0.9), TH, BattleRates())
