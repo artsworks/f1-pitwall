@@ -210,6 +210,66 @@ def test_open_final_stint_folds_once_at_session_end(tmp_path) -> None:
     assert fitted is not None and fitted.weight == stints[0]["n_valid_laps"]
 
 
+def test_sprint_stint_is_a_weekend_prior_for_the_main_race() -> None:
+    db = Database(":memory:")
+    link = 0x26000007
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=link, started_at=day, session_type=15)
+    race_uid = 0xF1262002
+    db.upsert_session(
+        race_uid, track_id=7, session_type=16, started_at=day + 3_600, weekend_link=link
+    )
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    engine.state.session_uid = race_uid
+
+    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+
+    assert prior.source == "weekend"
+
+
+def test_noisy_sprint_fit_is_not_a_weekend_prior() -> None:
+    db = Database(":memory:")
+    link = 0x26000008
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=link, started_at=day, rmse_ms=1180.0, session_type=15)
+    race_uid = 0xF1262002
+    db.upsert_session(
+        race_uid, track_id=7, session_type=16, started_at=day + 3_600, weekend_link=link
+    )
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    engine.state.session_uid = race_uid
+
+    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+
+    assert prior.source != "weekend"
+
+
+def test_race_stint_from_another_weekend_is_not_used() -> None:
+    db = Database(":memory:")
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=301, started_at=day, session_type=15)
+    race_uid = 0xF1262002
+    db.upsert_session(
+        race_uid, track_id=7, session_type=16, started_at=day + 3_600, weekend_link=302
+    )
+
+    assert db.weekend_stints(race_uid, 7, 17) == []
+
+
+def test_normal_weekend_race_still_uses_only_practice_stints() -> None:
+    db = Database(":memory:")
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=401, started_at=day)
+    race_uid = 0xF1262002
+    db.upsert_session(
+        race_uid, track_id=7, session_type=15, started_at=day + 3_600, weekend_link=401
+    )
+
+    stints = db.weekend_stints(race_uid, 7, 17)
+
+    assert len(stints) == 1 and stints[0].deg_ms_per_lap == 140.0
+
+
 def test_engine_stores_weekend_structure_arriving_after_upsert() -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
