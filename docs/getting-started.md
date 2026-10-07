@@ -78,7 +78,7 @@ when backend speech is off to avoid hearing duplicate calls. Browsers may suspen
 speech in background tabs; keep the page open and visible. The PWA caches only
 static assets; live telemetry still requires a connection to the PC.
 
-Other devices need the 4-digit PIN that Pitwall prints at startup. The PIN changes on each start. After 5 wrong tries, that device waits 60 s. This PC needs no PIN. Set `connection.require_pin: false` to turn it off. Do not forward port 8000 to the internet.
+Other devices need the 4-digit PIN that Pitwall prints at startup. The PIN changes on each start. After 5 wrong tries, that device waits 60 s. This PC needs no PIN, unless the request came through a proxy that adds `X-Forwarded-For` or `Forwarded`. If a tunnel or port forwarder on this PC serves the dashboard, set `connection.pin_trust_localhost: false`. Then this PC needs the PIN too. Set `connection.require_pin: false` to turn the PIN off. The PIN cookie is sent only over HTTPS when `connection.https_cert` is set. Do not forward port 8000 to the internet.
 
 ## After a session
 

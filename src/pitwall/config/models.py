@@ -17,6 +17,7 @@ class ConnectionSettings(BaseModel):
     http_host: str = "0.0.0.0"
     http_port: int = 8000
     require_pin: bool = True
+    pin_trust_localhost: bool = True
     https_cert: str = ""
     https_key: str = ""
     shutdown_timeout_s: int = 3

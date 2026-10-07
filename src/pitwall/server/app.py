@@ -19,7 +19,7 @@ from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.server.hub import PROTOCOL_VERSION, Hub
-from pitwall.server.pin import PIN_COOKIE, PinGate
+from pitwall.server.pin import PIN_COOKIE, PinGate, forwarded
 from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
@@ -617,7 +617,9 @@ def create_app(
         @app.middleware("http")
         async def require_pin(request: Request, call_next: Any) -> Any:
             host = request.client.host if request.client else None
-            if pin_gate.allowed(host, request.cookies.get(PIN_COOKIE)):
+            if pin_gate.allowed(
+                host, request.cookies.get(PIN_COOKIE), proxied=forwarded(request.headers)
+            ):
                 return await call_next(request)
 
             path = request.url.path
@@ -666,6 +668,7 @@ def create_app(
                 max_age=86400,
                 httponly=True,
                 samesite="strict",
+                secure=request.url.scheme == "https",
                 path="/",
             )
             return response
@@ -747,6 +750,7 @@ def create_app(
         if pin_gate is not None and not pin_gate.allowed(
             websocket.client.host if websocket.client else None,
             websocket.cookies.get(PIN_COOKIE),
+            proxied=forwarded(websocket.headers),
         ):
             await websocket.accept()
             await websocket.close(code=4003, reason="pin required")

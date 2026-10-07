@@ -7,10 +7,16 @@ import ipaddress
 import secrets
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 PIN_COOKIE = "pitwall_pin"
+_FORWARD_HEADERS = ("forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip")
+
+
+def forwarded(headers: Mapping[str, str]) -> bool:
+    """True when a proxy on this PC relayed the request for another device."""
+    return any(name in headers for name in _FORWARD_HEADERS)
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,7 @@ class PinGate:
         *,
         max_tries: int = 5,
         lockout_s: float = 60.0,
+        trust_local: bool = True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if max_tries < 1:
@@ -45,12 +52,13 @@ class PinGate:
         self.token = secrets.token_urlsafe(32)
         self.max_tries = max_tries
         self.lockout_s = lockout_s
+        self.trust_local = trust_local
         self._clock = clock
         self._attempts: dict[str, _HostAttempts] = {}
         self._lock = threading.Lock()
 
-    def allowed(self, host: str | None, cookie: str | None) -> bool:
-        if host is not None:
+    def allowed(self, host: str | None, cookie: str | None, *, proxied: bool = False) -> bool:
+        if self.trust_local and not proxied and host is not None:
             try:
                 if ipaddress.ip_address(host).is_loopback:
                     return True

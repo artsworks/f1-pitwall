@@ -724,7 +724,11 @@ async def _serve(
     from pitwall.server.pin import PinGate
 
     settings = store.current()
-    gate = PinGate() if settings.connection.require_pin else None
+    gate = (
+        PinGate(trust_local=settings.connection.pin_trust_localhost)
+        if settings.connection.require_pin
+        else None
+    )
     if sys.platform == "win32" and settings.connection.https_cert and settings.connection.https_key:
         asyncio.get_running_loop().set_exception_handler(_handle_https_disconnect)
 
