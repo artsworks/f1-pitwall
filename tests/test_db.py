@@ -463,12 +463,8 @@ def test_stored_weekend_structure_keeps_melbourne_track_id_zero() -> None:
     db = Database(":memory:")
     link = 0x1235
     sprint_uid = 210
-    db.upsert_session(
-        sprint_uid, track_id=0, session_type=15, started_at=100.0, weekend_link=link
-    )
-    db.upsert_session(
-        211, track_id=0, session_type=16, started_at=200.0, weekend_link=link
-    )
+    db.upsert_session(sprint_uid, track_id=0, session_type=15, started_at=100.0, weekend_link=link)
+    db.upsert_session(211, track_id=0, session_type=16, started_at=200.0, weekend_link=link)
 
     row = db.session_row(sprint_uid)
     assert row is not None

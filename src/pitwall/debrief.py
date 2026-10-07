@@ -1454,7 +1454,7 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
     def _structure(row: Mapping[str, Any]) -> tuple[int, ...]:
         key = (
             int(row.get("weekend_link") or 0),
-        -1 if row.get("track_id") is None else int(row["track_id"]),
+            -1 if row.get("track_id") is None else int(row["track_id"]),
             str(row.get("weekend_structure") or ""),
         )
         if key not in structures:
