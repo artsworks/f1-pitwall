@@ -1,0 +1,14 @@
+id: brazil-race-real
+title: Brazil race as recorded
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+expect:
+  fire:
+    - {rule: plan_announce, laps: [1, 1]}
+    - {rule: plan_window_open, laps: [7, 13]}
+  absent:
+    - {rule: [sc_deployed, vsc_deployed, sc_ending, vsc_ending, sc_restart, vsc_restart], laps: [1, 17]}
+why: The real race had no safety car. The opening plan has a window of laps 7 to 13.

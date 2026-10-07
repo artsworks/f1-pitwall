@@ -606,7 +606,7 @@ def _bench_history(scenarios_dir: Path, window: int) -> int:
         for line in history_lines[-window:]:
             print(line)
         print(f"trend: {trend(entries, window)}")
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
         print(f"bench: {exc}")
         return 1
     return 0

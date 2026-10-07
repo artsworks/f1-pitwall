@@ -128,3 +128,7 @@ Its output would still be synthetic and would follow the same exclusion policy. 
 Keep `derive` for quick checks of "the same race, with an event at a different time".
 
 The race used here had no safety car and one stop. A longer real race with a safety car and two stops would test these results better. You may need to record one.
+
+## Next step
+
+The [scenario bench](24-scenario-bench.md) turns derived recordings into scored scenarios with a baseline gate.

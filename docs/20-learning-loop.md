@@ -105,6 +105,9 @@ calibration, upkeep and the replay folds leave them out of physics priors.
 `pitwall calibrate --include-synthetic` adds them to the fit. See
 [Synthetic recordings](23-synthetic-recordings.md).
 
+To measure whether a change improves pitwall, run `pitwall bench`. See
+[Scenario bench](24-scenario-bench.md).
+
 ## After a race
 
 No command is required. Pitwall grades the session when it ends. On the next start,
