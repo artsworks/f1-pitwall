@@ -33,7 +33,7 @@ def test_report_bundle(tmp_path: Path, monkeypatch) -> None:
     )
     # point persistence + recordings at the tmp locations
     monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "no-profile.yaml"))
-    import pitwall.cli as cli_mod
+    import pitwall.cli.recordings as cli_mod
 
     # ConfigStore picks up settings dir paths; override via overrides on the
     # store is cumbersome -> patch open_configured & recording dir indirectly.

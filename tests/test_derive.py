@@ -586,7 +586,7 @@ def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
     assert replay_session["derived_from"] == str(SOURCE_UID)
     replay_db.close()
 
-    import pitwall.cli as cli_module
+    import pitwall.cli.recordings as cli_module
 
     serve_db_path = tmp_path / "replay-serve.sqlite"
     serve_origin_at_start = {}

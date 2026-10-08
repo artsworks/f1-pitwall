@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import pitwall.cli as cli
+import pitwall.cli.serve as cli
 
 
 def test_banner_groups_and_aligns_entries() -> None:

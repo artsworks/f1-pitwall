@@ -422,7 +422,7 @@ def test_restore_rejects_newer_pack_version(tmp_path: Path) -> None:
 def test_restore_cli_uses_configured_pack_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    import pitwall.cli as cli_module
+    import pitwall.cli.learn as cli_module
 
     source = Database(":memory:")
     pack_path = write_pack(source, tmp_path / "pack", now=datetime(2025, 4, 5))
