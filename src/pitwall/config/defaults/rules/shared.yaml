@@ -46,8 +46,9 @@ rules:
     priority: 1
     when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining > th.pit_min_laps_left"
     clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
-    still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct"
+    still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining > th.pit_min_laps_left"
     cooldown_s: 60
+    conflict_group: front_wing_lost
     requires: [car_damage, lap_data]
     say:
       - "Front wing's gone. Box, box, new nose"
@@ -58,7 +59,9 @@ rules:
     priority: 1
     when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining <= th.pit_min_laps_left"
     clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
+    still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining <= th.pit_min_laps_left"
     cooldown_s: 60
+    conflict_group: front_wing_lost
     requires: [car_damage, lap_data]
     say:
       - "Wing's gone, too late to stop. Nurse it home"
@@ -332,17 +335,35 @@ rules:
       - "Push lap behind, {traffic_behind_s:.1f} seconds. Let it by."
       - "Push lap behind. Let it by."
       - "Car on a lap behind. Give room, then go."
+  # Hot lap: a car that stays slow until you reach it. A cooling car that starts its lap before you catch it is not traffic.
   - id: slow_car_ahead
     sessions: [practice, qualifying]
     priority: 1
-    when: "phase == 'flying' and run_lap_kind != 'cool' and (traffic_ahead_kind != 'flying' or traffic_ahead_slow) and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 80"
-    clear_when: "traffic_ahead_m > 400 or traffic_ahead_kind == ''"
+    when: "phase == 'flying' and run_lap_kind != 'cool' and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 80 and (traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s))"
+    clear_when: "traffic_ahead_m > 400 or traffic_ahead_state == ''"
+    still_true: "traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s)"
     cooldown_s: 30
+    conflict_group: slow_car
     requires: [lap_data, car_telemetry]
     say:
       - "Slow car ahead, {traffic_ahead_m:.0f} metres"
       - "Traffic ahead, {traffic_ahead_m:.0f} metres. Watch your line"
       - "Slow car, {traffic_ahead_m:.0f} metres"
+  # Car crawling on the track surface ahead: stronger call than routine traffic.
+  - id: slow_car_crawling
+    sessions: [practice, qualifying]
+    priority: 1
+    when: "phase in ('flying', 'out_lap', 'on_track', 'in_lap') and traffic_ahead_state == 'aborted' and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 50"
+    clear_when: "traffic_ahead_m > 400 or traffic_ahead_state != 'aborted'"
+    still_true: "traffic_ahead_state == 'aborted'"
+    cooldown_s: 20
+    conflict_group: slow_car
+    supersedes: [slow_car_ahead]
+    requires: [lap_data, car_telemetry]
+    say:
+      - "Car crawling on track, {traffic_ahead_m:.0f} metres"
+      - "Stopped car ahead, {traffic_ahead_m:.0f} metres. Careful"
+      - "Car crawling, {traffic_ahead_m:.0f} metres. Lift"
   - id: prep_traffic_ahead
     sessions: [practice, qualifying]
     priority: 2

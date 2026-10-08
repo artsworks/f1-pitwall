@@ -6,8 +6,10 @@ rules:
     priority: 2
     when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and release_clean and time_for_out_lap and session_time_left > 60"
     clear_when: "not release_clean or phase != 'garage'"
+    still_true: "phase == 'garage' and release_clean"
     cooldown_s: 30
     cooldown_group: release
+    conflict_group: release
     requires: [lap_data, session]
     say:
       - "Pit exit clear. Go now"
@@ -18,8 +20,10 @@ rules:
     priority: 2
     when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and time_for_out_lap and session_time_left > 60"
     clear_when: "release_clean or phase != 'garage'"
+    still_true: "phase == 'garage' and not release_clean"
     cooldown_s: 30
     cooldown_group: release
+    conflict_group: release
     requires: [lap_data, session]
     say:
       - "Traffic at exit. Hold {release_wait_s:.0f} seconds"

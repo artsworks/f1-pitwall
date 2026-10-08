@@ -40,6 +40,7 @@ message takes to speak: level 1 5 s, level 2 3 s, level 3 1.5 s. On top of that,
 message carries its rule's `still_true` predicate; the backend re-evaluates it at the
 moment the message reaches the front of the queue and drops it if the world has moved on.
 Revalidation is the real requirement — TTL is only a backstop for a wedged client.
+Conflict groups keep a queued call only while its current predicate holds. A rule can also supersede named queued calls.
 
 ## Speech
 

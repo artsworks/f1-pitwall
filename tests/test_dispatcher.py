@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
+
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
@@ -131,6 +133,108 @@ def test_revalidation() -> None:
     cand2.still_true = lambda snap: False  # type: ignore[method-assign]
     d.submit([cand2], _snap(1.0, lap=1))
     assert d.drain(1.0) == []
+
+
+def test_stale_queued_call_in_group_is_superseded() -> None:
+    state = {"old_holds": True}
+    old = _cand("old", priority=1, conflict_group="slow_car")
+    old.current = lambda snap: state["old_holds"]
+    new = _cand("new", priority=1, conflict_group="slow_car")
+    new.current = lambda snap: True
+    d, sink, buf = _dispatcher()
+
+    d.submit([old], _snap(0.0))
+    state["old_holds"] = False
+    d.submit([new], _snap(1.0))
+
+    assert len(d._queue) == 1
+    assert [call.rule_id for call in d.drain(1.0)] == ["new"]
+    assert sink.spoken == ["new"]
+    assert ("old", "suppressed", "superseded") in {
+        (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+
+def test_queued_conflict_that_still_holds_keeps_old_call() -> None:
+    state = {"old_holds": True}
+    old = _cand("old", priority=1, conflict_group="slow_car")
+    old.current = lambda snap: state["old_holds"]
+    new = _cand("new", priority=1, conflict_group="slow_car")
+    d, _, buf = _dispatcher()
+
+    d.submit([old], _snap(0.0))
+    d.submit([new], _snap(1.0))
+
+    assert len(d._queue) == 1
+    assert ("new", "suppressed", "conflict") in {
+        (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+
+def test_supersedes_drops_queued_call_that_still_holds() -> None:
+    old = _cand("old", priority=1, conflict_group="slow_car")
+    old.current = lambda snap: True
+    new = _cand("new", priority=1, supersedes=["old"])
+    d, _, buf = _dispatcher()
+
+    d.submit([old], _snap(0.0))
+    d.submit([new], _snap(1.0))
+
+    assert len(d._queue) == 1
+    assert d._queue[0].call.rule_id == "new"
+    assert ("old", "suppressed", "superseded") in {
+        (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+
+def test_stale_conflict_undoes_shared_cooldown_booking() -> None:
+    old = _cand("old", priority=1, cooldown_s=30, cooldown_group="shared", conflict_group="g")
+    old.current = lambda snap: False
+    new = _cand("new", priority=1, cooldown_s=30, cooldown_group="shared", conflict_group="g")
+    d, _, buf = _dispatcher()
+
+    d.submit([old], _snap(0.0))
+    d.submit([new], _snap(1.0))
+
+    assert len(d._queue) == 1
+    assert d._queue[0].call.rule_id == "new"
+    assert not any(
+        row["rule_id"] == "new" and row["suppressed_by"] == "cooldown" for row in _log(buf)
+    )
+
+
+def test_conflict_removes_the_matching_call_when_queue_keys_tie() -> None:
+    unrelated = _cand("unrelated", priority=1, conflict_group="other")
+    old = _cand("old", priority=1, conflict_group="slow_car")
+    old.current = lambda snap: False
+    new = _cand("new", priority=1, conflict_group="slow_car")
+    d, _, _ = _dispatcher()
+
+    d.submit([unrelated, old], _snap(0.0))
+    d.submit([new], _snap(1.0))
+
+    assert {queued.call.rule_id for queued in d._queue} == {"unrelated", "new"}
+
+
+@pytest.mark.parametrize(
+    ("old_id", "new_id", "group"),
+    [
+        ("release_hold", "release_go", "release"),
+        ("front_wing_lost_box", "front_wing_lost_nurse", "front_wing_lost"),
+        ("battle_attack", "battle_patience", "battle_call"),
+    ],
+)
+def test_real_rule_pairs_drop_stale_queued_call(old_id: str, new_id: str, group: str) -> None:
+    old = _cand(old_id, priority=1, conflict_group=group)
+    old.current = lambda snap: False
+    new = _cand(new_id, priority=1, conflict_group=group)
+    d, _, _ = _dispatcher()
+
+    d.submit([old], _snap(0.0))
+    d.submit([new], _snap(1.0))
+
+    assert len(d._queue) == 1
+    assert d._queue[0].call.rule_id == new_id
 
 
 def test_log_records_outcomes() -> None:

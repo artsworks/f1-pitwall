@@ -3,10 +3,19 @@ from __future__ import annotations
 import pytest
 
 from pitwall.ingest import Ingest
+from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.header import PacketId
+from pitwall.protocol.layouts import Corners
 from pitwall.state.ema import Ema
 from pitwall.state.lap import LapAccumulator
-from pitwall.state.session import Damage, SessionState, Snapshot, pressure_window, thermal_window
+from pitwall.state.session import (
+    CarLap,
+    Damage,
+    SessionState,
+    Snapshot,
+    pressure_window,
+    thermal_window,
+)
 
 from .synth import make_event_packet, pack_packet
 
@@ -427,6 +436,33 @@ def test_cars_lap_all_slots() -> None:
     assert snap.cars[0].current_lap_time_ms == 12_345
     assert snap.cars[5].car_position == 7
     assert snap.current_lap_time_ms == 12_345
+
+
+def test_traffic_ahead_state_and_launch_time() -> None:
+    from types import SimpleNamespace
+
+    state = SessionState()
+    state.track_length_m = 1000.0
+    state.lap_distance = 100.0
+    state.speed_kmh = 150.0
+    state.cars_lap = (
+        CarLap(lap_distance=100.0),
+        CarLap(
+            lap_distance=200.0,
+            current_lap_time_ms=20_000,
+            driver_status=DriverStatus.OUT_LAP,
+            result_status=2,
+        ),
+    )
+    state.cars_telemetry = (
+        None,
+        SimpleNamespace(speed=50.0, surface_type=Corners(0, 1, 0, 1)),
+    )
+
+    ahead = state._traffic(100_000)
+
+    assert ahead["traffic_ahead_state"] == "cooling"
+    assert ahead["traffic_ahead_launch_s"] == 57.6
 
 
 def test_session_history_best_laps() -> None:

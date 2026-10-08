@@ -412,8 +412,10 @@ rules:
     priority: 3
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
+    still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     cooldown_s: 60
     cooldown_group: battle
+    conflict_group: battle_call
     requires: [lap_data]
     say:
       - "You're in range of {rival_ahead_name}. Hammer time"
@@ -435,8 +437,10 @@ rules:
     priority: 3
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
     clear_when: "sector != 1"
+    still_true: "battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
     cooldown_s: 180
     cooldown_group: battle
+    conflict_group: battle_call
     requires: [lap_data]
     say:
       - "Hard to pass. Stay with {rival_ahead_name}, save tyres"

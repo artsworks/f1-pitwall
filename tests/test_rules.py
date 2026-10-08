@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
-from pitwall.config.models import PolicySettings, RuleDefModel
+from pitwall.config.models import PolicySettings, RuleDefModel, Settings
+from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.rules.expr import ExprError, Predicate
-from pitwall.state.session import Snapshot
+from pitwall.state.session import Snapshot, car_ahead_state
 
 
 def _corners(v: float) -> Corners:
@@ -125,6 +127,62 @@ def test_mode_and_still_true() -> None:
     assert not cand.still_true(_snap(tyre_inner_ema_fast=_corners(89.0)))
 
 
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ({"driver_status": DriverStatus.FLYING_LAP}, "flying"),
+        (
+            {
+                "driver_status": DriverStatus.FLYING_LAP,
+                "lap_distance_m": 2000,
+                "lap_time_ms": 23_000,
+            },
+            "cooling",
+        ),
+        (
+            {"driver_status": DriverStatus.FLYING_LAP, "ref_lap_ms": 0, "lap_time_ms": 30_000},
+            "flying",
+        ),
+        ({"driver_status": DriverStatus.OUT_LAP}, "cooling"),
+        ({"driver_status": DriverStatus.IN_LAP}, "in_lap"),
+        (
+            {
+                "driver_status": DriverStatus.FLYING_LAP,
+                "speed_kmh": 20,
+                "closing_kmh": 200,
+                "on_tarmac": True,
+            },
+            "aborted",
+        ),
+        (
+            {
+                "driver_status": DriverStatus.IN_LAP,
+                "speed_kmh": 20,
+                "closing_kmh": 200,
+                "on_tarmac": False,
+            },
+            "in_lap",
+        ),
+    ],
+)
+def test_car_ahead_state(values: dict[str, object], expected: str) -> None:
+    args: dict[str, object] = {
+        "driver_status": DriverStatus.FLYING_LAP,
+        "speed_kmh": 200.0,
+        "closing_kmh": 0.0,
+        "on_tarmac": False,
+        "lap_distance_m": 1000.0,
+        "lap_time_ms": 10_000,
+        "ref_lap_ms": 100_000,
+        "track_length_m": 10_000.0,
+        "crawl_kmh": 40.0,
+        "slow_delta_kmh": 60.0,
+        "cool_pace_pct": 10.0,
+    }
+    args.update(values)
+    assert car_ahead_state(**args) == expected  # type: ignore[arg-type]
+
+
 def test_min_lap() -> None:
     eng = _engine([_rule(min_lap=3)])
     res = eng.evaluate(_snap(lap_num=1, tyre_inner_ema_fast=_corners(60.0)))
@@ -142,6 +200,111 @@ def _default_rule_engine() -> RuleEngine:
         mode=store.current().resolved_mindset(),
         staleness_s=s.engine.staleness_s,
     )
+
+
+def test_default_slow_car_rules_use_ahead_state() -> None:
+    base = {
+        "session_kind": "qualifying",
+        "phase": "flying",
+        "run_lap_kind": "hot",
+        "traffic_ahead_m": 220.0,
+        "traffic_ahead_closing_s": 4.0,
+    }
+
+    ahead = _default_rule_engine().evaluate(
+        _snap(**base, traffic_ahead_state="cooling", traffic_ahead_launch_s=2.0)
+    )
+    ids = {candidate.rule.id for candidate in ahead.candidates}
+    assert "slow_car_ahead" not in ids and "slow_car_crawling" not in ids
+
+    ahead = _default_rule_engine().evaluate(
+        _snap(**base, traffic_ahead_state="cooling", traffic_ahead_launch_s=8.0)
+    )
+    assert "slow_car_ahead" in {candidate.rule.id for candidate in ahead.candidates}
+
+    ahead = _default_rule_engine().evaluate(
+        _snap(**{**base, "traffic_ahead_closing_s": 3.0}, traffic_ahead_state="in_lap")
+    )
+    assert "slow_car_ahead" in {candidate.rule.id for candidate in ahead.candidates}
+
+    ahead = _default_rule_engine().evaluate(
+        _snap(
+            **base,
+            traffic_ahead_state="flying",
+            traffic_ahead_slow=True,
+            traffic_ahead_launch_s=0.0,
+        )
+    )
+    assert "slow_car_ahead" not in {candidate.rule.id for candidate in ahead.candidates}
+
+    ahead = _default_rule_engine().evaluate(
+        _snap(**{**base, "traffic_ahead_closing_s": 3.0}, traffic_ahead_state="aborted")
+    )
+    ids = {candidate.rule.id for candidate in ahead.candidates}
+    assert "slow_car_crawling" in ids and "slow_car_ahead" not in ids
+
+
+def test_default_conflict_pairs_share_groups() -> None:
+    from pitwall.config.loader import ConfigStore
+
+    rules = {rule.id: rule for rule in ConfigStore().current().rules}
+    for left, right, group in (
+        ("release_go", "release_hold", "release"),
+        ("front_wing_lost_box", "front_wing_lost_nurse", "front_wing_lost"),
+        ("battle_attack", "battle_patience", "battle_call"),
+    ):
+        assert rules[left].conflict_group == rules[right].conflict_group == group
+
+
+def test_release_hold_replaced_by_release_go_while_queued() -> None:
+    from pitwall.config.loader import ConfigStore
+
+    settings = ConfigStore().current()
+    engine = RuleEngine(
+        settings.rules,
+        thresholds=settings.thresholds,
+        mode=settings.resolved_mindset(),
+        staleness_s=settings.engine.staleness_s,
+    )
+    dispatcher = Dispatcher(
+        PolicySettings(min_gap_s=0.0, p3_straight_only=False),
+        VirtualClock(),
+        sinks=[],
+    )
+    common = {
+        "session_kind": "qualifying",
+        "phase": "garage",
+        "garage_s": 10.0,
+        "release_wait_s": 10.0,
+        "time_for_out_lap": True,
+        "session_time_left": 100.0,
+        "_ages": {"lap_data": 0.1, "session": 0.1},
+    }
+    hold = engine.evaluate(_snap(now=0.0, **common, release_clean=False))
+    dispatcher.submit(hold.candidates, _snap(now=0.0, **common, release_clean=False))
+    assert [queued.call.rule_id for queued in dispatcher._queue] == ["release_hold"]
+
+    go_snapshot = _snap(now=1.0, **common, release_clean=True)
+    go = engine.evaluate(go_snapshot)
+    dispatcher.submit(go.candidates, go_snapshot)
+
+    assert [queued.call.rule_id for queued in dispatcher._queue] == ["release_go"]
+
+
+def test_settings_reject_unknown_supersedes_rule() -> None:
+    with pytest.raises(ValidationError, match="known_rule.*missing_rule"):
+        Settings.model_validate(
+            {
+                "rules": [
+                    {
+                        "id": "known_rule",
+                        "priority": 1,
+                        "when": "True",
+                        "supersedes": ["missing_rule"],
+                    }
+                ]
+            }
+        )
 
 
 @pytest.mark.parametrize("laps_left_offset", [-1, 0, 1])
