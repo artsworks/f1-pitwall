@@ -17,8 +17,6 @@ from .corpus_synth import generate_learning_corpus
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
-pytestmark = pytest.mark.slow
-
 
 def _fit_corpus(tmp_path):
     db = Database(tmp_path / "learn.sqlite")
@@ -31,6 +29,7 @@ def _fit_corpus(tmp_path):
     return db, settings
 
 
+@pytest.mark.slow
 def test_calibration_recovers_synthetic_fits_and_converges(tmp_path) -> None:
     db, settings = _fit_corpus(tmp_path)
 
@@ -54,10 +53,11 @@ def test_calibration_recovers_synthetic_fits_and_converges(tmp_path) -> None:
     energy = track["energy"]
     assert energy["energy_deployed_j_p25"] == pytest.approx(475_000.0)
     assert energy["energy_deployed_j_p50"] == pytest.approx(487_500.0)
-    assert energy["energy_deployed_j_p75"] == pytest.approx(518_750.0)
+    assert energy["energy_deployed_j_p75"] == pytest.approx(525_000.0)
     db.close()
 
 
+@pytest.mark.slow
 def test_calibration_is_idempotent_and_dry_run_writes_nothing(tmp_path) -> None:
     db, settings = _fit_corpus(tmp_path)
     before = [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()]
@@ -106,6 +106,49 @@ def test_calibration_does_not_write_rank_deficient_pace() -> None:
     assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
 
 
+def test_calibration_rejects_fuel_explained_by_tyre_age() -> None:
+    db = Database(":memory:")
+    uid = 702
+    db.upsert_session(uid, track_id=7, session_type=15)
+    db.set_session_total_laps(uid, 52)
+    lap_num = 0
+    for compound, ages, base, deg in (
+        (17, range(1, 13), 90_000, 100),
+        (18, range(0, 12), 91_000, 120),
+    ):
+        for age in ages:
+            lap_num += 1
+            fuel = 80.0 - 1.5 * lap_num + 0.001 * (lap_num % 3)
+            db.insert_lap(
+                uid,
+                0,
+                LapSummary(
+                    lap_num,
+                    round(base + deg * age + 30 * fuel),
+                    30_000,
+                    30_000,
+                    compound,
+                    age,
+                    0,
+                    True,
+                    [],
+                    fuel_kg=fuel,
+                ),
+            )
+
+    report = calibrate(db, ConfigStore().current(), track_id=7)["tracks"][0]
+
+    assert report["k_identifiable"] is False
+    assert all(
+        not param.name.startswith(("base_ms", "deg_ms_per_lap", "fuel_ms_per_lap"))
+        for param in db.all_params()
+    )
+    assert all(
+        params["status"] == "fuel and tyre wear not identifiable"
+        for params in report["race_distances"][52].values()
+    )
+
+
 def test_calibration_preserves_separate_race_distances_and_practice() -> None:
     db = Database(":memory:")
     for uid, distance, deg in ((1, 13, 250), (2, 52, 90), (3, 0, 120)):
@@ -113,7 +156,7 @@ def test_calibration_preserves_separate_race_distances_and_practice() -> None:
         db.set_session_total_laps(uid, distance)
         for age in range(1, 8):
             rate = 2 if distance == 52 else 1
-            fuel = 25 - rate * age + 0.2 * (age % 2)
+            fuel = 25 - rate * age + (4.0 if age == 4 else 0.0)
             db.insert_lap(
                 uid,
                 0,
@@ -169,6 +212,7 @@ def test_unknown_race_length_does_not_replace_practice_priors() -> None:
     assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
 
 
+@pytest.mark.slow
 def test_corpus_proposals_are_review_only_and_require_convergence(tmp_path) -> None:
     db, settings = _fit_corpus(tmp_path)
     before = [(p.track_id, p.compound, p.name, p.value, p.weight) for p in db.all_params()]
@@ -185,6 +229,7 @@ def test_corpus_proposals_are_review_only_and_require_convergence(tmp_path) -> N
     empty.close()
 
 
+@pytest.mark.slow
 def test_calibration_fits_intermediate_window_and_fuel_without_compound_zero(tmp_path) -> None:
     settings = ConfigStore().current()
     db = Database(tmp_path / "inter.sqlite")
@@ -220,6 +265,7 @@ def test_calibration_fits_intermediate_window_and_fuel_without_compound_zero(tmp
     db.close()
 
 
+@pytest.mark.slow
 def test_write_overlay_preserves_existing_keys_and_gates_values(tmp_path) -> None:
     db, settings = _fit_corpus(tmp_path)
     report = calibrate(db, settings, track_id=7)
@@ -249,6 +295,7 @@ def test_write_overlay_preserves_existing_keys_and_gates_values(tmp_path) -> Non
     db.close()
 
 
+@pytest.mark.slow
 def test_calibrate_cli_ingests_paths_and_emits_history_json(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     paths = generate_learning_corpus(tmp_path / "recordings")

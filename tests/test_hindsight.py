@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from pitwall.cli import main
+from pitwall.derive import derived_uid
 from pitwall.digest import build_digest
 from pitwall.hindsight import (
     grade_session,
@@ -183,6 +184,49 @@ def test_digest_is_idempotent_and_feeds_tune(tmp_path: Path) -> None:
         db.grade_call(uid, f"b{i}", "box_now", "good", "")
     rows = {r.rule_id: r for r in tune_from_db(db, {})}
     assert rows["box_now"].auto == 0 and rows["box_now"].cooldown_mult < 1.0
+
+
+def test_tune_skips_synthetic_auto_outcomes_but_keeps_real_outcomes(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    synthetic_uid = 0x9234_5678_9ABC_DEF0
+    tagged_uid = derived_uid(UID, ["tune-test"])
+    real_uid = UID + 1
+    db.upsert_session(synthetic_uid, track_id=7, session_type=15, synthetic=True)
+    db.upsert_session(real_uid, track_id=7, session_type=15)
+    outcomes = [
+        {
+            "call_id": f"call-{index}",
+            "rule_id": "tyre_life",
+            "lap": index,
+            "metric": "stop_cost_s",
+            "label": "wrong",
+        }
+        for index in range(1, 4)
+    ]
+    db.replace_outcomes(synthetic_uid, outcomes)
+    db.replace_outcomes(tagged_uid, outcomes)
+
+    assert "tyre_life" not in {row.rule_id for row in tune_from_db(db, {})}
+
+    db.replace_outcomes(real_uid, outcomes)
+
+    rows = {row.rule_id: row for row in tune_from_db(db, {})}
+
+    assert "tyre_life" in rows
+    assert rows["tyre_life"].auto == 3
+    assert rows["tyre_life"].cooldown_mult > 1.0
+
+
+def test_tune_skips_synthetic_press_grades_but_keeps_review_grades(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15, synthetic=True)
+    db.grade_call(UID, "press-call", "press_rule", "wrong", source="press")
+    db.grade_call(UID, "review-call", "review_rule", "good")
+
+    rows = {row.rule_id: row for row in tune_from_db(db, {})}
+
+    assert "press_rule" not in rows
+    assert rows["review_rule"].grades == 1
 
 
 def test_digest_cli_writes_json(tmp_path: Path, capsys: object) -> None:

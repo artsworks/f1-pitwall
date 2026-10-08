@@ -16,16 +16,18 @@ from pitwall.protocol.header import PacketId
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 
+from .race_synth import RaceSpec, race_stream
 from .synth import make_event_packet, pack_packet, write_packet_stream
 
 BASE_MS = 90_000
 SLOPE = 100.0
 
 
-def _race_stream() -> list[tuple[float, bytes]]:
-    """10 player laps on a 5 km race (session_type 15, track 7). Lap 8 pits
-    (slow in-lap), lap 9 is the out-lap flagged after_in_lap. Rival session
-    history for car 1 with two completed laps."""
+def _race_stream(
+    post_laps: int = 0, *, pit_status_laps: set[int] | None = None
+) -> list[tuple[float, bytes]]:
+    """10 player laps on a 5 km race (session_type 15, track 7). Lap 8 pits,
+    and the next lap is the out-lap. Rival session history has two completed laps."""
     pkts: list[tuple[float, bytes]] = []
     t = 0.0
 
@@ -38,6 +40,7 @@ def _race_stream() -> list[tuple[float, bytes]]:
         PacketId.SESSION,
         {"session_type": 15, "track_id": 7, "total_laps": 12, "track_length": 5000},
     )
+    pitted_laps = {8} if pit_status_laps is None else pit_status_laps
 
     def lap_time(finished_lap: int) -> int:
         if finished_lap == 8:
@@ -46,9 +49,8 @@ def _race_stream() -> list[tuple[float, bytes]]:
             return BASE_MS + 8_000  # out-lap
         return int(BASE_MS + SLOPE * finished_lap)
 
-    for lap in range(1, 11):
-        driver_status = 2 if lap == 9 else 4  # lap 9 starts as IN_LAP -> after_in_lap
-        pit_status = 1 if lap == 8 else 0
+    for lap in range(1, 11 + post_laps):
+        pit_status = 1 if lap in pitted_laps else 0
         for _ in range(3):
             emit(
                 PacketId.CAR_STATUS,
@@ -79,7 +81,7 @@ def _race_stream() -> list[tuple[float, bytes]]:
                         0: {
                             "current_lap_num": lap,
                             "last_lap_time_ms": lap_time(lap - 1) if lap > 1 else 0,
-                            "driver_status": driver_status,
+                            "driver_status": 4,
                             "pit_status": pit_status,
                             "result_status": 2,
                             "pit_lane_time_in_lane_ms": 19_500 if lap == 9 else 0,
@@ -112,12 +114,29 @@ def _race_stream() -> list[tuple[float, bytes]]:
     return pkts
 
 
-def _run(tmp_path: Path) -> tuple[VirtualClock, object, Database]:
-    rec = write_packet_stream(tmp_path / "race.f1bin", _race_stream())
+def _run(
+    tmp_path: Path, *, post_laps: int = 0, pit_status_laps: set[int] | None = None
+) -> tuple[object, object, Database]:
+    rec = write_packet_stream(
+        tmp_path / "race.f1bin",
+        _race_stream(post_laps, pit_status_laps=pit_status_laps),
+    )
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
     asyncio.run(run_replay(rec, engine, None))
     return engine, engine.state, db
+
+
+def _run_synth_spec(tmp_path: Path, spec: RaceSpec) -> tuple[object, Database]:
+    rec = write_packet_stream(
+        tmp_path / "race-synth.f1bin",
+        race_stream(spec),
+        metadata={"synthetic": False},
+    )
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(rec, engine, None))
+    return engine, db
 
 
 def _deg_prior_engine(db: Database):
@@ -223,7 +242,7 @@ def test_stint_refit_writes_stints_row(tmp_path: Path) -> None:
 
 
 def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
-    engine, state, db = _run(tmp_path)
+    engine, state, db = _run(tmp_path, post_laps=3)
     uid = state.session_uid
     assert uid is not None
     events = db.pit_events_for_session(uid)
@@ -231,10 +250,91 @@ def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
     ev = events[0]
     assert ev.lap_num == 8  # the in-lap
     assert ev.ref_pace_ms > 0
-    # loss = (in - ref) + (out - ref) = 15000 + 8000 (minus slope drift)
+    # The out-lap uses the fresh-tyre reference.
     assert 20_000 < ev.loss_ms < 26_000
     p = db.get_param(7, 0, "pit_loss_green_ms")
     assert p is not None and p.value == float(ev.loss_ms)
+
+
+def test_repeated_pit_lane_laps_do_not_persist_a_stop(tmp_path: Path) -> None:
+    engine, _, db = _run(tmp_path, post_laps=3, pit_status_laps={8, 9, 10})
+    uid = engine.state.session_uid
+    assert uid is not None
+    laps = {row.lap_num: row for row in db.laps_for(uid, 0)}
+
+    assert all("pitted" in laps[n].invalid_reasons for n in (8, 9, 10))
+    assert "after_in_lap" in laps[9].invalid_reasons
+    assert db.pit_events_for_session(uid) == []
+    assert db.get_param(7, 0, "pit_loss_green_ms") is None
+
+
+def test_race_synth_pit_loss_and_compound_change_replay(tmp_path: Path) -> None:
+    spec = RaceSpec(
+        laps=14,
+        player_pit_lap=6,
+        pit_lane_loss_ms=20_000,
+        compound_after_stop=18,
+        deg_ms_after_stop=40,
+        lap_noise_ms=0,
+    )
+    rec = write_packet_stream(
+        tmp_path / "race-synth.f1bin",
+        race_stream(spec),
+        metadata={"synthetic": False},
+    )
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(rec, engine, None))
+
+    uid = engine.state.session_uid
+    assert uid is not None
+    events = db.pit_events_for_session(uid)
+    assert len(events) == 1
+    assert events[0].loss_ms == pytest.approx(20_000, abs=1_000)
+    laps = db.laps_for(uid, 0)
+    assert "pitted" in laps[5].invalid_reasons
+    assert "after_in_lap" in laps[6].invalid_reasons
+    assert [stint.compound for stint in db.stints_for_session(uid)] == [17, 18]
+
+
+def test_race_synth_after_line_stop_ignores_early_request(tmp_path: Path) -> None:
+    spec = RaceSpec(
+        laps=18,
+        player_pit_lap=12,
+        pit_lane_loss_ms=20_000,
+        pit_request_laps_early=4,
+        pit_box_after_line=True,
+    )
+    engine, db = _run_synth_spec(tmp_path, spec)
+    uid = engine.state.session_uid
+    assert uid is not None
+    events = db.pit_events_for_session(uid)
+    laps = db.laps_for(uid, 0)
+
+    assert len(events) == 1
+    assert events[0].lap_num == 12
+    assert events[0].loss_ms == pytest.approx(20_000, abs=1_000)
+    assert all(row.valid for row in laps if 2 <= row.lap_num < 8)
+
+
+def test_race_synth_rejects_implausible_pit_loss(tmp_path: Path) -> None:
+    spec = RaceSpec(laps=14, player_pit_lap=6, pit_lane_loss_ms=70_000)
+    engine, db = _run_synth_spec(tmp_path, spec)
+    uid = engine.state.session_uid
+    assert uid is not None
+    laps = {row.lap_num: row for row in db.laps_for(uid, 0)}
+
+    assert "pitted" in laps[6].invalid_reasons
+    assert "after_in_lap" in laps[7].invalid_reasons
+    assert db.pit_events_for_session(uid) == []
+    assert db.get_param(7, 0, "pit_loss_green_ms") is None
+
+
+def test_race_synth_lap_noise_is_seeded() -> None:
+    spec = RaceSpec(laps=8, lap_noise_ms=250.0, seed=17)
+
+    assert race_stream(spec) == race_stream(spec)
+    assert race_stream(spec) != race_stream(RaceSpec(laps=8))
 
 
 def test_fuel_kg_per_lap_folded(tmp_path: Path) -> None:
@@ -305,7 +405,7 @@ def test_session_end_writes_learning_pack_after_grading(
 def test_restart_mid_session_on_same_uid_folds_stints_once(tmp_path: Path) -> None:
     uid = 0xDEADBEEF
     packets = _race_stream()
-    cut = int(len(packets) * 0.8)
+    cut = int(len(packets) * 0.7)
     t_end = packets[-1][0] + 0.1
     send = (t_end, make_event_packet(b"SEND", session_uid=uid, session_time=t_end))
     full = [*packets, send]

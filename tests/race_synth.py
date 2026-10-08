@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
+from random import Random
 
 from pitwall.protocol.header import PacketId
 
@@ -55,6 +56,13 @@ class RaceSpec:
     thermal_penalty_ms: int = 0
     ers_deployed_j_per_lap: float = 0.0
     send_session_end: bool = False
+    pit_lane_loss_ms: int = 0
+    lap_noise_ms: float = 0.0
+    seed: int = 0
+    compound_after_stop: int | None = None
+    deg_ms_after_stop: int | None = None
+    pit_request_laps_early: int = 0
+    pit_box_after_line: bool = False
 
 
 def _rival(
@@ -123,13 +131,20 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     stint_start = 1
     player_wear0 = 0.0
     player_last_ms = 0
+    rng = Random(spec.seed)
     for lap in range(1, spec.laps + 1):
         if spec.player_pit_lap is not None and lap == spec.player_pit_lap + 1:
             stint_start = lap
             player_wear0 = 0.0
         age = lap - stint_start
+        after_stop = spec.player_pit_lap is not None and lap > spec.player_pit_lap
+        deg_ms = (
+            spec.deg_ms_after_stop
+            if after_stop and spec.deg_ms_after_stop is not None
+            else spec.deg_ms
+        )
         fuel = spec.fuel_kg - spec.fuel_kg_per_lap * (lap - 1)
-        lap_ms = int(spec.base_ms + spec.deg_ms * age + spec.fuel_ms_per_kg * fuel)
+        lap_ms = int(spec.base_ms + deg_ms * age + spec.fuel_ms_per_kg * fuel)
         if spec.tyre_inner_profile is not None:
             tyre_inner = spec.tyre_inner_profile[min(lap - 1, len(spec.tyre_inner_profile) - 1)]
         else:
@@ -144,14 +159,49 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             sc = 2 if spec.vsc else 1
         if sc:
             lap_ms = int(lap_ms * 1.4)
+        if spec.pit_lane_loss_ms > 0 and spec.player_pit_lap is not None:
+            in_lap_loss_ms = int(spec.pit_lane_loss_ms * 0.4)
+            if lap == spec.player_pit_lap:
+                lap_ms += in_lap_loss_ms
+            elif lap == spec.player_pit_lap + 1:
+                lap_ms += spec.pit_lane_loss_ms - in_lap_loss_ms
+        noise_ms = rng.gauss(0.0, spec.lap_noise_ms) if spec.lap_noise_ms > 0 else 0.0
+        if not sc:
+            lap_ms += int(noise_ms)
         frames = max(1, int(lap_ms / 1000 / spec.dt))
         wear = player_wear0 + spec.wear_pct_per_lap * age
         for f in range(frames):
             frame += 1
             frac = f / frames
             d = frac * TRACK_M
-            player_pitting = spec.player_pit_lap == lap and frac > 0.85
+            if spec.pit_box_after_line and spec.player_pit_lap == lap:
+                player_pit_status = 1 if frac > 0.85 else 0
+            elif spec.pit_box_after_line and spec.player_pit_lap == lap - 1:
+                if frac < 0.02:
+                    player_pit_status = 1
+                elif frac < 0.05:
+                    player_pit_status = 2
+                elif frac < 0.15:
+                    player_pit_status = 1
+                else:
+                    player_pit_status = 0
+            else:
+                player_pit_status = int(spec.player_pit_lap == lap and frac > 0.85)
+            player_pitting = player_pit_status != 0
             rival_pitting = spec.rival_pit_lap == lap and frac > 0.85
+            player_driver_status = 3 if spec.player_pit_lap == lap - 1 else 4
+            if spec.pit_lane_loss_ms > 0 and spec.player_pit_lap == lap - 1:
+                player_driver_status = 2
+            if spec.player_pit_lap is not None:
+                request_lap = max(1, spec.player_pit_lap - spec.pit_request_laps_early)
+                stop_lap = spec.player_pit_lap + int(spec.pit_box_after_line)
+                stop_frac = 0.02 if spec.pit_box_after_line else 0.95
+                if request_lap <= lap < stop_lap or (lap == stop_lap and frac < stop_frac):
+                    player_driver_status = 2
+                elif lap == stop_lap:
+                    player_driver_status = 3
+                elif lap == stop_lap + 1:
+                    player_driver_status = 3 if not spec.pit_box_after_line or f == 0 else 4
             if f % 5 == 0:
                 forecast: dict[str, object] = {}
                 if spec.rain_lap is not None and lap >= spec.rain_lap:
@@ -200,8 +250,8 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                             "lap_distance": d,
                             "sector": int(frac * 3),
                             "result_status": 2,
-                            "driver_status": 3 if spec.player_pit_lap == lap - 1 else 4,
-                            "pit_status": 1 if player_pitting else 0,
+                            "driver_status": player_driver_status,
+                            "pit_status": player_pit_status,
                             "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                             "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
                         },
@@ -215,8 +265,16 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "fuel_in_tank": fuel - spec.fuel_kg_per_lap * frac,
                 "fuel_remaining_laps": (fuel - spec.fuel_kg_per_lap * frac) / spec.fuel_kg_per_lap
                 - (spec.laps - lap + 1 - frac),
-                "actual_tyre_compound": spec.compound,
-                "visual_tyre_compound": spec.compound,
+                "actual_tyre_compound": (
+                    spec.compound_after_stop
+                    if after_stop and spec.compound_after_stop is not None
+                    else spec.compound
+                ),
+                "visual_tyre_compound": (
+                    spec.compound_after_stop
+                    if after_stop and spec.compound_after_stop is not None
+                    else spec.compound
+                ),
                 "tyres_age_laps": age,
                 "vehicle_fia_flags": 4 if spec.blue_flag_lap == lap and f < 5 else 0,
                 "ers_store_energy": 3_000_000.0,

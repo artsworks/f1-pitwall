@@ -51,11 +51,13 @@ class LapAccumulator:
         self._cur_lap = 0
         self._prev_was_in_lap = False
         self._saw_pit = False
+        self._saw_pit_entry = False
         self._saw_sc = False
         self._saw_red_flag = False
         self._saw_flashback = False
         self._saw_invalid = False
         self._sc_max = 0
+        self._last_pit_status: int | None = None
         self._last_driver_status = 0
         self._tyre_inner_sum = 0.0
         self._tyre_inner_front_sum = 0.0
@@ -71,6 +73,7 @@ class LapAccumulator:
 
     def reset_stint_flags(self) -> None:
         self._saw_pit = self._saw_sc = self._saw_red_flag = False
+        self._saw_pit_entry = False
         self._saw_flashback = self._saw_invalid = False
         self._sc_max = 0
 
@@ -124,8 +127,10 @@ class LapAccumulator:
             self._saw_flashback,
             self._saw_invalid,
             self._prev_was_in_lap,
+            self._saw_pit_entry,
             self._sc_max,
         )
+        saw_pit, saw_sc, saw_red_flag, saw_fb, saw_inv, prev_in_lap, pit_entry, sc_max = prev_flags
         inner_c = self._tyre_inner_sum / self._tyre_samples if self._tyre_samples else 0.0
         inner_front_c = (
             self._tyre_inner_front_sum / self._tyre_samples if self._tyre_samples else 0.0
@@ -138,13 +143,12 @@ class LapAccumulator:
         self._tyre_surface_sum = 0.0
         self._tyre_samples = 0
         self.reset_stint_flags()
-        self._prev_was_in_lap = driver_status == 2  # in lap
+        self._prev_was_in_lap = pit_entry
         self._accumulate(pit_status, current_lap_invalid, safety_car_status)
         self._last_driver_status = driver_status
 
         if finished == 0:
             return None  # first observation; nothing completed
-        saw_pit, saw_sc, saw_red_flag, saw_fb, saw_inv, prev_in_lap, sc_max = prev_flags
         reasons: list[str] = []
         if finished == 1:
             reasons.append("first_lap")
@@ -185,6 +189,9 @@ class LapAccumulator:
         )
 
     def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:
+        if self._last_pit_status == 0 and pit_status != 0:
+            self._saw_pit_entry = True
+        self._last_pit_status = pit_status
         self._saw_pit |= pit_status != 0
         self._saw_sc |= sc != 0
         self._saw_invalid |= invalid != 0

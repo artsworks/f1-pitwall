@@ -5,6 +5,7 @@ import pytest
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.state.ema import Ema
+from pitwall.state.lap import LapAccumulator
 from pitwall.state.session import Damage, SessionState, Snapshot, pressure_window, thermal_window
 
 from .synth import make_event_packet, pack_packet
@@ -19,6 +20,71 @@ def _state() -> tuple[Ingest, SessionState]:
 
 def _send(ingest: Ingest, pkt: bytes, t: float) -> None:
     ingest.on_datagram(pkt, t)
+
+
+def _lap_tick(
+    accumulator: LapAccumulator,
+    lap_num: int,
+    *,
+    pit_status: int = 0,
+    driver_status: int = 4,
+):
+    return accumulator.update(
+        current_lap_num=lap_num,
+        last_lap_time_ms=90_000,
+        sector1_ms=30_000,
+        sector2_ms=30_000,
+        pit_status=pit_status,
+        driver_status=driver_status,
+        current_lap_invalid=0,
+        safety_car_status=0,
+        compound=17,
+        tyre_age_laps=lap_num,
+        fuel_remaining_laps=10.0,
+    )
+
+
+def test_early_in_lap_request_does_not_mark_laps_after_in_lap() -> None:
+    accumulator = LapAccumulator()
+
+    laps = [
+        summary
+        for lap_num in range(1, 5)
+        if (summary := _lap_tick(accumulator, lap_num, driver_status=2)) is not None
+    ]
+
+    assert [lap.lap_num for lap in laps] == [1, 2, 3]
+    assert all("after_in_lap" not in lap.invalid_reasons for lap in laps)
+
+
+def test_pit_box_after_line_marks_both_pit_laps_and_then_clears() -> None:
+    accumulator = LapAccumulator()
+    _lap_tick(accumulator, 1, pit_status=0)
+    _lap_tick(accumulator, 1, pit_status=0)
+    _lap_tick(accumulator, 1, pit_status=1)
+
+    in_lap = _lap_tick(accumulator, 2, pit_status=1)
+    _lap_tick(accumulator, 2, pit_status=2)
+    _lap_tick(accumulator, 2, pit_status=1)
+    _lap_tick(accumulator, 2, pit_status=0)
+    out_lap = _lap_tick(accumulator, 3)
+    next_lap = _lap_tick(accumulator, 4)
+
+    assert in_lap is not None and "pitted" in in_lap.invalid_reasons
+    assert out_lap is not None and out_lap.invalid_reasons == ["pitted", "after_in_lap"]
+    assert next_lap is not None and next_lap.valid
+
+
+def test_starting_in_pit_lane_does_not_mark_following_lap_after_in_lap() -> None:
+    accumulator = LapAccumulator()
+    _lap_tick(accumulator, 1, pit_status=1)
+
+    first_completed = _lap_tick(accumulator, 2)
+    second_completed = _lap_tick(accumulator, 3)
+
+    assert first_completed is not None
+    assert second_completed is not None and second_completed.lap_num == 2
+    assert second_completed.valid
 
 
 def test_phase_mapping() -> None:

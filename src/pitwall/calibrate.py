@@ -46,6 +46,7 @@ def _fuel_burn(
 def _fit_pooled(
     sessions: Sequence[tuple[dict[str, Any], list[LapRow]]],
     fuel_ms_per_kg_max: float,
+    fuel_min_resid_kg: float,
 ) -> dict[str, Any]:
     by_group: dict[tuple[int, int], list[LapRow]] = defaultdict(list)
     for session, laps in sessions:
@@ -72,7 +73,11 @@ def _fit_pooled(
     design = np.asarray(matrix, dtype=np.float64)
     times = np.asarray(target, dtype=np.float64)
     coefficients, _, rank, _ = np.linalg.lstsq(design, times, rcond=None)
-    identifiable = int(rank) == column_count
+    fuel_col = design[:, -1]
+    other_coefficients = np.linalg.lstsq(design[:, :-1], fuel_col, rcond=None)[0]
+    residual = fuel_col - design[:, :-1] @ other_coefficients
+    residual_rms = float(np.sqrt(np.mean(residual**2)))
+    identifiable = int(rank) == column_count and residual_rms >= fuel_min_resid_kg
     raw_k = float(coefficients[-1])
     k_value = min(max(raw_k, 0.0), fuel_ms_per_kg_max) if identifiable else None
     if k_value is not None and k_value != raw_k:
@@ -195,6 +200,7 @@ def _fit_sessions(
     fit = _fit_pooled(
         sessions,
         _th(thresholds, "calib_fuel_ms_per_kg_max", 80.0),
+        _th(thresholds, "calib_fuel_min_resid_kg", 1.0),
     )
     fuel_burn, fuel_n = _fuel_burn(
         sessions,

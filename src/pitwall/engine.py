@@ -46,7 +46,7 @@ from pitwall.model.deg import (
     scoped,
     session_base_ms,
 )
-from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_ms
+from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_after_ms, ref_pace_ms
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
@@ -141,6 +141,17 @@ class _EnergyLapLatch:
     start_store_j: float
     start_laps_remaining: int
     gradable: bool
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _PendingPitLoss:
+    session_uid: int
+    track_id: int
+    in_lap: LapRow
+    out_lap: LapRow
+    ref_pace_ms: int
+    lane_ms: int
+    neutralised: int
 
 
 class _EnergyLapTracker:
@@ -361,6 +372,7 @@ class Engine:
         self.energy_prev_lap: EnergyBudget | None = None
         self._energy_lap_tracker = _EnergyLapTracker()
         self._pit_in_lap: LapSummary | None = None
+        self._pending_pit_loss: _PendingPitLoss | None = None
         self._folded_stints: set[tuple[int, int]] = set()
         self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
         self._fuel_last_kg: float | None = None
@@ -677,6 +689,16 @@ class Engine:
         return held[0]
 
     def _on_new_session(self, uid: int) -> None:
+        pending = self._pending_pit_loss
+        if pending is not None:
+            if self.db is None:
+                self._pending_pit_loss = None
+            else:
+                try:
+                    laps = self.db.laps_for(pending.session_uid, 0)
+                    self._flush_pending_pit_loss(pending.session_uid, laps, force=True)
+                except sqlite3.Error:
+                    self._pending_pit_loss = None
         self.dispatcher.reset_session()
         self._reset_energy_lap_tracking()
         self.menu.close()
@@ -886,10 +908,12 @@ class Engine:
                 setup_state_id=majority_state(tail),
             )
 
-        # Pit loss: measure when an out-lap completes against a pending in-lap.
-        if "pitted" in lap.invalid_reasons:
-            self._pit_in_lap = lap
-        elif "after_in_lap" in lap.invalid_reasons and self._pit_in_lap is not None:
+        # Pit loss: the lane-entry lap is the in-lap, even when the box is after the line.
+        if (
+            "after_in_lap" in lap.invalid_reasons
+            and self._pit_in_lap is not None
+            and self._pit_in_lap.lap_num == lap.lap_num - 1
+        ):
             in_lap = self._pit_in_lap
             self._pit_in_lap = None
             skip = {"flashback", "red_flag"}
@@ -900,33 +924,24 @@ class Engine:
                     in_row = next(r for r in all_laps if r.lap_num == in_lap.lap_num)
                     out_row = next(r for r in all_laps if r.lap_num == lap.lap_num)
                     neutralised = max(in_row.sc_status, out_row.sc_status)
-                    pit = measure(
-                        in_row,
-                        out_row,
-                        self.state.pit_lane_time_ms,
-                        ref,
-                        neutralised,
+                    self._pending_pit_loss = _PendingPitLoss(
+                        session_uid=uid,
+                        track_id=track_id,
+                        in_lap=in_row,
+                        out_lap=out_row,
+                        ref_pace_ms=ref,
+                        lane_ms=self.state.pit_lane_time_ms,
+                        neutralised=neutralised,
                     )
-                    db.insert_pit_event(
-                        uid,
-                        0,
-                        in_lap.lap_num,
-                        pit.loss_ms,
-                        neutralised,
-                        pit.lane_ms,
-                        pit.in_lap_ms,
-                        pit.out_lap_ms,
-                        pit.ref_pace_ms,
-                    )
-                    suffix = {0: "green", 1: "sc", 2: "vsc"}.get(neutralised, "green")
-                    if track_id >= 0 and not self._synthetic_session(uid):
-                        db.fold_param(
-                            track_id,
-                            0,
-                            f"pit_loss_{suffix}_ms",
-                            float(pit.loss_ms),
-                            param_weight_cap=self._th("param_weight_cap", 50),
-                        )
+        elif "pitted" in lap.invalid_reasons:
+            pending = self._pending_pit_loss
+            if pending is not None and pending.out_lap.lap_num == lap.lap_num - 1:
+                self._pending_pit_loss = None
+            elif pending is not None:
+                self._flush_pending_pit_loss(uid, all_laps, force=True)
+            self._pit_in_lap = lap
+        else:
+            self._flush_pending_pit_loss(uid, all_laps)
 
         # Fuel burn per lap: fold each consecutive-valid-lap delta.
         if lap.valid and lap.fuel_kg > 0:
@@ -956,6 +971,65 @@ class Engine:
             settings.track,
             th,
         )
+
+    def _flush_pending_pit_loss(
+        self,
+        uid: int,
+        laps: list[LapRow],
+        *,
+        force: bool = False,
+    ) -> None:
+        pending = self._pending_pit_loss
+        if pending is None:
+            return
+        if pending.session_uid != uid:
+            self._pending_pit_loss = None
+            return
+        if self.db is None:
+            self._pending_pit_loss = None
+            return
+        ref_laps = max(1, int(self._th("pit_ref_after_laps", 3)))
+        after_laps = [
+            row
+            for row in laps
+            if row.lap_num > pending.out_lap.lap_num and row.valid == 1 and row.lap_time_ms > 0
+        ]
+        if not force and len(after_laps) < ref_laps:
+            return
+        ref_after = ref_pace_after_ms(laps, pending.out_lap.lap_num, ref_laps) or None
+        self._pending_pit_loss = None
+        pit = measure(
+            pending.in_lap,
+            pending.out_lap,
+            pending.lane_ms,
+            pending.ref_pace_ms,
+            pending.neutralised,
+            ref_after_ms=ref_after,
+        )
+        if not (
+            self._th("pit_loss_min_ms", 5_000) <= pit.loss_ms <= self._th("pit_loss_max_ms", 60_000)
+        ):
+            return
+        self.db.insert_pit_event(
+            pending.session_uid,
+            0,
+            pending.in_lap.lap_num,
+            pit.loss_ms,
+            pending.neutralised,
+            pit.lane_ms,
+            pit.in_lap_ms,
+            pit.out_lap_ms,
+            pit.ref_pace_ms,
+        )
+        suffix = {0: "green", 1: "sc", 2: "vsc"}.get(pending.neutralised, "green")
+        if pending.track_id >= 0 and not self._synthetic_session(pending.session_uid):
+            self.db.fold_param(
+                pending.track_id,
+                0,
+                f"pit_loss_{suffix}_ms",
+                float(pit.loss_ms),
+                param_weight_cap=self._th("param_weight_cap", 50),
+            )
 
     def _note_session_fuel(self, lap: LapSummary) -> None:
         """Burn per lap measured this session; pit, SC and flashback laps break the chain."""
@@ -1095,10 +1169,12 @@ class Engine:
     def fold_open_stint(self) -> None:
         """Persist the current tail stint when a session closes."""
         if self.db is None or self.state.session_uid is None:
+            self._pending_pit_loss = None
             return
         self._write_laps()
         uid = self.state.session_uid
         rows = self.db.laps_for(uid, 0)
+        self._flush_pending_pit_loss(uid, rows, force=True)
         stint = self._stint_rows(rows)
         if not stint:
             return

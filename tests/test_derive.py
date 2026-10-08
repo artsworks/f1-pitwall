@@ -65,20 +65,10 @@ def _write_race(path, uid: int, *, laps: int = 6):
             session_uid=uid,
             dt=1.0,
             player_pit_lap=8,
+            pit_lane_loss_ms=20_000,
             send_session_end=True,
         )
     )
-    for index, (offset_s, payload) in enumerate(stream):
-        header = parse_header(payload)
-        if header.packet_id != PacketId.LAP_DATA:
-            continue
-        lap_offset = car_field_offset(PacketId.LAP_DATA, 0, "current_lap_num")
-        if payload[lap_offset] != 9:
-            continue
-        driver_status_offset = car_field_offset(PacketId.LAP_DATA, 0, "driver_status")
-        corrected = bytearray(payload)
-        corrected[driver_status_offset] = 2
-        stream[index] = (offset_s, bytes(corrected))
     return write_packet_stream(
         path,
         stream,

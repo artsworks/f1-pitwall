@@ -229,17 +229,36 @@ CREATE TABLE maintenance (
 ```python
 @dataclass(frozen=True, slots=True)
 class PitLoss:
-    loss_ms: int; lane_ms: int; in_lap_ms: int; out_lap_ms: int; ref_pace_ms: int; neutralised: int
+    loss_ms: int
+    lane_ms: int
+    in_lap_ms: int
+    out_lap_ms: int
+    ref_pace_ms: int
+    ref_after_ms: int
+    neutralised: int
 
-def measure(in_lap: LapRow, out_lap: LapRow, lane_ms: int, ref_pace_ms: int, neutralised: int) -> PitLoss
-    # loss_ms = (in_lap_ms - ref) + (out_lap_ms - ref). The lane time is already inside
-    # the in/out lap times; lane_ms is stored for review only.
+def measure(
+    in_lap: LapRow, out_lap: LapRow, lane_ms: int, ref_pace_ms: int, neutralised: int,
+    *, ref_after_ms: int | None = None,
+) -> PitLoss
+    # loss_ms = (in_lap_ms - ref_pace_ms) + (out_lap_ms - (ref_after_ms or ref_pace_ms)).
+    # The lap times include the lane time. Store lane_ms for review only.
 ```
 
-`ref_pace_ms` = median of the last 3 valid player laps before the in-lap (from SQLite).
-`neutralised` = max `sc_status` over in-lap/out-lap (0 green, 1 SC, 2 VSC).
-On out-lap completion: `insert_pit_event`, then `fold_param(track, 0, 'pit_loss_{green|sc|vsc}_ms', loss_ms)`.
-Measurement is skipped if either lap is flagged `flashback` or `red_flag`.
+The in-lap is the lap where `pit_status` first changes from 0 to nonzero.
+The out-lap is the next lap, even when the car reaches the box after crossing the line.
+An early pit request does not invalidate a lap. `after_in_lap` marks the out-lap.
+
+`ref_pace_ms` is the median of the last 3 valid player laps before the in-lap.
+`ref_after_ms` is the median of the first up to `pit_ref_after_laps` valid laps after the out-lap.
+It is 0 when no after-stop reference was used. If no valid lap follows the out-lap, measurement
+uses `ref_pace_ms` for both laps.
+`neutralised` is the max `sc_status` over the in-lap and out-lap. 0 means green, 1 means SC,
+and 2 means VSC.
+The engine waits for `pit_ref_after_laps` valid laps after the out-lap before it stores and folds
+the event. It flushes a pending event before another pit, at session end, and before a session
+reset. A flush uses the valid after-stop laps available at that time.
+Measurement is skipped if either pit lap has the `flashback` or `red_flag` reason.
 
 `current_pit_loss(db, track_id, neutralised, overlay, th) -> Prior` per the resolution order,
 preferring **this session's** measured events (`pit_events` for this uid) over cross-session
