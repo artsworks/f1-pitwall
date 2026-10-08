@@ -1,0 +1,4 @@
+track_id: 16
+name: interlagos
+fuel_kg_per_lap: 0.97
+thresholds: {energy_over_tolerance_j: 480000, tyre_inner_cold_by_compound_c: {17: 90.0, 18: 100.0, 19: 100.0}, tyre_inner_hot_by_compound_c: {17: 95.0, 18: 105.0, 19: 105.0}}
