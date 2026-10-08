@@ -55,6 +55,8 @@ class Call:
     t: float
     trigger_t: float
     still_true: Any = None
+    current: Any = None
+    conflict_group: str = ""
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     not_before: float = 0.0  # held in the queue until this time (min-gap spacing)
@@ -102,6 +104,9 @@ class Dispatcher:
         self._fires_this_stint: dict[str, int] = {}
         self._recent_texts: list[tuple[str, float]] = []
         self._last_call_t: float | None = None
+        self._booking_undo: dict[
+            str, tuple[str, float | None, float | None, tuple[int, int, int]]
+        ] = {}
         self._calls_this_lap = 0
         self._calls_lap: tuple[int, int, int] = (0, 0, 0)
         self._run = 0
@@ -136,6 +141,9 @@ class Dispatcher:
         allowed_p = _VERBOSITY_PRIORITIES[self.policy.verbosity]
         for cand in candidates:
             self._defs[cand.rule.id] = cand.rule.defn
+            if self._resolve_conflict(cand, snapshot, now):
+                self._log(cand, snapshot, now, "suppressed", "conflict")
+                continue
             suppressed = self._suppression_reason(cand, snapshot, now, allowed_p)
             not_before = now
             if suppressed == "min_gap":
@@ -157,6 +165,8 @@ class Dispatcher:
                 t=now,
                 trigger_t=cand.trigger_t,
                 still_true=cand.still_true,
+                current=cand.current,
+                conflict_group=cand.rule.defn.conflict_group,
                 inputs=cand.inputs,
                 not_before=not_before,
             )
@@ -226,12 +236,67 @@ class Dispatcher:
         return None
 
     def _book_call(self, call: Call, cand: Candidate, now: float) -> None:
-        self._last_fired[cand.rule.defn.cooldown_group or cand.rule.id] = now
+        cd_key = cand.rule.defn.cooldown_group or cand.rule.id
+        self._booking_undo[call.id] = (
+            cd_key,
+            self._last_fired.get(cd_key),
+            self._last_call_t,
+            self._calls_lap,
+        )
+        self._last_fired[cd_key] = now
         self._fires_this_stint[cand.rule.id] = self._fires_this_stint.get(cand.rule.id, 0) + 1
         self._recent_texts.append((cand.text, now))
         self._last_call_t = now
         if call.priority != 1:
             self._calls_this_lap += 1
+
+    def _undo_booking(self, call: Call) -> None:
+        booking = self._booking_undo.pop(call.id, None)
+        if booking is None:
+            return
+        cd_key, prev_last_fired, prev_last_call_t, calls_lap = booking
+        if self._last_fired.get(cd_key) == call.not_before:
+            if prev_last_fired is None:
+                self._last_fired.pop(cd_key, None)
+            else:
+                self._last_fired[cd_key] = prev_last_fired
+        self._fires_this_stint[call.rule_id] = max(
+            0, self._fires_this_stint.get(call.rule_id, 0) - 1
+        )
+        if call.priority != 1 and self._calls_lap == calls_lap:
+            self._calls_this_lap = max(0, self._calls_this_lap - 1)
+        for i, recent in enumerate(self._recent_texts):
+            if recent == (call.text, call.not_before):
+                del self._recent_texts[i]
+                break
+        if self._last_call_t == call.not_before:
+            self._last_call_t = prev_last_call_t
+
+    def _resolve_conflict(self, cand: Candidate, snapshot: Snapshot, now: float) -> bool:
+        group = cand.rule.defn.conflict_group
+        supersedes = set(cand.rule.defn.supersedes)
+        for queued in list(self._queue):
+            rival = queued.call
+            if rival.rule_id == cand.rule.id:
+                continue
+            same_group = bool(group) and group == rival.conflict_group
+            explicitly_superseded = rival.rule_id in supersedes
+            if not same_group and not explicitly_superseded:
+                continue
+            holds = True
+            if rival.current is not None:
+                try:
+                    holds = bool(rival.current(snapshot))
+                except Exception:
+                    pass
+            if explicitly_superseded or not holds:
+                self._queue = [item for item in self._queue if item is not queued]
+                heapq.heapify(self._queue)
+                self._undo_booking(rival)
+                self._log_call(rival, "suppressed", "superseded")
+            else:
+                return True
+        return False
 
     # -- output --------------------------------------------------------------
 
@@ -254,6 +319,7 @@ class Dispatcher:
             if (now - max(call.t, call.not_before)) * 1000 > deadline_ms:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
+                self._booking_undo.pop(call.id, None)
                 continue
             if now < call.not_before or (waits_for_straight and not on_straight):
                 held.append(q)
@@ -262,6 +328,7 @@ class Dispatcher:
                 try:
                     if not call.still_true(self.latest_snapshot):
                         self._log_call(call, "suppressed", "revalidation")
+                        self._booking_undo.pop(call.id, None)
                         continue
                 except Exception:
                     pass
@@ -279,11 +346,13 @@ class Dispatcher:
                 sink.speak(call)
             self._current = call
             if prompt:
+                self._booking_undo.pop(call.id, None)
                 continue  # menu item names: audio only, not logged or repeatable
             self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
             self._spoken_calls.append((call, now + len(call.text) / _CHARS_PER_SECOND))
             self._spoken_calls = self._spoken_calls[-16:]
             self._log_call(call, "fired", None)
+            self._booking_undo.pop(call.id, None)
             emitted.append(call)
         for q in held:
             heapq.heappush(self._queue, q)
@@ -327,6 +396,9 @@ class Dispatcher:
     def cancel_menu_prompt(self) -> None:
         kept = [q for q in self._queue if "menu" not in q.call.tags]
         if len(kept) != len(self._queue):
+            for queued in self._queue:
+                if "menu" in queued.call.tags:
+                    self._booking_undo.pop(queued.call.id, None)
             self._queue = kept
             heapq.heapify(self._queue)
         if self._current is not None and "menu" in self._current.tags:
@@ -356,6 +428,7 @@ class Dispatcher:
         purged = 0
         while self._queue:
             call = heapq.heappop(self._queue).call
+            self._booking_undo.pop(call.id, None)
             self._log_call(call, "suppressed", reason)
             purged += 1
         return purged
@@ -363,6 +436,7 @@ class Dispatcher:
     def reset_session(self) -> None:
         """New session: clear the queue and per-stint/per-lap budgets."""
         self._queue.clear()
+        self._booking_undo.clear()
         self._fires_this_stint.clear()
         self._calls_this_lap = 0
         self._calls_lap = (0, 0, 0)

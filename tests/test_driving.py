@@ -515,26 +515,26 @@ def test_slow_car_ahead_on_hot_lap() -> None:
     warn = _texts(
         _engine(),
         **base,
-        traffic_ahead_kind="in_lap",
+        traffic_ahead_state="in_lap",
         traffic_ahead_closing_s=3.0,
         traffic_ahead_m=220.0,
     )
     assert "slow_car_ahead" in warn and "220" in warn["slow_car_ahead"]
-    # same-pace flying car ahead: no warning; a much slower one: warning
+    # A flying-lap status alone does not identify a slow car.
     assert "slow_car_ahead" not in _texts(
-        _engine(), **base, traffic_ahead_kind="flying", traffic_ahead_closing_s=3.0
+        _engine(), **base, traffic_ahead_state="flying", traffic_ahead_closing_s=3.0
     )
-    assert "slow_car_ahead" in _texts(
+    assert "slow_car_ahead" not in _texts(
         _engine(),
         **base,
-        traffic_ahead_kind="flying",
+        traffic_ahead_state="flying",
         traffic_ahead_closing_s=3.0,
         traffic_ahead_slow=True,
     )
     assert "slow_car_ahead" not in _texts(
         _engine(),
         **{**base, "run_lap_kind": "cool"},
-        traffic_ahead_kind="in_lap",
+        traffic_ahead_state="in_lap",
         traffic_ahead_closing_s=3.0,
     )
 

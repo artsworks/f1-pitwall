@@ -255,6 +255,45 @@ def _lap_kind(driver_status: int) -> str:
         return ""
 
 
+def car_ahead_state(
+    *,
+    driver_status: int,
+    speed_kmh: float,
+    closing_kmh: float,
+    on_tarmac: bool,
+    lap_distance_m: float,
+    lap_time_ms: int,
+    ref_lap_ms: int,
+    track_length_m: float,
+    crawl_kmh: float,
+    slow_delta_kmh: float,
+    cool_pace_pct: float,
+) -> str:
+    """Classify a nearby car. RunTracker notes that FLYING_LAP persists during cool laps,
+    so compare its prorated pace with the reference lap."""
+    if on_tarmac and speed_kmh <= crawl_kmh and closing_kmh >= slow_delta_kmh:
+        return "aborted"
+    try:
+        status = DriverStatus(driver_status)
+    except ValueError:
+        return ""
+    if status == DriverStatus.IN_LAP:
+        return "in_lap"
+    if status in (DriverStatus.OUT_LAP, DriverStatus.ON_TRACK):
+        return "cooling"
+    if status == DriverStatus.FLYING_LAP:
+        if (
+            ref_lap_ms > 0
+            and track_length_m > 0
+            and lap_distance_m >= 200
+            and lap_time_ms
+            > ref_lap_ms * lap_distance_m / track_length_m * (1 + cool_pace_pct / 100)
+        ):
+            return "cooling"
+        return "flying"
+    return ""
+
+
 @dataclass(frozen=True, slots=True)
 class ErsLapTotals:
     lap_num: int
@@ -636,6 +675,8 @@ class Snapshot:
     traffic_ahead_kind: str = ""
     traffic_ahead_closing_s: float = math.inf  # time to catch it at the current speeds
     traffic_ahead_slow: bool = False  # it is much slower than the player right now
+    traffic_ahead_state: str = ""  # ahead car: aborted, in-lap, cooling, or flying
+    traffic_ahead_launch_s: float = math.inf  # seconds until a cooling car reaches the line
     traffic_behind_m: float = math.inf
     traffic_behind_s: float = math.inf
     traffic_behind_kind: str = ""
@@ -2918,9 +2959,32 @@ class SessionState:
         if ahead is not None:
             mine = self.speed_kmh / 3.6
             theirs = mine
+            telemetry = None
             if self.cars_telemetry is not None and ahead[1] < len(self.cars_telemetry):
-                theirs = float(self.cars_telemetry[ahead[1]].speed) / 3.6
+                telemetry = self.cars_telemetry[ahead[1]]
+                theirs = float(telemetry.speed) / 3.6
             closing = mine - theirs
+            c = self.cars_lap[ahead[1]]
+            on_tarmac = telemetry is not None and all(
+                surface in (0, 1) for surface in telemetry.surface_type.as_tuple()
+            )
+            state = car_ahead_state(
+                driver_status=c.driver_status,
+                speed_kmh=float(telemetry.speed) if telemetry is not None else 0.0,
+                closing_kmh=closing * 3.6,
+                on_tarmac=on_tarmac,
+                lap_distance_m=c.lap_distance,
+                lap_time_ms=c.current_lap_time_ms,
+                ref_lap_ms=player_best_ms,
+                track_length_m=length,
+                crawl_kmh=self._th("slow_car_crawl_kmh", 40.0),
+                slow_delta_kmh=self._th("slow_car_delta_kmh", 60.0),
+                cool_pace_pct=self._th("cool_pace_pct", 10.0),
+            )
+            launch_s = math.inf
+            if state == "cooling":
+                to_line = -c.lap_distance if c.lap_distance < 0 else length - c.lap_distance
+                launch_s = round(to_line / max(theirs, 1.0), 1)
             out.update(
                 traffic_ahead_m=round(ahead[0]),
                 traffic_ahead_s=round(ahead[0] / push_ms, 1),
@@ -2928,7 +2992,9 @@ class SessionState:
                     round(ahead[0] / closing, 1) if closing > 1.0 else math.inf
                 ),
                 traffic_ahead_slow=closing * 3.6 >= self._th("slow_car_delta_kmh", 60.0),
-                traffic_ahead_kind=_lap_kind(self.cars_lap[ahead[1]].driver_status),
+                traffic_ahead_kind=_lap_kind(c.driver_status),
+                traffic_ahead_state=state,
+                traffic_ahead_launch_s=launch_s,
             )
         if behind is not None:
             speed = 0.0

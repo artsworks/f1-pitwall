@@ -83,6 +83,7 @@ thresholds:
   fuel_cool_need_laps: 1.8   # cool + hot lap
   slow_car_warn_s: 5         # hot lap: warn when a slow car ahead is this many seconds from being caught
   slow_car_delta_kmh: 60     # a flying-lap car this much slower counts as slow too
+  slow_car_crawl_kmh: 40     # car ahead this slow with all wheels on tarmac or kerb counts as crawling
   cool_tyre_hot_c: 104       # hottest carcass at the line at or above this -> cool
   cool_lap_factor: 1.3       # cool lap length as a multiple of the best lap
   cool_pace_pct: 10          # sector 1 this much slower than best = driver is cooling

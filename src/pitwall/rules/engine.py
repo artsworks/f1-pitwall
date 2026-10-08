@@ -71,6 +71,7 @@ class Candidate:
     inputs: dict[str, Any]
     trigger_t: float
     screen_only: bool = False
+    current: Callable[[Snapshot], bool] | None = None
 
 
 @dataclass(slots=True)
@@ -96,6 +97,10 @@ class Rule:
             return True
         ns = make_namespace(snapshot, **ns_kwargs)
         return bool(self._still_true(ns))
+
+    def holds(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
+        ns = make_namespace(snapshot, **ns_kwargs)
+        return bool(self.when(ns))
 
 
 @dataclass(slots=True)
@@ -193,11 +198,20 @@ class RuleEngine:
                 if name in snap_attrs
             }
             still_true = None
+            current = None
+            ns_kwargs = self._ns_kwargs()
             if rule._still_true is not None:
-                ns_kwargs = self._ns_kwargs()
 
                 def still_true(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
                     return r.still_true(s, k)
+
+            if d.conflict_group or d.supersedes:
+                if rule._still_true is not None:
+                    current = still_true
+                else:
+
+                    def current(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
+                        return r.holds(s, k)
 
             result.candidates.append(
                 Candidate(
@@ -209,6 +223,7 @@ class RuleEngine:
                     inputs=inputs,
                     trigger_t=snapshot.now,
                     screen_only=d.screen_only,
+                    current=current,
                 )
             )
         return result

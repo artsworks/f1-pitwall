@@ -282,6 +282,8 @@ class RuleDefModel(BaseModel):
     still_true: str | None = None
     cooldown_s: float = 0.0
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
+    conflict_group: str = ""  # queued calls in one group: only the one still true is kept
+    supersedes: list[str] = Field(default_factory=list)  # rule ids this call replaces in the queue
     max_per_stint: int | None = None
     min_lap: int = 0
     requires: list[str] = Field(default_factory=list)
@@ -335,6 +337,15 @@ class Settings(BaseModel):
     track: TrackOverlay | None = None
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
     rules: list[RuleDefModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _known_supersedes(self) -> Settings:
+        rule_ids = {rule.id for rule in self.rules}
+        for rule in self.rules:
+            for superseded_id in rule.supersedes:
+                if superseded_id not in rule_ids:
+                    raise ValueError(f"rule {rule.id!r} supersedes unknown rule {superseded_id!r}")
+        return self
 
     def resolved_mindset(self) -> dict[str, Any]:
         """Active mindset vector with `inherits` resolution."""
