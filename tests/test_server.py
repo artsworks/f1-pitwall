@@ -515,6 +515,52 @@ def test_state_payload_quali_pole_available_outside_cool_lap() -> None:
     assert without_pole["quali"]["pole"] is None
 
 
+def test_state_payload_quali_teammate_benchmark() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    payload = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="qualifying",
+            phase="flying",
+            pole_gap_ms=420,
+            pole_driver="NORRIS",
+            best_sectors_ms=(30_100, 40_350, 20_970),
+            teammate_driver="PIASTRI",
+            teammate_gap_ms=-150,
+            teammate_sector_gaps_ms=(-200, 80, -30),
+            teammate_sectors_ms=(30_300, 40_270, 21_000),
+            teammate_worst_sector=2,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    quali = payload["quali"]
+    assert quali["teammate"] == {
+        "driver": "PIASTRI",
+        "gap_ms": -150,
+        "sector_gaps_ms": [-200, 80, -30],
+        "sectors_ms": [30_100, 40_350, 20_970],
+        "teammate_sectors_ms": [30_300, 40_270, 21_000],
+        "worst_sector": 2,
+    }
+    assert quali["pole"]["driver"] == "NORRIS"
+
+    without_mate = state_payload(
+        Snapshot(now=1.0, session_kind="qualifying", pole_gap_ms=420),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert without_mate["quali"]["teammate"] is None
+    assert without_mate["quali"]["pole"] is not None
+
+
 def test_pit_board_payload() -> None:
     from pitwall.protocol.layouts import Corners
     from pitwall.server.app import pit_board_payload

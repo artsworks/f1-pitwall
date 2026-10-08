@@ -867,3 +867,36 @@ def test_flashback_restores_setup_hash_and_resets_slip_balance() -> None:
         send_setup(t, 56)
     assert state.setup_hash == first_hash
     assert len(state.setup_changes) == 1
+
+
+def test_cool_view_teammate_benchmark() -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.state.session import Participant
+
+    _, state = _state()
+    state.participants = (
+        Participant(name="ME", team_id=4),
+        Participant(name="POLE", team_id=7),
+        Participant(name="MATE", team_id=4),
+    )
+    state._best_lap_sectors = {
+        0: (30_100, 40_350, 20_970),
+        1: (30_000, 40_000, 21_000),
+        2: (30_300, 40_270, 21_000),
+    }
+    inner = Corners(rl=90.0, rr=90.0, fl=90.0, fr=90.0)
+    field_best = (91_420, 91_000, 91_570)
+    out = state._cool_view(0.0, "qualifying", "flying", 91_420, field_best, inner)
+    assert out["pole_driver"] == "POLE" and out["pole_gap_ms"] == 420
+    assert out["teammate_driver"] == "MATE"
+    assert out["teammate_gap_ms"] == -150 and out["teammate_lap_gap_s"] == -0.1
+    assert out["teammate_sector_gaps_ms"] == (-200, 80, -30)
+    assert out["teammate_sectors_ms"] == (30_300, 40_270, 21_000)
+    assert out["teammate_worst_sector"] == 2
+    snap = Snapshot(now=0.0, **out)
+    assert snap.teammate_driver == "MATE" and snap.teammate_gap_s == float("inf")
+
+    no_lap = state._cool_view(0.0, "qualifying", "flying", 91_420, (91_420, 91_000, 0), inner)
+    assert no_lap["teammate_driver"] == "" and no_lap["teammate_gap_ms"] == 0
+    assert no_lap["teammate_sector_gaps_ms"] == (0, 0, 0)
+    assert no_lap["teammate_worst_sector"] == 0

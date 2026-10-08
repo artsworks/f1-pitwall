@@ -666,6 +666,12 @@ class Snapshot:
     pole_sectors_ms: tuple[int, int, int] = (0, 0, 0)
     pole_worst_sector: int = 0
     pole_worst_sector_s: float = 0.0
+    teammate_driver: str = ""
+    teammate_gap_ms: int = 0  # player best - teammate best; 0 when unknown
+    teammate_lap_gap_s: float = 0.0  # teammate_gap_s is the on-track race gap
+    teammate_sector_gaps_ms: tuple[int, int, int] = (0, 0, 0)
+    teammate_sectors_ms: tuple[int, int, int] = (0, 0, 0)
+    teammate_worst_sector: int = 0
     hot_car_behind_s: float = math.inf
     # Nearest on-track car either way: metres, seconds, and its lap kind
     # ("flying" | "out_lap" | "in_lap" | "on_track"). Ahead is timed at the
@@ -2525,6 +2531,27 @@ class SessionState:
             if pole_idx < len(self.participants):
                 name = self.participants[pole_idx].name
         worst = max(range(3), key=lambda i: gaps[i])
+        mate_idx = self._teammate()
+        mate_gap = 0
+        mate_gaps = (0, 0, 0)
+        mate_name = ""
+        mate_sectors: tuple[int, int, int] = (0, 0, 0)
+        if (
+            0 <= mate_idx < len(field_best)
+            and mate_idx != self._player_idx
+            and player_best > 0
+            and field_best[mate_idx] > 0
+        ):
+            mate_gap = player_best - field_best[mate_idx]
+            mate_sectors = self._best_lap_sectors.get(mate_idx, (0, 0, 0))
+            mate_gaps = (
+                mine[0] - mate_sectors[0] if mine[0] and mate_sectors[0] else 0,
+                mine[1] - mate_sectors[1] if mine[1] and mate_sectors[1] else 0,
+                mine[2] - mate_sectors[2] if mine[2] and mate_sectors[2] else 0,
+            )
+            if mate_idx < len(self.participants):
+                mate_name = self.participants[mate_idx].name
+        mate_worst = max(range(3), key=lambda i: mate_gaps[i])
         out.update(
             run_lap_kind=run.kind,
             line_crossings=run.crossings,
@@ -2555,6 +2582,12 @@ class SessionState:
             pole_sectors_ms=theirs,
             pole_worst_sector=worst + 1 if gaps[worst] > 0 else 0,
             pole_worst_sector_s=round(max(0, gaps[worst]) / 1000.0, 1),
+            teammate_driver=mate_name,
+            teammate_gap_ms=mate_gap,
+            teammate_lap_gap_s=round(mate_gap / 1000.0, 1),
+            teammate_sector_gaps_ms=mate_gaps,
+            teammate_sectors_ms=mate_sectors,
+            teammate_worst_sector=mate_worst + 1 if mate_gaps[mate_worst] > 0 else 0,
             hot_car_behind_s=(
                 self._hot_car_behind_s() if cool_lap or phase == "out_lap" else math.inf
             ),
