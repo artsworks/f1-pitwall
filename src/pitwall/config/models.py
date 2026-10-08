@@ -314,7 +314,7 @@ class TrackOverlay(BaseModel):
     fuel_kg_per_lap: float = 0.0
     deg_ms_per_lap: dict[int, float] = Field(default_factory=dict)  # actual compound -> ms
     base_pace_ms: int = 0  # 0 = unknown
-    thresholds: dict[str, float] = Field(default_factory=dict)
+    thresholds: dict[str, float | dict[int, float]] = Field(default_factory=dict)
 
 
 class Settings(BaseModel):
@@ -330,7 +330,7 @@ class Settings(BaseModel):
     learning: LearningSettings = Field(default_factory=LearningSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     mindset: MindsetSettings = Field(default_factory=MindsetSettings)
-    thresholds: dict[str, float | dict[int, int]] = Field(default_factory=dict)
+    thresholds: dict[str, float | dict[int, int] | dict[int, float]] = Field(default_factory=dict)
     setup_rules: dict[str, Any] = Field(default_factory=dict)
     track: TrackOverlay | None = None
     mindsets: dict[str, dict[str, Any]] = Field(default_factory=dict)
