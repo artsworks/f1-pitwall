@@ -1415,10 +1415,17 @@ def cmd_start(args: argparse.Namespace) -> int:
             from pitwall.learnpack import write_pack
 
             try:
-                saved = write_pack(db, pack_dir, keep_days=settings.learning.pack_keep_days)
+                saved = write_pack(
+                    db,
+                    pack_dir,
+                    keep_days=settings.learning.pack_keep_days,
+                    refresh_quality=[state.session_uid] if state.session_uid is not None else None,
+                )
                 print(f"learning pack: saved {saved}", flush=True)
             except (OSError, sqlite3.Error, ValueError) as e:
                 print(f"learning pack: skipped ({e})", flush=True)
+            except KeyboardInterrupt:
+                print("learning pack: interrupted", flush=True)
     return 0
 
 
