@@ -58,6 +58,9 @@ make that cheap:
    the decision log, and the notes into a zip, ready to attach to a GitHub issue.
 5. **Issue templates** in the repo: *wrong call*, *missed call*, *too chatty*, *bug*,
    *idea*. Each asks for the report bundle.
+6. **Analyse the bundle.** [14-report-analysis-prompt.md](14-report-analysis-prompt.md)
+   is a prompt to give an AI coding agent with the bundle. The agent writes one issue
+   per bookmark, a fix and a regression test.
 
 With a bug report plus its recording, the fix gets a replay test, and the same bug can't
 come back unnoticed.
