@@ -908,12 +908,12 @@ class Engine:
                 setup_state_id=majority_state(tail),
             )
 
-        # Pit loss: wait for valid laps on fresh tyres before measuring.
-        if "pitted" in lap.invalid_reasons:
-            if self._pending_pit_loss is not None:
-                self._flush_pending_pit_loss(uid, all_laps, force=True)
-            self._pit_in_lap = lap
-        elif "after_in_lap" in lap.invalid_reasons and self._pit_in_lap is not None:
+        # Pit loss: the lane-entry lap is the in-lap, even when the box is after the line.
+        if (
+            "after_in_lap" in lap.invalid_reasons
+            and self._pit_in_lap is not None
+            and self._pit_in_lap.lap_num == lap.lap_num - 1
+        ):
             in_lap = self._pit_in_lap
             self._pit_in_lap = None
             skip = {"flashback", "red_flag"}
@@ -933,6 +933,13 @@ class Engine:
                         lane_ms=self.state.pit_lane_time_ms,
                         neutralised=neutralised,
                     )
+        elif "pitted" in lap.invalid_reasons:
+            pending = self._pending_pit_loss
+            if pending is not None and pending.out_lap.lap_num == lap.lap_num - 1:
+                self._pending_pit_loss = None
+            elif pending is not None:
+                self._flush_pending_pit_loss(uid, all_laps, force=True)
+            self._pit_in_lap = lap
         else:
             self._flush_pending_pit_loss(uid, all_laps)
 
@@ -999,6 +1006,10 @@ class Engine:
             pending.neutralised,
             ref_after_ms=ref_after,
         )
+        if not (
+            self._th("pit_loss_min_ms", 5_000) <= pit.loss_ms <= self._th("pit_loss_max_ms", 60_000)
+        ):
+            return
         self.db.insert_pit_event(
             pending.session_uid,
             0,

@@ -53,7 +53,7 @@ def test_calibration_recovers_synthetic_fits_and_converges(tmp_path) -> None:
     energy = track["energy"]
     assert energy["energy_deployed_j_p25"] == pytest.approx(475_000.0)
     assert energy["energy_deployed_j_p50"] == pytest.approx(487_500.0)
-    assert energy["energy_deployed_j_p75"] == pytest.approx(518_750.0)
+    assert energy["energy_deployed_j_p75"] == pytest.approx(525_000.0)
     db.close()
 
 

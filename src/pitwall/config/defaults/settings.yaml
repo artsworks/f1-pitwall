@@ -100,6 +100,8 @@ thresholds:
   pit_loss_vsc_default_s: 12
   pit_loss_sc_default_s: 8
   pit_ref_after_laps: 3        # valid laps after an out-lap for the fresh-tyre reference
+  pit_loss_min_ms: 5000        # lower bound on plausible pit loss, ms
+  pit_loss_max_ms: 60000       # upper bound on plausible pit loss, ms
   fuel_kg_per_lap_default: 1.7
   energy_over_tolerance_j: 200000  # |lap_delta| above this flags over/under
   ers_store_capacity_j: 4000000    # nominal 4 MJ 2026 ERS store

@@ -92,7 +92,7 @@ def _learned(db: Any, laps: int) -> dict[str, float | None]:
     }
 
 
-def _spec(truth: Truth, seed: int) -> tuple[Any, int]:
+def _spec(truth: Truth, seed: int, race_index: int = 0) -> tuple[Any, int]:
     from tests.race_synth import RaceSpec
 
     rng = random.Random(seed * 7919)
@@ -113,6 +113,8 @@ def _spec(truth: Truth, seed: int) -> tuple[Any, int]:
         fuel_kg_per_lap=truth.fuel_kg_per_lap,
         fuel_ms_per_kg=truth.fuel_ms_per_kg,
         player_pit_lap=truth.pit_lap,
+        pit_request_laps_early=3,
+        pit_box_after_line=race_index % 2 == 1,
         pit_lane_loss_ms=truth.pit_lane_loss_ms,
         lap_noise_ms=truth.noise_ms,
         seed=seed,
@@ -125,7 +127,7 @@ def _spec(truth: Truth, seed: int) -> tuple[Any, int]:
     return spec, uid
 
 
-def run_one(seed: int) -> dict[str, Any]:
+def run_one(seed: int, race_index: int = 0) -> dict[str, Any]:
     from tests.race_synth import race_stream
     from tests.synth import write_packet_stream
 
@@ -135,7 +137,7 @@ def run_one(seed: int) -> dict[str, Any]:
     from pitwall.store.db import Database
 
     truth = make_truth(seed)
-    spec, uid = _spec(truth, seed)
+    spec, uid = _spec(truth, seed, race_index)
     with tempfile.TemporaryDirectory(prefix="pitwall-ka-") as tmp:
         tmp_path = Path(tmp)
         rec = write_packet_stream(
@@ -178,7 +180,7 @@ def run_pooled(seed: int, races: int) -> dict[str, Any]:
         db = Database(tmp_path / "ka.sqlite")
         for i, pit_lap in enumerate(pit_laps):
             truth = replace(base, pit_lap=pit_lap)
-            spec, uid = _spec(truth, seed * 100 + i)
+            spec, uid = _spec(truth, seed * 100 + i, i)
             rec = write_packet_stream(
                 tmp_path / f"ka_pool_{i}.f1bin",
                 race_stream(spec),
@@ -253,7 +255,7 @@ def main() -> None:
     seeds = [args.seed + i for i in range(args.races)]
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
         pooled_future = pool.submit(run_pooled, args.seed, args.pooled) if args.pooled else None
-        results = list(pool.map(run_one, seeds))
+        results = list(pool.map(run_one, seeds, range(args.races)))
         pooled = pooled_future.result() if pooled_future else None
     print(f"{'seed':>4} {'laps':>4} {'param':<16} {'true':>9} {'live':>9} {'calibrated':>10}")
     for r in results:

@@ -32,8 +32,9 @@ def generate_learning_corpus(
     for index in range(sessions):
         uid = 0xF1260000 + index
         compound = 17 if index < 4 else 0
+        session_laps = laps + int(compound == 0)
         spec = RaceSpec(
-            laps=laps,
+            laps=session_laps,
             base_ms=base_ms,
             deg_ms=deg_ms,
             fuel_kg=laps * fuel_kg_per_lap + 5.0 + index,

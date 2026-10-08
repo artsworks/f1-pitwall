@@ -245,6 +245,10 @@ def measure(
     # The lap times include the lane time. Store lane_ms for review only.
 ```
 
+The in-lap is the lap where `pit_status` first changes from 0 to nonzero.
+The out-lap is the next lap, even when the car reaches the box after crossing the line.
+An early pit request does not invalidate a lap. `after_in_lap` marks the out-lap.
+
 `ref_pace_ms` is the median of the last 3 valid player laps before the in-lap.
 `ref_after_ms` is the median of the first up to `pit_ref_after_laps` valid laps after the out-lap.
 It is 0 when no after-stop reference was used. If no valid lap follows the out-lap, measurement
