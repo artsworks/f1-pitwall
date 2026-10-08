@@ -424,6 +424,18 @@ def quali_payload(
         else None
     )
     out["pole"] = pole
+    out["teammate"] = (
+        {
+            "driver": snapshot.teammate_driver or None,
+            "gap_ms": snapshot.teammate_gap_ms,
+            "sector_gaps_ms": list(snapshot.teammate_sector_gaps_ms),
+            "sectors_ms": list(snapshot.best_sectors_ms),
+            "teammate_sectors_ms": list(snapshot.teammate_sectors_ms),
+            "worst_sector": snapshot.teammate_worst_sector or None,
+        }
+        if snapshot.teammate_driver or snapshot.teammate_gap_ms != 0
+        else None
+    )
     if snapshot.cool_lap and (not snapshot.cool_prep or snapshot.cool_extend):
         inner = snapshot.tyre_inner_ema_fast
         th = thresholds or {}

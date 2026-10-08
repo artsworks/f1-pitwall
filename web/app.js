@@ -972,6 +972,14 @@
     setRow("qr-gaps", gaps.map(function (v) { return v ? signed(v) : "--"; }),
       gaps.map(function (v, i) { return gapClass(v) + (i === worst && v > 0 ? " worst" : ""); }));
 
+    var mate = q.teammate || null;
+    var mGaps = mate ? mate.sector_gaps_ms : [0, 0, 0];
+    var mWorst = mate && mate.worst_sector ? mate.worst_sector - 1 : -1;
+    setRow("qr-mate-gaps", mGaps.map(function (v) { return v ? signed(v) : "--"; }),
+      mGaps.map(function (v, i) { return gapClass(v) + (i === mWorst && v > 0 ? " worst" : ""); }));
+    setText("qr-mate", mate ? "mate " + String(mate.driver || "TEAMMATE").toUpperCase() + " " +
+      signed(mate.gap_ms) : "mate --");
+
     var ph = el("qr-phase"), lap = q.lap;
     if (ph) {
       var word = PHASE_WORDS[p.phase];
