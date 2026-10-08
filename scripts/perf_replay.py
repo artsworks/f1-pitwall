@@ -33,7 +33,7 @@ from pitwall.clock import VirtualClock  # noqa: E402
 from pitwall.engine import build_engine, run_replay  # noqa: E402
 from pitwall.net.recording import RecordingReader  # noqa: E402
 from pitwall.protocol import packets  # noqa: E402
-from pitwall.protocol.header import PacketId  # noqa: E402
+from pitwall.protocol.header import HEADER_SIZE, PACKET_SIZES, PacketId  # noqa: E402
 
 TARGET_IDS = (
     PacketId.CAR_TELEMETRY,
@@ -74,7 +74,11 @@ def _samples(path: Path) -> dict[int, bytes]:
     samples: dict[int, bytes] = {}
     with RecordingReader(path) as reader:
         for _, payload in reader:
-            samples.setdefault(payload[6], payload)
+            if len(payload) < HEADER_SIZE:
+                continue
+            packet_id = payload[6]
+            if len(payload) == PACKET_SIZES.get(packet_id):
+                samples.setdefault(packet_id, payload)
     for packet_id in TARGET_IDS:
         samples.setdefault(packet_id, make_packet(packet_id))
     return samples

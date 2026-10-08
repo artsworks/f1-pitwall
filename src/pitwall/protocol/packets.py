@@ -342,7 +342,7 @@ _LAZY_PACKET_IDS = frozenset(
     (PacketId.CAR_TELEMETRY, PacketId.CAR_STATUS, PacketId.CAR_DAMAGE, PacketId.CAR_TELEMETRY_2)
 )
 _LazyFieldPlan = tuple[str, struct.Struct, int, int, bool]
-_LazyPacketPlan = tuple[int, struct.Struct, _Decoder, int, tuple[_LazyFieldPlan, ...]]
+_LazyPacketPlan = tuple[int, struct.Struct, _Decoder, int, tuple[_LazyFieldPlan, ...], int]
 _LAZY_PACKET_PLANS: dict[int, _LazyPacketPlan] = {}
 
 
@@ -376,6 +376,7 @@ def _lazy_plan(packet_id: int) -> _LazyPacketPlan:
         car_decoder,
         cars.n,
         tuple(fields),
+        compiled.struct.size,
     )
     _LAZY_PACKET_PLANS[packet_id] = plan
     return plan
@@ -383,7 +384,10 @@ def _lazy_plan(packet_id: int) -> _LazyPacketPlan:
 
 def _parse_lazy(packet_id: int, payload: bytes, header: PacketHeader) -> Any:
     cls, layout = _PACKET_CLASSES[packet_id]
-    base, car_struct, car_decoder, n, field_plans = _lazy_plan(packet_id)
+    base, car_struct, car_decoder, n, field_plans, body_size = _lazy_plan(packet_id)
+    expected_size = HEADER_SIZE + body_size
+    if len(payload) < expected_size:
+        raise struct.error(f"packet {packet_id} needs {expected_size} bytes, got {len(payload)}")
     cars = CarArray(payload, base, car_struct, car_decoder, n)
     values: dict[str, Any] = {}
     for name, field_struct, offset, count, corners in field_plans:

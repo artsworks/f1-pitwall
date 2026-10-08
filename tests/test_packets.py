@@ -5,7 +5,7 @@ import struct
 import pytest
 
 from pitwall.protocol.enums import session_kind, session_label, weekend_order
-from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
+from pitwall.protocol.header import HEADER_SIZE, PACKET_SIZES, PacketId, parse_header
 from pitwall.protocol.layouts import Corners
 from pitwall.protocol.packets import (
     _PACKET_CLASSES,
@@ -109,6 +109,27 @@ def test_high_rate_car_arrays_are_lazy_and_match_eager(
     fresh = parse(packet_id, pkt)
     assert fresh.cars[7] == eager.cars[7]
     assert sum(value is not None for value in fresh.cars.cache) == 1
+
+
+@pytest.mark.parametrize(
+    "packet_id",
+    (
+        PacketId.CAR_TELEMETRY,
+        PacketId.CAR_STATUS,
+        PacketId.CAR_DAMAGE,
+        PacketId.CAR_TELEMETRY_2,
+    ),
+)
+def test_high_rate_parsers_reject_truncated_packets(packet_id: int) -> None:
+    pkt = pack_packet(packet_id, {})
+    for truncated in (pkt[:HEADER_SIZE], pkt[:-1]):
+        with pytest.raises(struct.error) as error:
+            parse(packet_id, truncated)
+        assert str(error.value) == (
+            f"packet {packet_id} needs {PACKET_SIZES[packet_id]} bytes, got {len(truncated)}"
+        )
+        with pytest.raises(struct.error):
+            _parse_eager(packet_id, truncated)
 
 
 def test_session_parse() -> None:
