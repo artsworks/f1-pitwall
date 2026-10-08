@@ -13,7 +13,7 @@ from pitwall.audio.piper_tts import voice_path
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
-from pitwall.net.udp import listen
+from pitwall.net.udp import RCVBUF_MIN_OK, effective_rcvbuf, listen
 from pitwall.protocol.header import PACKET_SIZES, PacketId
 
 BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
@@ -107,6 +107,14 @@ def run_doctor(
 
     async def collect() -> None:
         transport = await listen(host, port, ingest, clock)
+        effective = effective_rcvbuf(transport)
+        status = "WARN" if effective < RCVBUF_MIN_OK else "OK"
+        msg = f"UDP receive buffer {effective / (1024 * 1024):.1f} MiB"
+        if status == "WARN" and sys.platform.startswith("linux"):
+            msg += " (increase sysctl net.core.rmem_max)"
+        elif status == "WARN":
+            msg += " (increase the socket receive buffer)"
+        _line(out, status, msg)
         await asyncio.sleep(seconds)
         transport.close()
 

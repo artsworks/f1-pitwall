@@ -8,6 +8,8 @@ from pitwall.protocol.enums import session_kind, session_label, weekend_order
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.protocol.layouts import Corners
 from pitwall.protocol.packets import (
+    _PACKET_CLASSES,
+    CarArray,
     CarDamagePacket,
     CarSetupsPacket,
     CarStatusPacket,
@@ -19,11 +21,94 @@ from pitwall.protocol.packets import (
     SessionHistoryPacket,
     SessionPacket,
     TyreSetsPacket,
+    _parse_eager,
     car_field_offset,
     parse,
 )
 
 from .synth import pack_packet
+
+
+@pytest.mark.parametrize(
+    ("packet_id", "cars", "top_fields"),
+    [
+        (
+            PacketId.CAR_TELEMETRY,
+            {
+                i: {
+                    "speed": 100 + i,
+                    "tyres_inner_temperature": (40 + i, 50 + i, 60 + i, 70 + i),
+                }
+                for i in range(24)
+            },
+            {
+                "mfd_panel_index": 1,
+                "mfd_panel_index_secondary_player": 2,
+                "suggested_gear": 3,
+            },
+        ),
+        (
+            PacketId.CAR_STATUS,
+            {i: {"traction_control": i, "fuel_in_tank": float(i) + 1.5} for i in range(24)},
+            {},
+        ),
+        (
+            PacketId.CAR_DAMAGE,
+            {
+                i: {
+                    "tyres_wear": (i + 0.1, i + 0.2, i + 0.3, i + 0.4),
+                    "gearbox_damage": i,
+                }
+                for i in range(24)
+            },
+            {},
+        ),
+        (
+            PacketId.CAR_TELEMETRY_2,
+            {
+                i: {"active_aero_mode": i % 4, "active_aero_activation_distance": 100 + i}
+                for i in range(24)
+            },
+            {},
+        ),
+    ],
+)
+def test_high_rate_car_arrays_are_lazy_and_match_eager(
+    packet_id: int,
+    cars: dict[int, dict[str, object]],
+    top_fields: dict[str, int],
+) -> None:
+    pkt = pack_packet(packet_id, {"cars": cars, **top_fields})
+    lazy = parse(packet_id, pkt)
+    eager = _parse_eager(packet_id, pkt)
+    _, layout = _PACKET_CLASSES[packet_id]
+
+    assert type(lazy) is type(eager)
+    assert isinstance(lazy.cars, CarArray)
+    assert len(lazy.cars) == 24
+    assert lazy.cars.cache == [None] * 24
+    for i in range(24):
+        assert lazy.cars[i] == eager.cars[i]
+        assert type(lazy.cars[i]) is type(eager.cars[i])
+    for item in layout:
+        if item.name != "cars":
+            assert getattr(lazy, item.name) == getattr(eager, item.name)
+    assert lazy.cars[-1] == eager.cars[-1]
+    assert lazy.cars[1:4] == eager.cars[1:4]
+    assert tuple(lazy.cars) == eager.cars
+    assert lazy.cars == eager.cars
+    assert len(tuple(lazy.cars)) == 24
+    with pytest.raises(IndexError):
+        _ = lazy.cars[24]
+
+    if packet_id == PacketId.CAR_TELEMETRY:
+        assert isinstance(lazy.cars[0].tyres_inner_temperature, Corners)
+    elif packet_id == PacketId.CAR_DAMAGE:
+        assert isinstance(lazy.cars[0].tyres_wear, Corners)
+
+    fresh = parse(packet_id, pkt)
+    assert fresh.cars[7] == eager.cars[7]
+    assert sum(value is not None for value in fresh.cars.cache) == 1
 
 
 def test_session_parse() -> None:

@@ -188,6 +188,9 @@ def test_doctor_pass_lines(monkeypatch: pytest.MonkeyPatch) -> None:
 
     async def fake_listen(host: str, port: int, ingest: object, clock: object) -> object:
         class T:
+            def get_extra_info(self, name: str) -> None:
+                return None
+
             def close(self) -> None:
                 pass
 
@@ -204,6 +207,7 @@ def test_doctor_pass_lines(monkeypatch: pytest.MonkeyPatch) -> None:
     text = out.getvalue()
     assert "PASS" in text
     assert "config loads" in text
+    assert "UDP receive buffer 0.0 MiB" in text
     assert rc in (0, 1)  # FAIL only if env is bad; lines must render
 
 
