@@ -30,7 +30,11 @@ def test_start_leaves_session_open_and_clears_heartbeat_on_clean_ctrl_c(
     uid = 123
 
     async def fake_serve(
-        engine: Any, hub: Any, store: Any, live: Coroutine[Any, Any, None]
+        engine: Any,
+        hub: Any,
+        store: Any,
+        live: Coroutine[Any, Any, None],
+        **kwargs: Any,
     ) -> None:
         live.close()
         engine.db.upsert_session(uid, track_id=7, session_type=15, started_at=1.0)

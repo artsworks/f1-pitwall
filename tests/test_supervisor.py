@@ -10,9 +10,10 @@ import time
 from pathlib import Path
 from unittest.mock import Mock
 
+import pitwall.supervisor as supervisor_module
 from pitwall.config.models import EngineSettings
 from pitwall.net.recording import RecordingReader, RecordingRotator
-from pitwall.supervisor import Supervisor, read_recording_pointer
+from pitwall.supervisor import WATCHDOG_ENV, Supervisor, read_recording_pointer
 
 
 def _free_port() -> int:
@@ -134,3 +135,28 @@ def test_second_interrupt_while_stopping_terminates_the_engine(tmp_path: Path) -
     sup._stop_child()
     child.terminate.assert_called_once_with()
     child.kill.assert_not_called()
+
+
+def test_supervisor_exposes_and_passes_watchdog_endpoints(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    engine = _settings()
+    udp_port = _free_port()
+    sup = Supervisor(
+        engine,
+        None,
+        [sys.executable, "-c", "pass"],
+        tmp_path,
+        udp_host="127.0.0.1",
+        udp_port=udp_port,
+    )
+    expected = f"recorder on 127.0.0.1:{udp_port}, engine on 127.0.0.1:{engine.engine_port}"
+    assert sup.endpoints == expected
+    captured: dict[str, object] = {}
+
+    def fake_popen(command: list[str], **kwargs: object) -> Mock:
+        captured.update(kwargs)
+        return Mock()
+
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+    sup._spawn()
+
+    assert captured["env"][WATCHDOG_ENV] == expected  # type: ignore[index]

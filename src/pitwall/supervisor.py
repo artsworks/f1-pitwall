@@ -9,6 +9,7 @@ recording tail (`Engine.recover`)."""
 from __future__ import annotations
 
 import contextlib
+import os
 import socket
 import subprocess
 import threading
@@ -21,6 +22,7 @@ from pitwall.net.recording import RecordingRotator
 
 RECORDING_POINTER = "current_recording"
 ALIVE_FILE = "engine.alive"
+WATCHDOG_ENV = "PITWALL_WATCHDOG_ENDPOINTS"
 _RECV_TIMEOUT_S = 0.2
 _CHECK_PERIOD_S = 0.5
 _STOP_WAIT_S = 10.0
@@ -71,6 +73,13 @@ class Supervisor:
     @property
     def alive_path(self) -> Path:
         return self.rt_dir / ALIVE_FILE
+
+    @property
+    def endpoints(self) -> str:
+        return (
+            f"recorder on {self.udp_host}:{self.udp_port}, "
+            f"engine on 127.0.0.1:{self.engine.engine_port}"
+        )
 
     def stop(self) -> None:
         self.stopping = True
@@ -126,7 +135,10 @@ class Supervisor:
     def _spawn(self) -> None:
         with contextlib.suppress(OSError):
             self.alive_path.unlink()
-        self._child = subprocess.Popen(self.child_cmd)
+        self._child = subprocess.Popen(
+            self.child_cmd,
+            env={**os.environ, WATCHDOG_ENV: self.endpoints},
+        )
         self._spawned_at = time.monotonic()
         self._respawn_at = None
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import re
 import sqlite3
 import sys
 import threading
@@ -43,10 +45,31 @@ from pitwall.net.recording import (
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
 from pitwall.state.session import SessionState
-from pitwall.supervisor import ALIVE_FILE, Supervisor, read_recording_pointer, runtime_dir
+from pitwall.supervisor import (
+    ALIVE_FILE,
+    WATCHDOG_ENV,
+    Supervisor,
+    read_recording_pointer,
+    runtime_dir,
+)
 
 if TYPE_CHECKING:
     from pitwall.config.models import Settings
+
+
+BannerEntry = tuple[str, str | None]
+_BANNER_GROUPS = {
+    "dashboard": 0,
+    "LAN": 0,
+    "PIN": 0,
+    "telemetry": 1,
+    "watchdog": 1,
+    "recovery": 1,
+    "recording": 1,
+    "speech": 1,
+    "learning": 2,
+    "pitwall": 2,
+}
 
 
 def _parse_speed(value: str) -> float | None:
@@ -968,18 +991,88 @@ def _lan_ip() -> str:
         return "127.0.0.1"
 
 
+def _banner(lines: list[BannerEntry]) -> str:
+    entries: list[tuple[str, str, int, bool]] = []
+    for label, value in lines:
+        if value is None:
+            continue
+        if label == "":
+            match = re.fullmatch(r"([A-Za-z][\w ]{0,15}): (.*)", value)
+            if match is not None:
+                label, value = match.groups()
+            else:
+                entries.append((label, value, 1, True))
+                continue
+        entries.append((label, value, _BANNER_GROUPS.get(label, 1), False))
+
+    width = max(
+        (len(label) for label, _, _, full_line in entries if not full_line and label != "PIN"),
+        default=0,
+    )
+    entries.sort(key=lambda entry: entry[2])
+    rendered: list[str] = []
+    previous_group: int | None = None
+    for label, value, group, full_line in entries:
+        if previous_group is not None and group != previous_group:
+            rendered.append("")
+        previous_group = group
+        if full_line:
+            rendered.append(f"  {value}")
+        elif label == "PIN":
+            pin, note = value.split("  ", 1)
+            rendered.extend(_pin_box(pin, note).splitlines())
+        else:
+            rendered.append(f"  {label:<{width}}  {value}")
+    return "\n".join(rendered)
+
+
+def _pin_box(pin: str, note: str) -> str:
+    try:
+        "┌─│".encode(sys.stdout.encoding or "ascii")
+        horizontal, vertical, top_left, top_right, bottom_left, bottom_right = (
+            "─",
+            "│",
+            "┌",
+            "┐",
+            "└",
+            "┘",
+        )
+    except (UnicodeEncodeError, LookupError):
+        horizontal, vertical = "-", "|"
+        top_left, top_right, bottom_left, bottom_right = "+", "+", "+", "+"
+    digits = f"\033[1m{pin}\033[0m" if sys.stdout.isatty() else pin
+    content = f"  PIN  {digits}  {note}  "
+    plain_content = f"  PIN  {pin}  {note}  "
+    width = len(plain_content)
+    border = horizontal * width
+    return "\n".join(
+        (
+            f"  {top_left}{border}{top_right}",
+            f"  {vertical}{content}{vertical}",
+            f"  {bottom_left}{border}{bottom_right}",
+        )
+    )
+
+
 def _quiet_left_s(engine: Engine, now: float) -> float | None:
     until = engine.dispatcher.quiet_until
     return until - now if until is not None and now < until else None
 
 
 async def _state_broadcast(
-    base: Engine, hub: Hub, store: ConfigStore, active: Callable[[], Engine]
+    base: Engine,
+    hub: Hub,
+    store: ConfigStore,
+    active: Callable[[], Engine],
+    *,
+    pin: str | None = None,
+    pin_note: str = "",
 ) -> None:
     from pitwall.server.app import state_payload
 
     period = 1.0 / store.current().ui.state_hz
     last_status = base.clock.now()
+    seen_packet = False
     while True:
         engine = active()
         now = engine.clock.now()
@@ -996,6 +1089,10 @@ async def _state_broadcast(
                 flush=True,
             )
         snap = engine.state.snapshot(engine.clock.now())
+        if snap.last_packet_t is not None and not seen_packet:
+            seen_packet = True
+            if pin:
+                print("telemetry connected\n" + _pin_box(pin, pin_note), flush=True)
         payload = state_payload(
             snap,
             settings=store.current(),
@@ -1032,6 +1129,8 @@ async def _serve(
     store: ConfigStore,
     coro: Coroutine[Any, Any, Any],
     review: Any = None,
+    *,
+    banner: list[BannerEntry] | None = None,
 ) -> None:
     import uvicorn
 
@@ -1098,12 +1197,36 @@ async def _serve(
     server = PitwallServer(config)
     host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
-    print(f"dashboard: {scheme}://{host}:{port}  (LAN: {scheme}://{_lan_ip()}:{port})")
+    local = "localhost" if host in ("0.0.0.0", "::", "") else host
+    entries = list(banner or [])
+    entries.extend(
+        [
+            ("dashboard", f"{scheme}://{local}:{port}"),
+            ("LAN", f"{scheme}://{_lan_ip()}:{port}"),
+        ]
+    )
+    pin_note = "(LAN devices only)" if gate is not None and gate.trust_local else "(all devices)"
     if gate is not None:
-        print(f"dashboard PIN: {gate.pin}  (other devices only)")
-    print(f"speech: {getattr(engine, 'speaker_name', 'null')}")
-    print(f"recording: {getattr(engine, 'recording_desc', 'off')}")
-    await serve_with(server, _state_broadcast(engine, hub, store, active), coro)
+        entries.append(("PIN", f"{gate.pin}  {pin_note}"))
+    entries.extend(
+        [
+            ("recording", getattr(engine, "recording_desc", "off")),
+            ("speech", getattr(engine, "speaker_name", "null")),
+        ]
+    )
+    print(_banner(entries), flush=True)
+    await serve_with(
+        server,
+        _state_broadcast(
+            engine,
+            hub,
+            store,
+            active,
+            pin=gate.pin if gate else None,
+            pin_note=pin_note,
+        ),
+        coro,
+    )
 
 
 def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, object]:
@@ -1169,6 +1292,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     rec_dir = Path(settings.recording.directory)
     rec_dir.mkdir(parents=True, exist_ok=True)
+    banner: list[BannerEntry] = []
     db = None
     if settings.persistence.enabled:
         from pitwall.store.db import open_configured
@@ -1179,15 +1303,15 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         try:
             report = maintain(db, settings, refit=not mid_session(db, settings))
-            print(f"learning: {report.summary()}", flush=True)
+            banner.append(("learning", report.summary()))
         except sqlite3.Error as e:
-            print(f"learning: upkeep skipped ({e})", flush=True)
+            banner.append(("learning", f"upkeep skipped ({e})"))
         from pitwall.digest import startup_scorecard
 
         try:
-            print(startup_scorecard(db, pack_dir), flush=True)
+            banner.append(("", startup_scorecard(db, pack_dir)))
         except sqlite3.Error as e:
-            print(f"startup scorecard skipped ({e})", flush=True)
+            banner.append(("pitwall", f"scorecard skipped ({e})"))
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
@@ -1224,10 +1348,13 @@ def cmd_start(args: argparse.Namespace) -> int:
         engine.alive_path = rt_dir / ALIVE_FILE
     recovered = engine.recover()
     if recovered is not None:
-        print(f"watchdog: {recovered}; radio: {engine.rejoin_text()}", flush=True)
+        banner.append(("recovery", f"{recovered}; radio: {engine.rejoin_text()}"))
     udp_host, udp_port = settings.connection.udp_host, settings.connection.udp_port
     if child:
         udp_host, udp_port = "127.0.0.1", settings.engine.engine_port
+        banner.append(("watchdog", os.environ.get(WATCHDOG_ENV)))
+    else:
+        banner.append(("telemetry", f"UDP {udp_host}:{udp_port}"))
 
     async def live() -> None:
         transport = await udp_listen(udp_host, udp_port, ingest, clock)
@@ -1270,7 +1397,7 @@ def cmd_start(args: argparse.Namespace) -> int:
             )
     clean = False
     try:
-        asyncio.run(_serve(engine, hub, store, live()))
+        asyncio.run(_serve(engine, hub, store, live(), banner=banner))
     except KeyboardInterrupt:
         clean = True
     finally:
@@ -1321,10 +1448,6 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
         udp_host=host,
         udp_port=port,
         log=lambda m: print(m, flush=True),
-    )
-    print(
-        f"watchdog: recorder on {host}:{port}, engine on 127.0.0.1:{settings.engine.engine_port}",
-        flush=True,
     )
     sup.run()
     if recorder is not None and recorder.last_path is not None:
