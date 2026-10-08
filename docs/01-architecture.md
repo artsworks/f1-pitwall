@@ -135,7 +135,15 @@ pitwall/
 │   ├── store/
 │   ├── strategy/
 │   ├── voice/
-│   ├── cli.py
+│   ├── cli/
+│   │   ├── __init__.py
+│   │   ├── __main__.py
+│   │   ├── common.py
+│   │   ├── learn.py
+│   │   ├── parser.py
+│   │   ├── recordings.py
+│   │   ├── serve.py
+│   │   └── voice.py
 │   └── engine.py
 ├── tests/
 └── web/

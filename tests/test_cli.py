@@ -9,12 +9,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from pitwall.cli import (
-    RecordingNotFoundError,
-    _handle_https_disconnect,
-    _resolve_recording,
-    main,
-)
+from pitwall.cli import RecordingNotFoundError, main
+from pitwall.cli.common import _resolve_recording
+from pitwall.cli.serve import _handle_https_disconnect
 from pitwall.net.recording import compress_recording
 
 from .synth import mixed_session_packets, write_synthetic_recording
@@ -113,9 +110,12 @@ def test_resolve_recording(tmp_path: Path) -> None:
 
 
 def _use_dirs(monkeypatch, recordings: Path, db_path: Path | None = None) -> None:  # type: ignore[no-untyped-def]
-    import pitwall.cli as cli_mod
+    import pitwall.cli.learn as cli_learn
+    import pitwall.cli.recordings as cli_recordings
+    import pitwall.cli.serve as cli_serve
+    import pitwall.cli.voice as cli_voice
 
-    base = cli_mod.ConfigStore
+    base = cli_recordings.ConfigStore
     overrides: dict[str, object] = {"recording": {"directory": str(recordings)}}
     if db_path is not None:
         overrides["persistence"] = {"enabled": True, "path": str(db_path)}
@@ -124,7 +124,8 @@ def _use_dirs(monkeypatch, recordings: Path, db_path: Path | None = None) -> Non
         def __init__(self, *a, **k):  # type: ignore[no-untyped-def]
             super().__init__(overrides=overrides)
 
-    monkeypatch.setattr(cli_mod, "ConfigStore", _Store)
+    for cli_module in (cli_learn, cli_recordings, cli_serve, cli_voice):
+        monkeypatch.setattr(cli_module, "ConfigStore", _Store)
 
 
 def test_recordings_list_and_stats_by_index(  # type: ignore[no-untyped-def]

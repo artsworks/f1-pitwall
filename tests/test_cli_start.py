@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pitwall.learnpack
-from pitwall import cli
+from pitwall.cli import serve as cli
 from pitwall.store.db import Database, _uid_to_sql
 
 
