@@ -29,11 +29,12 @@ def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _load_yaml_dir(path: Path) -> dict[str, Any]:
+def _load_yaml_dir(path: Path, *, exclude_dir: Path | None = None) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     if not path.is_dir():
         return merged
-    for f in sorted(path.rglob("*.yaml"), key=lambda p: (p.stem != "shared", str(p))):
+    files = (f for f in path.rglob("*.yaml") if exclude_dir is None or exclude_dir not in f.parents)
+    for f in sorted(files, key=lambda p: (p.stem != "shared", str(p))):
         data = yaml.safe_load(f.read_text()) or {}
         rules = data.get("rules")
         if rules and merged.get("rules"):
@@ -86,7 +87,7 @@ class ConfigStore:
         return srcs
 
     def _build(self) -> Settings:
-        merged = _load_yaml_dir(DEFAULTS_DIR)
+        merged = _load_yaml_dir(DEFAULTS_DIR, exclude_dir=DEFAULTS_DIR / "tracks")
         if self._rules_dir is not None:
             # A rules directory REPLACES the packaged rules; any other keys in
             # it (thresholds, engine, ...) deep-merge on top.

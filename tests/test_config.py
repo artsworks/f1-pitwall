@@ -23,6 +23,15 @@ def test_defaults_load() -> None:
     assert m["phrasing"] == "advisory"
 
 
+def test_track_thresholds_apply_only_after_selecting_track() -> None:
+    store = ConfigStore()
+
+    assert store.current().track is None
+    assert store.current().thresholds["energy_over_tolerance_j"] == 200_000
+    assert store.set_track(16) is True
+    assert store.current().thresholds["energy_over_tolerance_j"] == 480_000
+
+
 def test_mindset_inherits() -> None:
     s = Settings.model_validate({"mindset": {"active": "aggressive"}})
     s.mindsets = yaml.safe_load(
