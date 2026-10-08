@@ -340,6 +340,7 @@ rules:
     sessions: [practice, qualifying]
     priority: 1
     when: "phase == 'flying' and run_lap_kind != 'cool' and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 80 and (traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s))"
+    clear_when: "traffic_ahead_m > 400 or traffic_ahead_state == ''"
     still_true: "traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s)"
     cooldown_s: 30
     conflict_group: slow_car
