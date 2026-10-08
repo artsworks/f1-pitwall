@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -195,8 +196,8 @@ def main() -> int:
             if returncode != 0:
                 raise RuntimeError(f"child exited with code {returncode} after SIGINT")
             captured = "".join(output)
-            if "dashboard:" not in captured:
-                raise RuntimeError('child output does not contain "dashboard:"')
+            if re.search(r"^  dashboard\s+https?://", captured, re.M) is None:
+                raise RuntimeError("child output does not contain an aligned dashboard URL")
             if "Traceback (most recent call last)" in captured:
                 raise RuntimeError("child output contains a traceback")
         except Exception as exc:
@@ -219,6 +220,8 @@ def main() -> int:
         f"(ready {ready_elapsed:.2f}s, telemetry {telemetry_elapsed:.2f}s, "
         f"shutdown {shutdown_elapsed:.2f}s)"
     )
+    print("smoke: child output:")
+    print(captured.rstrip())
     return 0
 
 
