@@ -111,6 +111,8 @@ need to run it for a live session or edit SQLite.
 Cleanup keeps recordings until that exact file has been imported. Another file with
 the same session ID is not enough. It also keeps files changed after import and files
 written within the last hour. Check the list before confirming deletion.
+Cleanup also removes a `.f1bin` copy when its `.f1bin.zst` sibling has identical data and both
+files are at least an hour old.
 
 ## Recording
 

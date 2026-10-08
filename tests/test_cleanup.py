@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
+import zstandard
 
 from pitwall.cleanup import apply, plan_cleanup
 
@@ -18,6 +19,23 @@ def _touch(p: Path, age_days: float, size: int = 10) -> Path:
     t = NOW - age_days * DAY
     os.utime(p, (t, t))
     return p
+
+
+def _recording_pair(
+    directory: Path, uid: int, source_data: bytes, compressed_data: bytes | None = None
+) -> tuple[Path, Path]:
+    source = directory / f"session_{uid:016x}_1.f1bin"
+    compressed = source.with_name(source.name + ".zst")
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(source_data)
+    compressed.write_bytes(zstandard.ZstdCompressor().compress(compressed_data or source_data))
+    return source, compressed
+
+
+def _set_pair_age(paths: tuple[Path, Path], age_days: float) -> None:
+    mtime = NOW - age_days * DAY
+    for path in paths:
+        os.utime(path, (mtime, mtime))
 
 
 def test_only_old_learned_recordings_and_caches_are_listed(tmp_path: Path) -> None:
@@ -148,3 +166,52 @@ def test_cleanup_keeps_other_recordings_with_the_same_uid(tmp_path: Path) -> Non
     assert {c.path for c in plan.delete} == {old}
     assert plan.kept_unlearned == 2
     assert other.exists() and changed.exists()
+
+
+def test_cleanup_removes_identical_uncompressed_copy_regardless_of_learning(
+    tmp_path: Path,
+) -> None:
+    raw, compressed = _recording_pair(
+        tmp_path / "rec", 0xAB, b"raw recording data", compressed_data=b"raw recording data"
+    )
+    _set_pair_age((raw, compressed), 40)
+
+    plan = plan_cleanup(
+        tmp_path / "rec",
+        tmp_path / "home",
+        tmp_path / "voices",
+        set(),
+        365,
+        now=NOW,
+        recording_imports={},
+    )
+
+    planned = {candidate.path: candidate.reason for candidate in plan.delete}
+    assert planned[raw.absolute()] == "uncompressed copy, the .f1bin.zst has the same data"
+    assert compressed.absolute() not in planned
+
+
+def test_cleanup_keeps_uncompressed_copy_when_compressed_data_differs(
+    tmp_path: Path,
+) -> None:
+    raw, compressed = _recording_pair(
+        tmp_path / "rec", 0xAB, b"raw recording data", compressed_data=b"raw recording"
+    )
+    _set_pair_age((raw, compressed), 40)
+
+    plan = plan_cleanup(
+        tmp_path / "rec", tmp_path / "home", tmp_path / "voices", set(), 30, now=NOW
+    )
+
+    assert raw.absolute() not in {candidate.path for candidate in plan.delete}
+    assert compressed.absolute() not in {candidate.path for candidate in plan.delete}
+
+
+def test_cleanup_keeps_recent_uncompressed_copy(tmp_path: Path) -> None:
+    raw, compressed = _recording_pair(tmp_path / "rec", 0xAB, b"raw recording data")
+    _set_pair_age((raw, compressed), 0.01)
+
+    plan = plan_cleanup(tmp_path / "rec", tmp_path / "home", tmp_path / "voices", set(), 0, now=NOW)
+
+    assert raw.absolute() not in {candidate.path for candidate in plan.delete}
+    assert compressed.absolute() not in {candidate.path for candidate in plan.delete}
