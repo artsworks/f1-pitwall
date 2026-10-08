@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
 from pathlib import Path
 
+import pytest
+import zstandard
+
+from pitwall.net import recording
 from pitwall.net.recording import (
     RecordingReader,
+    RecordingRotator,
     RecordingWriter,
     build_index,
     compress_recording,
@@ -43,6 +50,109 @@ def test_zst_roundtrip(tmp_path: Path) -> None:
     assert zst.name.endswith(".f1bin.zst")
     with RecordingReader(path) as plain, RecordingReader(zst) as comp:
         assert list(plain) == list(comp)
+
+
+def test_compress_retries_locked_source_unlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _fixture(tmp_path / "s.f1bin")
+    original = path.read_bytes()
+    original_unlink = Path.unlink
+    attempts = 0
+
+    def flaky_unlink(self: Path, *, missing_ok: bool = False) -> None:
+        nonlocal attempts
+        if self == path:
+            attempts += 1
+            if attempts <= 2:
+                raise PermissionError("file in use")
+        original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    monkeypatch.setattr(recording, "_UNLINK_RETRY_S", (0.0, 0.0, 0.0))
+
+    dst = compress_recording(path, remove=True)
+
+    assert attempts == 3
+    assert not path.exists()
+    with dst.open("rb") as compressed:
+        with zstandard.ZstdDecompressor().stream_reader(compressed) as reader:
+            assert reader.read() == original
+
+
+def test_compress_keeps_locked_source_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = _fixture(tmp_path / "s.f1bin")
+    original_unlink = Path.unlink
+
+    def locked_unlink(self: Path, *, missing_ok: bool = False) -> None:
+        if self == path:
+            raise PermissionError("file in use")
+        original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    monkeypatch.setattr(recording, "_UNLINK_RETRY_S", (0.0, 0.0))
+
+    with caplog.at_level(logging.WARNING, logger=recording.__name__):
+        dst = compress_recording(path, remove=True)
+
+    assert path.exists()
+    assert dst.exists()
+    assert "file in use after compressing" in caplog.text
+    assert "`pitwall cleanup` removes it" in caplog.text
+
+
+def test_rotator_keeps_locked_sources_without_thread_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_unlink = Path.unlink
+    errors: list[BaseException] = []
+
+    def locked_unlink(self: Path, *, missing_ok: bool = False) -> None:
+        if self.suffix == ".f1bin":
+            raise PermissionError("file in use")
+        original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    monkeypatch.setattr(recording, "_UNLINK_RETRY_S", (0.0, 0.0))
+    monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args.exc_value))
+    rotator = RecordingRotator(tmp_path, profile="full", compress=True)
+    rotator.write_datagram(0.0, make_event_packet(b"SSTA", session_uid=0xA1))
+    rotator.write_datagram(1.0, make_event_packet(b"SSTA", session_uid=0xB2))
+    sources = list(tmp_path.glob("session_*.f1bin"))
+
+    rotator.close()
+
+    assert len(sources) == 2
+    assert errors == []
+    assert all(path.exists() for path in sources)
+    assert all(path.with_name(path.name + ".zst").is_file() for path in sources)
+
+
+def test_rotator_keeps_source_when_compression_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    errors: list[BaseException] = []
+
+    def fail_compression(path: Path, **kwargs: object) -> Path:
+        path.with_name(path.name + ".zst").write_bytes(b"partial")
+        raise OSError("compression failed")
+
+    monkeypatch.setattr(recording, "compress_recording", fail_compression)
+    monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args.exc_value))
+    rotator = RecordingRotator(tmp_path, profile="full", compress=True)
+    rotator.write_datagram(0.0, make_event_packet(b"SSTA", session_uid=0xA1))
+    rotator.write_datagram(1.0, make_event_packet(b"SSTA", session_uid=0xB2))
+    sources = list(tmp_path.glob("session_*.f1bin"))
+
+    rotator.close()
+
+    assert len(sources) == 2
+    assert errors == []
+    assert all(path.exists() for path in sources)
+    assert list(tmp_path.glob("*.f1bin.zst")) == []
+    assert rotator.last_path in sources
 
 
 def test_index_written_on_close(tmp_path: Path) -> None:

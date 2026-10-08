@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import struct
 import threading
 import time
@@ -41,6 +42,7 @@ from pitwall.protocol.header import (
 
 MAGIC = b"F1BIN\0"
 FILE_VERSION = 1
+log = logging.getLogger(__name__)
 
 # magic | file_version | packet_format | session_uid | wall_clock_start_us |
 # config_hash | game_version | reserved
@@ -53,6 +55,7 @@ RECORD_HEADER_STRUCT = struct.Struct("<IH")
 FLUSH_INTERVAL_S = 1.0
 ZSTD_SUFFIX = ".zst"
 IDX_SUFFIX = ".f1idx"
+_UNLINK_RETRY_S: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 3.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,7 +244,8 @@ class RecordingRotator:
 
     `profile` selects which datagrams are written (pitwall.net.profile). With
     `compress`, each finished file is replaced by its .f1bin.zst: rotated files
-    in a background thread, the last one synchronously on close()."""
+    in a background thread, the last one synchronously on close(). A locked
+    source file stays until `pitwall cleanup` removes it."""
 
     def __init__(
         self,
@@ -298,7 +302,15 @@ class RecordingRotator:
             self._compress_file(path)
 
     def _compress_file(self, path: Path) -> None:
-        self.last_path = compress_recording(path, remove=True)
+        try:
+            self.last_path = compress_recording(path, remove=True)
+        except Exception:
+            log.exception("could not compress %s; kept the uncompressed recording", path)
+            try:
+                path.with_name(path.name + ZSTD_SUFFIX).unlink(missing_ok=True)
+            except OSError:
+                pass
+            self.last_path = path
 
     def _rotate(self, uid: int) -> None:
         self._finish(background=True)
@@ -423,6 +435,20 @@ def list_recordings(directory: Path) -> list[Path]:
     return sorted(files, key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
 
 
+def _unlink_with_retry(path: Path) -> bool:
+    for delay in (None, *_UNLINK_RETRY_S):
+        if delay is not None:
+            time.sleep(delay)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return True
+        except PermissionError:
+            continue
+        return True
+    return False
+
+
 def compress_recording(path: Path, *, level: int = 3, remove: bool = False) -> Path:
     """Compress a .f1bin to .f1bin.zst. Intended for post-session, low priority."""
     src = Path(path)
@@ -432,5 +458,10 @@ def compress_recording(path: Path, *, level: int = 3, remove: bool = False) -> P
         while chunk := fin.read(1 << 20):
             zout.write(chunk)
     if remove:
-        src.unlink()
+        if not _unlink_with_retry(src):
+            log.warning(
+                "kept %s: file in use after compressing to %s; `pitwall cleanup` removes it",
+                src,
+                dst,
+            )
     return dst

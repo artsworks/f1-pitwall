@@ -6,12 +6,15 @@ is only listed once its session is in the learning database."""
 
 from __future__ import annotations
 
+import io
 import math
 import re
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+import zstandard
 
 _SESSION = re.compile(r"^session_([0-9a-f]{16})_\d+\.f1(bin|bin\.zst|idx)$")
 _RECENT_S = 3600.0  # never touch files written in the last hour: a session may be live
@@ -53,6 +56,24 @@ def _files(root: Path, pattern: str) -> Iterable[Path]:
     )
 
 
+def _same_as_zst(path: Path) -> bool:
+    sibling = path.with_name(path.name + ".zst")
+    try:
+        with path.open("rb") as source, sibling.open("rb") as compressed:
+            with io.BufferedReader(
+                zstandard.ZstdDecompressor().stream_reader(compressed)
+            ) as decoded:
+                while True:
+                    source_chunk = source.read(1 << 20)
+                    decoded_chunk = decoded.read(1 << 20)
+                    if source_chunk != decoded_chunk:
+                        return False
+                    if not source_chunk:
+                        return True
+    except (zstandard.ZstdError, OSError):
+        return False
+
+
 def plan_cleanup(
     recordings_dir: Path,
     pitwall_dir: Path,
@@ -91,6 +112,19 @@ def plan_cleanup(
         mtime = p.stat().st_mtime
         if mtime > recent:
             continue
+        if m.group(2) == "bin":
+            sibling = p.with_name(p.name + ".zst")
+            try:
+                sibling_old = (
+                    not _linked(sibling.absolute())
+                    and sibling.is_file()
+                    and sibling.stat().st_mtime <= recent
+                )
+            except OSError:
+                sibling_old = False
+            if sibling_old and _same_as_zst(p):
+                add(p, "uncompressed copy, the .f1bin.zst has the same data")
+                continue
         if mtime > cutoff:
             continue
         if int(m.group(1), 16) not in learned_uids:

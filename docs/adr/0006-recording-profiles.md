@@ -45,8 +45,10 @@ Observations:
 - Filtering is on raw datagrams before the writer, so every profile is an
   ordinary `.f1bin` that replays unchanged; the profile is stamped in the file
   header metadata (`"profile"`). Events are never rate-capped.
-- Each finished file is compressed to `.f1bin.zst` and the raw file removed:
-  rotated sessions in a background thread, the last one synchronously on exit.
+- Each finished file is compressed to `.f1bin.zst` and the raw file is removed.
+  Rotated sessions compress in a background thread, and the last session compresses
+  synchronously on exit. If another process locks the raw file, `pitwall cleanup`
+  removes it after an hour when the compressed copy matches.
 - `pitwall trim FILE --profile lite --out X` downsamples an existing full
   recording.
 - `pitwall record` (the dedicated capture tool) defaulted to `full`. It was later removed; use `pitwall start --record full`.

@@ -25,7 +25,9 @@ lap 24" and "jump to the safety car" instant on a ~1 GB file rather than a linea
 
 **Profiles** (ADR 0006): `lite` by default (no motion packets, rule inputs capped at
 10 Hz, ~35 MB zstd per 3 h), `full` for debugging (`pitwall start --record full`),
-`minimal`, or `off`. Finished files are zstd-compressed and the raw file removed.
+`minimal`, or `off`. Finished files are zstd-compressed and the raw file is removed.
+If another process locks the raw file, `pitwall cleanup` removes it after an hour when the
+compressed copy matches.
 
 A **new file per session UID**, rotated on `SEND`/Final Classification. A retention
 policy in config (default: keep everything under N GB, delete oldest, never delete a file
