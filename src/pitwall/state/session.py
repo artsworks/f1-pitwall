@@ -379,6 +379,8 @@ class Snapshot:
     session_time_left: float = 0.0
     session_duration: float = 0.0
     track_length_m: float = 0.0
+    pit_entry_m: float = 0.0
+    release_time_left_s: float = 0.0
     pit_speed_limit: int = 0
     game_paused: bool = False
     paused: bool = False
@@ -1463,10 +1465,12 @@ class SessionState:
 
     def _time_for_out_lap(self) -> bool:
         """Garage to the line before the flag: out lap plus pit-lane allowance."""
+        return self.session_time_left > self._out_lap_need_s()
+
+    def _out_lap_need_s(self) -> float:
         best = self._best_laps.get(self._player_idx, 0)
         lap_s = best / 1000.0 if best > 0 else self._th("release_fallback_lap_s", 95.0)
-        need = self._th("out_lap_factor", 1.3) * lap_s + self._th("out_lap_pit_s", 40.0)
-        return self.session_time_left > need
+        return self._th("out_lap_factor", 1.3) * lap_s + self._th("out_lap_pit_s", 40.0)
 
     def _time_for_cool_and_hot(self) -> bool:
         best = self._best_laps.get(self._player_idx, 0)
@@ -2271,6 +2275,8 @@ class SessionState:
             session_time_left=self.session_time_left,
             session_duration=self.session_duration,
             track_length_m=self.track_length_m,
+            pit_entry_m=self._th("pit_entry_m", 0.0),
+            release_time_left_s=self.session_time_left - self._out_lap_need_s(),
             pit_speed_limit=self.pit_speed_limit,
             game_paused=self.game_paused,
             paused=self.game_paused or self.network_paused,

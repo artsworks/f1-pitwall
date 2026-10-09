@@ -4,6 +4,7 @@ rules:
   - id: release_go
     sessions: [practice, qualifying]
     priority: 2
+    urgency: execution
     when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and release_clean and time_for_out_lap and session_time_left > 60"
     clear_when: "not release_clean or phase != 'garage'"
     still_true: "phase == 'garage' and release_clean"
@@ -18,6 +19,7 @@ rules:
   - id: release_hold
     sessions: [practice, qualifying]
     priority: 2
+    urgency: execution
     when: "phase == 'garage' and garage_s >= th.release_garage_settle_s and not release_clean and release_wait_s < 60 and release_wait_s >= 3 and time_for_out_lap and session_time_left > 60"
     clear_when: "release_clean or phase != 'garage'"
     still_true: "phase == 'garage' and not release_clean"
@@ -33,6 +35,7 @@ rules:
   - id: release_too_late
     sessions: [qualifying]
     priority: 2
+    urgency: execution
     when: "phase == 'garage' and not time_for_out_lap and session_time_left > 0"
     clear_when: "phase != 'garage'"
     cooldown_s: 600
@@ -41,10 +44,25 @@ rules:
     say:
       - "No time before the flag. Stay in"
       - "No time for another lap. Done"
+  - id: release_window_closing
+    sessions: [qualifying]
+    priority: 2
+    urgency: execution
+    when: "phase == 'garage' and time_for_out_lap and release_time_left_s > 0 and release_time_left_s <= th.release_closing_s"
+    still_true: "phase == 'garage' and time_for_out_lap"
+    clear_when: "phase != 'garage'"
+    cooldown_s: 600
+    cooldown_group: release_window
+    requires: [lap_data, session]
+    say:
+      - "Window closing. Go now or we miss the lap"
+      - "Last chance to go. Out now"
   # Abort advisory: projection is over the cut-off and the lap won't make it.
   - id: abort_lap
     sessions: [qualifying]
     priority: 2
+    urgency: execution
+    resolved_by: [quali_through]
     when: "phase == 'flying' and abort_advised"
     still_true: "abort_advised"
     clear_when: "phase != 'flying'"
@@ -245,6 +263,7 @@ rules:
   - id: cool_status
     sessions: [qualifying]
     priority: 3
+    brief: "Battery {ers_store_pct:.0f} percent, {cool_tyre_hint}"
     when: "cool_lap and not cool_prep and sector == 1"
     clear_when: "not cool_lap"
     still_true: "cool_lap and not cool_prep"
@@ -255,6 +274,7 @@ rules:
   - id: cool_vs_pole
     sessions: [qualifying]
     priority: 3
+    brief: "{pole_gap_s:.1f} to pole, sector {pole_worst_sector}"
     when: "cool_lap and not cool_prep and sector == 1 and pole_gap_ms > 0 and pole_worst_sector > 0 and pole_worst_sector_s <= pole_gap_s"
     clear_when: "not cool_lap"
     still_true: "cool_lap and not cool_prep"
@@ -275,6 +295,8 @@ rules:
   - id: cool_mistakes
     sessions: [qualifying]
     priority: 3
+    urgency: coaching
+    location_ref: true
     when: "cool_lap and not cool_prep and sector >= 1 and last_hot_mistakes != ''"
     clear_when: "not cool_lap"
     still_true: "cool_lap and not cool_prep"
@@ -285,6 +307,7 @@ rules:
   - id: cool_car_behind
     sessions: [qualifying]
     priority: 1
+    urgency: safety
     when: "(cool_lap or phase == 'out_lap') and hot_car_behind_s <= th.cool_car_behind_s"
     clear_when: "hot_car_behind_s > th.cool_car_behind_s + 2"
     still_true: "hot_car_behind_s <= th.cool_car_behind_s + 1"
@@ -297,6 +320,7 @@ rules:
   - id: cool_extend
     sessions: [qualifying]
     priority: 1
+    urgency: execution
     when: "cool_prep and cool_extend"
     clear_when: "not cool_lap"
     requires: [lap_data, car_status]
@@ -313,6 +337,8 @@ rules:
   - id: lap_deleted
     sessions: [qualifying]
     priority: 1
+    urgency: execution
+    resolved_by: [quali_through]
     when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and time_for_cool_and_hot"
     clear_when: "not current_lap_invalid"
     requires: [lap_data]
@@ -329,6 +355,7 @@ rules:
   - id: next_lap_invalid
     sessions: [qualifying]
     priority: 1
+    urgency: execution
     when: "phase == 'flying' and run_plan == 'cool' and run_plan_reason == 'invalid' and sector == 0"
     clear_when: "sector != 0"
     cooldown_s: 30
@@ -346,6 +373,8 @@ rules:
   - id: lap_deleted_last
     sessions: [qualifying]
     priority: 1
+    urgency: execution
+    resolved_by: [quali_through]
     when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and not time_for_cool_and_hot"
     clear_when: "not current_lap_invalid"
     requires: [lap_data]
@@ -358,6 +387,7 @@ rules:
   - id: cool_hot_mode
     sessions: [qualifying]
     priority: 1
+    urgency: execution
     when: "cool_prep and not cool_extend"
     clear_when: "not cool_lap"
     requires: [lap_data, car_status]

@@ -7,6 +7,7 @@ Per-rule hysteresis: fires on the `when` rising edge, re-arms on `clear_when`
 from __future__ import annotations
 
 import dataclasses
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -72,6 +73,10 @@ class Candidate:
     trigger_t: float
     screen_only: bool = False
     current: Callable[[Snapshot], bool] | None = None
+    outcome_score: float | None = None
+    obvious: bool = False
+    provisional_silent: bool = False
+    brief: str = ""
 
 
 @dataclass(slots=True)
@@ -91,6 +96,27 @@ class Rule:
         self.fires_this_stint = 0
         self.phrases = PhraseBook(defn)
         self.severity = [Predicate(t.when) for t in defn.severity]
+        self._outcome_score = Predicate(defn.outcome_score) if defn.outcome_score else None
+        self._obvious = Predicate(defn.obvious_when) if defn.obvious_when else None
+        self._worst_case = Predicate(defn.worst_case_when) if defn.worst_case_when else None
+
+    def extras(self, ns: TrackedNamespace) -> tuple[float | None, bool, bool]:
+        try:
+            score = self._outcome_score(ns) if self._outcome_score is not None else None
+            if isinstance(score, bool) or not isinstance(score, int | float):
+                score = None
+            else:
+                score = float(score)
+                if not math.isfinite(score):
+                    score = None
+            obvious = bool(self._obvious(ns)) if self._obvious is not None else False
+            worst_case = bool(self._worst_case(ns)) if self._worst_case is not None else True
+            provisional_silent = self.defn.provisional and not (
+                self.defn.worst_case_urgent and worst_case
+            )
+            return score, obvious, provisional_silent
+        except Exception:
+            return None, False, False
 
     def still_true(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         if self._still_true is None:
@@ -139,6 +165,76 @@ class RuleEngine:
 
     def _limit(self, name: str) -> float:
         return self.staleness_s.get(name, STALENESS_DEFAULT_S)
+
+    def candidate_for(self, rule_id: str, snapshot: Snapshot, text: str | None = None) -> Candidate:
+        """Build a rule candidate for replay without changing its trigger state."""
+        self._snapshot = snapshot
+        rule = next(item for item in self.rules if item.id == rule_id)
+        data = namespace_data(snapshot, **self._ns_kwargs())
+        ns = TrackedNamespace(data)
+        severity = 0
+        for i, pred in enumerate(rule.severity, start=1):
+            try:
+                if pred(ns):
+                    severity = i
+                    break
+            except Exception:
+                continue
+        tier_priority = rule.defn.severity[severity - 1].priority if severity else None
+        priority = tier_priority or rule.defn.priority
+        template = text
+        if template is None:
+            _, pool = rule.phrases.pool(1, severity)
+            template = pool[0] if pool else ""
+        try:
+            rendered = template.format_map(_WithRepeat(ns, 1))
+        except Exception:
+            rendered = template
+        outcome_score, obvious, provisional_silent = rule.extras(ns)
+        snap_attrs = frozenset(public_names(snapshot))
+        inputs = {
+            name: _jsonable(ns.get(name))
+            for name in dict.fromkeys(ns.accessed)
+            if name in snap_attrs
+        }
+        ns_kwargs = self._ns_kwargs()
+        still_true = None
+        if rule._still_true is not None:
+
+            def still_true(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
+                return r.still_true(s, k)
+
+        current = None
+        d = rule.defn
+        if d.conflict_group or d.supersedes or d.rotate_with:
+            if still_true is not None:
+                current = still_true
+            else:
+
+                def current(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
+                    return r.holds(s, k)
+
+        brief = ""
+        if d.brief:
+            try:
+                brief = d.brief.format_map(_WithRepeat(ns, 1))
+            except Exception:
+                brief = d.brief
+        return Candidate(
+            rule=rule,
+            text=rendered,
+            priority=priority,
+            tags=list(d.tags),
+            still_true=still_true,
+            inputs=inputs,
+            trigger_t=snapshot.now,
+            screen_only=d.screen_only,
+            current=current,
+            outcome_score=outcome_score,
+            obvious=obvious,
+            provisional_silent=provisional_silent,
+            brief=brief,
+        )
 
     def evaluate(self, snapshot: Snapshot) -> EvalResult:
         self._snapshot = snapshot
@@ -192,6 +288,13 @@ class RuleEngine:
                 text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
                 text = template
+            outcome_score, obvious, provisional_silent = rule.extras(ns)
+            brief = ""
+            if d.brief:
+                try:
+                    brief = d.brief.format_map(_WithRepeat(ns, repeat))
+                except Exception:
+                    brief = d.brief
             inputs = {
                 name: _jsonable(ns.get(name))
                 for name in dict.fromkeys(ns.accessed)
@@ -205,7 +308,7 @@ class RuleEngine:
                 def still_true(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
                     return r.still_true(s, k)
 
-            if d.conflict_group or d.supersedes:
+            if d.conflict_group or d.supersedes or d.rotate_with:
                 if rule._still_true is not None:
                     current = still_true
                 else:
@@ -224,6 +327,10 @@ class RuleEngine:
                     trigger_t=snapshot.now,
                     screen_only=d.screen_only,
                     current=current,
+                    outcome_score=outcome_score,
+                    obvious=obvious,
+                    provisional_silent=provisional_silent,
+                    brief=brief,
                 )
             )
         return result

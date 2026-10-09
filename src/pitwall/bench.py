@@ -212,9 +212,13 @@ def parse_scenario(path: Path) -> Scenario:
 
 
 def load_scenarios(directory: Path, only: Sequence[str] | None = None) -> list[Scenario]:
-    scenarios = [
-        parse_scenario(path) for path in sorted(directory.glob("*.yaml"), key=lambda p: p.stem)
-    ]
+    paths = sorted(directory.glob("*.yaml"), key=lambda p: p.stem)
+    scenarios = []
+    for path in paths:
+        raw = yaml.safe_load(path.read_text())
+        if isinstance(raw, dict) and raw.get("kind") == "radio-grades":
+            continue
+        scenarios.append(parse_scenario(path))
     if only is None:
         return scenarios
     requested = set(only)

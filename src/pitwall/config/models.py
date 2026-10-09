@@ -72,6 +72,22 @@ class PolicySettings(BaseModel):
     mute_until_lap: int = 0
     p3_straight_only: bool = True
     p3_straight_wait_s: float = 8.0  # extra deadline while a P3 call waits for a straight
+    decision_near_s: float = 12.0
+    decision_missed_s: float = 2.0
+    outcome_tie_eps: float = 0.05
+    resolved_window_s: float = 30.0
+    focus_window_s: float = 10.0
+    coherence_window_s: float = 15.0
+    digest_battle_gap_s: float = 1.0
+    digest_max_items: int = 3
+    digest_prefixes: list[str] = Field(
+        default_factory=lambda: [
+            "Also: ",
+            "Quick ones: ",
+            "While it's quiet: ",
+            "Couple of things: ",
+        ]
+    )
 
 
 class UiSettings(BaseModel):
@@ -278,6 +294,10 @@ class RuleDefModel(BaseModel):
     id: str
     sessions: list[str] = Field(default_factory=list)
     priority: Literal[1, 2, 3]
+    urgency: Literal["safety", "execution", "tactical", "info", "coaching"] | None = None
+    urgency_by_priority: dict[
+        Literal[1, 2, 3], Literal["safety", "execution", "tactical", "info", "coaching"]
+    ] = Field(default_factory=dict)
     when: str
     clear_when: str | None = None
     still_true: str | None = None
@@ -285,6 +305,19 @@ class RuleDefModel(BaseModel):
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     conflict_group: str = ""  # queued calls in one group: only the one still true is kept
     supersedes: list[str] = Field(default_factory=list)  # rule ids this call replaces in the queue
+    decision_point: Literal["", "pit_entry", "line"] = ""
+    outcome_score: str | None = None
+    rotate_with: list[str] = Field(default_factory=list)
+    resolved_by: list[str] = Field(default_factory=list)
+    escalates: list[str] = Field(default_factory=list)
+    flushes_queue: bool = False
+    obvious_when: str | None = None
+    provisional: bool = False
+    worst_case_urgent: bool = False
+    worst_case_when: str | None = None
+    location_ref: bool = False
+    say_many: list[str] = Field(default_factory=list)
+    brief: str = ""
     max_per_stint: int | None = None
     min_lap: int = 0
     requires: list[str] = Field(default_factory=list)
@@ -298,6 +331,14 @@ class RuleDefModel(BaseModel):
     on_ack: str | list[str] = ""
     on_neg: str | list[str] = ""
     response_window_s: float | None = None  # overrides input.response_window_s
+
+    def urgency_class(self, priority: int | None = None) -> str:
+        priority = priority or self.priority
+        if priority in self.urgency_by_priority:
+            return self.urgency_by_priority[priority]
+        if self.urgency is not None:
+            return self.urgency
+        return {1: "execution", 2: "tactical", 3: "info"}[priority]
 
     def say_pool(self) -> list[str]:
         if isinstance(self.say, str):
@@ -343,9 +384,13 @@ class Settings(BaseModel):
     def _known_supersedes(self) -> Settings:
         rule_ids = {rule.id for rule in self.rules}
         for rule in self.rules:
-            for superseded_id in rule.supersedes:
-                if superseded_id not in rule_ids:
-                    raise ValueError(f"rule {rule.id!r} supersedes unknown rule {superseded_id!r}")
+            for field_name in ("supersedes", "rotate_with", "resolved_by", "escalates"):
+                for referenced_id in getattr(rule, field_name):
+                    if referenced_id not in rule_ids:
+                        raise ValueError(
+                            f"rule {rule.id!r} references unknown rule {referenced_id!r} "
+                            f"in {field_name}"
+                        )
         return self
 
     def resolved_mindset(self) -> dict[str, Any]:

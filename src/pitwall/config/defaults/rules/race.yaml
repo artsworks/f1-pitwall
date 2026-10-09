@@ -2,6 +2,7 @@ rules:
   - id: setup_bias
     sessions: [race]
     priority: 3
+    urgency: coaching
     when: "setup_call_param == 'brake_bias'"
     clear_when: "setup_call_param == ''"
     cooldown_s: 300
@@ -12,6 +13,7 @@ rules:
   - id: setup_on_throttle
     sessions: [race]
     priority: 3
+    urgency: coaching
     when: "setup_call_param == 'on_throttle'"
     clear_when: "setup_call_param == ''"
     cooldown_s: 300
@@ -22,6 +24,7 @@ rules:
   - id: setup_stop_wing
     sessions: [race]
     priority: 3
+    urgency: coaching
     when: "setup_stop_wing_to > 0"
     clear_when: "setup_stop_wing_to <= 0"
     cooldown_s: 600
@@ -130,6 +133,7 @@ rules:
   - id: plan_target_lap
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "phase == 'racing' and on_plan and plan_stops_left > 0 and plan_target_lap == lap_num and laps_remaining > th.pit_min_laps_left"
     clear_when: "plan_target_lap != lap_num"
     still_true: "phase == 'racing' and plan_target_lap == lap_num"
@@ -149,6 +153,10 @@ rules:
   - id: box_now
     sessions: [race]
     priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    outcome_score: "pit_plan_gain_s - 5 * pit_plan_risk"
+    conflict_group: pit_or_stay
     when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
     clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
     still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
@@ -166,6 +174,8 @@ rules:
   - id: plan_sc_box
     sessions: [race]
     priority: 1
+    urgency: execution
+    decision_point: pit_entry
     when: "phase in ('sc', 'vsc') and active_plan == 'C' and plan_switch_reason == 'sc' and plan_switch_lap == lap_num and laps_remaining > th.pit_min_laps_left"
     clear_when: "active_plan != 'C' or plan_switch_lap != lap_num"
     still_true: "phase in ('sc', 'vsc') and active_plan == 'C'"
@@ -183,6 +193,8 @@ rules:
   - id: box_in_n
     sessions: [race]
     priority: 2
+    urgency: execution
+    decision_point: line
     when: "phase == 'racing' and pit_plan == 'box_in_n' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_gain_s >= mode.pit_gain_min_s"
     clear_when: "pit_plan != 'box_in_n'"
     still_true: "pit_plan == 'box_in_n'"
@@ -196,6 +208,8 @@ rules:
   - id: overcut_stay_out
     sessions: [race]
     priority: 2
+    outcome_score: "overcut_s if laps_of_pace >= laps_remaining else -99"
+    conflict_group: pit_or_stay
     when: "phase == 'racing' and pit_plan == 'overcut' and pit_plan_confidence >= mode.pit_confidence_min"
     clear_when: "pit_plan != 'overcut'"
     cooldown_s: 60
@@ -208,6 +222,7 @@ rules:
   - id: tyre_life
     sessions: [race]
     priority: 3
+    brief: "{laps_of_pace:.0f} laps in the tyres"
     when: "phase == 'racing' and sector == 1 and laps_of_pace >= 1 and laps_of_pace < laps_remaining and laps_of_pace < th.tyre_life_speak_laps and lap_num % mode.rival_info_every_n_laps == 0"
     clear_when: "sector != 1"
     cooldown_s: 60
@@ -280,6 +295,7 @@ rules:
   - id: fuel_short
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps < -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
     clear_when: "fuel_margin_laps >= 0"
     cooldown_s: 120
@@ -298,6 +314,7 @@ rules:
   - id: fuel_marginal
     sessions: [race]
     priority: 2
+    urgency: tactical
     when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps <= th.fuel_tight_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
     clear_when: "fuel_margin_laps > th.fuel_tight_laps + th.fuel_hysteresis_laps"
     cooldown_s: 180
@@ -320,6 +337,8 @@ rules:
   - id: fuel_spare
     sessions: [race]
     priority: 3
+    obvious_when: "lap_num <= 1"
+    brief: "Fuel margin is safe"
     when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps > th.fuel_spare_laps and sector == 1"
     clear_when: "fuel_margin_laps <= th.fuel_spare_laps"
     cooldown_s: 600
@@ -346,6 +365,7 @@ rules:
     sessions: [race]
     min_lap: 4  # grades the lap before; laps 1-2 spend the launch charge
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and energy_prev_lap_mode == 'under' and sector == 0"
     clear_when: "sector != 0"
     cooldown_s: 180
@@ -359,6 +379,7 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and sector == 0 and battle_mode == 'catching' and battle_catch_laps <= th.battle_charge_catch_laps and ers_store_pct < th.battle_charge_store_pct"
     clear_when: "sector != 0"
     still_true: "battle_mode == 'catching' and ers_store_pct < th.battle_charge_store_pct"
@@ -373,6 +394,7 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and ers_store_pct < th.energy_burst_store_pct"
@@ -403,6 +425,7 @@ rules:
   - id: overtake_earned
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and overtake_available and not overtake_active"
     clear_when: "not overtake_available or overtake_active"
     still_true: "overtake_available and not overtake_active"
@@ -417,6 +440,8 @@ rules:
   - id: overtake_lost
     sessions: [race]
     priority: 3
+    urgency: tactical
+    rotate_with: [battle_attack]
     when: "phase == 'racing' and overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s"
     clear_when: "overtake_available or not overtake_active"
     still_true: "not overtake_available"
@@ -435,6 +460,7 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 90
@@ -460,6 +486,9 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
+    outcome_score: "battle_pass_prob * 2 - 1"
+    rotate_with: [overtake_lost]
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
@@ -485,6 +514,8 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
+    outcome_score: "1 - battle_pass_prob * 2 if laps_remaining > th.battle_patience_laps else -99"
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
@@ -500,8 +531,11 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 2
+    urgency: tactical
     when: "phase == 'racing' and battle_mode == 'defending' and sector != 2"
     clear_when: "sector == 2 or battle_mode != 'defending'"
+    still_true: "phase == 'racing'"
+    still_true: "phase == 'racing'"
     cooldown_s: 60
     cooldown_group: battle
     requires: [lap_data]
@@ -534,6 +568,7 @@ rules:
     sessions: [race]
     min_lap: 2
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 120
@@ -557,7 +592,9 @@ rules:
     sessions: [race]
     min_lap: 3
     priority: 3
+    urgency: tactical
     when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
+    still_true: "phase == 'racing'"
     cooldown_s: 240
     cooldown_group: battle
     requires: [lap_data]
@@ -568,6 +605,7 @@ rules:
   - id: battle_passed
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'passed' and battle_result_recent"
     clear_when: "not battle_result_recent"
     requires: [lap_data]
@@ -587,6 +625,7 @@ rules:
   - id: battle_held
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'held' and battle_result_recent"
     clear_when: "not battle_result_recent"
     requires: [lap_data]
@@ -597,6 +636,7 @@ rules:
   - id: battle_lost
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'lost' and battle_result_recent"
     clear_when: "not battle_result_recent"
     requires: [lap_data]
@@ -610,6 +650,7 @@ rules:
   - id: off_track_lost
     sessions: [race]
     priority: 2
+    urgency: coaching
     when: "off_track_lost > 0 and phase == 'racing'"
     clear_when: "off_track_lost == 0"
     requires: [lap_data]
@@ -627,6 +668,7 @@ rules:
   - id: off_track_recovered
     sessions: [race]
     priority: 3
+    urgency: coaching
     when: "off_track_recovered and phase == 'racing'"
     clear_when: "not off_track_recovered"
     requires: [lap_data]
@@ -639,6 +681,7 @@ rules:
   - id: battle_swap_ahead
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'swap_ahead' and battle_result_recent"
     clear_when: "not battle_result_recent"
     cooldown_s: 60
@@ -649,6 +692,7 @@ rules:
   - id: battle_swap_behind
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'swap_behind' and battle_result_recent"
     clear_when: "not battle_result_recent"
     cooldown_s: 60
@@ -661,6 +705,7 @@ rules:
   - id: battle_scrap
     sessions: [race]
     priority: 3
+    urgency: tactical
     when: "battle_result == 'scrap' and battle_result_recent"
     clear_when: "not battle_result_recent"
     cooldown_s: 90
@@ -673,6 +718,7 @@ rules:
   - id: penalty
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement not in (7, 8, 9, 21)"
     clear_when: "not penalty_recent"
     cooldown_s: 15
@@ -684,6 +730,8 @@ rules:
   - id: penalty_pit
     sessions: [race]
     priority: 1
+    urgency: execution
+    decision_point: pit_entry
     when: "penalty_recent and penalty_kind in ('drive_through', 'stop_go')"
     clear_when: "not penalty_recent"
     cooldown_s: 15
@@ -695,6 +743,8 @@ rules:
   - id: serve_penalty
     sessions: [race]
     priority: 2
+    urgency: execution
+    decision_point: pit_entry
     when: "unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now', 'box_in_n', 'cheap_stop')"
     clear_when: "unserved_drive_through + unserved_stop_go == 0"
     cooldown_s: 120
@@ -706,6 +756,7 @@ rules:
   - id: penalty_track_limits
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement == 21"
     clear_when: "not penalty_recent"
     cooldown_s: 15
@@ -718,6 +769,7 @@ rules:
   - id: penalty_corner_cut
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement in (7, 8, 9)"
     clear_when: "not penalty_recent"
     cooldown_s: 15
@@ -728,6 +780,7 @@ rules:
   - id: track_limit_warning
     sessions: [race]
     priority: 2
+    urgency: coaching
     when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
@@ -740,6 +793,7 @@ rules:
   - id: track_limit_last_warning
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
@@ -751,6 +805,7 @@ rules:
   - id: corner_cut_warning
     sessions: [race]
     priority: 2
+    urgency: coaching
     when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
@@ -761,6 +816,7 @@ rules:
   - id: corner_cut_last_warning
     sessions: [race]
     priority: 1
+    urgency: tactical
     when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
@@ -782,6 +838,8 @@ rules:
   - id: blue_flag
     sessions: [race]
     priority: 1
+    urgency: safety
+    resolved_by: [box_now, plan_sc_box]
     when: "blue_flag and phase not in ('red_flag', 'sc', 'vsc')"
     clear_when: "not blue_flag or phase in ('red_flag', 'sc', 'vsc')"
     cooldown_s: 20
@@ -793,6 +851,7 @@ rules:
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
+    brief: "Rival ahead has pitted"
     when: "phase == 'racing' and rival_ahead_in_pit_lane and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s and laps_remaining > th.pit_min_laps_left"
     clear_when: "not rival_ahead_in_pit_lane"
     cooldown_s: 45
@@ -805,6 +864,7 @@ rules:
   - id: rival_behind_pitted
     sessions: [race]
     priority: 2
+    brief: "Rival behind has pitted"
     when: "phase == 'racing' and rival_behind_pitted and tyre_age_laps >= 2"
     clear_when: "not rival_behind_pitted"
     cooldown_s: 45
@@ -853,6 +913,8 @@ rules:
   - id: sc_deployed
     sessions: [race]
     priority: 1
+    urgency: safety
+    escalates: [vsc_deployed, vsc_ending, vsc_restart]
     when: "phase == 'sc'"
     clear_when: "phase != 'sc'"
     requires: [session]
@@ -863,6 +925,7 @@ rules:
   - id: vsc_deployed
     sessions: [race]
     priority: 1
+    urgency: safety
     when: "phase == 'vsc'"
     clear_when: "phase != 'vsc'"
     requires: [session]
@@ -873,6 +936,7 @@ rules:
   - id: sc_ending
     sessions: [race]
     priority: 1
+    urgency: safety
     when: "phase == 'sc' and sc_ending"
     clear_when: "not sc_ending"
     requires: [lap_data]
@@ -883,6 +947,7 @@ rules:
   - id: vsc_ending
     sessions: [race]
     priority: 1
+    urgency: safety
     when: "phase == 'vsc' and sc_ending"
     clear_when: "not sc_ending"
     requires: [lap_data]
@@ -892,6 +957,7 @@ rules:
   - id: sc_restart
     sessions: [race]
     priority: 1
+    urgency: safety
     when: "phase == 'racing' and neutral_ended_kind == 'sc' and neutral_ended_s < th.neutral_green_s"
     clear_when: "neutral_ended_s >= th.neutral_green_s"
     requires: [lap_data]
@@ -902,6 +968,7 @@ rules:
   - id: vsc_restart
     sessions: [race]
     priority: 1
+    urgency: safety
     when: "phase == 'racing' and neutral_ended_kind == 'vsc' and neutral_ended_s < th.neutral_green_s"
     clear_when: "neutral_ended_s >= th.neutral_green_s"
     requires: [lap_data]
@@ -912,6 +979,8 @@ rules:
   - id: lap1_gained
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Gained places on lap one"
     when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained > 0"
     clear_when: "lap_num != 2"
     max_per_stint: 1
@@ -923,6 +992,8 @@ rules:
   - id: lap1_lost
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Lost places on lap one"
     when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_lost > 0"
     clear_when: "lap_num != 2"
     max_per_stint: 1
@@ -933,6 +1004,8 @@ rules:
   - id: lap1_held
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Held position after lap one"
     when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained == 0"
     clear_when: "lap_num != 2"
     max_per_stint: 1
@@ -943,6 +1016,8 @@ rules:
   - id: three_to_go
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Three laps left in race"
     when: "phase == 'racing' and total_laps >= 6 and laps_remaining == 3 and sector == 0"
     clear_when: "laps_remaining != 3"
     max_per_stint: 1
@@ -955,6 +1030,7 @@ rules:
     cooldown_s: 120
     cooldown_group: last_lap
     priority: 1
+    urgency: execution
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_behind_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
     max_per_stint: 1
@@ -966,6 +1042,7 @@ rules:
     cooldown_s: 120
     cooldown_group: last_lap
     priority: 1
+    urgency: execution
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_ahead_s < th.last_lap_fight_s and not gap_behind_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
     max_per_stint: 1
@@ -978,6 +1055,8 @@ rules:
     cooldown_s: 120
     cooldown_group: last_lap
     priority: 2
+    urgency: info
+    brief: "Final lap, bring it home"
     when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and not gap_behind_s < th.last_lap_fight_s and not gap_ahead_s < th.last_lap_fight_s"
     clear_when: "laps_remaining != 1"
     max_per_stint: 1
@@ -995,6 +1074,8 @@ rules:
   - id: fastest_lap_mine
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Set the fastest lap"
     when: "phase == 'racing' and fastest_lap_mine and fastest_lap_age_s < th.fastest_lap_fresh_s"
     clear_when: "not fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
     still_true: "fastest_lap_mine"
@@ -1007,6 +1088,7 @@ rules:
   - id: fastest_lap_taken
     sessions: [race]
     priority: 3
+    brief: "Rival took fastest lap"
     when: "phase == 'racing' and not fastest_lap_mine and fastest_lap_age_s >= th.fastest_lap_settle_s and fastest_lap_age_s < th.fastest_lap_fresh_s and laps_remaining <= th.fastest_lap_chase_laps and fastest_lap_gap_s <= th.fastest_lap_chase_s"
     clear_when: "fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
     still_true: "not fastest_lap_mine"
@@ -1052,6 +1134,8 @@ rules:
   - id: finish_penalty
     sessions: [race]
     priority: 2
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and penalty_places > 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1062,6 +1146,8 @@ rules:
   - id: finish_gained
     sessions: [race]
     priority: 2
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and grid_position > 0 and classified_gained > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1071,6 +1157,8 @@ rules:
   - id: finish_lost
     sessions: [race]
     priority: 2
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and grid_position > 0 and classified_lost > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1080,6 +1168,8 @@ rules:
   - id: finish_held
     sessions: [race]
     priority: 2
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and grid_position > 0 and classified_gained == 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1089,6 +1179,8 @@ rules:
   - id: finish_win
     sessions: [race]
     priority: 1
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and classified_position == 1 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1102,6 +1194,8 @@ rules:
   - id: finish_podium
     sessions: [race]
     priority: 1
+    urgency: info
+    flushes_queue: true
     when: "phase == 'finished' and classified_position in (2, 3) and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1113,6 +1207,8 @@ rules:
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
+    urgency: safety
+    tags: [traffic]
     # In a race the driver holds position at the exit. Giving way is for practice and quali.
     when: "phase == 'out_lap' and pit_exit_s <= 3 and (traffic_behind_s <= th.pit_exit_traffic_s or (rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s))"
     clear_when: "pit_exit_s > 10"
@@ -1153,9 +1249,14 @@ rules:
           - "It's the team-mate. No risks"
   # Contact (COLL): check the car, then report once the damage data settles.
   # Repeat hits inside th.contact_merge_s are one contact.
+  # No other shared damage or puncture rule is provisional because those rules report confirmed damage.
   - id: contact_check_teammate
     sessions: [race]
     priority: 1
+    urgency: tactical
+    provisional: true
+    worst_case_urgent: true
+    worst_case_when: "contact_damage_major or puncture_corner != ''"
     when: "phase != 'garage' and contact_phase == 'checking' and contact_teammate"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
@@ -1168,6 +1269,10 @@ rules:
   - id: contact_check
     sessions: [race]
     priority: 1
+    urgency: tactical
+    provisional: true
+    worst_case_urgent: true
+    worst_case_when: "contact_damage_major or puncture_corner != ''"
     when: "phase != 'garage' and contact_phase == 'checking' and not contact_teammate"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
@@ -1186,6 +1291,8 @@ rules:
   - id: contact_damage_report
     sessions: [race]
     priority: 2
+    urgency: info
+    brief: "Confirmed minor damage"
     when: "phase != 'garage' and contact_phase == 'report' and contact_damage != '' and not contact_damage_major"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
@@ -1198,6 +1305,8 @@ rules:
   - id: contact_ok
     sessions: [race]
     priority: 3
+    urgency: info
+    brief: "No damage found after contact"
     when: "phase != 'garage' and contact_phase == 'report' and contact_damage == ''"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
