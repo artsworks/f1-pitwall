@@ -177,6 +177,22 @@ uint8  m_2026Regulations;              // 1 = 2026 regulations applicable
 uint8  m_drivingWrongWay;
 ```
 
+## Observed under 2026 regulations
+
+These observations come from real F1 26 recordings from the Silverstone and Interlagos weekends, across all session types.
+
+- `DRSE` and `DRSD` events never fired. `OVTK` fired for position changes, not overtake mode.
+- Car Status `m_drsAllowed` and `m_drsActivationDistance` stayed at 0. Car Telemetry `m_drs` also stayed at 0.
+- Session packets reported zero DRS zones and zero full and partial active aero zones. Zone timing comes from Car Telemetry 2 activation distances.
+- `m_overtakeAvailable` changed at one detection point per lap. The points were about 5631 m at Silverstone and 3401 m at Interlagos.
+- A gap of about 1.0 s or less turned `m_overtakeAvailable` on. The value held until the next detection.
+- `m_overtakeActivationDistance` counted down from about 300 m. `m_overtakeActive` matched `m_overtakeAvailable` within one frame in every observed lap.
+- `m_overtakeAvailable` was on most of the time in practice and qualifying. It never switched on in one sprint. The cause is unknown.
+- `m_activeAeroMode` switched to 1 a median 0.07 s after each zone start in 98 of 99 zones across three races. This suggests the game switches the mode.
+- `m_activeAeroAvailable` pulsed for one frame at each zone start. `m_activeAeroActivationDistance` counted down from about 249 m to each zone.
+- `m_ersDeployMode` used only values 0 through 3, the documented range.
+- `m_ersHarvestedThisLapMGUH` and MGU-H engine wear stayed at 0.
+
 ## Tyre Sets (ID 12)
 
 Per set: actual and visual compound, `m_wear`, `m_available`, `m_recommendedSession`,

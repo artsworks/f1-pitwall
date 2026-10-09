@@ -16,6 +16,8 @@ from pitwall.protocol.header import PacketId
 from .synth import pack_packet
 
 TRACK_M = 5000
+ACTIVE_AERO_LOOKAHEAD_M = 250
+OVERTAKE_LOOKAHEAD_M = 300
 NAMES = {0: b"PLAYER", 1: b"NORRIS", 2: b"LECLERC", 3: b"VERSTAPPEN"}
 
 
@@ -63,6 +65,106 @@ class RaceSpec:
     deg_ms_after_stop: int | None = None
     pit_request_laps_early: int = 0
     pit_box_after_line: bool = False
+    ct2: bool = False
+    aero_zones_m: tuple[tuple[float, float], ...] = ()
+    overtake_detect_m: float | None = None
+    overtake_gap_s: float = 1.0
+    rival_overtake_cars: tuple[int, ...] = ()
+
+
+def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
+    speed = TRACK_M / (spec.base_ms / 1000.0)
+    return (d + offset_s * speed) % TRACK_M
+
+
+def _inside_aero_zone(distance_m: float, zone: tuple[float, float]) -> bool:
+    start_m, end_m = (point % TRACK_M for point in zone)
+    distance_m %= TRACK_M
+    if start_m == end_m:
+        return False
+    if start_m < end_m:
+        return start_m <= distance_m < end_m
+    return distance_m >= start_m or distance_m < end_m
+
+
+class _Ct2Model:
+    def __init__(self, spec: RaceSpec) -> None:
+        self.spec = spec
+        self._zone_states: dict[int, tuple[bool, ...]] = {}
+        self._player_distance_m: float | None = None
+        self._overtake_available = 0
+
+    def fields_for_car(
+        self,
+        car_idx: int,
+        lap_distance_m: float,
+        gap_ahead_s: float,
+    ) -> dict[str, int]:
+        distance_m = lap_distance_m % TRACK_M
+        inside_zones = tuple(_inside_aero_zone(distance_m, zone) for zone in self.spec.aero_zones_m)
+        previous_zones = self._zone_states.get(car_idx, (False,) * len(inside_zones))
+        active_aero_available = int(
+            any(
+                inside and not was_inside
+                for inside, was_inside in zip(inside_zones, previous_zones, strict=True)
+            )
+        )
+        self._zone_states[car_idx] = inside_zones
+        active_aero_mode = int(any(inside_zones))
+
+        active_aero_activation_distance = 0
+        if not active_aero_mode:
+            upcoming_starts = (
+                (start_m % TRACK_M - distance_m) % TRACK_M
+                for start_m, _end_m in self.spec.aero_zones_m
+                if (start_m % TRACK_M) != (_end_m % TRACK_M)
+            )
+            in_range = (
+                activation_distance
+                for activation_distance in upcoming_starts
+                if 0 < activation_distance <= ACTIVE_AERO_LOOKAHEAD_M
+            )
+            active_aero_activation_distance = int(min(in_range, default=0))
+
+        if car_idx == 0:
+            self._update_overtake(distance_m, gap_ahead_s)
+            overtake_available = self._overtake_available
+            overtake_activation_distance = self._overtake_distance(distance_m)
+        else:
+            overtake_available = int(car_idx in self.spec.rival_overtake_cars)
+            overtake_activation_distance = 0
+
+        return {
+            "active_aero_mode": active_aero_mode,
+            "active_aero_available": active_aero_available,
+            "active_aero_activation_distance": active_aero_activation_distance,
+            "overtake_available": overtake_available,
+            "overtake_active": overtake_available,
+            "overtake_activation_distance": overtake_activation_distance,
+            "regulations_2026": 1,
+        }
+
+    def _overtake_distance(self, distance_m: float) -> int:
+        if self.spec.overtake_detect_m is None:
+            return 0
+        detect_m = self.spec.overtake_detect_m % TRACK_M
+        activation_distance = (detect_m - distance_m) % TRACK_M
+        if 0 < activation_distance <= OVERTAKE_LOOKAHEAD_M:
+            return int(activation_distance)
+        return 0
+
+    def _update_overtake(self, distance_m: float, gap_ahead_s: float) -> None:
+        if self.spec.overtake_detect_m is not None and self._player_distance_m is not None:
+            detect_m = self.spec.overtake_detect_m % TRACK_M
+            previous = self._player_distance_m
+            crossed = (
+                previous < detect_m <= distance_m
+                if distance_m >= previous
+                else detect_m > previous or detect_m <= distance_m
+            )
+            if crossed:
+                self._overtake_available = int(gap_ahead_s <= self.spec.overtake_gap_s)
+        self._player_distance_m = distance_m
 
 
 def _rival(
@@ -75,11 +177,10 @@ def _rival(
     pos: int,
     pitting: bool,
 ) -> dict[str, object]:
-    speed = TRACK_M / (spec.base_ms / 1000.0)
     return {
         "current_lap_num": lap,
         "car_position": pos,
-        "lap_distance": (d + offset_s * speed) % TRACK_M,
+        "lap_distance": _rival_lap_distance(spec, d, offset_s),
         "result_status": 2,
         "driver_status": 4,
         "pit_status": 1 if pitting else 0,
@@ -104,6 +205,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     pkts: list[tuple[float, bytes]] = []
     t = 0.0
     frame = 1
+    ct2_model = _Ct2Model(spec) if spec.ct2 else None
 
     def emit(pid: int, data: dict[str, object]) -> None:
         pkts.append(
@@ -121,6 +223,20 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
 
     def event(code: bytes, detail: bytes = b"") -> None:
         emit(PacketId.EVENT, {"event_string_code": code, "event_data": detail.ljust(12, b"\0")})
+
+    def emit_ct2(lap_distances: dict[int, float], gap_ahead_ms: int) -> None:
+        if ct2_model is None:
+            return
+        gap_ahead_s = gap_ahead_ms / 1000.0
+        emit(
+            PacketId.CAR_TELEMETRY_2,
+            {
+                "cars": {
+                    car_idx: ct2_model.fields_for_car(car_idx, distance_m, gap_ahead_s)
+                    for car_idx, distance_m in lap_distances.items()
+                }
+            },
+        )
 
     emit(
         PacketId.PARTICIPANTS,
@@ -238,28 +354,33 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     },
                 )
 
-            emit(
-                PacketId.LAP_DATA,
+            player_lap_data: dict[str, object] = {
+                "current_lap_num": lap,
+                "last_lap_time_ms": player_last_ms,
+                "car_position": 3,
+                "grid_position": spec.grid_position,
+                "lap_distance": d,
+                "sector": int(frac * 3),
+                "result_status": 2,
+                "driver_status": player_driver_status,
+                "pit_status": player_pit_status,
+                "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
+                "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
+            }
+            rival_lap_data = {
+                1: _rival(spec, lap, d, frac, 1, spec.gap_ahead_s, 2, rival_pitting),
+                2: _rival(spec, lap, d, frac, 2, -spec.gap_behind_s, 4, False),
+                3: _rival(spec, lap, d, frac, 3, 20.0, 1, False),
+            }
+            emit(PacketId.LAP_DATA, {"cars": {0: player_lap_data, **rival_lap_data}})
+            emit_ct2(
                 {
-                    "cars": {
-                        0: {
-                            "current_lap_num": lap,
-                            "last_lap_time_ms": player_last_ms,
-                            "car_position": 3,
-                            "grid_position": spec.grid_position,
-                            "lap_distance": d,
-                            "sector": int(frac * 3),
-                            "result_status": 2,
-                            "driver_status": player_driver_status,
-                            "pit_status": player_pit_status,
-                            "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
-                            "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
-                        },
-                        1: _rival(spec, lap, d, frac, 1, spec.gap_ahead_s, 2, rival_pitting),
-                        2: _rival(spec, lap, d, frac, 2, -spec.gap_behind_s, 4, False),
-                        3: _rival(spec, lap, d, frac, 3, 20.0, 1, False),
-                    }
+                    0: d,
+                    1: _rival_lap_distance(spec, d, spec.gap_ahead_s),
+                    2: _rival_lap_distance(spec, d, -spec.gap_behind_s),
+                    3: _rival_lap_distance(spec, d, 20.0),
                 },
+                int(player_lap_data["delta_to_car_in_front_ms_part"]),
             )
             player_status: dict[str, object] = {
                 "fuel_in_tank": fuel - spec.fuel_kg_per_lap * frac,
@@ -326,25 +447,38 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         for f in range(int(4 / spec.dt)):
             frame += 1
             d = f * spec.dt * TRACK_M / (spec.base_ms / 1000.0)
+            player_lap_data = {
+                "current_lap_num": spec.laps + 1,
+                "last_lap_time_ms": player_last_ms,
+                "car_position": 3,
+                "grid_position": spec.grid_position,
+                "lap_distance": d,
+                "result_status": 3,
+                "driver_status": 4,
+                "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
+            }
+            rival_lap_data = {
+                1: _rival(spec, spec.laps + 1, d, 0.0, 1, spec.gap_ahead_s, 2, False),
+                2: _rival(spec, spec.laps + 1, d, 0.0, 2, -spec.gap_behind_s, 4, False),
+                3: _rival(spec, spec.laps + 1, d, 0.0, 3, 20.0, 1, False),
+            }
             emit(
                 PacketId.LAP_DATA,
                 {
                     "cars": {
-                        0: {
-                            "current_lap_num": spec.laps + 1,
-                            "last_lap_time_ms": player_last_ms,
-                            "car_position": 3,
-                            "grid_position": spec.grid_position,
-                            "lap_distance": d,
-                            "result_status": 3,
-                            "driver_status": 4,
-                            "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
-                        },
-                        1: _rival(spec, spec.laps + 1, d, 0.0, 1, spec.gap_ahead_s, 2, False),
-                        2: _rival(spec, spec.laps + 1, d, 0.0, 2, -spec.gap_behind_s, 4, False),
-                        3: _rival(spec, spec.laps + 1, d, 0.0, 3, 20.0, 1, False),
+                        0: player_lap_data,
+                        **rival_lap_data,
                     }
                 },
+            )
+            emit_ct2(
+                {
+                    0: d,
+                    1: _rival_lap_distance(spec, d, spec.gap_ahead_s),
+                    2: _rival_lap_distance(spec, d, -spec.gap_behind_s),
+                    3: _rival_lap_distance(spec, d, 20.0),
+                },
+                int(player_lap_data["delta_to_car_in_front_ms_part"]),
             )
             t += spec.dt
     if spec.send_session_end:
