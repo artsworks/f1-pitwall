@@ -58,7 +58,7 @@ optionally another to **UDP Action 3**). The pit wall answers every press by voi
 | UDP 1 double | Negative ("Noted."); with no recent call, quiet for 5 minutes |
 | UDP 1 held ≥ 0.8 s | **Radio silent** on/off: no speech (urgent P1 calls still speak), dashboard keeps the radio |
 
-With `voice.enabled: true`, wheel gestures stay the same, and the mic listens while the menu is open or 2 s after dashboard `V`.
+With `voice.enabled: true`, the wheel gestures stay the same. The mic listens while the driver menu is open, or for 2 s after you press `V` on the dashboard.
 
 To update later: `git pull; uv sync`.
 

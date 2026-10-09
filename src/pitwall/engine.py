@@ -720,9 +720,9 @@ class Engine:
         return ns
 
     def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
-        self._voice_close(t, "menu")
         if not self.menu.open:
             return
+        self._voice_close(t, "menu")
         self.menu.close()
         self.dispatcher.cancel_menu_prompt()
         self._menu_log(t, snapshot, "menu_close", None, reason)
