@@ -1,15 +1,33 @@
 # Audio dispatcher, UI and transport
 
-## Priorities
+## Urgency classes
 
-| Level | Contents | Behaviour |
-|---|---|---|
-| 1 critical | safety car / VSC / red flag, *forced* box (fuel, puncture, damage), imminent penalty | cancels speech in progress and speaks immediately |
-| 2 tactical | strategic box recommendation (pit window, undercut, SC cheap stop), thermal, wear, fuel saving, undercut threat | preempts level 3, queues behind level 1 |
-| 3 informational | gaps, sector deltas, ERS state, position changes | queues; dropped first under pressure |
+| Class | Rank | Typical calls |
+|---|---:|---|
+| Safety | 0 | Red flags, yellows, punctures, hazards, and blue flags |
+| Execution | 1 | Pit, penalty, and qualifying actions |
+| Reply | 2 | Answers to driver-menu requests |
+| Tactical | 3 | Battle plans, energy, fuel, and strategy |
+| Info | 4 | Gaps, wear, status, and position |
+| Coaching | 5 | Lock-ups, saved moments, and driving advice |
 
-Level 1 is **not** merged with anything. Plan v1 merged simultaneous P1 and P2 into a
-single sentence, which delays the critical half by seconds. Speak the P1, queue the P2.
+Lower ranks enter the queue first. Promoted execution calls rank -1 near a decision
+point. Numeric priority still controls budgets, deadlines, quiet mode, and exemptions.
+
+## Preemption
+
+The dispatcher cuts a call only before its estimated speech time ends.
+
+| Incoming class | Calls it can cut |
+|---|---|
+| Safety | Every call except promoted execution |
+| Execution | Info and coaching. Tactical only when promoted |
+| Reply | Info and coaching |
+| Tactical | Info and coaching |
+| Info or coaching | None |
+
+The dispatcher re-queues a cut reply once with a fresh queue time. It does not re-queue
+menu prompts.
 
 ## Staying quiet
 
@@ -39,8 +57,28 @@ Per-priority deadlines replace the single 1500 ms TTL, which was shorter than th
 message takes to speak: level 1 5 s, level 2 3 s, level 3 1.5 s. On top of that, every
 message carries its rule's `still_true` predicate; the backend re-evaluates it at the
 moment the message reaches the front of the queue and drops it if the world has moved on.
-Revalidation is the real requirement — TTL is only a backstop for a wedged client.
-Conflict groups keep a queued call only while its current predicate holds. A rule can also supersede named queued calls.
+Revalidation is the real requirement. TTL is only a backstop for a stalled client.
+Conflict groups keep a queued call only while its current predicate holds.
+
+Execution calls with a decision point calculate seconds to pit entry or the finish line.
+The dispatcher promotes calls inside `decision_near_s` and logs their distance and time.
+Calls inside `decision_missed_s` lose conflicts because their action window has closed.
+
+An untagged safety call starts a focus window. Focus drops queued info and coaching calls.
+It also suppresses new info and coaching calls until the window ends. Systems warnings do
+not start focus. The dispatcher drops a location-specific call after a recent safety or
+traffic call.
+
+Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
+higher outcome score. Rotation pairs always choose a seeded random winner, regardless of
+their scores. Other live conflicts keep the queued call. `resolved_by` rules suppress resolved calls in either
+submission order. Escalations remove lower-state calls. Flush events remove queued
+non-safety calls.
+
+Rules can suppress obvious calls and silence provisional checks until an urgent condition
+holds. Duplicate queued rules can merge into a count-aware `say_many` line.
+A queued call absorbs a related menu reply. The dispatcher can combine due info calls into
+one digest with the freshest briefs. It drops overflow and skips digests during battles.
 
 ## Speech
 

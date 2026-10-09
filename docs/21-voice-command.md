@@ -33,6 +33,22 @@ The short version:
   game audio), open-vocabulary Whisper-class models (bursty, larger, unneeded), and
   anything cloud (network mid-race, non-replayable).
 
+## Radio scheduling
+
+Menu replies use the reply urgency class. Replies rank below execution calls and above
+tactical calls. Numeric priority still governs budgets and deadlines.
+
+Safety calls can cut a reply while it is still speaking. The dispatcher queues the reply
+once with a fresh queue time. It does not re-queue a menu prompt.
+
+Each menu item lists its related rules. A matching queued call absorbs its reply. Other
+topics do not absorb the reply.
+
+The scheduler can combine two or more due info calls into one digest. It uses the freshest
+briefs first, adds a rotating prefix, and drops items beyond the configured limit. It
+skips a digest during a battle. See [the audio dispatcher guide](04-audio-ui.md) for digest
+details.
+
 ## 1. Goals and non-goals
 
 Goals
