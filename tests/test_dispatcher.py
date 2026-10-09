@@ -123,6 +123,23 @@ def test_deadline_drop() -> None:
     assert not sink.spoken
 
 
+def test_p3_deadline_starts_after_3_second_p2_speech() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    assert d.policy.deadlines_s == {1: 5.0, 2: 3.0, 3: 1.5}
+    p2_text = "p" * 45
+    d.submit([_cand("p2", priority=2, text=p2_text)], Snapshot(now=0.0))
+    assert d.drain(0.0)[0].text == p2_text
+    speech_end = d._spoken_calls[-1][1]
+    assert speech_end == pytest.approx(3.0)
+
+    d.submit([_cand("p3", priority=3, text="info")], Snapshot(now=0.5, on_straight=True))
+    assert d.drain(0.5) == []
+    held = d._queue[0].call
+    assert held.ready_t == pytest.approx(speech_end)
+    assert [call.rule_id for call in d.drain(speech_end)] == ["p3"]
+    assert sink.spoken == [p2_text, "info"]
+
+
 def test_revalidation() -> None:
     cand = _cand("a")
     cand.still_true = lambda snap: snap.lap_num > 0  # type: ignore[method-assign]
@@ -641,6 +658,32 @@ def test_decision_distance_promotes_and_logs() -> None:
     assert call.decision_s == pytest.approx(5.0)
     assert call.promoted is True
     assert any(row["inputs"].get("decision_s") == pytest.approx(5.0) for row in _log(buf))
+
+
+def test_nearer_promoted_execution_precedes_older_call() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    snap = Snapshot(
+        now=0.0,
+        track_length_m=5000,
+        pit_entry_m=10,
+        lap_distance=4990,
+        speed_kmh=36,
+    )
+    d.submit([_cand("pit", urgency="execution", decision_point="pit_entry")], snap)
+    d.submit(
+        [_cand("line", urgency="execution", decision_point="line")],
+        Snapshot(
+            now=0.1,
+            track_length_m=5000,
+            pit_entry_m=10,
+            lap_distance=4990,
+            speed_kmh=36,
+        ),
+    )
+    assert {item.call.rule_id: item.call.decision_s for item in d._queue} == pytest.approx(
+        {"pit": 2.0, "line": 1.0}
+    )
+    assert [call.rule_id for call in d.drain(0.1)] == ["line", "pit"]
 
 
 def test_focus_and_systems_exemption() -> None:

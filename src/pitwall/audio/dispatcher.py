@@ -80,6 +80,7 @@ class Call:
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     not_before: float = 0.0  # held in the queue until this time (min-gap spacing)
+    ready_t: float = 0.0
     urgency: str = "info"
     rank: int = 4
     decision_point: str = ""
@@ -100,7 +101,7 @@ class Call:
 
 @dataclass(order=True)
 class _Queued:
-    sort_key: tuple[int, int, float] = field(compare=True)
+    sort_key: tuple[int, int, float, float] = field(compare=True)
     call: Call = field(compare=False)
 
 
@@ -378,9 +379,10 @@ class Dispatcher:
         seconds = distance / speed
         return distance, seconds, seconds <= self.policy.decision_near_s
 
-    def _queue_key(self, call: Call) -> tuple[int, int, float]:
+    def _queue_key(self, call: Call) -> tuple[int, int, float, float]:
         promoted = call.urgency == "execution" and call.promoted
-        return (-1 if promoted else call.rank, 0 if promoted else 1, call.t)
+        decision_s = call.decision_s if promoted and call.decision_s is not None else 0.0
+        return (-1 if promoted else call.rank, 0 if promoted else 1, decision_s, call.t)
 
     def _queue_call(self, call: Call) -> None:
         heapq.heappush(self._queue, _Queued(self._queue_key(call), call))
@@ -572,7 +574,8 @@ class Dispatcher:
             deadline_ms = call.deadline_ms
             if waits_for_straight:
                 deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
-            if (now - max(call.t, call.not_before)) * 1000 > deadline_ms:
+            deadline_start = max(call.t, call.not_before, call.ready_t)
+            if (now - deadline_start) * 1000 > deadline_ms:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
                 self._booking_undo.pop(call.id, None)
@@ -611,6 +614,16 @@ class Dispatcher:
                 and self._mid_sentence(current_at_start, now)
                 and not self._preempts(call, current_at_start)
             ):
+                speech_end = next(
+                    (
+                        end_t
+                        for spoken, end_t in self._spoken_calls
+                        if spoken.id == current_at_start.id
+                    ),
+                    None,
+                )
+                if speech_end is not None:
+                    q.call.ready_t = max(q.call.ready_t, speech_end)
                 held.append(q)
                 continue
             if (
@@ -701,7 +714,8 @@ class Dispatcher:
         deadline_ms = call.deadline_ms
         if call.priority == 3 and self.policy.p3_straight_only:
             deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
-        if (now - max(call.t, call.not_before)) * 1000 > deadline_ms:
+        deadline_start = max(call.t, call.not_before, call.ready_t)
+        if (now - deadline_start) * 1000 > deadline_ms:
             return False
         if now < call.not_before:
             return False

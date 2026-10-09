@@ -12,14 +12,6 @@ SCENARIOS = load_workbook(WORKBOOK)
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.id)
 def test_radio_grade_scenario(scenario) -> None:
     result = replay(scenario, ConfigStore(isolated=True).current())
-
-    if scenario.id == "r25":
-        assert result.mismatches == [
-            ("box", "now", "next"),
-            ("pen", "next", "now"),
-            ("order", "['box', 'pen']", "['pen', 'box']"),
-        ]
-        return
     assert not result.mismatches, result.mismatches
 
 

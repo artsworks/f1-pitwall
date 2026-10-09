@@ -59,6 +59,7 @@ message carries its rule's `still_true` predicate; the backend re-evaluates it a
 moment the message reaches the front of the queue and drops it if the world has moved on.
 Revalidation is the real requirement. TTL is only a backstop for a stalled client.
 Conflict groups keep a queued call only while its current predicate holds.
+A call that waits behind speech starts its deadline when that speech ends.
 
 Execution calls with a decision point calculate seconds to pit entry or the finish line.
 The dispatcher promotes calls inside `decision_near_s` and logs their distance and time.
@@ -71,9 +72,9 @@ traffic call.
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
 higher outcome score. Rotation pairs always choose a seeded random winner, regardless of
-their scores. Other live conflicts keep the queued call. `resolved_by` rules suppress resolved calls in either
-submission order. Escalations remove lower-state calls. Flush events remove queued
-non-safety calls.
+their scores. Other live conflicts keep the queued call. `resolved_by` rules suppress
+resolved calls in either submission order. Escalations remove lower-state calls. Flush
+events remove queued non-safety calls.
 
 Rules can suppress obvious calls and silence provisional checks until an urgent condition
 holds. Duplicate queued rules can merge into a count-aware `say_many` line.
