@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import threading
 import time
 
 import pytest
@@ -66,6 +67,7 @@ def test_websocket_hello_and_state_shape() -> None:
         assert snap["type"] == "snapshot"
         for key in ("live", "tyres", "brakes", "phase", "latency"):
             assert key in snap["payload"]
+        assert snap["payload"]["voice"] == {"available": False, "listening": False}
         for corner in ("fl", "fr", "rl", "rr"):
             assert set(snap["payload"]["tyres"][corner]) == {
                 "surface",
@@ -161,6 +163,42 @@ def test_api_health_and_config() -> None:
     assert c["ui"]["state_hz"] == 5
     assert client.get("/").status_code == 200
     assert client.get("/radio").status_code == 200
+
+
+def test_websocket_voice_control_reaches_engine_callback() -> None:
+    received: list[dict[str, object]] = []
+    called = threading.Event()
+
+    def on_client_message(message: dict[str, object]) -> None:
+        received.append(message)
+        called.set()
+
+    hub = Hub()
+    state = SessionState()
+    client = TestClient(
+        create_app(
+            hub,
+            ConfigStore(),
+            Metrics(),
+            latest_snapshot=lambda: state.snapshot(_now),
+            on_client_message=on_client_message,
+        )
+    )
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "hello", "v": 1, "last_seq": None})
+        ws.receive_json()
+        ws.send_json({"type": "voice"})
+        assert called.wait(timeout=1.0)
+        assert received == [{"type": "voice"}]
+
+
+def test_voice_blip_endpoint_returns_wav() -> None:
+    client, _ = _app()
+    response = client.get("/api/voice/blip.wav")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/wav"
+    assert response.content.startswith(b"RIFF")
 
 
 def test_null_speaker_on_spoken() -> None:

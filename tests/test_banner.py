@@ -96,6 +96,7 @@ def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys)
         mindset=None,
         page=None,
         menu_payload=lambda _now: {},
+        voice_payload=lambda _now: {"available": False, "listening": False},
     )
     store = SimpleNamespace(
         current=lambda: SimpleNamespace(
