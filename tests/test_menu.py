@@ -528,16 +528,12 @@ def test_battery_answer_cases() -> None:
         "balanced",
     )
     assert case == "under" and values["mj"] == "0.4"
-    case, values = answer(
-        battery, dataclasses.replace(base, energy_mode="attack_ok"), "balanced"
-    )
+    case, values = answer(battery, dataclasses.replace(base, energy_mode="attack_ok"), "balanced")
     assert case == "attack"
     assert ReplyPicker().pick(battery, case, values) == (
         "Battery 52 percent, spare to attack. Deploy."
     )
-    case, values = answer(
-        battery, dataclasses.replace(base, energy_mode="on_budget"), "balanced"
-    )
+    case, values = answer(battery, dataclasses.replace(base, energy_mode="on_budget"), "balanced")
     assert case == "ok"
     assert ReplyPicker().pick(battery, case, values) == "Battery 52 percent, on budget."
 
