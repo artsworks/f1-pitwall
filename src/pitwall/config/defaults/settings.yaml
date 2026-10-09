@@ -131,8 +131,10 @@ thresholds:
   tyre_graining_wet_c: 50
   compound_gain_min_cars: 2    # cars needed per compound group for a lap-time crossover
   compound_crossover_s: 1.0    # drier compound this much a lap quicker = switch
-  drs_zone_lookahead_m: 300    # zone start this close counts as "DRS ahead"
-  drs_detection_gap_s: 1.0     # gap to car ahead inside this = DRS available
+  drs_zone_lookahead_m: 300    # before 2026 only: zone start this close counts as "DRS ahead"
+  drs_detection_gap_s: 1.0     # before 2026 only: gap for DRS availability
+  aero_zone_lookahead_m: 250   # active aero countdown at or under this = aero zone ahead (2026)
+  overtake_zone_lookahead_m: 300  # overtake countdown at or under this = overtake point ahead (2026)
   penalty_standing_laps: 3     # time penalty vs position calls from this many laps to go
   penalty_recent_s: 10         # session seconds a PENA stays "recent"
   rain_inter_pct: 60           # forecast rain -> crossover bands
