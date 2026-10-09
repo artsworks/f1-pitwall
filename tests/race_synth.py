@@ -68,6 +68,7 @@ class RaceSpec:
     ct2: bool = False
     aero_zones_m: tuple[tuple[float, float], ...] = ()
     overtake_detect_m: float | None = None
+    overtake_activation_offset_m: float = 80.0
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
 
@@ -93,6 +94,7 @@ class _Ct2Model:
         self._zone_states: dict[int, tuple[bool, ...]] = {}
         self._player_distance_m: float | None = None
         self._overtake_available = 0
+        self._overtake_active = 0
 
     def fields_for_car(
         self,
@@ -129,9 +131,11 @@ class _Ct2Model:
         if car_idx == 0:
             self._update_overtake(distance_m, gap_ahead_s)
             overtake_available = self._overtake_available
+            overtake_active = self._overtake_active
             overtake_activation_distance = self._overtake_distance(distance_m)
         else:
             overtake_available = int(car_idx in self.spec.rival_overtake_cars)
+            overtake_active = overtake_available
             overtake_activation_distance = 0
 
         return {
@@ -139,7 +143,7 @@ class _Ct2Model:
             "active_aero_available": active_aero_available,
             "active_aero_activation_distance": active_aero_activation_distance,
             "overtake_available": overtake_available,
-            "overtake_active": overtake_available,
+            "overtake_active": overtake_active,
             "overtake_activation_distance": overtake_activation_distance,
             "regulations_2026": 1,
         }
@@ -147,24 +151,34 @@ class _Ct2Model:
     def _overtake_distance(self, distance_m: float) -> int:
         if self.spec.overtake_detect_m is None:
             return 0
-        detect_m = self.spec.overtake_detect_m % TRACK_M
-        activation_distance = (detect_m - distance_m) % TRACK_M
+        activation_m = (
+            self.spec.overtake_detect_m + self.spec.overtake_activation_offset_m
+        ) % TRACK_M
+        activation_distance = (activation_m - distance_m) % TRACK_M
         if 0 < activation_distance <= OVERTAKE_LOOKAHEAD_M:
             return int(activation_distance)
         return 0
 
     def _update_overtake(self, distance_m: float, gap_ahead_s: float) -> None:
-        if self.spec.overtake_detect_m is not None and self._player_distance_m is not None:
-            detect_m = self.spec.overtake_detect_m % TRACK_M
+        if self._player_distance_m is not None:
             previous = self._player_distance_m
-            crossed = (
-                previous < detect_m <= distance_m
-                if distance_m >= previous
-                else detect_m > previous or detect_m <= distance_m
-            )
-            if crossed:
-                self._overtake_available = int(gap_ahead_s <= self.spec.overtake_gap_s)
+            if self.spec.overtake_detect_m is not None:
+                detect_m = self.spec.overtake_detect_m % TRACK_M
+                if _crossed(previous, distance_m, detect_m):
+                    self._overtake_available = int(gap_ahead_s <= self.spec.overtake_gap_s)
+            if self.spec.overtake_detect_m is not None:
+                activation_m = (
+                    self.spec.overtake_detect_m + self.spec.overtake_activation_offset_m
+                ) % TRACK_M
+                if _crossed(previous, distance_m, activation_m):
+                    self._overtake_active = self._overtake_available
         self._player_distance_m = distance_m
+
+
+def _crossed(previous_m: float, current_m: float, point_m: float) -> bool:
+    if current_m >= previous_m:
+        return previous_m < point_m <= current_m
+    return point_m > previous_m or point_m <= current_m
 
 
 def _rival(

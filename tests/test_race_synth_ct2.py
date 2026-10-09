@@ -86,7 +86,7 @@ def test_overtake_availability_and_activation_countdown() -> None:
         frames = _ct2_frames(
             RaceSpec(
                 laps=2,
-                base_ms=10_000,
+                base_ms=20_000,
                 dt=0.25,
                 ct2=True,
                 gap_ahead_s=gap_ahead_s,
@@ -96,14 +96,41 @@ def test_overtake_availability_and_activation_countdown() -> None:
         player_rows = [
             (snapshot.lap_distance, packet.cars[0], snapshot) for _, packet, snapshot in frames
         ]
-        crossing_idx = next(i for i, (distance, _, _) in enumerate(player_rows) if distance == 2000)
-        after_crossing = player_rows[crossing_idx:]
-        assert all(car.overtake_available == expected for _, car, _ in after_crossing)
-        assert all(car.overtake_active == expected for _, car, _ in after_crossing)
-        assert all(snapshot.overtake_available == expected for _, _, snapshot in after_crossing)
-        assert all(snapshot.overtake_active == expected for _, _, snapshot in after_crossing)
+        if expected:
+            detection_idx = next(
+                i for i, (distance, _, _) in enumerate(player_rows) if distance == 2000
+            )
+            activation_idx = next(
+                i for i in range(detection_idx, len(player_rows)) if player_rows[i][0] >= 2080
+            )
+            assert detection_idx < activation_idx
+            assert player_rows[detection_idx][1].overtake_available == 1
+            assert player_rows[detection_idx][1].overtake_active == 0
+            assert player_rows[detection_idx][2].overtake_available == 1
+            assert player_rows[detection_idx][2].overtake_active == 0
+            assert all(
+                car.overtake_available == 1 and car.overtake_active == 0
+                for _, car, _ in player_rows[detection_idx:activation_idx]
+            )
+            assert all(
+                snapshot.overtake_available == 1 and snapshot.overtake_active == 0
+                for _, _, snapshot in player_rows[detection_idx:activation_idx]
+            )
+            after_activation = player_rows[activation_idx:]
+            assert all(
+                car.overtake_available == 1 and car.overtake_active == 1
+                for _, car, _ in after_activation
+            )
+            assert all(snapshot.overtake_available == 1 for _, _, snapshot in after_activation)
+            assert all(snapshot.overtake_active == 1 for _, _, snapshot in after_activation)
+        else:
+            assert all(car.overtake_available == 0 for _, car, _ in player_rows)
+            assert all(car.overtake_active == 0 for _, car, _ in player_rows)
+            assert all(snapshot.overtake_available == 0 for _, _, snapshot in player_rows)
+            assert all(snapshot.overtake_active == 0 for _, _, snapshot in player_rows)
+
         for distance, car, _ in player_rows:
-            remaining = (2000 - distance) % TRACK_M
+            remaining = (2080 - distance) % TRACK_M
             expected_countdown = int(remaining) if 0 < remaining <= 300 else 0
             assert car.overtake_activation_distance == expected_countdown
 
