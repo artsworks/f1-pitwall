@@ -6,12 +6,13 @@ import dataclasses
 import json
 import math
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -51,6 +52,13 @@ def packet_age_ms(snapshot: Snapshot) -> float | None:
 
 def _finite(x: float) -> float | None:
     return x if math.isfinite(x) else None
+
+
+@lru_cache(maxsize=1)
+def _voice_blip_wav() -> bytes:
+    from pitwall.audio.piper_tts import radio_blip, to_wav
+
+    return to_wav(radio_blip(22050), 22050)
 
 
 PIT_BOARD_PHASES = ("pitting", "garage")
@@ -479,6 +487,7 @@ def state_payload(
     mindset: str | None = None,
     page: str | None = None,
     menu: dict[str, object] | None = None,
+    voice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     cold, hot = thermal_window(settings.thresholds, snapshot.tyre_compound)
     age_ms = packet_age_ms(snapshot)
@@ -543,6 +552,7 @@ def state_payload(
         "quiet_left_s": quiet_left_s,
         "silent": silent,
         "menu": menu or {"open": False},
+        "voice": voice or {"available": False, "listening": False},
         "red_flag": snapshot.red_flag,
         "paused": snapshot.paused,
         "quali": quali_payload(snapshot, settings.thresholds),
@@ -631,7 +641,7 @@ def create_app(
     """latest_snapshot: callable -> Snapshot for the state broadcaster/snapshot
     frames (defaults to the hub's no-state placeholder). on_client_press:
     callable(down: bool) fed by {"type":"press"} client messages.
-    on_client_message: callable(msg) fed by {"type":"mindset"|"page"} messages.
+    on_client_message: callable(msg) fed by {"type":"mindset"|"page"|"menu"|"voice"} messages.
     review:
     optional ReviewController; when present the /api/review/* routes are
     mounted and the hello frame carries review=True."""
@@ -770,6 +780,10 @@ def create_app(
     async def config() -> JSONResponse:
         return JSONResponse(settings_store.current().model_dump())
 
+    @app.get("/api/voice/blip.wav")
+    async def voice_blip() -> Response:
+        return Response(_voice_blip_wav(), media_type="audio/wav")
+
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         if pin_gate is not None and not pin_gate.allowed(
@@ -830,7 +844,7 @@ def create_app(
                         hub.audio_clients.discard(websocket)
                 elif (
                     isinstance(msg, dict)
-                    and msg.get("type") in ("mindset", "page", "menu")
+                    and msg.get("type") in ("mindset", "page", "menu", "voice")
                     and on_client_message is not None
                 ):
                     on_client_message(msg)

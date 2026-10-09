@@ -809,6 +809,13 @@ body.swap .strat { animation-delay: 80ms; }
   box-shadow: 0 .4rem 1.6rem #000c; font-size: 1.7rem; }
 .drvmenu-head { display: flex; justify-content: space-between; padding: .35rem .7rem;
   font-size: 1rem; letter-spacing: .14em; color: var(--info); border-bottom: 1px solid var(--line); }
+.voice { display: inline-block; padding: .2rem .65rem; border: 2px solid var(--crit);
+  border-radius: .35rem; background: var(--crit); color: #fff; font-size: 1.2rem;
+  font-weight: bold; letter-spacing: .06em; line-height: 1.25; }
+.voice.warn, .voice.missed { border-color: var(--warn); background: var(--warn); color: #000; }
+.voice.heard { border-color: var(--ok); background: var(--ok); color: #000; }
+.voice-tag { color: var(--crit); font-size: .85rem; font-weight: bold; }
+.voice-tag.warn { color: var(--warn); }
 .drvmenu ol { list-style: none; margin: 0; padding: .2rem 0; }
 .drvmenu li { padding: .3rem .7rem; color: var(--dim); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; border-left: .35rem solid transparent; }

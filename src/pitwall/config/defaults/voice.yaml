@@ -1,8 +1,6 @@
-# Driver -> pit wall voice channel (docs/21). Closed grammar: the recogniser only
-# chooses among these phrases, so accuracy comes from the list being small.
-# Intent ids are driver-menu item ids (menu.yaml) or input actions.
-# Tap UDP Action 1 once to open the channel; it closes on a recognised phrase,
-# on silence, on a second tap, or at max_open_s.
+# Driver -> pit wall voice channel (docs/21). The recogniser chooses from this
+# closed grammar. The mic listens while the driver menu is open or after V.
+# Action 1 keeps its doc-12 gestures.
 voice:
   enabled: false
   engine: sapi
@@ -11,6 +9,7 @@ voice:
   early_close_ms: 300
   close_silence_ms: 1000
   max_open_s: 6.0
+  key_max_open_s: 2.0
   open_warn_s: 3.0
   confidence_min: 0.7
   priority: below_normal

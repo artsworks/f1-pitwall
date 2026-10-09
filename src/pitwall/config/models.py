@@ -208,7 +208,7 @@ class MenuSettings(BaseModel):
 
 
 class VoiceSettings(BaseModel):
-    """Driver voice channel (docs/21). Phase 0: `pitwall voice spike` only."""
+    """Listen while the driver menu is open or after V; Action 1 keeps doc-12 gestures."""
 
     enabled: bool = False
     engine: Literal["sapi"] = "sapi"
@@ -217,6 +217,7 @@ class VoiceSettings(BaseModel):
     early_close_ms: int = 300  # SAPI CompleteResponseSpeed: silence after a full phrase
     close_silence_ms: int = 1000  # SAPI IncompleteResponseSpeed: silence after a partial one
     max_open_s: float = 6.0  # hard cap on an open channel
+    key_max_open_s: float = 2.0  # cap for a V key open
     open_warn_s: float = 3.0  # dashboard turns amber after this with nothing recognised
     confidence_min: float = 0.7  # EngineConfidence below this is a miss
     priority: Literal["below_normal", "normal"] = "below_normal"

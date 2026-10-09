@@ -22,12 +22,14 @@
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
   var soundOn = false, serverAudio = false, spokenIds = {}, cancelledIds = {}, audioQueue = [];
   var playingId = null, soundAttempt = 0, soundFailed = false;
+  var voiceListening = false, voiceFlash = null, voiceFlashTimer = null;
   var armRadio = document.getElementById("arm-radio");
   var soundButton = document.getElementById("sound");
   var audioSupported = typeof window.Audio === "function";
   var speechSupported = !!window.speechSynthesis;
   var utteranceSupported = !!window.SpeechSynthesisUtterance;
   var player = audioSupported ? new Audio() : null;
+  var voiceBlip = audioSupported ? new Audio("/api/voice/blip.wav") : null;
   var mobile = /[?&]sound=1/.test(location.search) ||
     (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches);
   if (/[?&]sound=0/.test(location.search)) mobile = false;
@@ -275,6 +277,8 @@
 
   function renderState(p) {
     renderMenu(p.menu);
+    voiceListening = !!(p.voice && p.voice.listening);
+    renderVoice(p.voice);
     var phase = (p.phase || "--").replace("_", " ").toUpperCase();
     setText("phase", phase);
     setClass("phase", p.phase === "out_lap" ? "amber" : "");
@@ -388,6 +392,30 @@
     if (p.latency) {
       setText("latency", "voice lag " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
         " ms · screen lag " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
+    }
+  }
+
+  function renderVoice(v) {
+    var pill = el("voice"), tag = el("drvmenu-voice");
+    var listening = voiceListening && v && v.listening;
+    var flash = voiceFlash && voiceFlash.until > Date.now() ? voiceFlash : null;
+    if (pill) {
+      if (listening) {
+        pill.hidden = false;
+        pill.className = "voice" + (v.warn ? " warn" : "");
+        pill.textContent = "● LISTENING" +
+          (v.left_s !== null && v.left_s !== undefined ? " " + Math.ceil(v.left_s) + "s" : "");
+      } else if (flash) {
+        pill.hidden = false;
+        pill.className = "voice " + flash.kind;
+        pill.textContent = flash.text;
+      } else {
+        pill.hidden = true;
+      }
+    }
+    if (tag) {
+      tag.hidden = !listening;
+      tag.className = "voice-tag" + (v && v.warn ? " warn" : "");
     }
   }
 
@@ -1550,6 +1578,43 @@
         pe.textContent = label + " L" + (p.lap || "--") +
           (p.text ? " ▸ " + p.text : "");
       }
+    } else if (m.type === "voice") {
+      if (p.state === "listening") {
+        voiceListening = true;
+        voiceFlash = null;
+        clearTimeout(voiceFlashTimer);
+        if (soundOn && voiceBlip) {
+          voiceBlip.currentTime = 0;
+          voiceBlip.play().catch(function () {});
+        }
+        renderVoice({ listening: true, via: p.via, left_s: p.cap_s, warn: false });
+      } else if (p.state === "closed") {
+        voiceListening = false;
+        var message = "";
+        var kind = "";
+        if (p.reason === "recognised") {
+          message = "HEARD ▸ " + (p.item || p.text || "?");
+          kind = "heard";
+        } else if (p.reason === "miss" || p.reason === "low_confidence") {
+          message = "MISSED ▸ " + (p.text || "?");
+          kind = "missed";
+        } else if (p.reason === "cap") {
+          message = "NO REQUEST";
+          kind = "missed";
+        }
+        if (message) {
+          voiceFlash = { text: message, kind: kind, until: Date.now() + 3000 };
+          clearTimeout(voiceFlashTimer);
+          voiceFlashTimer = setTimeout(function () {
+            voiceFlash = null;
+            renderVoice(lastState && lastState.voice);
+          }, 3000);
+        } else {
+          voiceFlash = null;
+          clearTimeout(voiceFlashTimer);
+        }
+        renderVoice(lastState && lastState.voice);
+      }
     }
     render();
   }
@@ -1600,8 +1665,15 @@
   // Escape = close (docs/12). Space still confirms like UDP Action 1.
   var MENU_KEYS = { ArrowUp: "up", ArrowDown: "down", Enter: "confirm", Escape: "close" };
   document.addEventListener("keydown", function (ev) {
+    if (ev.repeat || !document.hasFocus()) return;
+    if (ev.code === "KeyV") {
+      if (ev.target && ev.target.closest && ev.target.closest("input, textarea, select, button")) return;
+      ev.preventDefault();
+      sendCtl({ type: "voice" });
+      return;
+    }
     var op = MENU_KEYS[ev.code];
-    if (!op || ev.repeat || !document.hasFocus()) return;
+    if (!op) return;
     if (ev.target && ev.target.closest && ev.target.closest("input, textarea, select, button")) return;
     ev.preventDefault();
     sendCtl({ type: "menu", op: op });

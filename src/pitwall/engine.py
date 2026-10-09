@@ -12,9 +12,10 @@ import dataclasses
 import logging
 import math
 import sqlite3
+import sys
 import time
 import traceback
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -82,6 +83,9 @@ from pitwall.strategy.plans import (
     view_fields,
 )
 from pitwall.tune import load_cooldown_mults
+from pitwall.voice.channel import ChannelRecord, VoiceChannel
+from pitwall.voice.grammar import VoiceGrammar
+from pitwall.voice.worker import VoiceWorker, make_voice_worker
 
 log = logging.getLogger(__name__)
 
@@ -308,6 +312,10 @@ class Engine:
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
+        self.voice: VoiceChannel | None = None
+        self._voice_worker: VoiceWorker | None = None
+        self._voice_closed: list[ChannelRecord] = []
+        self.on_voice_event: Callable[[dict[str, Any]], None] | None = None
         self._paused = False
         inp = store.current().input
         self.detector = PressDetector(
@@ -404,6 +412,122 @@ class Engine:
         if press is not None:
             self._press_queue.append(press)
 
+    def setup_voice(self) -> str | None:
+        voice = self.store.current().voice
+        if not voice.enabled:
+            return None
+        if sys.platform != "win32":
+            log.warning("voice needs Windows SAPI; disabled")
+            print("voice: needs Windows SAPI; disabled", file=sys.stderr)
+            return "off (needs Windows)"
+        worker: VoiceWorker | None = None
+        try:
+            worker = make_voice_worker(voice)
+            if not worker.wait_ready(10.0):
+                raise worker.error or RuntimeError("recogniser did not become ready")
+            self.enable_voice(worker)
+        except Exception as exc:
+            if worker is not None:
+                worker.close()
+            log.warning("voice unavailable (%s); disabled", exc)
+            return f"off ({exc})"
+        rec: Any = worker.recognizer
+        return f"{rec.recognizer_desc}, mic {rec.device_desc}"
+
+    def enable_voice(self, worker: VoiceWorker) -> None:
+        settings = self.store.current().voice
+        grammar = VoiceGrammar.from_mapping(settings.intents)
+        self._voice_worker = worker
+        self.voice = VoiceChannel(
+            worker,
+            grammar.intent_for,
+            max_open_s=settings.max_open_s,
+            confidence_min=settings.confidence_min,
+        )
+        self.voice.on_close = self._voice_closed.append
+
+    def close_voice(self) -> None:
+        if self._voice_worker is not None:
+            self._voice_worker.close()
+            self._voice_worker = None
+
+    def _voice_open(self, t: float, via: str, max_open_s: float | None = None) -> None:
+        channel = self.voice
+        if channel is None:
+            return
+        cap_s = max_open_s or channel.max_open_s
+        if channel.open(t, via=via, max_open_s=cap_s) and self.on_voice_event is not None:
+            self.on_voice_event({"state": "listening", "via": via, "cap_s": cap_s})
+
+    def _voice_close(self, t: float, reason: str) -> None:
+        if self.voice is not None:
+            self.voice.close(t, reason)
+
+    def _voice_tick(self, now: float, snapshot: Snapshot) -> None:
+        channel = self.voice
+        worker = self._voice_worker
+        if channel is not None and worker is not None:
+            for name, text, confidence, _ in worker.drain():
+                if name == "recognised":
+                    channel.recognised(text, confidence, now)
+                elif name == "false":
+                    channel.false_recognition(text, confidence, now)
+                else:
+                    channel.mark(name, now)
+            channel.tick(now)
+        closed = list(self._voice_closed)
+        self._voice_closed.clear()
+        for record in closed:
+            self._voice_done(record, snapshot)
+
+    def _voice_done(self, record: ChannelRecord, snapshot: Snapshot) -> None:
+        items = self.store.current().menu.items
+        item = next((entry for entry in items if entry.id == record.intent), None)
+        if self.on_voice_event is not None:
+            self.on_voice_event(
+                {
+                    "state": "closed",
+                    "reason": record.reason,
+                    "text": record.text,
+                    "intent": record.intent,
+                    "via": record.via,
+                    "item": item.label if item is not None else None,
+                }
+            )
+        if record.reason != "recognised" or record.intent is None:
+            return
+        if item is not None:
+            if self.menu.open:
+                self.menu.close()
+                self.dispatcher.cancel_menu_prompt()
+                self._menu_log(record.closed_t, snapshot, "menu_close", None, "voice")
+            self._menu_answer(item, record.closed_t, snapshot, via="voice")
+        elif record.intent in ("ack", "neg"):
+            self.dispatcher.on_press(Press(record.intent, record.closed_t), snapshot)
+        elif record.intent in ("mindset_aggressive", "mindset_balanced"):
+            self.set_mindset(record.intent.removeprefix("mindset_"), record.closed_t)
+        elif record.intent == "page":
+            self.cycle_page(record.closed_t)
+
+    def voice_payload(self, now: float) -> dict[str, Any]:
+        channel = self.voice
+        if channel is None or not channel.is_open or channel.current is None:
+            return {
+                "available": channel is not None,
+                "listening": False,
+                "via": "",
+                "left_s": None,
+                "warn": False,
+            }
+        elapsed = channel.open_for(now)
+        return {
+            "available": True,
+            "listening": True,
+            "via": channel.current.via,
+            "left_s": max(0.0, channel.current.cap_s - elapsed),
+            "warn": elapsed >= self.store.current().voice.open_warn_s,
+        }
+
     # -- live overrides: mindset (UDP Action 2) and dashboard page (Action 4) --
 
     @property
@@ -499,9 +623,16 @@ class Engine:
     def client_message(self, msg: dict[str, Any]) -> None:
         """Dashboard control messages: {"type":"mindset","name"},
         {"type":"page","name"|"cycle":true} and
-        {"type":"menu","op":"up"|"down"|"confirm"|"close"}."""
+        {"type":"menu","op":"up"|"down"|"confirm"|"close"} or {"type":"voice"}."""
         now = self.clock.now()
-        if msg.get("type") == "mindset":
+        if msg.get("type") == "voice":
+            if self.voice is None:
+                return
+            if self.voice.is_open:
+                self._voice_close(now, "tap")
+            else:
+                self._voice_open(now, "key", self.store.current().voice.key_max_open_s)
+        elif msg.get("type") == "mindset":
             name = msg.get("name")
             if isinstance(name, str):
                 self.set_mindset(name, now)
@@ -553,6 +684,7 @@ class Engine:
                 return True
             if not was_open:
                 self._menu_log(p.t, snapshot, "menu_open", None, "")
+                self._voice_open(p.t, "menu")
             if settings.speak_on_scroll:
                 self.dispatcher.menu_prompt(item.label, snapshot)
             return True
@@ -590,6 +722,7 @@ class Engine:
     def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
         if not self.menu.open:
             return
+        self._voice_close(t, "menu")
         self.menu.close()
         self.dispatcher.cancel_menu_prompt()
         self._menu_log(t, snapshot, "menu_close", None, reason)
@@ -624,6 +757,7 @@ class Engine:
         )
 
     def _menu_confirm(self, t: float, snapshot: Snapshot) -> None:
+        self._voice_close(t, "menu")
         item = self.menu.selected(self.store.current().menu)
         self.menu.close()
         self.dispatcher.cancel_menu_prompt()
@@ -702,6 +836,7 @@ class Engine:
         self.dispatcher.reset_session()
         self._reset_energy_lap_tracking()
         self.menu.close()
+        self._voice_close(self.clock.now(), "session")
         self._menu_replies.reset()
         self.opinions.clear()
         self._laps_written = len(self.state.laps)
@@ -1797,6 +1932,7 @@ class Engine:
         self._press_queue.clear()
         if self.menu.expired(self.store.current().menu, now):
             self._menu_close(now, snapshot, "timeout")
+        self._voice_tick(now, snapshot)
         self._auto_page(snapshot, now)
         if self.state.last_recv_wall is not None:
             self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)

@@ -172,6 +172,7 @@ async def _state_broadcast(
             mindset=engine.mindset,
             page=engine.page,
             menu=engine.menu_payload(now),
+            voice=engine.voice_payload(now),
         )
         hub.broadcast("state", payload)
         if snap.last_packet_t is not None:
@@ -410,6 +411,14 @@ def cmd_start(args: argparse.Namespace) -> int:
         learning_pack_dir=pack_dir,
         learning_pack_keep_days=settings.learning.pack_keep_days,
     )
+    voice_desc = engine.setup_voice()
+    if voice_desc is not None:
+        banner.append(("voice", voice_desc))
+
+    def on_voice_event(payload: dict[str, Any]) -> None:
+        hub.broadcast("voice", payload)
+
+    engine.on_voice_event = on_voice_event
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
     elif child:
@@ -472,6 +481,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     finally:
         if clean and db is not None:
             db.clear_heartbeat()  # a later start is a fresh session, not a crash
+        engine.close_voice()
         speaker.close()
         if recorder is not None:
             if settings.recording.compress_on_close:

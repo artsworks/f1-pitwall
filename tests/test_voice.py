@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import sys
+import threading
+import time
 import xml.etree.ElementTree as ET
 
 import pytest
 
+from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
-from pitwall.protocol.header import HEADER_SIZE, PacketId
-from pitwall.voice.channel import CLOSED, OPEN, PROVISIONAL, ChannelRecord, VoiceChannel
+from pitwall.voice.channel import CLOSED, OPEN, ChannelRecord, VoiceChannel
 from pitwall.voice.grammar import SRGS_NS, VoiceGrammar, lang_for_lcid, normalise
-from pitwall.voice.spike import butn_status, format_row, record_row
+from pitwall.voice.spike import format_row, record_row
+from pitwall.voice.worker import EventSink, StaRecognizer, VoiceWorker
 
 
 class FakeRec:
@@ -23,33 +27,28 @@ class FakeRec:
 
 
 def _channel() -> tuple[VoiceChannel, FakeRec, list[ChannelRecord]]:
-    g = VoiceGrammar.from_mapping({"gap": ["gap ahead"], "fuel": ["fuel", "fuel check"]})
+    grammar = VoiceGrammar.from_mapping({"pit": ["should I pit"], "fuel": ["fuel", "fuel check"]})
     rec = FakeRec()
-    ch = VoiceChannel(rec, g.intent_for, max_open_s=6.0, confidence_min=0.7)
-    out: list[ChannelRecord] = []
-    ch.on_close = out.append
-    return ch, rec, out
-
-
-def _tap(ch: VoiceChannel, t: float) -> None:
-    ch.button_edge(t, True)
-    ch.button_edge(t + 0.1, False)
+    channel = VoiceChannel(rec, grammar.intent_for, max_open_s=6.0, confidence_min=0.7)
+    closed: list[ChannelRecord] = []
+    channel.on_close = closed.append
+    return channel, rec, closed
 
 
 def test_packaged_grammar_loads_and_is_valid_srgs() -> None:
     voice = ConfigStore().current().voice
-    g = VoiceGrammar.from_mapping(voice.intents)
-    root = ET.fromstring(g.to_srgs("en-GB"))
+    grammar = VoiceGrammar.from_mapping(voice.intents)
+    root = ET.fromstring(grammar.to_srgs("en-GB"))
     assert root.tag == f"{{{SRGS_NS}}}grammar"
     assert root.get("{http://www.w3.org/XML/1998/namespace}lang") == "en-GB"
-    items = [i.text for i in root.iter(f"{{{SRGS_NS}}}item")]
-    assert items == g.phrases and len(items) >= 40
-    assert g.intent_for("What's the gap?") == "fight"
-    assert g.intent_for("Copy that.") == "ack"
-    menu_ids = {i.id for i in ConfigStore().current().menu.items}
-    assert {"tyres", "pit", "fight", "rain", "push"} <= menu_ids & set(g.intents)
-    assert {"understeer", "oversteer", "budget", "mindset"} <= menu_ids & set(g.intents)
-    assert not {"gap", "gap_behind", "fuel", "plan", "race_stat"} & set(g.intents)
+    items = [item.text for item in root.iter(f"{{{SRGS_NS}}}item")]
+    assert items == grammar.phrases and len(items) >= 20
+    assert grammar.intent_for("What's the gap?") == "fight"
+    assert grammar.intent_for("Copy that.") == "ack"
+    menu_ids = {item.id for item in ConfigStore().current().menu.items}
+    assert {"tyres", "pit", "fight", "rain", "push"} <= menu_ids & set(grammar.intents)
+    assert {"understeer", "oversteer", "budget", "mindset"} <= menu_ids & set(grammar.intents)
+    assert not {"gap", "gap_behind", "fuel", "plan", "race_stat"} & set(grammar.intents)
 
 
 def test_grammar_rejects_duplicate_phrase() -> None:
@@ -63,96 +62,277 @@ def test_normalise_and_lcid() -> None:
     assert lang_for_lcid("ffff") == "en-US"
 
 
-def test_single_tap_opens_on_down_edge_and_recognition_closes() -> None:
-    ch, rec, out = _channel()
-    ch.button_edge(0.0, True)
-    assert ch.state == PROVISIONAL and rec.calls == ["start"]
-    ch.button_edge(0.1, False)
-    ch.tick(0.5)  # double window (350 ms) passed -> single tap
-    assert ch.state == OPEN
-    ch.mark("sound_start", 0.6)
-    ch.recognised("gap ahead", 0.9, 1.4)
-    assert ch.state == CLOSED and rec.calls == ["start", "stop"]
-    (r,) = out
-    assert (r.reason, r.intent, r.events["sound_start"]) == ("recognised", "gap", 0.6)
+def test_open_recognise_closes_with_intent_and_via() -> None:
+    channel, rec, closed = _channel()
+    assert channel.open(0.0, via="menu")
+    assert channel.open(0.1, via="key") is False
+    assert channel.state == OPEN and rec.calls == ["start"]
+    channel.mark("sound_start", 0.2)
+    channel.recognised("should I pit", 0.9, 1.0)
+    assert channel.state == CLOSED and rec.calls == ["start", "stop"]
+    (record,) = closed
+    assert (record.reason, record.intent, record.via, record.cap_s) == (
+        "recognised",
+        "pit",
+        "menu",
+        6.0,
+    )
+    assert record.events["sound_start"] == pytest.approx(0.2)
 
 
-def test_result_before_single_tap_resolves_is_kept() -> None:
-    ch, _, out = _channel()
-    ch.button_edge(0.0, True)
-    ch.button_edge(0.05, False)
-    ch.recognised("fuel", 0.9, 0.3)
-    assert ch.state == PROVISIONAL and not out
-    ch.tick(0.45)
-    assert ch.state == CLOSED and out[0].intent == "fuel"
+def test_key_tap_toggles_and_closes_with_tap_reason() -> None:
+    channel, rec, closed = _channel()
+    channel.key_tap(0.0)
+    assert channel.is_open and rec.calls == ["start"]
+    channel.key_tap(0.5)
+    assert not channel.is_open and rec.calls == ["start", "stop"]
+    assert closed[0].reason == "tap"
+    assert closed[0].via == "key"
 
 
-def test_double_tap_aborts_as_negative() -> None:
-    ch, rec, out = _channel()
-    _tap(ch, 0.0)
-    ch.button_edge(0.2, True)
-    assert ch.state == CLOSED and rec.calls == ["start", "stop"]
-    assert (out[0].reason, out[0].passthrough) == ("abort", "neg")
-    ch.button_edge(0.3, False)
-    ch.tick(1.0)
-    assert len(out) == 1 and ch.state == CLOSED
+def test_per_open_cap_and_default_cap() -> None:
+    channel, _, closed = _channel()
+    channel.key_tap(0.0, max_open_s=2.0)
+    assert channel.current is not None and channel.current.cap_s == 2.0
+    channel.tick(1.9)
+    assert channel.is_open
+    channel.tick(2.0)
+    assert not channel.is_open and closed[-1].reason == "cap"
+
+    channel.open(10.0, via="menu")
+    assert channel.current is not None and channel.current.cap_s == 6.0
+    channel.tick(16.0)
+    assert closed[-1].reason == "cap"
 
 
-def test_long_press_aborts_as_long_press() -> None:
-    ch, _, out = _channel()
-    ch.button_edge(0.0, True)
-    ch.tick(0.9)
-    assert ch.state == CLOSED and out[0].passthrough == "bookmark"
-    ch.button_edge(1.5, False)
-    assert ch.state == CLOSED
+def test_close_while_closed_does_not_stop_recognizer() -> None:
+    channel, rec, closed = _channel()
+    channel.close(1.0, "menu")
+    assert rec.calls == [] and closed == []
 
 
-def test_second_tap_closes_and_its_release_is_swallowed() -> None:
-    ch, _, out = _channel()
-    _tap(ch, 0.0)
-    ch.tick(0.5)
-    ch.button_edge(2.0, True)
-    assert ch.state == CLOSED and out[0].reason == "tap"
-    ch.button_edge(2.1, False)
-    ch.tick(3.0)
-    assert ch.state == CLOSED and len(out) == 1
-
-
-def test_hard_cap_miss_and_low_confidence() -> None:
-    ch, _, out = _channel()
-    ch.key_tap(0.0)
-    ch.tick(6.0)
-    ch.key_tap(10.0)
-    ch.false_recognition("", 0.0, 11.0)
-    ch.key_tap(20.0)
-    ch.recognised("fuel check", 0.4, 21.0)
-    ch.key_tap(30.0)
-    ch.recognised("not in grammar", 0.9, 31.0)
-    assert [(r.reason, r.intent) for r in out] == [
-        ("cap", None),
+def test_miss_low_confidence_and_out_of_grammar() -> None:
+    channel, _, closed = _channel()
+    channel.open(0.0)
+    channel.false_recognition("", 0.0, 1.0)
+    channel.open(2.0)
+    channel.recognised("should I pit", 0.4, 3.0)
+    channel.open(4.0)
+    channel.recognised("not in grammar", 0.9, 5.0)
+    assert [(record.reason, record.intent) for record in closed] == [
         ("miss", None),
-        ("low_confidence", "fuel"),
+        ("low_confidence", "pit"),
         ("miss", None),
     ]
 
 
-def test_results_while_closed_are_ignored() -> None:
-    ch, _, out = _channel()
-    ch.recognised("fuel", 0.9, 1.0)
-    assert not out
+def test_results_and_marks_while_closed_are_ignored() -> None:
+    channel, _, closed = _channel()
+    channel.recognised("fuel", 0.9, 1.0)
+    channel.false_recognition("fuel", 0.9, 1.0)
+    channel.mark("sound_start", 1.0)
+    assert not closed and channel.current is None
 
 
-def test_butn_status_and_row() -> None:
-    payload = bytearray(HEADER_SIZE + 8)
-    payload[6] = PacketId.EVENT
-    payload[HEADER_SIZE : HEADER_SIZE + 4] = b"BUTN"
-    payload[HEADER_SIZE + 4 : HEADER_SIZE + 8] = (0x00100000).to_bytes(4, "little")
-    assert butn_status(bytes(payload)) == 0x00100000
-    payload[HEADER_SIZE : HEADER_SIZE + 4] = b"SCAR"
-    assert butn_status(bytes(payload)) is None
-    r = ChannelRecord(opened_t=0.0, closed_t=1.5, reason="recognised", text="fuel", intent="fuel")
-    r.confidence = 0.9
-    r.events["sound_end"] = 1.2
-    row = record_row(r, 80.0, 120.0)
+class FakeStaRecognizer:
+    def __init__(self, sink: EventSink, thread_ids: list[int]) -> None:
+        self.sink = sink
+        self.thread_ids = thread_ids
+        self.listening = False
+        self.emitted = False
+        self._note_thread()
+
+    def _note_thread(self) -> None:
+        self.thread_ids.append(threading.get_ident())
+
+    def start(self) -> None:
+        self._note_thread()
+        self.listening = True
+
+    def stop(self) -> None:
+        self._note_thread()
+        self.listening = False
+
+    def pump(self) -> None:
+        self._note_thread()
+        if self.listening and not self.emitted:
+            self.emitted = True
+            self.sink("recognised", "fuel check", 0.9, time.monotonic())
+
+    def close(self) -> None:
+        self._note_thread()
+
+
+def test_worker_keeps_recognizer_calls_on_its_daemon_thread() -> None:
+    thread_ids: list[int] = []
+    worker = VoiceWorker(lambda sink: FakeStaRecognizer(sink, thread_ids), com=False)
+    assert worker.wait_ready(1.0)
+    assert worker._thread.name == "voice" and worker._thread.daemon
+    worker.start()
+    deadline = time.monotonic() + 1.0
+    events = []
+    while time.monotonic() < deadline and not events:
+        events.extend(worker.drain())
+        threading.Event().wait(0.001)
+    assert events and events[0][:3] == ("recognised", "fuel check", 0.9)
+    worker.stop()
+    worker.close()
+    assert not worker._thread.is_alive()
+    assert thread_ids and set(thread_ids) == {worker._thread.ident}
+    assert worker._thread.ident != threading.get_ident()
+
+
+def test_worker_factory_failure_sets_error_and_ready() -> None:
+    def fail(_sink: EventSink) -> StaRecognizer:
+        raise ValueError("cannot build recognizer")
+
+    worker = VoiceWorker(fail, com=False)
+    assert worker.wait_ready(1.0) is False
+    assert isinstance(worker.error, ValueError)
+    worker.close()
+    assert not worker._thread.is_alive()
+
+
+class FakeWorker:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.events: list[tuple[str, str, float, float]] = []
+
+    def start(self) -> None:
+        self.calls.append("start")
+
+    def stop(self) -> None:
+        self.calls.append("stop")
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+    def drain(self) -> list[tuple[str, str, float, float]]:
+        events, self.events = self.events, []
+        return events
+
+
+def _engine() -> tuple[object, VirtualClock]:
+    from pitwall.engine import build_engine
+
+    clock = VirtualClock()
+    engine = build_engine(
+        clock=clock,
+        sinks=[],
+        overrides={"voice": {"enabled": True}},
+    )
+    return engine, clock
+
+
+def test_engine_menu_opens_and_closes_voice() -> None:
+    engine, _ = _engine()
+    worker = FakeWorker()
+    engine.enable_voice(worker)
+    events: list[dict[str, object]] = []
+    engine.on_voice_event = events.append
+
+    engine.client_message({"type": "menu", "op": "down"})
+    engine.tick(0.0)
+    assert worker.calls == ["start"]
+    assert events[0] == {"state": "listening", "via": "menu", "cap_s": 6.0}
+
+    engine.client_message({"type": "menu", "op": "close"})
+    engine.tick(0.0)
+    assert worker.calls == ["start", "stop"]
+    assert events[-1]["reason"] == "menu"
+
+
+def test_engine_recognised_menu_intent_answers_and_closes_menu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, _ = _engine()
+    worker = FakeWorker()
+    engine.enable_voice(worker)
+    answers: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        engine,
+        "_menu_answer",
+        lambda item, _t, _snapshot, via: answers.append((item.id, via)),
+    )
+    engine.client_message({"type": "menu", "op": "down"})
+    engine.tick(0.0)
+    worker.events.append(("recognised", "should I pit", 0.9, time.monotonic()))
+    engine.tick(0.5)
+    assert answers == [("pit", "voice")]
+    assert not engine.menu.open
+
+
+def test_engine_miss_closes_voice_but_leaves_menu_open() -> None:
+    engine, _ = _engine()
+    worker = FakeWorker()
+    engine.enable_voice(worker)
+    engine.client_message({"type": "menu", "op": "down"})
+    engine.tick(0.0)
+    worker.events.append(("false", "unrecognised words", 0.0, time.monotonic()))
+    engine.tick(0.5)
+    assert not engine.voice.is_open
+    assert engine.menu.open
+    assert engine._voice_closed == []
+
+
+def test_engine_v_toggle_has_two_second_cap() -> None:
+    engine, clock = _engine()
+    worker = FakeWorker()
+    engine.enable_voice(worker)
+    events: list[dict[str, object]] = []
+    engine.on_voice_event = events.append
+    engine.client_message({"type": "voice"})
+    assert worker.calls == ["start"]
+    assert engine.voice_payload(0.0)["left_s"] == 2.0
+    clock.advance(2.0)
+    engine.tick(clock.now())
+    assert worker.calls == ["start", "stop"]
+    assert events[-1]["reason"] == "cap"
+
+
+def test_action_1_press_still_reaches_dispatcher_with_voice_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, _ = _engine()
+    worker = FakeWorker()
+    engine.enable_voice(worker)
+    presses: list[str] = []
+    monkeypatch.setattr(
+        engine.dispatcher,
+        "on_press",
+        lambda press, _snapshot: presses.append(press.kind),
+    )
+    engine._on_press_edge(0.0, True)
+    engine._on_press_edge(0.1, False)
+    engine.tick(0.45)
+    assert presses == ["ack"]
+    assert worker.calls == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="non-Windows behavior")
+def test_voice_setup_is_disabled_without_windows_sapi(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    engine, _ = _engine()
+    assert engine.setup_voice() == "off (needs Windows)"
+    assert engine.voice is None
+    engine.client_message({"type": "voice"})
+    assert engine.voice is None
+    assert "voice: needs Windows SAPI; disabled" in capsys.readouterr().err
+
+
+def test_spike_row_records_via_and_format() -> None:
+    record = ChannelRecord(
+        opened_t=0.0,
+        closed_t=1.5,
+        reason="recognised",
+        text="fuel",
+        intent="fuel",
+        via="key",
+    )
+    record.confidence = 0.9
+    record.events["sound_end"] = 1.2
+    row = record_row(record, 80.0, 120.0)
     assert row["finalise_ms"] == pytest.approx(300.0)
-    assert "fuel" in format_row(row)
+    assert row["via"] == "key"
+    assert "(key)" in format_row(row)

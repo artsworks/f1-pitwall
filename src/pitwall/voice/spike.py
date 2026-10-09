@@ -1,48 +1,27 @@
-"""`pitwall voice spike`: Phase 0 check of the SAPI recogniser on the game PC.
-
-Tap UDP Action 1 (wheel) or press Enter to open the channel, say a phrase, and
-the channel closes on its own. Every channel is printed and appended to a JSONL
-log with latency, confidence, process CPU and working set, so accuracy and cost
-can be judged from a real session. Runs standalone (binds the telemetry port);
-stop `pitwall start` first, or point the game at `--port`.
-"""
+"""Standalone check of the threaded SAPI recogniser on the game PC."""
 
 from __future__ import annotations
 
 import json
 import queue
-import socket
 import sys
 import threading
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 
-from pitwall.config.models import InputSettings, VoiceSettings
-from pitwall.input.press import PressDetector
-from pitwall.protocol.header import HEADER_SIZE, PacketId
+from pitwall.audio.dispatcher import Call
+from pitwall.audio.speaker import make_speaker
+from pitwall.config.models import SpeechSettings, VoiceSettings
 
 from .channel import ChannelRecord, VoiceChannel
 from .grammar import VoiceGrammar
-
-BUTN = b"BUTN"
-EVENT_CODE_AT = HEADER_SIZE
-PACKET_ID_AT = 6
-
-
-def butn_status(payload: bytes) -> int | None:
-    """Button bitmask of a BUTN event datagram, else None."""
-    end = EVENT_CODE_AT + 8
-    if len(payload) < end or payload[PACKET_ID_AT] != PacketId.EVENT:
-        return None
-    if payload[EVENT_CODE_AT : EVENT_CODE_AT + 4] != BUTN:
-        return None
-    return int.from_bytes(payload[EVENT_CODE_AT + 4 : end], "little")
+from .worker import make_voice_worker
 
 
 class ProcessStats:
-    """CPU seconds and working set of this process (the in-proc recogniser runs here)."""
+    """CPU seconds and working set of this process."""
 
     def __init__(self) -> None:
         self._handle: Any = None
@@ -55,7 +34,7 @@ class ProcessStats:
         return time.process_time()
 
     def rss_mb(self) -> tuple[float, float]:
-        """(working set, peak working set) in MB; (0, 0) off Windows."""
+        """Return working set and peak working set in MB."""
         if self._handle is None:
             return 0.0, 0.0
         import win32process  # type: ignore[import-untyped]
@@ -91,7 +70,7 @@ def format_row(row: dict[str, Any]) -> str:
     what = row["intent"] or "-"
     heard = f'"{row["text"]}"' if row["text"] else ""
     extra = f" finalise {row['finalise_ms']:.0f} ms" if "finalise_ms" in row else ""
-    via = f" ({row['passthrough']})" if row["passthrough"] else ""
+    via = f" ({row['via']})" if row["via"] else ""
     return (
         f"{row['reason']:<14} {what:<18} {heard} conf {row['confidence']:.2f} "
         f"open {row['open_ms']:.0f} ms{extra} cpu {row['cpu_ms']:.0f} ms "
@@ -99,97 +78,69 @@ def format_row(row: dict[str, Any]) -> str:
     )
 
 
-def _udp_reader(host: str, port: int, bit: int, out: queue.Queue[tuple[str, float, bool]]) -> None:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((host, port))
-    down = False
-    while True:
-        payload = sock.recv(2048)
-        status = butn_status(payload)
-        if status is None:
-            continue
-        now = bool(status & bit)
-        if now != down:
-            down = now
-            out.put(("edge", time.monotonic(), now))
-
-
-def _stdin_reader(out: queue.Queue[tuple[str, float, bool]]) -> None:
+def _stdin_reader(out: queue.Queue[str]) -> None:
     for line in sys.stdin:
-        out.put(
-            ("quit" if line.strip().lower() in ("q", "quit") else "key", time.monotonic(), True)
-        )
-    out.put(("quit", time.monotonic(), True))
+        out.put("quit" if line.strip().lower() in ("q", "quit") else "key")
+    out.put("quit")
 
 
 def run_spike(
     voice: VoiceSettings,
-    inp: InputSettings,
     *,
-    host: str,
-    port: int | None,
     log_path: Path,
-    grammar_mode: str = "srgs",
     say: bool = False,
     out: IO[str] = sys.stdout,
 ) -> int:
-    from .sapi import SapiRecognizer
-
-    grammar = VoiceGrammar.from_mapping(voice.intents)
     stats = ProcessStats()
     prio = stats.lower_priority(voice.priority, voice.affinity_mask)
-    inbox: queue.Queue[tuple[str, float, bool]] = queue.Queue()
-    channel_ref: list[VoiceChannel] = []
-
-    def on_event(name: str, text: str, conf: float, t: float) -> None:
-        ch = channel_ref[0]
-        if name == "recognised":
-            ch.recognised(text, conf, t)
-        elif name == "false":
-            ch.false_recognition(text, conf, t)
-        else:
-            ch.mark(name, t)
-
     cpu0 = stats.cpu_s()
     rss0, _ = stats.rss_mb()
-    rec = SapiRecognizer(
-        grammar,
-        on_event,
-        recognizer=voice.recognizer,
-        device=voice.device,
-        early_close_ms=voice.early_close_ms,
-        close_silence_ms=voice.close_silence_ms,
-        grammar_mode=grammar_mode,
-    )
-    rss1, _ = stats.rss_mb()
-    speaker: Any = None
-    if say:
-        import win32com.client  # type: ignore[import-untyped]
+    worker = make_voice_worker(voice)
+    if not worker.wait_ready():
+        error = worker.error or RuntimeError("recogniser did not become ready")
+        worker.close()
+        out.write(f"voice worker unavailable: {error}\n")
+        return 1
 
-        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+    rec = cast(Any, worker.recognizer)
+    rss1, _ = stats.rss_mb()
+    speaker = make_speaker(SpeechSettings(engine="sapi")) if say else None
+    inbox: queue.Queue[str] = queue.Queue()
     channel = VoiceChannel(
-        rec,
-        grammar.intent_for,
+        worker,
+        VoiceGrammar.from_mapping(voice.intents).intent_for,
         max_open_s=voice.max_open_s,
         confidence_min=voice.confidence_min,
-        detector=PressDetector(inp.double_press_ms, inp.long_press_ms, inp.bounce_ms),
     )
-    channel_ref.append(channel)
-    open_cpu: list[float] = [0.0]
+    open_cpu = [0.0]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("a", encoding="utf-8")
 
-    def on_close(r: ChannelRecord) -> None:
+    def on_close(record: ChannelRecord) -> None:
         cpu_ms = (stats.cpu_s() - open_cpu[0]) * 1000.0
-        row = record_row(r, cpu_ms, stats.rss_mb()[0])
+        row = record_row(record, cpu_ms, stats.rss_mb()[0])
         log.write(json.dumps(row) + "\n")
         log.flush()
         out.write(format_row(row) + "\n")
         out.flush()
-        if speaker is not None and r.reason == "recognised" and r.intent:
-            speaker.Speak(f"Copy, {r.intent.replace('_', ' ')}.", 1)
+        if speaker is not None and record.reason == "recognised" and record.intent:
+            t = time.monotonic()
+            speaker.speak(
+                Call(
+                    id=f"voice-spike-{t:.6f}",
+                    rule_id="voice-spike",
+                    priority=1,
+                    text=f"Copy, {record.intent.replace('_', ' ')}.",
+                    tags=[],
+                    deadline_ms=10000,
+                    lap=0,
+                    t=t,
+                    trigger_t=t,
+                )
+            )
 
     channel.on_close = on_close
+    grammar = VoiceGrammar.from_mapping(voice.intents)
     fallback = f" (SRGS load failed: {rec.srgs_error})" if rec.grammar_mode == "api" else ""
     out.write(
         f"recogniser: {rec.recognizer_desc} [{rec.lang}]\n"
@@ -202,14 +153,8 @@ def run_spike(
         f"working set {rss0:.0f} -> {rss1:.0f} MB\n"
         f"log:        {log_path}\n"
     )
-    if port is not None:
-        threading.Thread(
-            target=_udp_reader, args=(host, port, inp.udp_action_bit, inbox), daemon=True
-        ).start()
-        out.write(f"input:      UDP {host}:{port} Action bit {hex(inp.udp_action_bit)}, or Enter\n")
-    else:
-        out.write("input:      Enter\n")
-    out.write("tap to open, speak, the channel closes by itself; 'q' + Enter quits\n")
+    out.write("input:      Enter\n")
+    out.write("press Enter to open or close, speak, or 'q' + Enter to quit\n")
     out.flush()
     threading.Thread(target=_stdin_reader, args=(inbox,), daemon=True).start()
 
@@ -217,19 +162,23 @@ def run_spike(
     was_open = False
     try:
         while True:
-            rec.pump()
             try:
-                kind, t, down = inbox.get(timeout=0.01)
+                kind = inbox.get(timeout=0.01)
             except queue.Empty:
                 kind = ""
-                t, down = time.monotonic(), False
+            now = time.monotonic()
             if kind == "quit":
                 break
-            if kind == "edge":
-                channel.button_edge(t, down)
-            elif kind == "key":
-                channel.key_tap(t)
-            channel.tick(time.monotonic())
+            if kind == "key":
+                channel.key_tap(now)
+            for name, text, confidence, event_t in worker.drain():
+                if name == "recognised":
+                    channel.recognised(text, confidence, event_t)
+                elif name == "false":
+                    channel.false_recognition(text, confidence, event_t)
+                else:
+                    channel.mark(name, event_t)
+            channel.tick(now)
             if channel.is_open and not was_open:
                 open_cpu[0] = stats.cpu_s()
             was_open = channel.is_open
@@ -244,6 +193,8 @@ def run_spike(
             f"({100.0 * cpu / max(wall, 1e-6):.2f} % of one core), "
             f"working set {rss:.0f} MB (peak {peak:.0f} MB)\n"
         )
-        rec.close()
         log.close()
+        worker.close()
+        if speaker is not None:
+            speaker.close()
     return 0
