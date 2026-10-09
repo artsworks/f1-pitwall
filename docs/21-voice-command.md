@@ -182,8 +182,6 @@ unchanged. A few are new because they are natural to say and awkward to scroll t
 | `pit` | menu `pit` | "pit now", "should I box", "what's the plan" | question |
 | `fight` | menu `fight` | "fight", "gap ahead", "gap behind", "race stat" | question |
 | `push` | menu `push` | "push or save", "can I push", "fuel check" | question |
-| `overtake` | menu `overtake` | "overtake", "overtake ready" | question |
-| `battery` | menu `battery` | "battery", "energy check" | question |
 | `rain` | menu `rain` | "rain coming", "weather", "is it going to rain" | question |
 | `budget` | menu `budget` | "radio calls", "call budget", "calls per lap" | action |
 | `laps_left` | new question | "laps left", "how many laps", "how long to go" | question |

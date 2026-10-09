@@ -17,11 +17,9 @@ voice:
   affinity_mask: 0
   intents:
     tyres: ["tyres", "how are the tyres", "tyres gone", "are the tyres gone", "tyre wear"]
-    pit: ["pit now", "should I pit", "box now", "do we box", "should I box", "plan", "what's the plan", "strategy"]
-    fight: ["fight", "fight briefing", "battle", "who am I fighting", "gap ahead", "gap in front", "what's the gap", "gap behind", "who's behind", "race stat", "status", "how are we doing"]
-    push: ["push or save", "can I push", "should I save", "fuel", "fuel check", "how's the fuel"]
-    battery: ["battery", "energy check"]
-    overtake: ["overtake", "overtake ready"]
+    pit: ["pit now", "should I pit", "box now", "do we box", "should I box", "plan", "what's the plan", "strategy", "what's the strategy"]
+    fight: ["fight", "fight briefing", "battle", "who am I fighting", "gap ahead", "gap in front", "what's the gap", "gap to the car ahead", "gap behind", "who's behind", "gap to the car behind", "race stat", "status", "how are we doing"]
+    push: ["push or save", "can I push", "should I save", "fuel", "fuel check", "how's the fuel", "fuel okay"]
     rain: ["rain", "is rain coming", "weather", "how's the weather"]
     understeer: ["understeer", "car is understeering", "I have understeer"]
     oversteer: ["oversteer", "car is oversteering", "I have oversteer"]

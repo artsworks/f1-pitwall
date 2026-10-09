@@ -358,8 +358,6 @@ def test_packaged_menu_is_valid() -> None:
         "tyres",
         "pit",
         "fight",
-        "overtake",
-        "battery",
         "rain",
         "push",
     ]
@@ -507,70 +505,6 @@ def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
 def _packaged_item(item_id: str) -> MenuItemModel:
     settings = build_engine(clock=VirtualClock(), sinks=[]).store.current()
     return next(i for i in settings.menu.items if i.id == item_id)
-
-
-def test_battery_answer_cases() -> None:
-    battery = _packaged_item("battery")
-    base = Snapshot(now=0.0, ers_store_pct=52.0)
-    case, values = answer(battery, base, "balanced")
-    assert case == "unknown"
-    assert values["battery"] == "52" and values["mj"] == "0.0"
-    case, values = answer(
-        battery, dataclasses.replace(base, energy_mode="over", energy_lap_delta_mj=0.3), "balanced"
-    )
-    assert case == "over" and values["mj"] == "0.3"
-    assert ReplyPicker().pick(battery, case, values) == (
-        "Battery 52 percent, 0.3 MJ over. Harvest more."
-    )
-    case, values = answer(
-        battery,
-        dataclasses.replace(base, energy_mode="under", energy_lap_delta_mj=-0.4),
-        "balanced",
-    )
-    assert case == "under" and values["mj"] == "0.4"
-    case, values = answer(battery, dataclasses.replace(base, energy_mode="attack_ok"), "balanced")
-    assert case == "attack"
-    assert ReplyPicker().pick(battery, case, values) == (
-        "Battery 52 percent, spare to attack. Deploy."
-    )
-    case, values = answer(battery, dataclasses.replace(base, energy_mode="on_budget"), "balanced")
-    assert case == "ok"
-    assert ReplyPicker().pick(battery, case, values) == "Battery 52 percent, on budget."
-
-
-def test_overtake_answer_cases() -> None:
-    overtake = _packaged_item("overtake")
-    base = Snapshot(
-        now=0.0,
-        regulations_2026=True,
-        rival_ahead_idx=1,
-        rival_ahead_name="Norris",
-        gap_ahead_s=0.6,
-    )
-    case, values = answer(
-        overtake, dataclasses.replace(base, overtake_available=1, overtake_active=1), "balanced"
-    )
-    assert case == "active" and values["name"] == "Norris" and values["gap"] == "0.6"
-    assert ReplyPicker().pick(overtake, case, values) == "Overtake on. Norris 0.6 ahead."
-    case, values = answer(
-        overtake, dataclasses.replace(base, overtake_available=0, overtake_active=1), "balanced"
-    )
-    assert case == "losing"
-    case, values = answer(
-        overtake, dataclasses.replace(base, overtake_available=1, overtake_active=0), "balanced"
-    )
-    assert case == "earned"
-    assert ReplyPicker().pick(overtake, case, values) == (
-        "Overtake earned on Norris, 0.6. Next straight."
-    )
-    case, _ = answer(overtake, dataclasses.replace(base, rival_ahead_idx=-1), "balanced")
-    assert case == "clear"
-    case, _ = answer(overtake, dataclasses.replace(base, gap_ahead_s=math.inf), "balanced")
-    assert case == "clear"
-    case, values = answer(overtake, dataclasses.replace(base, gap_ahead_s=1.4), "balanced")
-    assert case == "off" and values["gap"] == "1.4"
-    case, _ = answer(overtake, dataclasses.replace(base, regulations_2026=False), "balanced")
-    assert case == "unknown"
 
 
 def test_fight_answers_in_race_and_non_race_sessions() -> None:
