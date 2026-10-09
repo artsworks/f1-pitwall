@@ -557,9 +557,9 @@ batches:
         queued:
           - {id: pen, rule: serve_penalty, text: "Serve the penalty this lap", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {box: now, pen: next}
-        order: [box, pen]
-        notes: Near the pit entry the box call jumps its class peers.
+        grade: {pen: now, box: next}
+        order: [pen, box]
+        notes: Both calls need the pit entry and are equally close, so the older call goes first.
       - id: r26
         source: reconstructed
         session: race
@@ -629,12 +629,12 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 8}
         policy: {deadlines_s: {1: 5.0, 2: 3.0, 3: 1.5}}
-        currently_speaking: {id: defend, rule: battle_defend, text: "Car behind in DRS, he's quicker on the straight. Defend into Turn 1", age_s: 0.5}
         queued:
-          - {id: life, rule: tyre_life, text: "About twelve laps in the tyres"}
+          - {id: life, rule: tyre_life, text: "About twelve laps in the tyres", age_s: 3.0}
+          - {id: defend, rule: battle_defend, text: "Car behind in DRS. Defend"}
         grade: {defend: now, life: drop}
-        order: []
-        notes: Existing deadlines still expire info calls stuck behind a long call.
+        order: [defend]
+        notes: Existing deadlines still expire an info call that waited past its window.
       - id: r33
         source: reconstructed
         session: race
