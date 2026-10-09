@@ -502,6 +502,11 @@ def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
     assert [r["item_id"] for r in _inputs(rows)] == ["push"]
 
 
+def _packaged_item(item_id: str) -> MenuItemModel:
+    settings = build_engine(clock=VirtualClock(), sinks=[]).store.current()
+    return next(i for i in settings.menu.items if i.id == item_id)
+
+
 def test_fight_answers_in_race_and_non_race_sessions() -> None:
     fight = MenuItemModel(
         id="fight",

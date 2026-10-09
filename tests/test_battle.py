@@ -22,7 +22,7 @@ from pitwall.strategy.battle import (
     FREE,
     MANAGING,
     PASS_COMPOUND,
-    PASS_DRS,
+    PASS_OT,
     THREAT,
     BattleInputs,
     BattleRates,
@@ -56,7 +56,7 @@ def _inp(**kw: object) -> BattleInputs:
         "own_age": 10,
         "ahead_age": 10,
         "behind_age": 10,
-        "drs_available": False,
+        "overtake_active": False,
         "attack_gap_s": 1.0,
     }
     base.update(kw)
@@ -96,13 +96,29 @@ def test_tracker_catch_laps_and_offsets() -> None:
     assert b.closing_ahead_s == 0.5
     assert b.catch_laps == 4.0
     assert b.tyre_offset_ahead == 8
-    assert b.pass_prob == BattleRates().pass_nodrs
+    assert b.pass_prob == BattleRates().pass_no_overtake
+
+
+def test_overtake_now_uses_overtake_active_under_2026_regs() -> None:
+    rates = BattleRates()
+    close = _inp(gap_ahead_s=0.6, regulations_2026=True)
+    assert BattleTracker().update(close, TH, rates).pass_prob == rates.pass_no_overtake
+    active = dataclasses.replace(close, overtake_active=True)
+    assert BattleTracker().update(active, TH, rates).pass_prob == rates.pass_overtake
+
+
+def test_overtake_now_legacy_gap_fallback() -> None:
+    rates = BattleRates()
+    close = _inp(gap_ahead_s=0.6)
+    assert BattleTracker().update(close, TH, rates).pass_prob == rates.pass_overtake
+    far = _inp(gap_ahead_s=1.4)
+    assert BattleTracker().update(far, TH, rates).pass_prob == rates.pass_no_overtake
 
 
 def test_attack_episode_passed_and_encouragement_window() -> None:
     tr = BattleTracker()
     rates = BattleRates()
-    tr.update(_inp(now=0.0, gap_ahead_s=0.8, drs_available=True), TH, rates)
+    tr.update(_inp(now=0.0, gap_ahead_s=0.8, overtake_active=True), TH, rates)
     # passed: P4, the old rival is now the car behind
     b = tr.update(
         _inp(now=12.0, position=4, ahead_idx=3, behind_idx=1, gap_ahead_s=6.0, gap_behind_s=2.0),
@@ -230,12 +246,12 @@ def test_engine_folds_episodes_into_pass_model(tmp_path: Path) -> None:
         clock=VirtualClock(), sinks=[], db=db, decision_log_path=tmp_path / "d.jsonl"
     )
     snap = dataclasses.replace(Snapshot(now=0.0), track_id=7)
-    prior = engine.battle_rates(7).pass_drs
+    prior = engine.battle_rates(7).pass_overtake
     for _ in range(4):
         engine._persist_episode(snap, Episode("attack", 1, 3, 4, True, "passed"))
-    p = db.get_param(7, PASS_COMPOUND, PASS_DRS)
+    p = db.get_param(7, PASS_COMPOUND, PASS_OT)
     assert p is not None and p.value == 1.0
-    assert engine.battle_rates(7).pass_drs > prior
+    assert engine.battle_rates(7).pass_overtake > prior
 
 
 def test_strategy_payload_battle() -> None:
@@ -365,3 +381,18 @@ def test_swaps_with_several_cars_are_a_scrap() -> None:
     for t, (rival, res) in enumerate(((3, "passed"), (4, "lost"), (3, "lost"), (5, "passed"))):
         tr._announce(Episode("attack", rival, 10, 10, False, res), t * 10.0, th)
     assert tr.result == "scrap"
+
+
+def test_replay_ct2_attack_episode_logs_overtake(tmp_path: Path) -> None:
+    spec = RaceSpec(
+        laps=5,
+        base_ms=30_000,
+        ct2=True,
+        gap_ahead_s=0.5,
+        overtake_detect_m=2000,
+        gap_ahead_from_lap=(4, 3.0),
+    )
+    _, rows = _replay(tmp_path, spec)
+    episodes = [r for r in rows if r.get("outcome") == "battle" and r["kind"] == "attack"]
+    assert episodes and all(r["overtake"] is True for r in episodes)
+    assert all("drs" not in r for r in episodes)

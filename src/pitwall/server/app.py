@@ -184,6 +184,13 @@ def strategy_payload(
     own_ms = snapshot.predicted_lap_ms or int(snapshot.base_pace_ms)
     own_last = snapshot.player_last_lap_ms
 
+    def rival_overtake(ahead: bool, gap_f: float | None) -> bool:
+        if snapshot.safety_car_status != 0:
+            return False
+        if snapshot.regulations_2026:
+            return bool(snapshot.rival_ahead_overtake if ahead else snapshot.rival_behind_overtake)
+        return gap_f is not None and gap_f < drs_gap
+
     def rival(side: str) -> dict[str, Any] | None:
         ahead = side == "ahead"
         idx = snapshot.rival_ahead_idx if ahead else snapshot.rival_behind_idx
@@ -205,7 +212,7 @@ def strategy_payload(
             # + = the rival is slower than us per lap
             "pace_delta_s": round((pace - own_ms) / 1000.0, 3) if pace and own_ms else None,
             "gap_trend_s": snapshot.gap_trend_ahead_s if ahead else snapshot.gap_trend_behind_s,
-            "drs": gap_f is not None and gap_f < drs_gap and snapshot.safety_car_status == 0,
+            "overtake": rival_overtake(ahead, gap_f),
             "pitted": snapshot.rival_ahead_pitted if ahead else snapshot.rival_behind_pitted,
             "pace_words": (snapshot.battle_pace_ahead if ahead else snapshot.battle_pace_behind)
             or None,
@@ -266,7 +273,9 @@ def strategy_payload(
         "plan": plan,
         "ahead": rival("ahead"),
         "behind": rival("behind"),
-        "drs": snapshot.drs_available,
+        "overtake": bool(snapshot.overtake_active),
+        "overtake_earned": bool(snapshot.overtake_available and not snapshot.overtake_active),
+        "aero_mode": snapshot.active_aero_mode,
         "undercut_s": snapshot.undercut_s or None,
         "overcut_s": snapshot.overcut_s or None,
         "stint_plan": stint,

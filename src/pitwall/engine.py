@@ -61,8 +61,8 @@ from pitwall.store.db import LapRow
 from pitwall.strategy.battle import (
     HOLD,
     PASS_COMPOUND,
-    PASS_DRS,
-    PASS_NODRS,
+    PASS_NO_OT,
+    PASS_OT,
     Battle,
     BattleInputs,
     BattleRates,
@@ -1456,7 +1456,7 @@ class Engine:
         harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
         energy_capacity_j = self._th("ers_store_capacity_j", 4_000_000)
         energy_floor_pct = float(mode.get("ers_soc_floor_pct", 0) or 0)
-        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 200_000)
+        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 400_000)
         energy_attack_ok = mode.get("ers_policy") == "attack_rival"
         (
             live_deployed_j,
@@ -1765,15 +1765,15 @@ class Engine:
             return self._battle_rates[1]
         w = self._th("battle_prior_weight", 4.0)
         priors = {
-            PASS_DRS: self._th("battle_pass_drs_prior", 0.35),
-            PASS_NODRS: self._th("battle_pass_nodrs_prior", 0.15),
+            PASS_OT: self._th("battle_pass_overtake_prior", 0.6),
+            PASS_NO_OT: self._th("battle_pass_no_overtake_prior", 0.6),
             HOLD: self._th("battle_hold_prior", 0.7),
         }
         vals: dict[str, float] = {}
         for name, prior in priors.items():
             p = self.db.get_param(track_id, PASS_COMPOUND, name) if self.db else None
             vals[name] = shrink(p.value if p else None, p.weight if p else 0.0, prior, w)
-        rates = BattleRates(vals[PASS_DRS], vals[PASS_NODRS], vals[HOLD])
+        rates = BattleRates(vals[PASS_OT], vals[PASS_NO_OT], vals[HOLD])
         self._battle_rates = (track_id, rates)
         return rates
 
@@ -1801,10 +1801,13 @@ class Engine:
             own_age=snap.tyre_age_laps,
             ahead_age=snap.rival_ahead_age,
             behind_age=snap.rival_behind_age,
-            drs_available=snap.drs_available,
+            overtake_active=bool(snap.overtake_active)
+            if snap.regulations_2026
+            else snap.drs_available,
             attack_gap_s=float(attack) if isinstance(attack, int | float) else 1.0,
             positions=tuple(c.car_position for c in snap.cars),
             pitting=frozenset(i for i, c in enumerate(snap.cars) if c.pit_status != 0),
+            regulations_2026=snap.regulations_2026,
         )
         tracker = self.battle_tracker
         b: Battle = tracker.update(
@@ -1845,13 +1848,13 @@ class Engine:
                 "kind": ep.kind,
                 "rival_idx": ep.rival_idx,
                 "start_lap": ep.start_lap,
-                "drs": ep.drs,
+                "overtake": ep.overtake,
                 "result": ep.result,
             }
         )
         if self.db is None or snap.track_id < 0 or self._synthetic_session():
             return
-        name = HOLD if ep.kind == "defend" else PASS_DRS if ep.drs else PASS_NODRS
+        name = HOLD if ep.kind == "defend" else PASS_OT if ep.overtake else PASS_NO_OT
         cap = self._th("param_weight_cap", 50.0)
         self.db.fold_param(
             snap.track_id,

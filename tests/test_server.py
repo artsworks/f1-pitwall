@@ -691,7 +691,7 @@ def test_strategy_payload_race_contract() -> None:
     assert s["pit_window"] == {"start": 26, "end": 28}
     assert s["ahead"]["pos"] == 4 and s["ahead"]["compound"] == "HARD"
     assert s["ahead"]["pace_delta_s"] == 0.2 and s["ahead"]["gap_trend_s"] == 0.3
-    assert s["behind"]["drs"] is True and s["ahead"]["drs"] is False
+    assert s["behind"]["overtake"] is True and s["ahead"]["overtake"] is False
     assert s["undercut_s"] == 1.2 and s["fuel_delta_laps"] == 0.4
     assert "L26–28" in s["stint_plan"]
     body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="car")
@@ -699,6 +699,38 @@ def test_strategy_payload_race_contract() -> None:
     assert body["page"] == "car" and "car" in body["pages"]
     assert body["track_info"]["gap_ahead_s"] == 1.4
     assert body["setup"] is None
+
+
+def test_strategy_payload_overtake_2026() -> None:
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        regulations_2026=True,
+        rival_ahead_idx=3,
+        gap_ahead_s=0.4,
+        rival_ahead_overtake=False,
+        rival_behind_idx=5,
+        gap_behind_s=2.5,
+        rival_behind_overtake=True,
+        overtake_available=1,
+        overtake_active=0,
+        active_aero_mode=1,
+    )
+    s = strategy_payload(snap, {"drs_detection_gap_s": 1.0})
+    assert s is not None
+    assert s["ahead"]["overtake"] is False and s["behind"]["overtake"] is True
+    assert s["overtake"] is False and s["overtake_earned"] is True and s["aero_mode"] == 1
+    active = strategy_payload(dataclasses.replace(snap, overtake_active=1))
+    assert active is not None and active["overtake"] is True and active["overtake_earned"] is False
+    sc = strategy_payload(dataclasses.replace(snap, safety_car_status=1))
+    assert sc is not None and sc["behind"]["overtake"] is False
 
 
 def test_strategy_payload_named_plans() -> None:

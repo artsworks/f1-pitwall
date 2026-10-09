@@ -495,7 +495,11 @@ class Snapshot:
     energy_mode: str = ""
     num_pit_stops: int = 0
     drs_zone_ahead: bool = False
+    aero_zone_ahead: bool = False
+    overtake_zone_ahead: bool = False
     drs_available: bool = False
+    rival_ahead_overtake: bool = False
+    rival_behind_overtake: bool = False
     penalty_s: int = 0
     penalty_type: int = 0
     penalty_infringement: int = 0
@@ -609,6 +613,8 @@ class Snapshot:
     setup_off_throttle_diff: int = 0
     active_aero_mode: int = 0
     active_aero_available: int = 0
+    active_aero_activation_distance_m: int = 0
+    regulations_2026: bool = False
     overtake_available: int = 0
     overtake_active: int = 0
     overtake_activation_distance_m: int = 0
@@ -928,6 +934,7 @@ class SessionState:
 
         self.cars_lap: tuple[Any, ...] | None = None
         self.cars_telemetry: Sequence[Any] | None = None
+        self.cars_telemetry_2: Any | None = None
         self.cars_status: Sequence[Any] | None = None
         # (rival idx, gap s) now / at the last two line crossings, for gap trends.
         self._gap_now: dict[str, tuple[int, float]] = {}
@@ -954,6 +961,9 @@ class SessionState:
         self.setup_off_throttle_diff = 0
         self.active_aero_mode = 0
         self.active_aero_available = 0
+        self.active_aero_activation_distance_m = 0
+        self.regulations_2026 = False
+        self.cars_telemetry_2 = None
         self.overtake_available = 0
         self.overtake_active = 0
         self.overtake_activation_distance_m = 0
@@ -1817,8 +1827,11 @@ class SessionState:
 
     def _on_car_telemetry_2(self, pkt: CarTelemetry2Packet) -> None:
         car = pkt.cars[self._player_idx]
+        self.cars_telemetry_2 = pkt.cars
         self.active_aero_mode = car.active_aero_mode
         self.active_aero_available = car.active_aero_available
+        self.active_aero_activation_distance_m = car.active_aero_activation_distance
+        self.regulations_2026 = bool(car.regulations_2026)
         self.overtake_available = car.overtake_available
         self.overtake_active = car.overtake_active
         self.overtake_activation_distance_m = car.overtake_activation_distance
@@ -1871,7 +1884,7 @@ class SessionState:
         session_time = pkt.header.session_time
         deployed_j = float(car.ers_deployed_this_lap)
         harvested_mguk_j = float(car.ers_harvested_this_lap_mguk)
-        harvested_mguh_j = float(car.ers_harvested_this_lap_mguh)
+        harvested_mguh_j = 0.0 if self.regulations_2026 else float(car.ers_harvested_this_lap_mguh)
         self._ers_samples.append(
             (
                 frame,
@@ -2352,6 +2365,8 @@ class SessionState:
             setup_off_throttle_diff=self.setup_off_throttle_diff,
             active_aero_mode=self.active_aero_mode,
             active_aero_available=self.active_aero_available,
+            active_aero_activation_distance_m=self.active_aero_activation_distance_m,
+            regulations_2026=self.regulations_2026,
             overtake_available=self.overtake_available,
             overtake_active=self.overtake_active,
             overtake_activation_distance_m=self.overtake_activation_distance_m,
@@ -2730,7 +2745,11 @@ class SessionState:
             rival_data_restricted=self.rival_data_restricted,
             overheat=overheat,
             graining=graining,
-            drs_zone_ahead=self._drs_zone_ahead(),
+            aero_zone_ahead=self._aero_zone_ahead(),
+            overtake_zone_ahead=self._overtake_zone_ahead(),
+            drs_zone_ahead=(
+                self._overtake_zone_ahead() if self.regulations_2026 else self._drs_zone_ahead()
+            ),
         )
         if kind != "race" or not cars or self.track_length_m <= 0:
             base["race_phase"] = self.race_phase if kind == "race" else ""
@@ -2845,6 +2864,8 @@ class SessionState:
             gap_behind_s=gap_behind,
             rival_ahead_idx=ahead_i,
             rival_behind_idx=behind_i,
+            rival_ahead_overtake=self._rival_overtake_active(ahead_i),
+            rival_behind_overtake=self._rival_overtake_active(behind_i),
             rival_pit_exit_idx=exit_i,
             rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
@@ -2867,10 +2888,15 @@ class SessionState:
             penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
             pit_exit_clean=release.clean,
             drs_available=(
-                bool(self.drs_allowed)
-                and self.delta_to_car_in_front_ms > 0
-                and self.delta_to_car_in_front_ms / 1000.0 < self._th("drs_detection_gap_s", 1.0)
-                and self.safety_car_status == 0
+                bool(self.overtake_active)
+                if self.regulations_2026
+                else (
+                    bool(self.drs_allowed)
+                    and self.delta_to_car_in_front_ms > 0
+                    and self.delta_to_car_in_front_ms / 1000.0
+                    < self._th("drs_detection_gap_s", 1.0)
+                    and self.safety_car_status == 0
+                )
             ),
         )
         return base
@@ -2936,15 +2962,41 @@ class SessionState:
         return ""
 
     def _drs_zone_ahead(self) -> bool:
-        """A DRS/active-aero zone starts within the lookahead distance."""
+        """A legacy DRS zone starts within the lookahead distance."""
+        return self._zone_ahead(
+            self._drs_zones,
+            self._th("drs_zone_lookahead_m", 300.0),
+        )
+
+    def _aero_zone_ahead(self) -> bool:
+        if self.regulations_2026:
+            distance = self.active_aero_activation_distance_m
+            return 0 < distance <= self._th("aero_zone_lookahead_m", 250.0)
+        return self._zone_ahead(
+            self._aero_zones,
+            self._th("aero_zone_lookahead_m", 250.0),
+        )
+
+    def _overtake_zone_ahead(self) -> bool:
+        distance = self.overtake_activation_distance_m
+        return 0 < distance <= self._th("overtake_zone_lookahead_m", 300.0)
+
+    def _zone_ahead(self, zones: Sequence[Any], lookahead_m: float) -> bool:
         if self.track_length_m <= 0:
             return False
-        lookahead = self._th("drs_zone_lookahead_m", 300.0)
-        for zone in (*self._drs_zones, *self._aero_zones):
+        for zone in zones:
             dist = (float(zone.zone_start) - self.lap_distance) % self.track_length_m
-            if 0 < dist <= lookahead:
+            if 0 < dist <= lookahead_m:
                 return True
         return False
+
+    def _rival_overtake_active(self, index: int) -> bool:
+        if index < 0 or self.cars_telemetry_2 is None:
+            return False
+        try:
+            return bool(self.cars_telemetry_2[index].overtake_active)
+        except IndexError:
+            return False
 
     def _thermal(self) -> tuple[bool, bool]:
         """(overheat, graining) with hysteresis on the slow inner EMA."""

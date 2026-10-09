@@ -15,7 +15,7 @@ from pitwall.derive import is_synthetic_uid
 from pitwall.model.deg import Prior, resolve_prior
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database
-from pitwall.strategy.battle import HOLD, PASS_COMPOUND, PASS_DRS, PASS_NODRS
+from pitwall.strategy.battle import HOLD, PASS_COMPOUND, PASS_NO_OT, PASS_OT
 from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 
 
@@ -228,8 +228,8 @@ def learned_state(db: Database, settings: Settings, track_id: int | None = None)
             if db.get_param(current_track, 0, name) is not None
         }
         battle_defaults = {
-            PASS_DRS: _th(settings.thresholds, "battle_pass_drs_prior", 0.35),
-            PASS_NODRS: _th(settings.thresholds, "battle_pass_nodrs_prior", 0.15),
+            PASS_OT: _th(settings.thresholds, "battle_pass_overtake_prior", 0.35),
+            PASS_NO_OT: _th(settings.thresholds, "battle_pass_no_overtake_prior", 0.15),
             HOLD: _th(settings.thresholds, "battle_hold_prior", 0.7),
         }
         battle = {

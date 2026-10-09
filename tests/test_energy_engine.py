@@ -12,10 +12,13 @@ from pitwall.protocol.header import PacketId
 from .synth import pack_packet
 
 
-def _energy_engine(total_laps: int = 8):
+def _energy_engine(total_laps: int = 8, *, energy_over_tolerance_j: int = 400_000):
     engine = build_engine(
         clock=VirtualClock(),
-        overrides={"policy": {"min_gap_s": 0.0, "p3_straight_only": False}},
+        overrides={
+            "policy": {"min_gap_s": 0.0, "p3_straight_only": False},
+            "thresholds": {"energy_over_tolerance_j": energy_over_tolerance_j},
+        },
         decision_log_fp=io.StringIO(),
         sinks=[],
     )
@@ -236,7 +239,7 @@ def test_ers_attribution_grades_a_genuine_zero_use_lap() -> None:
 
 
 def test_energy_budget_uses_full_lap_counters_and_reports_under_lap() -> None:
-    engine, race_lap, status = _energy_engine(total_laps=6)
+    engine, race_lap, status = _energy_engine(total_laps=6, energy_over_tolerance_j=200_000)
     status(0.2, 3_000_000.0, 0.0, 0.0, frame=3)
     race_lap(0.2, 1, 0, 0.0, frame=4)
 

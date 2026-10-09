@@ -36,6 +36,10 @@ body.dash > * { background: var(--bg); min-width: 0; min-height: 0; }
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
   padding: .05rem .6rem; font-size: 1.1rem; letter-spacing: .1em; }
 .pill.aggr { border-color: var(--aggr); background: var(--aggr); color: #000; }
+.pill.ot, .pill.aero { font-size: 1.5rem; font-weight: bold; padding: 0 .7rem; }
+.pill.ot.on { border-color: var(--ok); background: var(--ok); color: #000; }
+.pill.ot.next { border-color: var(--warn); color: var(--warn); }
+.pill.aero { border-color: var(--info); color: var(--info); }
 .quiet { color: var(--warn); }
 .silent { color: var(--info); font-weight: 700; }
 body.connecting .status .live { color: var(--dim); }
@@ -724,7 +728,7 @@ body.swap .fuel, body.swap .log { animation-delay: 40ms; }
 body.swap .strat { animation-delay: 80ms; }
 @keyframes page-in { from { opacity: 0; transform: translateX(var(--swap-dx, 1.6rem)); } }
 
-/* battle: gap rail. 0–3 s scale, DRS zone shaded; the rival marker glides */
+/* battle: gap rail. 0–3 s scale, 1 s overtake gap shaded; the rival marker glides */
 .rail { position: relative; height: .9rem; margin: .3rem 0 .45rem; flex: none;
   border-radius: .45rem; background: var(--line); }
 .rail .rz { position: absolute; left: 0; top: 0; bottom: 0; width: 33.33%;

@@ -331,6 +331,7 @@
     renderPitBoard(p.pit_board, p.quali, p.phase);
     renderPage(p);
     renderStrategy(p.strategy, p.quali);
+    renderOvertake(p.strategy);
     renderDuel(p.strategy, p.quali);
     renderQRail(p.quali, p);
     renderCarPage(p, p.strategy);
@@ -437,6 +438,9 @@
     if (cls) n.className = cls;
     return n;
   }
+  // Overtake badge on a rival: a car behind with overtake is a threat (red),
+  // a car ahead with overtake is attacking someone else (neutral).
+  function otBadge(side) { return span("OT", "badge " + (side === "behind" ? "crit" : "inf")); }
   function rivalRow(id, r, side, s) {
     var n = el(id);
     if (!n) return;
@@ -449,13 +453,25 @@
     n.appendChild(compoundBadge(r.compound, r.tyre_age));
     n.appendChild(span(paceText(r), "words " + paceClass(r.pace_delta_s, side)));
     var flags = [];
-    if (r.drs) flags.push(span("DRS", "badge " + (side === "behind" ? "crit" : "ok")));
+    if (r.overtake) flags.push(otBadge(side));
     if (side === "ahead" && s.undercut_s > 0) flags.push(span("UNDERCUT", "badge ok"));
     if (side === "behind" && s.overcut_s > 0) flags.push(span("OVERCUT", "badge ok"));
     if (r.pitted) flags.push(span("PIT", "badge warn"));
     var fl = span("", "flags");
     flags.forEach(function (b) { fl.appendChild(b); });
     n.appendChild(fl);
+  }
+
+  // Player overtake and active aero pills (F1 26). Both switch automatically.
+  function renderOvertake(s) {
+    var ot = el("ot"), aero = el("aero");
+    var on = !!(s && s.overtake), next = !!(s && s.overtake_earned);
+    if (ot) {
+      ot.hidden = !on && !next;
+      ot.textContent = on ? "OT" : "OT NEXT";
+      ot.className = "pill ot " + (on ? "on" : "next");
+    }
+    if (aero) aero.hidden = !(s && s.aero_mode === 1);
   }
 
   function renderStrategy(s, q) {
@@ -577,7 +593,7 @@
 
   // Rival vs us. pace_delta_s + = he is slower than our pace; last_lap_delta_s
   // + = his last lap was slower than ours. Colour = threat: green good for us,
-  // red an immediate threat (behind and faster / in DRS), amber caution.
+  // red an immediate threat (behind and faster / with overtake), amber caution.
   function paceClass(delta, side) {
     if (delta === null || delta === undefined || Math.abs(delta) < 0.03) return "";
     if (delta > 0) return "ok";
@@ -622,26 +638,26 @@
     if (!rail) {
       rail = document.createElement("div");
       rail.className = "rail";
-      rail.appendChild(span("DRS", "rz"));
+      rail.appendChild(span("1.0s", "rz"));
       rail.appendChild(span("", "rc"));
     }
     while (n.firstChild) n.removeChild(n.firstChild);
     var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
     var abs = r.gap_s === null || r.gap_s === undefined ? null : Math.abs(r.gap_s);
-    var inDrs = abs !== null && abs <= 1;
+    var close = abs !== null && abs <= 1;
 
     var head = span("", "b-head");
     head.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "side"));
     head.appendChild(span(r.pos ? "P" + r.pos : "", "pos"));
     head.appendChild(span(String(r.name || "--").toUpperCase(), "name"));
-    head.appendChild(span(gapText(gap), "gap" + (inDrs ? (side === "behind" ? " crit" : " ok") : "")));
+    head.appendChild(span(gapText(gap), "gap" + (close ? (side === "behind" ? " crit" : " ok") : "")));
     n.appendChild(head);
 
     n.appendChild(rail);
     rail.hidden = abs === null;
     if (abs !== null) {
       rail.style.setProperty("--g", String(Math.min(abs, 3) / 3));
-      rail.className = "rail " + side + (inDrs ? " in" : "");
+      rail.className = "rail " + side + (close ? " in" : "");
     }
 
     // Row 1: pace per lap + tyre badge.
@@ -663,10 +679,10 @@
     lap.appendChild(span(tr ? tr.text : "= gap steady", "tr " + (tr ? tr.cls : "dim")));
     n.appendChild(lap);
 
-    // Row 3: badges — DRS, strategy lever, pit state, stewards. Always present
+    // Row 3: badges — overtake, strategy lever, pit state, stewards. Always present
     // (min-height) so the card never changes height as badges come and go.
     var bad = span("", "b-badges");
-    if (r.drs) bad.appendChild(span("DRS", "badge " + (side === "behind" ? "crit" : "ok")));
+    if (r.overtake) bad.appendChild(otBadge(side));
     if (side === "ahead" && s.undercut_s > 0) bad.appendChild(span("UNDERCUT +" + fmt(s.undercut_s, 1), "badge ok"));
     if (side === "behind" && s.overcut_s > 0) bad.appendChild(span("OVERCUT +" + fmt(s.overcut_s, 1), "badge ok"));
     if (r.pitted) bad.appendChild(span("PITTED", "badge warn"));
@@ -674,8 +690,8 @@
     n.appendChild(bad);
 
     var closing = r.gap_trend_s > 0;
-    var threat = side === "behind" && (r.drs || inDrs || closing || paceClass(r.pace_delta_s, side) === "crit");
-    var edge = side === "ahead" && (r.drs || inDrs);
+    var threat = side === "behind" && (r.overtake || close || closing || paceClass(r.pace_delta_s, side) === "crit");
+    var edge = side === "ahead" && (s.overtake || close);
     n.className = "b-card " + side + (threat ? " threat" : side === "behind" ? " calm" : edge ? " edge" : "");
   }
 

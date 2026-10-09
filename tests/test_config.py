@@ -15,6 +15,10 @@ def test_defaults_load() -> None:
     assert s.connection.udp_port == 20777
     assert s.engine.tick_hz == 10
     assert s.thresholds["tyre_inner_cold_c"] == 80
+    assert s.thresholds["fuel_kg_per_lap_default"] == 1.2
+    assert s.thresholds["energy_over_tolerance_j"] == 400_000
+    assert s.thresholds["battle_pass_overtake_prior"] == 0.6
+    assert s.thresholds["battle_pass_no_overtake_prior"] == 0.6
     quali_eliminated = s.thresholds["quali_eliminated"]
     assert isinstance(quali_eliminated, dict)
     assert all(type(value) is int for value in quali_eliminated.values())
@@ -27,7 +31,11 @@ def test_track_thresholds_apply_only_after_selecting_track() -> None:
     store = ConfigStore()
 
     assert store.current().track is None
-    assert store.current().thresholds["energy_over_tolerance_j"] == 200_000
+    assert store.current().thresholds["energy_over_tolerance_j"] == 400_000
+    assert store.set_track(7) is True
+    assert store.current().thresholds["energy_over_tolerance_j"] == 600_000
+    assert store.current().track is not None
+    assert store.current().track.fuel_kg_per_lap == 1.26
     assert store.set_track(16) is True
     assert store.current().thresholds["energy_over_tolerance_j"] == 480_000
 
