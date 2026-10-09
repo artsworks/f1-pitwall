@@ -1321,7 +1321,7 @@ class Engine:
         harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
         energy_capacity_j = self._th("ers_store_capacity_j", 4_000_000)
         energy_floor_pct = float(mode.get("ers_soc_floor_pct", 0) or 0)
-        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 200_000)
+        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 400_000)
         energy_attack_ok = mode.get("ers_policy") == "attack_rival"
         (
             live_deployed_j,
@@ -1630,8 +1630,8 @@ class Engine:
             return self._battle_rates[1]
         w = self._th("battle_prior_weight", 4.0)
         priors = {
-            PASS_OT: self._th("battle_pass_overtake_prior", 0.35),
-            PASS_NO_OT: self._th("battle_pass_no_overtake_prior", 0.15),
+            PASS_OT: self._th("battle_pass_overtake_prior", 0.6),
+            PASS_NO_OT: self._th("battle_pass_no_overtake_prior", 0.6),
             HOLD: self._th("battle_hold_prior", 0.7),
         }
         vals: dict[str, float] = {}

@@ -193,6 +193,18 @@ These observations come from real F1 26 recordings from the Silverstone and Inte
 - `m_ersDeployMode` used only values 0 through 3, the documented range.
 - `m_ersHarvestedThisLapMGUH` and MGU-H engine wear stayed at 0.
 
+### Calibration from real races
+
+The sample covers two F1 26 races: Silverstone (track 7, 13 laps) and Interlagos (track 16, 18 laps).
+It includes 23 clean player laps plus practice and quali.
+
+- Fuel use was 1.26 kg per lap at Silverstone (14 lap pairs) and 0.97 kg per lap at Interlagos (19).
+- Energy deployed per lap, p25/p50/p75, was 7.00/7.47/8.23 MJ at Silverstone and 5.76/6.21/6.60 MJ at Interlagos.
+  `pitwall calibrate` sets the tolerance to half the p25 to p75 spread, capped at 600 kJ.
+  This gives 600 kJ at Silverstone and 420 kJ at Interlagos.
+- Battle replays recorded 13 passes in 21 attack episodes with overtake, 12 in 19 without overtake, and 21 holds in 37 defend episodes.
+  Pass rates were about the same with and without overtake.
+
 ## Tyre Sets (ID 12)
 
 Per set: actual and visual compound, `m_wear`, `m_available`, `m_recommendedSession`,

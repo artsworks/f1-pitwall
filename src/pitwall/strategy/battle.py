@@ -59,8 +59,8 @@ class BattleInputs:
 class BattleRates:
     """Learned (or prior) probabilities for this track."""
 
-    pass_overtake: float = 0.35
-    pass_no_overtake: float = 0.15
+    pass_overtake: float = 0.6
+    pass_no_overtake: float = 0.6
     hold: float = 0.7
 
 

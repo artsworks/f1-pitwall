@@ -111,10 +111,10 @@ name: silverstone
 pit_loss_s: {green: 21.5, vsc: 12.0, sc: 8.0}   # cold-start priors only
 pit_exit_m: 320.0
 pit_entry_m: 5700.0
-fuel_kg_per_lap: 1.75
+fuel_kg_per_lap: 1.26
 deg_ms_per_lap: {16: 110, 17: 70, 18: 45}       # by actual compound id
 base_pace_ms: 0                                   # 0 = unknown
-thresholds: {}                                    # optional threshold overrides for this track
+thresholds: {energy_over_tolerance_j: 600000}     # optional threshold overrides for this track
 ```
 
 `ConfigStore.set_track(track_id: int | None)` selects the overlay; `_build()` deep-merges
@@ -297,6 +297,7 @@ Energy: `per_lap_j = max(0, (store_j - floor_j)) / max(1, laps_remaining) + harv
 (2026: the store is a per-lap budget, not a threshold). `mode = 'over'` when
 `lap_delta_j > th.energy_over_tolerance_j`, `'under'` when below `-tolerance`,
 `'attack_ok'` when `laps_to_floor > laps_remaining + 1` and `mode.ers_policy == 'attack_rival'`.
+The default tolerance is 400 kJ. The Silverstone track overlay raises it to 600 kJ.
 
 ## `pitwall.state.race`
 
@@ -457,7 +458,8 @@ rival no longer ahead) or `failed`; defend → `held` or `lost`. Episodes shorte
 (`outcome: "battle"`) and folded into `model_params` (track, compound 0) as
 `battle_pass_overtake`, `battle_pass_no_overtake` or `battle_hold`. Live `battle_pass_prob` /
 `battle_hold_prob` are those rates shrunk toward the `battle_*_prior` settings with
-`battle_prior_weight` pseudo-episodes, so one race can't swing them.
+`battle_prior_weight` pseudo-episodes, so one race can't swing them. The default pass priors
+(`battle_pass_overtake_prior` and `battle_pass_no_overtake_prior`) are both 0.6.
 
 **Calls** (shared `battle` cooldown group, budgeted; mode calls re-arm each lap so a
 budget-suppressed call is retried): `battle_catching` ("Push now…, on him in 4 laps"),
@@ -489,7 +491,6 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `overtake_earned` / `overtake_lost` | 3/3 | `overtake_available and not overtake_active` / `overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s` |
 | `energy_charge_for_battle` | 3 | sector 1, `battle_mode == 'catching'`, `battle_catch_laps <= th.battle_charge_catch_laps`, `ers_store_pct < th.battle_charge_store_pct` |
 | `energy_burst` | 3 | sector 2, `battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct` |
-| `drs_enabled` | 3 | DRS enabled event after SC / lap 2 |
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |
 | `serve_penalty` | 2 | `unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now','box_in_n')` |

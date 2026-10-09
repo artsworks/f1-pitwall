@@ -76,6 +76,31 @@ lap_time_ms = base_ms
 Output to the driver is always in driver currency: "about three laps of life left at this
 pace", "the undercut is worth 1.2 seconds", never a raw coefficient.
 
+## F1 26 calibration
+
+The current defaults use these F1 26 race values:
+
+- `fuel_kg_per_lap_default` is 1.2 kg per lap.
+- `energy_over_tolerance_j` is 400 kJ.
+- `battle_pass_overtake_prior` is 0.6.
+- `battle_pass_no_overtake_prior` is 0.6.
+
+Silverstone's track overlay uses `fuel_kg_per_lap: 1.26` and
+`energy_over_tolerance_j: 600000`.
+
+These settings stay unchanged:
+
+- `cliff_ms_per_lap`, `tyre_cliff_ms`, and `wear_corner_*`. No stint reached the cliff or showed uneven wear.
+- Degradation remains unchanged. Calibrate reports `not identifiable` with one stint per compound.
+- Tyre inner windows remain unchanged. The Silverstone fit uses three laps on one compound.
+  Interlagos's windows already come from a larger database.
+- `battle_defend_gap_s` stays at 1.0 s, matching the 1.0 s overtake detection gap.
+- `slow_car_*` stays unchanged because the 2026 rules do not change qualifying behavior.
+- Pit loss stays unchanged because the sample has one stop per track.
+
+We will refit these values after we record more F1 26 races, through `pitwall calibrate` and
+`pitwall propose`.
+
 ## Pit loss
 
 Measured, not assumed. On any stop, `m_pitLaneTimeInLaneInMS` plus the pace delta of the
