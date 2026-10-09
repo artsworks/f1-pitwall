@@ -1,6 +1,7 @@
 # Voice command: driver → pit wall by speech
 
-Feasibility, design and impact analysis. Design only — nothing here is implemented.
+Design and implementation notes. Sections 2 and 3 describe current behavior. Later sections
+include planned work.
 
 The driver menu (doc 12, M3) already lets the driver ask the pit wall a preset question
 with the thumb stick: open, scroll, confirm, and a deterministic handler answers from the
@@ -54,76 +55,25 @@ Non-goals (for the first version)
 
 ## 2. Interaction design
 
-### Talk toggle (open the channel, say it, channel closes)
+### Menu listening and the V key
 
-Tap once to open the channel, speak, and the channel closes **by itself** on the first
-of:
+Action 1 keeps its doc-12 gestures, regardless of `voice.enabled`. The engine does not
+use UDP Action 1 to control voice listening.
 
-1. **the request is recognised** — the streaming partial result matches a complete
-   grammar phrase and `voice.early_close_ms` (default 300 ms) of silence follows; the
-   reply is the acknowledgement, so the driver never has to toggle off;
-2. `voice.close_silence_ms` (default 1.0 s) of silence after speech was heard (the
-   words did not match a phrase yet — finalise and try);
-3. a second tap (manual close, also cancels: a tap during the reply stops it);
-4. the hard cap `voice.max_open_s` (default 6 s).
+When the driver menu opens, the engine opens the microphone. A recognised menu request
+answers like a tapped menu item and closes the menu. A miss closes listening but leaves
+the menu open for a manual selection. The channel also closes when its cap expires or
+the menu closes.
 
-In normal use the driver taps once and talks; the channel is closed by the time the
-answer starts. The recogniser starts on open (with a 400 ms
-pre-roll from the ring buffer, so a word that started a fraction before the tap is not
-lost) and finalises on close. A tap is all it takes, so the binding works identically on
-a wheel button and on a Stream Deck key, and nothing depends on the game reporting a
-*held* UDP Action (doc 12 flags that as untested).
+Press `V` on the dashboard to open listening for `voice.key_max_open_s` seconds. The
+packaged value is 2 seconds. Press `V` again to close listening. This key-open does not
+change the driver menu.
 
-Why a toggle rather than hold-to-talk: one tap and the hand is back on the wheel, and
-the open channel is an explicit state the dispatcher can act on (below). Why not a wake
-word: nothing runs while the channel is closed, so idle cost is zero; the game's engine
-note, crowd, the engineer's own replies and Discord never reach the recogniser; and
-"pit wall, gap ahead?" becomes just "gap ahead?".
+The dashboard shows a `LISTENING` pill with the remaining time. If sound is enabled,
+the dashboard plays a cached radio blip when listening opens. A recognised or missed
+request appears in the pill for 3 seconds. A cap expiry displays `NO REQUEST`.
 
-End-of-speech detection is a plain RMS energy gate in the voice process (speech = above
-`voice.vad_db` for 100 ms; silence = below it for `close_silence_ms`). It is a few
-multiplies per 20 ms block, and it only runs while the channel is open. The hard cap is
-the safety net for a channel left open by mistake, and it bounds the recogniser's CPU
-per request.
-
-Binding: **Action 1 is repurposed** (`input.ack_bit`, `0x00100000`, the existing wheel
-button — no new binding, and Actions 9–12 all stay free). With `voice.enabled: true`:
-
-| Action 1 gesture | Today (doc 12) | With voice |
-|---|---|---|
-| single tap | acknowledge | **open the channel** (tap again = close) |
-| double tap | negative | negative (unchanged) |
-| long press | radio silent | radio silent (unchanged) |
-| tap while the stick menu is open | confirm | confirm (unchanged; the menu owns the button) |
-
-Acknowledge moves to the voice grammar ("copy", "understood", "got it") with one
-fallback that keeps the old muscle memory: a tap that **closes on silence with nothing
-heard while a call's response window is open** is recorded as `ack` — the driver tapped
-and said nothing, exactly as before, and it lands ~1 s later than today. A tap with a
-recognised request is *not* an acknowledge; the request is answered and the response
-window stays open. With `voice.enabled: false` (or the voice process down) Action 1
-reverts to doc 12 behaviour, so the wheel never has a dead button. The dashboard key `V`
-mirrors the tap. The UDP route is preferred for the same reasons as doc 12: no hook, no
-anti-cheat question, and the tap is in the recording. No new `*_bit` and no new collision
-case; `PressDetector` already separates single / double / long for Action 1.
-
-Feedback so the driver knows the channel is open, without looking:
-
-- **Open:** the existing radio blip (the two-pip open-channel sound), slightly softer.
-- **Close, recognised:** the reply itself, within ~0.5 s. No extra "copy".
-- **Close, not recognised:** "Say again?" once; a second miss in a row is silent (the
-  dashboard shows what was heard). Never guess at a low-confidence action.
-- **Channel still open with nothing understood** (mis-tap, or the driver changed their
-  mind): no speech. The dashboard pill turns amber `CHANNEL OPEN` with a countdown to
-  the hard cap; at the cap the channel closes with a single soft closing pip. A forgotten
-  toggle is therefore visible on the second screen but never talked about on the radio,
-  and it can only happen when no request was recognised.
-- **Dashboard:** a `LISTENING` pill beside the call banner while open (amber with a
-  countdown once `voice.open_warn_s`, default 3 s, has passed without a recognised
-  request); then the recognised text and intent for 3 s (or `?` and the raw text on a
-  miss). Same overlay slot as the menu, so nothing reflows.
-
-### The driver's request takes priority: the dispatcher hold
+### Proposed dispatcher hold
 
 When the channel opens the dispatcher enters **hold** and stays there until the reply
 has finished speaking (or the channel closed with nothing to answer). While on hold:
@@ -215,25 +165,22 @@ Rules for the grammar:
 
 ## 3. Architecture
 
+Current implementation: `pitwall start` runs an in-process Windows SAPI recogniser on a
+dedicated daemon thread named `voice`. `VoiceWorker` builds and pumps the recogniser on
+that thread, then queues its events for engine ticks. The engine and `VoiceChannel` stay
+on the engine thread. The separate-process design below is future work.
+
 ```
 game ──UDP──▶ backend (ingest → state → rules → dispatcher → speaker)
                  ▲                        │
-                 │ ws {"type":"intent"}   │ ws state {voice: {listening, heard, intent}}
+                 │ dashboard V / menu    │ voice state and events
                  │                        ▼
-             voice process  ◀── mic (WASAPI shared, 16 kHz mono) ── ring buffer
-             (below-normal priority, pinned, 1 decode thread)
-                 ▲
-                 └── channel tap: BUTN Action 1 single tap (via backend ws) or key
+             VoiceWorker thread ◀── mic (Windows SAPI)
+             (recogniser and COM work)
 ```
 
-**A separate process, not a thread.** Three reasons, all from doc 09: the recogniser's
-memory and any native-library thread pool are isolated from the ingest hot path; it can
-be given its own priority and affinity; and it can crash, hang or be disabled without
-the race engineer noticing. It is a second console-less process started by `pitwall
-start` when `voice.enabled` is true (`pitwall voice` runs it standalone), and it talks to
-the backend over the dashboard WebSocket exactly like the keyboard route does today. That
-also means it can run on a second machine with the microphone, if the backend ever
-moves off the game PC.
+The separate-process design below is future work. The current worker keeps SAPI COM
+calls off the engine loop, but it does not isolate recogniser memory or native threads.
 
 **Backend side (small):**
 
@@ -244,11 +191,8 @@ moves off the game PC.
   `pitwall.input.menu.answer()`, or to the press/say-again/page paths. New question
   handlers (`laps_left`, `position`) and the two statements go into `menu.ANSWERS` and
   `menu.yaml` so they are also available on the stick.
-- A single tap on `BUTN` Action 1 toggles the channel; the backend owns the channel state and
-  tells the voice process `{"type":"channel","open":true|false,"t":..}`; a `V` key on
-  the dashboard toggles the same. The voice process reports a silence/cap close back as
-  `{"type":"channel","open":false,"reason":"silence"|"cap"}` so the backend state
-  matches.
+- UDP Action 1 keeps the doc-12 gestures. The engine opens voice listening when the
+  driver menu opens. Dashboard `V` toggles a separate listening window with a 2-second cap.
 - Dispatcher: `hold()` on channel open, `release(reply_topic)` when the reply has been
   spoken (or the channel closed with a miss), with the four outcomes above. The reply is
   a P1 reply as menu answers already are.
@@ -415,9 +359,7 @@ voice:
   engine: auto              # auto = vosk if its model is present, else sapi (Windows), else off
   model_dir: models/vosk-small-en-us
   device: null              # input device name filter; null = default
-  # channel tap = Action 1 single tap (input.ack_bit); double / long press keep doc 12 meaning
-  silent_tap_is_ack: true   # empty tap while a response window is open counts as acknowledge
-  channel_key: "V"          # dashboard key, mirrors the wheel button
+  key_max_open_s: 2.0       # cap for a dashboard V key open
   early_close_ms: 300       # close as soon as a full phrase is recognised and this much silence follows
   close_silence_ms: 1000    # close after this much silence once speech was heard
   max_open_s: 6.0           # hard cap on an open channel
@@ -469,11 +411,9 @@ Phase 0 — spike (one session, no backend changes, decides go/no-go)
 
 Phase 1 — questions by voice (one to two sessions)
 
-- `pitwall voice` process, channel toggle via Action 1 single tap and `V` with recognised /
-  silence / cap auto-close, grammar for the existing menu questions and opinions,
-  backend `intent` message → `menu.answer()`, dispatcher hold/release with the four
-  outcomes and `brief`/`topic` on the race rules, state pill with the open-channel
-  countdown, recording + replay, decision log, `pitwall rules check` for `voice.yaml`.
+- The menu opens voice listening. Dashboard `V` opens it for 2 seconds, and `V` closes it.
+  Action 1 keeps its doc-12 gestures. The engine processes queued recognition events and
+  answers menu intents through the existing menu path.
 - Tests: intent matcher (unit, incl. thresholds and slots); channel state machine
   (early close on a recognised phrase, silence close, tap close, cap close, tap during
   the reply cancels it; silent tap in a response window → `ack`, silent tap outside one →
