@@ -8,6 +8,7 @@ import pytest
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
+from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.digest import call_quality
 from pitwall.rules.engine import Candidate, Rule
@@ -56,7 +57,7 @@ def _cand(rule_id: str, priority: int = 2, text: str | None = None, **defn: obje
         rule=rule,
         text=text or rule_id,
         priority=priority,
-        tags=[],
+        tags=list(rd.tags),
         still_true=None,
         inputs={},
         trigger_t=0.0,
@@ -120,6 +121,23 @@ def test_deadline_drop() -> None:
     d.submit([_cand("a")], _snap(0.0))
     assert d.drain(2.0) == []  # 2 s past a 0.5 s P2 deadline
     assert not sink.spoken
+
+
+def test_p3_deadline_starts_after_3_second_p2_speech() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    assert d.policy.deadlines_s == {1: 5.0, 2: 3.0, 3: 1.5}
+    p2_text = "p" * 45
+    d.submit([_cand("p2", priority=2, text=p2_text)], Snapshot(now=0.0))
+    assert d.drain(0.0)[0].text == p2_text
+    speech_end = d._spoken_calls[-1][1]
+    assert speech_end == pytest.approx(3.0)
+
+    d.submit([_cand("p3", priority=3, text="info")], Snapshot(now=0.5, on_straight=True))
+    assert d.drain(0.5) == []
+    held = d._queue[0].call
+    assert held.ready_t == pytest.approx(speech_end)
+    assert [call.rule_id for call in d.drain(speech_end)] == ["p3"]
+    assert sink.spoken == [p2_text, "info"]
 
 
 def test_revalidation() -> None:
@@ -533,10 +551,11 @@ def test_radio_silent_keeps_screen_mutes_headset() -> None:
     d.submit([_cand("info", priority=2, text="gap 1.2")], _snap(1.0))
     d.submit([_cand("urgent", priority=1, text="car behind")], _snap(1.0))
     d.drain(1.0)
+    d.drain(4.0)
     assert "gap 1.2" in screen.spoken and "gap 1.2" not in audio.spoken
     assert "car behind" in audio.spoken  # P1 still speaks
-    d.on_press(Press("silent", 2.0), _snap(2.0))  # UDP 3 toggle
-    d.drain(2.0)
+    d.on_press(Press("silent", 5.0), _snap(5.0))  # UDP 3 toggle
+    d.drain(5.0)
     assert d.silent is False and audio.spoken[-1] == "Back with you. Feeding you info again."
     outcomes = [r["outcome"] for r in _log(buf)]
     assert "silent_on" in outcomes and "silent_off" in outcomes and "bookmark" not in outcomes
@@ -578,3 +597,266 @@ def test_min_gap_drops_past_defer_limit() -> None:
     d.drain(0.0)
     d.submit([_cand("b"), _cand("c")], _snap(0.5))  # c would wait until 6.0
     assert [r["rule_id"] for r in _log(buf) if r.get("suppressed_by") == "budget"] == ["c"]
+
+
+def test_urgency_order_and_preemption_matrix() -> None:
+    d, _, _ = _dispatcher(
+        min_gap_s=0.0,
+        calls_per_lap=20,
+        deadlines_s={1: 60.0, 2: 60.0, 3: 60.0},
+    )
+    d.submit(
+        [
+            _cand(
+                name,
+                priority=1 if urgency == "safety" else 2,
+                urgency=urgency,
+                **({"tags": ["systems"]} if urgency == "safety" else {}),
+            )
+            for name, urgency in (
+                ("coach", "coaching"),
+                ("info", "info"),
+                ("tactical", "tactical"),
+                ("execution", "execution"),
+                ("safety", "safety"),
+            )
+        ],
+        _snap(0.0),
+    )
+    d.menu_reply("Reply", "reply", _snap(0.0))
+    d.drain(0.0)
+    calls = {call.rule_id: call for call, _ in d._spoken_calls}
+    assert [call.rule_id for call, _ in d._spoken_calls] == [
+        "safety",
+        "execution",
+        "reply",
+        "tactical",
+        "info",
+        "coach",
+    ]
+    assert d._preempts(calls["safety"], calls["execution"]) is True
+    calls["execution"].promoted = True
+    assert d._preempts(calls["safety"], calls["execution"]) is False
+    assert d._preempts(calls["execution"], calls["tactical"]) is True
+    calls["execution"].promoted = False
+    assert d._preempts(calls["execution"], calls["tactical"]) is False
+    assert d._preempts(calls["reply"], calls["tactical"]) is False
+    assert d._preempts(calls["reply"], calls["info"]) is True
+
+
+def test_decision_distance_promotes_and_logs() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    snap = Snapshot(
+        now=0.0,
+        track_length_m=5000,
+        pit_entry_m=1000,
+        lap_distance=950,
+        speed_kmh=36,
+    )
+    d.submit([_cand("box", urgency="execution", decision_point="pit_entry")], snap)
+    call = d._queue[0].call
+    assert call.decision_s == pytest.approx(5.0)
+    assert call.promoted is True
+    assert any(row["inputs"].get("decision_s") == pytest.approx(5.0) for row in _log(buf))
+
+
+def test_nearer_promoted_execution_precedes_older_call() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    snap = Snapshot(
+        now=0.0,
+        track_length_m=5000,
+        pit_entry_m=10,
+        lap_distance=4990,
+        speed_kmh=36,
+    )
+    d.submit([_cand("pit", urgency="execution", decision_point="pit_entry")], snap)
+    d.submit(
+        [_cand("line", urgency="execution", decision_point="line")],
+        Snapshot(
+            now=0.1,
+            track_length_m=5000,
+            pit_entry_m=10,
+            lap_distance=4990,
+            speed_kmh=36,
+        ),
+    )
+    assert {item.call.rule_id: item.call.decision_s for item in d._queue} == pytest.approx(
+        {"pit": 2.0, "line": 1.0}
+    )
+    assert [call.rule_id for call in d.drain(0.1)] == ["line", "pit"]
+
+
+def test_focus_and_systems_exemption() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("hazard", urgency="safety"), _cand("tip", urgency="info")], _snap(0.0))
+    assert {item.call.rule_id for item in d._queue} == {"hazard"}
+    assert ("tip", "focus") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("systems", urgency="safety", tags=["systems"])], _snap(0.0))
+    d.submit([_cand("tip", urgency="info")], _snap(1.0))
+    assert {item.call.rule_id for item in d._queue} == {"systems", "tip"}
+
+
+def test_location_coherence_after_safety() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], _snap(0.0))
+    d.drain(0.0)
+    d.submit([_cand("corner", urgency="coaching", location_ref=True)], _snap(1.0))
+    assert d.drain(1.0) == []
+    assert ("corner", "coherence") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+
+
+def test_conflict_scores_and_decision_missed() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    lower = _cand("lower", conflict_group="choice")
+    higher = _cand("higher", conflict_group="choice")
+    lower.outcome_score, higher.outcome_score = 0.2, 0.9
+    d.submit([lower], _snap(0.0))
+    d.submit([higher], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["higher"]
+    assert ("lower", "conflict_loser") in {
+        (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+    d, _, buf = _dispatcher(min_gap_s=0.0, decision_missed_s=2.0)
+    live = _cand("live", conflict_group="choice")
+    missed = _cand("missed", urgency="execution", decision_point="line", conflict_group="choice")
+    live.outcome_score, missed.outcome_score = 0.1, 10.0
+    d.submit([live], Snapshot(now=0.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
+    d.submit([missed], Snapshot(now=1.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
+    assert [item.call.rule_id for item in d._queue] == ["live"]
+    assert ("missed", "decision_missed") in {
+        (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+
+def test_rotation_is_seeded_and_both_rules_can_win() -> None:
+    winners = set()
+    for seed in range(1, 21):
+        same_seed = []
+        for _ in range(2):
+            d, _, _ = _dispatcher(min_gap_s=0.0)
+            d.reset_session(seed)
+            d.submit([_cand("a", rotate_with=["b"]), _cand("b", rotate_with=["a"])], _snap(0.0))
+            same_seed.append(d._queue[0].call.rule_id)
+        assert same_seed[0] == same_seed[1]
+        winners.add(same_seed[0])
+    assert winners == {"a", "b"}
+
+
+@pytest.mark.parametrize("resolver_first", [False, True])
+def test_resolved_by_works_in_both_orders(resolver_first: bool) -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    target, resolver = _cand("target", resolved_by=["resolver"]), _cand("resolver")
+    ordered = [resolver, target] if resolver_first else [target, resolver]
+    for index, candidate in enumerate(ordered):
+        d.submit([candidate], _snap(float(index)))
+    assert not any(item.call.rule_id == "target" for item in d._queue)
+    assert ("target", "resolved") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+
+
+def test_escalation_and_flush_drop_queued_calls() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("low", urgency="info")], _snap(0.0))
+    d.submit([_cand("high", urgency="safety", escalates=["low"])], _snap(1.0))
+    assert {item.call.rule_id for item in d._queue} == {"high"}
+    assert ("low", "superseded_escalation") in {
+        (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
+    }
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("tip", urgency="info")], _snap(0.0))
+    d.menu_reply("Reply", "reply", _snap(0.0))
+    d.submit(
+        [_cand("red", urgency="safety", flushes_queue=True, tags=["systems"])],
+        _snap(1.0),
+    )
+    assert {item.call.rule_id for item in d._queue} == {"red"}
+    assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+
+
+def test_obvious_and_provisional_suppression() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    obvious, provisional = _cand("obvious"), _cand("provisional")
+    obvious.obvious = True
+    provisional.provisional_silent = True
+    d.submit([obvious, provisional], _snap(0.0))
+    assert not d._queue
+    assert {row["suppressed_by"] for row in _log(buf)} == {"obvious", "provisional"}
+
+
+def test_reply_absorption_is_topic_specific_and_reply_waits_for_execution() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
+    d.submit([_cand("tyre_life", urgency="info")], _snap(1.0))
+    assert not any(item.call.rule_id == "menu:tyres" for item in d._queue)
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
+    d.submit([_cand("box_now", urgency="execution")], _snap(1.0))
+    assert any(item.call.rule_id == "menu:tyres" for item in d._queue)
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
+    d.submit([_cand("box", urgency="execution")], _snap(1.0))
+    assert [item.call.urgency for item in sorted(d._queue)] == ["execution", "reply"]
+    assert {item.call.rule_id for item in d._queue} == {"box", "menu:tyres"}
+
+
+def test_safety_cut_requeues_reply_once() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.menu_reply(
+        "A long answer that keeps speaking while safety arrives",
+        "menu:answer",
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    d.submit([_cand("hazard", urgency="safety")], _snap(0.5))
+    emitted = d.drain(0.5) + d.drain(1.0)
+    assert [call.rule_id for call in emitted] == ["hazard", "menu:answer"]
+    assert ("menu:answer", "requeued", "preempted") in {
+        (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
+    }
+
+
+def test_coalescing_renders_count_word() -> None:
+    template = ["{count_word} slow cars ahead. Careful"]
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("slow", say_many=template)], _snap(0.0))
+    d.submit([_cand("slow", say_many=template)], _snap(0.1))
+    assert d.drain(0.1)[0].text == "two slow cars ahead. Careful"
+
+
+def test_digest_uses_freshest_briefs_caps_items_and_skips_battle() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0, digest_max_items=2)
+    for name, now in (("old", 0.0), ("newer", 1.0), ("newest", 2.0)):
+        candidate = _cand(name, urgency="info")
+        candidate.brief = name
+        d.submit([candidate], _snap(now))
+    emitted = d.drain(2.0)
+    assert len(emitted) == 1 and emitted[0].rule_id == "digest"
+    assert "newer" in emitted[0].text and "newest" in emitted[0].text
+    assert "old" not in emitted[0].text
+    assert any(row["outcome"] == "digest_overflow" for row in _log(buf))
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit(
+        [_cand("one", urgency="info"), _cand("two", urgency="info")],
+        Snapshot(now=0.0, gap_ahead_s=0.5, gap_behind_s=0.5),
+    )
+    assert {call.rule_id for call in d.drain(0.0)} == {"one", "two"}
+    assert not any(row["rule_id"] == "digest" for row in _log(buf))
+
+
+def test_every_priority_one_rule_has_explicit_urgency() -> None:
+    settings = ConfigStore(isolated=True).current()
+    missing = [
+        rule.id
+        for rule in settings.rules
+        if (rule.priority == 1 or any(item.priority == 1 for item in rule.severity))
+        and rule.urgency is None
+    ]
+    assert not missing
+
+
+def test_drs_fault_urgency_tracks_priority() -> None:
+    settings = ConfigStore(isolated=True).current()
+    drs_fault = next(rule for rule in settings.rules if rule.id == "drs_fault")
+    assert drs_fault.urgency_class(1) == "safety"
+    assert drs_fault.urgency_class(2) == "tactical"

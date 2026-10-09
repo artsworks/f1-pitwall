@@ -125,6 +125,15 @@ def test_parse_scenario_and_sort_by_id(tmp_path: Path) -> None:
     assert scenarios[0].checks == (ScenarioCheck("fire", ("sc_deployed",), (3, 4)),)
 
 
+def test_load_scenarios_skips_radio_grades_workbook(tmp_path: Path) -> None:
+    _write_scenario(tmp_path, _scenario_data())
+    (tmp_path / "radio-priority-grades.yaml").write_text("kind: radio-grades\nscenarios: []\n")
+
+    scenarios = load_scenarios(tmp_path)
+
+    assert [scenario.id for scenario in scenarios] == ["case"]
+
+
 @pytest.mark.parametrize(
     ("update", "key"),
     [

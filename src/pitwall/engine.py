@@ -812,7 +812,7 @@ class Engine:
         elif item.action == "page":
             self.cycle_page(t)
         if text:
-            self.dispatcher.menu_reply(text, f"menu:{item.id}", snap)
+            self.dispatcher.menu_reply(text, f"menu:{item.id}", snap, item.related_rules)
 
     def driver_balance(self, lap: int) -> str:
         """Latest balance opinion while it still holds (docs/12 advice bias)."""
@@ -833,7 +833,7 @@ class Engine:
                     self._flush_pending_pit_loss(pending.session_uid, laps, force=True)
                 except sqlite3.Error:
                     self._pending_pit_loss = None
-        self.dispatcher.reset_session()
+        self.dispatcher.reset_session(uid)
         self._reset_energy_lap_tracking()
         self.menu.close()
         self._voice_close(self.clock.now(), "session")

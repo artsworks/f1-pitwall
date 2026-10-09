@@ -100,8 +100,12 @@ class ConfigStore:
             merged = _deep_merge(merged, yaml.safe_load(self._profile.read_text()) or {})
         overlay = None if self._isolated else self._load_track_overlay()
         if overlay is not None:
-            th = overlay.get("thresholds")
-            if isinstance(th, dict) and th:
+            overlay_thresholds = overlay.get("thresholds")
+            th = dict(overlay_thresholds) if isinstance(overlay_thresholds, dict) else {}
+            for name in ("pit_entry_m", "pit_exit_m"):
+                if name in overlay and name not in th:
+                    th[name] = overlay[name]
+            if th:
                 merged["thresholds"] = _deep_merge(merged.get("thresholds", {}), th)
             merged["track"] = overlay
         merged = _deep_merge(merged, self._overrides)

@@ -44,6 +44,9 @@ rules:
   - id: front_wing_lost_box
     sessions: [race]
     priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    outcome_score: "1 if laps_remaining > th.pit_min_laps_left else -99"
     when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining > th.pit_min_laps_left"
     clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
     still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining > th.pit_min_laps_left"
@@ -57,6 +60,8 @@ rules:
   - id: front_wing_lost_nurse
     sessions: [race]
     priority: 1
+    urgency: tactical
+    outcome_score: "1 if laps_remaining <= th.pit_min_laps_left else -99"
     when: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining <= th.pit_min_laps_left"
     clear_when: "max(damage.front_left_wing, damage.front_right_wing) < th.front_wing_lost_pct"
     still_true: "phase in ('racing', 'sc', 'vsc') and max(damage.front_left_wing, damage.front_right_wing) >= th.front_wing_lost_pct and laps_remaining <= th.pit_min_laps_left"
@@ -69,6 +74,7 @@ rules:
   - id: puncture
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: safety
     when: "phase not in ('garage', 'in_lap', 'finished') and puncture_corner != ''"
     clear_when: "puncture_corner == ''"
     still_true: "puncture_corner != ''"
@@ -121,6 +127,10 @@ rules:
   - id: drs_fault
     sessions: [practice, qualifying, race]
     priority: 2
+    urgency: tactical
+    urgency_by_priority:
+      1: safety
+    tags: [systems]
     when: "phase != 'garage' and damage.drs_fault != 0"
     clear_when: "damage.drs_fault == 0"
     requires: [car_damage]
@@ -130,6 +140,8 @@ rules:
   - id: ers_fault
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: safety
+    tags: [systems]
     when: "phase != 'garage' and damage.ers_fault != 0"
     clear_when: "damage.ers_fault == 0"
     requires: [car_damage]
@@ -139,6 +151,7 @@ rules:
   - id: boost_left_on
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: safety
     when: "boost_on_s >= th.boost_warn_s and (brake >= th.boost_warn_brake or throttle <= th.boost_warn_lift)"
     clear_when: "boost_on_s == 0"
     still_true: "boost_on_s > 0"
@@ -156,6 +169,7 @@ rules:
   - id: yellow_ahead
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: safety
     when: "yellow_ahead_m <= th.yellow_warn_ahead_m"
     clear_when: "yellow_ahead_m > th.yellow_warn_ahead_m + 300"
     still_true: "yellow_ahead_m <= th.yellow_warn_ahead_m or yellow_here"
@@ -180,6 +194,8 @@ rules:
   - id: lockup_front_same_spot
     sessions: [practice, qualifying, race]
     priority: 3
+    urgency: coaching
+    location_ref: true
     when: "lockup == 'front' and lockup_spot_laps >= 1"
     clear_when: "lockup == ''"
     cooldown_s: 150
@@ -197,6 +213,7 @@ rules:
   - id: lockup_front
     sessions: [practice, qualifying, race]
     priority: 2
+    urgency: coaching
     when: "lockup == 'front' and lockup_spot_laps == 0"
     clear_when: "lockup == ''"
     cooldown_s: 60
@@ -221,6 +238,7 @@ rules:
   - id: lockup_rear
     sessions: [practice, qualifying, race]
     priority: 2
+    urgency: coaching
     when: "lockup == 'rear'"
     clear_when: "lockup == ''"
     cooldown_s: 45
@@ -242,6 +260,8 @@ rules:
   - id: spun_rejoin_traffic
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: safety
+    tags: [traffic]
     when: "spun and traffic_behind_s <= th.rejoin_traffic_s"
     clear_when: "not spun"
     still_true: "spun and traffic_behind_s <= th.rejoin_traffic_s + 1"
@@ -255,6 +275,7 @@ rules:
   - id: saved_moment
     sessions: [practice, qualifying, race]
     priority: 2
+    urgency: coaching
     when: "saved and phase not in ('finished', 'red_flag', 'sc', 'vsc')"
     clear_when: "not saved"
     requires: [motion_ex]
@@ -280,6 +301,7 @@ rules:
   - id: spun_rejoin
     sessions: [practice, qualifying, race]
     priority: 1
+    urgency: execution
     when: "spun and traffic_behind_s > th.rejoin_traffic_s + 2"
     clear_when: "not spun"
     still_true: "spun and traffic_behind_s > th.rejoin_traffic_s + 2"
@@ -311,6 +333,8 @@ rules:
   - id: pit_exit_traffic
     sessions: [practice, qualifying]
     priority: 1
+    urgency: safety
+    tags: [traffic]
     when: "pit_exit_s <= 3 and traffic_behind_s <= th.pit_exit_traffic_s"
     clear_when: "pit_exit_s > 10"
     still_true: "traffic_behind_s <= th.pit_exit_traffic_s + 1"
@@ -325,6 +349,7 @@ rules:
   - id: prep_car_behind
     sessions: [practice, qualifying]
     priority: 2
+    tags: [traffic]
     when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_behind_kind == 'flying' and traffic_behind_s <= th.prep_behind_s"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap' and traffic_behind_kind == 'flying'"
@@ -339,6 +364,8 @@ rules:
   - id: slow_car_ahead
     sessions: [practice, qualifying]
     priority: 1
+    urgency: safety
+    tags: [traffic]
     when: "phase == 'flying' and run_lap_kind != 'cool' and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 80 and (traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s))"
     clear_when: "traffic_ahead_m > 400 or traffic_ahead_state == ''"
     still_true: "traffic_ahead_state == 'in_lap' or (traffic_ahead_state == 'cooling' and traffic_ahead_closing_s < traffic_ahead_launch_s)"
@@ -349,10 +376,13 @@ rules:
       - "Slow car ahead, {traffic_ahead_m:.0f} metres"
       - "Traffic ahead, {traffic_ahead_m:.0f} metres. Watch your line"
       - "Slow car, {traffic_ahead_m:.0f} metres"
+    say_many: ["{count_word} slow cars ahead. Careful", "Slow cars ahead, {count_word} of them. Careful"]
   # Car crawling on the track surface ahead: stronger call than routine traffic.
   - id: slow_car_crawling
     sessions: [practice, qualifying]
     priority: 1
+    urgency: safety
+    tags: [traffic]
     when: "phase in ('flying', 'out_lap', 'on_track', 'in_lap') and traffic_ahead_state == 'aborted' and traffic_ahead_closing_s <= th.slow_car_warn_s and traffic_ahead_m >= 50"
     clear_when: "traffic_ahead_m > 400 or traffic_ahead_state != 'aborted'"
     still_true: "traffic_ahead_state == 'aborted'"
@@ -367,6 +397,7 @@ rules:
   - id: prep_traffic_ahead
     sessions: [practice, qualifying]
     priority: 2
+    tags: [traffic]
     when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind != 'flying' and traffic_ahead_s <= th.prep_traffic_s"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap' and traffic_ahead_s <= th.prep_traffic_s + 1"
@@ -380,6 +411,7 @@ rules:
   - id: prep_dirty_air
     sessions: [practice, qualifying]
     priority: 2
+    tags: [traffic]
     when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s < th.tow_min_s"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap' and traffic_ahead_s < th.tow_min_s + 0.3"
@@ -392,6 +424,7 @@ rules:
   - id: prep_tow
     sessions: [practice, qualifying]
     priority: 2
+    tags: [traffic]
     when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s >= th.tow_min_s and traffic_ahead_s <= th.tow_max_s"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap' and traffic_ahead_kind == 'flying'"
@@ -418,6 +451,9 @@ rules:
   # Red flag: all sessions; repeats on cooldown while the flag stays out.
   - id: red_flag
     priority: 1
+    urgency: safety
+    escalates: [sc_deployed, sc_ending, sc_restart, vsc_deployed, vsc_ending, vsc_restart]
+    flushes_queue: true
     when: "red_flag"
     clear_when: "not red_flag"
     say:
@@ -429,6 +465,8 @@ rules:
   - id: wear_front_left
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Front left tyre wear"
     when: "wear_hot_corner == 'front left'"
     clear_when: "wear_hot_corner != 'front left'"
     cooldown_s: 300
@@ -440,6 +478,8 @@ rules:
   - id: wear_front_right
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Front right tyre wear"
     when: "wear_hot_corner == 'front right'"
     clear_when: "wear_hot_corner != 'front right'"
     cooldown_s: 300
@@ -451,6 +491,8 @@ rules:
   - id: wear_rear_left
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Rear left tyre wear"
     when: "wear_hot_corner == 'rear left'"
     clear_when: "wear_hot_corner != 'rear left'"
     cooldown_s: 300
@@ -462,6 +504,8 @@ rules:
   - id: wear_rear_right
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Rear right tyre wear"
     when: "wear_hot_corner == 'rear right'"
     clear_when: "wear_hot_corner != 'rear right'"
     cooldown_s: 300
@@ -473,6 +517,8 @@ rules:
   - id: wear_fronts
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Front tyre wear report"
     when: "wear_hot_corner == 'fronts'"
     clear_when: "wear_hot_corner != 'fronts'"
     cooldown_s: 300
@@ -484,6 +530,8 @@ rules:
   - id: wear_rears
     sessions: [practice, race]
     priority: 2
+    urgency: info
+    brief: "Rear tyre wear report"
     when: "wear_hot_corner == 'rears'"
     clear_when: "wear_hot_corner != 'rears'"
     cooldown_s: 300
