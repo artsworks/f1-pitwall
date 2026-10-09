@@ -355,28 +355,78 @@ rules:
       - "{energy_prev_under_mj:.1f} MJ unused last lap. Deploy more"
       - "{energy_prev_under_mj:.1f} MJ left last lap. Use it"
       - "Battery spare last lap, {energy_prev_under_mj:.1f} MJ. Deploy"
+  - id: energy_charge_for_battle
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 0 and battle_mode == 'catching' and battle_catch_laps <= th.battle_charge_catch_laps and ers_store_pct < th.battle_charge_store_pct"
+    clear_when: "sector != 0"
+    still_true: "battle_mode == 'catching' and ers_store_pct < th.battle_charge_store_pct"
+    cooldown_s: 180
+    cooldown_group: energy
+    requires: [car_status, lap_data]
+    say:
+      - "On {rival_ahead_name} in {battle_catch_laps:.1f} laps. Battery {ers_store_pct:.0f}, harvest this sector"
+      - "Battery {ers_store_pct:.0f}. Harvest now, {rival_ahead_name} in {battle_catch_laps:.1f} laps"
+      - "{rival_ahead_name} in {battle_catch_laps:.1f} laps. Charge up, battery {ers_store_pct:.0f}"
+  - id: energy_burst
+    sessions: [race]
+    min_lap: 2
+    priority: 3
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct"
+    clear_when: "sector != 1"
+    still_true: "battle_mode == 'attacking' and ers_store_pct < th.energy_burst_store_pct"
+    cooldown_s: 180
+    cooldown_group: energy
+    requires: [car_status, lap_data]
+    say:
+      - "Battery {ers_store_pct:.0f}. Short bursts on {rival_ahead_name}"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}, battery {ers_store_pct:.0f}. Deploy in bursts"
+      - "Short bursts only, battery {ers_store_pct:.0f}. {gap_ahead_s:.1f} to {rival_ahead_name}"
+  # 2026 overtake (docs/reference/f1-26-udp-notes.md): the game grants it at a
+  # detection point (gap about a second) and switches it on at the activation
+  # point. Both are automatic, so the calls give the gap, never a button.
   - id: overtake_mode
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and energy_mode == 'attack_ok' and gap_ahead_s <= mode.overtake_call_gap_s and drs_zone_ahead"
-    clear_when: "gap_ahead_s > mode.overtake_call_gap_s + th.gap_hysteresis_s"
+    when: "phase == 'racing' and energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s"
+    clear_when: "gap_ahead_s > mode.overtake_call_gap_s + th.gap_hysteresis_s or not overtake_active"
+    still_true: "overtake_active and energy_mode == 'attack_ok'"
     cooldown_s: 60
+    conflict_group: overtake
+    supersedes: [energy_over, energy_charge_for_battle, energy_burst]
     requires: [car_status, lap_data]
     say:
-      - "Overtake mode is yours on {rival_ahead_name}. Use it"
+      - "{rival_ahead_name}, {gap_ahead_s:.1f}. Battery's there, deploy"
       - "{gap_ahead_s:.1f} to {rival_ahead_name}. Energy is there, go"
-      - "{rival_ahead_name}, {gap_ahead_s:.1f} ahead. Overtake mode, use it"
-  - id: drs_attack
+      - "Battery {ers_store_pct:.0f}, {gap_ahead_s:.1f} to {rival_ahead_name}. Deploy"
+  - id: overtake_earned
     sessions: [race]
     priority: 3
-    when: "phase == 'racing' and drs_available and drs_zone_ahead"
-    clear_when: "not drs_available"
+    when: "phase == 'racing' and overtake_available and not overtake_active"
+    clear_when: "not overtake_available or overtake_active"
+    still_true: "overtake_available and not overtake_active"
     cooldown_s: 90
-    requires: [car_status, lap_data]
+    conflict_group: overtake
+    supersedes: [energy_over, energy_charge_for_battle, energy_burst]
+    requires: [lap_data]
     say:
-      - "DRS on {rival_ahead_name}. {gap_ahead_s:.1f} seconds"
-      - "DRS, {gap_ahead_s:.1f} to {rival_ahead_name}. Go get him"
-      - "You've got DRS on {rival_ahead_name}, {gap_ahead_s:.1f}"
+      - "Overtake earned on {rival_ahead_name}, {gap_ahead_s:.1f}"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Overtake next straight"
+      - "Overtake next straight. {rival_ahead_name} {gap_ahead_s:.1f} ahead"
+  - id: overtake_lost
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s"
+    clear_when: "overtake_available or not overtake_active"
+    still_true: "not overtake_available"
+    cooldown_s: 120
+    conflict_group: overtake
+    requires: [lap_data]
+    say:
+      - "Overtake gone. {gap_ahead_s:.1f} to {rival_ahead_name}, get inside a second"
+      - "No overtake next lap. {gap_ahead_s:.1f} to {rival_ahead_name}, close in"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Inside a second for overtake"
   # Battle coaching (docs/20 L3): push / attack / defend / manage / encourage,
   # driven by battle_mode (pitwall.strategy.battle) and the learned pass model.
   # Mode calls re-arm every lap (sector gate) so a budget-suppressed call is
@@ -397,7 +447,7 @@ rules:
     severity:
       - when: "battle_catch_laps < 0.5"
         say:
-          - "Closing fast on {rival_ahead_name}. DRS soon"
+          - "Closing fast on {rival_ahead_name}, {gap_ahead_s:.1f}. Overtake range soon"
       - when: "battle_pace_ahead == ''"
         say:
           - "{rival_ahead_name} ahead, {gap_ahead_s:.1f} to him"
@@ -405,7 +455,7 @@ rules:
       - when: "battle_catch_laps <= 2"
         say:
           - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"
-          - "Closing fast on {rival_ahead_name}. DRS soon"
+          - "{gap_ahead_s:.1f} to {rival_ahead_name}, closing. Overtake range soon"
   - id: battle_attack
     sessions: [race]
     min_lap: 2
@@ -497,7 +547,7 @@ rules:
       - when: "battle_threat_laps <= 2"
         priority: 2
         say:
-          - "{rival_behind_name} in DRS in {battle_threat_laps:.1f} laps. Push"
+          - "{rival_behind_name} in overtake range in {battle_threat_laps:.1f} laps. Push"
           - "Gap behind {gap_behind_s:.1f}, falling. Push"
       - when: "battle_pace_behind == ''"
         say:
@@ -523,7 +573,7 @@ rules:
     requires: [lap_data]
     say:
       - "Great move on {battle_result_name}. P{position}, now build the gap"
-      - "Past {battle_result_name}. P{position}, clear his DRS"
+      - "Past {battle_result_name}. P{position}, pull a second clear of his overtake"
       - "Past {battle_result_name}. P{position}, lovely"
     severity:
       - when: "position == 1"
@@ -543,7 +593,7 @@ rules:
     say:
       - "Good defending. Held off {battle_result_name}"
       - "Well held, {battle_result_name} dropped back"
-      - "{battle_result_name} is out of DRS. Nice work"
+      - "{battle_result_name} is out of overtake range. Nice work"
   - id: battle_lost
     sessions: [race]
     priority: 3
@@ -551,7 +601,7 @@ rules:
     clear_when: "not battle_result_recent"
     requires: [lap_data]
     say:
-      - "{battle_result_name}'s through. Stay with him, you'll have DRS"
+      - "{battle_result_name}'s through. Stay inside a second for overtake"
       - "Lost it to {battle_result_name}. Stay close"
       - "{battle_result_name} got you. Head down, go again"
   # Place changes going back and forth with one car (or several): one call
@@ -595,7 +645,7 @@ rules:
     cooldown_group: battle_swap
     requires: [lap_data]
     say:
-      - "Ahead of {battle_result_name}. Nail the exit, no DRS"
+      - "Ahead of {battle_result_name}. Nail the exit, keep him out of a second"
   - id: battle_swap_behind
     sessions: [race]
     priority: 3
@@ -606,7 +656,7 @@ rules:
     requires: [lap_data]
     say:
       - "{battle_result_name} back ahead. Set up one clean move"
-      - "He's back ahead. Pass where he can't DRS back"
+      - "He's back ahead. Pass after the detection point, no overtake back"
       - "Swapping costs you both. Pick a pass that sticks"
   - id: battle_scrap
     sessions: [race]

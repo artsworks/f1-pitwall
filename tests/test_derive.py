@@ -488,7 +488,7 @@ def test_persist_episode_skips_battle_param_folds_for_synthetic_session() -> Non
         rival_idx=1,
         start_lap=3,
         end_lap=4,
-        drs=False,
+        overtake=False,
         result="held",
     )
 

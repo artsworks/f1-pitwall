@@ -74,8 +74,9 @@ menu:
       label: "Fight"
       rank_when: "battle_mode in ('attacking', 'defending')"
       related_rules:
+        - overtake_earned
+        - overtake_lost
         - overtake_mode
-        - drs_attack
         - battle_catching
         - battle_attack
         - battle_patience

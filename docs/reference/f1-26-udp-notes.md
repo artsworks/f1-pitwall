@@ -177,6 +177,34 @@ uint8  m_2026Regulations;              // 1 = 2026 regulations applicable
 uint8  m_drivingWrongWay;
 ```
 
+## Observed under 2026 regulations
+
+These observations come from real F1 26 recordings from the Silverstone and Interlagos weekends, across all session types.
+
+- `DRSE` and `DRSD` events never fired. `OVTK` fired for position changes, not overtake mode.
+- Car Status `m_drsAllowed` and `m_drsActivationDistance` stayed at 0. Car Telemetry `m_drs` also stayed at 0.
+- Session packets reported zero DRS zones and zero full and partial active aero zones. Zone timing comes from Car Telemetry 2 activation distances.
+- `m_overtakeAvailable` changed at one detection point per lap, about 5550 m at Silverstone and 3230 m at Interlagos. A gap of about 1.0 s or less at that point turned it on. The value held until the next detection.
+- `m_overtakeActivationDistance` counted down from about 300 m to an activation point, about 5631 m at Silverstone and 3401 m at Interlagos.
+- `m_overtakeActive` took the `m_overtakeAvailable` value at the activation point, 2.4 to 4.2 s after detection. It held that value until the next activation point.
+- `m_overtakeAvailable` was on most of the time in practice and qualifying. It never switched on in one sprint. The cause is unknown.
+- `m_activeAeroMode` switched to 1 a median 0.07 s after each zone start in 98 of 99 zones across three races. This suggests the game switches the mode.
+- `m_activeAeroAvailable` pulsed for one frame at each zone start. `m_activeAeroActivationDistance` counted down from about 249 m to each zone.
+- `m_ersDeployMode` used only values 0 through 3, the documented range.
+- `m_ersHarvestedThisLapMGUH` and MGU-H engine wear stayed at 0.
+
+### Calibration from real races
+
+The sample covers two F1 26 races: Silverstone (track 7, 13 laps) and Interlagos (track 16, 18 laps).
+It includes 23 clean player laps plus practice and quali.
+
+- Fuel use was 1.26 kg per lap at Silverstone (14 lap pairs) and 0.97 kg per lap at Interlagos (19).
+- Energy deployed per lap, p25/p50/p75, was 7.00/7.47/8.23 MJ at Silverstone and 5.76/6.21/6.60 MJ at Interlagos.
+  `pitwall calibrate` sets the tolerance to half the p25 to p75 spread, capped at 600 kJ.
+  This gives 600 kJ at Silverstone and 420 kJ at Interlagos.
+- Battle replays recorded 13 passes in 21 attack episodes with overtake, 12 in 19 without overtake, and 21 holds in 37 defend episodes.
+  Pass rates were about the same with and without overtake.
+
 ## Tyre Sets (ID 12)
 
 Per set: actual and visual compound, `m_wear`, `m_available`, `m_recommendedSession`,
