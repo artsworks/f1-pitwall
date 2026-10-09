@@ -71,6 +71,7 @@ class RaceSpec:
     overtake_activation_offset_m: float = 80.0
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
+    gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
 
 
 def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
@@ -284,6 +285,9 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             and not spec.thermal_window_c[0] <= tyre_inner <= spec.thermal_window_c[1]
         ):
             lap_ms += spec.thermal_penalty_ms
+        gap_ahead_s = spec.gap_ahead_s
+        if spec.gap_ahead_from_lap is not None and lap >= spec.gap_ahead_from_lap[0]:
+            gap_ahead_s = spec.gap_ahead_from_lap[1]
         sc = 0
         if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1]:
             sc = 2 if spec.vsc else 1
@@ -379,10 +383,10 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "driver_status": player_driver_status,
                 "pit_status": player_pit_status,
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
-                "delta_to_car_in_front_ms_part": int(spec.gap_ahead_s * 1000),
+                "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
             rival_lap_data = {
-                1: _rival(spec, lap, d, frac, 1, spec.gap_ahead_s, 2, rival_pitting),
+                1: _rival(spec, lap, d, frac, 1, gap_ahead_s, 2, rival_pitting),
                 2: _rival(spec, lap, d, frac, 2, -spec.gap_behind_s, 4, False),
                 3: _rival(spec, lap, d, frac, 3, 20.0, 1, False),
             }
@@ -390,7 +394,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             emit_ct2(
                 {
                     0: d,
-                    1: _rival_lap_distance(spec, d, spec.gap_ahead_s),
+                    1: _rival_lap_distance(spec, d, gap_ahead_s),
                     2: _rival_lap_distance(spec, d, -spec.gap_behind_s),
                     3: _rival_lap_distance(spec, d, 20.0),
                 },

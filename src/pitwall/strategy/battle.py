@@ -25,7 +25,8 @@ FREE, CATCHING, ATTACKING, DEFENDING, THREAT, MANAGING = (
     "managing",
 )
 
-PASS_DRS, PASS_NODRS, HOLD = "battle_pass_drs", "battle_pass_nodrs", "battle_hold"
+PASS_OT, PASS_NO_OT = "battle_pass_overtake", "battle_pass_no_overtake"
+HOLD = "battle_hold"
 PASS_COMPOUND = 0  # model_params compound slot for battle params (per track)
 
 
@@ -47,18 +48,19 @@ class BattleInputs:
     own_age: int
     ahead_age: int
     behind_age: int
-    drs_available: bool
+    overtake_active: bool
     attack_gap_s: float  # mindset attack_window_s
     positions: tuple[int, ...] = ()  # car_position per car idx (0 = unknown)
     pitting: frozenset[int] = frozenset()  # car idxs in the pit lane
+    regulations_2026: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class BattleRates:
     """Learned (or prior) probabilities for this track."""
 
-    pass_drs: float = 0.35
-    pass_nodrs: float = 0.15
+    pass_overtake: float = 0.35
+    pass_no_overtake: float = 0.15
     hold: float = 0.7
 
 
@@ -85,7 +87,7 @@ class Episode:
     rival_idx: int
     start_lap: int
     end_lap: int
-    drs: bool
+    overtake: bool
     result: str
 
     @property
@@ -155,7 +157,7 @@ class _Open:
     start_lap: int
     start_pos: int
     start_t: float
-    drs: bool = False
+    overtake: bool = False
 
 
 @dataclass
@@ -244,7 +246,7 @@ class BattleTracker:
         if ep.rival in inp.pitting:
             return  # he boxed: neither a pass nor a hold
         res = self._outcome(ep, inp)
-        done = Episode(ep.kind, ep.rival, ep.start_lap, inp.lap_num, ep.drs, res)
+        done = Episode(ep.kind, ep.rival, ep.start_lap, inp.lap_num, ep.overtake, res)
         if res in ("passed", "lost"):
             wait = _th(th, "battle_result_confirm_s", 0.0)
             if inp.now - self.undone_t.get(ep.rival, -math.inf) > wait:
@@ -318,8 +320,8 @@ class BattleTracker:
         self._confirm(inp, th)
         self.attack = self._track(self.attack, "attack", a_rival, inp, th)
         self.defend = self._track(self.defend, "defend", d_rival, inp, th)
-        if self.attack is not None and inp.drs_available:
-            self.attack.drs = True
+        if self.attack is not None and inp.overtake_active:
+            self.attack.overtake = True
         self._confirm(inp, th)
         if mode != self.mode:
             self.mode, self.since_lap = mode, inp.lap_num
@@ -331,8 +333,11 @@ class BattleTracker:
         threat = math.inf
         if inp.behind_idx >= 0 and _finite(inp.gap_behind_s) and c_behind > 0:
             threat = max(0.0, (inp.gap_behind_s - _th(th, "battle_defend_gap_s", 1.0)) / c_behind)
-        drs_now = inp.drs_available or (
-            _finite(inp.gap_ahead_s) and inp.gap_ahead_s <= _th(th, "drs_detection_gap_s", 1.0)
+        # The gap fallback covers pre-2026 data only. F1 26 sends overtake_active.
+        overtake_now = inp.overtake_active or (
+            not inp.regulations_2026
+            and _finite(inp.gap_ahead_s)
+            and inp.gap_ahead_s <= _th(th, "drs_detection_gap_s", 1.0)
         )
         recent = inp.now - self.result_t <= _th(th, "battle_result_hold_s", 20.0)
         return Battle(
@@ -344,7 +349,7 @@ class BattleTracker:
             closing_behind_s=round(c_behind, 2),
             tyre_offset_ahead=inp.ahead_age - inp.own_age if inp.ahead_idx >= 0 else 0,
             tyre_offset_behind=inp.behind_age - inp.own_age if inp.behind_idx >= 0 else 0,
-            pass_prob=round(rates.pass_drs if drs_now else rates.pass_nodrs, 2),
+            pass_prob=round(rates.pass_overtake if overtake_now else rates.pass_no_overtake, 2),
             hold_prob=round(rates.hold, 2),
             result=self.result if recent else "",
             result_recent=recent and bool(self.result),

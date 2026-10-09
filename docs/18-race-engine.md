@@ -455,7 +455,7 @@ episode, closed when the mode or rival changes: attack → `passed` (position ga
 rival no longer ahead) or `failed`; defend → `held` or `lost`. Episodes shorter than
 `battle_min_episode_s` that change nothing are dropped. Each is written to the decision log
 (`outcome: "battle"`) and folded into `model_params` (track, compound 0) as
-`battle_pass_drs`, `battle_pass_nodrs` or `battle_hold`. Live `battle_pass_prob` /
+`battle_pass_overtake`, `battle_pass_no_overtake` or `battle_hold`. Live `battle_pass_prob` /
 `battle_hold_prob` are those rates shrunk toward the `battle_*_prior` settings with
 `battle_prior_weight` pseudo-episodes, so one race can't swing them.
 
