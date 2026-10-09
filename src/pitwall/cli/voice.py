@@ -153,10 +153,6 @@ def _voice_channel(action: str, args: argparse.Namespace) -> int:
     log = Path(args.log or f"recordings/voice-spike-{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
     return run_spike(
         voice,
-        settings.input,
-        host=settings.connection.udp_host,
-        port=None if args.no_udp else (args.port or settings.connection.udp_port),
         log_path=log,
-        grammar_mode=args.grammar,
         say=args.say,
     )

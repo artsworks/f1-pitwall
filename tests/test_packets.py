@@ -285,7 +285,7 @@ def test_car_field_offset() -> None:
     assert pkt[off] == 42
 
 
-def test_parse_header_passthrough() -> None:
+def test_parse_uses_supplied_header() -> None:
     pkt = pack_packet(PacketId.SESSION, {"total_laps": 44})
     h = parse_header(pkt)
     p = parse(PacketId.SESSION, pkt, h)

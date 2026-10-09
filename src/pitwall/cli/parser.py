@@ -236,13 +236,10 @@ def build_parser() -> argparse.ArgumentParser:
     vgram = vsub.add_parser("grammar", help="print the SRGS grammar")
     vgram.add_argument("--lang", default="en-US", help="xml:lang of the grammar")
     vspike = vsub.add_parser("spike", help="Phase 0 SAPI recogniser check")
-    vspike.add_argument("--port", type=int, default=None, help="UDP port for Action 1 taps")
-    vspike.add_argument("--no-udp", action="store_true", help="Enter key only; don't bind UDP")
     vspike.add_argument("--device", type=int, default=None, help="audio input index")
     vspike.add_argument("--recognizer", default=None, help="recogniser description substring")
     vspike.add_argument("--confidence", type=float, default=None, help="confidence_min override")
     vspike.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
-    vspike.add_argument("--grammar", choices=["srgs", "api"], default="srgs")
     vspike.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
     vspike.add_argument("--log", default=None, help="JSONL log path")
 
