@@ -927,13 +927,13 @@ class SessionState:
         self._rival_laps_emitted: dict[int, int] = {}
 
         self.cars_lap: tuple[Any, ...] | None = None
-        self.cars_telemetry: tuple[Any, ...] | None = None
-        self.cars_status: tuple[Any, ...] | None = None
+        self.cars_telemetry: Sequence[Any] | None = None
+        self.cars_status: Sequence[Any] | None = None
         # (rival idx, gap s) now / at the last two line crossings, for gap trends.
         self._gap_now: dict[str, tuple[int, float]] = {}
         self._gap_lines: list[dict[str, tuple[int, float]]] = []
         self._ahead_latch: tuple[int, float] = (-1, math.inf)
-        self.cars_damage: tuple[Any, ...] | None = None
+        self.cars_damage: Sequence[Any] | None = None
 
         # M2 packet state
         self.participants: tuple[Participant, ...] = ()

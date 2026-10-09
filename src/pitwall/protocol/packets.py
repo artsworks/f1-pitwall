@@ -1,8 +1,9 @@
 """Parsed packet objects, generated from the declarative layouts.
 
 Each packet class is slotted: `header` plus one attribute per layout field.
-Car arrays are tuples of slotted per-car objects; 4-element tyre arrays are
-`Corners` (wire order RL, RR, FL, FR — `tyre_inner.FL` works).
+Car arrays are tuples of slotted per-car objects, except for the four high-rate
+packet types, which use lazy `CarArray` values that retain the payload.
+Four-element tyre arrays are `Corners` (wire order RL, RR, FL, FR).
 
 Import-time gate: for every table, HEADER_SIZE + body size must equal
 PACKET_SIZES[id]. A mismatch means the table (or header layout) is wrong and
@@ -12,10 +13,10 @@ fails loudly here rather than mis-parsing later.
 from __future__ import annotations
 
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import field as dc_field
 from dataclasses import make_dataclass
-from typing import Any
+from typing import Any, overload
 
 from pitwall.protocol.header import (
     HEADER_SIZE,
@@ -196,6 +197,65 @@ def _decoder(cls: Any, layout: tuple[Item, ...]) -> _Decoder:
     return nested
 
 
+class CarArray(Sequence[Any]):
+    __slots__ = ("payload", "base", "car_struct", "decoder", "n", "cache")
+
+    def __init__(
+        self,
+        payload: bytes,
+        base: int,
+        car_struct: struct.Struct,
+        decoder: _Decoder,
+        n: int,
+    ) -> None:
+        self.payload = payload
+        self.base = base
+        self.car_struct = car_struct
+        self.decoder = decoder
+        self.n = n
+        self.cache: list[Any | None] = [None] * n
+
+    @overload
+    def __getitem__(self, index: int, /) -> Any: ...
+
+    @overload
+    def __getitem__(self, index: slice, /) -> tuple[Any, ...]: ...
+
+    def __getitem__(self, index: int | slice, /) -> Any | tuple[Any, ...]:
+        if isinstance(index, slice):
+            return tuple(self[i] for i in range(*index.indices(self.n)))
+        if index < 0:
+            index += self.n
+        if not 0 <= index < self.n:
+            raise IndexError("car array index out of range")
+        cached = self.cache[index]
+        if cached is None:
+            values = self.car_struct.unpack_from(
+                self.payload, self.base + index * self.car_struct.size
+            )
+            cached, _ = self.decoder(values, 0)
+            self.cache[index] = cached
+        return cached
+
+    def __len__(self) -> int:
+        return self.n
+
+    def __iter__(self) -> Iterator[Any]:
+        for i in range(self.n):
+            yield self[i]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Sequence):
+            return False
+        return len(self) == len(other) and all(a == b for a, b in zip(self, other, strict=True))
+
+    __hash__: Any = None
+
+    def __repr__(self) -> str:
+        decoded = sum(value is not None for value in self.cache)
+        return f"CarArray(n={self.n}, decoded={decoded})"
+
+
 _Step = tuple[int, int, _Decoder | None]
 
 
@@ -278,10 +338,76 @@ def _post_decode(obj: Any) -> None:
 
 
 _PACKET_PLANS: dict[int, tuple[struct.Struct, tuple[_Step, ...]]] = {}
+_LAZY_PACKET_IDS = frozenset(
+    (PacketId.CAR_TELEMETRY, PacketId.CAR_STATUS, PacketId.CAR_DAMAGE, PacketId.CAR_TELEMETRY_2)
+)
+_LazyFieldPlan = tuple[str, struct.Struct, int, int, bool]
+_LazyPacketPlan = tuple[int, struct.Struct, _Decoder, int, tuple[_LazyFieldPlan, ...], int]
+_LAZY_PACKET_PLANS: dict[int, _LazyPacketPlan] = {}
 
 
-def parse(packet_id: int, payload: bytes, header: PacketHeader | None = None) -> Any:
-    """Parse a datagram (including its 29-byte header) into a packet object."""
+def _lazy_plan(packet_id: int) -> _LazyPacketPlan:
+    plan = _LAZY_PACKET_PLANS.get(packet_id)
+    if plan is not None:
+        return plan
+    _cls, layout = _PACKET_CLASSES[packet_id]
+    compiled = _compiled(layout)
+    arrays = [item for item in layout if isinstance(item, Array)]
+    assert len(arrays) == 1 and arrays[0].name == "cars"
+    cars = arrays[0]
+    car_struct = _compiled(cars.layout).struct
+    car_decoder = _decoder(_SUB_CLASSES[cars.layout], cars.layout)
+    fields: list[_LazyFieldPlan] = []
+    for item in layout:
+        if isinstance(item, Field):
+            fmt = f"{item.count}{item.fmt}" if item.count > 1 else item.fmt
+            fields.append(
+                (
+                    item.name,
+                    struct.Struct("<" + fmt),
+                    compiled.offsets[item.name],
+                    item.count,
+                    item.corners,
+                )
+            )
+    plan = (
+        HEADER_SIZE + compiled.offsets["cars"],
+        car_struct,
+        car_decoder,
+        cars.n,
+        tuple(fields),
+        compiled.struct.size,
+    )
+    _LAZY_PACKET_PLANS[packet_id] = plan
+    return plan
+
+
+def _parse_lazy(packet_id: int, payload: bytes, header: PacketHeader) -> Any:
+    cls, layout = _PACKET_CLASSES[packet_id]
+    base, car_struct, car_decoder, n, field_plans, body_size = _lazy_plan(packet_id)
+    expected_size = HEADER_SIZE + body_size
+    if len(payload) < expected_size:
+        raise struct.error(f"packet {packet_id} needs {expected_size} bytes, got {len(payload)}")
+    cars = CarArray(payload, base, car_struct, car_decoder, n)
+    values: dict[str, Any] = {}
+    for name, field_struct, offset, count, corners in field_plans:
+        unpacked = field_struct.unpack_from(payload, HEADER_SIZE + offset)
+        if corners:
+            values[name] = Corners(*unpacked)
+        elif count == 1:
+            values[name] = unpacked[0]
+        else:
+            values[name] = unpacked
+    args: list[Any] = [header]
+    for item in layout:
+        args.append(cars if isinstance(item, Array) else values[item.name])
+    obj: Any = cls(*args)
+    _post_decode(obj)
+    return obj
+
+
+def _parse_eager(packet_id: int, payload: bytes, header: PacketHeader | None = None) -> Any:
+    """Parse with eager per-car decoding for tests and benchmarks."""
     if header is None:
         header = parse_header(payload)
     cls, layout = _PACKET_CLASSES[packet_id]
@@ -295,6 +421,15 @@ def parse(packet_id: int, payload: bytes, header: PacketHeader | None = None) ->
     obj: Any = cls(*args)
     _post_decode(obj)
     return obj
+
+
+def parse(packet_id: int, payload: bytes, header: PacketHeader | None = None) -> Any:
+    """Parse a datagram (including its 29-byte header) into a packet object."""
+    if header is None:
+        header = parse_header(payload)
+    if packet_id in _LAZY_PACKET_IDS:
+        return _parse_lazy(packet_id, payload, header)
+    return _parse_eager(packet_id, payload, header)
 
 
 # ---------------------------------------------------------------- Event detail
