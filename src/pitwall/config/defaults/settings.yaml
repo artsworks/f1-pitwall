@@ -203,6 +203,10 @@ thresholds:
   battle_attack_prob_min: 0.3   # below this, attacking is patience + tyres, not "go"
   battle_patience_laps: 2       # laps stuck in attack range before the patience call
   battle_manage_every_laps: 5   # "gaps stable" cadence
+  battle_charge_catch_laps: 2   # on the car ahead within this many laps: harvest first
+  battle_charge_store_pct: 60   # battery under this while catching: harvest call
+  energy_burst_store_pct: 40    # battery under this while attacking: short bursts call
+  overtake_lost_call_gap_s: 2.0  # overtake lost with the car ahead within this: call it
   # Feedback loop (pitwall tune): grades -> persisted per-rule cooldown multiplier
   tune_min_grades: 3
   tune_gain: 2.0

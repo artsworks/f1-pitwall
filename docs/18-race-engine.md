@@ -485,7 +485,10 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `fuel_marginal` | 2 | `fuel_margin_laps < mode.fuel_margin_laps` |
 | `fuel_spare` | 3 | `fuel_margin_laps > th.fuel_spare_laps` once per N laps |
 | `energy_over` / `energy_under` | 2/3 | `energy_mode == 'over'`/`'under'` at lap end |
-| `overtake_mode` | 2 | `energy_mode == 'attack_ok' and gap_ahead_s <= mode.overtake_call_gap_s and drs_available` |
+| `overtake_mode` | 2 | `energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s` |
+| `overtake_earned` / `overtake_lost` | 3/3 | `overtake_available and not overtake_active` / `overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s` |
+| `energy_charge_for_battle` | 3 | sector 1, `battle_mode == 'catching'`, `battle_catch_laps <= th.battle_charge_catch_laps`, `ers_store_pct < th.battle_charge_store_pct` |
+| `energy_burst` | 3 | sector 2, `battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct` |
 | `drs_enabled` | 3 | DRS enabled event after SC / lap 2 |
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |

@@ -253,6 +253,34 @@ def _push(snap: Snapshot) -> Answer:
     return "push", v
 
 
+def _battery(snap: Snapshot) -> Answer:
+    v = {"battery": _n(snap.ers_store_pct, 0), "mj": _n(abs(snap.energy_lap_delta_mj))}
+    if snap.energy_mode == "":
+        return "unknown", v
+    if snap.energy_mode == "over":
+        return "over", v
+    if snap.energy_mode == "under":
+        return "under", v
+    if snap.energy_mode == "attack_ok":
+        return "attack", v
+    return "ok", v
+
+
+def _overtake(snap: Snapshot) -> Answer:
+    v = {"name": snap.rival_ahead_name or "Car", "gap": _n(snap.gap_ahead_s)}
+    if not snap.regulations_2026:
+        return "unknown", v
+    if snap.overtake_active and snap.overtake_available:
+        return "active", v
+    if snap.overtake_active and not snap.overtake_available:
+        return "losing", v
+    if snap.overtake_available:
+        return "earned", v
+    if snap.rival_ahead_idx < 0 or not math.isfinite(snap.gap_ahead_s):
+        return "clear", v
+    return "off", v
+
+
 def _side(name: str, gap: float, trend: float, ahead: bool) -> str:
     """Gap and which way it's going, per lap: "GASLY 0.4 behind, catching 0.3 a lap"."""
     where = "ahead" if ahead else "behind"
@@ -312,6 +340,8 @@ ANSWERS: Mapping[str, Callable[[Snapshot], Answer]] = {
     "rain": _rain,
     "push": _push,
     "fight": _fight,
+    "battery": _battery,
+    "overtake": _overtake,
     "understeer": lambda s: _balance(s, -1),  # bias rearward frees the front
     "oversteer": lambda s: _balance(s, +1),  # bias forward calms the rear
 }
@@ -343,6 +373,8 @@ TEMPLATE_KEYS = frozenset(
         "ahead",
         "behind",
         "budget",
+        "battery",
+        "mj",
     }
 )
 

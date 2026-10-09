@@ -195,7 +195,7 @@ or `id`) picks the case from the current snapshot and fills the placeholders; va
 rotate per item and case. No language model is involved (ADR 0008). `pitwall rules
 check` validates ids, handlers and placeholders.
 
-The scroll list order is Tyres gone?, Pit now?, Fight, Rain coming?, and Push or save?.
+The scroll list order is Tyres gone?, Pit now?, Fight, Overtake?, Battery?, Rain coming?, and Push or save?.
 Radio silent is shortcut-only. Items with `shortcut_only: true` do not appear in that list.
 They remain available through a shortcut or voice intent with the same item id.
 
@@ -208,6 +208,8 @@ The list stays frozen while the menu is open. Wheel-right (UDP Action 4) cycles 
 | Tyres gone? | question | switch / gone / fading / ok / unknown | "Fading. Worst one 55 percent, 3 laps left." |
 | Pit now? | question | box_now / soon / stay_out / no_stop / unknown | "Stay out, box lap 26. Window 24 to 28." |
 | Fight | question | race: both / ahead / behind / none; other sessions: times / no_time | "P4, 12 to go. Clear air." |
+| Overtake? | question (race) | active / earned / losing / off / clear / unknown | "Overtake earned on Norris, 0.6. Next straight." |
+| Battery? | question | over / under / attack / ok / unknown | "Battery 52 percent, 0.3 MJ over. Harvest more." |
 | Rain coming? | question | switch / right_tyre / crossover / coming / chance / dry | "Rain coming. 60 percent in ten." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / fuel_tight / attack / push | "Push, fuel's tight. Plus 0.2 laps." |
 | Radio silent | shortcut-only action | — | Toggles radio silence |

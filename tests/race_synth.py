@@ -72,6 +72,7 @@ class RaceSpec:
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
     gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
+    ers_store_j: float = 3_000_000.0
 
 
 def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
@@ -416,7 +417,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 ),
                 "tyres_age_laps": age,
                 "vehicle_fia_flags": 4 if spec.blue_flag_lap == lap and f < 5 else 0,
-                "ers_store_energy": 3_000_000.0,
+                "ers_store_energy": spec.ers_store_j,
             }
             if spec.ers_deployed_j_per_lap > 0:
                 player_status["ers_deployed_this_lap"] = spec.ers_deployed_j_per_lap

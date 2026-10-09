@@ -74,8 +74,9 @@ menu:
       label: "Fight"
       rank_when: "battle_mode in ('attacking', 'defending')"
       related_rules:
+        - overtake_earned
+        - overtake_lost
         - overtake_mode
-        - drs_attack
         - battle_catching
         - battle_attack
         - battle_patience
@@ -97,6 +98,37 @@ menu:
         times: ["P{pos} on the times. Best lap {best}."]
         no_time: ["No clean lap on the board yet."]
         unknown: ["No timing yet.", "Still waiting on timing."]
+    - id: overtake
+      label: "Overtake?"
+      show_when: "session_kind == 'race'"
+      rank_when: "overtake_available or overtake_zone_ahead"
+      related_rules:
+        - overtake_earned
+        - overtake_lost
+        - overtake_mode
+        - battle_attack
+      replies:
+        active: ["Overtake on. {name} {gap} ahead.", "Overtake's live, {gap} to {name}."]
+        earned: ["Overtake earned on {name}, {gap}. Next straight.", "Yes, overtake next straight. {gap} to {name}."]
+        losing: ["Overtake ends this straight. {gap} to {name}, get inside a second.", "Last overtake for now. {gap} to {name}, close in."]
+        "off": ["No overtake. {gap} to {name}, get inside a second.", "Not yet. {gap} to {name}, need under a second."]
+        clear: ["Nobody ahead. No overtake to earn.", "Clear ahead, no overtake."]
+        unknown: ["No overtake data.", "No overtake read yet."]
+    - id: battery
+      label: "Battery?"
+      rank_when: "overtake_available or overtake_zone_ahead"
+      related_rules:
+        - energy_over
+        - energy_under
+        - energy_charge_for_battle
+        - energy_burst
+        - overtake_mode
+      replies:
+        over: ["Battery {battery} percent, {mj} MJ over. Harvest more.", "{mj} MJ over this lap. Battery {battery} percent, harvest."]
+        under: ["Battery {battery} percent, {mj} MJ spare. Deploy more.", "{mj} MJ unused. Battery {battery} percent, deploy."]
+        attack: ["Battery {battery} percent, spare to attack. Deploy.", "Battery's there, {battery} percent. Deploy on the straight."]
+        ok: ["Battery {battery} percent, on budget.", "On budget. Battery {battery} percent."]
+        unknown: ["No battery read yet.", "Not enough energy data yet."]
     - id: rain
       label: "Rain coming?"
       show_when: "rain_pct_in_30 > 0 or weather_crossover != '' or weather_now >= 3"
