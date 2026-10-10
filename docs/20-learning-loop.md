@@ -124,6 +124,8 @@ Run `pitwall restore learnings/learning-latest.json` to restore a pack.
 Restore keeps active priors and call-quality history for sessions in the ledger.
 Set `learning.pack_dir` to use another drive or synced folder.
 Upload `learning-latest.json` to request promotion into packaged track YAML.
+`pitwall cleanup` deletes dated packs older than 5 days and leftover `.tmp` files. Use `--days` to change the age.
+Cleanup never deletes `learning-latest.json` or `track_ledger.jsonl`, because restore and the track ledger need them.
 
 ## After a race
 
