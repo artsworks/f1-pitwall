@@ -165,6 +165,7 @@ class Dispatcher:
         self._reply_n: dict[str, int] = {}
         self._focus_until = 0.0
         self._rng = random.Random(0)
+        self._rng_uid: int | None = None
         self._digest_prefix_index = 0
 
     @property
@@ -174,6 +175,9 @@ class Dispatcher:
     # -- submission ----------------------------------------------------------
 
     def submit(self, candidates: list[Candidate], snapshot: Snapshot) -> None:
+        if self._rng_uid is None:
+            self._rng = random.Random(snapshot.session_uid)
+            self._rng_uid = snapshot.session_uid
         self.latest_snapshot = snapshot
         self._refresh_queue(snapshot)
         # Suppression windows run on snapshot time so a max-speed replay
@@ -561,7 +565,7 @@ class Dispatcher:
             now = self.latest_snapshot.now if self.latest_snapshot is not None else self.clock.now()
         emitted: list[Call] = []
         held: list[_Queued] = []
-        current_at_start = self._current
+        speaking = self._current
         snap = self.latest_snapshot
         on_straight = bool(snap.on_straight) if snap is not None else False
         if snap is not None:
@@ -595,6 +599,21 @@ class Dispatcher:
                 self._log_call(call, "suppressed", "coherence")
                 self._booking_undo.pop(call.id, None)
                 continue
+            if (
+                speaking is not None
+                and self._current is speaking
+                and not call.screen_only
+                and self._mid_sentence(speaking, now)
+                and not self._preempts(call, speaking)
+            ):
+                speech_end = next(
+                    (end_t for spoken, end_t in self._spoken_calls if spoken.id == speaking.id),
+                    None,
+                )
+                if speech_end is not None:
+                    q.call.ready_t = max(q.call.ready_t, speech_end)
+                held.append(q)
+                continue
             if call.urgency == "info" and self._digest_allowed(call, now, on_straight):
                 due_info = [call]
                 due_info.extend(
@@ -608,25 +627,6 @@ class Dispatcher:
                     call = self._make_digest(due_info, now, snap)
                     prompt = False
             if (
-                self._current is current_at_start
-                and current_at_start is not None
-                and not call.screen_only
-                and self._mid_sentence(current_at_start, now)
-                and not self._preempts(call, current_at_start)
-            ):
-                speech_end = next(
-                    (
-                        end_t
-                        for spoken, end_t in self._spoken_calls
-                        if spoken.id == current_at_start.id
-                    ),
-                    None,
-                )
-                if speech_end is not None:
-                    q.call.ready_t = max(q.call.ready_t, speech_end)
-                held.append(q)
-                continue
-            if (
                 self._current is not None
                 and self._preempts(call, self._current)
                 and self._mid_sentence(self._current, now)
@@ -639,13 +639,14 @@ class Dispatcher:
                         interrupted.requeued = True
                         interrupted.t = now
                         interrupted.not_before = now
-                        self._queue_call(interrupted)
+                        held.append(_Queued(self._queue_key(interrupted), interrupted))
                         self._log_call(interrupted, "requeued", "preempted")
                     else:
                         self._log_call(interrupted, "suppressed", "preempted")
                 else:
                     self._log_call(interrupted, "suppressed", "preempted")
                 self._current = None
+                speaking = call
             spoken_t = self.clock.now()
             muted = call.screen_only or self._silenced(call)
             for sink in self.sinks:
@@ -888,6 +889,7 @@ class Dispatcher:
         self.quiet_until = None
         self._focus_until = 0.0
         self._rng = random.Random(session_uid)
+        self._rng_uid = session_uid
         self._digest_prefix_index = 0
         self._spoken_calls.clear()
         self._negatives.clear()
