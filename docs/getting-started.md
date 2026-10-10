@@ -102,17 +102,22 @@ These commands are optional:
 | `pitwall calibrate` | Fit track values now (upkeep also runs this fit) |
 | `pitwall evaluate` | Compare calls-on and calls-off sessions |
 | `pitwall propose` | Write threshold candidates for review |
-| `pitwall cleanup` | Delete old learned recordings and caches; lists them and asks first |
+| `pitwall cleanup` | Delete old recordings, learning packs and caches. Lists them and asks first |
 | `pitwall digest` | Write a digest JSON or ingest external recordings |
 
 Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not
 need to run it for a live session or edit SQLite.
 
+Cleanup lists files older than 5 days by default. Use `--days` to change the age.
 Cleanup keeps recordings until that exact file has been imported. Another file with
 the same session ID is not enough. It also keeps files changed after import and files
 written within the last hour. Check the list before confirming deletion.
+To also delete old recordings that are not learned yet, add `--include-unlearned`.
+Pitwall cannot learn from a recording after you delete it.
 Cleanup also removes a `.f1bin` copy when its `.f1bin.zst` sibling has identical data and both
 files are at least an hour old.
+In `learnings/`, cleanup removes dated `learning-YYYY-MM-DD.json` packs older than `--days`
+and leftover `.tmp` files. It never removes `learning-latest.json` or `track_ledger.jsonl`.
 
 ## Recording
 
