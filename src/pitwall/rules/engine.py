@@ -93,6 +93,7 @@ class Rule:
         self.clear_when = Predicate(defn.clear_when) if defn.clear_when else None
         self._still_true = Predicate(defn.still_true) if defn.still_true else None
         self.armed = True
+        self.obvious_noted = False
         self.fires_this_stint = 0
         self.phrases = PhraseBook(defn)
         self.severity = [Predicate(t.when) for t in defn.severity]
@@ -268,11 +269,19 @@ class RuleEngine:
                 rule.armed = True
             if not (fired and rule.armed):
                 continue
-            rule.armed = False if rule.clear_when is not None else False
-            if d.max_per_stint is not None and rule.fires_this_stint >= d.max_per_stint:
-                result.suppressed.append(Suppressed(rule, "max_per_stint"))
-                continue
-            repeat = rule.phrases.trigger(snapshot.now)
+            outcome_score, obvious, provisional_silent = rule.extras(ns)
+            if obvious:
+                if rule.obvious_noted:
+                    continue
+                rule.obvious_noted = True
+                repeat = 1
+            else:
+                rule.obvious_noted = False
+                rule.armed = False
+                if d.max_per_stint is not None and rule.fires_this_stint >= d.max_per_stint:
+                    result.suppressed.append(Suppressed(rule, "max_per_stint"))
+                    continue
+                repeat = rule.phrases.trigger(snapshot.now)
             severity = 0
             for i, pred in enumerate(rule.severity, start=1):
                 try:
@@ -281,14 +290,17 @@ class RuleEngine:
                         break
                 except Exception:
                     continue
-            template = rule.phrases.pick(repeat, severity)
+            if obvious:
+                pool = rule.phrases.pool(repeat, severity)[1]
+                template = pool[0] if pool else ""
+            else:
+                template = rule.phrases.pick(repeat, severity)
             tier_priority = d.severity[severity - 1].priority if severity else None
             priority = tier_priority or d.priority
             try:
                 text = template.format_map(_WithRepeat(ns, repeat))
             except Exception:
                 text = template
-            outcome_score, obvious, provisional_silent = rule.extras(ns)
             brief = ""
             if d.brief:
                 try:

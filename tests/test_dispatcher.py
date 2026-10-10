@@ -644,6 +644,29 @@ def test_urgency_order_and_preemption_matrix() -> None:
     assert d._preempts(calls["reply"], calls["info"]) is True
 
 
+def test_preempting_call_holds_lower_urgency_calls_behind_it() -> None:
+    d, _, _ = _dispatcher(
+        min_gap_s=0.0,
+        calls_per_lap=20,
+        deadlines_s={1: 60.0, 2: 60.0, 3: 60.0},
+    )
+    d.submit([_cand("info", urgency="info", text="X" * 90)], _snap(0.0))
+    assert [call.rule_id for call in d.drain(0.0)] == ["info"]
+
+    d.submit(
+        [
+            _cand("safety", urgency="safety", tags=["systems"], text="S"),
+            _cand("tactical", urgency="tactical", text="T"),
+        ],
+        _snap(0.2),
+    )
+    assert [call.rule_id for call in d.drain(0.2)] == ["safety"]
+    safety_end = next(end_t for call, end_t in d._spoken_calls if call.rule_id == "safety")
+    tactical = next(item.call for item in d._queue if item.call.rule_id == "tactical")
+    assert tactical.ready_t >= safety_end
+    assert [call.rule_id for call in d.drain(safety_end)] == ["tactical"]
+
+
 def test_decision_distance_promotes_and_logs() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
     snap = Snapshot(
@@ -744,6 +767,22 @@ def test_rotation_is_seeded_and_both_rules_can_win() -> None:
     assert winners == {"a", "b"}
 
 
+def test_first_submission_seeds_rotation_from_session_uid() -> None:
+    for session_uid in range(1, 21):
+        winners = []
+        snapshot = Snapshot(now=0.0, session_uid=session_uid)
+        for reset in (False, True):
+            d, _, _ = _dispatcher(min_gap_s=0.0)
+            if reset:
+                d.reset_session(session_uid)
+            d.submit(
+                [_cand("a", rotate_with=["b"]), _cand("b", rotate_with=["a"])],
+                snapshot,
+            )
+            winners.append(d._queue[0].call.rule_id)
+        assert winners[0] == winners[1]
+
+
 @pytest.mark.parametrize("resolver_first", [False, True])
 def test_resolved_by_works_in_both_orders(resolver_first: bool) -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
@@ -772,6 +811,21 @@ def test_escalation_and_flush_drop_queued_calls() -> None:
     )
     assert {item.call.rule_id for item in d._queue} == {"red"}
     assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+
+
+def test_flush_calls_preserve_other_flush_calls_in_the_same_tick() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit(
+        [
+            _cand("ordinary", urgency="info"),
+            _cand("finish_podium", urgency="info", flushes_queue=True),
+            _cand("finish_gained", urgency="info", flushes_queue=True),
+        ],
+        _snap(0.0),
+    )
+
+    assert {item.call.rule_id for item in d._queue} == {"finish_podium", "finish_gained"}
+    assert ("ordinary", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
 def test_obvious_and_provisional_suppression() -> None:
@@ -807,13 +861,17 @@ def test_safety_cut_requeues_reply_once() -> None:
         "menu:answer",
         _snap(0.0),
     )
-    d.drain(0.0)
-    d.submit([_cand("hazard", urgency="safety")], _snap(0.5))
-    emitted = d.drain(0.5) + d.drain(1.0)
-    assert [call.rule_id for call in emitted] == ["hazard", "menu:answer"]
+    assert [call.rule_id for call in d.drain(0.0)] == ["menu:answer"]
+    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], _snap(0.5))
+    assert [call.rule_id for call in d.drain(0.5)] == ["hazard"]
+    reply = next(item.call for item in d._queue if item.call.rule_id == "menu:answer")
+    assert reply.requeued
+    assert sum(call.rule_id == "menu:answer" for call, _ in d._spoken_calls) == 1
     assert ("menu:answer", "requeued", "preempted") in {
         (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
     }
+    safety_end = next(end_t for call, end_t in d._spoken_calls if call.rule_id == "hazard")
+    assert [call.rule_id for call in d.drain(safety_end)] == ["menu:answer"]
 
 
 def test_coalescing_renders_count_word() -> None:
@@ -842,6 +900,26 @@ def test_digest_uses_freshest_briefs_caps_items_and_skips_battle() -> None:
     )
     assert {call.rule_id for call in d.drain(0.0)} == {"one", "two"}
     assert not any(row["rule_id"] == "digest" for row in _log(buf))
+
+
+def test_digest_waits_until_current_speaker_finishes() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0, digest_max_items=2)
+    d.submit([_cand("tactical", urgency="tactical", text="T" * 90)], _snap(0.0))
+    assert [call.rule_id for call in d.drain(0.0)] == ["tactical"]
+    for name in ("brief one", "brief two"):
+        candidate = _cand(name.replace(" ", "_"), urgency="info")
+        candidate.brief = name
+        d.submit([candidate], _snap(0.2))
+
+    assert d.drain(0.3) == []
+    assert not any(row["outcome"] == "digested" for row in _log(buf))
+    assert {item.call.rule_id for item in d._queue} == {"brief_one", "brief_two"}
+
+    speech_end = next(end_t for call, end_t in d._spoken_calls if call.rule_id == "tactical")
+    digest_calls = d.drain(speech_end)
+    assert len(digest_calls) == 1
+    assert digest_calls[0].rule_id == "digest"
+    assert "brief one" in digest_calls[0].text and "brief two" in digest_calls[0].text
 
 
 def test_every_priority_one_rule_has_explicit_urgency() -> None:

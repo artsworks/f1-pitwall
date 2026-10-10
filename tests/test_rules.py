@@ -95,6 +95,19 @@ def test_hysteresis_no_refire() -> None:
     assert eng.evaluate(cold).candidates
 
 
+def test_obvious_trigger_does_not_consume_rising_edge() -> None:
+    eng = _engine([_rule(when="True", obvious_when="lap_num <= 1")])
+
+    obvious = eng.evaluate(_snap(lap_num=1))
+    assert len(obvious.candidates) == 1
+    assert obvious.candidates[0].obvious
+    assert not eng.evaluate(_snap(lap_num=1, now=1.0)).candidates
+
+    regular = eng.evaluate(_snap(lap_num=2, now=2.0))
+    assert len(regular.candidates) == 1
+    assert not regular.candidates[0].obvious
+
+
 def test_requires_stale_skips() -> None:
     eng = _engine([_rule(requires=["car_telemetry", "lap_data"])])
     res = eng.evaluate(
