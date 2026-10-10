@@ -813,6 +813,21 @@ def test_escalation_and_flush_drop_queued_calls() -> None:
     assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
+def test_flush_calls_preserve_other_flush_calls_in_the_same_tick() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit(
+        [
+            _cand("ordinary", urgency="info"),
+            _cand("finish_podium", urgency="info", flushes_queue=True),
+            _cand("finish_gained", urgency="info", flushes_queue=True),
+        ],
+        _snap(0.0),
+    )
+
+    assert {item.call.rule_id for item in d._queue} == {"finish_podium", "finish_gained"}
+    assert ("ordinary", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+
+
 def test_obvious_and_provisional_suppression() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
     obvious, provisional = _cand("obvious"), _cand("provisional")

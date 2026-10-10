@@ -495,7 +495,11 @@ class Dispatcher:
 
     def _flush_for(self, call: Call) -> None:
         for queued in list(self._queue):
-            if queued.call.id != call.id and queued.call.urgency != "safety":
+            if (
+                queued.call.id != call.id
+                and queued.call.urgency != "safety"
+                and not queued.call.flushes_queue
+            ):
                 self._drop_queued(queued.call.id, "flushed")
 
     def _resolve_conflict(self, call: Call, snapshot: Snapshot, now: float) -> str | None:
@@ -712,6 +716,8 @@ class Dispatcher:
         )
 
     def _digest_call_ready(self, call: Call, now: float, on_straight: bool) -> bool:
+        if call.flushes_queue:
+            return False
         deadline_ms = call.deadline_ms
         if call.priority == 3 and self.policy.p3_straight_only:
             deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
