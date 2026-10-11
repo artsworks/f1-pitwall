@@ -123,9 +123,16 @@ The latest pack includes learned parameters, quarantined values, call grades, tr
 Run `pitwall restore learnings/learning-latest.json` to restore a pack.
 Restore keeps active priors and call-quality history for sessions in the ledger.
 Set `learning.pack_dir` to use another drive or synced folder.
-Upload `learning-latest.json` to request promotion into packaged track YAML.
 `pitwall cleanup` deletes dated packs older than 5 days and leftover `.tmp` files. Use `--days` to change the age.
 Cleanup never deletes `learning-latest.json` or `track_ledger.jsonl`, because restore and the track ledger need them.
+
+### Contributing your learnings
+
+To propose your learned per-track values for the packaged track YAML, share `learnings/learning-latest.json`.
+The pack is one JSON file. It holds learned parameters, quarantined values, call grades and track overlays.
+It also lists each session's ID, start time, track, session type and lap count.
+The `learnings/` folder is gitignored, so the pack never reaches a commit unless you add it on purpose.
+Share only this file. Do not share the SQLite database, digests, profile or certificates from `~/.pitwall`.
 
 ## After a race
 
