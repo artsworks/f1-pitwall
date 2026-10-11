@@ -193,6 +193,21 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts |
 | [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md), [`06`](docs/06-direction-changes.md), [`10`](docs/10-angles-not-yet-considered.md), [`11`](docs/11-open-questions.md), [`14`](docs/14-adversarial-review.md) | Planning history: review of the first plan, direction changes, open angles and questions, adversarial review |
 
+## Versioning
+
+The project follows [Semantic Versioning 2.0.0](https://semver.org). While the version is 0.x, a breaking change bumps MINOR instead of MAJOR. Moving to 1.0.0 is a manual decision.
+
+Pull requests are squash-merged, so the PR title becomes the commit on `main`. The PR title must be a [Conventional Commit](https://www.conventionalcommits.org), and CI checks it. On each push to `main`, the release workflow reads the title and bumps the version:
+
+| PR title | Bump on 0.x |
+|---|---|
+| `fix: ...`, `perf: ...` | PATCH |
+| `feat: ...` | MINOR |
+| `feat!: ...` or a `BREAKING CHANGE:` footer | MINOR |
+| `docs:`, `chore:`, `refactor:`, `test:`, `build:`, `ci:` | none |
+
+The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag. It creates no GitHub Release. Do not edit the version by hand.
+
 ## Licence
 
 GPLv3 — see [`LICENSE`](LICENSE).

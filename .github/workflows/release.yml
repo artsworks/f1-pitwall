@@ -1,0 +1,26 @@
+name: Release
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      # Bumps pyproject.toml, runs `uv lock`, updates CHANGELOG.md, commits, tags and pushes.
+      # No GitHub Release: publish.upload_to_vcs_release is false and `publish` is never run.
+      - name: Version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run semantic-release -v version --no-vcs-release
