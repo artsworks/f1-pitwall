@@ -97,6 +97,70 @@ question is closed and we stop paying for micro-optimisations.
   to cost more than the backend does.
 - State at 5–10 Hz, not 60 Hz; deltas rather than full snapshots where it is easy.
 
+## TTS synthesis latency
+
+`trigger_to_speak_ms` in `src/pitwall/metrics.py` is the voice lag. The dashboard shows it as
+"voice lag" p99. Synthesis is the part of that lag that changes with the speech engine.
+`scripts/perf_tts.py` measures it for one lap of radio calls.
+
+The workload is 22 fixed lines in the script. Twenty are P2 and P3 calls, which is the top
+`budget_steps` step in `menu.yaml` (20 calls per lap). Two are P1 calls. The budget does not cap P1
+calls, so they come on top of the 20. Each line uses the speed and expression of its priority tone.
+Fifteen lines are fixed phrases from the rule YAML. Seven are rule templates with example values,
+because gap, fuel and plan calls change every lap and never hit the cache.
+
+The script reads the `speech` settings and changes nothing. For each line it reports these values:
+
+- `cold_ms`: time for the synth of that priority on uncached text, median of `--repeat` passes
+  (default 3)
+- `audio_s`: length of the speech it produced
+- `rtf`: `cold_ms` divided by `audio_s`
+- `warm`: whether `pitwall voice warm` pre-renders the line (`common_phrases()`)
+
+The summary block lists the engine, voice, sample rate and model load time. It also lists the lap
+totals and the p50 and p99 for each priority. The script then renders the lap twice through
+`PiperSpeaker.render()`. The first pass is cold and the second pass hits the in-memory cache.
+
+If the backend can't load, the script prints the reason and exits with code 2. A Piper voice that is
+not downloaded causes this, and so do missing Kokoro model files or a missing `kokoro-onnx`.
+
+### Compare Piper and Kokoro
+
+Run the same script with the same settings on both checkouts:
+
+1. On `main`, run `uv run pitwall voice get`. Then run `uv run python scripts/perf_tts.py`.
+2. Add a worktree for the Kokoro branch:
+   `git worktree add ../f1-pitwall-kokoro origin/devin/1790482416-kokoro-tts`.
+3. If the branch has no `scripts/perf_tts.py`, copy the script from `main` into the worktree.
+4. In the worktree, run `uv sync`. Then run `uv run pitwall voices kokoro`.
+5. In the worktree, run `uv run python scripts/perf_tts.py`.
+6. Compare the p50 and p99 for each priority, `lap_cold_ms` and `budget_cold_ms`.
+   Report both the cold and the warm figures.
+
+`--engine`, `--voice` and `--speed` override the settings, as in `pitwall voice say`.
+
+The cold figures are an upper bound for a real session. Repeated phrases come from the cache in
+about 0 ms, and on `main` `pitwall voice warm` stores the rendered P1 phrases on disk. Because of
+`policy.min_gap_s` (3 s), calls do not fire back to back. The latency of each call matters more than
+the lap total.
+
+Results on an 8-core Linux VM, CPU only, default settings:
+
+| | Piper `en_GB-northern_english_male-medium` | Kokoro `bm_george` |
+|---|---|---|
+| Sample rate | 22050 | 24000 |
+| Model load | 1167 ms | 721 ms |
+| P1 cold p50 / p99 | 183 / 183 ms | 901 / 901 ms |
+| P2 cold p50 / p99 | 144 / 179 ms | 1424 / 1862 ms |
+| P3 cold p50 / p99 | 151 / 183 ms | 1386 / 1814 ms |
+| Lap cold total, 22 calls | 3.0 s | 29.2 s |
+| Budgeted cold total, 20 calls | 2.8 s | 27.4 s |
+| Lap audio | 50.6 s | 65.4 s |
+| Warm render p99 | 0.0 ms | 0.0 ms |
+
+Kokoro runs on 2 onnxruntime threads (`speech.kokoro_threads`). Piper uses the onnxruntime default
+thread count. The game PC has a different CPU, so measure there before you choose an engine.
+
 ## Escape hatches, in order of cost
 
 1. Lower the game's UDP rate to 20 Hz and decimate Motion. (free)
