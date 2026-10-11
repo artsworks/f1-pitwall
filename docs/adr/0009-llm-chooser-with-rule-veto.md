@@ -15,17 +15,17 @@ where the gain was only more varied wording. Two things have changed:
 - Fast, cheap models (Flash-tier) make cost negligible and bring latency down to under
   a second for short structured replies. Decisions made at pit-window or debrief speed
   can afford that.
-- The decisions pitwall now makes have real judgment in them that the rules only
-  approximate. Examples: choosing between pit laps inside the window against rival
+- Pitwall now makes decisions that rules only approximate. Examples include choosing
+  between pit laps inside the window against rival
   projections, and picking the one setup change to try next from symptoms the research
   rates low or medium confidence (`22-setup-advisor.md` §1.2). A model that sees the whole
   evidence set may choose better than a fixed candidate order. Nobody knows yet, and the
   learning loop (`20-learning-loop.md`) can measure it.
 
-The ban's real justification was never cost. It was that a decision nobody can reproduce
-or grade cannot be improved or trusted, and that a free-form model can invent an action
-("−3 rear wing", "box this lap" under a red flag). This ADR keeps both protections and
-drops the ban.
+Cost was never the main reason for the ban. A decision nobody can reproduce or grade
+cannot be improved or trusted. A free-form model can also invent an action ("−3 rear
+wing", "box this lap" under a red flag). This ADR keeps both protections and drops the
+ban.
 
 ## Decision
 
@@ -70,12 +70,12 @@ rules on graded outcomes.
    `off → shadow → chooser`. In **shadow**, the model's choice is requested, logged and
    graded, but the rules' choice is used. Promotion to **chooser** is a reviewed config change
    (`llm_authority.<type>: chooser`). Automatic promotion isn't built
-   (`20-learning-loop.md`). Two things must be true before the change is made. First, over ≥ `llm_promote_min_graded`
-   graded decisions, the model's picks do at least as well as the rules' by
-   `llm_promote_margin`. Second, `pitwall diff --corpus` using the logged model responses
-   loses no must-fire calls. The decision type drops back to shadow automatically if its rolling
-   hindsight grade falls below the rules' over the last `llm_demote_window` graded
-   decisions. A change of model version also sends it back to shadow.
+   (`20-learning-loop.md`). Two conditions must hold before promotion. Across at least
+   `llm_promote_min_graded` graded decisions, the model's picks must match or exceed the
+   rules' score by `llm_promote_margin`. `pitwall diff --corpus` with logged model
+   responses must lose no must-fire calls. The decision type returns to shadow
+   automatically if its rolling hindsight grade falls below the rules' over the last
+   `llm_demote_window` graded decisions. A model version change also returns it to shadow.
 7. **Grading uses the existing loop.** The hindsight grader grades whichever choice was
    used. A shadow pick is graded where the grader can price the alternative. `stop_cost_s`
    already searches every legal in-lap, so it can price a different stop lap. In setup
@@ -99,10 +99,9 @@ rules on graded outcomes.
    request's inputs (the same check as the §08 generated section in
    `16-debrief-design.md`).
 10. **Config and privacy.** The provider sits behind `complete(system, user) -> text`
-   (`16-debrief-design.md` §6). The key is optional and the exact model version is set in
-   config. With no key, pitwall behaves exactly as before. In league sessions, rival names
-   are replaced with slot labels before a request leaves the machine, unless a local model
-   is configured (items 13 and 15).
+    (`16-debrief-design.md` §6). The key is optional, and config sets the exact model
+    version. In league sessions, replace rival names with slot labels before sending a
+    request off-machine, unless a local model is configured (items 13 and 15).
 
 ## Consequences
 

@@ -4,11 +4,11 @@ Status: accepted (2026-10)
 
 ## Context
 
-Seven full-profile recordings from one F1 26 Brazil weekend (track 16) were
-replayed, ingested, digested and checked against the live decision log
-(447 rows). The race was 18 laps (session type 15). The recordings stay on
-the game PC per [0005](0005-recordings-never-committed.md). This record keeps
-only the observed values.
+We replayed, ingested, and digested seven full-profile recordings from one
+F1 26 Brazil weekend (track 16). We checked them against the live decision log
+(447 rows). The race was 18 laps (session type 15). Recordings stay on the game
+PC per [0005](0005-recordings-never-committed.md). This ADR records only
+observed values.
 
 ### What the game sent
 
@@ -28,10 +28,9 @@ Measured race rates:
 | 3 | Event | 0.8 |
 | 4 | Participants | 0.4 |
 
-The menu-rate packets arrived at 20.0 to 20.2 Hz in all seven files. The
-capture in [0006](0006-recording-profiles.md) measured 28.7 Hz. The header
-value is the rate Pitwall was configured for. The game does not report its
-send rate in any packet, so the header does not prove what the game sent.
+Menu-rate packets arrived at 20.0 to 20.2 Hz in all seven files. The capture
+in [0006](0006-recording-profiles.md) measured 28.7 Hz. The header records
+Pitwall's configured rate, not the game's actual send rate.
 
 Lap Data and Car Status arrive as separate packets. In all 33 lap crossings
 in the seven files, Car Status reset its per-lap ERS counters on the same
@@ -113,9 +112,9 @@ input was a prior of 1.04 kg per lap from the live database. The real burn was
 - `boost_left_on` fires only on a lift or brake after 3 s. This replaces the
   12 s rule in [0007](0007-driving-event-signals.md), and the
   `boost_max_s` threshold is gone.
-- `penalty_cost` has its own cooldown. Good news can no longer block bad news.
-  `last_lap` gives the position after the penalty when the penalty costs
-  places.
+- `penalty_cost` has its own cooldown, so a positive call cannot suppress a
+  negative one. `last_lap` gives the post-penalty position when the penalty
+  costs places.
 - `plan_announce_no_stop` needs `num_pit_stops == 0`.
 - `pit_exit_traffic_race` fires only at the exit and shares the `car_behind`
   group with `pit_exit_traffic`.
@@ -130,9 +129,9 @@ input was a prior of 1.04 kg per lap from the live database. The real burn was
   the expected samples at 20 Hz.
 - An energy, battery or tyre call made mid-lap must say which part of the lap
   it measured. A full-lap allowance needs a full-lap measurement.
-- A shared cooldown group can starve a rule whose `when` stays true, because
-  the rule only re-arms on `clear_when`. Put opposite messages in different
-  groups, or re-arm each lap.
+- A shared cooldown group can suppress a rule while its `when` remains true,
+  because the rule rearms only on `clear_when`. Put opposite messages in
+  different groups or rearm each lap.
 - Not explained yet: on lap 3, `battle_defend` said the car behind was
   "8.6 seconds slower". Check the rival pace input on the next race recording.
 - The CLI has no `hindsight` command. `pitwall digest` grades calls in

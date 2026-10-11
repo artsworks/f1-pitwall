@@ -1,4 +1,4 @@
-# 0006 — Recording profiles: lite by default, full on demand
+# 0006: Recording profiles: lite by default, full on demand
 
 Status: accepted (2026-09)
 

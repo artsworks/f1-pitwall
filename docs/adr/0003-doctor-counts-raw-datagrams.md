@@ -1,4 +1,4 @@
-# 0003 — Doctor counts raw datagrams, not accepted ones
+# 0003: Doctor counts raw datagrams, not accepted ones
 
 Status: accepted (2026-09)
 
@@ -12,10 +12,10 @@ settings screenshots were spent on the wrong hypothesis.
 
 ## Decision
 
-Ingest counts at every stage — raw datagrams, accepted, dropped-unsupported,
-dropped-malformed, dropped-size-mismatch (per packet id, with observed vs
-expected size) — and `doctor` and `pitwall start` print all of them. "No
-datagrams" is only reported when the raw count is zero.
+Ingest counts every stage: raw datagrams, accepted, dropped-unsupported,
+dropped-malformed, and dropped-size-mismatch per packet id, with observed vs
+expected size. The `doctor` and `pitwall start` commands print all counts. "No
+datagrams" is reported only when the raw count is zero.
 
 ## Consequences
 

@@ -1,13 +1,13 @@
 # Architecture decision records
 
-One file per decision or hard-won lesson, numbered, never rewritten — supersede
-with a new record instead. Each has **Context** (what we saw), **Decision**
-(what we do now), **Consequences** (what to remember). Anything learnt from a
-live F1 26 session belongs here so the next parser, rule or UI change does not
-repeat it.
+Write one numbered file per decision or hard-won lesson. Never rewrite a record;
+supersede it with a new one. Each record has **Context** (what we saw),
+**Decision** (what we do now), and **Consequences** (what to remember). Record
+findings from live F1 26 sessions here so later parser, rule, and UI changes do
+not repeat them.
 
-Recordings (`*.f1bin`, `*.f1idx`, `recordings/`, `decisions/`) stay on the game
-PC and are git-ignored; the ADR records the finding, not the data.
+Keep recordings (`*.f1bin`, `*.f1idx`, `recordings/`, `decisions/`) on the game
+PC and git-ignored. Record findings, not data.
 
 | # | Title |
 |---|-------|
