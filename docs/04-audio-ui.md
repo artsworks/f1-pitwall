@@ -137,7 +137,7 @@ Show state changes with colour and text on the same frame.
 │ LIVE  60Hz  age 18ms        RACE  LAP 24/44        FUEL +0.4 LAPS   │
 ├──────────────────────────────┬──────────────────────────────────────┤
 │ TYRES            MED  14 LAPS│ AHEAD   P4 NORRIS      +1.4  (HARD)  │
-│  FL 106  OVERHEAT │ FR  98 OK│ BEHIND  P6 LECLERC     -2.1  DRS     │
+│  FL 106  OVERHEAT │ FR  98 OK│ BEHIND  P6 LECLERC     -2.1  OT      │
 │  RL  94 OK        │ RR  95 OK│ PIT EXIT RIVAL         P7 SAINZ      │
 │  WEAR 38%   LIFE ~5 LAPS     │ PIT WINDOW  LAP 26-28  UNDERCUT +1.2 │
 ├──────────────────────────────┴──────────────────────────────────────┤

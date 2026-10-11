@@ -341,7 +341,7 @@ overheat: bool                      # slow inner EMA > th.tyre_inner_hot_c with 
 pit_loss_s, pit_loss_source: float, str
 fuel_margin_laps: float; fuel_per_lap_kg: float; fuel_source: str
 energy_per_lap_mj, energy_lap_delta_mj, energy_laps_to_floor: float; energy_mode: str
-drs_zone_ahead: bool; drs_available: bool (drs_allowed and gap_ahead_s < 1.0 and not sc)
+drs_zone_ahead: bool; drs_available: bool (2026: overtake_active; pre-2026: drs_allowed and gap_ahead_s < 1.0 and not sc)
 penalty_s: int; unserved_drive_through: int; unserved_stop_go: int; warnings: int; corner_cut_warnings: int
 track_warning_count: int             # warnings so far of the latest warning's kind (corner cut / running wide)
 penalty_recent: bool                # PENA event for the player inside th.penalty_recent_s

@@ -158,9 +158,9 @@ fuel-mix changes. Phrase the call as "you need half a lap of fuel saving over th
 
 **Energy.** Compare ERS store with `m_ersHarvestLimitPerLap` and `m_ersDeployedThisLap`
 to advise deployment. The 2026 Overtake Mode uses `m_overtakeAvailable` and
-`m_overtakeActivationDistance` make "overtake available in 200 metres" a precise,
-actionable call. DRS availability comes from `m_drsAllowed` / `m_drsActivationDistance`
-and the `DRSE`/`DRSD` events.
+`m_overtakeActivationDistance` to make "overtake available in 200 metres" a precise,
+actionable call. Under the 2026 regulations, `m_drsAllowed` and `m_drsActivationDistance`
+are always 0 and the `DRSE`/`DRSD` events never fire. DRS logic runs only on pre-2026 data.
 
 **Discipline.** Track `m_cornerCuttingWarnings` against the penalty threshold, blue flags,
 unserved penalties, and damage-driven pace loss.

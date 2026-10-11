@@ -313,7 +313,7 @@ that audio was interrupted.
 | Milestone | Screen change | Zone |
 |---|---|---|
 | M2 quali | Phase words `OUT LAP / FLYING / IN LAP`; release-window countdown `release in 12 s` in zone F; abort advisory as a P2 banner; ACK/NEG chips; QUIET state; verbosity name | A, F, B, E |
-| M3 race | Zone F fills: `PIT WINDOW L26–28`, `AHEAD P4 NORRIS +1.4 HARD · UC +1.2`, `BEHIND P6 LECLERC −2.1 DRS`, one-line stint plan `M 1–26 → H 27–57`. SC/VSC paints the status bar. `fuel_delta_laps` from server. Damage `box for wing` rows turn red | F, A, D |
+| M3 race | Zone F fills: `PIT WINDOW L26–28`, `AHEAD P4 NORRIS +1.4 HARD · UC +1.2`, `BEHIND P6 LECLERC −2.1 OT`, one-line stint plan `M 1–26 → H 27–57`. SC/VSC paints the status bar. `fuel_delta_laps` from server. Damage `box for wing` rows turn red | F, A, D |
 | M4 | Nothing new on the live screen. Debrief is a separate page; Piper changes the voice, not the UI. Phone client reuses `/radio` | — |
 
 Reserved but empty until M3: zone F, `~12 %` of the height. It is cheaper to carry an
@@ -395,7 +395,7 @@ LIVE/STALE never move, and the pit board / cool-down takeovers still win.
 
 | Page | Occasion | Zones |
 |---|---|---|
-| race | default, 90 % of laps | A B C D F E (zone F = strategy) + rival cards on the right (immediate ahead/behind: battle state, gap rail, pace delta, last lap, tyre + age, DRS/UC/OC/infringements; BEHIND lights up when a threat), pit-exit projection |
+| race | default, 90 % of laps | A B C D F E (zone F = strategy) + rival cards on the right (immediate ahead/behind: battle state, gap rail, pace delta, last lap, tyre + age, OT/UC/OC/infringements; BEHIND lights up when a threat), pit-exit projection |
 | car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
 | track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
 
@@ -417,7 +417,7 @@ number and word is readable in its final state on the first frame.
 | Tyre status flip | one ring pulse in the new colour | 700 ms |
 | Position change | number lifts green (gain) or drops red (loss) | 1.6 s |
 | Lap change | lap counter flashes | 900 ms |
-| Battle gap | marker on a 0–3 s rail glides to the new gap; DRS third shaded | 600 ms |
+| Battle gap | marker on a 0–3 s rail glides to the new gap, and the 1.0 s overtake range is shaded | 600 ms |
 | SC/VSC, red flag, stale | static diagonal stripes on the status bar | while true |
 
 Animations run off timestamps, not the render tick, so the 4–5 Hz re-render never

@@ -68,7 +68,7 @@ afterwards for false positives. Tune from the recording, not from another run.
 - Lap-time and degradation model fitted online; rival pace from Session History.
 - Measured pit loss; track priors as cold start only.
 - Pit window optimiser, undercut/overcut, free stop, SC/VSC cheap stop.
-- Fuel and ERS/Overtake-mode calls; DRS, penalties, blue flags, and weather crossover.
+- Fuel, ERS and Overtake-mode calls, penalties, blue flags and weather crossover.
 - Rival scope filter with the pit-exit rival projection.
 - `pitwall replay --mask-restricted`: replay single-player recordings with rival fuel/ERS/wear zeroed, to prove the model degrades gracefully for league races.
 - Wire balanced / aggressive mindsets (defend and survive after M3) through the rules.
