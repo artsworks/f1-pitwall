@@ -31,7 +31,30 @@ dev = [
     "ruff",
     "mypy",
     "types-PyYAML",
+    "python-semantic-release~=10.6.2",
 ]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_parser = "conventional"
+tag_format = "v{version}"
+# 0.x rule: a breaking change bumps MINOR, not MAJOR. Moving to 1.0.0 is a manual decision.
+major_on_zero = false
+allow_zero_version = true
+build_command = "uv lock"
+assets = ["uv.lock"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.changelog]
+mode = "update"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.publish]
+upload_to_vcs_release = false
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pitwall"]
