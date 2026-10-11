@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 import zstandard
 
 from pitwall.cleanup import apply, plan_cleanup
+from pitwall.cli.parser import build_parser
 
 NOW = 1_800_000_000.0
 DAY = 86400.0
@@ -38,6 +40,29 @@ def _set_pair_age(paths: tuple[Path, Path], age_days: float) -> None:
         os.utime(path, (mtime, mtime))
 
 
+def _make_cleanup_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "persistence": {"enabled": True, "path": str(tmp_path / "pitwall.sqlite")},
+                "recording": {"directory": str(tmp_path / "recordings")},
+                "speech": {"voices_dir": str(tmp_path / "voices")},
+                "learning": {"pack_dir": str(tmp_path / "learnings")},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile_path))
+    monkeypatch.chdir(tmp_path)
+
+
+def test_cleanup_days_defaults_to_five() -> None:
+    args = build_parser().parse_args(["cleanup"])
+    assert args.days == 5.0
+    assert args.include_unlearned is False
+
+
 def test_only_old_learned_recordings_and_caches_are_listed(tmp_path: Path) -> None:
     rec, home, voices = tmp_path / "rec", tmp_path / "home", tmp_path / "voices"
     learned = 0xDB913A6A1919407E
@@ -63,10 +88,11 @@ def test_only_old_learned_recordings_and_caches_are_listed(tmp_path: Path) -> No
     assert not old.exists()
 
 
-def test_cleanup_cli_needs_confirmation(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_cleanup_cli_needs_confirmation(tmp_path: Path, capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     from pitwall.cli import main
     from pitwall.store.db import Database
 
+    _make_cleanup_profile(tmp_path, monkeypatch)
     rec = tmp_path / "rec"
     db_path = tmp_path / "pitwall.sqlite"
     db = Database(str(db_path))
@@ -83,6 +109,112 @@ def test_cleanup_cli_needs_confirmation(tmp_path: Path, capsys) -> None:  # type
     assert "deleted 1 file" in capsys.readouterr().out
 
 
+def test_cleanup_cli_keeps_unlearned_recordings_unless_forced(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    file = _touch(rec / "session_00000000000000ab_1.f1bin.zst", 40)
+    mtime = time.time() - 40 * DAY
+    os.utime(file, (mtime, mtime))
+    args = ["cleanup", "--recordings", str(rec), "--db", str(tmp_path / "pitwall.sqlite"), "--yes"]
+
+    assert main(args) == 0
+    assert file.exists()
+
+    assert main([*args, "--include-unlearned"]) == 0
+    assert not file.exists()
+
+
+def test_unlearned_recordings_kept_unless_forced(tmp_path: Path) -> None:
+    rec, home, voices = tmp_path / "rec", tmp_path / "home", tmp_path / "voices"
+    unlearned_uid = 0xAA
+    old = _touch(rec / f"session_{unlearned_uid:016x}_1.f1bin.zst", 40)
+    old_idx = _touch(rec / f"session_{unlearned_uid:016x}_1.f1idx", 40)
+    recent = _touch(rec / f"session_{unlearned_uid:016x}_2.f1bin.zst", 0.01)
+
+    default = plan_cleanup(rec, home, voices, set(), 5, now=NOW)
+    assert default.delete == []
+    assert default.kept_unlearned == 1
+
+    forced = plan_cleanup(rec, home, voices, set(), 0, now=NOW, include_unlearned=True)
+    assert {candidate.path: candidate.reason for candidate in forced.delete} == {
+        old.absolute(): "old recording (unlearned, forced)",
+        old_idx.absolute(): "old recording (unlearned, forced)",
+    }
+    assert forced.kept_unlearned == 0
+    assert recent.absolute() not in {candidate.path for candidate in forced.delete}
+
+    learned_uid = 0xBB
+    stale_import = _touch(rec / f"session_{learned_uid:016x}_1.f1bin.zst", 40)
+    imports = {stale_import.resolve(): NOW - 41 * DAY}
+    stale_default = plan_cleanup(
+        rec,
+        home,
+        voices,
+        {learned_uid},
+        0,
+        now=NOW,
+        recording_imports=imports,
+    )
+    assert stale_import.absolute() not in {candidate.path for candidate in stale_default.delete}
+
+    stale_plan = plan_cleanup(
+        rec,
+        home,
+        voices,
+        {learned_uid},
+        0,
+        now=NOW,
+        recording_imports=imports,
+        include_unlearned=True,
+    )
+    stale_candidates = {candidate.path: candidate.reason for candidate in stale_plan.delete}
+    assert stale_candidates[stale_import.absolute()] == "old recording (unlearned, forced)"
+    assert stale_plan.kept_unlearned == 0
+
+
+def test_learnings_prunes_dated_packs_and_temp_files(tmp_path: Path) -> None:
+    learnings = tmp_path / "learnings"
+    latest = _touch(learnings / "learning-latest.json", 40)
+    ledger = _touch(learnings / "track_ledger.jsonl", 40)
+    old_dated = _touch(learnings / "learning-2020-01-01.json", 40)
+    old_temp = _touch(learnings / ".learning-latest.json.abc123.tmp", 40)
+    fresh_dated = _touch(learnings / "learning-2026-01-01.json", 0.01)
+    fresh_temp = _touch(learnings / ".track_ledger.jsonl.x.tmp", 0.01)
+    notes = _touch(learnings / "notes.json", 40)
+
+    plan = plan_cleanup(
+        tmp_path / "rec",
+        tmp_path / "home",
+        tmp_path / "voices",
+        set(),
+        5,
+        now=NOW,
+        learnings_dir=learnings,
+    )
+    assert {candidate.path: candidate.reason for candidate in plan.delete} == {
+        old_dated.absolute(): "old dated learning pack",
+        old_temp.absolute(): "leftover learning pack temp file",
+    }
+    expected_bytes = old_dated.stat().st_size + old_temp.stat().st_size
+    assert apply(plan) == (2, expected_bytes)
+    for untouched in (latest, ledger, fresh_dated, fresh_temp, notes):
+        assert untouched.exists()
+
+    zero_days = plan_cleanup(
+        tmp_path / "rec",
+        tmp_path / "home",
+        tmp_path / "voices",
+        set(),
+        0,
+        now=NOW,
+        learnings_dir=learnings,
+    )
+    assert latest.absolute() not in {candidate.path for candidate in zero_days.delete}
+    assert ledger.absolute() not in {candidate.path for candidate in zero_days.delete}
+
+
 def test_symlinked_folder_is_skipped(tmp_path: Path) -> None:
     real = tmp_path / "elsewhere"
     real.mkdir()
@@ -92,6 +224,24 @@ def test_symlinked_folder_is_skipped(tmp_path: Path) -> None:
     (pw / "digests").symlink_to(real)
     plan = plan_cleanup(
         tmp_path / "rec", pw, tmp_path / "voices", set(), 0.0, now=time.time() + 1e6
+    )
+    assert plan.delete == []
+
+
+def test_symlinked_learnings_folder_is_skipped(tmp_path: Path) -> None:
+    real = tmp_path / "elsewhere"
+    _touch(real / "learning-2020-01-01.json", 40)
+    link = tmp_path / "learnings"
+    link.symlink_to(real, target_is_directory=True)
+
+    plan = plan_cleanup(
+        tmp_path / "rec",
+        tmp_path / "home",
+        tmp_path / "voices",
+        set(),
+        0,
+        now=NOW,
+        learnings_dir=link,
     )
     assert plan.delete == []
 

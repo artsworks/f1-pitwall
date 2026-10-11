@@ -86,11 +86,18 @@ def build_parser() -> argparse.ArgumentParser:
     add_db_arg(tun)
     tun.set_defaults(func=cmd_tune)
 
-    cu = sub.add_parser("cleanup", help="delete old learned recordings and caches (asks first)")
-    cu.add_argument("--days", type=float, default=30.0, help="only files older than this")
+    cu = sub.add_parser("cleanup", help="delete old recordings, packs and caches (asks first)")
+    cu.add_argument(
+        "--days", type=float, default=5.0, help="only files older than this (default: 5)"
+    )
     cu.add_argument("--recordings", default=None, help="recordings folder (default: settings)")
     add_db_arg(cu)
     cu.add_argument("--yes", action="store_true", help="delete without asking")
+    cu.add_argument(
+        "--include-unlearned",
+        action="store_true",
+        help="also delete old recordings not learned yet",
+    )
     cu.set_defaults(func=cmd_cleanup)
 
     dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")

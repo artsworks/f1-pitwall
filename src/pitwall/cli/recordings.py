@@ -411,6 +411,8 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
             db.ingested_uids() if db is not None else set(),
             args.days,
             recording_imports=db.ingested_recordings() if db is not None else {},
+            learnings_dir=Path(settings.learning.pack_dir).expanduser(),
+            include_unlearned=args.include_unlearned,
         )
     except ValueError as exc:
         print(f"cleanup: {exc}")

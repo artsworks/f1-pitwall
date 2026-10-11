@@ -1,8 +1,10 @@
 """`pitwall cleanup`: find old files that are safe to delete.
 
-Only files Pitwall can rebuild or no longer needs are listed. The database,
-profile, track overlays and voice models are never touched, and a recording
-is only listed once its session is in the learning database."""
+Only files Pitwall can rebuild or no longer needs are listed. Dated learning
+packs and old temporary pack files can be listed, but `learning-latest.json`
+and `track_ledger.jsonl` are never touched. Recordings not yet learned are
+only listed with `--include-unlearned`. The database, profile, track overlays
+and voice models are never touched."""
 
 from __future__ import annotations
 
@@ -15,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import zstandard
+
+from pitwall.learnpack import LATEST_NAME, LEDGER_NAME
 
 _SESSION = re.compile(r"^session_([0-9a-f]{16})_\d+\.f1(bin|bin\.zst|idx)$")
 _RECENT_S = 3600.0  # never touch files written in the last hour: a session may be live
@@ -82,6 +86,8 @@ def plan_cleanup(
     older_than_days: float,
     now: float | None = None,
     recording_imports: Mapping[Path, float] | None = None,
+    learnings_dir: Path | None = None,
+    include_unlearned: bool = False,
 ) -> Plan:
     if not math.isfinite(older_than_days) or older_than_days < 0:
         raise ValueError("--days must be a finite, non-negative number")
@@ -128,6 +134,9 @@ def plan_cleanup(
         if mtime > cutoff:
             continue
         if int(m.group(1), 16) not in learned_uids:
+            if include_unlearned:
+                add(p, "old recording (unlearned, forced)")
+                continue
             if m.group(2) != "idx":
                 kept += 1
             continue
@@ -136,6 +145,9 @@ def plan_cleanup(
             sources = (source.resolve(), Path(str(source.resolve()) + ".zst"))
             imported_at = max((recording_imports.get(path, 0.0) for path in sources), default=0.0)
             if imported_at < mtime:
+                if include_unlearned:
+                    add(p, "old recording (unlearned, forced)")
+                    continue
                 if m.group(2) != "idx":
                     kept += 1
                 continue
@@ -147,6 +159,17 @@ def plan_cleanup(
     for p in _files(pitwall_dir / "digests", "*.json"):
         if p.stat().st_mtime <= cutoff:
             add(p, "old digest, rebuilt from the database")
+    if learnings_dir is not None:
+        for p in _files(learnings_dir, ".*.tmp"):
+            if p.name in (LATEST_NAME, LEDGER_NAME):
+                continue
+            if p.stat().st_mtime <= recent:
+                add(p, "leftover learning pack temp file")
+        for p in _files(learnings_dir, "learning-????-??-??.json"):
+            if p.name in (LATEST_NAME, LEDGER_NAME):
+                continue
+            if p.stat().st_mtime <= cutoff:
+                add(p, "old dated learning pack")
     for p in _files(voices_dir / ".phrases", "*.wav"):
         if p.stat().st_mtime <= recent:
             add(p, "speech cache, rebuilt when needed")
