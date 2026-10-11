@@ -1,4 +1,4 @@
-# 0001 — `m_packetFormat == 2026` is the only header gate
+# 0001: `m_packetFormat == 2026` is the only header gate
 
 Status: accepted (2026-09, first live session)
 
@@ -22,4 +22,4 @@ protects the layout tables.
 - Never derive acceptance from a header field whose value we have only read in
   documentation; the wire discriminator is the format field.
 - If a future patch changes sizes, `doctor` shows `size_mismatch` per id and
-  observed-vs-expected bytes — fix the layout table, do not loosen the gate.
+  the observed and expected bytes. Fix the layout table. Do not loosen the gate.

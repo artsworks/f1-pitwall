@@ -1,17 +1,17 @@
 # Guest timing tower (`/tower`)
 
-Status: design only. Not built. Owner decision (M3): write up now, build later.
+Status: design only, not built. M3 owner decision: document now, build later.
 
-A second screen for people watching the race from the garage: friends, family, guests
-on a laptop across the room. It shows the whole field, sectors and pace, and tells the
-story of our race in plain words. It never talks to the driver and never changes anything
-on the driver's side.
+A second screen for friends, family, and other guests watching from the garage on a
+laptop across the room. It shows the whole field, sectors, and pace, and explains the
+race in plain words. It never talks to the driver or changes anything on the driver's
+side.
 
 ## 1. Why a separate route, not a dashboard page
 
-`15-dashboard-design.md` bans a 22-car timing tower from the driver's screen because it
-fails the glance test at 300 km/h. Guests have the opposite problem: they have time,
-no context, and want the TV picture. So this is a separate route, `/tower`:
+`15-dashboard-design.md` excludes a 22-car timing tower from the driver's screen because
+it fails the glance test at 300 km/h. Guests have time but lack context and want the TV
+view, so use a separate `/tower` route:
 
 - Not in the Action 4 page cycle and not affected by `ui.auto_page`.
 - Read-only socket: the server ignores `mindset`, `page`, `ack` and control messages
@@ -33,9 +33,9 @@ no context, and want the TV picture. So this is a separate route, `/tower`:
 | 6 | What's our plan? | strategy strip in plain words from the engine: "One stop, window L26–28. Norris pitted L24, we're covering." |
 | 7 | What just happened? | events feed: overtakes, stops, penalties, fastest laps, SC, retirements |
 
-Row 6 is what only our pitwall can offer. The engine already knows the pit window, the
-relevant rivals and the undercut threat (`18-race-engine.md`), so the tower explains
-them the way a TV commentator would.
+Row 6 is unique to this pit wall. The engine already knows the pit window, relevant rivals,
+and undercut threat (`18-race-engine.md`), so the tower can explain them like a TV
+commentator.
 
 ## 3. Data sources
 
@@ -54,10 +54,10 @@ Everything comes from the packets the engine already parses. No new ingestion.
 | our plan and battle | `strategy` payload (`18-race-engine.md`) | own-car plan is exact; rival parts carry the engine's confidence |
 | weather forecast | Session forecast samples | available |
 
-Places gained comes from the grid position (Final Classification / Lap Data grid
-position) and is stored in the `sessions` row so the number stays correct after a
-recovery restart. The sparklines use stored `laps` for our car and the Session History
-buffer for the others. No new tables are needed for v1.
+Calculate places gained from grid position (Final Classification / Lap Data grid
+position) and store it in the `sessions` row so recovery restarts preserve the value.
+Sparklines use stored `laps` for our car and the Session History buffer for others. V1
+needs no new tables.
 
 ## 4. `timing` payload (sketch)
 
@@ -82,7 +82,7 @@ buffer for the others. No new tables are needed for v1.
 }
 ```
 
-Absent fields hide, never error (same rule as `15-dashboard-design.md` §5).
+Hide absent fields; they must not cause errors (same rule as `15-dashboard-design.md` §5).
 
 ## 5. Layout (landscape laptop, 1366×768 to 1920×1080)
 
@@ -101,9 +101,9 @@ Absent fields hide, never error (same rule as `15-dashboard-design.md` §5).
 └───────────────────────────────────────────────────────────────┴──────────────┘
 ```
 
-- Our row: highlighted background, never scrolled away; if the list overflows, the
-  tower compresses row height before it scrolls.
-- Font sized for 3 m viewing: `clamp(14px, 1.3vw, 28px)`; names shortened to 3-letter
+- Our row: use a highlighted background and keep it visible. If the list overflows,
+  compress rows before scrolling.
+- Set the font for 3 m viewing: `clamp(14px, 1.3vw, 28px)`. Shorten names to 3-letter
   codes below 1280 px width.
 - Colour always paired with a word or shape (purple/green/yellow sectors also carry a
   `●`/`▲`/`·` glyph), matching `15-dashboard-design.md` §4.
@@ -128,9 +128,9 @@ Same rules as `15-dashboard-design.md` §11, tuned for spectators:
   `tower.show_calls: false` hides it.
 - **Privacy in leagues.** `tower.show_rival_detail` (default `true` offline, `false`
   in online sessions) controls pace sparklines and the strategy story's rival names.
-- **No load on the driver path.** The `timing` payload is built at 1 Hz from the
-  latest snapshot; building it must stay under 2 ms (`09-performance.md` budget) and
-  it is skipped when no `/tower` client is connected.
+- **No load on the driver path.** Build the `timing` payload at 1 Hz from the latest
+  snapshot. Keep build time under 2 ms (`09-performance.md` budget) and skip it when no
+  `/tower` client is connected.
 - **Stale.** Same >1 s rule: the whole tower greys and shows `STALE` in the header.
 
 ## 8. Config (sketch)

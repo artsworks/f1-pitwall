@@ -1,4 +1,4 @@
-# 0007 — Driving-event signals: lock-ups, boost, yellows, out-lap timing
+# 0007: Driving-event signals: lock-ups, boost, yellows, out-lap timing
 
 Status: accepted (2026-09)
 

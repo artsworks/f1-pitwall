@@ -4,7 +4,8 @@ Run pitwall on the Windows game PC next to F1 26.
 
 ## Install
 
-Git and [uv](https://docs.astral.sh/uv/); uv downloads Python 3.12 itself. In PowerShell:
+Install Git and [uv](https://docs.astral.sh/uv/). `uv` downloads Python 3.12. Run these
+commands in PowerShell:
 
 ```powershell
 winget install --id astral-sh.uv -e   # then reopen PowerShell
@@ -49,45 +50,49 @@ uv run pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
 uv run pitwall voice say --engine sapi        # compare with the old voice
 ```
 
-Pick the default in `speech.piper_voice` and the pace in `speech.piper_speed`
-(1.3 default; try `voice say --speed 1.4`). `speech.rate` and `speech.volume`
-apply to both engines. Piper also reads each call in a tone set by its priority:
-P1 urgent (`speech.tone_urgent_speed` / `tone_urgent_expression`), P2 normal and P3 calm
-(`tone_calm_*`). Expression scales Piper's pitch and energy variation (1.0 is the voice's
-default).
+Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
+1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.
+Piper sets each call's tone by priority. P1 is urgent (`speech.tone_urgent_speed` /
+`tone_urgent_expression`), P2 is normal, and P3 is calm (`tone_calm_*`). Expression scales
+Piper's pitch and energy variation. The default is 1.0.
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.
 
 ## Phone radio over HTTPS
 
-On the PC that hosts Pitwall, install [mkcert](https://github.com/FiloSottile/mkcert)
-and run `mkcert -install`. Make a certificate for the PC's actual LAN IP:
+On the Pitwall PC, install [mkcert](https://github.com/FiloSottile/mkcert) and run
+`mkcert -install`. Make a certificate for the PC's actual LAN IP:
 
 ```powershell
 mkcert -cert-file "$HOME\.pitwall\phone.pem" -key-file "$HOME\.pitwall\phone-key.pem" 192.168.1.20 localhost 127.0.0.1
 ```
 
-Replace `192.168.1.20` with the PC's IP. Configure `connection.https_cert` and
-`connection.https_key` with those absolute PEM paths and restart Pitwall. Install
-mkcert's local root CA on the phone (the mkcert README explains the phone-specific
-steps); the phone must trust it for wake lock, service worker, and PWA install.
-Open `https://<PC-LAN-IP>:8000/radio`, choose **ARM PHONE RADIO** once on the
-phone, then install the page from the browser menu if desired. Use phone speech
-when backend speech is off to avoid hearing duplicate calls. Browsers may suspend
-speech in background tabs; keep the page open and visible. The PWA caches only
-static assets; live telemetry still requires a connection to the PC.
+Replace `192.168.1.20` with the PC's IP. Set `connection.https_cert` and
+`connection.https_key` to those absolute PEM paths, then restart Pitwall. Install mkcert's
+local root CA on the phone. The mkcert README explains the phone-specific steps. The phone
+must trust the CA for wake lock, service worker, and PWA installation.
 
-Other devices need the 4-digit PIN that Pitwall prints at startup. The PIN changes on each start. After 5 wrong tries, that device waits 60 s. This PC needs no PIN, unless the request came through a proxy that adds `X-Forwarded-For` or `Forwarded`. If a tunnel or port forwarder on this PC serves the dashboard, set `connection.pin_trust_localhost: false`. Then this PC needs the PIN too. Set `connection.require_pin: false` to turn the PIN off. The PIN cookie is sent only over HTTPS when `connection.https_cert` is set. Do not forward port 8000 to the internet.
+Open `https://<PC-LAN-IP>:8000/radio`. On the phone, choose **ARM PHONE RADIO** once.
+Install the page from the browser menu if desired. Use phone speech when backend speech is
+off to avoid duplicate calls. Browsers may suspend speech in background tabs, so keep the
+page open and visible. The PWA caches only static assets. Live telemetry still needs a
+connection to the PC.
+
+Other devices need the 4-digit PIN that Pitwall prints at startup. The PIN changes on
+each start. After 5 wrong tries, a device waits 60 s. This PC needs no PIN unless a proxy
+adds `X-Forwarded-For` or `Forwarded`. If a tunnel or port forwarder on this PC serves the
+dashboard, set `connection.pin_trust_localhost: false`. This PC then needs the PIN too.
+Set `connection.require_pin: false` to disable the PIN. The PIN cookie is sent only over
+HTTPS when `connection.https_cert` is set. Do not forward port 8000 to the internet.
 
 ## After a session
 
-Nothing is required after a live session. Pitwall grades it when it ends. Then
-automatic upkeep runs on the next `pitwall start`. It grades any remaining sessions and
-rebuilds stint priors once per learning version. It moves bad learned values to SQLite
-quarantine with a reason such as `unknown_track` or `deg_clamped`. It also refits track
-priors and adjusts rule cooldowns. `pitwall doctor` reports the quarantine
-count.
+No action is required after a live session. Pitwall grades it when it ends. Automatic
+upkeep runs on the next `pitwall start`. Upkeep grades remaining sessions and rebuilds
+stint priors once per learning version. It moves invalid learned values to SQLite
+quarantine with reasons such as `unknown_track` or `deg_clamped`. Upkeep also refits track
+priors and adjusts rule cooldowns. `pitwall doctor` reports the quarantine count.
 
 Open `http://localhost:8000/debrief` to list stored sessions. Each row links to its
 debrief, where you can grade calls. `/debrief/latest` opens the newest session.
@@ -176,4 +181,5 @@ when it is missing or older than the recording.
 ## Troubleshooting
 
 - **Doctor shows 0 datagrams**: set the in-game IP to `127.0.0.1`, restart the game after changing telemetry settings, and allow UDP 20777 through Windows Firewall (doctor prints the `netsh` commands).
-- **Dashboard says STALE**: no fresh telemetry for over 1 s — you are in a menu, paused, or the game is not sending.
+- If the dashboard says STALE, Pitwall has received no fresh telemetry for over 1 s.
+  You may be in a menu, paused, or the game may not be sending.

@@ -1,4 +1,4 @@
-# 0004 — Bind UDP on 0.0.0.0; ship `websockets` explicitly; pin Python 3.12
+# 0004: Bind UDP on 0.0.0.0, ship `websockets` explicitly, and pin Python 3.12
 
 Status: accepted (2026-09)
 
@@ -8,8 +8,8 @@ Three environment failures on the first Windows install, none visible in tests:
 
 1. The UDP listener bound `127.0.0.1`; the game was configured to send to the
    PC's LAN address, so nothing arrived.
-2. uvicorn logged `No supported WebSocket library detected` — the dashboard
-   connected over HTTP but every WS upgrade failed and the page sat STALE.
+2. uvicorn logged `No supported WebSocket library detected`. The dashboard
+   connected over HTTP, but every WS upgrade failed and the page sat STALE.
    `uvicorn` alone does not pull a WebSocket implementation.
 3. `uv` picked Python 3.13 on the game PC; the project targets 3.12
    (`pywin32` wheels and the tested matrix).

@@ -1,8 +1,8 @@
 # Target: friends-only multiplayer league
 
-The goal is to use the assistant in a **friends-only online Grand Prix league**. Single-player
-Grand Prix is where it is tested, and it stands in for multiplayer until then. Everything
-built for single-player must keep working when some or all rivals are human.
+Use the assistant in a **friends-only online Grand Prix league**. Test it in single-player
+Grand Prix until then. Features built for single-player must also work when some or all
+rivals are human.
 
 ## What changes online
 
@@ -18,15 +18,14 @@ built for single-player must keep working when some or all rivals are human.
 | Session | `m_networkGame = 0` | `m_networkGame = 1` | recorded in the session row; the league preset activates automatically |
 | Drop-outs | rare | a friend disconnects mid-race | `m_resultStatus` / `m_numActiveCars` purge the car; its slot may be reused, so key rivals by slot **and** network id |
 
-**Assumption: friends stay Restricted**, like a real race where rival data is hidden. The
-two friends' cars are modelled from compound, tyre age, stint length and lap-time trend;
-the AI cars (the rest of the grid) remain fully visible. Rival fuel and energy calls
-("he's low on battery") are therefore only made about AI cars, and the radio says so
-when the target is a human with hidden data.
+**Assumption: friends stay Restricted**, as in a race where rival data is hidden. Model
+friends' cars from compound, tyre age, stint length, and lap-time trend. AI cars remain
+fully visible. Make rival fuel and energy calls ("he's low on battery") only about AI
+cars. The radio identifies human targets with hidden data.
 
 ## League preset
 
-A `league` profile layered over the user profile (`08-configuration.md`):
+A `league` profile layered over the user profile (`08-configuration.md`) will:
 
 - rival models run in "lap-time only" mode for restricted cars;
 - rival names come from an alias map (`gamertag → "Dave"`), since online IDs are
@@ -38,32 +37,32 @@ A `league` profile layered over the user profile (`08-configuration.md`):
 
 ## Fairness
 
-Friends leagues settle this socially, not technically. If the assistant is in use,
-say so, and offer the repo. Under GPLv3 your friends can run it too.
+Friends leagues settle fairness socially, not technically. Tell friends when using the
+assistant and offer them the repo. GPLv3 lets them run it too.
 
 ## Test and feedback loop (single-player GP)
 
-The pilot is tested by racing single-player Grand Prix and reporting what you notice. To
-make that cheap:
+Test the pilot in single-player Grand Prix and report what you notice. Use this feedback
+loop:
 
-1. **Record by default.** Every session is kept, tagged with game mode, track and
-   config hash, so any report can be replayed exactly.
-2. **Mark a moment in the race.** Long-press button 2 or spacebar (≥ 800 ms) drops a
-   bookmark in the recording, with no speech and no effect on the race. Afterwards, go
-   through the bookmarks and write what was wrong.
-3. **Post-session feedback screen.** The dashboard lists bookmarks and graded calls
-   next to the radio log, with a free-text box for each. Saved to SQLite and exported
+1. **Record by default.** Keep every session, tagged with game mode, track, and config
+   hash, so each report can be replayed exactly.
+2. **Mark a moment in the race.** Long-press button 2 or spacebar (≥ 800 ms) to add a
+   bookmark to the recording. This produces no speech and does not affect the race.
+   Review the bookmarks afterwards and describe what was wrong.
+3. **Post-session feedback screen.** The dashboard lists bookmarks and graded calls next
+   to the radio log, with a free-text box for each. Save feedback to SQLite and export it
    to Markdown.
 4. **`pitwall report <session>`** bundles the trimmed recording around each bookmark,
-   the decision log, and the notes into a zip, ready to attach to a GitHub issue.
-5. **Issue templates** in the repo: *wrong call*, *missed call*, *too chatty*, *bug*,
+   decision log, and notes into a zip for a GitHub issue.
+5. **Issue templates** in the repo: *wrong call*, *missed call*, *too chatty*, *bug*, and
    *idea*. Each asks for the report bundle.
-6. **Analyse the bundle.** [25-report-analysis-prompt.md](25-report-analysis-prompt.md)
-   is a prompt to give an AI coding agent with the bundle. The agent writes one issue
-   per bookmark, a fix and a regression test.
+6. **Analyse the bundle.** Give [25-report-analysis-prompt.md](25-report-analysis-prompt.md)
+   and the bundle to an AI coding agent. The agent writes one issue per bookmark, a fix,
+   and a regression test.
 
-With a bug report plus its recording, the fix gets a replay test, and the same bug can't
-come back unnoticed.
+A bug report with its recording yields a replay test for the fix, so the same bug cannot
+return unnoticed.
 
 ## Staging
 

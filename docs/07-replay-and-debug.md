@@ -1,14 +1,13 @@
 # Replay, review and debugging
 
-Short answer to "do we have replayability?": yes — it is milestone zero, before anything
-speaks. This document specifies it properly, because it is the tool the whole project is
-tuned with.
+Replayability is milestone zero, before anything speaks. This document specifies the
+tool used to tune the whole project.
 
 ## What gets recorded
 
-Recording is **on by default** and happens before parsing, so a recording is valid even
-if the parser is wrong — which matters most in the early weeks, when the parser *will* be
-wrong and you will want to re-run old sessions through a fixed one.
+Recording is **on by default** and starts before parsing. A recording remains valid when
+the parser is wrong. This matters early, when you may need to replay old sessions through
+a corrected parser.
 
 `.f1bin` layout:
 
@@ -19,30 +18,28 @@ header:  magic "F1BIN\0" | uint16 file_version | uint16 packet_format
 record:  uint32 delta_us (since previous record) | uint16 length | bytes payload
 ```
 
-Sidecar `.f1idx`, written on close (and rebuildable): byte offsets for every lap start,
-session-type change, pit entry/exit, and every Event packet. This is what makes "jump to
-lap 24" and "jump to the safety car" instant on a ~1 GB file rather than a linear scan.
+Write the rebuildable `.f1idx` sidecar on close. It stores byte offsets for every lap
+start, session-type change, pit entry/exit, and Event packet. This makes "jump to lap 24"
+and "jump to the safety car" instant on a ~1 GB file instead of scanning it linearly.
 
 **Profiles** (ADR 0006): `lite` by default (no motion packets, rule inputs capped at
 10 Hz, ~35 MB zstd per 3 h), `full` for debugging (`pitwall start --record full`),
-`minimal`, or `off`. Finished files are zstd-compressed and the raw file is removed.
-If another process locks the raw file, `pitwall cleanup` removes it after an hour when the
-compressed copy matches.
+`minimal`, or `off`. Compress finished files with zstd and remove the raw file.
+If another process locks the raw file, `pitwall cleanup` removes it after an hour once
+the compressed copy matches.
 
-A **new file per session UID**, rotated on `SEND`/Final Classification. A retention
-policy in config (default: keep everything under N GB, delete oldest, never delete a file
-tagged `keep`). Tagging is one click in the UI during or after a session — "that was the
-race where the undercut call was wrong" is a thing you know at the time and forget by the
-evening.
+Create a **new file per session UID** and rotate it on `SEND`/Final Classification.
+Configure retention (default: keep everything under N GB, delete oldest, never delete a
+file tagged `keep`). Tag a file with one click in the UI during or after a session.
+"That was the race where the undercut call was wrong" is easy to forget by evening.
 
 Raw recording is not the only artefact. Alongside it:
 
-- **`.jsonl` decision log** — one line per rule evaluation that mattered: rule id, tick,
-  lap, lap distance, the input values the predicate read, fired or suppressed, and *which
-  suppression layer* suppressed it (cooldown, budget, hysteresis, stale packet, quiet
-  mode, revalidation). This log is the single most useful debugging artefact in the
-  project, because "why didn't it say anything?" is a more common question than "why did
-  it say that?".
+- **`.jsonl` decision log.** Record each relevant rule evaluation with its rule id, tick,
+  lap, lap distance, predicate inputs, and fired or suppressed status. Record *which
+  suppression layer* applied (cooldown, budget, hysteresis, stale packet, quiet mode, or
+  revalidation). "Why didn't it say anything?" is a more common question than "why did it
+  say that?".
 - **SQLite rows** for laps, stints, pit events and calls (`03-strategy.md`).
 
 ## The replay tool
@@ -59,13 +56,13 @@ Raw recording is not the only artefact. Alongside it:
 | `--stats` | packet census per type, rates, gaps, malformed counts |
 | `--seed-db PATH` | choose replay persistence; defaults to `:memory:` |
 
-Replay drives the **same ingest entry point** as the live socket. The only difference is
-the source object and the clock. Everything time-dependent — EMAs, cooldowns, deadlines,
-budgets — reads a `Clock`, which is wall-clock live and virtual in replay, so a 10×
-replay produces the same decisions as a replay at max speed. That determinism is the whole
-point; if it ever breaks, the tests stop meaning anything. On every pull request, CI runs
-`test_deterministic_across_speeds` and `test_replay_deterministic_across_speeds`. They replay
-a synthetic recording at 10× and at max speed and diff the decision logs.
+Replay uses the **same ingest entry point** as the live socket. Only the source object and
+clock differ. Time-dependent systems (EMAs, cooldowns, deadlines, and budgets) read a
+`Clock`: wall-clock time live and virtual time in replay. Thus, a 10× replay produces the
+same decisions as max speed. If determinism breaks, the tests lose meaning. On every pull
+request, CI runs `test_deterministic_across_speeds` and
+`test_replay_deterministic_across_speeds`. They replay a synthetic recording at 10× and
+max speed, then diff the decision logs.
 
 ## Review mode (the part that makes it useful for a human)
 
@@ -75,33 +72,31 @@ Replay with `--serve` opens the normal dashboard with a transport bar added:
 ┌──────────────────────────────────────────────────────────────────────┐
 │ ◀◀  ▶  ▶▶   LAP 24 / 44   ──●──────────────────────────────  10:23   │
 │ calls:  ▌  ▌▌      ▌        ▌▌▌   ▌          ▌▌        ▌             │
-│ events: ░░░░SC░░░░           ▌pit                     ▌DRS           │
+│ events: ░░░░SC░░░░           ▌pit                     ▌OT            │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- Scrub anywhere; the state rebuilds by replaying from the nearest lap boundary.
-- Every call is a tick on the timeline. Click it and you get the phrasing, the rule id,
-  the predicate that fired, and every snapshot value the predicate read — the "why" is
-  reconstructed from the decision log, not guessed.
-- Suppressed calls are shown in grey on the same timeline. Seeing what the engine
-  *nearly* said is how you tune the budget.
+- Scrub anywhere. The state rebuilds by replaying from the nearest lap boundary.
+- Every call is a timeline tick. Click it to see the phrasing, rule id, firing predicate,
+  and every snapshot value the predicate read. The decision log reconstructs the "why".
+- Show suppressed calls in grey on the same timeline. Review what the engine *nearly*
+  said to tune the budget.
 - A "grade this call" control (good / noise / too late / wrong) writes to the database.
-  Over a season this becomes a labelled dataset for tuning, and it costs one tap.
+  The ratings form a labelled tuning dataset over a season. Grading takes one tap.
 
-## A/B diffing — the tuning loop
+## A/B diffing: the tuning loop
 
 ```
 pitwall diff <recording> --a config/rules --b config/rules-experiment
 ```
 
-Runs both rule sets over one recording and prints the call-stream diff: calls only A
-made, only B made, and those both made with different timing or wording, plus summary
-counts per lap and per priority. This turns "does raising the overheat threshold to 108
-stop the chatter without missing the real event?" into a five-second question.
+Run both rule sets on one recording and print the call-stream diff. It shows calls only A
+made, calls only B made, and calls both made with different timing or wording. It also
+shows summary counts per lap and priority. This turns "does raising the overheat threshold
+to 108 stop the chatter without missing the real event?" into a five-second question.
 
-Extended to a corpus: `pitwall diff --corpus recordings/*.f1bin` gives the aggregate
-effect of a config change over every session ever driven. This is the mechanism by which
-the assistant gets better without new races.
+Run `pitwall diff --corpus recordings/*.f1bin` to see a config change's aggregate effect
+across recorded sessions. This lets the assistant improve without new races.
 
 ## Synthetic and trimmed fixtures
 
@@ -109,23 +104,23 @@ Some situations are hard to produce on demand (red flag, a specific SC timing, a
 particular weather crossover). Two answers:
 
 - **Trim tool**: `pitwall trim <recording> --from-us N --to-us N --out fixtures/sc.f1bin`
-  — small local slices for replay. Recordings stay out of git (ADR 0005).
+  creates local replay slices. Keep recordings out of git (ADR 0005).
 - **Derive tool**: `pitwall derive <recording> <out> --inject-sc 6-8 --wear-scale 1.5`
-  writes a synthetic copy of a real recording with a tagged session UID. Synthetic sessions feed
-  grading and tuning but not physics priors. See [Synthetic recordings](23-synthetic-recordings.md).
+  writes a synthetic copy of a real recording with a tagged session UID. Use synthetic
+  sessions for grading and tuning, not physics priors. See
+  [Synthetic recordings](23-synthetic-recordings.md).
 - **Synthetic generator**: build valid packets from the layout tables to script an exact
   scenario. Used only for cases real recordings do not cover, and always flagged as
   synthetic, because synthetic data quietly encodes your assumptions.
 
 ## Debugging when it is live
 
-- `--stats` equivalent on a live `/debug` page: packets/s per type, malformed count,
+- Show the `--stats` equivalent on a live `/debug` page: packets/s per type, malformed count,
   unknown header triples, per-car staleness for the round-robin packets, tick duration
   histogram, latency histograms per stage, queue depth, calls-per-lap versus budget.
-- `pitwall doctor`: binds the port, checks the Windows Firewall rule, waits for packets,
-  reports the format and rate actually observed, and prints exactly which in-game setting
-  is wrong when it sees nothing. This is the difference between a five-minute setup and
-  an evening lost to a firewall dialog.
-- Every recording stores the `config_hash`, so a replay can warn when the current config
-  differs from the one that was live — otherwise you will eventually debug a call that
-  the running config could never have produced.
+- `pitwall doctor`: bind the port, check the Windows Firewall rule, and wait for packets.
+  Report the observed format and rate. If no packets arrive, name the incorrect in-game
+  setting. This avoids an evening lost to a firewall dialog.
+- Store `config_hash` in every recording. Replay can then warn when the current config
+  differs from the live config. Otherwise, you may debug a call that the running config
+  could never have produced.

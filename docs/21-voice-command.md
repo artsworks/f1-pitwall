@@ -1,37 +1,34 @@
 # Voice command: driver → pit wall by speech
 
-Design and implementation notes. Sections 2 and 3 describe current behavior. Later sections
-include planned work.
+Sections 2 and 3 describe current behaviour. Later sections cover planned work.
 
-The driver menu (doc 12, M3) already lets the driver ask the pit wall a preset question
-with the thumb stick: open, scroll, confirm, and a deterministic handler answers from the
-snapshot. That works, but it costs a hand off the wheel and a glance at the second screen,
-and in a battle neither is free. Voice removes the navigation: the driver taps a button
-to open the channel, says "gap ahead?", and the same handler answers.
+The M3 driver menu (doc 12) lets the driver ask a preset question with the thumb stick:
+open, scroll, confirm. A deterministic handler answers from the snapshot. This costs a
+hand off the wheel and a glance at the second screen, both costly in a battle. Voice
+removes the navigation. The driver taps a button to open the channel, says "gap ahead?",
+and gets an answer from the same handler.
 
 The short version:
 
-- **Feasible, with a small footprint,** if it is a *talk toggle* (tap to open the channel,
-  tap or silence to close it) with a *closed grammar* of roughly 40 phrases, recognised
-  offline on the CPU in a **separate process** at below-normal priority. Idle cost is an
-  audio callback; the recogniser only runs while the channel is open (capped at a few
-  seconds) and for ~300 ms after it closes.
-- **The driver's request takes priority on the radio.** Opening the channel puts the
-  dispatcher on hold: P2/P3 calls queue instead of speaking (P1 safety calls still
-  interrupt). After the reply, each held call is dropped if it is stale, dropped if the
-  reply already covered it, spoken if it is the only one left, or folded with the others
-  into a single deterministic "Also: …" digest. Every outcome is in the decision log.
+- **Feasible, with a small footprint,** as a *talk toggle* (tap to open the channel, tap
+  or silence to close it) with a *closed grammar* of roughly 40 phrases. Recognise offline
+  on the CPU in a **separate process** at below-normal priority. Idle cost is an audio
+  callback. Run the recogniser only while the channel is open (capped at a few seconds)
+  and for ~300 ms after it closes.
+- **The driver's request takes priority on the radio.** Opening the channel holds the
+  dispatcher. P2/P3 calls queue; P1 safety calls still interrupt. After the reply, drop
+  each held call if stale or covered by the reply. Speak a call if it is the only one
+  left; otherwise fold calls into one deterministic "Also: …" digest. Log every outcome.
 - **Voice is a new input route into the existing menu, not a new answer system.** The
   reply side (cases, templates, variants, decision log, `driver_inputs` table) is reused
   untouched. No LLM anywhere (ADR 0008 applies to the ear as much as the mouth).
 - **Memory is not the constraint on 32 GB.** The recommended recogniser adds an estimated
-  150–300 MB RSS; the game plus browser plus backend leave well over 10 GB free. The risk
-  that matters is the same one as in doc 09: a CPU burst landing on the render thread.
-  Channel gating, process priority, affinity and a single decode thread bound that burst,
-  and the frame-time A/B in doc 09 is how we prove it.
+  150–300 MB RSS. The game, browser, and backend leave well over 10 GB free. The risk is a
+  CPU burst on the render thread, as in doc 09. Channel gating, process priority, affinity,
+  and a single decode thread bound that burst. Use the doc 09 frame-time A/B to verify.
 - **Not recommended:** always-on wake word (continuous inference and false triggers from
-  game audio), open-vocabulary Whisper-class models (bursty, larger, unneeded), and
-  anything cloud (network mid-race, non-replayable).
+  game audio), open-vocabulary Whisper-class models (bursty, larger, unneeded), or cloud
+  recognition (network dependency mid-race, non-replayable).
 
 ## Radio scheduling
 
@@ -120,8 +117,8 @@ The digest is deterministic and comes from YAML like everything else (ADR 0008):
 rule may carry a `brief:` template (a 3–6 word form of the call; `say` variants are the
 long form). Release joins up to `voice.digest_max_items` (default 3) briefs, highest
 priority first, under `voice.digest_prefix` ("Also: "); anything beyond the cap is
-dropped as `digest_overflow`. A rule without `brief` cannot be digested — if it survives
-to release it is spoken in full only if it is the sole survivor, else dropped. The
+dropped as `digest_overflow`. A rule without `brief` cannot be digested. If it survives
+to release, speak it in full only when it is the sole survivor. Otherwise, drop it. The
 digest counts as **one** call against the lap budget and against the minimum gap, and it
 is a P2 so it is not itself workload-gated to a straight.
 
@@ -170,8 +167,8 @@ Rules for the grammar:
   word differs); "push" / "plush" is not a concern because the vocabulary is closed.
 - Questions and opinions execute on a single confident hit. **Actions** with a lasting
   effect (`silent` on, `mindset`, `budget`) also execute on a confident hit but are
-  confirmed by voice as today; a *low-confidence* action is not executed — the pit wall
-  says "Say again?".
+  confirmed by voice as today; a *low-confidence* action is not executed. The pit wall says
+  "Say again?".
 - `voice.confidence_min` (default 0.7) and `voice.margin_min` (default 0.15, gap to the
   second-best intent) are YAML. Below either: miss.
 - `pitwall rules check` validates the file: every intent maps to a known menu item or
@@ -182,9 +179,9 @@ Rules for the grammar:
 ## 3. Architecture
 
 Current implementation: `pitwall start` runs an in-process Windows SAPI recogniser on a
-dedicated daemon thread named `voice`. `VoiceWorker` builds and pumps the recogniser on
-that thread, then queues its events for engine ticks. The engine and `VoiceChannel` stay
-on the engine thread. The separate-process design below is future work.
+daemon thread named `voice`. `VoiceWorker` builds and pumps the recogniser, then queues
+events for engine ticks. The engine and `VoiceChannel` stay on the engine thread. The
+separate-process design below is future work.
 
 ```
 game ──UDP──▶ backend (ingest → state → rules → dispatcher → speaker)
@@ -195,8 +192,8 @@ game ──UDP──▶ backend (ingest → state → rules → dispatcher → s
              (recogniser and COM work)
 ```
 
-The separate-process design below is future work. The current worker keeps SAPI COM
-calls off the engine loop, but it does not isolate recogniser memory or native threads.
+The current worker keeps SAPI COM calls off the engine loop, but does not isolate
+recogniser memory or native threads.
 
 **Backend side (small):**
 
@@ -245,10 +242,10 @@ thresholds, and extracts slots (`aggressive|balanced`, page names, `on|off`).
 
 ## 4. Recogniser choice
 
-Requirements: offline, CPU only (the GPU is the game's), Windows, Python-callable, small
-memory, streaming or fast-final, and — most important — able to be **constrained to a
-phrase list**, because a closed grammar of 40 phrases is both more accurate and far
-cheaper than open transcription.
+Requirements: offline, CPU only because the GPU is for the game, Windows, Python-callable,
+small memory, and streaming or fast-final recognition. Most important, recognition must
+be **constrained to a phrase list**. A closed grammar of 40 phrases is more accurate and
+far cheaper than open transcription.
 
 | Option | Grammar-constrained | Est. RSS | CPU while decoding | Idle CPU | Notes |
 |---|---|---|---|---|---|
@@ -262,8 +259,8 @@ cheaper than open transcription.
 **Recommendation: Vosk small English, grammar-constrained, with the Windows in-proc SAPI
 recogniser as the zero-dependency fallback** (same shape as Piper primary / SAPI fallback
 on the speaking side). Rhino stays on the list if the spike shows Vosk's accuracy on the
-driver's accent through a headset is not good enough — its intent model is likely the
-most robust, at the cost of a licence and an external grammar tool.
+driver's accent through a headset is not good enough. Rhino's intent model is likely the
+most robust. It costs a licence and uses an external grammar tool.
 
 The RSS and RTF figures are estimates from the projects' own published small-model
 numbers and general experience, not measurements on the game PC; the spike (section 8)
@@ -272,7 +269,8 @@ replaces them with measured values before anything is built on them.
 ## 5. Performance impact (same PC as the game, Windows, 32 GB)
 
 Doc 09 ranks the contention channels: CPU core contention, GPU, disk, memory, timer
-resolution. Voice command touches the first, fourth and — new — the audio stack.
+resolution. Voice command affects the first and fourth channels. It adds the audio stack
+as a new channel.
 
 ### Memory
 
@@ -287,8 +285,8 @@ resolution. Voice command touches the first, fourth and — new — the audio st
 Total added is roughly 1 % of 32 GB; free memory stays above 10 GB with a wide margin.
 Memory is not the risk. Two things do matter: the model is **memory-mapped from disk
 once at startup** (a one-off ~40 MB read, done before the session, not on first press),
-and the process must not swap — keep the working set steady (no per-press allocations
-beyond the recogniser object) and confirm with a perf-counter log over a full race.
+and the process must not swap. Keep the working set steady with no per-press allocations
+beyond the recogniser object. Confirm this with a perf-counter log over a full race.
 
 ### CPU
 
@@ -307,13 +305,13 @@ Mitigations, all default-on and all from doc 09's playbook:
 
 1. The voice process runs at **below-normal priority** (`SetPriorityClass`); the game
    wins every scheduling contest. The hold/release logic itself is a few list
-   operations inside the existing dispatcher drain — no measurable cost.
+   operations inside the existing dispatcher drain. They add no measurable cost.
 2. **Affinity** to the same trailing cores as the backend (`voice.cpu_affinity`,
    inherits `cpu_affinity` when unset). On CPUs with E-cores, pin to E-cores.
 3. **One decode thread.** No thread pools, no GPU/DirectML providers.
 4. **Model load and warm-up at startup**, in the garage, never mid-lap.
 5. **No timer-resolution changes**; channel taps arrive as events, no polling loops.
-6. `voice.enabled: false` removes the process entirely — a one-line A/B.
+6. `voice.enabled: false` removes the process entirely. This is a one-line A/B test.
 
 Where micro-stutter could still come from, and the check for each:
 
@@ -332,10 +330,9 @@ Doc 09's procedure, extended: the same hotlap benchmark, three runs each of (a) 
 off, (b) backend on, (c) backend on + voice process idle, (d) backend on + a scripted
 spoken question every 20 s. Capture with PresentMon or CapFrameX; compare 1 % and 0.1 %
 lows, where (d) alternates real questions with worst-case opens that hit the 6 s cap.
-Acceptance: (c) and (d) inside the run-to-run noise of (b). If (d) fails, the
-first knob is affinity to E-cores, the second is the SAPI fallback, the third is moving
-the voice process to another machine — the architecture allows all three without code
-changes to the backend.
+Acceptance: (c) and (d) inside the run-to-run noise of (b). If (d) fails, first try
+affinity to E-cores. Then try the SAPI fallback. Finally, move the voice process to
+another machine. The architecture allows all three without backend code changes.
 
 ### Latency budget (channel close → reply starts)
 
@@ -412,7 +409,7 @@ intents:
 
 ## 8. Plan
 
-Phase 0 — spike (one session, no backend changes, decides go/no-go)
+Phase 0: spike (one session, no backend changes, decides go/no-go)
 
 1. On the game PC: install Vosk + the small English model; record 60 utterances of the
    grammar through the driving headset **while driving** (engine noise, breathing,
@@ -425,7 +422,7 @@ Phase 0 — spike (one session, no backend changes, decides go/no-go)
    Exit: ≥ 90 % intent accuracy on the driver's voice, frame-time lows inside noise, RSS
    under 300 MB. Otherwise try Rhino or stop.
 
-Phase 1 — questions by voice (one to two sessions)
+Phase 1: questions by voice (one to two sessions)
 
 - The menu opens voice listening. Dashboard `V` opens it for 2 seconds, and `V` closes it.
   Action 1 keeps its doc-12 gestures. The engine processes queued recognition events and
@@ -439,12 +436,12 @@ Phase 1 — questions by voice (one to two sessions)
   budget counting the digest as one); engine `intent` handling on a replay with
   synthetic channel and intent records; grammar validation; menu hold parity.
 
-Phase 2 — actions and statements (one session)
+Phase 2: actions and statements (one session)
 
 - `ack`, `negative`, `say_again`, `boxing`, `staying_out`, `laps_left`, `position`,
   slot-driven `mindset` / `silent` / `budget` / `page`; `voice eval` over saved audio.
 
-Phase 3 — optional, only if asked for
+Phase 3: optional, only if asked for
 
 - Wake word ("pit wall") via a small keyword spotter, always-on. Costs a few percent of
   one core continuously and re-opens the false-trigger problem with game audio; only
@@ -456,15 +453,15 @@ Phase 3 — optional, only if asked for
   `close_silence_ms` before it counts as `ack`; saying "copy" is faster than that. If the
   response window is shorter than the silence timeout for some call, the window must be
   extended by the channel-open time (the tap opened before it closed), otherwise the
-  fallback can miss — spec: response windows pause while the channel is open.
+  fallback can miss. The spec pauses response windows while the channel is open.
 - **Accent and vocabulary.** Small English models are US-trained; "tyres", "box",
   "Norris" may be weak. Grammar constraint helps a lot (the model only has to choose
   among 40 phrases), but the spike decides. Fallback: respell phrasings to lexicon words,
   or Rhino.
 - **Microphone while driving.** A wheel-rig headset mic picks up breathing and the rig;
   the closed channel plus the short pre-roll is the main defence. If the driver uses
-  speakers, the engineer's reply must never overlap an open channel — which the
-  auto-close on recognition guarantees (the channel is closed before the reply starts).
+  speakers, the engineer's reply must never overlap an open channel. Auto-close on
+  recognition prevents this by closing the channel before the reply starts.
 - **Silence close mis-fires.** A pause mid-sentence ("gap… ahead?") longer than 1 s
   closes the channel early and the recogniser sees half a phrase, usually a miss. The
   driver can re-tap; `close_silence_ms` is tunable; the spike measures natural pause
@@ -476,13 +473,13 @@ Phase 3 — optional, only if asked for
 - **Two-way talk-over.** The driver asks while the engineer is mid-sentence: the hold
   stops the engineer at the end of the sentence and re-queues it; on the capture side
   the pit wall's own audio is in the headphones, not the mic, so it is not heard. With
-  speakers it would be — see above.
+  speakers, the microphone would capture the pit wall audio. See above.
 - **Digest quality.** A three-item "Also:" can sound like a list. The cap is 3, briefs
   are 3–6 words, recommendations are never digested, and the grader will tell us if the
   digest is noise; if so, lower `digest_max_items` to 1.
 - **Hold duration.** A question plus reply plus digest can hold P2/P3 for 5–8 s. A P2
   recommendation (box this lap) is spoken first at release, and P1 never waits, so the
-  cost is only ever informational calls arriving late — which stale-drop then handles.
+  only informational calls can arrive late. Stale-drop handles them.
 - **Discord / league voice.** A talk key shared with Discord would send the question to
   the league too. Use a separate button.
 - **Windows only.** Capture (WASAPI) and the SAPI fallback are Windows; Vosk is

@@ -1,16 +1,15 @@
-# 0002 — Two clock domains: session time vs receive clock
+# 0002: Two clock domains: session time vs receive clock
 
 Status: accepted (2026-09, first live dashboard)
 
 ## Context
 
-The first live dashboard showed `packet age 153,000,000 ms` and stayed STALE,
-which also silenced every rule through the staleness gate. `Snapshot.last_packet_t`
-carried `header.session_time` (game clock, seconds since the session started)
-while `snapshot.now` was the receive/tick clock (`time.monotonic()`); the UI
-subtracted one from the other. The replay `--serve` path had the mirror-image
-bug: record offsets fed into `recv_time` while the engine clock was wall time,
-giving a WS latency p99 of ~2.4 million ms.
+The first live dashboard showed `packet age 153,000,000 ms` and stayed STALE. This
+silenced every rule through the staleness gate. `Snapshot.last_packet_t` carried
+`header.session_time` (game time, seconds since the session started). `snapshot.now` used
+the receive/tick clock (`time.monotonic()`), but the UI subtracted the two values.
+The replay `--serve` path had the opposite bug. Record offsets fed into `recv_time`, while
+the engine clock used wall time. WebSocket latency p99 reached ~2.4 million ms.
 
 ## Decision
 

@@ -1,12 +1,11 @@
 # Report analysis prompt
 
-Use this prompt after a race where you dropped bookmarks. Give it to an AI coding agent
-together with the zip from `pitwall report`. The agent turns each bookmark into an issue
-writeup, a minimal fix and a regression test.
+After a race with bookmarks, give this prompt and the `pitwall report` zip to an AI coding
+agent. The agent writes an issue for each bookmark, proposes a minimal fix, and adds a
+regression test.
 
-The bookmark and report workflow is in
-[13-league-multiplayer.md](13-league-multiplayer.md), under *Test and feedback loop*.
-In short:
+See the bookmark and report workflow in
+[13-league-multiplayer.md](13-league-multiplayer.md), under *Test and feedback loop*:
 
 1. During the race, long-press wheel button 2 or spacebar (≥ 800 ms) to drop a bookmark.
 2. After the race, add a note to each bookmark on the feedback screen.

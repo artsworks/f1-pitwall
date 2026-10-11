@@ -1,7 +1,9 @@
 # Scenario bench
 
-`pitwall bench` replays a set of scenario files and scores the calls pitwall makes. It compares the score with a stored baseline. A change that makes any guarded result worse fails the gate.
-Use the bench to measure each rule or strategy change, and to check that learning improves pitwall instead of degrading it.
+`pitwall bench` replays scenario files, scores pitwall's calls, and compares the results
+with a stored baseline. A change that worsens any guarded result fails the gate. Use the
+bench to measure rule and strategy changes and check that learning improves pitwall
+without regressions.
 
 ## Terms
 
@@ -36,9 +38,11 @@ why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 - `mutations` takes the `pitwall derive` options: `inject_sc`, `vsc`, `wear_scale` and `penalty`.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
-- The bench finds the source by session UID in the `--recordings` folders and checks its sha256. If the file is missing, the scenario is `skipped`.
+- The bench finds the source by session UID in `--recordings` folders and checks its
+  sha256. If the file is missing, the scenario is `skipped`.
 
-Each scenario runs in its own empty database with default priors. The result does not depend on the order of scenarios or on what the database has learned.
+Each scenario runs in its own empty database with default priors. Results do not depend on
+scenario order or previously learned values.
 
 ## Scorecard
 

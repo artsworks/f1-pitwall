@@ -6,24 +6,24 @@
 
 ## What we saw
 
-On exploratory laps the driver locks up a lot. Every lock-up produced the same
+On exploratory laps, the driver locks up often. Every lock-up produced the same
 sentence ("Lock-up, front left. Ease the brake pressure into the corner, that
-costs tyre."), which quickly reads as a machine reading a log, not an engineer.
+costs tyre."), which sounded like a machine reading a log, not an engineer.
 Replaying the Brazil recording also showed five genuine spins in two minutes,
-all 140°–180° of sideslip from Motion Ex local velocity; a caught slide peaked
+all 140°–180° of sideslip from Motion Ex local velocity. A caught slide peaked
 around 85°.
 
 ## Decision
 
-Phrasing stays deterministic and in config; no LLM (reaffirms doc 10, angle 20).
+Phrasing stays deterministic and in config. No LLM (reaffirms doc 10, angle 20).
 
 - `say` accepts a list of variants. The first call uses the first (plain)
-  variant; after that a shuffle bag uses every variant before any repeats and
+  variant. After that, a shuffle bag uses every variant before any repeats and
   never says the same line twice in a row.
 - `escalate: [{after: N, say: [...]}]` switches to a different pool once the
   same call has triggered N times inside `repeat_window_s` (default 600 s).
-  Tone goes plain → dry → snarky for a repeated mistake, and resets after a
-  quiet stretch. `{repeat}` is available in templates.
+  Tone moves from plain to dry to snarky for a repeated mistake, then resets
+  after a quiet stretch. `{repeat}` is available in templates.
 - Triggers are counted in the rule engine, before dispatcher cooldowns, so the
   count reflects the mistakes made, not the calls spoken.
 - The shuffle is seeded by rule id: a replay says exactly what the live session said.

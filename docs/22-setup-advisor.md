@@ -1,26 +1,24 @@
 # Setup advisor
 
-Design and implementation proposal for the "second product" parked as item 9 in
-`10-angles-not-yet-considered.md`: setup advice derived from stored tyre, wear and pace
-history, delivered in three phase-aware modes. **Status: A1 to A4 implemented (PR #37). A5 not started.** Numbered 22
-because 17 is taken by `17-quali-run-plan.md`.
+This proposal develops the "second product" identified in item 9 of
+`10-angles-not-yet-considered.md`: setup advice from stored tyre, wear, and pace history,
+in three phase-aware modes. **Status: A1 to A4 implemented (PR #37). A5 not started.**
+Numbered 22 because `17-quali-run-plan.md` uses 17.
 
-Today the only setup advice is tyre pressure (`state/pressure.py`, core temperature vs a
-window, clamped to the setup range), plus the brake-bias / diff hints in the lock-up calls
-(`18-race-engine.md`). This document extends that to the whole setup screen without
-breaking the project invariants: decisions are deterministic and replayable (ADR 0008),
-and thresholds live in YAML. An LLM is optional and never required. With no API key the
-advisor runs entirely on the deterministic tables in §4, and every mode, signal, grade and
-replay in this document works unchanged (§7, ADR 0009).
+Current setup advice covers tyre pressure (`state/pressure.py`: core temperature versus a
+window, clamped to the setup range) and brake-bias / diff hints in lock-up calls
+(`18-race-engine.md`). This extends advice to the whole setup screen while keeping
+decisions deterministic and replayable (ADR 0008) and thresholds in YAML. An LLM is
+optional. With no API key, the advisor uses the deterministic tables in §4; all modes,
+signals, grades, and replays work unchanged (§7, ADR 0009).
 
 ## 1. Research summary
 
 ### Sources
 
-Codemasters/EA publish no physics documentation for the setup screen, so every mechanism
-below is either an official one-liner, community consensus, or our own telemetry. Sources
-are labelled by kind; confidence in §1.3 is derived from how many *independent* kinds
-agree.
+Codemasters/EA publish no physics documentation for the setup screen. Each mechanism below
+comes from an official one-liner, community consensus, or our telemetry. Sources are
+labelled by kind. Confidence in §1.3 depends on agreement across *independent* kinds.
 
 | Id | Source | Kind |
 |----|--------|------|
@@ -49,12 +47,13 @@ claims may not transfer. Anything sourced only from F1 23–25 is capped at **me
 
 ### 1.1 Confidence scale
 
-- **High** — official source or our own telemetry, plus at least one independent guide;
-  no disagreement found.
-- **Medium** — two or more independent community guides agree; not verified in our data;
-  or high-confidence for an earlier game version only.
-- **Low** — a single source, sources disagree, or the mechanism is plausible real-car
-  physics with no game-specific evidence.
+- **High.** An official source or our telemetry agrees with at least one independent
+  guide. No disagreement has been found.
+- **Medium.** At least two independent community guides agree, but our data does not
+  verify the claim. This rating also applies to high-confidence evidence from an earlier
+  game version.
+- **Low.** One source, conflicting sources, or plausible real-car physics without
+  game-specific evidence.
 
 The advisor only *acts* (emits a delta) on high/medium rows. Low rows can appear in the
 debrief as "try this" experiments, flagged as such, and graduate via the learning loop (§6).
@@ -111,8 +110,8 @@ On track (S4, S13, R): brake bias and on-throttle diff via MFD/bindings at any t
 a few seconds later; off-throttle untouched). S4 states only on-throttle is adjustable in
 a race. S16 states that off-throttle cannot change while the car is on track. Front wing can be requested for the next pit stop (S9, low trust, corroborated by
 the Car Setups field `next_front_wing_value`, R). An EA forum thread (S15) reports that pressing
-bias/diff bindings before opening the MFD resets the value to its minimum — an argument
-for always quoting the current value in calls.
+bias/diff bindings before opening the MFD resets the value to its minimum. This supports
+always quoting the current value in calls.
 
 **Confidence:** garage list medium (community, earlier versions, consistent); MFD bias and
 on-throttle high (R); front wing at the stop medium. The first practice → quali → race
@@ -168,25 +167,24 @@ Car Setups (packet 5, 2 Hz, read-only; `CAR_SETUP_CAR` in `protocol/layouts.py`)
 | `fuel_load` | f32 | `setup_fuel_load` |
 | `next_front_wing_value` (packet-level, after the 24 cars) | f32 | **not stored** |
 
-So the advisor sees **every** setup-screen value for the player — it never recommends
-blind about the *current* setting. What it cannot see: the setup-screen ranges and step
+So the advisor sees **every** setup-screen value for the player. It never recommends a
+value without knowing the *current* setting. What it cannot see: the setup-screen ranges and step
 sizes (learn them as observed min/max/step per field, or configure), the in-game
 "understeer/oversteer" labels, inner/middle/outer tyre temps, ride height/bottoming,
 per-corner loads. Rivals' setups are expected to be blanked under restricted
 multiplayer telemetry (per the EA UDP spec, not yet seen in our data); the advisor only
 uses the player's own car, so this does not matter.
 
-Related Session fields: `parc_ferme_rules`, `tyre_temperature` (surface-only vs surface &
-carcass simulation — core-temp rules are disabled when the carcass isn't simulated;
-value semantics to be confirmed against a recording), `track_temperature`,
-`weekend_structure`.
+Related Session fields include `parc_ferme_rules`, `tyre_temperature`, `track_temperature`,
+and `weekend_structure`. The `tyre_temperature` field distinguishes surface-only from
+surface-and-carcass simulation. Disable core-temperature rules when carcass simulation is
+off. Confirm the field's value semantics against a recording.
 
 ## 2. What "balanced" means
 
-The target is **race-stint pace**: the setup that finishes a stint fastest with the tyres
-it has, not the one with the best single lap. Every signal below already exists in
-`SessionState` or can be derived from existing packets at existing rates; the "new"
-column marks what the advisor adds.
+The target is **race-stint pace**: finish a stint as fast as possible on its tyres, not
+set the best single lap. Each signal below already exists in `SessionState` or can be
+derived from existing packets at their current rates. The "new" column marks additions.
 
 | Signal | Definition | Source | New? |
 |--------|------------|--------|------|
@@ -248,8 +246,8 @@ track+compound, the debrief shows the measured before/after, e.g.:
 > track, +0.4 psi front cut front wear 4 %.
 
 (The user-supplied example "−1 front wing / −0.5 psi front" is correct only when the
-fronts are *under* window and the car is not understeering; with hot fronts the research
-says the pressure goes *up* — S3, S7. The rules make the direction conditional, §4.)
+fronts are *under* window and the car is not understeering. With hot fronts, research
+says to increase pressure (S3, S7). The rules make the direction conditional, §4.)
 
 One primary change per run follows the one-change-at-a-time method in S10 and is what
 makes the learning loop able to attribute the result.
@@ -512,11 +510,11 @@ on that track.
 Compare the triggering symptom metric (from `evidence`) and `J` between the before-run and
 the after-run at matched conditions (6.3):
 
-- `good` — symptom metric improved by ≥ `setup_grade_tol` **and** `J` did not get worse
+- A `good` result means the symptom metric improved by ≥ `setup_grade_tol` **and** `J` did not get worse
   **and** no contraindicated symptom appeared;
-- `wrong` — symptom worsened by ≥ tol, or a contraindicated symptom appeared, or `J` worse
+- A `wrong` result means the symptom worsened by ≥ tol, a contraindicated symptom appeared, or `J` worsened
   by ≥ tol;
-- `n/a` — inside tolerance (inconclusive).
+- An `n/a` result means the value is inside tolerance (inconclusive).
 
 Rows go into the existing `outcomes` table: `call_id = rec_id`, `rule_id`,
 `metric = "setup:<symptom>"`, `predicted` = expected sign × tol, `actual` = measured
@@ -544,8 +542,8 @@ fold_param(track_id, compound, f"setup_base:{signal}", value=<signal on a balanc
 ```
 
 - `setup_gain:*` re-ranks candidates and replaces the YAML `conf` once its weight passes
-  `setup_learned_min_weight` (a low-confidence row that keeps measuring `good` graduates
-  per track — this is how the disputed on-throttle diff gets settled);
+  `setup_learned_min_weight`. A low-confidence row that repeatedly measures `good`
+  graduates per track. This is how the disputed on-throttle diff gets settled.
 - `setup_base:*` holds the track's normal asymmetry (side_thermal, wear_spread), which is
   subtracted before a symptom is judged;
 - `pitwall tune` treats `setup.*` rules like any other rule: grades → `cooldown_mult`

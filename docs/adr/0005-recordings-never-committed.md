@@ -1,4 +1,4 @@
-# 0005 — Recordings never enter git; learnings do
+# 0005: Keep recordings out of git and commit learnings
 
 Status: accepted (2026-09)
 
@@ -12,14 +12,14 @@ the one that reproduced a bug.
 ## Decision
 
 - `recordings/`, `*.f1bin`, `*.f1idx`, `*.f1bin.zst` and `decisions/` are
-  git-ignored. Recordings live on the game PC (and are shared ad hoc, e.g. a
-  zip in a conversation) — never in the repository.
+  git-ignored. Recordings live on the game PC. Share them ad hoc, such as a zip
+  in a conversation. Never store them in the repository.
 - What a recording taught us is written up as an ADR in `docs/adr/`, with the
   observed values (sizes, rates, header fields, what the game actually sends)
   so the fact survives without the file.
 - Regression tests use synthetic packets from `tests/synth.py`, never real
-  captures. If a real capture is needed to reproduce a bug, `pitwall trim`
-  the relevant seconds with participant redaction and keep it outside git.
+  captures. If a real capture is needed to reproduce a bug, run `pitwall trim`
+  to extract the relevant seconds with participant redaction and keep it outside git.
 
 ## Consequences
 

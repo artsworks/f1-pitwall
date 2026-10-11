@@ -2,9 +2,9 @@
 
 ## Goal
 
-A race engineer that talks to you. It ingests F1 26 UDP telemetry, maintains a model of
-the session, decides what is worth saying, and says it — on a phone or second monitor —
-fast enough to act on, and rarely enough to trust.
+A race engineer for F1 26. It reads UDP telemetry, tracks the session, decides what to
+say, and speaks on a phone or second monitor. Calls must arrive in time to act and stay
+rare enough to trust.
 
 The hard problems are **judgement** (what to say, when to shut up) and **iteration speed**
 (tuning without driving a race per change). Parsing and plumbing are the easy parts and
@@ -30,13 +30,14 @@ F1 26 (Windows PC) ──UDP 20777──▶ ingest ──▶ session state ─�
 ```
 
 ### 1. Ingest
-Stdlib `asyncio.DatagramProtocol` on UDP 20777. Reads the 29-byte header, accepts only
-F1 26 / format 2026 and dispatches on (`m_packetId`, `m_packetVersion`) to a generated parser. Unknown
-combinations are logged once and dropped — never parsed speculatively.
+Stdlib `asyncio.DatagramProtocol` listens on UDP 20777. It reads the 29-byte header,
+accepts only F1 26 / format 2026, and dispatches on (`m_packetId`, `m_packetVersion`)
+to a generated parser. It logs unknown combinations once and drops them without
+speculative parsing.
 
 Every received datagram is optionally written verbatim to a recording file with its
-receive timestamp, before parsing. Recording is on by default; it costs nothing and is
-the raw material for everything else.
+receive timestamp before parsing. Recording is on by default, costs nothing, and
+supplies the raw data for everything else.
 
 ### 2. Session state
 A single mutable `SessionState` updated in place, from which an immutable snapshot is
@@ -50,53 +51,52 @@ taken per evaluation tick (10 Hz). Holds:
 - session context: track, session type, total laps, weather forecast, safety car state,
   DRS/active-aero zones, flags
 
-Rules never see raw packets — only the snapshot. This is what makes them testable.
+Rules see only the snapshot, not raw packets. This makes them testable.
 
 ### 3. Rules
 Declarative rule definitions evaluated against each snapshot. See `03-strategy.md`.
 A rule produces a candidate *call* (text, priority, tags) or nothing.
 
 ### 4. Dispatcher
-Priority queue with preemption, cooldowns, dedupe, global rate budget, and speak-time
-revalidation. Emits to the WebSocket. See `04-audio-ui.md`.
+The dispatcher uses a priority queue with preemption, cooldowns, deduplication, a global
+rate budget, and speak-time revalidation. It emits to the WebSocket. See `04-audio-ui.md`.
 
 ### 5. Clients
-One page served over the LAN, opened on a phone or a second monitor. Renders a
-high-contrast state view and the radio log. Speech is played by the backend on the game PC
-(`04-audio-ui.md`). No build step required to run it.
+The client is one page served over the LAN for a phone or second monitor. It renders a
+high-contrast state view and radio log. The backend on the game PC plays speech
+(`04-audio-ui.md`). The page needs no build step.
 
 ## Cross-cutting decisions
 
 **Recording and replay are first-class.** The replay tool feeds recorded datagrams through
-the exact same ingest path at a configurable speed. Every test, every threshold tune, and
-every demo runs through it. A session recorded once is a regression fixture forever.
+the same ingest path at a configurable speed. Tests, threshold tuning, and demos all use
+it. Each recording becomes a regression fixture.
 
-**Parsers are generated from declarative layouts.** One table per (packet,
-version), format 2026 only. EA revises layouts in patches via `m_packetVersion`; a
-schema-driven parser turns that from a rewrite into a data edit.
+**Parsers are generated from declarative layouts.** Use one table per (packet, version),
+for format 2026 only. EA revises layouts in patches through `m_packetVersion`; a
+schema-driven parser makes those updates data edits instead of rewrites.
 
-**Persistence over minimalism.** Lap summaries and a 10 Hz downsample go to SQLite. That
-history powers the degradation model, measured pit loss, and the post-session debrief. An
-in-memory-only design cannot get better over time.
+**Persistence over minimalism.** Store lap summaries and a 10 Hz downsample in SQLite.
+That history powers the degradation model, measured pit loss, and post-session debrief.
+An in-memory-only design cannot improve over time.
 
-**Latency budget, measured.** Targets: packet → WebSocket p99 < 50 ms; trigger → speech
-start p99 < 300 ms for priority 1. Instrument these and expose them in the UI. Optimise
-against the measurement, not against a theory about garbage collection.
+**Measure the latency budget.** Target packet → WebSocket p99 < 50 ms and trigger → speech
+start p99 < 300 ms for priority 1. Instrument both and expose them in the UI. Optimise
+against measurements, not theories about garbage collection.
 
-**Everything a human would tune lives in config**, not in code: thresholds, phrasings,
-cooldowns, priorities, per-track data. Layered defaults → profile → track/session overlay
-→ live toggles, hot-reloaded and hash-stamped into every recording. See
-`08-configuration.md`.
+**Keep human-tuned values in config**, not code: thresholds, phrasings, cooldowns,
+priorities, and per-track data. Layer defaults → profile → track/session overlay
+→ live toggles. Hot-reload them and hash-stamp each recording. See `08-configuration.md`.
 
-**The driver sets a mindset.** Balanced or aggressive (defend and survive later) is a vector of numeric
-biases that rules read (`mode.*`), not a parallel rule set. It biases judgement — pit
-gamble margin, energy policy, which rival is watched, how much is said — and never
-changes priority-1 facts. The assistant may suggest a change; only the driver makes one.
+**The driver sets a mindset.** Balanced or aggressive (defend and survive later) is a set
+of numeric biases that rules read (`mode.*`), not a parallel rule set. It biases judgement,
+including pit gamble margin, energy policy, rival selection, and call frequency. It never
+changes priority-1 facts. The assistant may suggest a change, but only the driver makes it.
 
-**Co-hosting with the game is a measured constraint.** Below-normal process priority,
-loopback UDP, I/O off the hot path, and a deliberately cheap, display-only dashboard page on
-the second monitor. The acceptance test is a frame-time A/B against a no-backend baseline, not a
-micro-benchmark. See `09-performance.md`.
+**Measure the cost of co-hosting with the game.** Use below-normal process priority,
+loopback UDP, and keep I/O off the hot path. Keep the second-monitor dashboard cheap
+and display-only. Compare frame times against a no-backend baseline, not a micro-benchmark.
+See `09-performance.md`.
 
 ## Stack
 
@@ -112,8 +112,8 @@ micro-benchmark. See `09-performance.md`.
 | Input | UDP Action via `BUTN`; Windows keyboard hook | wheel and spacebar (`12-driver-input.md`) |
 | Tooling | uv, ruff, mypy, pytest | fast, standard |
 
-Deliberately no framework on the frontend: the UI is ~10 numbers and a banner, and
-avoiding a build step means it can be edited on the race PC between sessions.
+The frontend has no framework because the UI is ~10 numbers and a banner. Without a build
+step, it can be edited on the race PC between sessions.
 
 ## Repository layout
 

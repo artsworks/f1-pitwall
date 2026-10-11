@@ -1,9 +1,8 @@
 # Adversarial review of the plan (before the first commit)
 
-A deliberate attempt to break the plan: every decision re-read against the spec, against
-the other documents, and against how it will actually be used — a Windows gaming PC,
-a second monitor, a Fanatec wheel, and a friends league of three humans plus an AI grid.
-Each finding lists what was wrong and what the docs now say.
+This review tests each decision against the spec, related documents, and the target setup:
+a Windows gaming PC, second monitor, Fanatec wheel, and friends league with three humans
+and an AI grid.
 
 ## Errors found and fixed
 
@@ -25,15 +24,15 @@ Each finding lists what was wrong and what the docs now say.
 
 ## Challenged and kept
 
-- **Python on the game PC.** At 30 Hz the ingest is ~230 packets/s (~0.24 MB/s) — well
-  within Python's range; the native-ingest escape hatch stays documented, not planned.
-- **10 Hz engine tick.** Fast enough for strategy; the only sub-second calls (Overtake
-  Mode distance) are served from the latest state at speak time, not the tick.
-- **No LLM.** Re-examined against the adaptivity requirement; acknowledge/negative
-  counts give deterministic, replay-testable adaptivity. Kept.
-- **Balanced and aggressive only.** Two tuned vectors beat four guessed ones. Kept.
-- **Frame-time A/B as the stutter test.** Now also has to cover the second-monitor
-  browser, which is the more likely cost. Kept, scope widened.
+- **Python on the game PC.** At 30 Hz, ingest is ~230 packets/s (~0.24 MB/s), within
+  Python's range. Keep native ingest documented, not planned.
+- **10 Hz engine tick.** This is fast enough for strategy. Serve sub-second calls
+  (Overtake Mode distance) from the latest state at speak time, not the tick.
+- **No LLM.** Acknowledge/negative counts provide deterministic, replay-testable
+  adaptivity. Keep this decision.
+- **Balanced and aggressive only.** Two tuned vectors are better than four guessed ones.
+- **Frame-time A/B as the stutter test.** Include the second-monitor browser, the more
+  likely cost. Keep the wider scope.
 
 ## Assumptions to verify early (M0/M1)
 
@@ -43,10 +42,10 @@ Each finding lists what was wrong and what the docs now say.
 3. AI cars report `m_yourTelemetry = public` in a league lobby.
 4. Spacebar is unbound in your F1 26 control profile, and a passive keyboard hook is
    tolerated by the game's anti-cheat online.
-5. Real recording size and compression ratio — measured on the first M0 session.
+5. Measure real recording size and compression ratio in the first M0 session.
 6. SAPI voice quality and start latency are acceptable on your PC.
 
 ## Nothing blocking
 
-None of the findings needs a decision from you; all were resolved inside the existing
-direction. The assumptions above are verified by the first recorded session.
+No finding requires a decision; all were resolved within the existing direction. Verify
+the assumptions above in the first recorded session.
