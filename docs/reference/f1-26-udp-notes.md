@@ -1,9 +1,9 @@
 # F1 26 UDP notes (packet format 2026)
 
-Working notes extracted while reviewing plan v1. These are the facts the design depends
-on. The authoritative source is EA's published specification; the 2026 structures are
-also mirrored in community repositories such as `MacManley/f1-26-udp`. The game can
-also emit formats 2025 and 2024; this project accepts only 2026.
+These notes record facts from the v1 plan review. The design depends on them. EA's
+published specification is authoritative. Community repositories such as
+`MacManley/f1-26-udp` also mirror the 2026 structures. The game can emit formats 2025 and
+2024, but this project accepts only 2026.
 
 **Always re-check against the official spec after a game patch.** `m_packetVersion` in
 the header exists precisely because layouts change within a season.
@@ -55,7 +55,7 @@ Tyre Sets 231 · Motion Ex 273 · Time Trial 104 · Lap Positions 1231 · Car Te
 9 One-Shot Qualifying · 10–12 Sprint Shootout 1–3 · 13 Short Sprint Shootout ·
 14 One-Shot Sprint Shootout · **15 Race · 16 Race 2 · 17 Race 3** · 18 Time Trial.
 
-## Track IDs (sparse — do not assume contiguity)
+## Track IDs (sparse, do not assume contiguity)
 
 0 Melbourne · 2 Shanghai · 3 Sakhir · 4 Catalunya · 5 Monaco · 6 Montreal · 7 Silverstone ·
 9 Hungaroring · 10 Spa · 11 Monza · 12 Singapore · 13 Suzuka · 14 Abu Dhabi · 15 Texas ·
@@ -65,7 +65,7 @@ Tyre Sets 231 · Motion Ex 273 · Time Trial 104 · Lap Positions 1231 · Car Te
 
 IDs 1, 8, 18, 21–25, 28 and 33–38 are absent from the F1 26 list.
 
-## Session packet — fields we use
+## Session packet: fields we use
 
 `m_weather`, `m_trackTemperature`, `m_airTemperature`, `m_totalLaps`, `m_trackLength`,
 `m_sessionType`, `m_trackId`, `m_formula`, `m_safetyCarStatus` (0 none, 1 full, 2 virtual,
@@ -75,13 +75,13 @@ IDs 1, 8, 18, 21–25, 28 and 33–38 are absent from the F1 26 list.
 (`m_numDRSZones`, `m_drsZones[4]`), active-aero zones (full and partial, max 8 each),
 `m_startReactionTime`.
 
-Each `WeatherForecastSample` carries the **session type it applies to**, a
-`m_timeOffset` in minutes, weather, temperatures and rain percentage — filter to the
-current session before using.
+Each `WeatherForecastSample` carries the **session type it applies to**, `m_timeOffset`
+in minutes, weather, temperatures, and rain percentage. Filter it to the current session
+before use.
 
 There is **no** `m_raceDistance` field.
 
-## Lap Data — fields we use
+## Lap Data: fields we use
 
 Times are split into a milliseconds part and a whole-minutes part:
 `m_sector1TimeMSPart` / `m_sector1TimeMinutesPart`, likewise sector 2,
@@ -104,7 +104,7 @@ Also `m_lastLapTimeInMS`, `m_currentLapTimeInMS`, `m_lapDistance`, `m_totalDista
 `SCAR` carries the safety car type and event type; `COLL` carries both vehicle indices
 and a severity; `FLBK` carries the flashback frame identifier and session time.
 
-## Car Status — fields we use
+## Car Status: fields we use
 
 `m_fuelMix`, `m_frontBrakeBias`, `m_pitLimiterStatus`, `m_fuelInTank`, `m_fuelCapacity`,
 `m_fuelRemainingLaps`, `m_drsAllowed`, `m_drsActivationDistance`, `m_actualTyreCompound`,
@@ -113,7 +113,7 @@ and a severity; `FLBK` carries the flashback frame identifier and session time.
 2 hotlap, 3 boost), `m_ersHarvestedThisLapMGUK`, `m_ersHarvestedThisLapMGUH`,
 **`m_ersHarvestLimitPerLap`**, `m_ersDeployedThisLap`, `m_networkPaused`.
 
-Compounds — actual: 16 = C5, 17 = C4, 18 = C3, 19 = C2, 20 = C1, 21 = C0, 22 = C6,
+Actual compounds: 16 = C5, 17 = C4, 18 = C3, 19 = C2, 20 = C1, 21 = C0, 22 = C6,
 7 = inter, 8 = wet. Visual: 16 soft, 17 medium, 18 hard, 7 inter, 8 wet.
 
 ### Inner tyre temperature defaults
@@ -157,7 +157,7 @@ global fallback thresholds.
 
 **Tyre wear is not here.**
 
-## Car Damage (10 Hz) — where tyre wear lives
+## Car Damage (10 Hz): where tyre wear lives
 
 `m_tyresWear[4]` (percentage), `m_tyresDamage[4]`, `m_brakesDamage[4]`,
 `m_tyreBlisters[4]`, wing/floor/diffuser/sidepod damage, `m_drsFault`, `m_ersFault`,
