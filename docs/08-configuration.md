@@ -1,25 +1,24 @@
 # Configuration, profiles and race mindset
 
-Everything a human would want to tune lives in configuration. The test for whether
-something belongs here: *would you ever want it different between two sessions, two
-tracks, or two moods?* If yes, it is config.
+Put human-tuned values in configuration. Ask: *would you want this to differ between
+sessions, tracks, or moods?* If yes, make it configurable.
 
 ## Layers
 
 Resolved in order, last wins:
 
-1. **Packaged defaults** (`config/defaults/`) — in the repo, never edited by the user.
-2. **User profile** (`~/.pitwall/profile.yaml`) — your persistent preferences.
+1. **Packaged defaults.** They live in `config/defaults/` and users never edit them.
+2. **User profile.** It stores your persistent preferences in `~/.pitwall/profile.yaml`.
 3. **Track / session overlay** (`config/tracks/<id>.yaml`, `config/sessions/race.yaml`).
-4. **Live overrides** — toggles from the dashboard, held for the session unless pinned.
+4. **Live overrides.** Dashboard toggles stay active for the session unless pinned.
 
 Rules:
 
 - Validated with pydantic on load *and* on hot reload. An invalid edit is rejected, the
   last good config stays live, and the UI shows the error. A config typo must never end a
   race.
-- Hot reload is on file change, and it is atomic — the snapshot for a tick sees one
-  consistent config.
+- Hot reload applies file changes atomically. Each tick's snapshot sees one consistent
+  config.
 - Every config resolution produces a hash, stamped into the recording header and the
   decision log, so a replay always knows which settings produced a call.
 - Live overrides are written to the decision log too. "It went quiet at lap 30" is
@@ -28,10 +27,11 @@ Rules:
 ## Settings the backend should expose
 
 **Connection**
-`udp_host` (default `127.0.0.1` when co-hosted — see `09-performance.md`), `udp_port`
-20777, `send_rate_hz` (default 30; set before start, used only for health checks — see
-`02-ingestion.md`), packet format fixed at 2026, `http_port` 8000, bind address,
-access token, HTTPS cert paths.
+Set `udp_host` to `127.0.0.1` when co-hosted. See `09-performance.md`.
+The `udp_port` default is 20777. `send_rate_hz` defaults to 30. Set it before start.
+Pitwall uses it only for health checks. See `02-ingestion.md`.
+The packet format is fixed at 2026. Set `http_port` to 8000.
+Expose the bind address, access token, and HTTPS certificate paths.
 
 **Recording and data**
 recording on/off, directory, retention size, auto-tag rules, persistence on/off,
@@ -57,7 +57,7 @@ voice, rate, pitch, volume, language, units (°C/°F, kg/lb), driver name used o
 theme, font scale, layout (phone landscape / monitor), colour-blind-safe palette,
 visual-only mode.
 
-**Verbosity presets** — one control most of the time, rather than tuning six numbers:
+**Verbosity presets** let one control replace six separate settings:
 
 | Preset | Speaks | Budget/lap | Typical use |
 |---|---|---|---|
@@ -68,19 +68,18 @@ visual-only mode.
 
 ## Race mindset
 
-Yes, this is worth building — and it is worth building as a **small vector of numeric
-biases**, not as parallel rule sets. Parallel rule sets would multiply the tuning surface
-and drift apart. Rules reference `mode.*` parameters; a mindset is a named set of values.
+Build mindsets as a **small set of numeric biases**, not parallel rule sets. Parallel
+rule sets multiply the tuning surface and drift apart. Rules reference `mode.*`
+parameters; each mindset names a set of values.
 
-The pilot ships two mindsets, **balanced** (default) and **aggressive**, tuned properly.
-Defend and survive stay in the design and are added once the first two are proven in
-replay — two well-tuned vectors beat four guessed ones.
+The pilot ships two tuned mindsets: **balanced** (default) and **aggressive**. Keep defend
+and survive in the design. Add them after replay proves the first two, rather than shipping
+four untested sets.
 
 ### The vector
 
-Each parameter maps to something a real race engineer changes when told "we're
-attacking" versus "bring it home in the points". Values are starting points to be tuned
-against recordings, not conclusions.
+Each parameter maps to something a race engineer changes when told "we're attacking" or
+"bring it home in the points". Tune these starting values against recordings.
 
 | Parameter | Balanced | Aggressive | What it controls | The coaching behaviour it models |
 |---|---|---|---|---|
@@ -148,25 +147,24 @@ mindsets:
 
 Why these particular knobs correlate with the coaching styles:
 
-- **Appetite, not information.** Both mindsets see the same projection; aggressive just
-  needs less gain (`pit_gain_min_s`) and less certainty (`pit_confidence_min`) before
-  acting, and tolerates more downside (`position_loss_risk_max`). That is the essential
-  difference between an attacking and a measured strategist.
-- **Where the margins go.** Balanced keeps margins in tyres, fuel and battery; aggressive
-  converts them into pace. Each margin is one number, so the debrief can say exactly which
-  margin was spent.
-- **Where attention goes.** `rival_focus_ahead` and `attack_window_s` move the engineer's
-  eyes forward. This is what drivers notice most: the radio talks about the car you are
-  chasing.
-- **Tone follows.** `phrasing` changes templates, not decisions — "box this lap" and
-  "consider boxing this lap" come from the same recommendation.
-- **Chattiness barely moves.** Aggressive is +1 call per lap, not double. A hunting driver
-  is busier, and more talk costs attention.
+- **Appetite, not information.** Both mindsets use the same projection. Aggressive needs
+  less gain (`pit_gain_min_s`) and certainty (`pit_confidence_min`) before acting. It also
+  tolerates more downside (`position_loss_risk_max`). These differences define an
+  attacking or measured strategy.
+- **Where the margins go.** Balanced keeps margins in tyres, fuel, and battery. Aggressive
+  converts them into pace. Each margin is one number, so the debrief can report what was
+  spent.
+- **Where attention goes.** `rival_focus_ahead` and `attack_window_s` focus the engineer
+  ahead. Drivers notice this because the radio talks about the car they are chasing.
+- **Tone follows.** `phrasing` changes templates, not decisions. "Box this lap" and
+  "consider boxing this lap" use the same recommendation.
+- **Chattiness barely moves.** Aggressive adds +1 call per lap, not twice as many. A
+  hunting driver is busier, but more talk costs attention.
 
 Guard-rails:
 
 1. **The driver switches the mindset; the assistant never switches it silently.** It may
-   *suggest* one, as a P3 call: "you're 1.2 behind and a second a lap quicker — go
+   *suggest* one, as a P3 call: "you're 1.2 behind and a second a lap quicker. Go
    aggressive?" An acknowledge press accepts it; a negative press dismisses it for five laps.
 2. **Mindset never changes priority-1 facts.** Safety car, red flag, damage, imminent
    penalty and "box or run out of fuel" are invariant. A mindset biases *judgement*, never
@@ -177,13 +175,12 @@ Guard-rails:
 4. **Recorded per call.** The mindset and its hash go into the decision log, so
    `pitwall diff --b-mindset aggressive` can replay a race under the other mindset.
 
-Switching mid-race is a wheel button (UDP Action 2) or a key, confirmed by voice
-("aggressive"); the dashboard toggle is for between sessions, since clicking it would take
-focus from a fullscreen game (`12-driver-input.md`).
+Switch mindsets mid-race with a wheel button (UDP Action 2) or key, then confirm by voice
+("aggressive"). Use the dashboard toggle between sessions because clicking it takes focus
+from a fullscreen game (`12-driver-input.md`).
 
 ## Weekend and season context
 
-The engine uses the weekend link for degradation priors. Earlier fitted practice stints can
-inform a race on the same track and compound. Nonzero links must match; if either link is
-zero, the UTC session dates must match. The engine needs at least `weekend_min_laps` fitted
-laps.
+The engine uses the weekend link for degradation priors. Fitted practice stints can inform
+a race on the same track and compound. Nonzero links must match. If either link is zero,
+the UTC session dates must match. The engine needs at least `weekend_min_laps` fitted laps.

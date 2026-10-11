@@ -58,7 +58,7 @@ tagged with why, so the debrief can show it.
 
 ## Pace and degradation model
 
-The model is what lets the engine answer "box this lap or next", which thresholds cannot.
+The model lets the engine answer "box this lap or next". Thresholds cannot.
 
 ```
 lap_time_ms = base_ms
@@ -67,14 +67,14 @@ lap_time_ms = base_ms
 ```
 
 - The engine fits valid, non-neutralised laps in the current stint. Short fits use or blend
-  toward a prior. The planner shrinks the fitted slope toward the prior based on fit error;
-  clean fits are used as-is.
+  toward a prior. The planner shrinks the fitted slope toward the prior based on fit error.
+  It uses clean fits as-is.
 - Race priors are scoped by total race laps, so different race distances do not mix.
   Practice values are unscoped.
 - Rival pace comes from Session History lap times, filtered the same way.
 
-Output to the driver is always in driver currency: "about three laps of life left at this
-pace", "the undercut is worth 1.2 seconds", never a raw coefficient.
+Report results in driver currency: "about three laps of life left at this pace" or
+"the undercut is worth 1.2 seconds", never a raw coefficient.
 
 ## F1 26 calibration
 
@@ -98,18 +98,18 @@ These settings stay unchanged:
 - `slow_car_*` stays unchanged because the 2026 rules do not change qualifying behavior.
 - Pit loss stays unchanged because the sample has one stop per track.
 
-We will refit these values after we record more F1 26 races, through `pitwall calibrate` and
+Refit these values after recording more F1 26 races with `pitwall calibrate` and
 `pitwall propose`.
 
 ## Pit loss
 
-Measured, not assumed. On any stop, `m_pitLaneTimeInLaneInMS` plus the pace delta of the
-in/out laps versus rolling green-flag pace gives the real loss; store it per track and
-per neutralisation state. The hardcoded table is only a cold-start prior, and must be
-keyed by the **sparse, non-contiguous** track IDs (see `reference/f1-26-udp-notes.md`).
+Measure, do not assume, pit loss. For each stop, combine `m_pitLaneTimeInLaneInMS` with
+the in/out-lap pace delta versus rolling green-flag pace. Store the result per track and
+neutralisation state. The hardcoded table is only a cold-start prior. Key it by the
+**sparse, non-contiguous** track IDs (see `reference/f1-26-udp-notes.md`).
 
 Neutralisation multipliers (green ≈ 1.0, VSC ≈ 0.55, full SC ≈ 0.45 of green loss) are
-also priors to be replaced by measurement.
+priors to replace with measurements.
 
 ## Race calls
 
@@ -117,9 +117,10 @@ also priors to be replaced by measurement.
 horizon with and without stopping, using measured pit loss, the deg model, and rival pace
 from Session History; recommend the lap with the best projected net position. Re-evaluate
 each lap and only *speak* when the recommendation changes materially or the window is
-about to close. The margin required before recommending a stop, and the tolerated
-probability of losing a place, come from `mode.pit_gain_min_s`,
-`mode.pit_confidence_min` and `mode.position_loss_risk_max` — the same projection, a different appetite.
+about to close. The minimum gain required to recommend a stop and the tolerated
+probability of losing a place come from `mode.pit_gain_min_s`,
+`mode.pit_confidence_min`, and `mode.position_loss_risk_max`. These settings change the
+appetite, not the projection.
 
 Every projection carries a confidence. Below the configured floor the engine says "not
 enough data yet" rather than a number; a model that is confidently wrong is worse than
@@ -135,45 +136,43 @@ These limits suppress values and plans when too few laps remain to exploit the t
 When `laps_remaining <= th.pit_min_laps_left`, the optimiser returns `no_stop` with both values at zero.
 The `rival_ahead_pitted` rule also stays silent at this limit.
 
-**Free stop.** Gap to the car behind exceeds measured pit loss → position-neutral stop
-available.
+**Free stop.** A position-neutral stop is available when the gap to the car behind exceeds
+measured pit loss.
 
-**Cheap stop.** Safety car or VSC deployed (from the `SCAR` event, not polling) and
-current tyre wear justifies it → box now, with the saving quantified.
+**Cheap stop.** If the `SCAR` event reports a safety car or VSC and current tyre wear
+justifies a stop, recommend boxing now and quantify the saving.
 
-**Rival scope.** Track at most three: the car ahead, the car behind (only while the gap is
-under 5 s), and the projected pit-exit rival — the car whose projected track position
+**Rival scope.** Track at most three rivals: the car ahead, the car behind (only while the
+gap is under 5 s), and the projected pit-exit rival. The projected rival's track position
 lands near your pit-exit point, computed as
 `D_target = (D_player − L_track · T_pit_loss / P_rolling) mod L_track`. Purge a missing
 rival only after two consecutive missing updates or `m_resultStatus >= 3`.
 
-**Tyre and thermal.** Overheat and graining warnings from the slow (30 s) core EMA with
-hysteresis, blister percentage from Car Damage, and wear phrased as remaining laps of
+**Tyre and thermal.** Use the slow (30 s) core EMA with hysteresis for overheat and graining
+warnings. Use Car Damage for blister percentage, and phrase wear as remaining laps of
 pace. Tyre life is the earlier of the worst corner's wear limit and the pace cliff from
-the degradation fit. Compound choice for the next stint is constrained by what Tyre Sets
-says you actually have left.
+the degradation fit. Choose the next-stint compound from the sets reported by Tyre Sets.
 
-**Fuel.** `m_fuelRemainingLaps` versus laps remaining → lift-and-coast or fuel-mix calls,
-stated as "you need half a lap of fuel saving over the next five".
+**Fuel.** Compare `m_fuelRemainingLaps` with laps remaining to advise lift-and-coast or
+fuel-mix changes. Phrase the call as "you need half a lap of fuel saving over the next five".
 
-**Energy.** ERS store versus `m_ersHarvestLimitPerLap` and `m_ersDeployedThisLap` →
-deployment advice; plus the 2026 Overtake Mode: `m_overtakeAvailable` and
+**Energy.** Compare ERS store with `m_ersHarvestLimitPerLap` and `m_ersDeployedThisLap`
+to advise deployment. The 2026 Overtake Mode uses `m_overtakeAvailable` and
 `m_overtakeActivationDistance` make "overtake available in 200 metres" a precise,
 actionable call. DRS availability comes from `m_drsAllowed` / `m_drsActivationDistance`
 and the `DRSE`/`DRSD` events.
 
-**Discipline.** `m_cornerCuttingWarnings` approaching the penalty threshold, blue flags,
-unserved penalties, damage-driven pace loss.
+**Discipline.** Track `m_cornerCuttingWarnings` against the penalty threshold, blue flags,
+unserved penalties, and damage-driven pace loss.
 
-**Weather.** Forecast samples filtered to the current session type, ordered by
-`m_timeOffset`, with `m_rainPercentage` — call the crossover lap for inters/wets and warn
-on the transition, not merely on the change.
+**Weather.** Filter forecast samples to the current session type and order them by
+`m_timeOffset`. Use `m_rainPercentage` to call the crossover lap for inters/wets and warn
+on the transition, not only on the change.
 
 ## Strategy plans (Plan A/B/C)
 
-**How real pit walls talk strategy.** Teams pre-brief a small set of named strategies
-before the race and then speak in references to them, not in full explanations — the radio
-is public and bandwidth is tiny. Common patterns:
+**How real pit walls talk strategy.** Teams pre-brief a few named strategies and refer to
+them by name on the radio. The radio is public and bandwidth is limited. Common patterns:
 
 - *Lettered plans.* Ferrari famously name them "Plan A / B / C" ("we are on Plan C",
   "let's go Plan F" is folklore); Mercedes and Red Bull say "Plan B" / "we're switching to
@@ -190,13 +189,13 @@ is public and bandwidth is tiny. Common patterns:
 - *Reactive plans.* Under SC/VSC the pre-briefed plan is "Plan C, box box" or "safety
   car, box this lap", because the neutralised pit loss changes the answer instantly.
 
-**Model.** `pitwall.strategy.plans` enumerates every compound sequence with 0–2 stops
-(`plan_max_stops`) that is legal: sets left per compound from the Tyre Sets packet
-(unknown = unlimited), the mandatory two-dry-compound rule (`plan_two_compound_rule`) and
-`plan_min_stint_laps`. Each sequence gets its best stop laps from the same deg model and
-pit-loss the optimiser uses (fresh-set pace per compound = learned prior, else the current
-slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`). The window is every first-
-stop lap within `plan_window_s` of the best.
+**Model.** `pitwall.strategy.plans` enumerates every legal compound sequence with 0–2 stops
+(`plan_max_stops`). It uses sets left per compound from the Tyre Sets packet (unknown =
+unlimited), the mandatory two-dry-compound rule (`plan_two_compound_rule`), and
+`plan_min_stint_laps`. It finds each sequence's best stop laps with the optimiser's
+degradation model and pit loss. Fresh-set pace per compound uses a learned prior or the
+current slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`. The window
+includes each first-stop lap within `plan_window_s` of the best.
 
 - **Plan A** = fastest sequence at race start; **Plan B** = fastest with a different stop
   count (else a different sequence); **Plan C** = reactive: box this lap at the SC/VSC pit
@@ -225,36 +224,35 @@ stop lap within `plan_window_s` of the best.
 | `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Cheap stop under the safety car" |
 | `plan_sc_box` | 1 | fallback when `box_now` is gated out: "Plan C, box box. Hards, cheap stop" |
 
-Every set/switch/off/on transition is written to the decision log (`outcome: plan`) and the
-`plan_events` table; every call row carries `active_plan` and `on_plan` for review grading.
+Write every set/switch/off/on transition to the decision log (`outcome: plan`) and
+`plan_events` table. Each call row carries `active_plan` and `on_plan` for review grading.
 
 ## Qualifying calls
 
-**Out-lap priming.** Target windows per compound and track from config, phrased as
-actions: "front left is cold, weave less and drag the brakes through sector three".
+**Out-lap priming.** Use config target windows for each compound and track. Phrase them
+as actions: "front left is cold, weave less and drag the brakes through sector three".
 
-**Track evolution and run timing.** Session clock versus expected queue at pit exit;
-advise the release slot.
+**Track evolution and run timing.** Compare the session clock with the expected queue at
+pit exit, then advise the release slot.
 
-**Clean-air release.** Project every car's `m_lapDistance` forward to your pit-exit point
-over the expected out-lap time and report the true window, rather than reading a gap off
-the classification.
+**Clean-air release.** Project every car's `m_lapDistance` to your pit-exit point over the
+expected out-lap time. Report the true window instead of a gap from the classification.
 
-**Abort advisory.** Compare the projected lap time (current sector deltas extrapolated)
-against the time needed to advance, derived from the field's Session History, and weigh
-it against remaining ERS and remaining fresh sets from Tyre Sets. A fixed +0.2 s rule
-cannot know whether you are already comfortably through.
+**Abort advisory.** Compare the projected lap time (extrapolated from current sector
+deltas) with the time needed to advance, derived from the field's Session History. Weigh
+the result against remaining ERS and fresh sets from Tyre Sets. A fixed +0.2 s rule
+cannot tell whether you are already comfortably through.
 
 ## Persistence
 
 SQLite, one file per install:
 
-- `sessions` — uid, track, type, date, weather, game version
-- `laps` — lap summary rows per car, with validity reason
-- `stints` — compound, in/out lap, fitted deg parameters
-- `pit_events` — measured loss, neutralisation state
-- `calls` — every rule firing and every suppression with its reason
-- `track_params` — learned pit loss, fuel coefficient, base pace
+- `sessions`: uid, track, type, date, weather, game version
+- `laps`: lap summary rows per car, with validity reason
+- `stints`: compound, in/out lap, fitted deg parameters
+- `pit_events`: measured loss, neutralisation state
+- `calls`: every rule firing and every suppression with its reason
+- `track_params`: learned pit loss, fuel coefficient, base pace
 
-This is what makes the second race at a track better than the first, and it is what the
-"< 1 MB memory" constraint in plan v1 would have prevented.
+This makes the second race at a track better than the first. The "< 1 MB memory"
+constraint in plan v1 would have prevented it.
