@@ -119,6 +119,20 @@ files are at least an hour old.
 In `learnings/`, cleanup removes dated `learning-YYYY-MM-DD.json` packs older than `--days`
 and leftover `.tmp` files. It never removes `learning-latest.json` or `track_ledger.jsonl`.
 
+### Reclaim disk space
+
+Learn from old recordings first, then delete them:
+
+1. Run `uv run pitwall digest recordings/`. Digest learns each recording that has a session UID and records the import.
+2. Run `uv run pitwall cleanup --days 1`. Cleanup deletes the recordings that step 1 learned.
+3. If you also want to delete recordings that Pitwall cannot learn, run `uv run pitwall cleanup --days 1 --include-unlearned`.
+
+Recordings named `session_0000000000000000_*` have no session UID. Digest reports
+`recording did not contain a session UID` for them and does not learn them. Cleanup
+deletes them only with `--include-unlearned`. You can also delete them by hand.
+Cleanup never deletes split archives (`.zip.*` files) or decision logs such as
+`balanced.decisions.jsonl`. Delete those by hand.
+
 ## Recording
 
 | Command | Use |
@@ -130,6 +144,10 @@ and leftover `.tmp` files. It never removes `learning-latest.json` or `track_led
 Files land in `recordings/` as `.f1bin.zst` + `.f1idx`; they stay on your PC and are
 never committed ([ADR 0005](adr/0005-recordings-never-committed.md)). It is safe to delete
 them while pitwall is stopped.
+
+Personal state (SQLite database, digests, profile, track overlays and certificates) lives in
+`~/.pitwall`, outside git and shared by every checkout, while `recordings/`, `learnings/` and
+`voices/` sit in the working directory and git ignores them.
 
 List recordings, newest first:
 

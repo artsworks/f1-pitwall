@@ -106,6 +106,12 @@ automatic ones. Rule thresholds never change without your review, and cooldown
 multipliers stay between `tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
 Set `learning.auto_calibrate: false` to turn off the refit and cooldown steps.
 
+#### Contributing your learnings
+
+To propose your learned per-track values for the packaged defaults, share only
+`learnings/learning-latest.json`. Do not share the SQLite database, digests, profile
+or certificates. See [Contributing your learnings](docs/20-learning-loop.md#contributing-your-learnings).
+
 ## Shape of the system
 
 ```mermaid
