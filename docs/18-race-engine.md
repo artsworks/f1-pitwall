@@ -1,4 +1,4 @@
-# 18 — Race engine (M3) design
+# 18: Race engine (M3) design
 
 Implements `docs/05-roadmap.md` M3 on top of the M2 pipeline. Governing constraints:
 
@@ -124,25 +124,25 @@ config hash. When a `<id>.yaml` is absent `settings.track` is `None` and models 
 `thresholds` defaults (`pit_loss_default_s`, etc.).
 
 **Prior resolution order** (`model.pitloss.resolve_prior`, `model.deg.resolve_prior`):
-For degradation, enough earlier practice data in the same weekend takes precedence. Otherwise,
-a race first looks for its total-distance-scoped `model_params` value with weight at least
-`prior_min_weight`; if it is too light, the engine tries the unscoped value. It then tries the
-track overlay and global default. Non-race stint values are unscoped. A scoped value from one
-race distance is never combined with another. A learned degradation prior lighter than
-`prior_full_weight` laps is blended toward the overlay or default value in proportion to its
-weight, and its confidence scales the same way, so one steep stint cannot set the plan alone.
+For degradation, enough earlier practice data in the same weekend takes precedence. For a
+race, use the total-distance-scoped `model_params` value when its weight reaches
+`prior_min_weight`. Otherwise, try the unscoped value, then the track overlay, then the
+global default. Non-race stint values are unscoped. Never combine scoped values from
+different race distances. Blend a learned degradation prior below `prior_full_weight`
+laps toward the overlay or default in proportion to its weight. Scale its confidence by
+the same proportion so one steep stint cannot set the plan alone.
 
-Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`; `N` is the
+Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`. `N` is the
 session's total race laps. Weekend degradation uses earlier fitted practice stints on the
-same compound and track. It requires `weekend_min_laps` in total.
+same compound and track, with at least `weekend_min_laps` total.
 
 For other priors, `model_params` with weight at least `prior_min_weight` wins, then the track
 overlay, then the global default. Sources are reported as `weekend`, `learned`, `overlay`, or
 `default`.
 
-When a track has no learned or track-file base, the engine uses the median of this session's
-clean laps after removing tyre-age degradation. Before the first clean lap, the engine uses the
-95 s `release_fallback_lap_s` fallback.
+When a track has no learned or track-file base, use the median of this session's clean
+laps after removing tyre-age degradation. Before the first clean lap, use the 95 s
+`release_fallback_lap_s` fallback.
 
 ## `pitwall.model.deg`
 

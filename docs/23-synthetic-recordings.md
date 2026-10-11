@@ -1,7 +1,8 @@
 # Synthetic recordings (spike)
 
-This spike tested whether f1-pitwall can turn a real recording into a synthetic one for the learning loop. The synthetic copy adds scenarios for the rules to learn from. It must not change the physics priors.
-It is a proof of concept, not a finished feature.
+This spike tested whether f1-pitwall can derive synthetic recordings from real ones for
+the learning loop. The copies add rule-learning scenarios without changing physics priors.
+This is a proof of concept, not a finished feature.
 
 _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 
@@ -51,12 +52,16 @@ A new migration adds `synthetic` and `derived_from` columns to `sessions`. Inges
 | Learning pack grades | Human grades kept. Press grades dropped |
 | Question mining (`pitwall propose`) | Excluded |
 
-`calibrate` is not the only way into the priors. The engine folds pit loss, fuel, degradation and battle rates while it replays a session, so those folds also check the synthetic flag.
-A derived recording keeps the source's real physics. Without these checks, each variant would fold the same real laps again.
+`calibrate` is not the only path to priors. The engine folds pit loss, fuel, degradation,
+and battle rates during replay, so those folds also check the synthetic flag. A derived
+recording retains the source's physics. Without these checks, each variant would fold the
+same real laps again.
 
 A replayed press answers a call from the real race. In a synthetic session it can land on a call that only the mutation created, so pitwall does not grade from it.
 
-The engine treats a session as synthetic if the recording metadata has `synthetic`, or if the UID has the reserved tag. It reads the metadata before the first packet. A generator that keeps a plain UID still cannot fold priors.
+The engine treats a session as synthetic if its metadata has `synthetic` or its UID has
+the reserved tag. It reads metadata before the first packet. A generator with a plain UID
+still cannot fold priors.
 
 ### Where the flag shows
 
@@ -120,10 +125,13 @@ Some problems apply to every mutation:
 
 ## Should the exclusion become a down-weight?
 
-No. The rules get consistent signals, but the physics in each variant is the source's physics with some fields changed. Pace, gaps, positions and the relation between wear and age stay as they were in the source.
-A down-weighted variant would also count the source's real laps a second time. Keep the hard exclusion for priors.
+No. Each variant keeps the source physics and changes only some fields. Pace, gaps,
+positions, and the relation between wear and age stay as in the source. A down-weighted
+variant would count the source's real laps twice. Keep the hard exclusion for priors.
 
-Keep synthetic sessions in `tune`, with one follow-up. `tune` should discount outcomes that depend on what the driver did, such as `stop_taken`, in synthetic sessions. Today `tune` skips `ignored` outcomes, so this race showed no harm.
+Keep synthetic sessions in `tune`, with one follow-up: discount outcomes that depend on
+the driver's actions, such as `stop_taken`, in synthetic sessions. `tune` currently skips
+`ignored` outcomes, so this race showed no harm.
 
 ## Follow-up: a generator seeded from real priors
 

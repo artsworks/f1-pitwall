@@ -1,22 +1,20 @@
 # Debrief screen: the post-session review page
 
-Status: **design only** (M4 target). Mockup with static sample data:
-`docs/mockups/debrief.html` — vanilla HTML/CSS/JS, self-contained, no build step. All
-numbers in it are illustrative; the source line under each panel names the real table or
-artifact it would be built from.
+Status: **design only** (M4 target). Static sample mockup: `docs/mockups/debrief.html`.
+It uses self-contained vanilla HTML/CSS/JS and needs no build step. All numbers are
+illustrative. Each panel's source line names the real table or artifact behind it.
 
-This doc does for the debrief what `15-dashboard-design.md` does for the live screen. The
-two are different pages with different jobs and share only the visual tokens. It also
-gives item 21 of `10-angles-not-yet-considered.md` (LLM-assisted debrief) its UI home.
+This doc designs the debrief page, while `15-dashboard-design.md` covers the live screen.
+The pages have different jobs and share only visual tokens. This doc also gives item 21 of
+`10-angles-not-yet-considered.md` (LLM-assisted debrief) a UI.
 
 ## 1. Why a separate page
 
-The live dashboard is glanced at for under a second while driving; it deliberately
-excludes lap tables, traces, sector deltas and call grading (`15-dashboard-design.md`,
-non-goals). A debrief is the opposite activity: the session is over, the driver is
-reading, scrolling, comparing, and answering "was that right?" The page is therefore a
-**report** — long, vertical, dense, readable at desk distance — not a glanceable panel.
-Forcing it into the live layout would break both.
+The live dashboard is glanced at for under a second while driving. It excludes lap
+tables, traces, sector deltas, and call grading (`15-dashboard-design.md`, non-goals).
+The debrief is for reading, scrolling, comparing, and answering "was that right?" after
+the session. It is a long, vertical **report**, readable at desk distance, not a
+glanceable panel. Combining both pages would compromise each.
 
 **Goals**
 
@@ -26,7 +24,7 @@ Forcing it into the live layout would break both.
    `calls`, the `.jsonl` decision log, the `.f1bin` index). Charts are built from those
    tables, never from prose.
 3. Every call in the session reviewable with the exact inputs its predicate read, and
-   gradable (right / noise / late / wrong) — the grade feeds rule tuning and the
+   gradable (right / noise / late / wrong). The grade feeds rule tuning and the
    replay-test corpus (`07-replay-and-debug.md`).
 4. Works as a static HTML file (openable years later without the backend) *and* served
    by the backend at `/debrief/<session>` so grading and "open in review mode" work.
@@ -45,24 +43,24 @@ Forcing it into the live layout would break both.
 
 ## 2. What a debrief covers (research)
 
-Real F1 debriefs are structured performance reviews, not open conversation: engineers
-lead with data, the driver gives feedback, then strategy, tyres, pit stops, traffic and
-energy are reviewed in turn, ending with actions for the next session or event. The
-attendees are the driver, race engineer, performance engineer, strategy, tyre and data
-engineers. Public team write-ups (McLaren's per-race "Strategy Debrief", Mercedes'
-"Race Debrief" videos) frame strategy as *decision → alternatives considered → outcome*,
-and post-race analysis pieces state findings as **time deltas at specific laps** ("out of
-undercut range by ~3.5 s", "damage cost >0.5 s/lap").
+Real F1 debriefs are structured performance reviews. Engineers lead with data, the driver
+gives feedback, then the group reviews strategy, tyres, pit stops, traffic, and energy.
+They finish with actions for the next session or event. Attendees include the driver,
+race engineer, performance engineer, strategy, tyre, and data engineers. Public team
+write-ups (McLaren's per-race "Strategy Debrief", Mercedes' "Race Debrief" videos) frame
+strategy as *decision → alternatives considered → outcome*. Post-race analysis pieces
+state **time deltas at specific laps** ("out of undercut range by ~3.5 s", "damage cost
+>0.5 s/lap").
 
-Engineering tools converge on a small chart vocabulary: MoTeC i2 and McLaren Applied
-ATLAS organise work into workbooks/worksheets of traces on a shared distance axis with a
-running time-difference trace and sector stripes; sim tools (VRS, Garage61, Popometer,
-Coach Dave Delta, Z1 Analyzer) put a delta-vs-reference chart on top, a lap list with
-per-sector gain/loss, and — in the last three — plain-English findings beside the charts,
-each linking back to the corner it describes. Strategy analysis uses the **race trace**
-(cumulative time vs a reference lap; slope = pace, vertical drop = pit stop), the
-**compound-coloured stint bar** per driver, and the **lap-time-vs-lap scatter coloured by
-compound** with SC/pit laps filtered so degradation shows as within-stint slope.
+Engineering tools use a small chart vocabulary. MoTeC i2 and McLaren Applied ATLAS
+organise traces into workbooks/worksheets on a shared distance axis, with a running
+time-difference trace and sector stripes. Sim tools (VRS, Garage61, Popometer, Coach Dave
+Delta, Z1 Analyzer) put a delta-vs-reference chart above a lap list with per-sector
+gain/loss. The last three also show plain-English findings beside the charts, each linked
+to its corner. Strategy analysis uses the **race trace** (cumulative time vs a reference
+lap; slope = pace, vertical drop = pit stop), **compound-coloured stint bars** per driver,
+and a **lap-time-vs-lap scatter coloured by compound**. Filter SC/pit laps so degradation
+appears as within-stint slope.
 
 Translated to a solo sim driver with Pitwall's data, the debrief agenda is:
 
@@ -100,15 +98,15 @@ Translated to a solo sim driver with Pitwall's data, the debrief agenda is:
 └──────────────┴────────────────────────────────────────────────────────┘
 ```
 
-- **Sticky left agenda** (16 rem) with the section numbers; the active section
-  highlights on scroll. The footer of the nav carries provenance: recording file, lite /
-  full, size, config hash, rules version, mindset — the same identity fields the decision
-  log records, so a debrief can always be matched to its inputs.
-- **Main column** capped at ~76 rem for reading; panels use two or three columns where
-  a chart and its table belong side by side.
+- **Sticky left agenda** (16 rem) with section numbers; the active section highlights on
+  scroll. The nav footer carries the recording file, lite / full, size, config hash, rules
+  version, and mindset. The decision log records the same fields, so each debrief can be
+  matched to its inputs.
+- **Main column** capped at ~76 rem for reading. Panels use two or three columns when a
+  chart and table belong side by side.
 - **Section header** = number, title, and a `DETERMINISTIC` or `GENERATED` badge where
   the distinction matters.
-- Below 900 px the nav becomes a static block above the content and multi-column panels
+- Below 900 px, the nav becomes a static block above the content and multi-column panels
   collapse. Print hides the nav and interactive controls so "export HTML → print to PDF"
   produces a readable document.
 
@@ -129,8 +127,8 @@ Every chart obeys the same rules so the page reads as one document:
 | Verdicts | `right` / `noise` / `late` / `wrong` — the grading vocabulary from review mode |
 | Source line | Every panel ends with the table / column / artifact it was built from |
 
-Findings are stated in driver currency (seconds per lap, laps of fuel, seconds of undercut
-margin), matching `03-strategy.md`'s rule that raw coefficients never reach the UI.
+State findings in driver currency (seconds per lap, laps of fuel, seconds of undercut
+margin). This follows `03-strategy.md`, which keeps raw coefficients out of the UI.
 
 ## 5. Section detail
 
@@ -157,7 +155,7 @@ in window / hot per corner, from the 10 Hz downsample. Wear at stop and finish.
 
 **04 Strategy calls.** One card per strategy-class call (`pit_window`, `undercut`,
 `free_stop`, `extend`…) with five fixed rows: *called* (exact text, lap, confidence),
-*inputs* (gaps, deg, pit loss — what the predicate read), *alternative* (what the engine
+*inputs* (gaps, deg, and pit loss read by the predicate), *alternative* (what the engine
 also projected), *outcome* (what actually happened, in seconds), *verdict*. This is the
 McLaren "decision → alternatives → impact" shape, computed deterministically from the
 decision log plus post-hoc pit-loss and gap measurements.
@@ -165,7 +163,7 @@ decision log plus post-hoc pit-loss and gap measurements.
 **05 Radio & decision log.** A timeline strip of every call by lap (coloured by class),
 then the list: lap, rule id, exact spoken text, audio fate (spoken / interrupted /
 dropped), driver ACK / NEG, and grade buttons. Each row expands to the predicate inputs
-and — for suppressed calls — which suppression layer fired. Grades post to the backend
+and the suppression layer that fired for suppressed calls. Grades post to the backend
 and land in `calls.grade`; in the static export they are read-only.
 
 **06 Incidents & energy.** Event table (lock-up, off-track, slide, contact, damage,
@@ -196,8 +194,8 @@ AI-generated content is labelled in a clear, distinguishable way:
 3. **Anchored claims.** Each paragraph ends with the sections it relied on (`§01 §04`),
    rendered as links that scroll to them. A claim with no anchor is a prompt bug.
 4. **Grounded inputs.** The model receives the structured stats behind §00–§07 and the
-   decision log — never raw packets, never the `.f1bin`. Small context, low hallucination
-   surface, and the page's own numbers are the only numbers it can quote.
+   decision log. It never receives raw packets or the `.f1bin`. The context stays small.
+   The page's own numbers are the only numbers the model can quote.
 5. **Advisory footer.** A fixed line: generated text never changes a decision, a grade or
    an action; the deterministic sections above are the record.
 6. **Hideable.** A "show generated text" toggle (persisted in `localStorage`) hides §08
@@ -237,5 +235,5 @@ race traces. Sector 3 is derived from lap time minus sectors 1 and 2.
 | D4 | Partial | Section 07 lists rules with negative human grades and shows learned state; it is not a generated action list |
 | D5 | Deferred | LLM prose and the ask box (item 21) |
 
-Each phase is testable by rendering a recorded session (`07-replay-and-debug.md`) and
-diffing the produced HTML against a golden file, the same way replay tests pin decisions.
+Test each phase by rendering a recorded session (`07-replay-and-debug.md`) and diffing
+the HTML against a golden file, as replay tests do for decisions.

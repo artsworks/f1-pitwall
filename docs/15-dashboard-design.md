@@ -1,12 +1,15 @@
 # Dashboard redesign: the second-monitor race-engineer screen
 
-Status: **phases 1–6 implemented** in `web/`; M3 adds the zone F `strategy` block, backend-owned `fuel_delta_laps` and backend-owned pages (§10) (call evidence awaits backend fields; the banner clears to "radio quiet" after 20 s / 30 s and the call moves to the log). Mockups with static sample data live in
-`docs/mockups/` (`dashboard-1080p.html`, `dashboard-m3-stale.html`, `radio.html`). They
-are vanilla HTML/CSS, self-contained, no build step — open them in a browser.
-Their call evidence, fuel target and damage values illustrate planned backend fields.
+Status: **phases 1–6 implemented** in `web/`. M3 adds the zone F `strategy` block,
+backend-owned `fuel_delta_laps`, and backend-owned pages (§10). Call evidence awaits
+backend fields. The banner clears to "radio quiet" after 20 s / 30 s, then moves the call
+to the log. Static sample mockups live in `docs/mockups/` (`dashboard-1080p.html`,
+`dashboard-m3-stale.html`, `radio.html`). They use self-contained vanilla HTML/CSS with
+no build step. Open them in a browser. Call evidence, fuel targets, and damage values
+illustrate planned backend fields.
 
-This doc supersedes the "Dashboard" section of `04-audio-ui.md` for layout. The
-current runtime is unchanged; future call-history additions are identified below.
+This doc supersedes the "Dashboard" section of `04-audio-ui.md` for layout. The runtime
+is unchanged; planned call-history additions are listed below.
 
 ## 1. Goals and non-goals
 
@@ -17,26 +20,26 @@ current runtime is unchanged; future call-history additions are identified below
    The **call banner** is therefore the largest thing on screen.
 2. A small previous-call subtitle provides continuity; the radio log holds older calls
    and distinguishes dispatched, audio started, interrupted and dropped.
-3. Connection freshness is load-bearing. LIVE / STALE and packet age are always visible;
-   above 1 s of staleness the whole page greys out so a frozen screen never looks alive.
+3. Connection freshness is essential. LIVE / STALE and packet age are always visible.
+   Above 1 s of staleness, the whole page greys out so a frozen screen never looks alive.
 4. The few numbers that *justify* a call are visible without reading: tyres per corner,
    fuel laps and delta, pit window / gaps (M3), damage, lap / position / phase, mindset.
 5. Readable on a 27-inch overhead monitor at roughly 1 m, at either 1080p or 1440p.
-   Dark, high contrast, big type; colour always paired with a word.
+   Use a dark, high-contrast design with large type; pair every colour with a word.
 6. Offline. Vanilla HTML/CSS/JS served by the backend; no CDN, no framework, no build.
 
 **Non-goals**
 
 - Not a telemetry gauge cluster. No speed, RPM, gear, throttle/brake traces, g-forces,
   minimap, sector deltas, per-lap tables. If the game HUD already shows it, we don't.
-- Not a control surface during a session. Every mid-race control (ACK / NEG, mindset,
+- The screen does not control the session. Every mid-race control (ACK / NEG, mindset,
   quiet) has a wheel or keyboard binding (`12-driver-input.md`). The screen only
   *displays* their state.
 - Not a debrief tool. Stint plots, deg curves and call grading live in the post-session
   HTML debrief (M4, `16-debrief-design.md`) and review mode (`07-replay-and-debug.md`).
-- No continuous animation (motion rules in §11). A new call makes a brief, one-time transition into the
-  fixed banner while the old call settles into a smaller previous-call line. Urgent
-  calls and stale/error states appear immediately; reduced-motion users get no motion.
+- No continuous animation (motion rules in §11). A new call makes one brief transition
+  into the fixed banner while the old call moves to a smaller previous-call line. Urgent
+  calls and stale/error states appear immediately. Reduced-motion users see no motion.
 
 ## 2. Information hierarchy
 
@@ -58,12 +61,11 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 
 ## 3. Layout grid
 
-Landscape, 16:9. Fixed 12-column grid with `rem` sizing driven by a root font size set
-from viewport width (`font-size: clamp(14px, 0.9vw, 24px)`), so 1080p and 1440p render
-the same composition at nearly the same physical scale on a 27-inch panel. Make the
-tyre temperature 3 rem and secondary tyre values at least 1.15 rem; scaling only the
-root font would crowd the status bar. Zones never reflow between
-sessions; empty zones keep their box so nothing jumps when a value appears.
+Use a landscape 16:9 layout with a fixed 12-column grid. Set the root font size from
+viewport width (`font-size: clamp(14px, 0.9vw, 24px)`) so 1080p and 1440p use nearly the
+same physical scale on a 27-inch panel. Set tyre temperature to 3 rem and secondary tyre
+values to at least 1.15 rem; scaling only the root font would crowd the status bar. Zones
+never reflow between sessions. Empty zones keep their space when values are absent.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -95,43 +97,41 @@ sessions; empty zones keep their box so nothing jumps when a value appears.
 
 Zone rules:
 
-- **A status bar**: freshness lives at the far left, first thing the eye lands on in
-  Western reading order. Session/lap/position right-aligned. Mindset pill far right.
-- **B banner**: full width, fixed height, never collapses. A large current line, a
-  single evidence line and a dim, one-line **PREV** radio subtitle share this
-  fixed space. The subtitle shows the immediately preceding call whose audio started;
-  the next call replaces it. The log shows older calls, omitting those already in the
-  banner, but retains recent calls in its underlying history. Long calls use at most two
-  banner lines with the complete text retained in call history for review. When there
-  is no call, the banner says "— radio quiet —".
-- **C tyres**: a 2×2 grid drawn as the car from above — **FL top-left, FR top-right, RL
-  bottom-left, RR bottom-right** — with a thin centre-line so left/right is unambiguous
-  at a glance. Compound chip and tyre age sit above the grid. The **whole tile** takes the
-  status colour (border + faint background tint, not just the number) so a corner
-  heating up is visible in peripheral vision. Brake temp sits small in each tile's
-  corner: it can help explain heat or lock-ups, but it never competes with the tyre
-  temp for size. The corner label, temperature and status word share the colour;
-  brakes stay neutral until a calibrated threshold exists.
-- **D fuel + damage**: fuel laps remaining is the large number until the backend
-  supplies a target delta; only then does the signed delta take prominence. Damage
-  renders as a list of non-zero components only; the zone header stays.
-- **E radio log**: newest older call at the top; the current and previous calls are
-  already visible in B. Show as many older rows as fit without shrinking the type.
-- **F strategy**: reserved for M3. Until then it shows the pit-window placeholder line
-  from the roadmap ("pit window: M3") in the dim colour, so the grid does not change
-  when strategy lands.
-- **G footer**: diagnostics only. Everything here is deliberately small.
+- **A status bar**: place freshness at the far left, first in Western reading order.
+  Right-align session/lap/position and place the mindset pill at the far right.
+- **B banner**: keep it full-width and fixed-height. It holds a large current line, one
+  evidence line, and a dim, one-line **PREV** radio subtitle. The subtitle shows the
+  preceding call whose audio started; the next call replaces it. The log shows older
+  calls, omits those in the banner, and retains recent calls in its underlying history.
+  Long calls use at most two banner lines; call history retains the full text for review.
+  With no call, the banner says "— radio quiet —".
+- **C tyres**: draw a 2×2 grid as the car from above: **FL top-left, FR top-right, RL
+  bottom-left, RR bottom-right**. Add a thin centre-line to distinguish left from right.
+  Place the compound chip and tyre age above the grid. Colour the **whole tile** by status
+  (border and faint background tint, not just the number) so a hot corner shows in
+  peripheral vision. Put brake temperature in a small corner label. It can explain heat
+  or lock-ups but must not compete with tyre temperature. Colour the corner label,
+  temperature, and status word alike. Keep brakes neutral until a calibrated threshold
+  exists.
+- **D fuel + damage**: show fuel laps remaining as the large number until the backend
+  supplies a target delta. Then emphasize the signed delta. List only non-zero damage
+  components and keep the zone header.
+- **E radio log**: put the newest older call at the top. The current and previous calls
+  already appear in B. Show as many older rows as fit without shrinking the type.
+- **F strategy**: reserve this zone for M3. Until then, show the roadmap's dim placeholder
+  line ("pit window: M3") so the grid stays the same when strategy arrives.
+- **G footer**: show diagnostics only, in small type.
 
 ### 1440p
 
-Same grid; root font scales ~1.33×, preserving the physical size of text on a
-27-inch panel. Additional radio rows fit when calls are short.
+Use the same grid. The root font scales ~1.33× to preserve text size on a 27-inch panel.
+Short calls leave room for more radio rows.
 
 ### `/radio` compact view
 
-Log only: status bar (freshness, lap), banner with previous-call subtitle, then the log
-in ~1.6× type. For a narrow
-portrait screen or phone. Same `app.js`, `body.radio` class hides zones C/D/F/G.
+Show only the status bar (freshness, lap), banner with previous-call subtitle, and log in
+~1.6× type. This view suits a narrow portrait screen or phone. The same `app.js` uses the
+`body.radio` class to hide zones C/D/F/G.
 
 ## 4. Colour and typography tokens
 
@@ -166,17 +166,17 @@ whole text; white text beside a red bar stays readable from the overhead monitor
 
 ### Screen copy
 
-Use short, action-first calls: `Front left hot. Ease trail braking.` rather than a
-long preamble. The banner and log show the **exact dispatched call text**; shortening
-a spoken call belongs in its rule template, not a client-side rewrite of history.
-The mockup phrases show the proposed concise style, not a change to current audio.
-Keep `HOT`, `COLD`, `LIVE`, `STALE` and instructions such as `Box` as words.
-In supporting labels, `FL/FR/RL/RR` identify corners; `BRK` is brake temperature,
-`surf` is surface temperature, `L` after a number is laps, `FW/RW` are wings and
-`UC` is undercut; `S3` is sector three. `age 14 laps` becomes `14L old`;
-`34.4 laps remaining · 34 including this lap` becomes `34.4 left · 34 to finish`.
-Do not abbreviate away
-why an urgent call matters or the condition for acting on it.
+Use short, action-first calls: `Front left hot. Ease trail braking.` instead of a long
+preamble. The banner and log show the **exact dispatched call text**. Shorten spoken calls
+in their rule templates, not through client-side rewrites of history. Mockup phrases show
+the proposed concise style, not a change to current audio.
+
+Keep `HOT`, `COLD`, `LIVE`, `STALE`, and instructions such as `Box` as words. Use
+`FL/FR/RL/RR` for corners, `BRK` for brake temperature, `surf` for surface temperature,
+`L` after a number for laps, `FW/RW` for wings, `UC` for undercut, and `S3` for sector
+three. Change `age 14 laps` to `14L old`, and `34.4 laps remaining · 34 including this
+lap` to `34.4 left · 34 to finish`. Keep why an urgent call matters and its action
+condition.
 
 ## 5. State → component mapping
 
@@ -239,21 +239,20 @@ Backend only.
 
 ## 6. Stale and reconnect behaviour
 
-Two independent staleness sources, either one greys the page:
+Either of these two independent staleness sources greys the page:
 
 1. **Server-reported**: `live === false` or `packet_age_ms > 1000` in the latest frame.
-   Meaning: the game stopped sending UDP (menu, pause, crash).
-2. **Client-observed**: no WS frame for > 1 s (a client `setInterval` checks the last
-   frame time). Meaning: the backend or socket is gone. This is the case a
-   server-only check can never catch.
+   The game stopped sending UDP (menu, pause, crash).
+2. **Client-observed**: no WS frame for > 1 s. A client `setInterval` checks the last
+   frame time. The backend or socket is gone, which a server-only check cannot detect.
 
-Greyed state: `body.stale` desaturates and dims telemetry, strategy and log, while the
-status bar turns **red** with `STALE · last packet 4.2 s ago` counting up. The main
-banner immediately reads `TELEMETRY STALE · ADVICE PAUSED`. The latest
-audio-started call moves to the dim subtitle labelled `LAST RADIO (STARTED) · L31 · 5s`;
-it never remains a large imperative like "Box now". There is no transition into
-stale/error states. Numbers stay visible as historical data. Refresh the status bar's
-age using locally elapsed monotonic time when no new packet or frame arrives.
+In the greyed state, `body.stale` desaturates and dims telemetry, strategy, and log. The
+status bar turns **red** and counts up `STALE · last packet 4.2 s ago`. The main banner
+immediately reads `TELEMETRY STALE · ADVICE PAUSED`. Move the latest audio-started call
+to the dim `LAST RADIO (STARTED) · L31 · 5s` subtitle. Never leave a large imperative
+such as "Box now" in the banner. Do not animate stale/error transitions. Keep numbers
+visible as historical data. Update the status bar's age using locally elapsed monotonic
+time when no new packet or frame arrives.
 
 Reconnect: exponential back-off 0.5 → 5 s (as today). On `open` send `hello` with
 `last_seq`; the server already sends a `snapshot` with recent calls after **every**
@@ -331,30 +330,30 @@ Each PR keeps `/` and `/radio` working against the current `state_payload`; the 
 three use the existing protocol, with absent/planned fields hidden. PR 4 handles
 the call-history contract.
 
-1. **Tokens + grid + freshness** — restructure `index.html`/`style.css`; bring the
+1. **Tokens + grid + freshness.** Restructure `index.html`/`style.css`. Bring the
    client-side 1 s timeout, `CONNECTING…` and the red stale warning to `app.js` in
    the same PR. Avoid shipping a new banner that could appear live when frozen.
    Verify at 1920×1080 and 2560×1440, including long calls and lost WS/UDP.
-2. **Tyres 2×2 + fuel + evidence** — `app.js` render functions per zone; plan-view
+2. **Tyres 2×2 + fuel + evidence.** Add `app.js` render functions per zone. Add plan-view
    tyre tiles, remaining fuel laps, WS update rate. Hide the target delta and
    call-evidence strip until the backend supplies them. Unit-testable pure
    formatters can live in `web/format.js`.
-3. **Current + previous radio + log** — state machine from §7, age counter,
+3. **Current + previous radio + log.** Add the state machine from §7, an age counter,
    ≤220 ms handoff, reduced motion, next older call at the top of the log,
    and protocol-mismatch state. Restored calls without outcome/timestamp display
    unknown status/age. Test rapid consecutive calls, P1 preemption, cancellation,
    stale during transition and long-text clipping.
-4. **Call history status contract** — in a separate server/protocol PR, enrich the
+4. **Call history status contract.** In a separate server/protocol PR, enrich the
    existing `snapshot.calls[]` entries with original dispatch timestamps and
    `spoken`/`cancel` outcomes, retaining stable call IDs. Add confirmed
    finish/interruption events only if the product needs them. Keep current clients
    compatible or version the protocol. Verify replay and reconnect recovery.
-5. **Damage + server-computed fuel delta** — render `damage` once the owner's
+5. **Damage + server-computed fuel delta.** Render `damage` once the owner's
    server change lands in zone D; add `fuel_delta_laps` after its target has a
    defined session-aware source. Do not compute a race-only guess for quali/practice;
    absent/unknown delta leaves fuel laps remaining prominent.
-6. **`/radio` compact** — `body.radio` rules on the new grid; test on a phone in portrait.
-7. **M3 strategy zone** — when `strategy` exists in the payload. Separate PR series.
+6. **`/radio` compact.** Add `body.radio` rules to the new grid. Test on a phone in portrait.
+7. **M3 strategy zone.** Add it when `strategy` exists in the payload. Use a separate PR series.
 
 Definition of done: screenshots at both landscape sizes and portrait `/radio`,
 lint/type checks for any changed Python, and an offline `pitwall replay --serve`
@@ -362,25 +361,26 @@ render check against a test recording. No running game is needed.
 
 ## 10. Open questions for the owner
 
-1. **Fuel delta target** — which backend strategy target owns `fuel_delta_laps` in
+1. **Fuel delta target.** Which backend strategy target owns `fuel_delta_laps` in
    race, quali and practice? Until defined, display only laps remaining. In the
    illustrative live mockup, lap 24/57 has 34 laps including the current lap;
    34.4 remaining gives a future server delta of +0.4. In the M3 mockup,
    lap 31/52 has 22 laps including the current lap; 21.7 gives −0.3.
-2. **Damage thresholds** — amber 10 % / red 30 % are guesses. Should these come from
+2. **Damage thresholds.** Amber 10 % / red 30 % are guesses. Should these come from
    `thresholds` in config like the tyre temps, and should the server emit a
    `status` word per component the way it does for tyres?
-3. **Log order** — newest-first (proposed, keeps the top row adjacent to the banner) vs.
-   the current newest-last chat style?
-4. **Banner fade times** — 20 s / 30 s, or tie to the rule's `deadline_ms`?
+3. **Log order.** Should the log be newest-first, which keeps the top row next to the
+   banner, or newest-last, like the current chat style?
+4. **Banner fade times.** Should banners fade after 20 s or 30 s, or follow the rule's `deadline_ms`?
    Expiration of an actionable P1 needs a distinct rule from its visual fade.
-5. **Tyre tile colour source** — keep server `status` (COLD/OK/HOT from config) or also
-   let wear drive a second colour band? Proposal: temp colours the number, wear colours
+5. **Tyre tile colour source.** Should the server's `status` (COLD/OK/HOT from config)
+   set the colour, or should wear set a second colour band? Proposal: temp colours the
+   number, wear colours
    only its own `38%` text.
-6. **Brake threshold** — brakes are shown small inside each tyre tile and remain
+6. **Brake threshold.** Brakes appear small inside each tyre tile and remain
    neutral for now; what calibrated threshold should turn them amber?
-7. **SC/VSC** — status-bar paint only, or should a `safety_car != 0` also force a
-   synthetic banner if the dispatcher has not sent a P1 yet?
+7. **SC/VSC.** Should the status bar only show SC/VSC, or should `safety_car != 0` also
+   force a synthetic banner if the dispatcher has not sent a P1?
 8. **Should `rate_hz` be populated** by the server (it is `null` today) or is a client
    derived number acceptable?
 9. **1440p only?** If the second monitor is known, the `clamp()` scaling can be dropped

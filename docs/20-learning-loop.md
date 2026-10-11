@@ -1,13 +1,13 @@
 # Learning loop
 
-How pitwall gets better from each session without repeating the same mistakes.
-Live decisions stay deterministic (ADR 0008). Upkeep and calibration write learned values.
-Proposals remain review-only.
+Pitwall learns from each session without repeating mistakes. Live decisions stay
+deterministic (ADR 0008). Upkeep and calibration write learned values; proposals remain
+review-only.
 
-Recording imports and startup upkeep use database transactions. A failed import
-leaves no partial learning. Calibration stores race pace and tyre wear separately
-for each race length. A fit that cannot separate fuel from tyre age does not replace
-those priors. `pitwall stats --learned` lists each race length.
+Recording imports and startup upkeep use database transactions. A failed import leaves no
+partial learning. Calibration stores race pace and tyre wear by race length. A fit that
+cannot separate fuel from tyre age does not replace those priors. `pitwall stats --learned`
+lists each race length.
 
 ```
 session ──► SQLite laps, stints, calls and plan events
@@ -24,8 +24,8 @@ automatic promotion and LLM debrief prose are not implemented; LLM prose is defe
 
 ## 1. Hindsight grader (`pitwall.hindsight`)
 
-Labels come from SQLite alone. They're recomputed for the whole session on every run, so
-running it again is idempotent. They're stored in the `outcomes` table (migration 6):
+Labels come only from SQLite. Each run recomputes the whole session, so reruns are
+idempotent. Store them in the `outcomes` table (migration 6):
 `call_id, rule_id, lap, metric, predicted, actual, error, label, detail`.
 
 | Calls | Metric | Label |
@@ -37,11 +37,14 @@ running it again is idempotent. They're stored in the `outcomes` table (migratio
 | `fuel_*` (`inputs.fuel_margin_laps`) | `fuel_margin` | vs the final lap's fuel-remaining laps, tolerance `hind_fuel_tol_laps`. `censored` unless the session reached `sessions.total_laps` (migration 7). Kept in the digest as forecast calibration but not fed to `pitwall tune` (the driver's response to the call moves it) |
 | plan `set` / `switch` events | `plan_followed` | Did the compounds actually run from that lap match the plan's sequence exactly (a stint's compound is its first lap's visual compound, `laps.visual`, else its C-number code)? A plan replaced before any stop is `n/a`; a session that ended early while still on the plan so far is `censored` |
 
-Stops are laps flagged `pitted` next to a tyre change (drive-throughs don't count), else a tyre-age reset. Each tyre change is one stop, the in-lap when it is flagged, else the out-lap. Player laps are always `car_idx` 0; a rival in slot 0 is stored under the player's slot. Labels: `good`, `wrong`, `ignored`,
-`censored`, `n/a` (not enough green laps to judge).
+Stops are laps flagged `pitted` next to a tyre change (not drive-throughs), or laps with a
+tyre-age reset. Count each tyre change as one stop. Use the in-lap when flagged, otherwise
+the out-lap. Player laps always use `car_idx` 0. A rival in slot 0 is stored under the
+player's slot. Labels are `good`, `wrong`, `ignored`, `censored`, and `n/a` (not enough
+green laps to judge).
 
-`pitwall tune` now also uses `good`/`wrong` outcomes, each weighted `tune_auto_weight` (0.5),
-but only for calls nobody graded by hand. A human grade always overrides the automatic one.
+`pitwall tune` also uses `good`/`wrong` outcomes, weighted by `tune_auto_weight` (0.5), but
+only when nobody graded the call by hand. A human grade overrides the automatic one.
 
 ## 2. Session digest (`pitwall digest`)
 
@@ -94,13 +97,13 @@ fold without a distance suffix.
 ## Calibration and review
 
 `pitwall calibrate` fits values from stored sessions. `pitwall stats --learned` shows
-their values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by
-track; it is descriptive, not a causal comparison. `pitwall propose` writes candidates
-for review and does not change active settings. `pitwall calibrate` and `pitwall tune`
-run the same steps as upkeep on demand. `pitwall tune` also folds A/B results from
-`pitwall diff`.
+values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by track.
+This report is descriptive, not a causal comparison. `pitwall propose` writes candidates
+for review without changing active settings. Run `pitwall calibrate` and `pitwall tune` to
+apply upkeep steps on demand. `pitwall tune` also folds A/B results from `pitwall diff`.
 
-`pitwall start` prints ingested track minutes and recent call quality, and `pitwall stats --quality` shows session totals and the trend.
+`pitwall start` prints ingested track minutes and recent call quality.
+`pitwall stats --quality` shows session totals and the trend.
 
 `pitwall propose` also reports menu questions that recur before a related rule fires.
 Each candidate includes median snapshot signals at the ask and current rule thresholds.
@@ -112,7 +115,7 @@ Calibration, upkeep and the replay folds leave them out of physics priors.
 `pitwall calibrate --include-synthetic` adds them to the fit. See
 [Synthetic recordings](23-synthetic-recordings.md).
 
-To measure whether a change improves pitwall, run `pitwall bench`. See
+Run `pitwall bench` to measure whether a change improves pitwall. See
 [Scenario bench](24-scenario-bench.md).
 
 ## Learning pack
@@ -137,10 +140,9 @@ Share only this file. Do not share the SQLite database, digests, profile or cert
 ## After a race
 
 No command is required. Pitwall grades the session when it ends. On the next start,
-upkeep refits pace, tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns.
-Two steps stay manual by design: grading calls and applying the threshold YAML changes
-that `pitwall propose` writes. Open `/debrief` to pick a session (`/debrief/latest` for
-the newest) and grade its calls. `pitwall sessions` lists the same sessions in the
-terminal. Rule thresholds never change without your review. Use `pitwall stats --learned`
-to inspect learned values. Use `pitwall digest`
-only when you want digest JSON or need to ingest external recordings.
+upkeep refits pace, tyre wear, fuel, thermal, and energy priors, then adjusts rule
+cooldowns. Two steps remain manual: grade calls and apply threshold YAML changes from
+`pitwall propose`. Open `/debrief` to choose a session (`/debrief/latest` for the newest)
+and grade its calls. `pitwall sessions` lists the same sessions in the terminal.
+Thresholds never change without your review. Use `pitwall stats --learned` to inspect learned
+values. Use `pitwall digest` only to create digest JSON or ingest external recordings.
