@@ -1,4 +1,5 @@
 import io
+import threading
 import time
 import wave
 from collections.abc import Callable
@@ -267,4 +268,29 @@ def test_piper_speaker_renders_each_priority_with_its_tone() -> None:
     _wait_for(lambda: spoken == ["a", "b"])
     assert used == ["calm", "urgent"]
     assert player.played == [b"calm:x", b"urgent:x"]
+    sp.close()
+
+
+def test_piper_flush_drops_queued_and_in_flight_calls() -> None:
+    sp, player, spoken, _ = _speaker(0.0)
+    audio: list[str] = []
+    sp.on_audio = lambda cid, priority, wav: audio.append(cid)
+    rendering = threading.Event()
+    release = threading.Event()
+
+    def synth(text: str) -> tuple[bytes, float]:
+        rendering.set()
+        release.wait(2.0)
+        return text.encode(), 0.0
+
+    sp._synth = synth  # noqa: SLF001
+    sp.speak(_call("c-1", text="old one"))
+    rendering.wait(2.0)
+    sp.speak(_call("c-2", text="old two"))
+    sp.flush()
+    release.set()
+    sp.speak(_call("c-1", text="new one"))
+    _wait_for(lambda: spoken == ["c-1"])
+    assert player.played == [b"new one"]
+    assert audio == ["c-1"]
     sp.close()
