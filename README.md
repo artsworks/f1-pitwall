@@ -25,6 +25,7 @@ uv sync                      # creates .venv with Python 3.12 and all dependenci
 
 # 3. Optional: natural voice (~60 MB download into voices/, git-ignored)
 uv run pitwall voice get
+uv run pitwall voice warm    # optional: pre-render fixed phrases (speech.warm_phrases, default 150)
 
 # 4. Check the setup, then run
 uv run pitwall voice say     # radio check through your headset

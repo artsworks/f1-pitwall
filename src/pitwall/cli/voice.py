@@ -161,7 +161,7 @@ def _voice_warm(args: argparse.Namespace) -> int:
                 key=lambda phrase: (phrase[1], phrase[0]),
             )
         else:
-            phrases = common_phrases()
+            phrases = common_phrases(speech.warm_phrases)
         count = speaker.warm(phrases)
         print(f"cached {count} phrases for {speaker.name}")
         return 0

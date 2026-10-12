@@ -44,11 +44,22 @@ and falls back to SAPI if it cannot load:
 ```powershell
 uv run pitwall voice get                      # default: en_GB-northern_english_male-medium
 uv run pitwall voice get en_US-ryan-high      # try others; samples: https://rhasspy.github.io/piper-samples/
-uv run pitwall voice warm                     # pre-render 50 common fixed phrases
+uv run pitwall voice warm                     # pre-render common fixed phrases (default 150)
 uv run pitwall voice                          # list installed voices
 uv run pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
 uv run pitwall voice say --engine sapi        # compare with the old voice
 ```
+
+`speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 150.
+If disk space is tight, lower it in `~/.pitwall/profile.yaml`:
+
+```yaml
+speech:
+  warm_phrases: 50
+```
+
+Only phrases without slots such as `{lap}` can be cached. A value above the number of
+fixed phrases caches nothing extra.
 
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
 1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.

@@ -68,12 +68,15 @@ def _run(
     name: str = "m",
     overrides: dict[str, object] | None = None,
     db: Database | None = None,
+    page: str | None = None,
 ) -> tuple[Engine, list[Call], list[dict[str, object]]]:
     path = write_packet_stream(tmp_path / f"{name}.f1bin", _stream(presses))
     log = tmp_path / f"{name}.jsonl"
     engine = build_engine(
         clock=VirtualClock(), sinks=[], decision_log_path=log, overrides=overrides, db=db
     )
+    if page is not None:
+        engine.page = page
     _, calls = asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()
     rows = [json.loads(x) for x in log.read_text().splitlines() if x]
@@ -461,7 +464,8 @@ def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None
 
 
 def test_stick_right_left_keep_page_and_mindset_when_closed(tmp_path: Path) -> None:
-    engine, _, rows = _run(tmp_path, [(RIGHT, 20.0), (LEFT, 21.0)])
+    engine, _, rows = _run(tmp_path, [(RIGHT, 20.0), (LEFT, 21.0)], page="track")
+    assert engine.page == "race"
     assert engine.mindset == "aggressive"
     assert [r for r in rows if r["outcome"] == "page" and r.get("manual")]
     assert not [r for r in rows if r["outcome"] == "menu_open"]

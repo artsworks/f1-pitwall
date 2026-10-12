@@ -365,7 +365,7 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
     return speaker
 
 
-def common_phrases(limit: int = 50) -> list[tuple[str, int]]:
+def common_phrases(limit: int = 150) -> list[tuple[str, int]]:
     root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
     phrases: set[tuple[str, int]] = set()
     for path in sorted(root.glob("*.yaml")):

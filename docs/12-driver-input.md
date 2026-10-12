@@ -11,7 +11,7 @@ Earlier plans missed a way for the driver to answer the radio. One control for "
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | Negative: "no / not now". Closes the menu while open |
 | Long press (held ≥ 800 ms) | button 2 held | Spacebar held | Toggle radio silence. Set `input.long_press: bookmark` to add a contextual hold bookmark |
 | Menu up / down | UDP Action 2 / 3 (stick up / down) | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
-| Dashboard page cycle | UDP Action 4 (stick right) | `P` / click the page pill | race → car → track → race; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
+| Dashboard page reset | UDP Action 4 (stick right) | `P` / click the page pill | resets to the race layout; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
 | Mindset toggle | UDP Action 5 (stick left) | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item. **Close** while the menu is open |
 | Shortcuts | UDP Action 6 to 12 (Stream Deck) | — | Ask "Pit now?", "Push or save?", "Fight", "Understeer", "Oversteer", "Radio calls", or "Mindset" directly |
 | Menu close | — | `Esc` | close the menu without answering |
@@ -105,12 +105,12 @@ the driver menu took it) cycles through `input.mindset_cycle` (default
 thresholds at once. Voice confirms the choice (`input.mindset_replies`). The decision log
 stores a `mindset` record, and each later decision record carries the active mindset.
 
-UDP Action 4 (`input.page_cycle_bit`, default `0x00800000`) cycles through `ui.pages`. The
-backend owns the current page and sends it in every state frame, so `/` and `/radio` stay
-in sync. Optional auto-paging (`ui.auto_page`, default off) selects the track page in
-formation/SC/VSC and the battle page when a rival is within
-`ui.auto_page_battle_gap_s`. A manual choice holds for `ui.auto_page_manual_hold_s`.
-Auto-paging does not swap pages within `ui.auto_page_call_hold_s` of a call.
+The dashboard has one screen. UDP Action 4 (`input.page_cycle_bit`, default
+`0x00800000`), `P`, the menu page item and the voice page command reset the backend page
+to the first entry of `ui.pages` (`race`) and log a `page` record. The live screen does
+not change, because it has no other pages. A named `{"type":"page","name":...}` message
+still sets the backend page. `ui.auto_page` and the `car` and `track` entries in
+`ui.pages` are still in the config but no longer change the screen.
 
 Set either bit to `0` to disable its button. When config loads, it checks every
 `input.*_bit` for collisions. Two actions on one bit cause a config error.
@@ -124,7 +124,7 @@ it must use three buttons and a glance.
 
 Twelve UDP Actions exist (`buttonStatus` bits, UDP Action *n* = `0x00100000 << (n-1)`).
 Action 1 handles ack, negative, bookmarks, and radio silence. Actions 2 and 3 scroll the
-menu, Action 4 cycles pages, and Action 5 toggles mindset.
+menu, Action 4 resets the page, and Action 5 toggles mindset.
 
 Use the wheel button for Action 1 and the Fanatec F1 V2.5 thumb stick for Actions 2 to 5.
 The driver can also use seven Stream Deck keys for Actions 6 to 12. Each key sends a tap
@@ -135,7 +135,7 @@ only. Holding a key may not hold the game key, so assign one action to each key.
 | 1 | `0x00100000` | `input.udp_action_bit` | wheel button; Spacebar | tap ack or bookmark · double neg · hold radio silent | tap **confirm** · double **close** · hold radio silent |
 | 2 | `0x00200000` | `input.menu_up_bit` | stick up; key `↑` | **open** on the last item | previous item |
 | 3 | `0x00400000` | `input.menu_down_bit` | stick down; key `↓` | **open** on the first item | next item |
-| 4 | `0x00800000` | `input.page_cycle_bit` + `menu_open_actions.page: confirm` | stick right | next dashboard page | **confirm** |
+| 4 | `0x00800000` | `input.page_cycle_bit` + `menu_open_actions.page: confirm` | stick right | reset to the race layout | **confirm** |
 | 5 | `0x01000000` | `input.mindset_toggle_bit` + `menu_open_actions.mindset: close` | stick left | balanced ⇄ aggressive | **close**, no answer |
 | 6 | `0x02000000` | `input.shortcuts: {item: pit}` | Stream Deck tap | asks "Pit now?" | same, closes the menu first |
 | 7 | `0x04000000` | `input.shortcuts: {item: push}` | Stream Deck tap | asks "Push or save?" | same, closes the menu first |
@@ -198,7 +198,7 @@ remain available through a shortcut or voice intent with the same item id.
 
 Items may also carry snapshot-based `show_when` / `rank_when` expressions. `show_when`
 hides an item; `rank_when` moves it to the top. The list stays frozen while the menu is
-open. Wheel-right (UDP Action 4) cycles pages.
+open. Wheel-right (UDP Action 4) resets the page to the race layout.
 
 | Item | Kind | Cases (from the snapshot) | Example reply |
 |---|---|---|---|

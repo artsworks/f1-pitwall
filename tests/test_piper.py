@@ -109,8 +109,14 @@ def test_prerendered_phrases_survive_restart_and_keep_tone_separate(tmp_path: Pa
     assert restarted.render("Box this lap", 2) == (wav, 0.01)
     assert len(synthed) == 2
     restarted.close()
-    assert len(common_phrases()) == 50
     assert all("{" not in text for text, _ in common_phrases())
+
+
+def test_common_phrases_limit() -> None:
+    every = common_phrases(10_000)
+    assert len(every) >= 129
+    assert common_phrases() == every
+    assert len(common_phrases(10)) == 10
 
 
 def test_piper_speaker_skips_cancelled() -> None:

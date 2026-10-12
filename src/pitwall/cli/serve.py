@@ -157,7 +157,7 @@ async def _state_broadcast(
                 f"telemetry {rate:.0f} Hz",
                 flush=True,
             )
-        snap = engine.state.snapshot(engine.clock.now())
+        snap = engine.last_snapshot or engine.state.snapshot(engine.clock.now())
         if snap.last_packet_t is not None and not seen_packet:
             seen_packet = True
             if pin:
