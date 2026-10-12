@@ -9,7 +9,7 @@ import pytest
 
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
-from pitwall.state.race import penalty_standing, relevant_rivals
+from pitwall.state.race import penalty_standing, relevant_rivals, second_rivals
 from pitwall.state.session import SessionState
 
 from .synth import pack_packet
@@ -143,6 +143,80 @@ def test_penalty_standing_skips_a_lapped_car_without_stopping() -> None:
         _Timed(4, 3000, total_distance=50001.0),
     ]
     assert penalty_standing(cars, 1, 5000.0)[0] == 3
+
+
+def test_second_rivals_scope() -> None:
+    cars = [
+        _Car(1, 1200.0, 400),
+        _Car(2, 1100.0, 500),
+        _Car(3, 1000.0, 900),
+        _Car(4, 950.0, 1500),
+        _Car(5, 900.0, 700),
+        _Car(6, 800.0, 800),
+    ]
+    # Player P3 (idx 2): ahead is P2, behind is P4 -> ahead2 P1, behind2 P5.
+    assert second_rivals(cars, 1, 3) == (0, 4)
+    # Player P2 (idx 1): nobody ahead of P1.
+    assert second_rivals(cars, 0, 2) == (-1, 3)
+    # Missing immediate rivals give -1 on that side only.
+    assert second_rivals(cars, -1, 3) == (-1, 4)
+    assert second_rivals(cars, 1, -1) == (0, -1)
+    assert second_rivals(cars, -1, -1) == (-1, -1)
+    cars[0].pit_status = 1
+    assert second_rivals(cars, 1, 3) == (-1, 4)
+    cars[0].pit_status = 0
+    cars[0].result_status = 3
+    assert second_rivals(cars, 1, 3) == (-1, 4)
+
+
+def test_second_rivals_fill_in_snapshot() -> None:
+    from pitwall.state.session import Participant
+
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    ingest.on_datagram(
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 15, "track_length": 5000, "total_laps": 20},
+        ),
+        0.0,
+    )
+    state.participants = tuple(Participant(name=n) for n in ("ME", "P2", "P4", "P1", "P5"))
+    cars = {
+        0: {
+            "current_lap_num": 5,
+            "car_position": 3,
+            "result_status": 2,
+            "driver_status": 4,
+            "delta_to_car_in_front_ms_part": 800,
+        },
+        1: {
+            "current_lap_num": 5,
+            "car_position": 2,
+            "result_status": 2,
+            "delta_to_car_in_front_ms_part": 400,
+        },
+        2: {
+            "current_lap_num": 5,
+            "car_position": 4,
+            "result_status": 2,
+            "delta_to_car_in_front_ms_part": 1500,
+        },
+        3: {"current_lap_num": 5, "car_position": 1, "result_status": 2},
+        4: {
+            "current_lap_num": 5,
+            "car_position": 5,
+            "result_status": 2,
+            "delta_to_car_in_front_ms_part": 700,
+        },
+    }
+    ingest.on_datagram(pack_packet(PacketId.LAP_DATA, {"cars": cars}, session_time=1.0), 1.0)
+    snap = state.snapshot(1.0)
+    assert snap.rival_ahead2_pos == 1 and snap.rival_ahead2_name == "P1"
+    assert snap.rival_ahead2_gap_s == pytest.approx(0.8 + 0.4)
+    assert snap.rival_behind2_pos == 5 and snap.rival_behind2_name == "P5"
+    assert snap.rival_behind2_gap_s == pytest.approx(1.5 + 0.7)
 
 
 def test_behind_rival_rejects_lapped_and_implausible_gap() -> None:

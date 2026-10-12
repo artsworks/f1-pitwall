@@ -1810,9 +1810,8 @@ class Engine:
             regulations_2026=snap.regulations_2026,
         )
         tracker = self.battle_tracker
-        b: Battle = tracker.update(
-            inp, self.store.current().thresholds, self.battle_rates(snap.track_id)
-        )
+        th = self.store.current().thresholds
+        b: Battle = tracker.update(inp, th, self.battle_rates(snap.track_id))
         for ep in tracker.drain():
             self._persist_episode(snap, ep)
         name = ""
@@ -1833,6 +1832,7 @@ class Engine:
             battle_result=b.result,
             battle_result_recent=b.result_recent,
             battle_result_name=name,
+            battle_swaps=tracker.swap_count(inp.now, th),
             battle_pace_ahead=_rival_pace(snap, snap.rival_ahead_idx, -b.closing_ahead_s),
             battle_pace_behind=_rival_pace(snap, snap.rival_behind_idx, b.closing_behind_s),
         )

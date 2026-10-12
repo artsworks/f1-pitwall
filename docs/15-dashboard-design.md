@@ -235,7 +235,16 @@ Battle state (docs/18 "Battle state") adds `battle: {mode: 'free_air'|'catching'
 'attacking'|'defending'|'under_threat'|'managing', mode_laps, catch_laps | null,
 threat_laps | null, closing_ahead_s, closing_behind_s, pass_prob, hold_prob,
 result: 'passed'|'failed'|'held'|'lost' | null}` (result only for ~20 s after an episode).
-Backend only.
+The `battle` object also carries `ahead2` and `behind2` (`{pos, name, gap_s,
+overtake}` or `null` when there is no second car) and `swaps` (place changes
+inside `battle_swap_window_s`). Backend only.
+
+Other additions: `track_info.weather_crossover_min` and
+`track_info.weather_crossover_pct` (minutes out and rain chance, `null` when
+no crossover), `strategy.tyres.wear_hot_corner` and
+`strategy.tyres.wear_hot_rate` (hot corner name and wear rate, `null` when
+none), and per-corner `tyres.*.tyre_inner_ema_slow` plus `tyres.*.lockup`
+(`true` only on the wheel that locked).
 
 ## 6. Stale and reconnect behaviour
 

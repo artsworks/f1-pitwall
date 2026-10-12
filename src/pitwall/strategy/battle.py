@@ -196,6 +196,11 @@ class BattleTracker:
         self.result, self.result_t, self.result_rival = "", -math.inf, -1
         self.episodes.clear()
 
+    def swap_count(self, now: float, th: Mapping[str, object]) -> int:
+        """Place changes inside battle_swap_window_s (for the dashboard)."""
+        window = _th(th, "battle_swap_window_s", 120.0)
+        return sum(1 for t, _ in self.swaps if now - t <= window)
+
     def drain(self) -> list[Episode]:
         out, self.episodes = self.episodes, []
         return out

@@ -24,6 +24,7 @@ from pitwall.server.hub import PROTOCOL_VERSION, Hub
 from pitwall.server.pin import PIN_COOKIE, PinGate, forwarded
 from pitwall.setup.evaluate import setup_modes
 from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
+from pitwall.state.driving import WHEEL_NAMES
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
 
@@ -52,6 +53,16 @@ def packet_age_ms(snapshot: Snapshot) -> float | None:
 
 def _finite(x: float) -> float | None:
     return x if math.isfinite(x) else None
+
+
+# WHEEL_NAMES order matches the Corners wire order (rl, rr, fl, fr);
+# lockup_wheel carries one of those words.
+_CORNER_WHEEL = {
+    "rl": WHEEL_NAMES[0],
+    "rr": WHEEL_NAMES[1],
+    "fl": WHEEL_NAMES[2],
+    "fr": WHEEL_NAMES[3],
+}
 
 
 @lru_cache(maxsize=1)
@@ -191,6 +202,17 @@ def strategy_payload(
             return bool(snapshot.rival_ahead_overtake if ahead else snapshot.rival_behind_overtake)
         return gap_f is not None and gap_f < drs_gap
 
+    def rival2(pos: int, name: str, gap: float, overtake: bool) -> dict[str, Any] | None:
+        if pos == 0:
+            return None
+        if snapshot.safety_car_status != 0:
+            ot = False
+        elif snapshot.regulations_2026:
+            ot = overtake
+        else:
+            ot = False
+        return {"pos": pos, "name": name, "gap_s": _finite(gap), "overtake": ot}
+
     def rival(side: str) -> dict[str, Any] | None:
         ahead = side == "ahead"
         idx = snapshot.rival_ahead_idx if ahead else snapshot.rival_behind_idx
@@ -297,6 +319,8 @@ def strategy_payload(
             "graining": snapshot.graining,
             "blister_max_pct": snapshot.blister_max_pct,
             "wear_per_lap_pct": snapshot.wear_per_lap_pct,
+            "wear_hot_corner": snapshot.wear_hot_corner or None,
+            "wear_hot_rate": snapshot.wear_hot_rate if snapshot.wear_hot_corner else None,
         },
         "restricted": snapshot.rival_data_restricted,
         "plans": [
@@ -336,6 +360,19 @@ def strategy_payload(
             "pass_prob": snapshot.battle_pass_prob,
             "hold_prob": snapshot.battle_hold_prob,
             "result": snapshot.battle_result or None,
+            "ahead2": rival2(
+                snapshot.rival_ahead2_pos,
+                snapshot.rival_ahead2_name,
+                snapshot.rival_ahead2_gap_s,
+                snapshot.rival_ahead2_overtake,
+            ),
+            "behind2": rival2(
+                snapshot.rival_behind2_pos,
+                snapshot.rival_behind2_name,
+                snapshot.rival_behind2_gap_s,
+                snapshot.rival_behind2_overtake,
+            ),
+            "swaps": snapshot.battle_swaps,
         },
     }
 
@@ -355,6 +392,12 @@ def track_payload(snapshot: Snapshot) -> dict[str, Any]:
             snapshot.rain_pct_in_30,
         ],
         "weather_crossover": snapshot.weather_crossover or None,
+        "weather_crossover_min": (
+            snapshot.weather_crossover_min if snapshot.weather_crossover else None
+        ),
+        "weather_crossover_pct": (
+            snapshot.weather_crossover_pct if snapshot.weather_crossover else None
+        ),
         "blue_flag": snapshot.blue_flag,
         "red_flag": snapshot.red_flag,
         "penalty_s": snapshot.penalty_s,
@@ -500,6 +543,8 @@ def state_payload(
         return {
             "surface": surface,
             "inner": inner,
+            "tyre_inner_ema_slow": getattr(snapshot.tyre_inner_ema_slow, name),
+            "lockup": snapshot.lockup_wheel == _CORNER_WHEEL[name],
             "wear": wear,
             "status": tyre_status(inner, cold, hot),
         }
@@ -600,6 +645,8 @@ def state_payload(
             "energy_laps_to_floor": _finite(snapshot.energy_laps_to_floor),
             "energy_mode": snapshot.energy_mode,
             "weather_crossover": snapshot.weather_crossover,
+            "weather_crossover_min": snapshot.weather_crossover_min,
+            "weather_crossover_pct": snapshot.weather_crossover_pct,
             "pit_plan": snapshot.pit_plan,
             "pit_plan_lap": snapshot.pit_plan_lap,
             "pit_plan_gain_s": snapshot.pit_plan_gain_s,

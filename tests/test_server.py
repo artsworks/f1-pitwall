@@ -72,6 +72,8 @@ def test_websocket_hello_and_state_shape() -> None:
             assert set(snap["payload"]["tyres"][corner]) == {
                 "surface",
                 "inner",
+                "tyre_inner_ema_slow",
+                "lockup",
                 "wear",
                 "status",
             }
@@ -782,6 +784,88 @@ def test_strategy_payload_named_plans() -> None:
     assert s["active_plan"] == "B" and s["on_plan"] is False and s["plan_off_s"] == 4.2
     assert s["plan_target_lap"] == 18
     assert s["plan_switch"] == {"from": "A", "reason": "pace", "lap": 15}
+
+
+def test_strategy_payload_battle_second_cars_swaps_and_wear() -> None:
+    import dataclasses
+    import math
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        regulations_2026=True,
+        rival_ahead2_pos=2,
+        rival_ahead2_name="PIASTRI",
+        rival_ahead2_gap_s=3.2,
+        rival_ahead2_overtake=True,
+        rival_behind2_pos=7,
+        rival_behind2_name="HADJAR",
+        rival_behind2_gap_s=math.inf,
+        battle_swaps=3,
+        wear_hot_corner="front left",
+        wear_hot_rate=1.8,
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    b = s["battle"]
+    assert b["ahead2"] == {"pos": 2, "name": "PIASTRI", "gap_s": 3.2, "overtake": True}
+    assert b["behind2"]["gap_s"] is None and b["behind2"]["overtake"] is False
+    assert b["swaps"] == 3
+    sc = strategy_payload(dataclasses.replace(snap, safety_car_status=1))
+    assert sc is not None and sc["battle"]["ahead2"]["overtake"] is False
+    legacy = strategy_payload(dataclasses.replace(snap, regulations_2026=False))
+    assert legacy is not None and legacy["battle"]["ahead2"]["overtake"] is False
+    none = strategy_payload(dataclasses.replace(snap, rival_ahead2_pos=0))
+    assert none is not None and none["battle"]["ahead2"] is None
+    assert s["tyres"]["wear_hot_corner"] == "front left"
+    assert s["tyres"]["wear_hot_rate"] == 1.8
+    cool = strategy_payload(dataclasses.replace(snap, wear_hot_corner=""))
+    assert cool is not None
+    assert cool["tyres"]["wear_hot_corner"] is None
+    assert cool["tyres"]["wear_hot_rate"] is None
+
+
+def test_track_payload_crossover_min_pct() -> None:
+    from pitwall.server.app import track_payload
+    from pitwall.state.session import Snapshot
+
+    snap = Snapshot(
+        now=0.0,
+        weather_crossover="to_inter",
+        weather_crossover_pct=70,
+        weather_crossover_min=30,
+    )
+    t = track_payload(snap)
+    assert (t["weather_crossover_min"], t["weather_crossover_pct"]) == (30, 70)
+    empty = track_payload(Snapshot(now=0.0))
+    assert empty["weather_crossover_min"] is None
+    assert empty["weather_crossover_pct"] is None
+
+
+def test_state_payload_corner_slow_ema_and_lockup() -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        tyre_inner_ema_slow=Corners(rl=93.0, rr=94.0, fl=91.0, fr=92.0),
+        lockup_wheel="front left",
+    )
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+    tyres = body["tyres"]
+    assert tyres["fl"]["tyre_inner_ema_slow"] == 91.0
+    assert tyres["fl"]["lockup"] is True
+    assert tyres["fr"]["lockup"] is False
+    assert tyres["rl"]["lockup"] is False
+    assert tyres["rr"]["lockup"] is False
 
 
 def test_state_payload_session_label_and_weekend() -> None:
