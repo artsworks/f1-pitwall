@@ -7,7 +7,7 @@
 # The list is situational: on open, items whose `show_when` is false are hidden
 # and those whose `rank_when` holds move to the top (rule expressions on the
 # snapshot). Shortcut-only items use a dedicated button or voice command.
-# Stick right still cycles pages.
+# Stick right still resets the page to the race layout.
 menu:
   enabled: true
   timeout_s: 6.0

@@ -94,7 +94,6 @@ class UiSettings(BaseModel):
     state_hz: int = 5
     pages: list[str] = Field(default_factory=lambda: ["race", "car", "track"])
     auto_page: bool = False  # contextual page switching (race / track); driver press wins
-    auto_page_manual_hold_s: float = 60.0  # no auto switch this long after a manual choice
     auto_page_battle_gap_s: float = 1.0  # rival ahead/behind inside this = battle page
     auto_page_call_hold_s: float = 8.0  # no auto switch this soon after a call went out
 
@@ -137,7 +136,7 @@ class InputSettings(BaseModel):
             "aggressive": "Copy, aggressive. Pushing.",
         }
     )
-    page_cycle_bit: int = 0  # e.g. 0x00800000 = UDP Action 4; next dashboard page
+    page_cycle_bit: int = 0  # e.g. 0x00800000 = UDP Action 4; resets to the first page
     # Driver menu (docs/12): up/down open and scroll; Action 1 confirms while open.
     menu_up_bit: int = 0  # e.g. 0x00200000 = UDP Action 2
     menu_down_bit: int = 0  # e.g. 0x00400000 = UDP Action 3

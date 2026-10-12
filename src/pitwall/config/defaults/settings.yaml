@@ -238,9 +238,8 @@ thresholds:
   energy_tol_max_j: 600000 # maximum learned energy tolerance
 ui:
   state_hz: 5
-  pages: [race, car, track]  # UDP Action 4 cycles in this order
+  pages: [race, car, track]  # UDP Action 4 resets to the first entry
   auto_page: false              # true: battle page in a fight, track page under SC/VSC/formation
-  auto_page_manual_hold_s: 60   # a manual page choice holds this long before auto may switch
   auto_page_battle_gap_s: 1.0
   auto_page_call_hold_s: 8       # never auto-switch while a call banner is up
 input:
@@ -258,7 +257,7 @@ input:
   silent_toggle_bit: 0            # dedicated radio-silent toggle; 0 disables
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
   mindset_toggle_bit: 0x01000000  # UDP Action 5 (stick left): balanced <-> aggressive; 0 disables
-  page_cycle_bit: 0x00800000      # UDP Action 4 (stick right): next dashboard page; 0 disables
+  page_cycle_bit: 0x00800000      # UDP Action 4 (stick right): reset to the first page; 0 disables
   # Driver menu (docs/12, menu.yaml): Up/Down open + scroll, Action 1 confirms while open.
   menu_up_bit: 0x00200000         # UDP Action 2 (stick up); 0 disables
   menu_down_bit: 0x00400000       # UDP Action 3 (stick down); 0 disables

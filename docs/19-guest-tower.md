@@ -13,7 +13,7 @@ side.
 it fails the glance test at 300 km/h. Guests have time but lack context and want the TV
 view, so use a separate `/tower` route:
 
-- Not in the Action 4 page cycle and not affected by `ui.auto_page`.
+- Not reachable through Action 4 and not affected by `ui.auto_page`.
 - Read-only socket: the server ignores `mindset`, `page`, `ack` and control messages
   from `/tower` clients.
 - Its own `timing` payload, sent at 1 Hz (the tower doesn't need 5 Hz), so the

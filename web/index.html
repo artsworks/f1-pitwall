@@ -9,31 +9,41 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=21">
+  <link rel="stylesheet" href="/static/style.css?v=25">
 </head>
+<!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
+     redflag, stale, phone. Every value updates in place; nothing reflows. -->
 <body class="dash connecting">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- weather icons, one per game weather type 0..5 -->
+  <symbol id="wx-0" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="wx-1" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1M9 20h8a3.5 3.5 0 0 0 0-7 4.8 4.8 0 0 0-9.2 1.3A2.9 2.9 0 0 0 9 20z"/></symbol>
+  <symbol id="wx-2" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
+  <symbol id="wx-3" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="wx-4" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="wx-5" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM13 15l-3 4h3l-2 4"/></symbol>
+</svg>
   <header class="status">
     <span id="live" class="live">CONNECTING…</span>
-    <span id="age" class="dim">--</span>
-    <span class="dim">·</span>
-    <span id="phase">--</span>
+    <span id="age">--</span>
+    <span id="phase" class="sess">--</span>
     <span id="flag" class="flag" hidden></span>
     <span class="spacer"></span>
-    <span id="session">--</span>
+    <span id="session" class="sess">--</span>
     <span id="lap">LAP --</span>
     <span id="position">P--</span>
-    <span id="ot" class="pill ot" title="overtake mode" hidden>OT</span>
-    <span id="aero" class="pill aero" title="active aero in straight mode" hidden>STR</span>
-    <span id="page" class="pill page" title="page (UDP Action 4 / P)">RACE</span>
-    <span id="mindset" class="pill" title="mindset (UDP Action 2 / M)">--</span>
+    <span class="chips">
+      <span id="ov" class="chip ov" title="overtake mode">OV</span>
+      <span id="sm" class="chip sm" title="active aero in straight mode">SM</span>
+    </span>
     <span id="verbosity" class="dim"></span>
     <span id="voice" class="voice" hidden></span>
+    <span id="mindset" class="pill" title="mindset (UDP Action 2 / M)">--</span>
     <button id="sound" class="sound" type="button" aria-pressed="false" hidden>ENABLE SOUND</button>
   </header>
 
   <section id="banner" class="banner idle">
     <div class="bar"></div>
-    <div id="call-life" class="life"></div>
     <div class="body">
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>
@@ -45,58 +55,87 @@
     </div>
   </section>
 
-  <section id="transport" class="transport" hidden>
-    <div class="row">
-      <button id="t-prev" title="previous lap">&lt; LAP</button>
-      <button id="t-play" title="play/pause">PLAY</button>
-      <button id="t-next" title="next lap">LAP &gt;</button>
-      <span id="t-lap" class="dim">LAP -- / --</span>
-      <input id="t-scrub" type="range" min="0" max="1000" value="0">
-      <span id="t-pos" class="dim">--:--</span>
-    </div>
-    <div id="t-strip" class="strip"></div>
-    <div id="t-detail" class="detail" hidden></div>
-  </section>
-
   <section class="zone tyres">
-    <div class="chip"><span id="compound" class="comp">--</span><span id="tyre-age" class="dim">--</span></div>
+    <div class="t-head">
+      <span class="t-fit"><span id="compound" class="comp">--</span><span id="tyre-age" class="age">--</span></span>
+      <span class="t-sep"></span>
+      <span id="t-pace" class="t-pace"></span>
+    </div>
     <div class="car">
-      <div class="corner" id="tyre-fl"><div class="lbl"><span>FL</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
-      <div class="corner" id="tyre-fr"><div class="lbl"><span>FR</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
-      <div class="corner" id="tyre-rl"><div class="lbl"><span>RL</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
-      <div class="corner" id="tyre-rr"><div class="lbl"><span>RR</span><span class="brk">BRK --</span></div><div class="temp">--</div><div class="word">--</div><div class="det">--</div></div>
+      <!-- Owner choice: the trend arrow replaces the status word, so the tile colour has no word beside it. -->
+      <div id="tyre-fl" class="corner"><div class="lbl"><span>FL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
+      <div id="tyre-fr" class="corner"><div class="lbl"><span>FR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
+      <div id="tyre-rl" class="corner"><div class="lbl"><span>RL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
+      <div id="tyre-rr" class="corner"><div class="lbl"><span>RR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
+    </div>
+    <div id="setup" class="setup">
+      <span class="k">BB</span>
+      <span><span id="su-bb" class="v">--</span> <span id="su-bb-sug" class="sug none"></span></span>
+      <span></span>
+      <span class="k">DIFF</span>
+      <span>ON <span id="su-on" class="v">--</span> <span id="su-on-sug" class="sug none"></span></span>
+      <span>OFF <span id="su-off" class="v">--</span></span>
+      <span class="legend">underlined = matches setup target · ▲▼ = suggested change</span>
     </div>
   </section>
 
-  <section class="zone fuel">
-    <div>
-      <h2>FUEL</h2>
+  <section class="zone tiles">
+    <div class="tile fuel">
+      <h2>FUEL AT FLAG</h2>
       <div id="fuel" class="big">--</div>
-      <div id="fuel-sub" class="sub">laps left</div>
+      <div id="fuel-sub" class="sub">--</div>
     </div>
-    <div>
+    <div id="batt" class="tile batt">
+      <h2>BATT</h2>
+      <div><span id="batt-pct" class="big">--</span></div>
+      <div id="batt-mode" class="mode">--</div>
+    </div>
+    <div class="tile wide weather">
+      <h2>WEATHER</h2>
+      <div class="wx">
+        <div id="wxs-0"><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
+        <div id="wxs-1"><div class="k">IN 10</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
+        <div id="wxs-2"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
+      </div>
+      <div id="cross" class="cross">--</div>
+    </div>
+    <div class="tile wide damage">
       <h2>DAMAGE</h2>
       <div id="damage" class="dmg"><span class="none">✓ none</span></div>
     </div>
   </section>
 
-  <section class="zone strat">
-    <h2 id="strat-title">STRATEGY</h2>
-    <div id="strat-ph" class="ph">waiting for race data…</div>
-    <div id="strategy" class="strategy" hidden>
-      <div id="s-window" class="s-window">--</div>
-      <div id="s-ahead" class="s-row">--</div>
-      <div id="s-behind" class="s-row">--</div>
-      <div id="s-stint" class="s-stint dim">--</div>
+  <!-- Contextual zone, auto-selected: safety › execution › reply › tactical › info.
+       Page input (UDP Action 4 / P) resets to this race layout; it does not cycle. -->
+  <section class="zone ctx">
+    <div class="ctx-head"><h2 class="h-race">RACE · AUTO</h2><h2 class="h-quali">QUALI · AUTO</h2><span class="how h-race">safety › box › reply › battle › info</span></div>
+    <div id="ctx-race" class="ctx-race">
+      <div id="c-safety" class="card safety" hidden><div class="rank">SAFETY</div><div class="head"></div><div class="line"></div></div>
+      <div id="c-exec" class="card exec" hidden><div class="rank">EXECUTION</div><div class="head"></div><div class="line"></div></div>
+      <div id="c-reply" class="card reply" hidden><div class="rank">REPLY</div><div class="head"></div><div class="line"></div></div>
+      <div id="c-battle" class="card battle calm" hidden></div>
+      <div id="c-strat" class="card strat"><div class="rank">STRATEGY</div><div id="c-plans"></div></div>
+      <div id="c-info" class="card info" hidden></div>
     </div>
-    <div id="quali" class="quali" hidden>
-      <div id="q-main" class="qmain">--</div>
-      <div id="q-sub" class="sub">--</div>
-      <div id="q-press" class="sub" hidden></div>
+    <div class="qzone">
+      <div id="q-phase" class="qphase"><span data-ph="garage">GARAGE</span><span data-ph="out_lap">OUT LAP</span><span data-ph="flying">FLYING</span><span data-ph="in_lap">IN LAP</span></div>
+      <div class="card"><div class="qcut"><span>CUT-OFF</span><span id="q-pos" class="pos">P--</span>
+        <span id="q-badge" class="badge">--</span><span id="q-margin" class="m">--</span></div>
+        <div id="q-cut-line" class="line">--</div></div>
+      <div class="card"><div class="qcut"><span>BENCHMARK</span><span id="q-pole" class="pos">--</span><span id="q-pole-gap" class="m">--</span></div>
+        <table class="qbench"><thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th></tr></thead>
+          <tbody><tr id="q-gaps"><th>pole</th><td></td><td></td><td></td></tr>
+            <tr id="q-mate-gaps"><th>mate</th><td></td><td></td><td></td></tr></tbody></table>
+        <div id="q-mate" class="line">mate --</div></div>
+      <div id="q-run" class="card"><div class="rank">THIS RUN</div><div id="q-run-head" class="head">--</div><div id="q-run-line" class="line">--</div></div>
     </div>
   </section>
 
-  <section id="cool" class="zone cool" hidden>
+  <section id="cool" class="zone coolzone" hidden>
+    <div class="cz-top">
+      <div class="tile"><h2>LAST LAP</h2><div id="cz-last" class="v">--</div></div>
+      <div class="tile"><h2>GAP TO POLE</h2><div id="cz-pole" class="v">--</div></div>
+    </div>
     <div id="c-behind" class="c-alert clear">NO HOT LAP BEHIND</div>
     <div class="c-tiles">
       <div id="c-ers-tile" class="c-tile">
@@ -161,74 +200,31 @@
     </div>
   </section>
 
-  <section id="carpage" class="zone carpage">
-    <h2>CAR</h2>
-    <div id="cp-rivals" class="rivals" hidden><div></div><div></div></div>
-    <div class="cp-grid">
-      <div class="cp-tile"><h2>⚡ BATTERY / LAP</h2><div id="cp-energy" class="big">--</div><div id="cp-energy-sub" class="sub">--</div><div class="meter"><i id="cp-energy-bar"></i></div></div>
-      <div class="cp-tile"><h2>FUEL AT FINISH</h2><div id="cp-fuel" class="big">--</div><div id="cp-fuel-sub" class="sub">--</div><div class="meter"><i id="cp-fuel-bar"></i></div></div>
-      <div class="cp-tile"><h2>◎ TYRE LIFE</h2><div id="cp-life" class="big">--</div><div id="cp-life-sub" class="sub">--</div><div class="meter"><i id="cp-life-bar"></i><b id="cp-life-flag"></b></div></div>
+  <section id="transport" class="transport" hidden>
+    <div class="row">
+      <button id="t-prev" title="previous lap">&lt; LAP</button>
+      <button id="t-play" title="play/pause">PLAY</button>
+      <button id="t-next" title="next lap">LAP &gt;</button>
+      <span id="t-lap" class="dim">LAP -- / --</span>
+      <input id="t-scrub" type="range" min="0" max="1000" value="0">
+      <span id="t-pos" class="dim">--:--</span>
     </div>
-    <div id="cp-flags" class="cp-flags dim">--</div>
+    <div id="t-strip" class="strip"></div>
+    <div id="t-detail" class="detail" hidden></div>
   </section>
-
-  <section id="trackpage" class="zone trackpage">
-    <h2>TRACK</h2>
-    <div id="tp-status" class="tp-status">--</div>
-    <div class="tp-wx">
-      <div class="tp-wxt" id="tp-wx-0"><div class="k">NOW</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
-      <div class="tp-wxt" id="tp-wx-1"><div class="k">IN 10 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
-      <div class="tp-wxt" id="tp-wx-2"><div class="k">IN 30 MIN</div><div class="ico">·</div><div class="sky">--</div><div class="k">☂ rain</div><div class="pct">--</div></div>
-    </div>
-    <div class="tp-rows">
-      <div id="tp-cross" class="tp-row">--</div>
-      <div id="tp-flags" class="tp-row">--</div>
-      <div id="tp-pens" class="tp-row">--</div>
-      <div id="tp-exit" class="tp-row">--</div>
-    </div>
-  </section>
-
-  <section id="duel" class="zone duel">
-    <div id="d-state" class="b-state" hidden></div>
-    <div id="d-ph" class="ph">no rival in scope</div>
-    <div id="d-ahead" class="b-card" hidden></div>
-    <div id="d-behind" class="b-card" hidden></div>
-    <div id="d-plan" class="b-foot">--</div>
-  </section>
-
-  <section id="qrail" class="zone qrail" hidden>
-    <div id="qr-cut" class="b-card q-card">
-      <div class="q-head"><h2>CUT-OFF</h2><span id="qr-pos" class="pos">P--</span><span id="qr-pill" class="badge inf">--</span><span id="qr-margin" class="gap">--</span></div>
-      <div id="qr-cut-sub" class="q-sub">--</div>
-    </div>
-    <div id="qr-bench" class="b-card q-card">
-      <div class="q-head"><h2>BENCHMARK</h2><span id="qr-pole" class="name">--</span><span id="qr-gap" class="gap">--</span></div>
-      <table class="q-bench">
-        <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th></tr></thead>
-        <tbody>
-          <tr id="qr-gaps"><th>gap</th><td>--</td><td>--</td><td>--</td></tr>
-          <tr id="qr-mate-gaps"><th>mate</th><td>--</td><td>--</td><td>--</td></tr>
-        </tbody>
-      </table>
-      <div id="qr-mate" class="q-sub">--</div>
-    </div>
-    <div id="qr-phase" class="b-card q-card">
-      <div class="q-head"><h2 id="qr-ph-k">FLYING</h2><span id="qr-ph-main" class="name">--</span><span id="qr-ph-flag" class="gap"></span></div>
-      <div id="qr-ph-sub" class="q-sub">--</div>
-    </div>
-    <div id="qr-session" class="b-foot">--</div>
-  </section>
-
-  <section class="log"><div id="tp-rivals" class="rivals" hidden><div></div><div></div></div><ol id="log"></ol></section>
 
   <footer class="footer">
-    <span id="ers">⚡ BATTERY --</span><span id="sc">--</span><span id="rate"></span><span id="latency"></span>
+    <span id="rate"></span><span id="latency"></span><span id="ers">ERS --</span><span id="sc">SC --</span>
   </footer>
-  <aside id="drvmenu" class="drvmenu" hidden aria-live="polite">
-    <div class="drvmenu-head">RADIO PIT <span id="drvmenu-voice" class="voice-tag" hidden>LISTENING</span><span id="drvmenu-left" class="dim"></span></div>
+  <button id="arm-radio" class="arm" type="button" aria-pressed="false">ARM PHONE RADIO</button>
+  <div class="scrim"></div>
+  <aside id="drvmenu" class="drvmenu" aria-live="polite">
+    <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="left"></span></div>
+    <div class="meter"><i id="drvmenu-meter"></i></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=21"></script>
-  <script src="/static/review.js?v=21"></script>
+  <div id="fx" class="fx"></div>
+  <script src="/static/app.js?v=26"></script>
+  <script src="/static/review.js?v=25"></script>
 </body>
 </html>
