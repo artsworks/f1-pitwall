@@ -224,6 +224,27 @@ def relevant_rivals(
     return ahead, behind, pit_exit
 
 
+def second_rivals(cars: Sequence[Any], ahead_idx: int, behind_idx: int) -> tuple[int, int]:
+    """(ahead2, behind2) car indices; -1 = none.
+
+    The car one position beyond each immediate rival: ahead2 runs
+    car_position(ahead) - 1, behind2 runs car_position(behind) + 1. Both
+    must be active and not pitting.
+    """
+    ahead2 = behind2 = -1
+    want_ahead = getattr(cars[ahead_idx], "car_position", 0) - 1 if ahead_idx >= 0 else 0
+    want_behind = getattr(cars[behind_idx], "car_position", 0) + 1 if behind_idx >= 0 else 0
+    for i, c in enumerate(cars):
+        if getattr(c, "result_status", 0) != 2 or getattr(c, "pit_status", 0) != 0:
+            continue
+        pos = getattr(c, "car_position", 0)
+        if want_ahead >= 1 and pos == want_ahead:
+            ahead2 = i
+        elif want_behind and pos == want_behind:
+            behind2 = i
+    return ahead2, behind2
+
+
 def penalty_standing(
     cars: Sequence[Any], player_idx: int, track_m: float, speed_mps: float = 0.0
 ) -> tuple[int, float, int]:

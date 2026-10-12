@@ -329,6 +329,10 @@ rival_ahead_name, rival_behind_name, rival_pit_exit_name: str
 rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
 rival_ahead_in_pit_lane: bool                  # the validated car ahead is in the pit lane now
+rival_ahead2_pos, rival_behind2_pos: int       # second car on each side (0 = none)
+rival_ahead2_name, rival_behind2_name: str
+rival_ahead2_gap_s, rival_behind2_gap_s: float # our gap to the rival plus its own delta to that car
+rival_ahead2_overtake, rival_behind2_overtake: bool
 # The latched car keeps its pre-pit gap while it stops.
 rival_data_restricted: bool         # rival Car Status/Damage fields all zero for >= th.restricted_detect_laps
 pit_exit_rival_gap_s: float         # projected gap to rival_pit_exit_idx at pit exit (positive = rival ahead)
@@ -449,7 +453,8 @@ Closing rate = measured gap trend when available, else the rival pace delta. Att
 defend ranges get `gap_hysteresis_s` once entered. Snapshot fields: `battle_mode`,
 `battle_mode_laps`, `battle_catch_laps`, `battle_threat_laps`, `battle_closing_*_s`,
 `battle_tyre_offset_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
-`battle_result_recent`, `battle_result_name`.
+`battle_result_recent`, `battle_result_name`, `battle_swaps` (place changes
+inside `battle_swap_window_s`).
 
 **Episodes and the pass model.** Each attacking / defending spell against one rival is an
 episode, closed when the mode or rival changes: attack → `passed` (position gained and the

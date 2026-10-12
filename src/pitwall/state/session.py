@@ -57,7 +57,13 @@ from pitwall.state.quali import (
     quali_margin_ms,
     release_window,
 )
-from pitwall.state.race import RacePhase, penalty_standing, relevant_rivals
+from pitwall.state.race import (
+    RacePhase,
+    gap_plausible,
+    penalty_standing,
+    relevant_rivals,
+    second_rivals,
+)
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
 
@@ -502,6 +508,14 @@ class Snapshot:
     drs_available: bool = False
     rival_ahead_overtake: bool = False
     rival_behind_overtake: bool = False
+    rival_ahead2_pos: int = 0
+    rival_ahead2_name: str = ""
+    rival_ahead2_gap_s: float = math.inf
+    rival_ahead2_overtake: bool = False
+    rival_behind2_pos: int = 0
+    rival_behind2_name: str = ""
+    rival_behind2_gap_s: float = math.inf
+    rival_behind2_overtake: bool = False
     penalty_s: int = 0
     penalty_type: int = 0
     penalty_infringement: int = 0
@@ -584,6 +598,7 @@ class Snapshot:
     battle_result_name: str = ""
     battle_pace_ahead: str = ""  # "three tenths slower": the car ahead vs us, per lap
     battle_pace_behind: str = ""
+    battle_swaps: int = 0  # place changes inside battle_swap_window_s
     player_last_lap_ms: int = 0
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
@@ -1747,7 +1762,8 @@ class SessionState:
 
     def _update_weather_crossover(self) -> None:
         """Crossover direction from the forecast, with % hysteresis so it
-        doesn't flap around the thresholds."""
+        doesn't flap around the thresholds. The reported minute is the first
+        forecast sample that crosses the band, not the wettest one."""
         horizon = self._race_horizon_min()
         ahead = [
             (int(f.rain_percentage), int(f.time_offset))
@@ -1777,6 +1793,15 @@ class SessionState:
             cand = ""
         else:
             cand = cur
+        if cand in ("to_inter", "to_wet"):
+            edge = wet if cand == "to_wet" else inter
+            first = min(
+                ((pct, m) for pct, m in ahead if pct >= edge),
+                key=lambda p: p[1],
+                default=None,
+            )
+            if first is not None:
+                self._weather_crossover_pct, self._weather_crossover_min = first
         self._weather_crossover = cand
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
@@ -2801,6 +2826,38 @@ class SessionState:
         if behind_i >= 0:
             d = cars[behind_i].delta_to_car_in_front_ms
             gap_behind = d / 1000.0 if d > 0 else math.inf
+        ahead2_i, behind2_i = second_rivals(cars, ahead_i, behind_i)
+        # Second-car gaps chain deltas: ours to the rival plus the rival's to
+        # the next car on that side.
+        gap_ahead2 = math.inf
+        if ahead2_i >= 0 and math.isfinite(gap_ahead):
+            d = cars[ahead_i].delta_to_car_in_front_ms
+            if d > 0:
+                gap_ahead2 = gap_ahead + d / 1000.0
+        gap_behind2 = math.inf
+        if behind2_i >= 0 and math.isfinite(gap_behind):
+            d = cars[behind2_i].delta_to_car_in_front_ms
+            if d > 0:
+                gap_behind2 = gap_behind + d / 1000.0
+        # Same plausibility gates as relevant_rivals: the chained gap must
+        # agree with the on-track distance, and a lapped car behind is out.
+        player_dist = getattr(cars[self._player_idx], "total_distance", None)
+        if ahead2_i >= 0 and math.isfinite(gap_ahead2):
+            d2 = getattr(cars[ahead2_i], "total_distance", None)
+            if (
+                player_dist is not None
+                and d2 is not None
+                and not gap_plausible(int(gap_ahead2 * 1000), d2 - player_dist, ref_speed)
+            ):
+                ahead2_i, gap_ahead2 = -1, math.inf
+        if behind2_i >= 0 and math.isfinite(gap_behind2):
+            d2 = getattr(cars[behind2_i], "total_distance", None)
+            if player_dist is not None and d2 is not None:
+                dist = player_dist - d2
+                if (self.track_length_m > 0 and dist >= self.track_length_m) or not gap_plausible(
+                    int(gap_behind2 * 1000), dist, ref_speed
+                ):
+                    behind2_i, gap_behind2 = -1, math.inf
 
         def pace_of(i: int) -> int:
             h = self._histories.get(i)
@@ -2872,6 +2929,14 @@ class SessionState:
             rival_behind_idx=behind_i,
             rival_ahead_overtake=self._rival_overtake_active(ahead_i),
             rival_behind_overtake=self._rival_overtake_active(behind_i),
+            rival_ahead2_pos=cars[ahead2_i].car_position if ahead2_i >= 0 else 0,
+            rival_ahead2_name=name_of(ahead2_i),
+            rival_ahead2_gap_s=gap_ahead2,
+            rival_ahead2_overtake=self._rival_overtake_active(ahead2_i),
+            rival_behind2_pos=cars[behind2_i].car_position if behind2_i >= 0 else 0,
+            rival_behind2_name=name_of(behind2_i),
+            rival_behind2_gap_s=gap_behind2,
+            rival_behind2_overtake=self._rival_overtake_active(behind2_i),
             rival_pit_exit_idx=exit_i,
             rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
