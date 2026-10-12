@@ -71,6 +71,15 @@ def test_invalid_override_keeps_last_good(tmp_path: Path, monkeypatch) -> None: 
     assert store.current().policy.calls_per_lap == 2  # last good kept
 
 
+def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing.yaml"))
+    assert ConfigStore().current().speech.warm_phrases == 150
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("speech:\n  warm_phrases: 50\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    assert ConfigStore().current().speech.warm_phrases == 50
+
+
 def test_isolated_config_skips_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     profile = tmp_path / "profile.yaml"
     profile.write_text("thresholds:\n  tyre_inner_cold_c: 42\n")
