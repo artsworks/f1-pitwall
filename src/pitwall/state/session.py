@@ -1756,7 +1756,8 @@ class SessionState:
 
     def _update_weather_crossover(self) -> None:
         """Crossover direction from the forecast, with % hysteresis so it
-        doesn't flap around the thresholds."""
+        doesn't flap around the thresholds. The reported minute is the first
+        forecast sample that crosses the band, not the wettest one."""
         horizon = self._race_horizon_min()
         ahead = [
             (int(f.rain_percentage), int(f.time_offset))
@@ -1786,6 +1787,15 @@ class SessionState:
             cand = ""
         else:
             cand = cur
+        if cand in ("to_inter", "to_wet"):
+            edge = wet if cand == "to_wet" else inter
+            first = min(
+                ((pct, m) for pct, m in ahead if pct >= edge),
+                key=lambda p: p[1],
+                default=None,
+            )
+            if first is not None:
+                self._weather_crossover_pct, self._weather_crossover_min = first
         self._weather_crossover = cand
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
