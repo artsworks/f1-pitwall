@@ -6,6 +6,20 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.6.0 (2026-10-12)
+
+### Bug Fixes
+
+- **quali**: Learn battery use per compound ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+### Features
+
+- **quali**: Lower battery floor on inters and wets for back-to-back hot laps
+  ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+
 ## v0.5.1 (2026-10-12)
 
 ### Bug Fixes
