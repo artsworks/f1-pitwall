@@ -15,7 +15,7 @@
       battle modes, weather crossover, battery modes) are commented-out blocks. Search
       for "ALT:" and swap the block in.
     - Body-class takeovers can be previewed with a URL hash, the same way the runtime
-      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain #lockup
+      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain #lockup #fight-ahead #sandwich #fight-behind
       (combine with "+", for example #quali+cool).
     - Demo keys (motion check): A = ACK glow, N = NEG glow, R = new call / say-again glow,
       V = voice open (steady lilac), V again = close as HEARD, Shift+V = close as MISSED,
@@ -39,6 +39,7 @@
        on-plan / off-plan with plan_off_s.
      8 Battle card: six modes, managing greyed, under_threat/defending lit red, pace and
        closing text, pass/hold probability, gap rail glide (.rail .rc).
+       Multi-car fights: rows in track order (2 ahead, 2 behind) with a SCRAP / TRADING PLACES header.
      9 Weather: compact fixed tile with icons, now / in 10 / in 30. A crossover marks its
        forecast cell, names the compound and ETA, and adds a Safety card when close (#rain).
     10 OV + SM chips side by side in the status bar.
@@ -373,6 +374,31 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
 .rail.ahead.in .rc { background: var(--ok); }
 .rail.in .rz { color: var(--fg); }
 
+/* multi-car battle (proposed): rows in track order, up to 2 ahead and 2 behind */
+.battle .grp { font-size: 1.5rem; font-weight: bold; letter-spacing: .06em; color: var(--warn);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .2rem; }
+.battle .grp.crit { color: var(--crit); } .battle .grp .ok { color: var(--ok); }
+.battle .grp .sub { color: var(--soft); font-weight: normal; }
+.battle.scrap:not(.threat) { border-color: var(--warn); }
+.battle .bcar .rv { grid-template-columns: 4.5rem minmax(0, 1fr) auto auto; }
+.battle .bcar .name { font-size: 1.4rem; }
+.battle .bcar .gap { font-size: 1.9rem; min-width: 4ch; }
+.battle .bcar .st { font-size: 1.1rem; font-weight: bold; letter-spacing: .08em; text-align: right; }
+.battle .bcar.defend .st, .battle .bcar.defend .side { color: var(--crit); }
+.battle .bcar.attack .st, .battle .bcar.attack .side { color: var(--ok); }
+.battle .bcar.train .st { color: var(--warn); }
+.battle .bcar.calm { opacity: .5; } .battle .bcar.calm .st { color: var(--dim); }
+.battle .bcar .rail { height: .6rem; margin: .1rem 0 .15rem; }
+.battle .bcar .rail .rz { font-size: 0; }
+.battle .bcar .rail .rc { width: .8rem; height: .8rem; left: calc(var(--g, 1) * (100% - .8rem)); }
+.rail.train .rc { background: var(--warn); }
+.battle .bcar .pace { font-size: 1.15rem; }
+.battle .you { font-size: 1.05rem; font-weight: bold; letter-spacing: .12em; text-align: center; color: var(--fg);
+  border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); margin: .2rem 0; }
+body:not(.fight-ahead) .fight-ahead-only, body:not(.sandwich) .sandwich-only,
+body:not(.fight-behind) .fight-behind-only { display: none !important; }
+body.fight-ahead .battle.single, body.sandwich .battle.single, body.fight-behind .battle.single { display: none; }
+
 /* strategy card (item 7) */
 .plan { display: flex; align-items: baseline; gap: .6rem; font-size: 1.35rem; white-space: nowrap; }
 .plan .pid { font-weight: bold; border: 2px solid var(--fg); border-radius: .3rem; padding: 0 .4rem; }
@@ -700,7 +726,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   -->
 
     <!-- strategy.battle (docs/18 battle state) -->
-    <div class="card battle threat">
+    <div class="card battle threat single">
       <div class="modes">
         <span>free air</span><span>catching</span><span>attacking</span>
         <span class="on">defending</span><span>under threat</span><span>managing</span>
@@ -716,6 +742,62 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
       <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div> <!-- battle.closing_behind_s, battle.hold_prob -->
       <div class="rv" style="margin-top:.3rem; opacity:.6">
         <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS</span><span class="gap">+2.4</span>
+      </div>
+    </div>
+    <!-- PROPOSED multi-car battle (#fight-ahead, #sandwich, #fight-behind). Rows run in track order,
+         up to 2 ahead and 2 behind, each with its own state word, gap to us and rail.
+         New backend fields: rival_ahead2_{pos,name,gap_s,overtake}, rival_behind2_{...}, battle_swaps
+         (place changes inside battle_swap_window_s). Header from battle.result:
+           scrap                    "SCRAP · P3 to P5 · 5 swaps in 2 min"
+           swap_ahead / swap_behind "TRADING PLACES · Hamilton · 3 swaps in 2 min"
+           none                     the row modes, e.g. "DEFENDING + ATTACKING"
+         IN TRAIN = second car within 1 s of the car between it and us. -->
+    <div class="card battle attack scrap fight-ahead-only">
+      <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>  <!-- battle.result='scrap', battle_swaps -->
+      <div class="bcar train">  <!-- rival_ahead2 -->
+        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI</span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
+      </div>
+      <div class="bcar attack">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
+        <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar calm">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON</span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+      </div>
+    </div>
+    <div class="card battle threat sandwich-only">
+      <div class="grp crit">◀ DEFENDING <span class="sub">+</span> <span class="ok">▶ ATTACKING</span></div>
+      <div class="bcar attack">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
+        <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .23"></div></div>
+        <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar defend">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
+        <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .2"></div></div>
+        <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div>
+      </div>
+    </div>
+    <!-- ALT sandwich after 3 swaps with Hamilton (battle.result='swap_behind'):
+         <div class="grp crit">⇄ TRADING PLACES <span class="sub">· Hamilton · 3 swaps in 2 min</span></div> -->
+    <div class="card battle threat scrap fight-behind-only">
+      <div class="grp crit">⇄ SCRAP <span class="sub">· P5 to P7 · 4 swaps in 2 min</span></div>
+      <div class="bcar calm">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar defend">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
+        <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .13"></div></div>
+        <div class="pace"><span class="crit">▲ closing 0.2 s/lap</span><span class="prob">HOLD 51%</span></div>
+      </div>
+      <div class="bcar train">  <!-- rival_behind2 -->
+        <div class="rv"><span class="side">▼ P7</span><span class="name">RUSSELL <span class="tag crit">OV</span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
+        <div class="rail behind train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
     </div>
     <!-- ALT battle modes (swap the card class + .on chip + mode word):
@@ -815,7 +897,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 (function () {
   var body = document.body, fx = document.getElementById("fx");
   var voice = document.getElementById("voice"), press = document.getElementById("press");
-  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain", "lockup"];
+  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain", "lockup", "fight-ahead", "sandwich", "fight-behind"];
   function applyHash() {
     KNOWN.forEach(function (c) { body.classList.remove(c); });
     location.hash.replace("#", "").split("+").forEach(function (c) {
