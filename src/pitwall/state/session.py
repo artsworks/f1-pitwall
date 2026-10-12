@@ -668,6 +668,7 @@ class Snapshot:
     run_plan_why: str = ""
     cool_lap: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    fuel_for_hot_lap: bool = False  # fuel at the line covers one more hot lap
     next_lap_invalid: bool = False  # track limits deleted this lap before it started
     cool_elapsed_s: float = 0.0
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
@@ -1409,6 +1410,7 @@ class SessionState:
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
+                fuel_short=self.fuel_remaining_laps < self._th("fuel_push_need_laps", 2.0),
             )
 
     def _is_sprint(self) -> bool:
@@ -2542,6 +2544,11 @@ class SessionState:
             if cool_lap and self.track_length_m > 0
             else 0.0
         )
+        projected_fuel_at_line = self.fuel_remaining_laps
+        if self.track_length_m > 0:
+            projected_fuel_at_line -= (
+                max(0.0, self.track_length_m - self.lap_distance) / self.track_length_m
+            )
         plan = run.plan
         why = ""
         if plan.reason == "battery":
@@ -2606,6 +2613,7 @@ class SessionState:
             run_plan_why=why,
             cool_lap=cool_lap,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            fuel_for_hot_lap=projected_fuel_at_line >= self._th("fuel_push_need_laps", 2.0),
             next_lap_invalid=run.next_lap_invalid,
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),

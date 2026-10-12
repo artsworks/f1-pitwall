@@ -544,6 +544,7 @@ def test_invalid_hot_lap_calls() -> None:
         "session_kind": "qualifying",
         "run_lap_kind": "hot",
         "current_lap_invalid": 1,
+        "fuel_for_hot_lap": True,
     }
     t = _texts(_engine(), **base, time_for_cool_and_hot=True)
     assert "lap_deleted" in t and "lap_deleted_last" not in t
@@ -559,6 +560,7 @@ def test_cool_lap_extends_when_battery_short() -> None:
         "run_lap_kind": "cool",
         "ers_store_pct": 34.0,
         "ers_need_pct": 60.0,
+        "fuel_for_hot_lap": True,
     }
     t = _texts(_engine(), **base, cool_extend=True)
     assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]

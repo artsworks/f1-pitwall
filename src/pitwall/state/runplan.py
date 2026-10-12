@@ -170,11 +170,11 @@ class RunTracker:
         cool_pace_pct: float,
         decide: Callable[[], Plan],
         extend_cool: bool = False,
+        fuel_short: bool = False,
     ) -> HotLap | None:
-        """Feed one Lap Data tick. `decide` is a zero-arg callable returning the
-        Plan for the line just crossed after a hot lap; `extend_cool` keeps a
-        cool lap's plan for another cool lap. Returns the HotLap
-        completed on this tick, if any."""
+        """Feed one Lap Data tick. `decide` plans after a hot lap; `extend_cool`
+        retains a cool plan, and `fuel_short` boxes after a cool lap. Returns the
+        HotLap completed on this tick, if any."""
         prev_ms, self._prev_lap_ms = self._prev_lap_ms, lap_time_ms
         prev_sector, self._prev_sector = self._prev_sector, sector
         if phase == "out_lap":
@@ -218,6 +218,8 @@ class RunTracker:
                 )
                 self.last_hot = done
                 self.plan = decide()
+            elif fuel_short:
+                self.plan = Plan("box", "fuel")
             elif not (self.kind == COOL and extend_cool):
                 self.plan = Plan("", "")
             if starts_invalid and self.plan.plan != "box":

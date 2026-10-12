@@ -146,6 +146,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
 | `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
+| `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
 ## Backlog
 
