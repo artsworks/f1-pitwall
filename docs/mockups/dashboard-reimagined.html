@@ -15,7 +15,7 @@
       battle modes, weather crossover, battery modes) are commented-out blocks. Search
       for "ALT:" and swap the block in.
     - Body-class takeovers can be previewed with a URL hash, the same way the runtime
-      would set body classes: #phone #quali #cool #pit #menu #listen #stale
+      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain
       (combine with "+", for example #quali+cool).
     - Demo keys (motion check): A = ACK glow, N = NEG glow, R = new call / say-again glow,
       V = voice open (steady lilac), V again = close as HEARD, Shift+V = close as MISSED,
@@ -39,7 +39,8 @@
        on-plan / off-plan with plan_off_s.
      8 Battle card: six modes, managing greyed, under_threat/defending lit red, pace and
        closing text, pass/hold probability, gap rail glide (.rail .rc).
-     9 Weather: compact fixed tile, now / in 10 / in 30, crossover line amber or blue.
+     9 Weather: compact fixed tile with icons, now / in 10 / in 30. A crossover marks its
+       forecast cell, names the compound and ETA, and adds a Safety card when close (#rain).
     10 OV + SM chips side by side in the status bar.
     11 BB + DIFF strip with suggestion arrows on bias and on-throttle only, underline =
        already suited.
@@ -271,6 +272,13 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .wx .sky { color: var(--soft); font-size: 1rem; }
 .wx .wet .pct, .wx .wet .wxi { color: var(--cold); }
 .wx .storm .pct, .wx .storm .wxi { color: var(--crit); }
+/* crossover marker: the forecast cell where the crossover lands, colour + compound chip */
+.wx > div { border: 2px solid transparent; border-radius: 6px; }
+.wx > div.xo-warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.wx > div.xo-cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 10%, transparent); }
+.comp.xs { font-size: .8rem; padding: 0 .25rem; letter-spacing: .04em; vertical-align: .05rem; }
+.card .head .comp { font-size: 1.5rem; vertical-align: .25rem; }
+body:not(.rain) .rain-only, body.rain .dry-only { display: none !important; }
 svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; color: var(--soft); stroke-width: 1.8; }
 .cross { margin-top: .35rem; font-size: 1.25rem; font-weight: bold; padding: .1rem .5rem;
   border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
@@ -586,7 +594,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   <div class="tile wide weather">
     <h2>WEATHER</h2>
     <!-- track_info.weather_forecast[0..2], track_info.rain_chance_pct[0..2] -->
-    <div class="wx">
+    <div class="wx dry-only">
       <!-- icon = weather type (0 clear .. 5 storm, web/app.js WEATHER_WORDS), always with its word.
            Cell class: dry (neutral), wet (blue: type 3, or rain >= 40 %), storm (red: type >= 4), as wxTile() today. -->
       <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-1"/></svg><span class="pct">5%</span><div class="sky">LIGHT CLOUD</div></div>
@@ -595,11 +603,21 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
       <!-- ALT rain coming: <div class="wet"><div class="k">IN 10</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">60%</span><div class="sky">LIGHT RAIN</div></div>
            ALT storm:      <div class="storm"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-5"/></svg><span class="pct">90%</span><div class="sky">STORM</div></div> -->
     </div>
+    <!-- Rain preview (#rain). Marker goes on the first forecast cell at or after
+         weather_crossover_min (SessionState, not in the payload yet). Colour by crossover:
+         to_inter amber, to_wet blue, to_dry amber. -->
+    <div class="wx rain-only">
+      <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">20%</span><div class="sky">OVERCAST</div></div>
+      <div class="wet xo-warn"><div class="k">IN 10 <span class="comp inter xs">INTER</span></div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">65%</span><div class="sky">LIGHT RAIN</div></div>
+      <div class="wet"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">70%</span><div class="sky">LIGHT RAIN</div></div>
+    </div>
     <!-- track_info.weather_crossover: to_inter / to_wet / to_dry -->
-    <div class="cross">✓ no crossover</div>
+    <div class="cross dry-only">✓ no crossover</div>
+    <!-- weather_crossover='to_inter', weather_crossover_min=5, weather_crossover_pct=65 -->
+    <div class="cross warn rain-only">→ <span class="comp inter xs">INTER</span> in ~5 min · rain 65%</div>
     <!-- ALT to_inter: <div class="cross warn">⚠ INTERS SOON · rain 60% in 10</div>
-         ALT to_wet:   <div class="cross cold">☂ WETS SOON · heavy rain in 10</div>
-         ALT to_dry:   <div class="cross warn">☀ SLICKS SOON · track drying</div> -->
+         ALT to_wet:   <div class="cross cold">→ <span class="comp wet xs">WET</span> in ~10 min · rain 90%</div>  cell class="storm xo-cold"
+         ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
   </div>
   <div class="tile wide damage">
     <h2>DAMAGE</h2>
@@ -620,6 +638,15 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 <section class="zone ctx">
   <div class="ctx-head"><h2 class="h-race">RACE · AUTO</h2><h2 class="h-quali">QUALI · AUTO</h2><span class="how h-race">safety › box › reply › battle › info</span></div>
   <div class="ctx-race">
+
+    <!-- Rain crossover is Safety (docs/04 ladder), so it tops the zone. Proposal: the card shows
+         when weather_crossover is set and weather_crossover_min <= 5; further out, the tile marker alone.
+         Card colour follows the crossover: to_inter / to_dry amber, to_wet blue. -->
+    <div class="card safety rain-only">
+      <div class="rank">SAFETY</div>
+      <div class="head">☂ RAIN CROSSOVER → <span class="comp inter">INTER</span></div>
+      <div class="line">rain <b>65%</b> in <b>~5 min</b> · about 3 laps</div>
+    </div>
 
   <!-- ALT: SC + battle. Safety card goes on top; battle stays below; PLAN C line appears in strategy.
   <div class="card safety"><div class="rank">SAFETY</div><div class="head">⚠ SAFETY CAR</div>
@@ -756,7 +783,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 (function () {
   var body = document.body, fx = document.getElementById("fx");
   var voice = document.getElementById("voice"), press = document.getElementById("press");
-  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag"];
+  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain"];
   function applyHash() {
     KNOWN.forEach(function (c) { body.classList.remove(c); });
     location.hash.replace("#", "").split("+").forEach(function (c) {
