@@ -105,13 +105,12 @@ the driver menu took it) cycles through `input.mindset_cycle` (default
 thresholds at once. Voice confirms the choice (`input.mindset_replies`). The decision log
 stores a `mindset` record, and each later decision record carries the active mindset.
 
-UDP Action 4 (`input.page_cycle_bit`, default `0x00800000`) resets the dashboard page to
-the first entry in `ui.pages`, the race layout. A `page` client message or menu item with
-a page name still selects that page directly. The backend owns the current page and sends
-it in every state frame, so `/` and `/radio` stay in sync. Optional auto-paging
-(`ui.auto_page`, default off) selects the track page in formation/SC/VSC and the battle
-page when a rival is within `ui.auto_page_battle_gap_s`. Auto-paging does not swap pages
-within `ui.auto_page_call_hold_s` of a call.
+The dashboard has one screen. UDP Action 4 (`input.page_cycle_bit`, default
+`0x00800000`), `P`, the menu page item and the voice page command reset the backend page
+to the first entry of `ui.pages` (`race`) and log a `page` record. The live screen does
+not change, because it has no other pages. A named `{"type":"page","name":...}` message
+still sets the backend page. `ui.auto_page` and the `car` and `track` entries in
+`ui.pages` are still in the config but no longer change the screen.
 
 Set either bit to `0` to disable its button. When config loads, it checks every
 `input.*_bit` for collisions. Two actions on one bit cause a config error.

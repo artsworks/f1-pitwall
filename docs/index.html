@@ -292,16 +292,15 @@ function overview() {
       ["quali-pit-exit", "Pit exit", "The pit board says the track is clear and shows the next run plan."],
       ["quali-out-lap", "Out-lap", "The banner says the tyres are in. The cut-off and pole gaps fill in after the first lap."],
       ["quali-flying", "Flying lap", "The right column shows the cut-off, the sector gaps to pole and the projected lap."],
-      ["quali-cool-lap", "Cool lap", "Battery, push distance and tyre temperatures before the next push."]
+      ["quali-cool-lap", "Cool lap", "Last lap time and gap to pole, with battery and tyre temperatures before the next push."]
     ]],
     ["Race", [
-      ["race-duel", "Race", "Cards for the cars ahead and behind, with pace and the gap trend."],
-      ["race-box-call", "Box call", "An urgent call turns the banner red, and the strategy row shows the pit window."],
-      ["race-car-page", "Car page", "Battery use per lap, fuel at the finish and tyre life."],
-      ["race-in-lap-track", "In-lap", "The track page shows weather, flags and penalties on the way to the pits."],
+      ["race-duel", "Battle", "The battle card lists the cars ahead and behind, each with its state, gap and gap rail."],
+      ["race-box-call", "Box call", "An urgent call turns the banner red. The right zone puts the box call and pit window first."],
       ["race-final-lap", "Final lap", "The last-lap call gives the position. Hot tyres turn red."]
     ]],
     ["On the phone", [
+      ["phone-race", "Phone race page", "The race page on a phone shows the call, tyres, fuel and strategy, plus the button that arms phone radio."],
       ["phone-radio", "Phone radio", "The /radio page on a phone during a box call, with the latest calls."]
     ]],
     ["Debrief and review", [
@@ -320,7 +319,7 @@ function overview() {
       <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. Here you find the design docs, the decision records and the status of each milestone.</p>
       <div class="cta">
         <a class="btn primary" href="#/getting-started">Getting started</a>
-        <a class="btn" href="mockups/dashboard-1080p.html">Dashboard mockup</a>
+        <a class="btn" href="mockups/dashboard-reimagined.html">Dashboard mockup</a>
         <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
       </div>
       </div>
@@ -328,7 +327,7 @@ function overview() {
     </section>
 
     <h2>Screens</h2>
-    <p class="lede">Captured from replays of real Q1 and race recordings at 1920x1080. Select a screen to open it at full size.</p>
+    <p class="lede">Dashboard and phone shots come from synthetic replays. Select a screen to open it at full size.</p>
     <div class="gallery">${screens.map(([g, list]) => `<div class="group${list.some(([f]) => tall(f)) ? " phone" : ""}"><h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
       `<figure${tall(f) ? ` class="tall"` : ""}><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" ${tall(f) ? `width="390" height="844"` : `width="1920" height="1080"`}></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div></div>`).join("")}</div>
 

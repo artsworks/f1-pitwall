@@ -1,7 +1,7 @@
 # Dashboard redesign: the second-monitor race-engineer screen
 
 Status: **phases 1–6 implemented** in `web/`. M3 adds the zone F `strategy` block,
-backend-owned `fuel_delta_laps`, and backend-owned pages (§10). Call evidence awaits
+backend-owned `fuel_delta_laps`, and the backend-owned page reset (§10). Call evidence awaits
 backend fields. The banner clears to "radio quiet" after 20 s / 30 s, then moves the call
 to the log. Static sample mockups live in `docs/mockups/` (`dashboard-1080p.html`,
 `dashboard-m3-stale.html`, `radio.html`). They use self-contained vanilla HTML/CSS with
@@ -50,13 +50,13 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 | 1 | **Call banner** — current call, priority, age, lap, one evidence line | The spoken word is the product; the screen confirms and explains it | ~60 px text, 160–190 px tall |
 | 2 | **Freshness** — LIVE/STALE, packet age, WS rate | A stale screen must be recognisable instantly | 26 px, top-left corner, always the same place |
 | 3 | **Previous radio** — one line below the current call | Preserves the last call as the next one arrives, without competing for attention | 22 px, dim |
-| 4 | **Radio log** — the 3 most recent older calls, lap, priority, audio state / ACK / NEG | "What did it say two laps ago?" | 26 px |
+| 4 | **Radio log** — recent calls, lap, priority, audio state / ACK / NEG | "What did it say two laps ago?" Lives on `/radio`, not the main screen | 26 px |
 | 5 | **Tyres** — 2×2 car plan view; inner EMA temp, surface, wear %, status word | Justifies thermal / wear calls; the most common M1–M2 call family | 52 px temp, 22–23 px labels and detail, 20 px brake |
 | 6 | **Fuel** — laps remaining, then delta to a real target when available | Justifies lift-and-coast / fuel calls | 40 px |
 | 7 | **Lap / position / session phase** | Context for every call | 32 px |
 | 8 | **Damage** — front wing L/R, rear wing, floor, diffuser, sidepod, gearbox, engine | Justifies "box for a wing"; hidden when all zero | 22 px, list |
 | 9 | **Mindset** BALANCED / AGGRESSIVE + verbosity + quiet | One-press control; must be visible to trust the calls | 24 px pill |
-| 10 (M3) | **Pit window**, undercut/overcut threats, gaps ahead/behind, stint plan | Race strategy; the tactical block. In a race the ahead/behind duel cards (gap rail, tyre, pace, trend, threat) take the top of the right column above the 3-row log | 32 px |
+| 10 (M3) | **Pit window**, undercut/overcut threats, gaps ahead/behind, stint plan | Race strategy; the tactical block. In a race the ahead/behind duel cards (gap rail, tyre, pace, trend, threat) take the top of the right column | 32 px |
 | — | ERS, SC status, latency p99 | Footer, small, dim. Diagnostics, not driving information | 18 px |
 
 ## 3. Layout grid
@@ -111,8 +111,9 @@ Zone rules:
   the current run.
 - **Battle card**: one rival as the single card. When `battle.ahead2` or
   `battle.behind2` is set, or places swap, the card lists up to two cars each side
-  with a state word, gap and rail around a YOU divider. The header says SCRAP or
-  TRADING PLACES from `battle.result` and `battle.swaps`. A second car within 1 s of the
+  with a state word, gap and rail around a YOU divider. The direct rival's row word
+  comes from `battle.mode`, the same word the header shows; other rows read MANAGING,
+  or FREE AIR in free air. A second car within 1 s of the
   car between shows IN TRAIN.
 - **Takeovers**: the pit board takes over the main row, and cool-down replaces the tyres
   and tiles. The status bar, banner, contextual zone and footer stay.
@@ -393,14 +394,27 @@ render check against a test recording. No running game is needed.
 
 ## 10. Pages (M3)
 
-The live screen has one layout. The backend still owns `page` and sends it with
-`pages`, but UDP Action 4, `P`, the menu page item and the voice page intent reset it to
-the first entry of `ui.pages` (normally `race`) instead of cycling. A named
-`{"type":"page","name":...}` message still selects that page. The pit board, cool-down
-and qualifying takeovers switch on their own.
+The live screen has one layout, and the client never reads `page` or `pages` from the
+payload. UDP Action 4, `P`, the menu page item and the voice page intent still reset
+the backend page to the first entry of `ui.pages` (`race`) and log a `page` record, but
+nothing on screen changes. A named `{"type":"page","name":...}` message still sets the
+backend page. `ui.auto_page` (off by default) and the `car` and `track` entries in
+`ui.pages` stay in the config but no longer change the screen. Only `pages[0]` matters,
+as the reset target.
+
+The pit board, cool-down and qualifying takeovers come from payload fields
+(`pit_board`, `quali`, the cool-down flag), not from `page`. Plan C
+(`kind: "reactive"`) shows its BOX NOW card only while `safety_car` is 1 (SC) or 2
+(VSC), or while plan C is the active plan.
+
+`/radio` keeps its compact layout. Its page pill is the static text RACE, and clicking
+it sends the same page reset.
+
+State frames carry the engine's processed snapshot (`engine.last_snapshot`, after the
+battle, plan and setup-advisor passes), falling back to the raw snapshot before the
+first tick.
 
 Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
-`/radio` keeps its compact layout and shows the current page name.
 
 
 ## 11. Motion (M3)

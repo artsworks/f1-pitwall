@@ -158,7 +158,7 @@ unchanged. A few are new because they are natural to say and awkward to scroll t
 | `say_again` | say again | "say again", "repeat", "what was that" | re-speaks the last call inside `say_again_window_s` |
 | `mindset` | menu `mindset` | "mindset", "change mindset", "toggle mindset" | action |
 | `silent` | menu `silent` | "radio silent", "leave me alone", "radio on", "talk to me" | action; on/off chosen by the phrase |
-| `page` | menu `page` | "next page", "battle page", "car page", "track page" | action; resets to the race layout |
+| `page` | menu `page` | "next page", "change page" | action; resets the backend page to race (no change on screen) |
 
 Rules for the grammar:
 
@@ -402,9 +402,7 @@ intents:
     slots:
       mindset: {aggressive: ["aggressive", "attack"], balanced: ["balanced", "calm it down", "settle"]}
   - id: page
-    say: ["next page", "{page} page"]
-    slots:
-      page: {battle: ["battle", "fight"], car: ["car"], track: ["track"], race: ["race"], setup: ["setup"]}
+    say: ["next page", "change page"]
 ```
 
 ## 8. Plan
