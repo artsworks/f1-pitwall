@@ -56,6 +56,41 @@ Piper sets each call's tone by priority. P1 is urgent (`speech.tone_urgent_speed
 `tone_urgent_expression`), P2 is normal, and P3 is calm (`tone_calm_*`). Expression scales
 Piper's pitch and energy variation. The default is 1.0.
 
+## Natural voice (OmniVoice, opt-in)
+
+Run the game and Pitwall on the Windows PC. Run OmniVoice's `tts-server` on a Linux PC with a GPU. Pitwall can also run on Linux. Linux Pitwall plays no local audio and streams speech to a browser or phone.
+
+Set these values under `speech`:
+
+```yaml
+engine: omnivoice
+omnivoice_url: "http://192.168.1.30:8080"
+omnivoice_voice: race-engineer
+omnivoice_seed: 42
+omnivoice_language: English
+omnivoice_timeout_s: 2.5
+omnivoice_voice_version: "1"
+omnivoice_ref_wav: "voices/reference.wav"
+omnivoice_ref_text: "voices/reference.txt"
+```
+
+Pitwall registers the voice at startup from `omnivoice_ref_wav` and `omnivoice_ref_text`. The server does not need `--ref-audio`.
+
+Keep `omnivoice_seed` fixed for repeatable audio and cache hits. Phrase WAV files live in `voices/.phrases`. The cache key changes when the model, voice, reference files, seed, language, or voice version changes. Increase `omnivoice_voice_version` after changing the voice.
+
+Cold lines play Piper first when a Piper voice is available. Pitwall renders OmniVoice in the background. Later requests play cached OmniVoice audio.
+
+Warm common lines or lines from a recording:
+
+```powershell
+uv run pitwall voice warm --engine omnivoice
+uv run pitwall voice warm --engine omnivoice --replay latest
+```
+
+The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same model, voice files, seed, language, and version. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
+
+OmniVoice falls back to Piper, then SAPI on Windows or null on other systems.
+
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.
 

@@ -4,7 +4,8 @@ speech start (the latency we measure).
 
 `SapiSpeaker` imports pywin32 lazily so this module loads on Linux.
 `speech.engine`: "auto" = piper if its voice is downloaded, else sapi on
-Windows, else null; "piper"/"sapi"/"null" explicit. Piper falls back to SAPI.
+Windows, else null; "piper"/"sapi"/"null" explicit. OmniVoice falls back to
+Piper, then SAPI or null.
 """
 
 from __future__ import annotations
@@ -177,6 +178,18 @@ def make_speaker(settings: SpeechSettings) -> Speaker:
             engine = "piper"
         else:
             engine = "sapi" if sys.platform == "win32" else "null"
+    if engine == "omnivoice":
+        try:
+            from pitwall.audio.omnivoice_tts import make_omnivoice_speaker
+
+            return make_omnivoice_speaker(settings)
+        except Exception as exc:
+            log.warning("OmniVoice unavailable (%s); falling back to Piper", exc)
+            print(
+                f"speech: OmniVoice unavailable ({exc}), falling back to Piper",
+                file=sys.stderr,
+            )
+            engine = "piper"
     if engine == "piper":
         try:
             return make_piper_speaker(settings)

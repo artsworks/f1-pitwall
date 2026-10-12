@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -13,7 +15,9 @@ from pitwall.config.loader import ConfigStore
 def cmd_voice(args: argparse.Namespace) -> int:
     """Piper voices, speech check and the voice-command channel (docs/21)."""
     action = args.voice_action or "list"
-    if action in ("list", "get", "warm"):
+    if action == "warm":
+        return _voice_warm(args)
+    if action in ("list", "get"):
         return _voice_piper(action, getattr(args, "names", []))
     if action == "say":
         return _voice_say(args)
@@ -84,10 +88,8 @@ def _voice_say(args: argparse.Namespace) -> int:
 def _voice_piper(action: str, names: list[str]) -> int:
     from pitwall.audio.piper_tts import (
         SUGGESTED_VOICES,
-        common_phrases,
         download_voice,
         installed_voices,
-        make_piper_speaker,
     )
 
     speech = ConfigStore().current().speech
@@ -95,14 +97,6 @@ def _voice_piper(action: str, names: list[str]) -> int:
         for name in names or [speech.piper_voice]:
             path = download_voice(speech, name)
             print(f"downloaded {name} -> {path}")
-        return 0
-    if action == "warm":
-        speaker = make_piper_speaker(speech)
-        try:
-            count = speaker.warm(common_phrases())
-            print(f"cached {count} phrases for {speech.piper_voice}")
-        finally:
-            speaker.close()
         return 0
     have = installed_voices(speech)
     print(f"voices in {speech.voices_dir}/ (configured: {speech.piper_voice}):")
@@ -113,6 +107,60 @@ def _voice_piper(action: str, names: list[str]) -> int:
     print("suggested: " + ", ".join(SUGGESTED_VOICES))
     print("all voices: https://rhasspy.github.io/piper-samples/")
     return 0
+
+
+def _voice_warm(args: argparse.Namespace) -> int:
+    from pitwall.audio.omnivoice_tts import (
+        OmniVoiceError,
+        OmniVoiceSpeaker,
+        make_omnivoice_speaker,
+    )
+    from pitwall.audio.piper_tts import PiperSpeaker, common_phrases, make_piper_speaker
+
+    settings = ConfigStore().current()
+    speech = settings.speech
+    speaker: PiperSpeaker | OmniVoiceSpeaker
+    if args.engine == "omnivoice":
+        try:
+            speaker = make_omnivoice_speaker(speech)
+        except OmniVoiceError as exc:
+            print(f"OmniVoice unavailable: {exc}")
+            return 1
+    else:
+        speaker = make_piper_speaker(speech)
+
+    try:
+        if args.replay:
+            from pitwall.cli.common import RecordingNotFoundError, _resolve_recording
+            from pitwall.clock import VirtualClock
+            from pitwall.engine import build_engine, run_replay
+
+            try:
+                path = _resolve_recording(args.replay, settings)
+            except RecordingNotFoundError as exc:
+                print(f"voice warm: {exc}")
+                return 1
+            with tempfile.TemporaryDirectory(prefix="pitwall-voice-warm-") as directory:
+                engine = build_engine(
+                    clock=VirtualClock(),
+                    sinks=[],
+                    decision_log_path=Path(directory) / "decisions.jsonl",
+                )
+                try:
+                    _, calls = asyncio.run(run_replay(path, engine, None))
+                finally:
+                    engine.dispatcher.log.close()
+            phrases = sorted(
+                {(call.text, call.priority) for call in calls},
+                key=lambda phrase: (phrase[1], phrase[0]),
+            )
+        else:
+            phrases = common_phrases()
+        count = speaker.warm(phrases)
+        print(f"cached {count} phrases for {speaker.name}")
+        return 0
+    finally:
+        speaker.close()
 
 
 def _voice_channel(action: str, args: argparse.Namespace) -> int:

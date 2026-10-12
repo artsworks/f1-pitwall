@@ -254,10 +254,18 @@ class LearningSettings(BaseModel):
 
 class SpeechSettings(BaseModel):
     enabled: bool = True
-    engine: Literal["auto", "piper", "sapi", "null"] = "auto"
+    engine: Literal["auto", "piper", "sapi", "null", "omnivoice"] = "auto"
     voice: str | None = None
     piper_voice: str = "en_GB-northern_english_male-medium"
     piper_speed: float = 1.3
+    omnivoice_url: str = "http://127.0.0.1:8080"
+    omnivoice_voice: str = ""
+    omnivoice_seed: int = 42
+    omnivoice_language: str = "English"
+    omnivoice_timeout_s: float = 2.5
+    omnivoice_voice_version: str = "1"
+    omnivoice_ref_wav: str = ""
+    omnivoice_ref_text: str = ""
     voices_dir: str = "voices"
     rate: int = 0
     volume: int = 100

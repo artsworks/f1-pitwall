@@ -85,6 +85,18 @@ class WinsoundPlayer:
         winsound.PlaySound(None, 0)  # type: ignore[attr-defined]
 
 
+class NullPlayer:
+    def play(self, wav: bytes) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+
+def default_player() -> Player:
+    return WinsoundPlayer() if sys.platform == "win32" else NullPlayer()
+
+
 def voice_path(settings: SpeechSettings, name: str | None = None) -> Path:
     return Path(settings.voices_dir) / f"{name or settings.piper_voice}.onnx"
 
@@ -236,6 +248,12 @@ class PiperSpeaker:
     def cancel(self, call_id: str) -> None:
         self._cancelled.add(call_id)
 
+    def _phrase_path(self, key: tuple[int, str]) -> Path | None:
+        if self._cache_dir is None:
+            return None
+        digest = hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()
+        return self._cache_dir / f"{digest}.wav"
+
     def close(self) -> None:
         self._q.put((-1, next(self._seq), None))
         self._thread.join(timeout=2.0)
@@ -248,12 +266,7 @@ class PiperSpeaker:
         if hit is not None:
             self._cache.move_to_end(key)
             return hit
-        disk_path = (
-            self._cache_dir
-            / f"{hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()}.wav"
-            if self._cache_dir is not None
-            else None
-        )
+        disk_path = self._phrase_path(key)
         if disk_path is not None and disk_path.is_file():
             wav = disk_path.read_bytes()
             with wave.open(io.BytesIO(wav)) as reader:
@@ -273,10 +286,8 @@ class PiperSpeaker:
         for text, priority in phrases:
             wav, _ = self.render(text, priority)
             key = (priority if priority in self._tones else 0, text)
-            path = self._cache_dir / (
-                f"{hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()}.wav"
-            )
-            if not path.exists():
+            path = self._phrase_path(key)
+            if path is not None and not path.exists():
                 path.write_bytes(wav)
         return len(phrases)
 
@@ -311,8 +322,8 @@ class PiperSpeaker:
                 self._player.stop()
 
 
-def make_piper_speaker(settings: SpeechSettings) -> PiperSpeaker:
-    player = WinsoundPlayer()
+def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -> PiperSpeaker:
+    player = player or default_player()
     tones = make_piper_tone_synths(settings)
     model = voice_path(settings)
     identity = hashlib.sha256(

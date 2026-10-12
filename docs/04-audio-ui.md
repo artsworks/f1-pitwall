@@ -99,6 +99,9 @@ headset. The browser is unsuitable because:
 most common phrases. **Optional:** use Web Speech on a phone client if the backend moves
 off the game PC.
 
+For an opt-in OmniVoice server on a Linux GPU box, setup, registration, caching, and fallback
+details are in [Natural voice (OmniVoice)](getting-started.md#natural-voice-omnivoice-opt-in).
+
 **Mixing with game audio:** the radio shares the game headset. Give it a separate volume
 setting and play a short radio "click" before each call. Do not duck game audio. If calls
 are hard to hear, lower the in-game volume or send the radio to another device.
