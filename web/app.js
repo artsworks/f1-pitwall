@@ -192,7 +192,7 @@
   var pressTimer = null;
   // motion state: a class stays on for a fixed window so the 4 Hz re-render
   // never restarts or cancels a running animation (docs/15 §11).
-  var until = {}, shownPage = null, shownPos = null, shownLap = null, tyreSt = {}, seenLog = null;
+  var until = {}, shownPage = null, shownPos = null, shownLap = null, tyreSt = {}, seenLog = null, menuCap = null;
   var HIT_MS = 900, FLIP_MS = 700, SWAP_MS = 420;
   function hold(key, ms) { until[key] = performance.now() + ms; }
   function on(key) { return (until[key] || 0) > performance.now(); }
@@ -246,21 +246,21 @@
       setText("age", fmt(age, 0) + " ms");
     }
     var ageEl = el("age");
-    if (ageEl) ageEl.className = !stale && age !== null && age >= 500 ? "age-warn" : "dim";
+    if (ageEl) ageEl.className = stale ? "crit" : age !== null && age >= 500 ? "warn" : "dim";
     var now = performance.now();
     stateTimes = stateTimes.filter(function (t) { return now - t < 1000; });
     setText("rate", stale ? "" : stateTimes.length + " upd/s");
     return stale;
   }
 
-  // -- telemetry zones --------------------------------------------------------
+  // -- telemetry zones (docs/15 §3) --------------------------------------------
 
-  // Driver -> pit wall menu (docs/12): backend-owned, a 5-row window around
-  // the highlight. Fixed overlay below the call banner; no zone reflows.
+  // Driver -> pit wall menu (docs/12): backend-owned, a 5-row window around the
+  // highlight. Floating overlay with a scrim below the banner; no zone reflows.
   function renderMenu(m) {
-    var box = el("drvmenu");
-    if (!box) return;
-    if (!m || !m.open || !m.items || !m.items.length) { box.hidden = true; return; }
+    var open = !!(m && m.open && m.items && m.items.length);
+    document.body.classList.toggle("menu", open);
+    if (!open) return;
     var list = el("drvmenu-list"), n = m.items.length, rows = Math.min(5, n);
     var start = Math.max(0, Math.min(m.index - 2, n - rows));
     list.textContent = "";
@@ -270,18 +270,35 @@
       if (i === m.index) li.className = "sel";
       list.appendChild(li);
     }
-    setText("drvmenu-left", (m.index + 1) + "/" + n +
-      (m.left_s !== null && m.left_s !== undefined ? " · " + Math.ceil(m.left_s) + "s" : ""));
-    box.hidden = false;
+    var left = m.left_s !== null && m.left_s !== undefined ? Math.ceil(m.left_s) : null;
+    setText("drvmenu-left", (m.index + 1) + "/" + n + (left !== null ? " · closes " + left + "s" : ""));
+    var bar = el("drvmenu-meter");
+    if (!m.left_s) menuCap = null;
+    else if (!menuCap || m.left_s > menuCap) menuCap = m.left_s;
+    if (bar) bar.style.setProperty("--f", menuCap ? String(m.left_s / menuCap) : "0");
+  }
+
+  // One-shot edge glow (ACK / NEG / new call / heard / missed); steady while listening.
+  function fx(kind) {
+    var n = el("fx");
+    if (!n || n.classList.contains("listen")) return;
+    n.className = "fx";
+    void n.offsetWidth;
+    n.className = "fx once " + kind;
+  }
+  function fxListen(open) {
+    var n = el("fx");
+    if (!n) return;
+    if (open) n.className = "fx listen";
+    else if (n.classList.contains("listen")) n.className = "fx";
   }
 
   function renderState(p) {
     renderMenu(p.menu);
     voiceListening = !!(p.voice && p.voice.listening);
     renderVoice(p.voice);
-    var phase = (p.phase || "--").replace("_", " ").toUpperCase();
-    setText("phase", phase);
-    setClass("phase", p.phase === "out_lap" ? "amber" : "");
+    var s = p.strategy || null, t = p.track_info || {};
+    setText("phase", (p.phase || "--").replace("_", " ").toUpperCase());
     setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
     setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
@@ -295,106 +312,481 @@
     if (p.lap_num && shownLap && p.lap_num !== shownLap) hold("tick:lap", 900);
     if (p.lap_num) shownLap = p.lap_num;
     setClass("lap", mark("tick:lap"));
-    var m = el("mindset");
-    if (m) {
-      m.textContent = String(p.mindset || "--").toUpperCase();
-      m.className = "pill" + (p.mindset === "aggressive" ? " aggr" : "");
+    var mind = el("mindset");
+    if (mind) {
+      mind.textContent = p.mindset === "aggressive" ? "AGGR" : p.mindset === "balanced" ? "BAL" :
+        String(p.mindset || "--").slice(0, 4).toUpperCase();
+      mind.className = "pill" + (p.mindset === "aggressive" ? " aggr" : "");
     }
     var v = el("verbosity");
     if (v) {
       v.innerHTML = "";
       if (p.verbosity && p.verbosity !== "normal") v.appendChild(document.createTextNode(String(p.verbosity).toUpperCase()));
-      if (p.silent) {
-        var s = document.createElement("span");
-        s.className = "silent";
-        s.textContent = " ✕ SILENT";
-        v.appendChild(s);
-      }
-      if (p.quiet) {
-        var q = document.createElement("span");
-        q.className = "quiet";
-        q.textContent = " QUIET" + (p.quiet_left_s ? " " + clock(p.quiet_left_s) : "");
-        v.appendChild(q);
-      }
+      if (p.silent) v.appendChild(span(" ✕ SILENT", "silent"));
+      if (p.quiet) v.appendChild(span(" QUIET" + (p.quiet_left_s ? " " + clock(p.quiet_left_s) : ""), "quiet"));
     }
-    var flag = el("flag");
+    var flag = el("flag"), sc = p.safety_car || 0;
     if (flag) {
-      var scw = p.safety_car ? SC_WORDS[p.safety_car] || "SAFETY CAR" : "";
-      var word = p.red_flag ? "⚑ RED FLAG" : p.paused ? "❚❚ PAUSED" : scw ? "⚠ " + scw : "";
+      var scw = sc ? SC_WORDS[sc] || "SAFETY CAR" : "";
+      var word = p.red_flag ? "⚠ RED FLAG" : p.paused ? "❚❚ PAUSED" : scw ? "⚠ " + scw : "";
       flag.hidden = !word;
       flag.textContent = word;
       flag.className = "flag" + (p.red_flag ? " red" : scw ? " sc" : "");
     }
     document.body.classList.toggle("redflag", !!p.red_flag);
-    renderQuali(p.quali);
-    renderCool(p.quali ? p.quali.cool : null, p.quali);
-    renderPitBoard(p.pit_board, p.quali, p.phase);
-    renderPage(p);
-    renderStrategy(p.strategy, p.quali);
-    renderOvertake(p.strategy);
-    renderDuel(p.strategy, p.quali);
-    renderQRail(p.quali, p);
-    renderCarPage(p, p.strategy);
-    renderTrackPage(p.track_info);
-    renderRivals(p.strategy, p.position);
-
-    var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
-    var compEl = el("compound");
-    if (compEl) {
-      compEl.textContent = comp;
-      compEl.className = "comp " + comp.toLowerCase();
-    }
-    setText("tyre-age", p.tyre_age_laps !== undefined ? p.tyre_age_laps + (p.tyre_age_laps === 1 ? " lap" : " laps") : "--");
-
-    if (p.tyres) {
-      ["fl", "fr", "rl", "rr"].forEach(function (k) {
-        var t = p.tyres[k], c = el("tyre-" + k);
-        if (!c || !t) return;
-        var st = String(t.status || "").toLowerCase();
-        if (tyreSt[k] && tyreSt[k] !== st) hold("flip:" + k, FLIP_MS);
-        tyreSt[k] = st;
-        c.className = "corner " + st + mark("flip:" + k);
-        c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
-        c.querySelector(".word").textContent = t.status || "--";
-        var det = c.querySelector(".det");
-        det.innerHTML = "";
-        var w = document.createElement("span");
-        w.textContent = "WEAR " + fmt(t.wear, 0) + "%";
-        w.className = "wear" + (t.wear >= 70 ? " wear-crit" : t.wear >= 50 ? " wear-warn" : "");
-        det.appendChild(w);
-        det.appendChild(span("surf " + fmt(t.surface, 0) + "°", "surf"));
-        var brk = c.querySelector(".brk");
-        if (brk && p.brakes) brk.textContent = "brake " + fmt(p.brakes[k], 0) + "°";
-      });
-    }
-
-    var toGo = p.total_laps && p.lap_num ? p.total_laps - p.lap_num + 1 : null;
-    var fdl = p.strategy ? p.strategy.fuel_delta_laps : null;
-    if (fdl !== null && fdl !== undefined) {
-      // Backend owns the target (docs/15 open question 1): delta vs the flag.
-      setText("fuel", (fdl >= 0 ? "+" : "") + fmt(fdl, 1) + " laps");
-      setClass("fuel", "big" + (fdl < 0 ? " delta-crit" : fdl < 0.5 ? " delta-warn" : " delta-ok"));
-      setText("fuel-sub", fdl >= 0 ? "spare at finish" : "SHORT · lift & coast");
-    } else {
-      // Game MFD value: laps of fuel to spare (+) or short (−) at the flag.
-      var mfd = p.fuel_remaining_laps;
-      setText("fuel", (mfd >= 0 ? "+" : "") + fmt(mfd, 1) + " laps");
-      setClass("fuel", "big");
-      setText("fuel-sub", mfd >= 0 ? "spare at finish · game" : "SHORT · game");
-    }
-
-    renderDamage(p.damage);
-
-    setText("ers", "⚡ BATTERY " + fmt(p.ers_pct, 0) + "%");
-    var sc = p.safety_car || 0;
-    setText("sc", sc ? "⚠ " + (SC_WORDS[sc] || "SC " + sc) : "TRACK GREEN");
     document.body.classList.toggle("sc", !!sc);
+    var ov = el("ov");
+    if (ov) {
+      var otOn = !!(s && s.overtake), otNext = !!(s && s.overtake_earned);
+      ov.className = "chip ov" + (otOn ? " active" : otNext ? " avail" : "");
+    }
+    setClass("sm", "chip sm" + (s && s.aero_mode === 1 ? " on" : ""));
+
+    var q = p.quali || null, cool = q ? q.cool : null;
+    document.body.classList.toggle("quali", !!q && p.session_kind === "qualifying");
+    renderCool(cool, q);
+    renderPitBoard(p.pit_board, q, p.phase);
+    if (q) renderQZone(q, p);
+    renderTyres(p, s);
+    renderSetupStrip(p);
+    renderFuel(p, s);
+    renderBatt(p, s);
+    renderWeather(t);
+    renderDamage(p.damage);
+    renderCtx(p, s, t);
+
+    setText("ers", "ERS " + fmt(p.ers_pct, 0) + "%");
+    setText("sc", "SC " + sc);
     if (p.latency) {
       setText("latency", "voice lag " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
         " ms · screen lag " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
     }
   }
 
+  // Tyres: trend arrow from the fast EMA (inner) vs tyre_inner_ema_slow, wear %,
+  // window meter on a 60..130 °C scale, HOT WEAR / condition tags, LOCKED border.
+  var T_LO = 60, T_HI = 130, TREND_C = 0.5;
+  function renderTyres(p, s) {
+    var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
+    setText("compound", comp);
+    setClass("compound", "comp " + comp.toLowerCase());
+    setText("tyre-age", p.tyre_age_laps !== undefined && p.tyre_age_laps !== null ?
+      p.tyre_age_laps + (p.tyre_age_laps === 1 ? " lap" : " laps") : "--");
+    var lop = s ? s.laps_of_pace : null, pace = el("t-pace");
+    if (pace) {
+      pace.innerHTML = "";
+      if (lop === null || lop === undefined) {
+        pace.className = "t-pace";
+        pace.appendChild(span("deg model warming up", "dim"));
+      } else {
+        var toGo = s.laps_remaining || 0;
+        var cls = lop >= toGo || lop >= 10 ? "ok" : lop >= 4 ? "warn" : "crit";
+        pace.className = "t-pace " + cls;
+        pace.appendChild(document.createTextNode("~" + fmt(lop, 0) + " laps of pace " + (cls === "ok" ? "▬ " : "▼ ")));
+        pace.appendChild(span(cls === "ok" ? "PLENTY" : cls === "warn" ? "SHRINKING" : "NEAR CLIFF", "", "small"));
+      }
+    }
+    if (!p.tyres) return;
+    var st = s ? s.tyres || {} : {};
+    var worst = null;
+    CORNERS.forEach(function (k) {
+      if (p.tyres[k] && (worst === null || p.tyres[k].wear > p.tyres[worst].wear)) worst = k;
+    });
+    CORNERS.forEach(function (k) {
+      var t = p.tyres[k], c = el("tyre-" + k);
+      if (!c || !t) return;
+      var status = String(t.status || "").toLowerCase();
+      if (tyreSt[k] && tyreSt[k] !== status) hold("flip:" + k, FLIP_MS);
+      tyreSt[k] = status;
+      c.className = "corner " + status + mark("flip:" + k) + (t.lockup ? " locked" : "");
+      c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
+      // Owner choice: a coloured arrow alone (no word) skips the colour + word rule here.
+      var d = t.inner !== null && t.tyre_inner_ema_slow !== null && t.tyre_inner_ema_slow !== undefined ?
+        t.inner - t.tyre_inner_ema_slow : 0;
+      var tr = c.querySelector(".trend");
+      tr.className = "trend " + (d > TREND_C ? "up" : d < -TREND_C ? "down" : "flat");
+      tr.textContent = d > TREND_C ? "▲" : d < -TREND_C ? "▼" : "▬";
+      tr.title = d > TREND_C ? "heating" : d < -TREND_C ? "cooling" : "steady";
+      var f = t.inner === null ? 0 : Math.max(0, Math.min(1, (t.inner - T_LO) / (T_HI - T_LO)));
+      c.querySelector(".meter i").style.setProperty("--f", f.toFixed(3));
+      c.querySelector(".wear b").textContent = fmt(t.wear, 0) + "%";
+      c.querySelector(".surf").textContent = "surf " + fmt(t.surface, 0) + "°";
+      var brk = c.querySelector(".brk");
+      if (brk) brk.textContent = p.brakes ? "BRK " + fmt(p.brakes[k], 0) + "°" : "";
+      var tags = c.querySelector(".tags");
+      tags.innerHTML = "";
+      if (t.lockup) tags.appendChild(span("LOCKED", "tag lock"));
+      if (st.wear_hot_corner === k) {
+        tags.appendChild(span("HOT WEAR" + (st.wear_hot_rate ? " +" + fmt(st.wear_hot_rate, 1) + "%/lap" : ""), "tag crit"));
+      }
+      if (k === worst) {
+        if (st.overheat) tags.appendChild(span("OVERHEAT", "tag crit"));
+        if (st.blister_max_pct >= 5) tags.appendChild(span("BLISTER " + fmt(st.blister_max_pct, 0) + "%", "tag warn"));
+        if (st.graining) tags.appendChild(span("GRAINING", "tag warn"));
+      }
+    });
+  }
+
+  // BB / DIFF: live values from the setup packet. Arrows only when the pit board
+  // carries a setup-advice target for that field (garage sessions).
+  function renderSetupStrip(p) {
+    var vals = p.setup ? p.setup.values || {} : {};
+    var advice = p.pit_board ? p.pit_board.setup_advice || [] : [];
+    function one(id, field, sug) {
+      var v = vals[field], rec = null;
+      advice.forEach(function (r) { if (r.fields.indexOf(field) >= 0) rec = r; });
+      setText(id, v === undefined || v === null ? "--" : fmt(v, 0) + "%");
+      var suited = rec && v !== undefined && Number(v) === Number(rec.to);
+      setClass(id, "v" + (suited ? " suited" : ""));
+      if (!sug) return;
+      if (!rec) { setText(sug, ""); setClass(sug, "sug none"); return; }
+      setText(sug, suited ? "✓ suited" : (rec.to > v ? "▲ try " : "▼ try ") + fmt(rec.to, 0));
+      setClass(sug, "sug" + (suited ? " none" : ""));
+    }
+    one("su-bb", "brake_bias", "su-bb-sug");
+    one("su-on", "on_throttle", "su-on-sug");
+    one("su-off", "off_throttle", null);
+  }
+
+  function renderFuel(p, s) {
+    var fdl = s ? s.fuel_delta_laps : null, game = fdl === null || fdl === undefined;
+    var d = game ? p.fuel_remaining_laps : fdl;
+    setText("fuel", d === null || d === undefined ? "--" : (d >= 0 ? "+" : "−") + fmt(Math.abs(d), 1));
+    setClass("fuel", "big" + (d === null || d === undefined ? "" : d < 0 ? " crit" : d < 0.5 ? " warn" : " ok"));
+    setText("fuel-sub", "laps " + (d < 0 ? "SHORT" : "SPARE") + (game ? " · game" : ""));
+  }
+
+  var BATT_WORDS = { on_budget: "ON BUDGET", over: "OVER · SAVE", under: "UNDER · CHARGING", attack_ok: "SPEND · ATTACK OK" };
+  var BATT_ICONS = { on_budget: "M13 2 4 14h7l-1 8 9-12h-7z", attack_ok: "M13 2 4 14h7l-1 8 9-12h-7z",
+    over: "M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3 4",
+    under: "M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" };
+  function renderBatt(p, s) {
+    var mode = s && s.energy ? s.energy.mode : null;
+    setClass("batt", "tile batt" + (mode ? " " + mode : ""));
+    setText("batt-pct", fmt(p.ers_pct, 0) + "%");
+    var m = el("batt-mode");
+    if (m && m.dataset.mode !== String(mode)) {
+      m.dataset.mode = String(mode);
+      m.innerHTML = mode && BATT_ICONS[mode] ?
+        '<svg class="ico" viewBox="0 0 24 24"><path d="' + BATT_ICONS[mode] + '"/></svg> ' : "";
+      m.appendChild(document.createTextNode(BATT_WORDS[mode] || "no budget yet"));
+    }
+  }
+
+  // Weather: icon + word per forecast slot, rain chance, crossover marker on the
+  // first slot at or after weather_crossover_min (slots are now / 10 / 30 min).
+  var WEATHER_WORDS = { 0: "CLEAR", 1: "LIGHT CLOUD", 2: "OVERCAST", 3: "LIGHT RAIN", 4: "HEAVY RAIN", 5: "STORM" };
+  var CROSS = { to_inter: ["INTER", "inter", "warn"], to_wet: ["WET", "wet", "cold"], to_dry: ["SLICK", "medium", "warn"] };
+  var SLOT_MIN = [0, 10, 30];
+  function crossChip(c) { return span(CROSS[c][0], "comp " + CROSS[c][1] + " xs"); }
+  function renderWeather(t) {
+    var wf = t.weather_forecast || [t.weather, -1, -1], r = t.rain_chance_pct || [null, null, null];
+    var c = CROSS[t.weather_crossover] ? t.weather_crossover : null, cm = t.weather_crossover_min;
+    var slot = -1;
+    if (c) {
+      slot = 2;
+      for (var j = 0; j < 3; j++) if (cm === null || cm === undefined || SLOT_MIN[j] >= cm) { slot = j; break; }
+    }
+    for (var i = 0; i < 3; i++) {
+      var n = el("wxs-" + i);
+      if (!n) continue;
+      var w = wf[i], pct = r[i], known = w !== null && w !== undefined && w >= 0;
+      n.className = (!known ? "" : w >= 4 ? "storm" : w >= 3 || pct >= 40 ? "wet" : "dry") +
+        (i === slot ? " xo-" + CROSS[c][2] : "");
+      var k = n.querySelector(".k");
+      k.textContent = i === 0 ? "NOW" : "IN " + SLOT_MIN[i];
+      if (i === slot) { k.appendChild(document.createTextNode(" ")); k.appendChild(crossChip(c)); }
+      n.querySelector("use").setAttribute("href", "#wx-" + (known ? w : 2));
+      n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
+      n.querySelector(".sky").textContent = known ? WEATHER_WORDS[w] || "--" : "--";
+    }
+    var x = el("cross");
+    if (!x) return;
+    x.innerHTML = "";
+    if (!c) { x.className = "cross"; x.textContent = "✓ no crossover"; return; }
+    x.className = "cross " + CROSS[c][2];
+    x.appendChild(document.createTextNode("→ "));
+    x.appendChild(crossChip(c));
+    x.appendChild(document.createTextNode((cm !== null && cm !== undefined ? " in ~" + fmt(cm, 0) + " min" : " soon") +
+      (t.weather_crossover_pct !== null && t.weather_crossover_pct !== undefined ? " · rain " + fmt(t.weather_crossover_pct, 0) + "%" : "")));
+  }
+
+  // Damage: amber from 5 %, red from 25 %. The number is what the engineer speaks.
+  var DMG_PARTS = [["front_left_wing", "FW L"], ["front_right_wing", "FW R"], ["rear_wing", "RW"],
+    ["floor", "Floor"], ["diffuser", "Diffuser"], ["sidepod", "Sidepod"], ["gearbox", "Gearbox"], ["engine", "Engine"]];
+  function renderDamage(d) {
+    var box = el("damage");
+    if (!box || !d) return;
+    box.innerHTML = "";
+    DMG_PARTS.forEach(function (pair) {
+      var val = d[pair[0]];
+      if (!(val > 0)) return;
+      var row = span(pair[1] + " ", "");
+      row.appendChild(span(val + "%", "n" + (val >= 25 ? " crit" : val >= 5 ? " warn" : "")));
+      box.appendChild(row);
+    });
+    [["drs_fault", "DRS fault"], ["ers_fault", "ERS fault"]].forEach(function (pair) {
+      if (d[pair[0]]) box.appendChild(span(pair[1], "n crit"));
+    });
+    if (!box.childNodes.length) box.appendChild(span("✓ none", "none"));
+  }
+
+  function card(id, show, cls, head, line, rank) {
+    var n = el(id);
+    if (!n) return;
+    n.hidden = !show;
+    if (!show) return;
+    if (cls !== null) n.className = cls;
+    if (rank) n.querySelector(".rank").textContent = rank;
+    var h = n.querySelector(".head");
+    h.innerHTML = "";
+    (Array.isArray(head) ? head : [head]).forEach(function (x) {
+      h.appendChild(typeof x === "string" ? document.createTextNode(x) : x);
+    });
+    n.querySelector(".line").innerHTML = line;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (ch) { return "&#" + ch.charCodeAt(0) + ";"; }); }
+
+  // Contextual zone: Safety > Execution > Reply > Tactical > Info, fixed card order.
+  function renderCtx(p, s, t) {
+    var sc = p.safety_car || 0, c = CROSS[t.weather_crossover] ? t.weather_crossover : null;
+    var cm = t.weather_crossover_min;
+    if (p.red_flag) {
+      card("c-safety", true, "card safety red", "⚠ RED FLAG", "box this lap · tyres free to change", "SAFETY");
+    } else if (sc) {
+      card("c-safety", true, "card safety", "⚠ " + (SC_WORDS[sc] || "SAFETY CAR"),
+        (t.sc_laps ? "lap " + t.sc_laps + " under " + (sc === 2 ? "VSC" : "SC") + " · " : "") +
+        (s && s.pit_loss_s ? "<b>pit loss " + fmt(s.pit_loss_s, 1) + " s</b>" : ""), "SAFETY");
+    } else if (c && cm !== null && cm !== undefined && cm <= 5) {
+      card("c-safety", true, "card safety" + (c === "to_wet" ? " cold" : ""), ["☂ RAIN CROSSOVER → ", crossChip(c)],
+        (t.weather_crossover_pct !== null && t.weather_crossover_pct !== undefined ? "rain <b>" + fmt(t.weather_crossover_pct, 0) + "%</b> " : "") +
+        "in <b>~" + fmt(cm, 0) + " min</b>", "SAFETY");
+    } else if (t.blue_flag) {
+      card("c-safety", true, "card safety cold", "⚑ BLUE FLAG", "let the leader by", "SAFETY");
+    } else card("c-safety", false);
+
+    var ap = activePlan(s), lapNow = p.lap_num || 0, win = ap && ap.window;
+    var boxNow = !!(s && ((win && lapNow >= win[0] && lapNow <= win[1]) ||
+      (s.plans || []).some(function (x) { return x.kind === "reactive" && sc; })));
+    card("c-exec", boxNow && !p.red_flag, null, "BOX NOW" + (ap ? " · PLAN " + ap.id : ""),
+      s ? (win ? "window L" + win[0] + "–" + win[1] : "") + (s.pit_loss_s ? " · costs " + fmt(s.pit_loss_s, 0) + " s" : "") : "",
+      "EXECUTION");
+    card("c-reply", false);
+    renderBattle(s, p.position);
+    renderPlans(s, lapNow);
+    var info = el("c-info"), msg = null;
+    if (s && s.ahead && s.ahead.pitted) msg = "◦ INFO · " + String(s.ahead.name || "car ahead") + " pitted";
+    else if (s && s.behind && s.behind.pitted) msg = "◦ INFO · " + String(s.behind.name || "car behind") + " pitted";
+    else if (t.penalty_s) msg = "◦ INFO · penalty +" + t.penalty_s + " s" + (t.unserved ? " · " + t.unserved + " unserved" : "");
+    if (info) { info.hidden = !msg; if (msg) info.textContent = msg; }
+  }
+
+  function renderPlans(s, lapNow) {
+    var box = el("c-plans");
+    if (!box) return;
+    box.innerHTML = "";
+    var plans = s ? s.plans || [] : [];
+    if (!plans.length) {
+      box.appendChild(span(s ? s.stint_plan || "no stop planned" : "--", "line"));
+      return;
+    }
+    plans.forEach(function (pl) {
+      var row = span("", "plan" + (pl.active ? "" : pl.kind === "reactive" ? " c" : " alt"));
+      row.appendChild(span("PLAN " + pl.id, "pid"));
+      if (pl.kind === "reactive") {
+        row.appendChild(span("BOX NOW", "boxnow"));
+        if (pl.delta_s !== null && pl.delta_s !== undefined) row.appendChild(document.createTextNode("cheap stop saves " + fmt(Math.abs(pl.delta_s), 1) + " s"));
+        box.appendChild(row);
+        return;
+      }
+      var seq = span("", "seq");
+      (pl.compounds || []).forEach(function (cp, i) {
+        if (i) seq.appendChild(span(" → ", "arr"));
+        seq.appendChild(span(String(cp || "?").charAt(0).toUpperCase(), "comp " + compoundClass(cp)));
+      });
+      row.appendChild(seq);
+      if (pl.active) {
+        var w = pl.window;
+        row.appendChild(document.createTextNode(w ? "window L" + w[0] + "–" + w[1] : pl.stops === 0 ? "no stop" : ""));
+        row.appendChild(span(s.on_plan === false ? "✗ OFF PLAN " + fmt(s.plan_off_s, 1) + " s" : "✓ ON PLAN",
+          "onp" + (s.on_plan === false ? " off" : "")));
+      } else {
+        var d = pl.delta_s;
+        row.appendChild(document.createTextNode((pl.stops === 1 ? "1 stop" : pl.stops + " stops") +
+          (d === null || d === undefined ? "" : " · " + (d < 0 ? "−" : "+") + fmt(Math.abs(d), 1) + " s")));
+      }
+      box.appendChild(row);
+    });
+  }
+
+  function span(txt, cls, tag) {
+    var n = document.createElement(tag || "span");
+    n.textContent = txt;
+    if (cls) n.className = cls;
+    return n;
+  }
+  function compoundClass(c) {
+    var w = String(c || "").toLowerCase();
+    return /^c\d/.test(w) ? "slick" : w;
+  }
+  function activePlan(s) {
+    var ps = s && s.plans ? s.plans : [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
+    return null;
+  }
+
+  // Battle card (docs/18): single rival as before, or per-car rows (2 ahead, 2
+  // behind) with a YOU divider when a second car is in play or places swap.
+  var MODES = ["free_air", "catching", "attacking", "defending", "under_threat", "managing"];
+  var MODE_WORDS = { free_air: "FREE AIR", catching: "▶ CATCHING", attacking: "▶ ATTACKING",
+    defending: "◀ DEFENDING", under_threat: "◀ UNDER THREAT", managing: "MANAGING" };
+  var MODE_CLS = { catching: "catching", attacking: "attack", defending: "threat", under_threat: "threat" };
+  function gapStr(g, side) { return g === null || g === undefined ? "--" : (side === "ahead" ? "+" : "−") + fmt(Math.abs(g), 1); }
+  function rail(g, side, train) {
+    var r = span("", "rail " + side + (train ? " train" : g <= 1 ? " in" : ""), "div");
+    r.appendChild(span(train ? "" : "1 S", "rz", "div"));
+    var c = span("", "rc", "div");
+    c.style.setProperty("--g", Math.max(0, Math.min(1, g / 3)).toFixed(3));
+    r.appendChild(c);
+    return r;
+  }
+  function rvRow(sideTxt, name, ot, st, gap) {
+    var rv = span("", "rv", "div");
+    rv.appendChild(span(sideTxt, "side"));
+    var nm = span(name, "name");
+    if (ot) nm.appendChild(span("OV", "tag crit"));
+    rv.appendChild(nm);
+    if (st !== null) rv.appendChild(span(st, "st"));
+    rv.appendChild(span(gap, "gap"));
+    return rv;
+  }
+  function paceRow(b, side) {
+    var closing = side === "ahead" ? b.closing_ahead_s : b.closing_behind_s;
+    var prob = side === "ahead" ? b.pass_prob : b.hold_prob;
+    if (!closing && (prob === null || prob === undefined)) return null;
+    var row = span("", "pace", "div");
+    row.appendChild(closing > 0 ? span((side === "ahead" ? "▶" : "▲") + " closing " + fmt(closing, 1) + " s/lap",
+      side === "ahead" ? "ok" : "crit") : span("", ""));
+    if (prob !== null && prob !== undefined) row.appendChild(span((side === "ahead" ? "PASS " : "HOLD ") + fmt(100 * prob, 0) + "%", "prob"));
+    return row;
+  }
+  function renderBattle(s, pos) {
+    var n = el("c-battle"), b = s && s.battle;
+    if (!n) return;
+    if (!b || !b.mode) { n.hidden = true; return; }
+    n.hidden = false;
+    n.innerHTML = "";
+    var mode = b.mode, multi = !!(b.ahead2 || b.behind2 || /^(scrap|swap_)/.test(b.result || ""));
+    var cls = MODE_CLS[mode] || (mode === "managing" || mode === "free_air" ? "calm" : "");
+    if (!multi) {
+      n.className = "card battle single " + cls;
+      var modes = span("", "modes", "div");
+      MODES.forEach(function (m) { modes.appendChild(span(m.replace("_", " "), m === mode ? "on" : "")); });
+      n.appendChild(modes);
+      var word = span(MODE_WORDS[mode] || mode.toUpperCase(), "mode", "div");
+      var sub = mode === "catching" && b.catch_laps ? "in range in " + fmt(b.catch_laps, 0) + " laps" :
+        mode === "under_threat" && b.threat_laps ? "in range in " + fmt(b.threat_laps, 0) + " laps" :
+        b.mode_laps ? b.mode_laps + (b.mode_laps === 1 ? " lap" : " laps") : "";
+      if (sub) word.appendChild(span(" · " + sub, "sub"));
+      n.appendChild(word);
+      var side = mode === "defending" || mode === "under_threat" ? "behind" : "ahead";
+      var r = s[side], other = s[side === "ahead" ? "behind" : "ahead"];
+      if (r) {
+        n.appendChild(rvRow(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", (r.pos ? "P" + r.pos + " " : "") +
+          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side)));
+        if (r.gap_s !== null && r.gap_s <= 3) n.appendChild(rail(r.gap_s, side, false));
+        var pr = paceRow(b, side);
+        if (pr) n.appendChild(pr);
+      }
+      if (other) {
+        var o = rvRow(side === "ahead" ? "▼ BEHIND" : "▲ AHEAD", (other.pos ? "P" + other.pos + " " : "") +
+          String(other.name || "--").toUpperCase(), false, null, gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"));
+        o.style.opacity = ".6";
+        n.appendChild(o);
+      }
+      return;
+    }
+    n.className = "card battle " + cls + (b.result === "scrap" ? " scrap" : "");
+    var swaps = b.swaps ? " · " + b.swaps + (b.swaps === 1 ? " swap" : " swaps") : "";
+    var cars = [[b.ahead2, "ahead", 2], [s.ahead, "ahead", 1], null, [s.behind, "behind", 1], [b.behind2, "behind", 2]];
+    var grp = span("", "grp" + (cls === "threat" ? " crit" : ""), "div");
+    if (b.result === "scrap") {
+      var ps = cars.filter(function (c) { return c && c[0] && c[0].pos; }).map(function (c) { return c[0].pos; }).concat(pos ? [pos] : []);
+      grp.appendChild(document.createTextNode("⇄ SCRAP "));
+      grp.appendChild(span(ps.length ? "· P" + Math.min.apply(null, ps) + " to P" + Math.max.apply(null, ps) + swaps : swaps, "sub"));
+    } else if (b.result === "swap_ahead" || b.result === "swap_behind") {
+      var who = b.result === "swap_ahead" ? s.ahead : s.behind;
+      grp.appendChild(document.createTextNode("⇄ TRADING PLACES "));
+      grp.appendChild(span("· " + (who ? who.name : "--") + swaps, "sub"));
+    } else {
+      grp.appendChild(document.createTextNode(MODE_WORDS[mode] || mode.toUpperCase()));
+    }
+    n.appendChild(grp);
+    cars.forEach(function (c, i) {
+      if (c === null) { n.appendChild(span("YOU · P" + (pos || "--"), "you", "div")); return; }
+      var r = c[0], side = c[1];
+      if (!r) return;
+      var near = cars[side === "ahead" ? 1 : 3][0];
+      var train = c[2] === 2 && near && r.gap_s !== null && near.gap_s !== null && Math.abs(r.gap_s - near.gap_s) <= 1;
+      var st = train ? "IN TRAIN" : c[2] === 1 && side === "ahead" && (mode === "attacking" || mode === "catching") ? MODE_WORDS[mode].slice(2) :
+        c[2] === 1 && side === "behind" && (mode === "defending" || mode === "under_threat") ? "DEFENDING" : "MANAGING";
+      var row = span("", "bcar " + (train ? "train" : st === "DEFENDING" ? "defend" : st === "MANAGING" ? "calm" : "attack"), "div");
+      row.appendChild(rvRow((side === "ahead" ? "▲ P" : "▼ P") + (r.pos || "-"), String(r.name || "--").toUpperCase(),
+        r.overtake && side === "behind", st, gapStr(r.gap_s, side)));
+      if (r.gap_s !== null && r.gap_s <= 3 && st !== "MANAGING") row.appendChild(rail(r.gap_s, side, train));
+      if (c[2] === 1 && st !== "MANAGING" && !train) { var pr = paceRow(b, side); if (pr) row.appendChild(pr); }
+      n.appendChild(row);
+    });
+  }
+
+  // Qualifying contextual zone: phase strip, cut-off, pole / teammate sectors, this run.
+  function qRow(id, gaps, worst) {
+    var row = el(id);
+    if (!row) return;
+    var tds = row.querySelectorAll("td");
+    for (var i = 0; i < 3; i++) {
+      var v = gaps ? gaps[i] : 0;
+      tds[i].textContent = v ? signed(v) : "--";
+      tds[i].className = (v < 0 ? "ok" : v > 0 ? "crit" : "") + (i === worst && v > 0 ? " worst" : "");
+    }
+  }
+  function renderQZone(q, p) {
+    var ph = q.release ? "garage" : p.phase;
+    var strip = el("q-phase");
+    if (strip) Array.prototype.forEach.call(strip.children, function (c) { c.className = c.dataset.ph === ph ? "on" : ""; });
+    var m = q.margin_ms, has = m !== null && m !== undefined;
+    var through = q.through || (has && m > 0);
+    setText("q-pos", p.position ? "P" + p.position : "P--");
+    setText("q-badge", q.margin_kind === "pole" ? (has && m > 0 ? "POLE" : "P2+") : through ? "THROUGH" : has ? "OUT" : "--");
+    setClass("q-badge", "badge" + (has && !through ? " out" : ""));
+    setText("q-margin", has ? signed(-m) : "--");
+    el("q-margin").style.color = has && !through ? "var(--crit)" : "";
+    setText("q-cut-line", (q.margin_kind === "pole" ? "vs P2" : "predicted cut-off " + lapTime(q.cutoff_ms)) +
+      " · best " + lapTime(q.best_lap_ms) + " · " + clock(q.session_time_left) + " left · " + q.fresh_sets + " fresh");
+    var pole = q.pole || (q.cool && q.cool.pole) || null;
+    setText("q-pole", pole ? "pole " + (pole.driver || "--") : "no pole time");
+    setText("q-pole-gap", pole ? signed(pole.gap_ms) : "--");
+    el("q-pole-gap").style.color = pole && pole.gap_ms > 0 ? "var(--crit)" : "";
+    var gaps = pole ? pole.sector_gaps_ms : null;
+    qRow("q-gaps", gaps, pole && pole.worst_sector ? pole.worst_sector - 1 : -1);
+    var mate = q.teammate || null;
+    qRow("q-mate-gaps", mate ? mate.sector_gaps_ms : null, mate && mate.worst_sector ? mate.worst_sector - 1 : -1);
+    setText("q-mate", mate ? "mate " + (mate.driver || "--") + " " + signed(mate.gap_ms) : "mate --");
+    var head = "--", line = "no run plan yet", lap = q.lap;
+    if (q.release) {
+      var r = q.release;
+      head = r.time_for_out_lap === false ? "✗ STAY IN" : r.clean ? "✓ GO NOW" : r.wait_s !== null ? "WAIT " + fmt(r.wait_s, 0) + " s" : "⚠ TRAFFIC";
+      line = r.cars_on_track + " on track" + (r.gap_ahead_s !== null ? " · " + fmt(r.gap_ahead_s, 0) + " s clear ahead" : "");
+    } else if (lap) {
+      head = "PROJ " + lapTime(lap.projected_ms) + (lap.abort ? " · ✗ ABORT" : "");
+      line = lap.delta_ms === null ? "no cut-off yet" : signed(lap.delta_ms) + " to cut";
+    } else if (q.plan) {
+      head = "PLAN " + String(q.plan.plan).toUpperCase();
+      line = q.plan.reason || "";
+    }
+    setText("q-run-head", head);
+    setText("q-run-line", line);
+  }
   function renderVoice(v) {
     var pill = el("voice"), tag = el("drvmenu-voice");
     var listening = voiceListening && v && v.listening;
@@ -417,479 +809,7 @@
       tag.hidden = !listening;
       tag.className = "voice-tag" + (v && v.warn ? " warn" : "");
     }
-  }
-
-
-  // -- M3 race: zone F strategy + pages ------------------------------------
-
-  function gapText(g) { return g === null || g === undefined ? "--" : (g >= 0 ? "+" : "") + fmt(g, 1); }
-  function trendText(t, side) {
-    // t = gap shrinking per lap (s). Ahead shrinking = we're closing;
-    // behind shrinking = we're being caught. Word only; the rate is the pace line.
-    if (!t) return null;
-    var closing = t > 0;
-    var word = side === "ahead" ? (closing ? "closing" : "dropping") : (closing ? "being caught" : "pulling away");
-    var cls = side === "behind" && closing ? "crit" : side === "ahead" && closing ? "ok" : "";
-    return { text: (closing ? "▲ " : "▼ ") + word, cls: cls };
-  }
-  function span(txt, cls) {
-    var n = document.createElement("span");
-    n.textContent = txt;
-    if (cls) n.className = cls;
-    return n;
-  }
-  // Overtake badge on a rival: a car behind with overtake is a threat (red),
-  // a car ahead with overtake is attacking someone else (neutral).
-  function otBadge(side) { return span("OT", "badge " + (side === "behind" ? "crit" : "inf")); }
-  function rivalRow(id, r, side, s) {
-    var n = el(id);
-    if (!n) return;
-    n.innerHTML = "";
-    n.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "lbl"));
-    if (!r) { n.appendChild(span("nobody close", "dim")); return; }
-    var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
-    n.appendChild(span((r.pos ? "P" + r.pos + " " : "") + String(r.name || "--").toUpperCase(), "name"));
-    n.appendChild(span(gapText(gap), "gap"));
-    n.appendChild(compoundBadge(r.compound, r.tyre_age));
-    n.appendChild(span(paceText(r), "words " + paceClass(r.pace_delta_s, side)));
-    var flags = [];
-    if (r.overtake) flags.push(otBadge(side));
-    if (side === "ahead" && s.undercut_s > 0) flags.push(span("UNDERCUT", "badge ok"));
-    if (side === "behind" && s.overcut_s > 0) flags.push(span("OVERCUT", "badge ok"));
-    if (r.pitted) flags.push(span("PIT", "badge warn"));
-    var fl = span("", "flags");
-    flags.forEach(function (b) { fl.appendChild(b); });
-    n.appendChild(fl);
-  }
-
-  // Player overtake and active aero pills (F1 26). Both switch automatically.
-  function renderOvertake(s) {
-    var ot = el("ot"), aero = el("aero");
-    var on = !!(s && s.overtake), next = !!(s && s.overtake_earned);
-    if (ot) {
-      ot.hidden = !on && !next;
-      ot.textContent = on ? "OT" : "OT NEXT";
-      ot.className = "pill ot " + (on ? "on" : "next");
-    }
-    if (aero) aero.hidden = !(s && s.aero_mode === 1);
-  }
-
-  function renderStrategy(s, q) {
-    var box = el("strategy"), ph = el("strat-ph");
-    if (!box) return;
-    box.hidden = !s || !!q;
-    if (ph && !q) ph.hidden = !!s;
-    if (!s || q) return;
-    setText("strat-title", "STRATEGY");
-    var w = el("s-window");
-    var ap = activePlan(s);
-    w.innerHTML = "";
-    w.className = "s-window";
-    var lapNow = lastState ? lastState.lap_num : 0;
-    if (ap) {
-      var win = ap.window;
-      w.appendChild(span("PLAN " + ap.id, ""));
-      w.appendChild(span(s.on_plan === false ? "OFF PLAN +" + fmt(s.plan_off_s, 1) + "s" : "ON PLAN",
-        s.on_plan === false ? "warn" : "ok"));
-      w.appendChild(boxWord(win ? win[0] : null, win ? win[1] : null, lapNow));
-    } else if (s.pit_window) {
-      w.appendChild(boxWord(s.pit_window.start, s.pit_window.end, lapNow));
-      if (s.plan) w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " "), ""));
-    } else if (s.plan && s.plan.kind) {
-      w.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
-        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
-    } else {
-      w.appendChild(span("NO STOP", ""));
-      if (s.laps_remaining) w.appendChild(span(s.laps_remaining + " laps to go", "togo"));
-    }
-    rivalRow("s-ahead", s.ahead, "ahead", s);
-    rivalRow("s-behind", s.behind, "behind", s);
-    renderStint(el("s-stint"), s, ap);
-  }
-
-  // Car and Track pages: one block per car. Colours follow the driver: green
-  // when the gap moves his way, red when it moves against him.
-  function rivalBlock(n, r, side, pos) {
-    n.innerHTML = "";
-    n.className = "rv";
-    n.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "rv-side"));
-    if (!r) {
-      n.appendChild(span(side === "ahead" && pos === 1 ? "leading" : "nobody close", "rv-none"));
-      return;
-    }
-    var nogap = r.gap_s === null || r.gap_s === undefined;
-    var gap = nogap ? null : side === "ahead" ? r.gap_s : -r.gap_s;
-    var gcls = !nogap && Math.abs(r.gap_s) <= 1 ? (side === "behind" ? "crit" : "ok") : "";
-    if (gcls) n.className += " " + gcls;
-    n.appendChild(span((r.pos ? "P" + r.pos + " " : "") + String(r.name || "--").toUpperCase(), "rv-name"));
-    var t = r.gap_trend_s;
-    if (!t || Math.abs(t) < 0.05) {
-      n.appendChild(span("steady", "rv-trend dim"));
-    } else {
-      var closing = t > 0, good = side === "ahead" ? closing : !closing;
-      var word = closing ? "closing" : side === "ahead" ? "pulling away" : "dropping back";
-      n.appendChild(span((closing ? "▲ " : "▼ ") + word, "rv-trend " + (good ? "ok" : "crit")));
-    }
-    n.appendChild(span(gapText(gap), "rv-gap " + gcls));
-  }
-  function renderRivals(s, pos) {
-    ["cp-rivals", "tp-rivals"].forEach(function (id) {
-      var box = el(id);
-      if (!box) return;
-      box.hidden = !s;
-      if (!s) return;
-      rivalBlock(box.children[0], s.ahead, "ahead", pos);
-      rivalBlock(box.children[1], s.behind, "behind", pos);
-    });
-  }
-
-  // BOX L33–35: white while far off, amber inside two laps, red once open.
-  function boxWord(a, b, lapNow) {
-    if (a === null || a === undefined) return span("NO STOP", "");
-    var st = lapNow >= a ? "box" : lapNow >= a - 2 ? "soon" : "";
-    return span((st === "box" ? "BOX NOW " : "BOX ") + "L" + a + "–" + b, st);
-  }
-
-  // Plan line: active plan as compound chips + stop count, then each alternative
-  // as a lettered chip with its race-time delta (negative = faster = green).
-  function renderStint(n, s, ap) {
-    if (!n) return;
-    n.innerHTML = "";
-    if (!ap) { n.appendChild(span(s.stint_plan || "", "")); return; }
-    var act = span("", "plan act");
-    act.appendChild(span(ap.id, "pid"));
-    act.appendChild(compoundSeq(ap.compounds));
-    act.appendChild(span(ap.stops === 0 ? "no stop" : ap.stops + (ap.stops === 1 ? " stop" : " stops"), "dim"));
-    n.appendChild(act);
-    (s.plans || []).filter(function (p) { return !p.active; }).forEach(function (p) {
-      var c = span("", "plan alt" + (p.kind === "reactive" ? " sc" : ""));
-      c.appendChild(span(p.id, "pid"));
-      if (p.kind === "reactive") c.appendChild(span("SC", "tag"));
-      c.appendChild(compoundSeq(p.compounds));
-      var d = p.delta_s;
-      if (d === null || d === undefined) c.appendChild(span(p.kind === "reactive" ? "SC box now" : p.kind, "dim"));
-      else if (Math.abs(d) < 0.05) c.appendChild(span("same time", "dim"));
-      else c.appendChild(span((d < 0 ? "−" : "+") + fmt(Math.abs(d), 1) + " s " + (d < 0 ? "faster" : "slower"),
-        d < 0 ? "ok" : "warn"));
-      n.appendChild(c);
-    });
-    if (s.restricted) n.appendChild(span("rival data hidden", "dim"));
-  }
-
-  function compoundSeq(cs) {
-    var q = span("", "cseq");
-    (cs || []).forEach(function (c, i) {
-      if (i) q.appendChild(span("›", "arr"));
-      q.appendChild(span(String(c || "?").charAt(0).toUpperCase(), "comp " + compoundClass(c)));
-    });
-    return q;
-  }
-
-  function activePlan(s) {
-    var ps = s && s.plans ? s.plans : [];
-    for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
-    return null;
-  }
-
-  // Rival vs us. pace_delta_s + = he is slower than our pace; last_lap_delta_s
-  // + = his last lap was slower than ours. Colour = threat: green good for us,
-  // red an immediate threat (behind and faster / with overtake), amber caution.
-  function paceClass(delta, side) {
-    if (delta === null || delta === undefined || Math.abs(delta) < 0.03) return "";
-    if (delta > 0) return "ok";
-    return side === "behind" ? "crit" : "warn";
-  }
-  function paceText(r) {
-    // Numeric pace line: how much the rival gains or loses on us per lap.
-    var d = r.pace_delta_s;
-    if (d === null || d === undefined) return "";
-    if (Math.abs(d) < 0.03) return "= same pace";
-    return (d < 0 ? "▲ THEY GAIN " : "▼ YOU GAIN ") + fmt(Math.abs(d), 2) + "s/lap";
-  }
-  function compoundClass(c) {
-    var w = String(c || "").toLowerCase();
-    return /^c\d/.test(w) ? "slick" : w;
-  }
-  function compoundBadge(c, age) {
-    var b = span("", "cb");
-    var word = c ? String(c).toUpperCase() : "--";
-    b.appendChild(span(word.length > 6 ? word.slice(0, 1) : word, "comp " + compoundClass(c)));
-    b.appendChild(span((age === null || age === undefined ? "--" : age) + "L", "age"));
-    return b;
-  }
-  function infringementBadges(inf) {
-    var out = [];
-    if (!inf) return out;
-    if (inf.penalty_s) out.push(span("PEN +" + inf.penalty_s + "s", "badge pen"));
-    if (inf.drive_throughs) out.push(span(inf.drive_throughs + "× DRIVE-THRU", "badge pen"));
-    if (inf.stop_gos) out.push(span(inf.stop_gos + "× STOP-GO", "badge pen"));
-    if (inf.warnings) out.push(span("⚠ " + inf.warnings + (inf.warnings === 1 ? " WARNING" : " WARNINGS"), "badge inf"));
-    if (inf.corner_cut_warnings) out.push(span("✂ " + inf.corner_cut_warnings + (inf.corner_cut_warnings === 1 ? " CUT" : " CUTS"), "badge inf"));
-    return out;
-  }
-
-  function battleCard(id, r, side, s) {
-    var n = el(id);
-    if (!n) return;
-    n.hidden = !r;
-    if (!r) return;
-    // The gap rail persists across renders so its marker glides between gaps.
-    var rail = n.querySelector(".rail");
-    if (!rail) {
-      rail = document.createElement("div");
-      rail.className = "rail";
-      rail.appendChild(span("1.0s", "rz"));
-      rail.appendChild(span("", "rc"));
-    }
-    while (n.firstChild) n.removeChild(n.firstChild);
-    var gap = side === "ahead" ? r.gap_s : (r.gap_s === null ? null : -r.gap_s);
-    var abs = r.gap_s === null || r.gap_s === undefined ? null : Math.abs(r.gap_s);
-    var close = abs !== null && abs <= 1;
-
-    var head = span("", "b-head");
-    head.appendChild(span(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", "side"));
-    head.appendChild(span(r.pos ? "P" + r.pos : "", "pos"));
-    head.appendChild(span(String(r.name || "--").toUpperCase(), "name"));
-    head.appendChild(span(gapText(gap), "gap" + (close ? (side === "behind" ? " crit" : " ok") : "")));
-    n.appendChild(head);
-
-    n.appendChild(rail);
-    rail.hidden = abs === null;
-    if (abs !== null) {
-      rail.style.setProperty("--g", String(Math.min(abs, 3) / 3));
-      rail.className = "rail " + side + (close ? " in" : "");
-    }
-
-    // Row 1: pace per lap + tyre badge.
-    var pace = span("", "b-pace");
-    var pw = paceText(r);
-    pace.appendChild(span(pw || "pace: reading…", "words " + (pw ? paceClass(r.pace_delta_s, side) : "dim")));
-    pace.appendChild(compoundBadge(r.compound, r.tyre_age));
-    n.appendChild(pace);
-
-    // Row 2: his last lap and the delta to ours; gap trend on the right.
-    var lap = span("", "b-lap");
-    lap.appendChild(span("LAST", "k"));
-    lap.appendChild(span(lapTime(r.last_lap_ms), "t"));
-    var d = r.last_lap_delta_s;
-    lap.appendChild(span(d === null || d === undefined ? "" :
-      fmt(Math.abs(d), 2) + (d > 0 ? "s slower" : d < 0 ? "s faster" : "s"),
-      "d " + paceClass(d, side)));
-    var tr = trendText(r.gap_trend_s, side);
-    lap.appendChild(span(tr ? tr.text : "= gap steady", "tr " + (tr ? tr.cls : "dim")));
-    n.appendChild(lap);
-
-    // Row 3: badges — overtake, strategy lever, pit state, stewards. Always present
-    // (min-height) so the card never changes height as badges come and go.
-    var bad = span("", "b-badges");
-    if (r.overtake) bad.appendChild(otBadge(side));
-    if (side === "ahead" && s.undercut_s > 0) bad.appendChild(span("UNDERCUT +" + fmt(s.undercut_s, 1), "badge ok"));
-    if (side === "behind" && s.overcut_s > 0) bad.appendChild(span("OVERCUT +" + fmt(s.overcut_s, 1), "badge ok"));
-    if (r.pitted) bad.appendChild(span("PITTED", "badge warn"));
-    infringementBadges(r.infringements).forEach(function (b) { bad.appendChild(b); });
-    n.appendChild(bad);
-
-    var closing = r.gap_trend_s > 0;
-    var threat = side === "behind" && (r.overtake || close || closing || paceClass(r.pace_delta_s, side) === "crit");
-    var edge = side === "ahead" && (s.overtake || close);
-    n.className = "b-card " + side + (threat ? " threat" : side === "behind" ? " calm" : edge ? " edge" : "");
-  }
-
-  var BATTLE_WORDS = { free_air: "◯ FREE AIR", catching: "▲ CATCHING", attacking: "⚔ ATTACKING",
-    defending: "◆ DEFENDING", under_threat: "⚠ UNDER THREAT", managing: "◐ MANAGING" };
-  var BATTLE_CLS = { attacking: "ok", catching: "ok", defending: "warn", under_threat: "crit" };
-  var RESULT_WORDS = { passed: "✓ PASSED", failed: "✗ ATTACK FAILED", held: "✓ HELD", lost: "✗ LOST PLACE" };
-  var RESULT_CLS = { passed: "ok", held: "ok", failed: "warn", lost: "crit" };
-
-  function renderBattleState(id, b, s) {
-    var n = el(id);
-    if (!n) return;
-    n.innerHTML = "";
-    var mode = b ? b.mode : null;
-    if (!mode) { n.hidden = true; return; }
-    n.hidden = false;
-    var res = b.result;
-    n.appendChild(span(res ? (RESULT_WORDS[res] || String(res).toUpperCase()) :
-      (BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase()),
-      "mode " + (res ? RESULT_CLS[res] || "" : BATTLE_CLS[mode] || "")));
-    if (res) n.appendChild(span(BATTLE_WORDS[mode] || String(mode).replace("_", " ").toUpperCase(),
-      "sub " + (BATTLE_CLS[mode] || "")));
-    var bits = [];
-    if (b.mode_laps) bits.push(b.mode_laps + (b.mode_laps === 1 ? " lap" : " laps"));
-    if ((mode === "catching" || mode === "attacking") && b.catch_laps !== null && b.catch_laps !== undefined)
-      bits.push("catch in " + fmt(b.catch_laps, 0) + " laps");
-    if ((mode === "defending" || mode === "under_threat") && b.threat_laps !== null && b.threat_laps !== undefined)
-      bits.push("caught in " + fmt(b.threat_laps, 0) + " laps");
-    if ((mode === "catching" || mode === "attacking") && b.pass_prob !== null && b.pass_prob !== undefined)
-      bits.push("pass " + fmt(100 * b.pass_prob, 0) + "%");
-    if ((mode === "defending" || mode === "under_threat") && b.hold_prob !== null && b.hold_prob !== undefined)
-      bits.push("hold " + fmt(100 * b.hold_prob, 0) + "%");
-    n.appendChild(span(bits.join(" · "), "detail"));
-  }
-
-  // Race page right column: battle state, ahead/behind cards, pit exit; the
-  // radio log sits below. Cards hide (placeholder stays) when no rival is in scope.
-  function renderDuel(s, q) {
-    var on = !!(s && !q);
-    document.body.classList.toggle("duel-on", on);
-    if (!on) return;
-    var ph = el("d-ph");
-    if (ph) ph.hidden = !!(s.ahead || s.behind);
-    renderBattleState("d-state", s.battle, s);
-    battleCard("d-ahead", s.ahead, "ahead", s);
-    battleCard("d-behind", s.behind, "behind", s);
-    var pe = s.pit_exit || {}, f = el("d-plan");
-    if (!f) return;
-    f.innerHTML = "";
-    var ap = activePlan(s);
-    if (ap) {
-      f.appendChild(span("PLAN " + ap.id, "k"));
-      if (s.plan_target_lap) f.appendChild(span("target L" + s.plan_target_lap, ""));
-    } else if (s.plan && s.plan.kind) {
-      f.appendChild(span(String(s.plan.kind).toUpperCase().replace("_", " ") +
-        (s.plan.lap ? " L" + s.plan.lap : ""), ""));
-    }
-    f.appendChild(span("PIT NOW →", "k"));
-    f.appendChild(span(pe.clean ? "CLEAR AIR" : "TRAFFIC", pe.clean ? "ok" : "warn"));
-    var near = pe.rival && pe.rival.gap_s !== null && Math.abs(pe.rival.gap_s) < 5;
-    f.appendChild(span((near ? "near " + String(pe.rival.name || "").toUpperCase() + " · " : "") +
-      (s.pit_loss_s ? "costs " + fmt(s.pit_loss_s, 0) + " s" : ""), ""));
-  }
-
-  function renderCarPage(p, s) {
-    var e = s ? s.energy : null;
-    if (e && e.per_lap_mj) {
-      setText("cp-energy", (e.lap_delta_mj >= 0 ? "+" : "") + fmt(e.lap_delta_mj, 1) + " MJ");
-      setText("cp-energy-sub", fmt(e.per_lap_mj, 1) + " MJ/lap target" +
-        (e.laps_to_floor !== null ? " · floor in " + fmt(e.laps_to_floor, 1) + " laps" : "") +
-        (e.mode ? " · " + e.mode : ""));
-    } else {
-      setText("cp-energy", "ERS " + fmt(p.ers_pct, 0) + "%");
-      setText("cp-energy-sub", "no energy budget yet");
-    }
-    var fd = s ? s.fuel_delta_laps : null;
-    setText("cp-fuel", fd === null || fd === undefined ?
-      (p.fuel_remaining_laps >= 0 ? "+" : "") + fmt(p.fuel_remaining_laps, 1) + " laps" :
-      (fd >= 0 ? "+" : "") + fmt(fd, 1) + " laps");
-    setClass("cp-fuel", "big" + (fd === null || fd === undefined ? "" : fd < 0 ? " delta-crit" : fd < 0.5 ? " delta-warn" : " delta-ok"));
-    setText("cp-fuel-sub", fd === null || fd === undefined ? "spare at finish · game" :
-      (fd >= 0 ? "spare at finish" : "SHORT · lift & coast"));
-    setText("cp-life", s && s.laps_of_pace !== null ? fmt(s.laps_of_pace, 0) + " laps" : "--");
-    setClass("cp-life", "big" + (s && s.laps_of_pace !== null && s.laps_remaining && s.laps_of_pace < s.laps_remaining ?
-      (s.laps_of_pace < s.laps_remaining - 3 ? " delta-crit" : " delta-warn") : ""));
-    setText("cp-life-sub", s ? "of pace left · " + (s.laps_remaining || 0) + " to go" +
-      (s.tyres && s.tyres.wear_per_lap_pct ? " · " + fmt(s.tyres.wear_per_lap_pct, 1) + "%/lap wear" : "") : "deg model needs race laps");
-    var f = [];
-    if (s && s.tyres) {
-      if (s.tyres.overheat) f.push("OVERHEATING");
-      if (s.tyres.graining) f.push("GRAINING");
-      if (s.tyres.blister_max_pct) f.push("BLISTER " + s.tyres.blister_max_pct + "%");
-    }
-    var lop = s ? s.laps_of_pace : null, togo = s ? s.laps_remaining : 0;
-    var cliff = lop !== null && lop !== undefined && lop < 1;
-    if (cliff) f.push("PAST THE CLIFF");
-    else if (lop !== null && lop !== undefined && lop < 3 && lop < togo) f.push("CLIFF IN " + Math.ceil(lop) + " LAPS");
-    setText("cp-flags", f.length ? "⚠ " + f.join(" · ") : "✓ tyres healthy");
-    meter("cp-energy-bar", p.ers_pct === null || p.ers_pct === undefined ? null : p.ers_pct / 100,
-      p.ers_pct < 20 ? "short" : "");
-    meter("cp-fuel-bar", fd === null || fd === undefined ? null : Math.max(0, Math.min(1, 0.5 + fd / 4)),
-      fd < 0 ? "crit" : fd < 0.5 ? "short" : "");
-    meter("cp-life-bar", lop === null || lop === undefined || !togo ? null : Math.min(1, lop / togo),
-      lop !== null && lop !== undefined && togo && lop < togo ? (lop < togo - 3 ? "crit" : "short") : "");
-    setClass("cp-flags", "cp-flags" + (cliff ? " crit" : f.length ? " warn" : " ok"));
-  }
-
-  function meter(id, frac, cls) {
-    var n = el(id);
-    if (!n) return;
-    n.parentNode.hidden = frac === null;
-    if (frac === null) return;
-    n.style.setProperty("--f", String(Math.max(0, Math.min(1, frac))));
-    n.className = cls || "";
-  }
-
-  var WEATHER_WORDS = { 0: "clear", 1: "light cloud", 2: "overcast", 3: "light rain", 4: "heavy rain", 5: "storm" };
-  var WEATHER_ICONS = { 0: "☀", 1: "☀☁", 2: "☁", 3: "☂", 4: "☔", 5: "⚡" };
-  function tpRow(id, k, v, cls) {
-    var n = el(id);
-    if (!n) return;
-    n.innerHTML = "";
-    n.appendChild(span(k, "k"));
-    n.appendChild(span(v, "v"));
-    n.className = "tp-row" + (cls ? " " + cls : "");
-  }
-  // Weather tiles: sky type + rain *chance* (forecast probability, never intensity).
-  function wxTile(i, w, pct) {
-    var n = el("tp-wx-" + i);
-    if (!n) return;
-    var known = w !== null && w !== undefined && w >= 0;
-    n.querySelector(".ico").textContent = known ? WEATHER_ICONS[w] || "·" : "·";
-    n.querySelector(".sky").textContent = known ? WEATHER_WORDS[w] || "--" : "--";
-    n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
-    // Neutral unless rain is actually coming: blue = wet/likely, red = heavy rain / storm.
-    n.className = "tp-wxt" + (!known ? "" : w >= 4 ? " storm" : w >= 3 || pct >= 40 ? " wet" : " dry");
-  }
-  function crossRow(c) {
-    var n = el("tp-cross");
-    if (!n) return;
-    n.innerHTML = "";
-    n.appendChild(span("☂ CROSSOVER", "k"));
-    var v = span("", "v");
-    if (c) {
-      v.appendChild(span("to", "dim"));
-      var cb = span("", "cb");
-      cb.appendChild(span(String(c).toUpperCase(), "comp " + compoundClass(c)));
-      v.appendChild(cb);
-      v.appendChild(span("likely inside the race", ""));
-    } else v.appendChild(span("none", "dim"));
-    n.appendChild(v);
-    n.className = "tp-row" + (c ? " cold" : "");
-  }
-  function renderTrackPage(t) {
-    if (!t) return;
-    var st = el("tp-status");
-    if (st) {
-      st.textContent = t.red_flag ? "RED FLAG" : t.safety_car ? (SC_WORDS[t.safety_car] || "SC") +
-        (t.sc_laps ? " · " + t.sc_laps + " laps" : "") : String(t.phase || "--").replace("_", " ").toUpperCase();
-      st.className = "tp-status" + (t.red_flag ? " red" : t.safety_car ? " sc" : "");
-    }
-    var r = t.rain_chance_pct || [null, null, null];
-    var wf = t.weather_forecast || [t.weather, -1, -1];
-    for (var i = 0; i < 3; i++) wxTile(i, wf[i], r[i]);
-    crossRow(t.weather_crossover);
-    tpRow("tp-flags", "⚑ FLAG", t.blue_flag ? "BLUE · let the leader by" : "none", t.blue_flag ? "cold" : "");
-    var pens = [];
-    if (t.penalty_s) pens.push("+" + t.penalty_s + " s");
-    if (t.unserved) pens.push(t.unserved + " UNSERVED");
-    if (t.warnings) pens.push(t.warnings + (t.warnings === 1 ? " warning" : " warnings"));
-    if (t.corner_cut_warnings) pens.push(t.corner_cut_warnings + (t.corner_cut_warnings === 1 ? " cut" : " cuts"));
-    tpRow("tp-pens", "⚠ PENALTIES", pens.length ? pens.join(" · ") : "none", t.unserved ? "crit" : t.penalty_s ? "warn" : "");
-    tpRow("tp-exit", "PIT EXIT", t.pit_exit_clean ? "CLEAR AIR" : "TRAFFIC", t.pit_exit_clean ? "ok" : "warn");
-  }
-
-  function renderPage(p) {
-    var page = p.page || "race", pages = p.pages || ["race"];
-    if (shownPage !== null && page !== shownPage) {
-      var from = pages.indexOf(shownPage), to = pages.indexOf(page);
-      var back = from >= 0 && to >= 0 && (to === from - 1 || (from === 0 && to === pages.length - 1));
-      document.body.style.setProperty("--swap-dx", back ? "-1.6rem" : "1.6rem");
-      hold("swap", SWAP_MS);
-    }
-    shownPage = page;
-    pages.concat(["race"]).forEach(function (n) {
-      document.body.classList.toggle("page-" + n, n === page);
-    });
-    document.body.classList.toggle("swap", on("swap"));
-    var pe = el("page");
-    if (pe && pe.dataset.key !== page + "|" + pages.join()) {
-      pe.dataset.key = page + "|" + pages.join();
-      pe.innerHTML = "";
-      pe.appendChild(span(page.toUpperCase(), "pg-name"));
-      var dots = span("", "pg-dots");
-      pages.forEach(function (n) { dots.appendChild(span("", n === page ? "on" : "")); });
-      pe.appendChild(dots);
-      if (on("swap")) restart(pe, "pg-flip");
-    }
+    fxListen(!!listening);
   }
 
   function sendCtl(msg) {
@@ -910,159 +830,6 @@
     if (ms === null || ms === undefined) return "--";
     return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(1);
   }
-
-  // Zone F in qualifying (docs/15 §8): release window in the garage, lap vs cut-off
-  // while flying. Race/practice keep the M3 placeholder.
-  function renderQuali(q) {
-    var box = el("quali"), ph = el("strat-ph");
-    if (!box) return;
-    box.hidden = !q;
-    if (ph) ph.hidden = !!q;
-    setText("strat-title", q ? "QUALIFYING" : "STRATEGY");
-    if (!q) return;
-    var main = el("q-main");
-    var sub = [clock(q.session_time_left) + " left", q.fresh_sets + " fresh set" +
-      (q.fresh_sets === 1 ? "" : "s"), "best " + lapTime(q.best_lap_ms),
-      "cut " + lapTime(q.cutoff_ms)];
-    if (q.release) {
-      var r = q.release;
-      if (r.clean) {
-        main.textContent = "✓ GO NOW" +
-          (r.gap_ahead_s !== null ? " · " + fmt(r.gap_ahead_s, 0) + " s clear" : "");
-        main.className = "qmain ok";
-      } else if (r.wait_s !== null) {
-        main.textContent = "WAIT " + fmt(r.wait_s, 0) + " s · then go";
-        main.className = "qmain warn";
-      } else {
-        main.textContent = "⚠ TRAFFIC · STAY IN";
-        main.className = "qmain crit";
-      }
-      sub.unshift(r.cars_on_track + " on track");
-    } else if (q.lap) {
-      var d = q.lap.delta_ms;
-      main.textContent = "LAP " + lapTime(q.lap.projected_ms) + " · " +
-        (d === null ? "no cut-off" : signed(d) + " to cut") +
-        (q.lap.abort ? " · ✗ ABORT" : "");
-      main.className = "qmain " + (q.lap.abort ? "crit" : d !== null && d <= 0 ? "ok" : "warn");
-    } else {
-      main.textContent = q.through ? "✓ THROUGH" : "--";
-      main.className = "qmain" + (q.through ? " ok" : "");
-    }
-    if (q.through) sub.push("THROUGH");
-    if (q.margin_ms !== null && q.margin_ms !== undefined) {
-      sub.push((q.margin_kind === "pole" ? "vs P2 " : "vs cut ") + signed(-q.margin_ms));
-    }
-    setText("q-sub", sub.join(" · "));
-    var press = el("q-press");
-    if (press) {
-      press.hidden = !q.pressure;
-      if (q.pressure) {
-        press.textContent = "PRESSURES " + (q.pressure.length ? q.pressure.map(function (p) {
-          return p.corner.toUpperCase() + " " + (p.delta_psi > 0 ? "+" : "") +
-            p.delta_psi.toFixed(1) + (p.target_psi ? " → " + p.target_psi.toFixed(1) : "") +
-            " (" + p.size + ", " + Math.round(p.avg_c) + "°)";
-        }).join(" · ") : "in window");
-      }
-    }
-  }
-
-
-  // Qualifying right column: cut-off, pole benchmark, phase, session. Additive;
-  // the pit board and cool-down takeovers still hide it.
-  var PHASE_WORDS = { out_lap: "OUT LAP", in_lap: "IN LAP", flying: "FLYING" };
-  function cutState(q) {
-    var m = q.margin_ms, has = m !== null && m !== undefined;
-    if (q.margin_kind === "pole") {
-      return has && m > 0 ? { pill: "POLE", cls: "ok" } : { pill: "P2+", cls: "warn" };
-    }
-    if (q.through || (has && m > 0)) return { pill: "THROUGH", cls: "ok" };
-    if (has) return { pill: "OUT", cls: "crit" };
-    return { pill: "--", cls: "" };
-  }
-  function gapClass(ms) {
-    if (!ms) return "";
-    return ms < 0 ? "gain" : ms <= 50 ? "ok" : "crit";
-  }
-  function setRow(id, vals, cls) {
-    var row = el(id);
-    if (!row) return;
-    var tds = row.querySelectorAll("td");
-    for (var i = 0; i < 3; i++) {
-      tds[i].textContent = vals[i];
-      tds[i].className = cls ? cls[i] : "";
-    }
-  }
-  function renderQRail(q, p) {
-    var box = el("qrail"), on = !!q && p.session_kind === "qualifying";
-    if (!box) return;
-    box.hidden = !on;
-    document.body.classList.toggle("qrail-on", on);
-    if (!on) return;
-    var cs = cutState(q), m = q.margin_ms, has = m !== null && m !== undefined;
-    setClass("qr-cut", "b-card q-card " + cs.cls);
-    setText("qr-pos", p.position ? "P" + p.position : "P--");
-    setText("qr-pill", cs.pill);
-    setClass("qr-pill", "badge " + (cs.cls || "inf"));
-    setText("qr-margin", has ? signed(-m) : "--");
-    setText("qr-cut-sub", (q.margin_kind === "pole" ? "vs P2" : "cut " + lapTime(q.cutoff_ms)) +
-      " · best " + lapTime(q.best_lap_ms));
-
-    var pole = q.pole || (q.cool && q.cool.pole) || null;
-    setText("qr-pole", pole ? String(pole.driver || "POLE").toUpperCase() :
-    p.position === 1 && q.best_lap_ms ? "you hold pole" : "no pole time");
-    setText("qr-gap", pole ? signed(pole.gap_ms) : "--");
-    var gaps = pole ? pole.sector_gaps_ms : [0, 0, 0];
-    var worst = pole && pole.worst_sector ? pole.worst_sector - 1 : gaps.indexOf(Math.max.apply(null, gaps));
-    setRow("qr-gaps", gaps.map(function (v) { return v ? signed(v) : "--"; }),
-      gaps.map(function (v, i) { return gapClass(v) + (i === worst && v > 0 ? " worst" : ""); }));
-
-    var mate = q.teammate || null;
-    var mGaps = mate ? mate.sector_gaps_ms : [0, 0, 0];
-    var mWorst = mate && mate.worst_sector ? mate.worst_sector - 1 : -1;
-    setRow("qr-mate-gaps", mGaps.map(function (v) { return v ? signed(v) : "--"; }),
-      mGaps.map(function (v, i) { return gapClass(v) + (i === mWorst && v > 0 ? " worst" : ""); }));
-    setText("qr-mate", mate ? "mate " + String(mate.driver || "TEAMMATE").toUpperCase() + " " +
-      signed(mate.gap_ms) : "mate --");
-
-    var ph = el("qr-phase"), lap = q.lap;
-    if (ph) {
-      var word = PHASE_WORDS[p.phase];
-      ph.hidden = !word;
-      if (word) {
-        setText("qr-ph-k", word);
-        var main = "--", flag = "", sub = "", cls = "";
-        if (lap) {
-          var d = lap.delta_ms;
-          main = "PROJ " + lapTime(lap.projected_ms);
-          sub = d === null ? "no cut-off yet" : signed(d) + " to cut " + lapTime(q.cutoff_ms);
-          cls = lap.abort ? "crit" : d !== null && d <= 0 ? "ok" : "warn";
-          flag = lap.abort ? "✗ ABORT" : d !== null ? signed(d) : "";
-        } else if (q.plan) {
-          main = "PLAN " + String(q.plan.plan).toUpperCase();
-          sub = q.plan.reason || "";
-        } else {
-          sub = "no run plan yet";
-        }
-        setText("qr-ph-main", main);
-        setText("qr-ph-flag", flag);
-        setText("qr-ph-sub", sub || "--");
-        ph.className = "b-card q-card " + cls;
-      }
-    }
-
-    var f = el("qr-session");
-    if (f) {
-      var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
-      f.innerHTML = "";
-      f.appendChild(span("SESSION", "k"));
-      f.appendChild(span(clock(q.session_time_left) + " left", ""));
-      f.appendChild(span(String(q.fresh_sets) + " fresh", ""));
-      f.appendChild(span(comp, "comp " + comp.toLowerCase()));
-    }
-  }
-
-  // Pit board (garage / pitting): release light, per-corner pressure target,
-  // next-run summary and the car setup in game-menu order.
   var SETUP_GROUPS = [
     ["AERODYNAMICS", [["front_wing", "F wing", 0], ["rear_wing", "R wing", 0]]],
     ["TRANSMISSION", [["on_throttle", "on-thr", 0, "%"], ["off_throttle", "off-thr", 0, "%"],
@@ -1332,39 +1099,6 @@
       "fuel " + fmt(c.fuel_laps, 1) + " laps");
   }
 
-  function renderDamage(d) {
-    var box = el("damage");
-    if (!box || !d) return;
-    var parts = [
-      ["front_left_wing", "FW L"], ["front_right_wing", "FW R"], ["rear_wing", "RW"],
-      ["floor", "Floor"], ["diffuser", "Diffuser"], ["sidepod", "Sidepod"],
-      ["gearbox", "Gearbox"], ["engine", "Engine"],
-    ];
-    box.innerHTML = "";
-    parts.forEach(function (pair) {
-      var val = d[pair[0]];
-      if (!(val > 0)) return;
-      var row = document.createElement("div");
-      row.appendChild(document.createTextNode(pair[1] + " "));
-      var s = document.createElement("span");
-      s.textContent = val + "%";
-      if (val >= 30) s.className = "crit"; else if (val >= 10) s.className = "warn";
-      row.appendChild(s);
-      box.appendChild(row);
-    });
-    [["drs_fault", "DRS fault"], ["ers_fault", "ERS fault"]].forEach(function (pair) {
-      if (!d[pair[0]]) return;
-      var row = document.createElement("div");
-      row.className = "crit"; row.textContent = pair[1];
-      box.appendChild(row);
-    });
-    if (!box.childNodes.length) {
-      var n = document.createElement("span");
-      n.className = "none"; n.textContent = "✓ none";
-      box.appendChild(n);
-    }
-  }
-
   // -- radio: current / previous / log ---------------------------------------
 
   function pickRadio(stale) {
@@ -1553,6 +1287,7 @@
       if (!calls.some(function (c) { return c.id === p.id; })) {
         calls.push(Object.assign({ t: m.t, seq: m.seq, audio: "dispatched" }, p));
         if (calls.length > MAX_CALLS) calls = calls.slice(-MAX_CALLS);
+        fx("call");
       }
       phoneCall(p);
     } else if (m.type === "audio") {
@@ -1578,6 +1313,7 @@
         pe.textContent = label + " L" + (p.lap || "--") +
           (p.text ? " ▸ " + p.text : "");
       }
+      if (p.kind === "ack" || p.kind === "neg") fx(p.kind);
     } else if (m.type === "voice") {
       if (p.state === "listening") {
         voiceListening = true;
@@ -1602,6 +1338,8 @@
           message = "NO REQUEST";
           kind = "missed";
         }
+        fxListen(false);
+        if (kind) fx(kind);
         if (message) {
           voiceFlash = { text: message, kind: kind, until: Date.now() + 3000 };
           clearTimeout(voiceFlashTimer);
@@ -1654,8 +1392,8 @@
       sendPress(true);
     }
   });
-  // P = next page, M = next mindset: same backend state the UDP Actions 4/2
-  // drive, so every client (/ and /radio) stays in sync.
+  // P = page reset (back to the race layout), M = next mindset: same backend
+  // state the UDP Actions 4/2 drive, so every client (/ and /radio) stays in sync.
   document.addEventListener("keydown", function (ev) {
     if (ev.repeat || !document.hasFocus()) return;
     if (ev.code === "KeyP") sendCtl({ type: "page" });
@@ -1689,24 +1427,15 @@
     }
   });
 
-  // Phone: swipe left/right steps pages through the same backend page state.
-  var touch0 = null;
-  document.addEventListener("touchstart", function (ev) {
-    touch0 = null;
-    if (ev.touches.length === 1 && !ev.target.closest(".transport")) {
-      touch0 = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+  // Phone (docs/15 §3): compact one-column page with ARM PHONE RADIO. ?phone=1 forces it.
+  var phoneQuery = matchMedia("(max-width: 600px)");
+  function setPhone() {
+    if (document.body.classList.contains("dash")) {
+      document.body.classList.toggle("phone", /[?&]phone=1/.test(location.search) || phoneQuery.matches);
     }
-  }, { passive: true });
-  document.addEventListener("touchcancel", function () { touch0 = null; }, { passive: true });
-  document.addEventListener("touchend", function (ev) {
-    if (!touch0 || !lastState) return;
-    var dx = ev.changedTouches[0].clientX - touch0.x, dy = ev.changedTouches[0].clientY - touch0.y;
-    touch0 = null;
-    if (Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
-    var pages = lastState.pages || ["race"], i = pages.indexOf(lastState.page || "race");
-    var next = pages[(i + (dx < 0 ? 1 : pages.length - 1)) % pages.length];
-    if (next) sendCtl({ type: "page", name: next });
-  }, { passive: true });
+  }
+  if (phoneQuery.addEventListener) phoneQuery.addEventListener("change", setPhone);
+  setPhone();
 
   // Phone on the wheel stand: keep the screen awake where the browser allows.
   var wake = null;

@@ -63,75 +63,71 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 
 Use a landscape 16:9 layout with a fixed 12-column grid. Set the root font size from
 viewport width (`font-size: clamp(14px, 0.9vw, 24px)`) so 1080p and 1440p use nearly the
-same physical scale on a 27-inch panel. Set tyre temperature to 3 rem and secondary tyre
-values to at least 1.15 rem; scaling only the root font would crowd the status bar. Zones
-never reflow between sessions. Empty zones keep their space when values are absent.
+same physical scale on a 27-inch panel. The live screen is one fixed page. Zones never
+reflow between sessions, and empty zones keep their space when values are absent.
+`docs/mockups/dashboard-reimagined.html` is the approved visual reference.
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ A  STATUS BAR   ● LIVE  age 42 ms  10 WS/s │ RACE · Bahrain  LAP 24/57  P5 │ 48 px
-│                 phase: ON TRACK            │ MED  14L old       [BALANCED] │
-├────────────────────────────────────────────────────────────────────────────┤
-│ B  CURRENT  ▮ P2  "Front left hot. Ease trail braking." L24 · 8s            │
-│    WHY  FL inner 112° HOT · wear 38%                                       │ 190 px
-│    PREV  L23 "Fuel on target."                                              │
-├─────────────────────────────────┬──────────────────────────────────────────┤
-│ C  TYRES (2×2 plan view)        │ E  RADIO LOG                             │
-│    FL 112 HOT   │  FR  98 OK    │   L22 ▶ Fronts warming…                  │
-│    surf 110° 38%│ surf 101° 35% │   L21 ✗ ERS at ninety (dropped)          │
-│    ─────────────┼─────────────  │   L20 ▶ Fuel good. Push.                │
-│    RL  94 OK    │  RR  95 OK    │   …                                      │
-│    surf 92° 22% │ surf 93° 21%  │                                          │  fills
-├─────────────────────────────────┤   …                                      │
-│ D  FUEL  +0.4 laps   34.4 laps  │                                          │
-│    DAMAGE FW L 12% · Floor 4%   │                                          │
-├─────────────────────────────────┤                                          │
-│ F  STRATEGY (M3; placeholder    │                                          │
-│    until then)                  │                                          │
-│    pit window · gaps · UC       │                                          │
-├─────────────────────────────────┴──────────────────────────────────────────┤
-│ G  FOOTER  ERS 62% · SC 0 · call p99 210 ms · ws 12 ms                       │ 32 px
-└────────────────────────────────────────────────────────────────────────────┘
-        ◄────────── 5 cols ──────────►◄──────────── 7 cols ─────────────►
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ A STATUS  ● LIVE 42 ms  ON TRACK │ RACE · BAHRAIN  LAP 24/57  P5  OV SM  BAL │ 3 rem
+├──────────────────────────────────────────────────────────────────────────────┤
+│ B CURRENT  "Car behind in range. Defend into turn 1."            L24 · 8 s   │
+│   WHY  gap 0.8 s · closing 0.3 s/lap      PREVIOUS  L23 "Fuel on target."    │ 12 rem
+├────────────────────────┬──────────────────┬──────────────────────────────────┤
+│ C TYRES  MED · 14 laps │ D FUEL   BATT    │ E CONTEXT (auto)                 │
+│   FL 103° ▲ │ FR 98° ▬ │   +0.4    62%    │   SAFETY    SC, red flag, rain   │
+│   wear 38%  │ wear 35% │ WEATHER now/10/30│   EXECUTION box now              │
+│   RL 94° ▼  │ RR 95° ▬ │   crossover ETA  │   REPLY     menu answer          │
+│   BB 56%  DIFF ON 60%  │ DAMAGE           │   TACTICAL  battle, strategy     │
+│                        │                  │   INFO      rival pitted, penalty│
+├────────────────────────┴──────────────────┴──────────────────────────────────┤
+│ G FOOTER  update rate · voice lag · screen lag · ERS · SC                    │ 2 rem
+└──────────────────────────────────────────────────────────────────────────────┘
+   ◄──── cols 1–4 ────►  ◄── cols 5–7 ──►   ◄──────── cols 8–12 ────────►
 ```
 
 Zone rules:
 
-- **A status bar**: place freshness at the far left, first in Western reading order.
-  Right-align session/lap/position and place the mindset pill at the far right.
-- **B banner**: keep it full-width and fixed-height. It holds a large current line, one
-  evidence line, and a dim, one-line **PREV** radio subtitle. The subtitle shows the
-  preceding call whose audio started; the next call replaces it. The log shows older
-  calls, omits those in the banner, and retains recent calls in its underlying history.
-  Long calls use at most two banner lines; call history retains the full text for review.
-  With no call, the banner says "— radio quiet —".
-- **C tyres**: draw a 2×2 grid as the car from above: **FL top-left, FR top-right, RL
-  bottom-left, RR bottom-right**. Add a thin centre-line to distinguish left from right.
-  Place the compound chip and tyre age above the grid. Colour the **whole tile** by status
-  (border and faint background tint, not just the number) so a hot corner shows in
-  peripheral vision. Put brake temperature in a small corner label. It can explain heat
-  or lock-ups but must not compete with tyre temperature. Colour the corner label,
-  temperature, and status word alike. Keep brakes neutral until a calibrated threshold
-  exists.
-- **D fuel + damage**: show fuel laps remaining as the large number until the backend
-  supplies a target delta. Then emphasize the signed delta. List only non-zero damage
-  components and keep the zone header.
-- **E radio log**: put the newest older call at the top. The current and previous calls
-  already appear in B. Show as many older rows as fit without shrinking the type.
-- **F strategy**: reserve this zone for M3. Until then, show the roadmap's dim placeholder
-  line ("pit window: M3") so the grid stays the same when strategy arrives.
+- **A status bar**: place freshness at the far left. Right-align session, lap and
+  position. The OV chip lights when overtake mode is active or earned, and the SM chip
+  lights in straight mode. The compact mindset pill sits at the far right.
+- **B banner**: keep it full-width and fixed-height. It holds the current call, one
+  evidence line and one dim PREVIOUS line. The main screen has no radio log. With no
+  call, the banner says "— radio quiet —".
+- **C tyres**: draw a 2×2 grid as the car from above (FL top-left, RR bottom-right). Each
+  corner shows the inner temperature, a trend arrow, wear %, a meter for the 80 to 110 °C
+  window and the brake temperature. The arrow compares `inner` (fast EMA) with
+  `tyre_inner_ema_slow`: red ▲ heating, blue ▼ cooling, white ▬ steady. The arrow
+  replaces the status word, which is an owner exception to the colour plus word rule.
+  The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
+  orange LOCKED border. The BB and DIFF strip sits under the grid.
+- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather and
+  damage. Weather shows an icon and rain chance for now, 10 and 30 min. The crossover
+  slot gets a marker, and a line under it gives the target compound and ETA.
+- **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
+  Info. Safety covers SC, VSC, red flag, blue flag and RAIN CROSSOVER when
+  `weather_crossover_min` is 5 or less. Tactical holds the battle card and the strategy
+  plans. In qualifying the zone shows the session phase, cut-off, benchmark sectors and
+  the current run.
+- **Battle card**: one rival as the single card. When `battle.ahead2` or
+  `battle.behind2` is set, or places swap, the card lists up to two cars each side
+  with a state word, gap and rail around a YOU divider. The header says SCRAP or
+  TRADING PLACES from `battle.result` and `battle.swaps`. A second car within 1 s of the
+  car between shows IN TRAIN.
+- **Takeovers**: the pit board takes over the main row, and cool-down replaces the tyres
+  and tiles. The status bar, banner, contextual zone and footer stay.
 - **G footer**: show diagnostics only, in small type.
 
 ### 1440p
 
 Use the same grid. The root font scales ~1.33× to preserve text size on a 27-inch panel.
-Short calls leave room for more radio rows.
 
 ### `/radio` compact view
 
 Show only the status bar (freshness, lap), banner with previous-call subtitle, and log in
-~1.6× type. This view suits a narrow portrait screen or phone. The same `app.js` uses the
-`body.radio` class to hide zones C/D/F/G.
+~1.6× type. The same `app.js` uses the `body.radio` class. On a screen 600 px wide or
+less (or with `?phone=1`), `/` adds `body.phone`: one column with the banner, context
+cards, tyres and an ARM PHONE RADIO button for browser speech.
 
 ## 4. Colour and typography tokens
 
@@ -397,18 +393,13 @@ render check against a test recording. No running game is needed.
 
 ## 10. Pages (M3)
 
-The backend owns `page` (sent in every state frame with `pages`); UDP Action 4, `P` or a
-click on the page pill cycles it, and every client follows. Pages are alternate grid
-layouts over the same zones: the status bar, call banner, footer, staleness guard and
-LIVE/STALE never move, and the pit board / cool-down takeovers still win.
+The live screen has one layout. The backend still owns `page` and sends it with
+`pages`, but UDP Action 4, `P`, the menu page item and the voice page intent reset it to
+the first entry of `ui.pages` (normally `race`) instead of cycling. A named
+`{"type":"page","name":...}` message still selects that page. The pit board, cool-down
+and qualifying takeovers switch on their own.
 
-| Page | Occasion | Zones |
-|---|---|---|
-| race | default, 90 % of laps | A B C D F E (zone F = strategy) + rival cards on the right (immediate ahead/behind: battle state, gap rail, pace delta, last lap, tyre + age, OT/UC/OC/infringements; BEHIND lights up when a threat), pit-exit projection |
-| car | management phases | C, D, F + energy/lap budget, fuel vs flag, laps of pace, thermal/blister flags |
-| track | formation, SC/VSC, weather | status word, rain now/10/30 min + crossover, blue flag, penalties, gaps, pit-exit traffic; F, E |
-
-Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet; shown on the pit board, not as a page).
+Payload: `strategy` (null outside races), `track_info`, `setup` (null until a setup packet).
 `/radio` keeps its compact layout and shows the current page name.
 
 
@@ -421,8 +412,9 @@ number and word is readable in its final state on the first frame.
 |---|---|---|
 | New call | priority bar stretches back (P1: three white flashes) and a light sweep crosses the banner; text is instant | 700–900 ms |
 | Call age | 3–4 px hairline under the banner shrinks to the fade time for that priority | the call's lifetime |
-| Radio log row | drops in from the banner side with a brief tint | 700 ms |
-| Page swap | page zones slide in from the direction of travel, staggered 0/40/80 ms; the status bar, banner and footer stay put; page dots in the status pill | 420 ms |
+| Radio log row (`/radio` only) | drops in from the banner side with a brief tint | 700 ms |
+| ACK, NEG, new call, voice heard or missed | one edge glow on the screen border | 500 ms |
+| Voice listening | steady lilac edge, no pulse | while listening |
 | Tyre status flip | one ring pulse in the new colour | 700 ms |
 | Position change | number lifts green (gain) or drops red (loss) | 1.6 s |
 | Lap change | lap counter flashes | 900 ms |
@@ -431,8 +423,7 @@ number and word is readable in its final state on the first frame.
 
 Animations run off timestamps, not the render tick, so the 4–5 Hz re-render never
 restarts one. On phones in portrait the status bar and banner are sticky while the
-page scrolls, with notch-safe insets; the page also swipes left/right to change pages
-(this sends the same `page` message as Action 4) and holds a screen wake lock where the
+page scrolls, with notch-safe insets, and the page holds a screen wake lock where the
 browser allows. A P1 vibrates once on phones that support it. `prefers-reduced-motion:
 reduce` cuts every animation and transition to a single frame and hides the age hairline.
 
@@ -451,5 +442,5 @@ Written for a driver who has never read this page.
 | ≥ 861 px tall, landscape | Fixed grid, no scroll |
 | 501–860 px tall, landscape (1366×768, 1024×768) | Same grid; zones keep a minimum height; page scrolls under pinned status + banner |
 | ≤ 1100 px wide, landscape | Status bar wraps |
-| ≤ 900 px wide, portrait (phones, tablets) | One column: status, banner, strategy, battle, tyres, fuel, log |
+| ≤ 600 px wide (phones) | `body.phone`: one column with status, banner, context cards, tyres and ARM PHONE RADIO |
 | ≤ 500 px tall, landscape | Compact scroll, one-line banner |
