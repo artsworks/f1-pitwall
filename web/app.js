@@ -549,7 +549,7 @@
 
   // Contextual zone: Safety > Execution > Reply > Tactical > Info, fixed card order.
   function renderCtx(p, s, t) {
-    var sc = p.safety_car || 0, c = CROSS[t.weather_crossover] ? t.weather_crossover : null;
+    var sc = p.safety_car || 0, scLive = sc === 1 || sc === 2, c = CROSS[t.weather_crossover] ? t.weather_crossover : null;
     var cm = t.weather_crossover_min;
     if (p.red_flag) {
       card("c-safety", true, "card safety red", "⚠ RED FLAG", "box this lap · tyres free to change", "SAFETY");
@@ -567,13 +567,13 @@
 
     var ap = activePlan(s), lapNow = p.lap_num || 0, win = ap && ap.window;
     var boxNow = !!(s && ((win && lapNow >= win[0] && lapNow <= win[1]) ||
-      (s.plans || []).some(function (x) { return x.kind === "reactive" && sc; })));
+      (s.plans || []).some(function (x) { return x.kind === "reactive" && scLive; })));
     card("c-exec", boxNow && !p.red_flag, null, "BOX NOW" + (ap ? " · PLAN " + ap.id : ""),
       s ? (win ? "window L" + win[0] + "–" + win[1] : "") + (s.pit_loss_s ? " · costs " + fmt(s.pit_loss_s, 0) + " s" : "") : "",
       "EXECUTION");
     card("c-reply", false);
     renderBattle(s, p.position);
-    renderPlans(s, lapNow);
+    renderPlans(s, scLive);
     var info = el("c-info"), msg = null;
     if (s && s.ahead && s.ahead.pitted) msg = "◦ INFO · " + String(s.ahead.name || "car ahead") + " pitted";
     else if (s && s.behind && s.behind.pitted) msg = "◦ INFO · " + String(s.behind.name || "car behind") + " pitted";
@@ -581,11 +581,12 @@
     if (info) { info.hidden = !msg; if (msg) info.textContent = msg; }
   }
 
-  function renderPlans(s, lapNow) {
+  // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
+  function renderPlans(s, scLive) {
     var box = el("c-plans");
     if (!box) return;
     box.innerHTML = "";
-    var plans = s ? s.plans || [] : [];
+    var plans = (s ? s.plans || [] : []).filter(function (pl) { return pl.kind !== "reactive" || pl.active || scLive; });
     if (!plans.length) {
       box.appendChild(span(s ? s.stint_plan || "no stop planned" : "--", "line"));
       return;
@@ -728,13 +729,16 @@
       if (!r) return;
       var near = cars[side === "ahead" ? 1 : 3][0];
       var train = c[2] === 2 && near && r.gap_s !== null && near.gap_s !== null && Math.abs(r.gap_s - near.gap_s) <= 1;
-      var st = train ? "IN TRAIN" : c[2] === 1 && side === "ahead" && (mode === "attacking" || mode === "catching") ? MODE_WORDS[mode].slice(2) :
-        c[2] === 1 && side === "behind" && (mode === "defending" || mode === "under_threat") ? "DEFENDING" : "MANAGING";
-      var row = span("", "bcar " + (train ? "train" : st === "DEFENDING" ? "defend" : st === "MANAGING" ? "calm" : "attack"), "div");
+      // The direct rival's row word is battle.mode; the other rows stay MANAGING (FREE AIR in free air).
+      var direct = c[2] === 1 && (side === "ahead" ? mode === "attacking" || mode === "catching" :
+        mode === "defending" || mode === "under_threat");
+      var st = train ? "IN TRAIN" : direct ? MODE_WORDS[mode].slice(2) : mode === "free_air" ? "FREE AIR" : "MANAGING";
+      var calm = !train && !direct;
+      var row = span("", "bcar " + (train ? "train" : calm ? "calm" : side === "behind" ? "defend" : "attack"), "div");
       row.appendChild(rvRow((side === "ahead" ? "▲ P" : "▼ P") + (r.pos || "-"), String(r.name || "--").toUpperCase(),
         r.overtake && side === "behind", st, gapStr(r.gap_s, side)));
-      if (r.gap_s !== null && r.gap_s <= 3 && st !== "MANAGING") row.appendChild(rail(r.gap_s, side, train));
-      if (c[2] === 1 && st !== "MANAGING" && !train) { var pr = paceRow(b, side); if (pr) row.appendChild(pr); }
+      if (r.gap_s !== null && r.gap_s <= 3 && !calm) row.appendChild(rail(r.gap_s, side, train));
+      if (direct) { var pr = paceRow(b, side); if (pr) row.appendChild(pr); }
       n.appendChild(row);
     });
   }
