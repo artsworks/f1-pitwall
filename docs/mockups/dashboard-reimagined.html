@@ -15,7 +15,7 @@
       battle modes, weather crossover, battery modes) are commented-out blocks. Search
       for "ALT:" and swap the block in.
     - Body-class takeovers can be previewed with a URL hash, the same way the runtime
-      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain
+      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain #lockup
       (combine with "+", for example #quali+cool).
     - Demo keys (motion check): A = ACK glow, N = NEG glow, R = new call / say-again glow,
       V = voice open (steady lilac), V again = close as HEARD, Shift+V = close as MISSED,
@@ -211,7 +211,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .car::before { content: ""; position: absolute; left: 50%; top: -.3rem; bottom: -.3rem; width: 2px;
   background: var(--faint); transform: translateX(-50%); }
 .corner { display: grid; grid-template-columns: auto 1fr; align-content: center; column-gap: .8rem;
-  grid-template-areas: "lbl lbl" "temp word" "det det"; border: 1px solid var(--line);
+  grid-template-areas: "lbl lbl" "temp word" "meter meter" "det det" "tags tags"; border: 1px solid var(--line);
   background: var(--panel); padding: .5rem .7rem; position: relative; z-index: 1; min-width: 0; }
 .corner .lbl { grid-area: lbl; color: var(--soft); font-size: 1.35rem; display: flex; justify-content: space-between; }
 .corner .lbl .brk { color: var(--dim); font-size: 1.15rem; }
@@ -232,6 +232,28 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .corner.hot.flip { --ring: var(--crit); } .corner.cold.flip { --ring: var(--cold); } .corner.ok.flip { --ring: var(--ok); }
 @keyframes flip { 0% { box-shadow: 0 0 0 0 var(--ring, var(--info)); } 100% { box-shadow: 0 0 0 .9rem transparent; } }
 .corner.flip .temp { animation: temp-pop 700ms var(--ease-snap); }
+/* trend: tyre_inner_ema_fast vs tyre_inner_ema_slow per corner */
+.corner .word { display: flex; flex-direction: column; line-height: 1.2; }
+.corner .trend { color: var(--soft); font-size: 1.05rem; font-weight: normal; letter-spacing: .04em; min-width: 9ch; }
+/* operating window meter: 60..130 °C scale, band = tyre_inner_cold_c 80 .. tyre_inner_hot_c 110
+   (thresholds.yaml). Fill reuses .meter i with the glide. */
+.corner .twin { grid-area: meter; margin: .3rem 0 .2rem; }
+.corner .twin i { background: currentColor; }
+.corner .twin b { position: absolute; left: 28.6%; width: 42.9%; top: -.2rem; bottom: -.2rem;
+  border-left: 2px solid var(--soft); border-right: 2px solid var(--soft); }
+.corner.ok .twin { color: var(--ok); } .corner.hot .twin { color: var(--crit); } .corner.cold .twin { color: var(--cold); }
+/* tags row keeps its height when empty, so a tag never pushes the tile */
+.corner .tags { grid-area: tags; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .3rem .4rem;
+  min-height: 3.6rem; margin-top: .25rem; }
+.tag { font-size: 1rem; font-weight: bold; letter-spacing: .08em; padding: 0 .35rem;
+  border: 1px solid currentColor; border-radius: 4px; white-space: nowrap; }
+.tag.warn { color: var(--warn); } .tag.crit { color: var(--crit); }
+.tag.lock { background: var(--aggr); border-color: var(--aggr); color: #000; }
+/* lock-up: orange border on that wheel while lockup_wheel is set (a few seconds), then gone.
+   Outline sits inside the status border, so the status colour and word stay readable. */
+body.lockup .corner.fl { outline: .3rem solid var(--aggr); outline-offset: -.3rem;
+  animation: flip 700ms var(--ease-out); --ring: var(--aggr); }
+body:not(.lockup) .lockup-only { display: none !important; }
 @keyframes temp-pop { 0% { transform: scale(1.12); } 100% { transform: none; } }
 
 /* BB + DIFF strip (item 11). Underline = already matches the setup-advisor target. */
@@ -469,6 +491,7 @@ body.phone .corner .temp { font-size: 2.4rem; }
 body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
 body.phone .t-head { font-size: 1.1rem; }
 body.phone .corner .det .surf { display: none; }
+body.phone .corner .trend .tw, body.phone .corner .tags { display: none; }
 body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
 body.phone .arm { display: block; margin: .6rem .9rem 1rem; padding: .8rem; font: inherit; font-size: 1.4rem;
   font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
@@ -554,10 +577,15 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   </div>
   <div class="car">
     <!-- tyres.{fl,fr,rl,rr}.inner / .status / .surface / .wear ; brakes.{fl,..} -->
-    <div class="corner ok"><div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div><div class="temp">104°</div><div class="word">OK</div><div class="det"><span class="wear">wear 31%</span><span class="surf">surf 101°</span></div></div>
-    <div class="corner hot flip"><div class="lbl"><span>FR</span><span class="brk">BRK 455°</span></div><div class="temp">112°</div><div class="word">HOT</div><div class="det"><span class="wear">wear 38%</span><span class="surf">surf 115°</span></div></div>
-    <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div><div class="temp">96°</div><div class="word">OK</div><div class="det"><span class="wear">wear 22%</span><span class="surf">surf 94°</span></div></div>
-    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div><div class="temp">84°</div><div class="word">COLD</div><div class="det"><span class="wear">wear 21%</span><span class="surf">surf 82°</span></div></div>
+    <!-- trend from tyre_inner_ema_fast - tyre_inner_ema_slow: ▲ heating / ▼ cooling / ▬ steady.
+         meter --f = (inner - 60) / 70. HOT WEAR tag: wear_hot_corner='fr', wear_hot_rate=1.9 %/lap.
+         Whole-car conditions (blister_max_pct, graining, overheat) show one tag on the worst corner.
+         #lockup previews lockup_wheel='fl' plus a blister tag. -->
+    <div class="corner ok fl"><div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div><div class="temp">104°</div><div class="word">OK<span class="trend">▲ <span class="tw">heating</span></span></div><div class="meter twin"><b></b><i style="--f:.63"></i></div><div class="det"><span class="wear">wear 31%</span><span class="surf">surf 101°</span></div><div class="tags"><span class="tag lock lockup-only">LOCKED</span></div></div>
+    <div class="corner hot flip"><div class="lbl"><span>FR</span><span class="brk">BRK 455°</span></div><div class="temp">112°</div><div class="word">HOT<span class="trend">▲ <span class="tw">heating</span></span></div><div class="meter twin"><b></b><i style="--f:.74"></i></div><div class="det"><span class="wear">wear 38%</span><span class="surf">surf 115°</span></div><div class="tags"><span class="tag crit">HOT WEAR +1.9%/lap</span><span class="tag warn lockup-only">BLISTER 12%</span></div></div>
+    <!-- ALT conditions on the worst corner: <span class="tag warn">GRAINING</span>  <span class="tag crit">OVERHEAT</span> -->
+    <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div><div class="temp">96°</div><div class="word">OK<span class="trend">▬ <span class="tw">steady</span></span></div><div class="meter twin"><b></b><i style="--f:.51"></i></div><div class="det"><span class="wear">wear 22%</span><span class="surf">surf 94°</span></div><div class="tags"></div></div>
+    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div><div class="temp">78°</div><div class="word">COLD<span class="trend">▼ <span class="tw">cooling</span></span></div><div class="meter twin"><b></b><i style="--f:.26"></i></div><div class="det"><span class="wear">wear 21%</span><span class="surf">surf 76°</span></div><div class="tags"></div></div>
   </div>
   <!-- Arrows only on the live-adjustable values (bias, on-throttle diff). Off-throttle is display only. -->
   <div class="setup">
@@ -783,7 +811,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 (function () {
   var body = document.body, fx = document.getElementById("fx");
   var voice = document.getElementById("voice"), press = document.getElementById("press");
-  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain"];
+  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain", "lockup"];
   function applyHash() {
     KNOWN.forEach(function (c) { body.classList.remove(c); });
     location.hash.replace("#", "").split("+").forEach(function (c) {
