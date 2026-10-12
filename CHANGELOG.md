@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.3.0 (2026-10-12)
+
+### Features
+
+- **server**: Add dashboard payload fields for reimagined dashboard
+  ([#72](https://github.com/artsworks/f1-pitwall/pull/72),
+  [`250b550`](https://github.com/artsworks/f1-pitwall/commit/250b55040911def5b9dcbfb14c515f5380a6596c))
+
+
 ## v0.2.0 (2026-10-12)
 
 ### Continuous Integration
