@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=25">
+  <link rel="stylesheet" href="/static/style.css?v=26">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -30,7 +30,7 @@
     <span id="flag" class="flag" hidden></span>
     <span class="spacer"></span>
     <span id="session" class="sess">--</span>
-    <span id="lap">LAP --</span>
+    <span id="lap-count">LAP --</span>
     <span id="position">P--</span>
     <span class="chips">
       <span id="ov" class="chip ov" title="overtake mode">OV</span>
@@ -98,6 +98,16 @@
         <div id="wxs-2"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
       </div>
       <div id="cross" class="cross">--</div>
+    </div>
+    <div id="lap" class="tile lap">
+      <h2>LAST LAP</h2>
+      <div id="lap-delta" class="big">--</div>
+      <div id="lap-sub" class="sub">no lap yet</div>
+    </div>
+    <div id="energy" class="tile energy">
+      <h2>ENERGY THIS LAP</h2>
+      <div id="en-delta" class="big">--</div>
+      <div id="en-sub" class="sub">--</div>
     </div>
     <div class="tile wide damage">
       <h2>DAMAGE</h2>
@@ -224,7 +234,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=26"></script>
+  <script src="/static/app.js?v=27"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

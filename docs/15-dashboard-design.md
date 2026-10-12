@@ -78,8 +78,8 @@ reflow between sessions, and empty zones keep their space when values are absent
 │   FL 103° ▲ │ FR 98° ▬ │   +0.4    62%    │   SAFETY    SC, red flag, rain   │
 │   wear 38%  │ wear 35% │ WEATHER now/10/30│   EXECUTION box now              │
 │   RL 94° ▼  │ RR 95° ▬ │   crossover ETA  │   REPLY     menu answer          │
-│   BB 56%  DIFF ON 60%  │ DAMAGE           │   TACTICAL  battle, strategy     │
-│                        │                  │   INFO      rival pitted, penalty│
+│   BB 56%  DIFF ON 60%  │ LAST LAP ENERGY  │   TACTICAL  battle, strategy     │
+│                        │ DAMAGE strip     │   INFO      rival pitted, penalty│
 ├────────────────────────┴──────────────────┴──────────────────────────────────┤
 │ G FOOTER  update rate · voice lag · screen lag · ERS · SC                    │ 2 rem
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -101,9 +101,10 @@ Zone rules:
   replaces the status word, which is an owner exception to the colour plus word rule.
   The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
   orange LOCKED border. The BB and DIFF strip sits under the grid.
-- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather and
-  damage. Weather shows an icon and rain chance for now, 10 and 30 min. The crossover
-  slot gets a marker, and a line under it gives the target compound and ETA.
+- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, last lap
+  vs best, energy this lap, and a one-line damage strip at the bottom. Weather shows an
+  icon and rain chance for now, 10 and 30 min. The crossover slot gets a marker, and a
+  line under it gives the target compound and ETA.
 - **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
   Info. Safety covers SC, VSC, red flag, blue flag and RAIN CROSSOVER when
   `weather_crossover_min` is 5 or less. Tactical holds the battle card and the strategy
@@ -196,7 +197,9 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `surf 110° · wear 38%`; wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` (game MFD: laps spare or short at the flag, not laps in tank) | `+0.4 laps`, one decimal, shown when the backend delta is unavailable |
-| Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}` (**being added**; percentages 0–100) | Rows for non-zero values only: `FW L 12%`; rear wing shows `RW` when supplied as one value, or `RW L` / `RW R` if split values become available. Amber ≥ 10, red ≥ 30. Header reads `DAMAGE none` when all zero |
+| Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries on one line; amber ≥ 5 %, red ≥ 25 %; text shrinks past 3 entries; `✓ none` when all values and faults are zero |
+| Last lap | `race.last_lap_ms`, `race.best_lap_ms` | Big delta vs own best. `PB` green when last ≤ best, amber ≥ +1.0 s. Sub line `1:32.1 · best 1:31.7` |
+| Energy this lap | `strategy.energy.{lap_delta_mj, laps_to_floor, mode}` | Signed MJ vs budget (+ = over), tile coloured by mode like BATT, sub `empty in ~N laps` red when below laps remaining, `✓ not draining` when null |
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |
@@ -241,7 +244,8 @@ Other additions: `track_info.weather_crossover_min` and
 no crossover), `strategy.tyres.wear_hot_corner` and
 `strategy.tyres.wear_hot_rate` (hot corner name and wear rate, `null` when
 none), and per-corner `tyres.*.tyre_inner_ema_slow` plus `tyres.*.lockup`
-(`true` only on the wheel that locked).
+(`true` only on the wheel that locked). `race.last_lap_ms` and
+`race.best_lap_ms` are null before the first lap.
 
 ## 6. Stale and reconnect behaviour
 

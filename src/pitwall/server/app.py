@@ -604,6 +604,8 @@ def state_payload(
         "race": {
             "phase": snapshot.race_phase,
             "laps_remaining": snapshot.laps_remaining,
+            "last_lap_ms": snapshot.player_last_lap_ms or None,
+            "best_lap_ms": snapshot.player_best_lap_ms or None,
             "sc_laps": snapshot.sc_laps,
             "gap_ahead_s": _finite(snapshot.gap_ahead_s),
             "gap_behind_s": _finite(snapshot.gap_behind_s),

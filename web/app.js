@@ -301,7 +301,7 @@
     setText("phase", (p.phase || "--").replace("_", " ").toUpperCase());
     setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
-    setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
+    setText("lap-count", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");
     if (p.position && shownPos && p.position !== shownPos) {
       hold(p.position < shownPos ? "gain:pos" : "loss:pos", 1600);
@@ -311,7 +311,7 @@
     setClass("position", mark("gain:pos") + mark("loss:pos"));
     if (p.lap_num && shownLap && p.lap_num !== shownLap) hold("tick:lap", 900);
     if (p.lap_num) shownLap = p.lap_num;
-    setClass("lap", mark("tick:lap"));
+    setClass("lap-count", mark("tick:lap"));
     var mind = el("mindset");
     if (mind) {
       mind.textContent = p.mindset === "aggressive" ? "AGGR" : p.mindset === "balanced" ? "BAL" :
@@ -351,6 +351,8 @@
     renderSetupStrip(p);
     renderFuel(p, s);
     renderBatt(p, s);
+    renderLap(p);
+    renderEnergy(p, s);
     renderWeather(t);
     renderDamage(p.damage);
     renderCtx(p, s, t);
@@ -473,6 +475,50 @@
     }
   }
 
+  function renderLap(p) {
+    var r = p.race || {}, last = r.last_lap_ms, best = r.best_lap_ms;
+    var value = "--", cls = "big", sub = "no lap yet";
+    if (last !== null && last !== undefined) {
+      sub = lapTime(last);
+      if (best !== null && best !== undefined) {
+        var d = last - best;
+        if (d <= 0) {
+          value = "PB";
+          cls = "big ok";
+        } else {
+          value = signed(d);
+          cls = "big" + (d >= 1000 ? " warn" : "");
+        }
+        sub += " · best " + lapTime(best);
+      }
+    }
+    setText("lap-delta", value);
+    setClass("lap-delta", cls);
+    setText("lap-sub", sub);
+  }
+
+  function renderEnergy(p, s) {
+    var e = s && s.energy;
+    if (!e) {
+      setText("en-delta", "--");
+      setClass("energy", "tile energy");
+      setText("en-sub", "--");
+      setClass("en-sub", "sub");
+      return;
+    }
+    setClass("energy", "tile energy" + (e.mode ? " " + e.mode : ""));
+    var d = e.lap_delta_mj;
+    setText("en-delta", d === null || d === undefined || isNaN(d) ? "--" : signed(d * 1000) + " MJ");
+    var floor = e.laps_to_floor;
+    if (floor === null || floor === undefined) {
+      setText("en-sub", "✓ not draining");
+      setClass("en-sub", "sub");
+    } else {
+      setText("en-sub", "empty in ~" + fmt(floor, 0) + " laps");
+      setClass("en-sub", "sub" + (s.laps_remaining > 0 && floor < s.laps_remaining ? " crit" : ""));
+    }
+  }
+
   // Weather: icon + word per forecast slot, rain chance, crossover marker on the
   // first slot at or after weather_crossover_min (slots are now / 10 / 30 min).
   var WEATHER_WORDS = { 0: "CLEAR", 1: "LIGHT CLOUD", 2: "OVERCAST", 3: "LIGHT RAIN", 4: "HEAVY RAIN", 5: "STORM" };
@@ -518,17 +564,23 @@
     var box = el("damage");
     if (!box || !d) return;
     box.innerHTML = "";
+    var count = 0;
     DMG_PARTS.forEach(function (pair) {
       var val = d[pair[0]];
       if (!(val > 0)) return;
       var row = span(pair[1] + " ", "");
       row.appendChild(span(val + "%", "n" + (val >= 25 ? " crit" : val >= 5 ? " warn" : "")));
       box.appendChild(row);
+      count += 1;
     });
     [["drs_fault", "DRS fault"], ["ers_fault", "ERS fault"]].forEach(function (pair) {
-      if (d[pair[0]]) box.appendChild(span(pair[1], "n crit"));
+      if (d[pair[0]]) {
+        box.appendChild(span(pair[1], "n crit"));
+        count += 1;
+      }
     });
     if (!box.childNodes.length) box.appendChild(span("✓ none", "none"));
+    box.className = "dmg" + (count > 3 ? " many" : "");
   }
 
   function card(id, show, cls, head, line, rank) {

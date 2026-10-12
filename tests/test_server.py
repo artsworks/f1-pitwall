@@ -516,6 +516,30 @@ def test_state_payload_quali_zone() -> None:
     assert "release" not in flying["quali"]
 
 
+def test_state_payload_race_lap_times() -> None:
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    race = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="race",
+            player_last_lap_ms=92104,
+            player_best_lap_ms=91702,
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    default = state_payload(Snapshot(now=1.0), settings=settings, metrics=Metrics(), quiet=False)
+
+    assert race["race"]["last_lap_ms"] == 92104
+    assert race["race"]["best_lap_ms"] == 91702
+    assert default["race"]["last_lap_ms"] is None
+    assert default["race"]["best_lap_ms"] is None
+
+
 def test_state_payload_quali_pole_available_outside_cool_lap() -> None:
     from pitwall.config.loader import ConfigStore
     from pitwall.metrics import Metrics
