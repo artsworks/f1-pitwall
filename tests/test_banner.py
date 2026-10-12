@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import pitwall.cli.serve as cli
+from pitwall.clock import VirtualClock
+from pitwall.engine import build_engine, run_replay
+
+from .race_synth import RaceSpec, race_stream
+from .synth import write_packet_stream
 
 
 def test_banner_groups_and_aligns_entries() -> None:
@@ -87,6 +93,7 @@ def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys)
     clock = FakeClock()
     state = SimpleNamespace(last_packet_t=None)
     engine = SimpleNamespace(
+        last_snapshot=None,
         clock=clock,
         state=SimpleNamespace(
             snapshot=lambda _now: SimpleNamespace(last_packet_t=state.last_packet_t)
@@ -121,3 +128,61 @@ def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys)
     output = capsys.readouterr().out
     assert output.count("telemetry connected") == 1
     assert output.count("1234") == 1
+
+
+class _StopBroadcast(Exception):
+    pass
+
+
+def _broadcast_frames(engine, frames: list, *, count: int = 1) -> list:
+    """Run _state_broadcast until `count` frames are sent, then stop."""
+    sent = frames
+
+    async def stop_sleep(_period: float) -> None:
+        if len(sent) >= count:
+            raise _StopBroadcast
+
+    engine.clock.sleep = stop_sleep
+    hub = SimpleNamespace(broadcast=lambda kind, payload: sent.append((kind, payload)))
+    with pytest.raises(_StopBroadcast):
+        asyncio.run(cli._state_broadcast(engine, hub, engine.store, lambda: engine))
+    return sent
+
+
+def test_state_broadcast_uses_processed_snapshot(tmp_path: Path) -> None:
+    # Rival 0.8 s ahead through the race -> Engine._battle marks it attacking.
+    path = write_packet_stream(tmp_path / "r.f1bin", race_stream(RaceSpec(laps=6, gap_ahead_s=0.8)))
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    asyncio.run(run_replay(path, engine, None))
+    assert engine.last_snapshot is not None
+
+    # Prove the setup advisor graft lands on the snapshot the frames use.
+    fields = {
+        "setup_call_param": "brake_bias",
+        "setup_call_from": 56.0,
+        "setup_call_to": 57.0,
+        "setup_call_reason": "test",
+        "setup_stop_wing_from": 0.0,
+        "setup_stop_wing_to": 0.0,
+    }
+    engine.setup_advisor.snapshot_fields = lambda: dict(fields)
+    engine.tick(engine.clock.now())
+    assert engine.last_snapshot.setup_call_param == "brake_bias"
+    assert engine.last_snapshot.setup_call_to == 57.0
+
+    (kind, payload), *_ = _broadcast_frames(engine, [])
+    assert kind == "state"
+    mode = payload["strategy"]["battle"]["mode"]
+    assert mode == engine.last_snapshot.battle_mode
+    assert mode != "free_air"
+    # The same processed snapshot feeds the frame: its grafted fields match too.
+    assert engine.last_snapshot.setup_call_param == "brake_bias"
+
+
+def test_state_broadcast_falls_back_without_last_snapshot(tmp_path: Path) -> None:
+    path = write_packet_stream(tmp_path / "r.f1bin", race_stream(RaceSpec(laps=3)))
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    asyncio.run(run_replay(path, engine, None))
+    engine.last_snapshot = None
+    (kind, _payload), *_ = _broadcast_frames(engine, [])
+    assert kind == "state"

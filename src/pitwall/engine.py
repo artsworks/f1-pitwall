@@ -332,6 +332,7 @@ class Engine:
         self.budget_live: int | None = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
+        self.last_snapshot: Snapshot | None = None  # latest processed tick snapshot
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
@@ -1909,6 +1910,7 @@ class Engine:
         balance = self.driver_balance(snapshot.lap_num)
         if balance != snapshot.driver_balance:
             snapshot = dataclasses.replace(snapshot, driver_balance=balance)
+        self.last_snapshot = snapshot
         for p in self._press_queue:
             if self._menu_press(p, snapshot):
                 continue
