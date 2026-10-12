@@ -42,15 +42,11 @@ BACKGROUND_TIMEOUT_S = 120.0
 def _write_cache(path: Path, wav: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    os.close(fd)
     try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(wav)
+        Path(temporary).write_bytes(wav)
         os.replace(temporary, path)
     except BaseException:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
         Path(temporary).unlink(missing_ok=True)
         raise
 
