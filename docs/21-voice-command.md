@@ -158,7 +158,7 @@ unchanged. A few are new because they are natural to say and awkward to scroll t
 | `say_again` | say again | "say again", "repeat", "what was that" | re-speaks the last call inside `say_again_window_s` |
 | `mindset` | menu `mindset` | "mindset", "change mindset", "toggle mindset" | action |
 | `silent` | menu `silent` | "radio silent", "leave me alone", "radio on", "talk to me" | action; on/off chosen by the phrase |
-| `page` | menu `page` | "next page", "battle page", "car page", "track page" | action; a named page jumps straight to it |
+| `page` | menu `page` | "next page", "battle page", "car page", "track page" | action; resets to the race layout |
 
 Rules for the grammar:
 

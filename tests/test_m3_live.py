@@ -42,7 +42,7 @@ def _press(stream: list[tuple[float, bytes]], bit: int, t: float) -> None:
     stream.sort(key=lambda r: r[0])
 
 
-def test_action4_cycles_page_and_action2_toggles_mindset(tmp_path: Path) -> None:
+def test_action4_resets_page_and_action2_toggles_mindset(tmp_path: Path) -> None:
     stream = race_stream(RaceSpec(laps=3))
     _press(stream, PAGE_BIT, 20.0)
     _press(stream, PAGE_BIT, 25.0)
@@ -50,14 +50,15 @@ def test_action4_cycles_page_and_action2_toggles_mindset(tmp_path: Path) -> None
     path = write_packet_stream(tmp_path / "r.f1bin", stream)
     log = tmp_path / "d.jsonl"
     engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log)
-    assert engine.page == "race" and engine.mindset == "balanced"
+    engine.page = "track"  # start on a non-race page without logging a page row
+    assert engine.page == "track" and engine.mindset == "balanced"
     asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()
-    assert engine.page == "track"  # race -> car -> track
+    assert engine.page == "race"  # both presses reset to the first page
     assert engine.mindset == "aggressive"
     rows = [json.loads(x) for x in log.read_text().splitlines() if x]
     pages = [r["text"] for r in rows if r.get("outcome") == "page"]
-    assert pages == ["car", "track"]
+    assert pages == ["race"]
     late = [r for r in rows if float(r.get("t") or 0) > 31.0]
     assert late and all(r["mindset"] == "aggressive" for r in late)
 
@@ -84,6 +85,8 @@ def test_client_messages_select_page_and_mindset() -> None:
     assert engine.page == "track"
     engine.client_message({"type": "page", "cycle": True})
     assert engine.page == "race"
+    engine.client_message({"type": "page", "cycle": True})
+    assert engine.page == "race"  # no cycling to "car"
     engine.client_message({"type": "mindset", "name": "aggressive"})
     assert engine.mindset == "aggressive"
     assert engine.dispatcher.log.mindset == "aggressive"

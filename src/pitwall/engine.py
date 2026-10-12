@@ -332,7 +332,6 @@ class Engine:
         self.budget_live: int | None = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
-        self._page_manual_t: float | None = None
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
         self.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
@@ -507,7 +506,7 @@ class Engine:
         elif record.intent in ("mindset_aggressive", "mindset_balanced"):
             self.set_mindset(record.intent.removeprefix("mindset_"), record.closed_t)
         elif record.intent == "page":
-            self.cycle_page(record.closed_t)
+            self.reset_page(record.closed_t)
 
     def voice_payload(self, now: float) -> dict[str, Any]:
         channel = self.voice
@@ -577,8 +576,6 @@ class Engine:
     def set_page(self, name: str, now: float, *, manual: bool = True) -> bool:
         if name not in self.store.current().ui.pages:
             return False
-        if manual:
-            self._page_manual_t = now
         if name == self.page:
             return False
         self.page = name
@@ -587,23 +584,15 @@ class Engine:
         )
         return True
 
-    def cycle_page(self, now: float) -> None:
+    def reset_page(self, now: float) -> None:
         pages = self.store.current().ui.pages
-        if not pages:
-            return
-        i = pages.index(self.page) if self.page in pages else -1
-        self.set_page(pages[(i + 1) % len(pages)], now)
+        self.set_page(pages[0] if pages else "race", now)
 
     def _auto_page(self, snap: Snapshot, now: float) -> None:
-        """Contextual page (off by default). A manual choice holds, and a
-        page never changes under a fresh call banner."""
+        """Contextual page (off by default). A page never changes under a
+        fresh call banner."""
         ui = self.store.current().ui
         if not ui.auto_page:
-            return
-        if (
-            self._page_manual_t is not None
-            and now - self._page_manual_t < ui.auto_page_manual_hold_s
-        ):
             return
         last = self.dispatcher.last_call_t
         if last is not None and now - last < ui.auto_page_call_hold_s:
@@ -622,7 +611,7 @@ class Engine:
 
     def client_message(self, msg: dict[str, Any]) -> None:
         """Dashboard control messages: {"type":"mindset","name"},
-        {"type":"page","name"|"cycle":true} and
+        {"type":"page","name"} (no name resets to the first page) and
         {"type":"menu","op":"up"|"down"|"confirm"|"close"} or {"type":"voice"}."""
         now = self.clock.now()
         if msg.get("type") == "voice":
@@ -643,7 +632,7 @@ class Engine:
             if isinstance(name, str):
                 self.set_page(name, now)
             else:
-                self.cycle_page(now)
+                self.reset_page(now)
         elif msg.get("type") == "menu":
             op = msg.get("op")
             kind = _MENU_CLIENT_OPS.get(op) if isinstance(op, str) else None
@@ -810,7 +799,7 @@ class Engine:
         elif item.action == "silent":
             self.dispatcher.toggle_silent(snap)
         elif item.action == "page":
-            self.cycle_page(t)
+            self.reset_page(t)
         if text:
             self.dispatcher.menu_reply(text, f"menu:{item.id}", snap, item.related_rules)
 
@@ -1926,7 +1915,7 @@ class Engine:
             if p.kind == "mindset":
                 self.cycle_mindset(p.t)
             elif p.kind == "page":
-                self.cycle_page(p.t)
+                self.reset_page(p.t)
             else:
                 self.dispatcher.on_press(p, snapshot)
         self._press_queue.clear()
