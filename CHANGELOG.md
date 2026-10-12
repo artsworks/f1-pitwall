@@ -6,6 +6,72 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.4.0 (2026-10-12)
+
+### Bug Fixes
+
+- **server**: State frames carry the engine's processed snapshot
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **state**: Drop implausible second-car gaps
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **state**: Report first crossing minute for weather crossover
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **web**: Battle rows follow battle.mode, plan C only under SC/VSC
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **web**: Cool-down last lap and pole gap, phone review layout
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **web**: Restore phone radio header wrap and keep the tyre row below the phone banner
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+### Documentation
+
+- One-screen dashboard docs and site screenshots
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- Resize box-call hero to 1920x1080 ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- Retake box-call hero on the desktop layout
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- Retake phone race and quali out-lap shots ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- Retake phone race shot ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- Retake phone shots and update final-lap caption
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+### Features
+
+- **engine**: Page input resets to the race layout
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **server**: Add dashboard payload fields for reimagined dashboard
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+- **web**: Rebuild dashboard on the reimagined single-screen layout
+  ([#74](https://github.com/artsworks/f1-pitwall/pull/74),
+  [`c9ac551`](https://github.com/artsworks/f1-pitwall/commit/c9ac551fc2ccba341286e80197e5c0fe0dcc044c))
+
+
 ## v0.3.0 (2026-10-12)
 
 ### Features
