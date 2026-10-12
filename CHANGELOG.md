@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.5.0 (2026-10-12)
+
+### Features
+
+- **voice**: Make voice warm phrase count configurable via speech.warm_phrases
+  ([#75](https://github.com/artsworks/f1-pitwall/pull/75),
+  [`404fdc4`](https://github.com/artsworks/f1-pitwall/commit/404fdc40462d63a20ca8c4054d48ca61db2a0905))
+
+
 ## v0.4.0 (2026-10-12)
 
 ### Bug Fixes
