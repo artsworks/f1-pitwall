@@ -99,7 +99,7 @@ def _voice_piper(action: str, names: list[str]) -> int:
     if action == "warm":
         speaker = make_piper_speaker(speech)
         try:
-            count = speaker.warm(common_phrases())
+            count = speaker.warm(common_phrases(speech.warm_phrases))
             print(f"cached {count} phrases for {speech.piper_voice}")
         finally:
             speaker.close()

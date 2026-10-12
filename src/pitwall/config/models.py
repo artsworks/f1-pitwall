@@ -258,6 +258,7 @@ class SpeechSettings(BaseModel):
     piper_voice: str = "en_GB-northern_english_male-medium"
     piper_speed: float = 1.3
     voices_dir: str = "voices"
+    warm_phrases: int = 150  # fixed phrases pre-rendered by `pitwall voice warm`
     rate: int = 0
     volume: int = 100
     radio_click: bool = True
