@@ -169,9 +169,9 @@ def test_second_rivals_scope() -> None:
     assert second_rivals(cars, 1, 3) == (-1, 4)
 
 
-def test_second_rivals_fill_in_snapshot() -> None:
-    from pitwall.state.session import Participant
-
+def _five_car_state(dists: dict[int, float] | None = None) -> SessionState:
+    """Player P3 (idx 0) with P1/P2 ahead and P4/P5 behind: ahead2=P1,
+    behind2=P5. Chained deltas: ahead2 0.8+0.4=1.2 s, behind2 1.5+0.7=2.2 s."""
     ingest = Ingest()
     state = SessionState()
     state.register(ingest)
@@ -182,7 +182,6 @@ def test_second_rivals_fill_in_snapshot() -> None:
         ),
         0.0,
     )
-    state.participants = tuple(Participant(name=n) for n in ("ME", "P2", "P4", "P1", "P5"))
     cars = {
         0: {
             "current_lap_num": 5,
@@ -211,12 +210,41 @@ def test_second_rivals_fill_in_snapshot() -> None:
             "delta_to_car_in_front_ms_part": 700,
         },
     }
+    for i, d in (dists or {}).items():
+        cars[i]["total_distance"] = d
     ingest.on_datagram(pack_packet(PacketId.LAP_DATA, {"cars": cars}, session_time=1.0), 1.0)
+    return state
+
+
+def test_second_rivals_fill_in_snapshot() -> None:
+    from pitwall.state.session import Participant
+
+    state = _five_car_state()
+    state.participants = tuple(Participant(name=n) for n in ("ME", "P2", "P4", "P1", "P5"))
     snap = state.snapshot(1.0)
     assert snap.rival_ahead2_pos == 1 and snap.rival_ahead2_name == "P1"
     assert snap.rival_ahead2_gap_s == pytest.approx(0.8 + 0.4)
     assert snap.rival_behind2_pos == 5 and snap.rival_behind2_name == "P5"
     assert snap.rival_behind2_gap_s == pytest.approx(1.5 + 0.7)
+
+
+def test_second_rivals_implausible_ahead_gap_dropped() -> None:
+    # P1 is ~2 km up the road: a 1.2 s chained gap cannot be real.
+    state = _five_car_state({0: 50000.0, 1: 50100.0, 2: 49850.0, 3: 52100.0, 4: 49890.0})
+    snap = state.snapshot(1.0)
+    assert snap.rival_ahead2_pos == 0 and math.isinf(snap.rival_ahead2_gap_s)
+    # A plausible second car behind is kept.
+    assert snap.rival_behind2_pos == 5
+    assert snap.rival_behind2_gap_s == pytest.approx(2.2)
+
+
+def test_second_rivals_lapped_car_behind_dropped() -> None:
+    state = _five_car_state({0: 50000.0, 1: 50100.0, 2: 49850.0, 3: 50110.0, 4: 44000.0})
+    snap = state.snapshot(1.0)
+    assert snap.rival_behind2_pos == 0 and math.isinf(snap.rival_behind2_gap_s)
+    # The plausible second car ahead is still kept.
+    assert snap.rival_ahead2_pos == 1
+    assert snap.rival_ahead2_gap_s == pytest.approx(1.2)
 
 
 def test_behind_rival_rejects_lapped_and_implausible_gap() -> None:
