@@ -446,19 +446,22 @@ body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .
 body.phone .setup, body.phone .t-pace small,
 body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
-body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
+body.phone .banner { position: sticky; top: var(--status-h, 3.2rem); z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
   text-overflow: ellipsis; }
 body.phone .car { min-height: 14rem; }
-body.phone .corner .temp { font-size: 2.4rem; }
+body.phone .corner .temp { font-size: 2.2rem; }
 body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
 body.phone .t-head { font-size: 1.1rem; }
 body.phone .corner .det .surf { display: none; }
 body.phone .corner .tags { display: none; }
 body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
-body.phone .arm { display: block; margin: .6rem .9rem 1rem; padding: .8rem; font: inherit; font-size: 1.4rem;
+body.phone .arm { display: block; margin: .3rem .9rem .5rem; padding: .6rem; font: inherit; font-size: 1.4rem;
   font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
 body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
+body.phone .transport { font-size: 1rem; padding: 0 4px; }
+body.phone .transport .row { gap: 4px; }
+body.phone .transport button { padding: 0 4px; }
 
 /* reduced motion: no motion at all. Glows that only mark a change are not shown
    (the chips carry the record); the steady listening edge stays, without a fade. */
@@ -501,6 +504,21 @@ body.radio .banner .text { font-size: 2.6rem; }
 body.radio .log ol { font-size: 1.6rem; }
 body.radio .log li { grid-template-columns: 3.2rem .6rem 1.4rem 1fr; }
 body.radio .log .tag { display: none; }
+body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width: auto;
+  max-height: calc(100vh - 14rem); font-size: 2rem; }
+/* portrait phone layout for /radio: wrap the status, keep it and the banner
+   sticky, let the page scroll instead of clipping */
+@media (max-width: 900px) and (orientation: portrait) {
+  body.radio { height: auto; min-height: 100vh; overflow: auto;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left); }
+  body.radio .status { flex-wrap: wrap; white-space: normal; gap: .3rem .8rem;
+    padding: .4rem .6rem; padding-top: calc(.4rem + env(safe-area-inset-top));
+    position: sticky; top: 0; z-index: 3; }
+  body.radio .banner { position: sticky; top: var(--status-h, 3rem);
+    z-index: 2; box-shadow: 0 .6rem 1rem -.6rem #000; }
+  body.radio .banner .life { height: 4px; }
+}
 
 .transport { padding: 6px 10px; border-top: 1px solid #2a2f36; }
 .transport .row { display: flex; gap: 8px; align-items: center; }

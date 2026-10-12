@@ -596,7 +596,8 @@
       row.appendChild(span("PLAN " + pl.id, "pid"));
       if (pl.kind === "reactive") {
         row.appendChild(span("BOX NOW", "boxnow"));
-        if (pl.delta_s !== null && pl.delta_s !== undefined) row.appendChild(document.createTextNode("cheap stop saves " + fmt(Math.abs(pl.delta_s), 1) + " s"));
+        var saving = !pl.active && typeof pl.delta_s === "number" && pl.delta_s < 0;
+        row.appendChild(document.createTextNode(saving ? "cheap stop saves " + fmt(-pl.delta_s, 1) + " s" : "cheap stop"));
         box.appendChild(row);
         return;
       }
