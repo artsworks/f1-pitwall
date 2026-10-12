@@ -118,6 +118,9 @@ class RunTracker:
         "_lap_start_t",
         "cool_start_t",
         "next_lap_invalid",
+        "cool_held",
+        "_throttle_samples",
+        "_full_throttle_samples",
     )
 
     def __init__(self) -> None:
@@ -137,6 +140,9 @@ class RunTracker:
         self._lap_start_t = 0.0
         self.cool_start_t = 0.0
         self.next_lap_invalid = False
+        self.cool_held = False
+        self._throttle_samples = 0
+        self._full_throttle_samples = 0
 
     def note_rewind(self) -> None:
         self._prev_lap_ms = None
@@ -149,8 +155,32 @@ class RunTracker:
         self._spins0 = spins
         self._invalid = False
         self._lap_start_t = t
+        self.cool_held = False
+        self._throttle_samples = 0
+        self._full_throttle_samples = 0
         if kind == COOL:
             self.cool_start_t = t
+
+    @property
+    def full_throttle_share(self) -> float:
+        if not self._throttle_samples:
+            return 0.0
+        return self._full_throttle_samples / self._throttle_samples
+
+    def _sample_throttle(self, sector: int, lap_distance: float, throttle: float) -> None:
+        if sector == 0 and lap_distance > 0:
+            self._throttle_samples += 1
+            if throttle >= 0.9:
+                self._full_throttle_samples += 1
+
+    def confirm_push(self) -> None:
+        if self.kind == COOL:
+            self.kind = HOT
+            self.plan = Plan("push", "driver")
+
+    def hold_cool(self) -> None:
+        if self.kind == COOL:
+            self.cool_held = True
 
     def update(
         self,
@@ -170,6 +200,7 @@ class RunTracker:
         cool_pace_pct: float,
         decide: Callable[[], Plan],
         extend_cool: bool = False,
+        throttle: float = 0.0,
     ) -> HotLap | None:
         """Feed one Lap Data tick. `decide` is a zero-arg callable returning the
         Plan for the line just crossed after a hot lap; `extend_cool` keeps a
@@ -191,6 +222,7 @@ class RunTracker:
             self._start_lap(t, HOT, ers_pct, lockups, spins)
             self._invalid = invalid
             self.crossings += 1
+            self._sample_throttle(sector, lap_distance, throttle)
             return None
         crossed = prev_ms is not None and lap_time_ms + 5000 < prev_ms and lap_distance < 500
         if not crossed:
@@ -225,16 +257,20 @@ class RunTracker:
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
             self._invalid = invalid
             self.next_lap_invalid = starts_invalid
+            self._sample_throttle(sector, lap_distance, throttle)
             return done
         if sector == 1 and prev_sector == 0 and sector1_ms > 0:
             self._s1 = sector1_ms
             if best_s1_ms > 0:
                 slow = sector1_ms > best_s1_ms * (1 + cool_pace_pct / 100)
                 new = COOL if slow else HOT
+                if self.cool_held and self.kind == COOL and new == HOT:
+                    new = COOL
                 if new != self.kind:
                     self.kind = new
                     if new == COOL:
                         self.cool_start_t = t
         elif sector == 2 and prev_sector == 1 and sector2_ms > 0:
             self._s2 = sector2_ms
+        self._sample_throttle(sector, lap_distance, throttle)
         return None

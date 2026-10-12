@@ -16,4 +16,10 @@ fuel laps. It reads limits from packaged YAML thresholds.
 server API expose the plan and its reason. Rules in
 `config/defaults/rules/qualifying.yaml` speak the plan and give cool-lap reminders.
 
+On a cool lap, the push check starts after 400 m when the current lap time stays within the
+configured cool-pace allowance of the best-lap projection, at least 40% of sector 1 samples
+use full throttle, and ERS is not in recharge mode. The driver has five seconds after the
+prompt ends. A single press or silence switches the lap to push. A double press keeps the
+lap cool for the rest of that lap.
+
 The dashboard API includes the plan, but the web page does not yet show a plan panel.
