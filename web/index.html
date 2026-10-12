@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=22">
+  <link rel="stylesheet" href="/static/style.css?v=23">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -132,6 +132,10 @@
   </section>
 
   <section id="cool" class="zone coolzone" hidden>
+    <div class="cz-top">
+      <div class="tile"><h2>LAST LAP</h2><div id="cz-last" class="v">--</div></div>
+      <div class="tile"><h2>GAP TO POLE</h2><div id="cz-pole" class="v">--</div></div>
+    </div>
     <div id="c-behind" class="c-alert clear">NO HOT LAP BEHIND</div>
     <div class="c-tiles">
       <div id="c-ers-tile" class="c-tile">
@@ -220,7 +224,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=22"></script>
-  <script src="/static/review.js?v=22"></script>
+  <script src="/static/app.js?v=23"></script>
+  <script src="/static/review.js?v=23"></script>
 </body>
 </html>

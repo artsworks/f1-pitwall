@@ -637,3 +637,8 @@ body.cool .coolzone { font-size: 1.3rem; }
 .ctx-race .card[hidden] { display: none; }
 /* the symbol sheet must not take a grid cell */
 body > svg[width="0"] { position: absolute; }
+/* phone in review: rows stay auto and the transport wraps inside 390 px */
+body.dash.phone, body.dash.phone.review { grid-template-rows: none; }
+body.phone .transport { min-width: 0; overflow: hidden; }
+body.phone .transport .row { flex-wrap: wrap; }
+body.phone .transport input[type=range] { min-width: 0; flex-basis: 100%; }

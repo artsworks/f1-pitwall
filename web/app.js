@@ -1041,6 +1041,10 @@
     box.hidden = !c;
     document.body.classList.toggle("cool", !!c);
     if (!c) return;
+    setText("cz-last", lapTime(c.last_hot_ms));
+    var pg = c.pole ? c.pole.gap_ms : null;
+    setText("cz-pole", signed(pg));
+    setClass("cz-pole", "v" + (pg > 0 ? " crit" : pg < 0 ? " ok" : ""));
     var minPct = c.ers_min_pct, ready = c.ers_pct >= minPct;
     var ersTile = el("c-ers-tile");
     if (ersTile) ersTile.className = "c-tile " + (ready ? "ok" : "warn");
