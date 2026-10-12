@@ -223,6 +223,7 @@ class PiperSpeaker:
         self._q: queue.PriorityQueue[tuple[int, int, Call | None]] = queue.PriorityQueue()
         self._seq = itertools.count()
         self._cancelled: set[str] = set()
+        self._gen = 0
         self._urgent = threading.Event()
         self.busy_until = 0.0
         self._thread = threading.Thread(target=self._worker, daemon=True, name="piper")
@@ -235,6 +236,17 @@ class PiperSpeaker:
 
     def cancel(self, call_id: str) -> None:
         self._cancelled.add(call_id)
+
+    def flush(self) -> None:
+        """Drop queued and in-flight calls. Replay seeks restart call ids."""
+        self._gen += 1
+        while True:
+            try:
+                self._q.get_nowait()
+            except queue.Empty:
+                break
+        self._cancelled.clear()
+        self._player.stop()
 
     def close(self) -> None:
         self._q.put((-1, next(self._seq), None))
@@ -285,6 +297,7 @@ class PiperSpeaker:
             _, _, call = self._q.get()
             if call is None:
                 return
+            gen = self._gen
             if call.id in self._cancelled:
                 self._cancelled.discard(call.id)
                 continue
@@ -292,6 +305,8 @@ class PiperSpeaker:
                 wav, seconds = self.render(call.text, call.priority)
             except Exception as exc:
                 print(f"speech: piper synthesis failed: {exc!r}", file=sys.stderr)
+                continue
+            if gen != self._gen:
                 continue
             if call.id in self._cancelled:
                 self._cancelled.discard(call.id)
