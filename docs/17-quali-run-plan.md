@@ -10,7 +10,9 @@
 | `box` | The flag has fallen, the qualifying margin is safe, or fuel is too low for a hot lap |
 
 The decision uses qualifying margin, battery, hottest tyre temperature, time left, and
-fuel laps. It reads limits from packaged YAML thresholds.
+fuel laps. It reads limits from packaged YAML thresholds. On inters and wets the
+battery floor is `cool_wet_ers_min_pct` (20%) instead of `cool_ers_min_pct` (40%),
+because a wet hot lap spends less battery, so back-to-back hot laps are allowed.
 
 `RunTracker` follows hot and cool laps across line crossings. The session snapshot and
 server API expose the plan and its reason. Rules in
