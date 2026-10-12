@@ -55,6 +55,20 @@ To take repeatable screenshots, pause the clock at checkpoints. This does not ch
 
 One more packet batch can arrive between a pause request and the paused frame. Record exact values from engine samples, not from screenshots.
 
+## Laps that depend on earlier laps
+
+Native review seeks start a fresh engine and skip earlier packets. Because of this, a seek resets lap history, such as the cool-lap extend latch.
+To test a late lap, run every earlier packet at full speed through the production replay sink. Use a temporary checkpoint runner outside the repository. Then pause the replay clock at the checkpoint.
+
+## Driver presses on a paused clock
+
+Spacebar presses use the engine clock, not wall time. Two presses at the same paused timestamp hit the debounce and do not count as NEG.
+Between the two presses, advance recorded time by more than `bounce_ms` (60) and less than `double_press_ms` (350). After an engine reset, reload the dashboard, because call IDs start again.
+
+## Qualifying panel on a flying lap
+
+On a flying lap, the qualifying panel shows the lap projection (PROJ) ahead of the plan tile. A `push` plan therefore shows PROJ, not PUSH. Check the plan in the payload, and check the takeover on screen.
+
 ## Matching takeover fixtures
 
 Do not assume a race pit stop produces the same payload as a garage/pitting
