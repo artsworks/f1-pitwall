@@ -375,6 +375,27 @@ def test_repeated_swaps_become_one_fight_call() -> None:
     assert tr.result == "passed"  # old swaps aged out
 
 
+def test_swap_count_within_window() -> None:
+    tr = BattleTracker()
+    th = {"battle_swap_window_s": 120.0}
+    for t in (0.0, 20.0, 40.0):
+        tr._announce(Episode("attack", 7, 10, 10, True, "passed"), t, th)
+    assert tr.swap_count(40.0, th) == 3
+    assert tr.swap_count(130.0, th) == 2  # the 0 s swap aged out
+    assert tr.swap_count(145.0, th) == 1
+
+
+def test_engine_battle_swaps_land_on_snapshot(tmp_path: Path) -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=tmp_path / "d.jsonl")
+    engine.battle_tracker._announce(
+        Episode("attack", 1, 3, 4, True, "passed"),
+        0.0,
+        {"battle_swap_window_s": 120.0},
+    )
+    snap = dataclasses.replace(Snapshot(now=10.0), session_kind="race", race_phase="racing")
+    assert engine._battle(snap).battle_swaps == 1
+
+
 def test_swaps_with_several_cars_are_a_scrap() -> None:
     tr = BattleTracker()
     th = {"battle_swap_window_s": 120.0, "battle_swap_count": 3, "battle_scrap_count": 4}

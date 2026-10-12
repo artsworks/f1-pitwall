@@ -249,6 +249,52 @@ def test_penalty_total_does_not_double_count_lap_data_arriving_first() -> None:
     assert state.snapshot(2.1).penalty_s == 13
 
 
+def test_weather_crossover_reports_first_crossing_minute() -> None:
+    ingest, state = _state()
+    _forecast(ingest, 1.0, 70, 80)
+    snap = state.snapshot(1.0)
+    assert snap.weather_crossover == "to_inter"
+    assert (snap.weather_crossover_pct, snap.weather_crossover_min) == (70, 10)
+
+
+def test_weather_crossover_reports_first_wet_crossing() -> None:
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    samples = {
+        0: {"session_type": 15, "time_offset": 0, "rain_percentage": 0},
+        1: {"session_type": 15, "time_offset": 10, "rain_percentage": 70},
+        2: {"session_type": 15, "time_offset": 20, "rain_percentage": 90},
+    }
+    ingest.on_datagram(
+        pack_packet(
+            PacketId.SESSION,
+            {
+                "session_type": 15,
+                "track_length": 5000,
+                "total_laps": 20,
+                "num_weather_forecast_samples": 3,
+                "weather_forecast_samples": samples,
+            },
+            session_time=1.0,
+        ),
+        1.0,
+    )
+    snap = state.snapshot(1.0)
+    assert snap.weather_crossover == "to_wet"
+    assert (snap.weather_crossover_pct, snap.weather_crossover_min) == (90, 20)
+
+
+def test_weather_crossover_hysteresis_hold_reports_max_pair() -> None:
+    ingest, state = _state()
+    _forecast(ingest, 1.0, 70, 40)
+    assert state.snapshot(1.0).weather_crossover == "to_inter"
+    _forecast(ingest, 2.0, 20, 58)
+    snap = state.snapshot(2.0)
+    assert snap.weather_crossover == "to_inter"  # held inside the band
+    assert (snap.weather_crossover_pct, snap.weather_crossover_min) == (58, 30)
+
+
 def test_weather_crossover_ignores_forecast_after_the_flag() -> None:
     ingest, state = _state()
     state._best_laps[0] = 90_000

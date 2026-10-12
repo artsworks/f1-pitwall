@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pitwall.audio.dispatcher import Call
 from pitwall.cli.common import (
     _resolve_recording,
     db_from_args,
@@ -98,27 +97,35 @@ def cmd_replay(args: argparse.Namespace) -> int:
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.serve:
         from pitwall.audio.dispatcher import LogSink
+        from pitwall.audio.piper_tts import PiperSpeaker
+        from pitwall.audio.speaker import make_speaker
         from pitwall.server.hub import Hub
         from pitwall.server.review import ReviewController
 
         hub = Hub()
         seed_db = Database(args.seed_db)
 
-        class _ReplaySpokenSink:
-            """No speaker in replay: mark calls spoken in the hub immediately."""
-
-            speaks_audio = False
-
-            def speak(self, call: Call) -> None:
-                hub.spoken(call.id, call.t)
-
-            def cancel(self, call_id: str) -> None:
-                pass
+        # Same speaker wiring as live `cmd_start`. Limits:
+        # - Piper synthesises in real time, so audio keeps pace only at --speed 1
+        #   (maybe 2). Faster replays lag behind the dashboard.
+        # - WinsoundPlayer also plays on the serving PC, so with browser SOUND on
+        #   the same machine you hear each call twice.
+        # - Without a downloaded voice (`pitwall voice get`) make_speaker falls back
+        #   to SAPI or null, no WAVs stream, and the browser reads calls itself.
+        speaker = make_speaker(ConfigStore().current().speech)
+        speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
+        if isinstance(speaker, PiperSpeaker):
+            speaker.on_audio = hub.audio
+            hub.streams_audio = True
 
         def _engine_factory(clk: Clock) -> Engine:
+            # Play and seek rebuild the engine, and call ids restart at c-1.
+            # Drop the old engine's pending audio so it can't play or mark new calls.
+            if isinstance(speaker, PiperSpeaker):
+                speaker.flush()
             eng = build_engine(
                 clock=clk,
-                sinks=[hub, LogSink(), _ReplaySpokenSink()],
+                sinks=[hub, LogSink(), speaker],
                 db=seed_db,
                 synthetic=synthetic,
             )
@@ -154,7 +161,10 @@ def cmd_replay(args: argparse.Namespace) -> int:
                     break
 
         store = ConfigStore()
-        asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
+        try:
+            asyncio.run(_serve(engine, hub, store, _replay_coro(), review=review))
+        finally:
+            speaker.close()
         persist_recording_origin(engine, seed_db)
         return 0
     db: Database | None = Database(args.seed_db) if args.seed_db else None
