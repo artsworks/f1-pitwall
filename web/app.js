@@ -301,7 +301,7 @@
     setText("phase", (p.phase || "--").replace("_", " ").toUpperCase());
     setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
-    setText("lap-count", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
+    setText("lap", "LAP " + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
     setText("position", p.position ? "P" + p.position : "P--");
     if (p.position && shownPos && p.position !== shownPos) {
       hold(p.position < shownPos ? "gain:pos" : "loss:pos", 1600);
@@ -311,7 +311,7 @@
     setClass("position", mark("gain:pos") + mark("loss:pos"));
     if (p.lap_num && shownLap && p.lap_num !== shownLap) hold("tick:lap", 900);
     if (p.lap_num) shownLap = p.lap_num;
-    setClass("lap-count", mark("tick:lap"));
+    setClass("lap", mark("tick:lap"));
     var mind = el("mindset");
     if (mind) {
       mind.textContent = p.mindset === "aggressive" ? "AGGR" : p.mindset === "balanced" ? "BAL" :
@@ -477,7 +477,8 @@
 
   function renderLap(p) {
     var r = p.race || {}, last = r.last_lap_ms, best = r.best_lap_ms;
-    var value = "--", cls = "big", sub = "no lap yet";
+    var value = "--", cls = "big", sub = "no lap yet", bestSub = "best --";
+    if (best !== null && best !== undefined) bestSub = "best " + lapTime(best);
     if (last !== null && last !== undefined) {
       sub = lapTime(last);
       if (best !== null && best !== undefined) {
@@ -489,12 +490,12 @@
           value = signed(d);
           cls = "big" + (d >= 1000 ? " warn" : "");
         }
-        sub += " · best " + lapTime(best);
       }
     }
     setText("lap-delta", value);
     setClass("lap-delta", cls);
     setText("lap-sub", sub);
+    setText("lap-best", bestSub);
   }
 
   function renderEnergy(p, s) {
@@ -511,10 +512,10 @@
     setText("en-delta", d === null || d === undefined || isNaN(d) ? "--" : signed(d * 1000) + " MJ");
     var floor = e.laps_to_floor;
     if (floor === null || floor === undefined) {
-      setText("en-sub", "✓ not draining");
+      setText("en-sub", "✓ no drain");
       setClass("en-sub", "sub");
     } else {
-      setText("en-sub", "empty in ~" + fmt(floor, 0) + " laps");
+      setText("en-sub", "~" + fmt(floor, 0) + " laps left");
       setClass("en-sub", "sub" + (s.laps_remaining > 0 && floor < s.laps_remaining ? " crit" : ""));
     }
   }

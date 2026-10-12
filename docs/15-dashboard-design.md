@@ -197,9 +197,9 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `surf 110° · wear 38%`; wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` (game MFD: laps spare or short at the flag, not laps in tank) | `+0.4 laps`, one decimal, shown when the backend delta is unavailable |
-| Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries on one line; amber ≥ 5 %, red ≥ 25 %; text shrinks past 3 entries; `✓ none` when all values and faults are zero |
-| Last lap | `race.last_lap_ms`, `race.best_lap_ms` | Big delta vs own best. `PB` green when last ≤ best, amber ≥ +1.0 s. Sub line `1:32.1 · best 1:31.7` |
-| Energy this lap | `strategy.energy.{lap_delta_mj, laps_to_floor, mode}` | Signed MJ vs budget (+ = over), tile coloured by mode like BATT, sub `empty in ~N laps` red when below laps remaining, `✓ not draining` when null |
+| Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries in a strip under the tiles; wraps only when needed; amber ≥ 5 %, red ≥ 25 %; smaller text past 3 entries; `✓ none` when all values and faults are zero |
+| Last lap | `race.last_lap_ms`, `race.best_lap_ms` | Big delta vs own best. `PB` green when last ≤ best, amber ≥ +1.0 s. Two sub lines: `1:32.1` and `best 1:31.7` |
+| Energy this lap | `strategy.energy.{lap_delta_mj, laps_to_floor, mode}` | H2 `ENERGY/LAP`. Signed MJ vs budget (+ = over), tile coloured by mode like BATT, sub `~N laps left` red when below laps remaining, `✓ no drain` when null |
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |

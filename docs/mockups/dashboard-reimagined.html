@@ -53,11 +53,11 @@
     15 Mindset pill: compact BAL / AGGR at the far right of the status bar.
     16 Motion: existing tokens verbatim, marks a change then stops, reserved min-widths.
     17 Footer diagnostics permanently muted. Only packet age in the status bar escalates.
-    20 LAST LAP + ENERGY tiles: last lap vs own best (PB green, +1.0 s amber). This lap's energy vs budget in MJ coloured by EnergyBudget.mode, laps to the battery floor.
     18 Compact iPhone race page (body.phone): one-line banner, tyres, fuel, strategy,
        ARM PHONE RADIO, no radio log, browser speech kept.
     19 Quali: phase-driven layout, benchmark, cut-off pill, predicted cut-off, cool-down
        lite debrief (last lap, gap to pole, sector consistency trend).
+    20 LAST LAP + ENERGY tiles: last lap vs own best (PB green, +1.0 s amber). This lap's energy vs budget in MJ coloured by EnergyBudget.mode, laps to the battery floor.
 -->
 <style>
 /* tokens: verbatim from web/style.css :root and the motion block */
@@ -114,7 +114,7 @@ h2 { margin: 0 0 .35rem; font-size: 1.15rem; letter-spacing: .12em; color: var(-
 .status #age.crit { color: var(--crit); font-weight: bold; }
 .status .spacer { flex: 1; }
 .status .sess { color: var(--soft); font-size: 1.25rem; }
-.status #lap-count { font-weight: bold; display: inline-block; min-width: 9ch; }
+.status #lap { font-weight: bold; display: inline-block; min-width: 9ch; }
 .status #position { font-size: 2rem; font-weight: bold; padding: 0 .5rem; border-radius: .3rem;
   background: var(--fg); color: var(--bg); line-height: 1.2; min-width: calc(3ch + 1rem);
   text-align: center; }
@@ -282,6 +282,7 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .big { font-size: 2.4rem; font-weight: bold; line-height: 1.1; display: inline-block; min-width: 6ch; }
 .sub { color: var(--soft); font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fuel .big.ok { color: var(--ok); } .fuel .big.warn { color: var(--warn); } .fuel .big.crit { color: var(--crit); }
+.fuel .sub { font-size: 1rem; }
 /* BATT (item 12): colour by EnergyBudget.mode, always with icon + word */
 .batt .big { min-width: 4ch; }
 .batt .mode { font-weight: bold; font-size: 1.2rem; letter-spacing: .06em; }
@@ -289,7 +290,7 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
-.lap .big.ok { color: var(--ok); } .lap .big.warn { color: var(--warn); }
+.lastlap .big.ok { color: var(--ok); } .lastlap .big.warn { color: var(--warn); }
 .energy .big { min-width: 6ch; }
 .energy.over { border-color: var(--warn); } .energy.over .big { color: var(--warn); }
 .energy.under { border-color: var(--cold); } .energy.under .big { color: var(--cold); }
@@ -320,9 +321,11 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
 .cross.cold { border-color: var(--cold); color: var(--cold); }
 .tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; }
 .tile.damage h2 { margin: 0; }
-.dmg { display: flex; flex-wrap: nowrap; gap: 1.2rem; font-size: 1.35rem; white-space: nowrap; overflow: hidden; min-width: 0; }
-.dmg.many { font-size: 1.05rem; gap: .8rem; }
+.dmg { display: flex; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
+.dmg > * { white-space: nowrap; }
+.dmg.many { font-size: 1.05rem; column-gap: .8rem; }
 .dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.dmg.many .n { min-width: 0; }
 .dmg .n.warn { color: var(--warn); } .dmg .n.crit { color: var(--crit); }
 .dmg .none { color: var(--soft); }
 
@@ -520,7 +523,7 @@ body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; ga
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
-body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lap, body.phone .tiles .energy, body.phone .tiles .damage,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .energy, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
 body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
@@ -572,7 +575,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   <!-- ALT: SC  <span class="flag sc">⚠ SAFETY CAR</span>   red flag  <span class="flag red">⚠ RED FLAG</span> -->
   <span class="spacer"></span>
   <span class="sess">RACE · BAHRAIN</span>                 <!-- session_kind, track -->
-  <span id="lap-count">LAP 24/57</span>                    <!-- lap_num, total_laps -->
+  <span id="lap">LAP 24/57</span>                          <!-- lap_num, total_laps -->
   <span id="position">P5</span>                            <!-- position -->
   <!-- OV and BO are the same game source (F1 26 Overtake Mode): show OV only.
        SM is the separate straight-mode active-aero chip (relabel of the current #aero STR pill). -->
@@ -686,31 +689,40 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
          ALT to_wet:   <div class="cross cold">→ <span class="comp wet xs">WET</span> in ~10 min · rain 90%</div>  cell class="storm xo-cold"
          ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
   </div>
-  <div id="lap" class="tile lap">
+  <div id="lastlap" class="tile lastlap">
     <h2>LAST LAP</h2>
     <div id="lap-delta" class="big">+0.4</div>
-    <div id="lap-sub" class="sub">1:32.1 · best 1:31.7</div>
+    <div id="lap-sub" class="sub">1:32.1</div>
+    <div id="lap-best" class="sub">best 1:31.7</div>
     <!-- race.last_lap_ms / race.best_lap_ms
-         ALT PB: <div class="big ok">PB</div> -->
+         ALT PB: <div class="big ok">PB</div>
+         ALT no lap: <div class="sub">no lap yet</div>
+         ALT no best: <div id="lap-best" class="sub">best --</div> -->
   </div>
   <div id="energy" class="tile energy on_budget">
-    <h2>ENERGY THIS LAP</h2>
+    <h2>ENERGY/LAP</h2>
     <div id="en-delta" class="big">+0.1 MJ</div>
-    <div id="en-sub" class="sub">empty in ~14 laps</div>
+    <div id="en-sub" class="sub">~14 laps left</div>
     <!-- strategy.energy.lap_delta_mj / laps_to_floor / mode
          ALT over-budget: <div class="tile energy over"><div class="big">+0.6 MJ</div></div>
-         ALT sub crit: <div class="sub crit">empty in ~6 laps</div> -->
+         ALT sub crit: <div class="sub crit">~6 laps left</div>
+         ALT no drain: <div class="sub">✓ no drain</div> -->
   </div>
   <div class="tile wide damage">
     <h2>DAMAGE</h2>
     <!-- damage.{front_left_wing,...} 0-100. Neutral numbers, amber >= 5, red >= 25.
+         Entries wrap when needed, with smaller text past 3 entries.
          The number is what the engineer speaks. No whole-tile colour. -->
     <div id="damage" class="dmg">
       <span>FW L <span class="n warn">6%</span></span>
       <span>Floor <span class="n">2%</span></span>
     </div>
     <!-- ALT none: <div class="dmg"><span class="none">✓ none</span></div>
-         ALT red:  <span>FW L <span class="n crit">31%</span></span> -->
+         ALT red:  <span>FW L <span class="n crit">31%</span></span>
+         ALT busy: <div class="dmg many"><span>FW L <span class="n warn">6%</span></span>
+           <span>FW R <span class="n warn">8%</span></span><span>RW 3%</span><span>Floor 2%</span>
+           <span>Diffuser 1%</span><span>Sidepod 3%</span><span>Gearbox 1%</span>
+           <span>Engine 1%</span><span class="n crit">DRS fault</span><span class="n crit">ERS fault</span></div> -->
   </div>
 </section>
 
