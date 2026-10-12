@@ -401,13 +401,44 @@ def test_wet_compound_lowers_battery_floor() -> None:
     assert st._ers_need_pct() == 20.0
     # the learned raise still applies on a wet compound
     st.tyre_compound = 7
-    st.run.last_hot = HotLap(84_104, 21_460, 44_257, 18_387, 60.0, 30.0, 0, 0, False)
+    st.run.last_hot = HotLap(84_104, 21_460, 44_257, 18_387, 60.0, 30.0, 0, 0, False, compound=7)
     assert st._ers_need_pct() == 30.0
     # Brazil wet quali: 37.5% at the line, hottest carcass 74.5 vs 84
     assert _plan(ers_pct=37.5, ers_min_pct=20.0, hottest_c=74.5, tyre_hot_c=84.0) == PUSH
     assert _plan(ers_pct=37.5, ers_min_pct=40.0, hottest_c=74.5, tyre_hot_c=84.0) == Plan(
         "cool", "battery"
     )
+
+
+def test_tyre_change_drops_other_compound_battery_use() -> None:
+    thresholds = {
+        "cool_ers_min_pct": 40,
+        "cool_wet_ers_min_pct": 20,
+        "cool_ers_need_max_pct": 70,
+    }
+    st = SessionState(thresholds=thresholds)
+    st.session_time_left = 600.0
+    st.fuel_remaining_laps = 10.0
+
+    # a dry hot lap that spent 45% must not block pushing on inters
+    st.run.last_hot = HotLap(84_104, 21_460, 44_257, 18_387, 80.0, 35.0, 0, 0, False, compound=17)
+    st.tyre_compound = 7
+    st.ers_store_pct = 30.0
+    assert st._decide_plan() == Plan("push", "ready")
+
+    # a wet hot lap that spent 50% must not raise the need on slicks
+    st.run.last_hot = HotLap(84_104, 21_460, 44_257, 18_387, 80.0, 30.0, 0, 0, False, compound=7)
+    st.tyre_compound = 17
+    st.ers_store_pct = 45.0
+    assert st._decide_plan() == Plan("push", "ready")
+    st.ers_store_pct = 35.0
+    assert st._decide_plan() == Plan("cool", "battery")
+
+    # same compound: the learned 45 still applies
+    st.run.last_hot = HotLap(84_104, 21_460, 44_257, 18_387, 80.0, 35.0, 0, 0, False, compound=17)
+    st.tyre_compound = 17
+    st.ers_store_pct = 42.0
+    assert st._decide_plan() == Plan("cool", "battery")
 
 
 WET_Q = Path(os.environ.get("PITWALL_WET_Q_RECORDING", "~/recordings/wet_q.f1bin.zst")).expanduser()
