@@ -499,6 +499,52 @@ def test_session_history_best_laps() -> None:
     assert snap.player_laps_completed == 2
 
 
+def test_session_history_recent_player_laps() -> None:
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION_HISTORY,
+            {
+                "car_idx": 0,
+                "num_laps": 4,
+                "laps": {
+                    0: {
+                        "lap_time_ms": 91_000,
+                        "sector1_ms_part": 30_000,
+                        "sector2_ms_part": 30_500,
+                        "sector3_ms_part": 30_500,
+                    },
+                    1: {"lap_time_ms": 0},
+                    2: {
+                        "lap_time_ms": 93_000,
+                        "sector1_ms_part": 31_000,
+                        "sector2_ms_part": 31_000,
+                        "sector3_ms_part": 31_000,
+                    },
+                    3: {"lap_time_ms": 94_000},
+                },
+            },
+        ),
+        0.0,
+    )
+    assert state.snapshot(0.0).player_recent_laps == (
+        (1, 91_000, 30_000, 30_500, 30_500),
+        (3, 93_000, 31_000, 31_000, 31_000),
+    )
+
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION_HISTORY,
+            {"car_idx": 0, "num_laps": 1, "laps": {0: {"lap_time_ms": 90_000}}},
+        ),
+        0.0,
+    )
+    assert state.snapshot(0.0).player_recent_laps == ()
+
+
 def test_tyre_sets_snapshot() -> None:
     ingest, state = _state()
     _send(

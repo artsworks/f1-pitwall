@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=26">
+  <link rel="stylesheet" href="/static/style.css?v=27">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -99,16 +99,18 @@
       </div>
       <div id="cross" class="cross">--</div>
     </div>
-    <div id="lastlap" class="tile lastlap">
-      <h2>LAST LAP</h2>
-      <div id="lap-delta" class="big">--</div>
-      <div id="lap-sub" class="sub">no lap yet</div>
-      <div id="lap-best" class="sub">best --</div>
-    </div>
-    <div id="energy" class="tile energy">
-      <h2>ENERGY/LAP</h2>
-      <div id="en-delta" class="big">--</div>
-      <div id="en-sub" class="sub">--</div>
+    <div id="lastlap" class="tile wide lastlap">
+      <h2>LAST 2 LAPS</h2>
+      <div class="lap-times">
+        <div class="lap-time"><span id="lap-prev" class="value">--</span></div>
+        <div class="lap-time"><span id="lap-last" class="value">no lap yet</span></div>
+        <div class="lap-total"><span class="label">Δ</span><strong id="lap-delta" class="value">--</strong></div>
+      </div>
+      <div class="lap-sectors">
+        <div class="lap-sector"><span class="label">S1</span><strong id="sec-1" class="value">--</strong></div>
+        <div class="lap-sector"><span class="label">S2</span><strong id="sec-2" class="value">--</strong></div>
+        <div class="lap-sector"><span class="label">S3</span><strong id="sec-3" class="value">--</strong></div>
+      </div>
     </div>
     <div class="tile wide damage">
       <h2>DAMAGE</h2>
@@ -235,7 +237,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=27"></script>
+  <script src="/static/app.js?v=28"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

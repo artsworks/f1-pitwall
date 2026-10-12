@@ -525,8 +525,10 @@ def test_state_payload_race_lap_times() -> None:
         Snapshot(
             now=1.0,
             session_kind="race",
-            player_last_lap_ms=92104,
-            player_best_lap_ms=91702,
+            player_recent_laps=(
+                (23, 92_304, 30_500, 31_000, 30_804),
+                (24, 92_104, 30_400, 31_000, 30_704),
+            ),
         ),
         settings=settings,
         metrics=Metrics(),
@@ -534,10 +536,11 @@ def test_state_payload_race_lap_times() -> None:
     )
     default = state_payload(Snapshot(now=1.0), settings=settings, metrics=Metrics(), quiet=False)
 
-    assert race["race"]["last_lap_ms"] == 92104
-    assert race["race"]["best_lap_ms"] == 91702
-    assert default["race"]["last_lap_ms"] is None
-    assert default["race"]["best_lap_ms"] is None
+    assert race["race"]["recent_laps"] == [
+        {"lap": 23, "time_ms": 92_304, "sectors_ms": [30_500, 31_000, 30_804]},
+        {"lap": 24, "time_ms": 92_104, "sectors_ms": [30_400, 31_000, 30_704]},
+    ]
+    assert default["race"]["recent_laps"] == []
 
 
 def test_state_payload_quali_pole_available_outside_cool_lap() -> None:

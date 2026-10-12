@@ -34,7 +34,7 @@
      4 Tyres: 2x2 plan view, whole-tile status colour, trend arrow in place of the status word, fitted group and a
        separate laps_of_pace group with trend arrow.
      5 Fuel: fixed tile, fuel_remaining_laps only (TODO for the two-part tile).
-     6 Damage: one-line strip under LAST LAP and ENERGY, neutral numbers, amber >= 5 %, red >= 25 %, smaller text past 3 entries.
+    6 Damage: strip under LAST 2 LAPS, neutral numbers, amber >= 5 %, red >= 25 %, smaller text past 3 entries.
      7 Strategy: PLAN A active, PLAN B dimmed, reactive PLAN C "BOX NOW" under SC,
        on-plan / off-plan with plan_off_s.
      8 Battle card: six modes, managing greyed, under_threat/defending lit red, pace and
@@ -57,7 +57,7 @@
        ARM PHONE RADIO, no radio log, browser speech kept.
     19 Quali: phase-driven layout, benchmark, cut-off pill, predicted cut-off, cool-down
        lite debrief (last lap, gap to pole, sector consistency trend).
-    20 LAST LAP + ENERGY tiles: last lap vs own best (PB green, +1.0 s amber). This lap's energy vs budget in MJ coloured by EnergyBudget.mode, laps to the battery floor.
+    20 LAST 2 LAPS: compare the latest two completed lap times and each sector.
 -->
 <style>
 /* tokens: verbatim from web/style.css :root and the motion block */
@@ -290,12 +290,18 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
-.lastlap .big.ok { color: var(--ok); } .lastlap .big.warn { color: var(--warn); }
-.energy .big { min-width: 6ch; }
-.energy.over { border-color: var(--warn); } .energy.over .big { color: var(--warn); }
-.energy.under { border-color: var(--cold); } .energy.under .big { color: var(--cold); }
-.energy.attack_ok { border-color: var(--ok); } .energy.attack_ok .big { color: var(--ok); }
-.energy .sub.crit { color: var(--crit); }
+.lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
+.lastlap .lap-times { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: baseline; gap: .8rem; margin: .1rem 0 .4rem; }
+.lastlap .lap-time { display: flex; align-items: baseline; gap: .5rem; min-width: 0; white-space: nowrap; }
+.lastlap .label { color: var(--soft); font-size: 1rem; letter-spacing: .08em; }
+.lastlap .lap-time .value { font-size: 1.1rem; font-weight: bold; }
+.lastlap .lap-total { display: flex; align-items: baseline; gap: .4rem; white-space: nowrap; }
+.lastlap .lap-total .value { font-size: 1.2rem; font-weight: bold; min-width: 4ch; text-align: right; }
+.lastlap .lap-sectors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
+.lastlap .lap-sector { display: flex; align-items: baseline; justify-content: space-between;
+  min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .25rem .5rem; }
+.lastlap .lap-sector .value { font-size: 1.35rem; font-weight: bold; white-space: nowrap; }
 .meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
   background: var(--line); overflow: hidden; }
 .meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
@@ -319,9 +325,10 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
   border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
 .cross.warn { border-color: var(--warn); color: var(--warn); }
 .cross.cold { border-color: var(--cold); color: var(--cold); }
-.tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; }
+.tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; min-height: min-content; }
+.tile.damage:has(.dmg.many) { min-height: 6rem; }
 .tile.damage h2 { margin: 0; }
-.dmg { display: flex; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
+.dmg { display: flex; flex: 1; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
 .dmg > * { white-space: nowrap; }
 .dmg.many { font-size: 1.05rem; column-gap: .8rem; }
 .dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
@@ -523,7 +530,7 @@ body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; ga
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
-body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .energy, body.phone .tiles .damage,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
 body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
@@ -689,24 +696,21 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
          ALT to_wet:   <div class="cross cold">→ <span class="comp wet xs">WET</span> in ~10 min · rain 90%</div>  cell class="storm xo-cold"
          ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
   </div>
-  <div id="lastlap" class="tile lastlap">
-    <h2>LAST LAP</h2>
-    <div id="lap-delta" class="big">+0.4</div>
-    <div id="lap-sub" class="sub">1:32.1</div>
-    <div id="lap-best" class="sub">best 1:31.7</div>
-    <!-- race.last_lap_ms / race.best_lap_ms
-         ALT PB: <div class="big ok">PB</div>
-         ALT no lap: <div class="sub">no lap yet</div>
-         ALT no best: <div id="lap-best" class="sub">best --</div> -->
-  </div>
-  <div id="energy" class="tile energy on_budget">
-    <h2>ENERGY/LAP</h2>
-    <div id="en-delta" class="big">+0.1 MJ</div>
-    <div id="en-sub" class="sub">~14 laps left</div>
-    <!-- strategy.energy.lap_delta_mj / laps_to_floor / mode
-         ALT over-budget: <div class="tile energy over"><div class="big">+0.6 MJ</div></div>
-         ALT sub crit: <div class="sub crit">~6 laps left</div>
-         ALT no drain: <div class="sub">✓ no drain</div> -->
+  <div id="lastlap" class="tile wide lastlap">
+    <h2>LAST 2 LAPS</h2>
+    <div class="lap-times">
+      <div class="lap-time"><span id="lap-prev" class="value">L23 1:32.3</span></div>
+      <div class="lap-time"><span id="lap-last" class="value">L24 1:32.1</span></div>
+      <div class="lap-total"><span class="label">Δ</span><strong id="lap-delta" class="value ok">−0.2s</strong></div>
+    </div>
+    <div class="lap-sectors">
+      <div class="lap-sector"><span class="label">S1</span><strong id="sec-1" class="value warn">+0.1s</strong></div>
+      <div class="lap-sector"><span class="label">S2</span><strong id="sec-2" class="value ok">−0.2s</strong></div>
+      <div class="lap-sector"><span class="label">S3</span><strong id="sec-3" class="value ok">−0.1s</strong></div>
+    </div>
+    <!-- race.recent_laps: [{lap, time_ms, sectors_ms: [s1, s2, s3]}]
+         ALT no lap: lap-prev --, lap-last "no lap yet", total and sectors --
+         ALT one lap: lap-prev --, lap-last "L24 1:32.1", total and sectors -- -->
   </div>
   <div class="tile wide damage">
     <h2>DAMAGE</h2>

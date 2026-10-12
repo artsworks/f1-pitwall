@@ -78,7 +78,7 @@ reflow between sessions, and empty zones keep their space when values are absent
 │   FL 103° ▲ │ FR 98° ▬ │   +0.4    62%    │   SAFETY    SC, red flag, rain   │
 │   wear 38%  │ wear 35% │ WEATHER now/10/30│   EXECUTION box now              │
 │   RL 94° ▼  │ RR 95° ▬ │   crossover ETA  │   REPLY     menu answer          │
-│   BB 56%  DIFF ON 60%  │ LAST LAP ENERGY  │   TACTICAL  battle, strategy     │
+│   BB 56%  DIFF ON 60%  │ LAST 2 LAPS      │   TACTICAL  battle, strategy     │
 │                        │ DAMAGE strip     │   INFO      rival pitted, penalty│
 ├────────────────────────┴──────────────────┴──────────────────────────────────┤
 │ G FOOTER  update rate · voice lag · screen lag · ERS · SC                    │ 2 rem
@@ -101,10 +101,10 @@ Zone rules:
   replaces the status word, which is an owner exception to the colour plus word rule.
   The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
   orange LOCKED border. The BB and DIFF strip sits under the grid.
-- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, last lap
-  vs best, energy this lap, and a one-line damage strip at the bottom. Weather shows an
-  icon and rain chance for now, 10 and 30 min. The crossover slot gets a marker, and a
-  line under it gives the target compound and ETA.
+- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, the last
+  two completed lap times and their sector deltas, and a damage strip at the bottom.
+  Weather shows an icon and rain chance for now, 10 and 30 min. The crossover slot gets
+  a marker, and a line under it gives the target compound and ETA.
 - **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
   Info. Safety covers SC, VSC, red flag, blue flag and RAIN CROSSOVER when
   `weather_crossover_min` is 5 or less. Tactical holds the battle card and the strategy
@@ -198,8 +198,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` (game MFD: laps spare or short at the flag, not laps in tank) | `+0.4 laps`, one decimal, shown when the backend delta is unavailable |
 | Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries in a strip under the tiles; wraps only when needed; amber ≥ 5 %, red ≥ 25 %; smaller text past 3 entries; `✓ none` when all values and faults are zero |
-| Last lap | `race.last_lap_ms`, `race.best_lap_ms` | Big delta vs own best. `PB` green when last ≤ best, amber ≥ +1.0 s. Two sub lines: `1:32.1` and `best 1:31.7` |
-| Energy this lap | `strategy.energy.{lap_delta_mj, laps_to_floor, mode}` | H2 `ENERGY/LAP`. Signed MJ vs budget (+ = over), tile coloured by mode like BATT, sub `~N laps left` red when below laps remaining, `✓ no drain` when null |
+| Last 2 laps | `race.recent_laps[{lap,time_ms,sectors_ms}]` | Show the previous and last lap times, plus last minus previous. Sector boxes show the same delta per sector. Negative deltas are green, positive are amber. With one lap, show its time and `--` elsewhere. With no laps, show `no lap yet`. A sector delta is `--` if either value is 0 |
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |

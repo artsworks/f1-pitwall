@@ -352,7 +352,6 @@
     renderFuel(p, s);
     renderBatt(p, s);
     renderLap(p);
-    renderEnergy(p, s);
     renderWeather(t);
     renderDamage(p.damage);
     renderCtx(p, s, t);
@@ -476,48 +475,22 @@
   }
 
   function renderLap(p) {
-    var r = p.race || {}, last = r.last_lap_ms, best = r.best_lap_ms;
-    var value = "--", cls = "big", sub = "no lap yet", bestSub = "best --";
-    if (best !== null && best !== undefined) bestSub = "best " + lapTime(best);
-    if (last !== null && last !== undefined) {
-      sub = lapTime(last);
-      if (best !== null && best !== undefined) {
-        var d = last - best;
-        if (d <= 0) {
-          value = "PB";
-          cls = "big ok";
-        } else {
-          value = signed(d);
-          cls = "big" + (d >= 1000 ? " warn" : "");
-        }
-      }
-    }
-    setText("lap-delta", value);
-    setClass("lap-delta", cls);
-    setText("lap-sub", sub);
-    setText("lap-best", bestSub);
-  }
-
-  function renderEnergy(p, s) {
-    var e = s && s.energy;
-    if (!e) {
-      setText("en-delta", "--");
-      setClass("energy", "tile energy");
-      setText("en-sub", "--");
-      setClass("en-sub", "sub");
-      return;
-    }
-    setClass("energy", "tile energy" + (e.mode ? " " + e.mode : ""));
-    var d = e.lap_delta_mj;
-    setText("en-delta", d === null || d === undefined || isNaN(d) ? "--" : signed(d * 1000) + " MJ");
-    var floor = e.laps_to_floor;
-    if (floor === null || floor === undefined) {
-      setText("en-sub", "✓ no drain");
-      setClass("en-sub", "sub");
-    } else {
-      setText("en-sub", "~" + fmt(floor, 0) + " laps left");
-      setClass("en-sub", "sub" + (s.laps_remaining > 0 && floor < s.laps_remaining ? " crit" : ""));
-    }
+    var r = p.race || {}, laps = Array.isArray(r.recent_laps) ? r.recent_laps : [];
+    var previous = laps.length > 1 ? laps[laps.length - 2] : null;
+    var last = laps.length ? laps[laps.length - 1] : null;
+    var lapDelta = previous && last ? last.time_ms - previous.time_ms : null;
+    setText("lap-prev", previous ? "L" + previous.lap + " " + lapTime(previous.time_ms) : "--");
+    setText("lap-last", last ? "L" + last.lap + " " + lapTime(last.time_ms) : "no lap yet");
+    setText("lap-delta", lapDelta === null ? "--" : signed(lapDelta) + "s");
+    setClass("lap-delta", "value" + (lapDelta < 0 ? " ok" : lapDelta > 0 ? " warn" : ""));
+    var sectorsBefore = previous && previous.sectors_ms;
+    var sectorsLast = last && last.sectors_ms;
+    ["sec-1", "sec-2", "sec-3"].forEach(function (id, index) {
+      var before = sectorsBefore && sectorsBefore[index], after = sectorsLast && sectorsLast[index];
+      var delta = before && after ? after - before : null;
+      setText(id, delta === null ? "--" : signed(delta) + "s");
+      setClass(id, "value" + (delta < 0 ? " ok" : delta > 0 ? " warn" : ""));
+    });
   }
 
   // Weather: icon + word per forecast slot, rain chance, crossover marker on the

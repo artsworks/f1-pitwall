@@ -604,8 +604,20 @@ def state_payload(
         "race": {
             "phase": snapshot.race_phase,
             "laps_remaining": snapshot.laps_remaining,
-            "last_lap_ms": snapshot.player_last_lap_ms or None,
-            "best_lap_ms": snapshot.player_best_lap_ms or None,
+            "recent_laps": [
+                {
+                    "lap": lap_num,
+                    "time_ms": lap_time_ms,
+                    "sectors_ms": [sector1_ms, sector2_ms, sector3_ms],
+                }
+                for (
+                    lap_num,
+                    lap_time_ms,
+                    sector1_ms,
+                    sector2_ms,
+                    sector3_ms,
+                ) in snapshot.player_recent_laps
+            ],
             "sc_laps": snapshot.sc_laps,
             "gap_ahead_s": _finite(snapshot.gap_ahead_s),
             "gap_behind_s": _finite(snapshot.gap_behind_s),
