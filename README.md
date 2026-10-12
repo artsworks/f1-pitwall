@@ -69,7 +69,7 @@ To update later: `git pull; uv sync`.
 | `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
 | `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
 | Dashboard says STALE | Run `uv run pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
-| No speech | `uv run pitwall voice say` prints the error. `--engine sapi` uses the built-in Windows voice; `--engine piper` the downloaded one. |
+| No speech | `uv run pitwall voice say` prints the error. `--engine sapi` uses the built-in Windows voice, `--engine piper` uses the downloaded voice, and `--engine omnivoice` uses the configured OmniVoice server. |
 | Robotic voice | `uv run pitwall voice get`, then restart `pitwall start`. |
 
 More in [docs/getting-started.md](docs/getting-started.md).

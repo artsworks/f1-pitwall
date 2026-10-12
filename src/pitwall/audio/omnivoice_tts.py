@@ -5,16 +5,20 @@ import hashlib
 import io
 import json
 import logging
+import os
 import queue
+import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.request
 import wave
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
+from pitwall.audio.dispatcher import Call
 from pitwall.audio.piper_tts import (
     CACHE_SIZE,
     PiperSpeaker,
@@ -27,9 +31,52 @@ from pitwall.audio.piper_tts import (
 )
 from pitwall.config.models import SpeechSettings
 
+if TYPE_CHECKING:
+    from pitwall.audio.speaker import Speaker
+
 log = logging.getLogger(__name__)
 
 BACKGROUND_TIMEOUT_S = 120.0
+
+
+def _write_cache(path: Path, wav: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(wav)
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def _read_cache(path: Path) -> tuple[bytes, float] | None:
+    try:
+        wav = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    try:
+        with wave.open(io.BytesIO(wav), "rb") as reader:
+            frames = reader.getnframes()
+            sample_rate = reader.getframerate()
+            channels = reader.getnchannels()
+            sample_width = reader.getsampwidth()
+            if frames <= 0:
+                raise wave.Error("cached WAV has no frames")
+            if sample_rate <= 0 or channels <= 0 or sample_width <= 0:
+                raise wave.Error("cached WAV has invalid audio parameters")
+            if len(reader.readframes(frames)) < frames * channels * sample_width:
+                raise wave.Error("cached WAV audio is truncated")
+            return wav, frames / sample_rate
+    except (wave.Error, EOFError, ZeroDivisionError) as exc:
+        log.warning("Invalid OmniVoice phrase cache %s: %s", path, exc)
+        path.unlink(missing_ok=True)
+        return None
 
 
 class OmniVoiceError(RuntimeError):
@@ -184,6 +231,7 @@ class OmniVoiceSpeaker(PiperSpeaker):
         label: str,
         cache_dir: Path,
         cache_key: str,
+        last_resort: Speaker | None = None,
     ) -> None:
         super().__init__(
             fallback[2] if fallback else omnivoice,
@@ -193,6 +241,7 @@ class OmniVoiceSpeaker(PiperSpeaker):
             cache_dir=cache_dir,
             cache_key=cache_key,
         )
+        self._last_resort = last_resort
         self._omnivoice = omnivoice
         self._background_synth = omnivoice
         self._cache_lock = threading.Lock()
@@ -222,10 +271,8 @@ class OmniVoiceSpeaker(PiperSpeaker):
                 self._cache.move_to_end(key)
                 return hit
             path = self._phrase_path(key)
-            if path is not None and path.is_file():
-                wav = path.read_bytes()
-                with wave.open(io.BytesIO(wav), "rb") as reader:
-                    result = wav, reader.getnframes() / reader.getframerate()
+            result = _read_cache(path) if path is not None else None
+            if result is not None:
                 self._store_cache(key, result)
                 return result
             if self._tones:
@@ -234,8 +281,7 @@ class OmniVoiceSpeaker(PiperSpeaker):
 
             result = self._omnivoice(text)
             if path is not None:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(result[0])
+                _write_cache(path, result[0])
             self._store_cache(key, result)
             return result
 
@@ -248,12 +294,11 @@ class OmniVoiceSpeaker(PiperSpeaker):
             print(f"warming {index}/{len(texts)}: {text}")
             key = (0, text)
             path = self._phrase_path(key)
-            if path is not None and path.is_file():
+            if path is not None and _read_cache(path) is not None:
                 continue
             result = self._background_synth(text)
             if path is not None:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(result[0])
+                _write_cache(path, result[0])
             with self._cache_lock:
                 self._store_cache(key, result)
         return len(texts)
@@ -268,10 +313,7 @@ class OmniVoiceSpeaker(PiperSpeaker):
                 result = self._background_synth(text)
                 path = self._phrase_path(key)
                 if path is not None:
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    temporary = path.with_suffix(".wav.tmp")
-                    temporary.write_bytes(result[0])
-                    temporary.replace(path)
+                    _write_cache(path, result[0])
                 with self._cache_lock:
                     self._store_cache(key, result)
             except Exception as exc:
@@ -281,9 +323,30 @@ class OmniVoiceSpeaker(PiperSpeaker):
                     self._pending.discard(text)
 
     def close(self) -> None:
-        super().close()
-        self._background_queue.put(None)
-        self._background_thread.join(timeout=1.0)
+        try:
+            super().close()
+        finally:
+            self._background_queue.put(None)
+            self._background_thread.join(timeout=1.0)
+            if self._last_resort is not None:
+                self._last_resort.close()
+
+    def cancel(self, call_id: str) -> None:
+        super().cancel(call_id)
+        if self._last_resort is not None:
+            self._last_resort.cancel(call_id)
+
+    def _render_failed(self, call: Call, exc: Exception) -> None:
+        if self._last_resort is None:
+            super()._render_failed(call, exc)
+            return
+        log.warning(
+            "OmniVoice synthesis failed; using %s as last resort: %s",
+            self._last_resort.name,
+            exc,
+        )
+        self._last_resort.on_spoken = self.on_spoken
+        self._last_resort.speak(call)
 
 
 def make_omnivoice_speaker(
@@ -296,6 +359,13 @@ def make_omnivoice_speaker(
     except Exception as exc:
         log.warning("Piper tone fallback unavailable (%s)", exc)
         fallback = None
+    last_resort: Speaker | None = None
+    if fallback is None:
+        from pitwall.audio.speaker import make_speaker
+
+        last_resort = make_speaker(
+            settings.model_copy(update={"engine": "sapi" if sys.platform == "win32" else "null"})
+        )
     speaker = OmniVoiceSpeaker(
         make_omnivoice_synth(settings),
         fallback,
@@ -303,6 +373,7 @@ def make_omnivoice_speaker(
         label=f"omnivoice ({settings.omnivoice_voice})",
         cache_dir=Path(settings.voices_dir) / ".phrases",
         cache_key=omnivoice_cache_key(settings, model_id, ref_identity),
+        last_resort=last_resort,
     )
     speaker._background_synth = make_omnivoice_synth(settings, timeout_s=BACKGROUND_TIMEOUT_S)
     return speaker

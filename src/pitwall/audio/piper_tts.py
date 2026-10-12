@@ -291,6 +291,9 @@ class PiperSpeaker:
                 path.write_bytes(wav)
         return len(phrases)
 
+    def _render_failed(self, call: Call, exc: Exception) -> None:
+        print(f"speech: piper synthesis failed: {exc!r}", file=sys.stderr)
+
     def _worker(self) -> None:
         while True:
             _, _, call = self._q.get()
@@ -302,7 +305,7 @@ class PiperSpeaker:
             try:
                 wav, seconds = self.render(call.text, call.priority)
             except Exception as exc:
-                print(f"speech: piper synthesis failed: {exc!r}", file=sys.stderr)
+                self._render_failed(call, exc)
                 continue
             if call.id in self._cancelled:
                 self._cancelled.discard(call.id)

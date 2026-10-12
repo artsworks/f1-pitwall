@@ -30,7 +30,9 @@ def _voice_say(args: argparse.Namespace) -> int:
     from pitwall.audio.speaker import make_speaker
 
     store = ConfigStore()
-    update: dict[str, object] = {"engine": args.engine}
+    update: dict[str, object] = {}
+    if args.engine is not None:
+        update["engine"] = args.engine
     if args.voice:
         update["piper_voice"] = args.voice
     if args.speed:
@@ -51,7 +53,8 @@ def _voice_say(args: argparse.Namespace) -> int:
         return 0
     speaker = make_speaker(speech)
     print(
-        f"speaker: {speaker.name} (engine={args.engine} rate={speech.rate} volume={speech.volume})"
+        f"speaker: {speaker.name} (engine={speech.engine} "
+        f"rate={speech.rate} volume={speech.volume})"
     )
     done = threading.Event()
     spoken_at: list[float] = []
@@ -119,8 +122,11 @@ def _voice_warm(args: argparse.Namespace) -> int:
 
     settings = ConfigStore().current()
     speech = settings.speech
+    engine = args.engine
+    if engine == "auto":
+        engine = "omnivoice" if speech.engine == "omnivoice" else "piper"
     speaker: PiperSpeaker | OmniVoiceSpeaker
-    if args.engine == "omnivoice":
+    if engine == "omnivoice":
         try:
             speaker = make_omnivoice_speaker(speech)
         except OmniVoiceError as exc:

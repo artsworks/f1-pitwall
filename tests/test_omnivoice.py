@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from pitwall.audio.dispatcher import Call
 from pitwall.audio.omnivoice_tts import (
     OmniVoiceError,
     OmniVoiceSpeaker,
@@ -355,13 +356,81 @@ def test_speaker_without_fallback_renders_synchronously_and_caches(tmp_path: Pat
         speaker.close()
 
 
+def test_synchronous_failure_uses_last_resort_with_original_call_and_callback(
+    tmp_path: Path,
+) -> None:
+    received: list[Call] = []
+    cancelled: list[str] = []
+    spoken = threading.Event()
+    spoken_ids: list[str] = []
+
+    class FakeLastResort:
+        name = "null"
+        speaks_audio = True
+        on_spoken = None
+        closed = False
+
+        def speak(self, call: Call) -> None:
+            received.append(call)
+            if self.on_spoken is not None:
+                self.on_spoken(call.id, time.time())
+
+        def cancel(self, call_id: str) -> None:
+            cancelled.append(call_id)
+
+        def close(self) -> None:
+            self.closed = True
+
+    def fail(text: str) -> tuple[bytes, float]:
+        raise OmniVoiceError("synthesis failed")
+
+    last_resort = FakeLastResort()
+    speaker = OmniVoiceSpeaker(
+        fail,
+        None,
+        FakePlayer(),
+        "omnivoice",
+        tmp_path,
+        "key",
+        last_resort=last_resort,
+    )
+
+    def on_spoken(call_id: str, _timestamp: float) -> None:
+        spoken_ids.append(call_id)
+        spoken.set()
+
+    speaker.on_spoken = on_spoken
+    call = Call(
+        id="original-id",
+        rule_id="test",
+        priority=2,
+        text="line",
+        tags=[],
+        deadline_ms=1000,
+        lap=0,
+        t=0.0,
+        trigger_t=0.0,
+    )
+    try:
+        speaker.speak(call)
+        assert spoken.wait(1.0)
+        assert received == [call]
+        assert received[0] is call
+        assert spoken_ids == ["original-id"]
+        speaker.cancel("cancel-id")
+    finally:
+        speaker.close()
+    assert cancelled == ["cancel-id"]
+    assert last_resort.closed
+
+
 def test_warm_deduplicates_and_uses_only_omnivoice(tmp_path: Path) -> None:
     calls: list[str] = []
     fallback_calls: list[str] = []
 
     def omnivoice(text: str) -> tuple[bytes, float]:
         calls.append(text)
-        return b"omnivoice", 0.5
+        return SMALL_WAV, 0.01
 
     def fallback(text: str) -> tuple[bytes, float]:
         fallback_calls.append(text)
@@ -371,13 +440,13 @@ def test_warm_deduplicates_and_uses_only_omnivoice(tmp_path: Path) -> None:
     existing = speaker._phrase_path((0, "cached"))
     assert existing is not None
     existing.parent.mkdir(parents=True, exist_ok=True)
-    existing.write_bytes(b"already cached")
+    existing.write_bytes(SMALL_WAV)
     try:
         assert speaker.warm([("cached", 2), ("line", 1), ("line", 3)]) == 2
         assert calls == ["line"]
         assert fallback_calls == []
         line_path = speaker._phrase_path((0, "line"))
-        assert line_path is not None and line_path.read_bytes() == b"omnivoice"
+        assert line_path is not None and line_path.read_bytes() == SMALL_WAV
     finally:
         speaker.close()
 
@@ -398,7 +467,143 @@ def test_make_omnivoice_speaker_is_piper_subclass_and_uses_null_player(
         assert isinstance(speaker, PiperSpeaker)
         assert isinstance(speaker._player, NullPlayer)
         if sys.platform != "win32":
+            from pitwall.audio.speaker import NullSpeaker
+
             assert isinstance(default_player(), NullPlayer)
+            assert isinstance(speaker._last_resort, NullSpeaker)
+    finally:
+        speaker.close()
+
+
+def test_make_omnivoice_speaker_with_piper_has_no_last_resort(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, _ = fake_server
+
+    def fallback(text: str) -> tuple[bytes, float]:
+        return SMALL_WAV, 0.01
+
+    monkeypatch.setattr(
+        omnivoice_module,
+        "make_piper_tone_synths",
+        lambda settings: {1: fallback, 2: fallback, 3: fallback},
+    )
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path))
+    try:
+        assert speaker._last_resort is None
+    finally:
+        speaker.close()
+
+
+def test_voice_warm_auto_uses_configured_engine_and_explicit_piper(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+    import pitwall.audio.piper_tts as piper_module
+    import pitwall.cli.voice as voice_module
+    from pitwall.cli import main
+
+    class FakeSpeaker:
+        name = "fake"
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            return len(phrases)
+
+        def close(self) -> None:
+            self.closed = True
+
+    settings = SpeechSettings(engine="omnivoice")
+    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
+    chosen: list[str] = []
+    speakers: list[FakeSpeaker] = []
+
+    def make(name: str) -> FakeSpeaker:
+        chosen.append(name)
+        speaker = FakeSpeaker()
+        speakers.append(speaker)
+        return speaker
+
+    monkeypatch.setattr(
+        omnivoice_module, "make_omnivoice_speaker", lambda speech: make("omnivoice")
+    )
+    monkeypatch.setattr(piper_module, "make_piper_speaker", lambda speech: make("piper"))
+    assert main(["voice", "warm"]) == 0
+    assert main(["voice", "warm", "--engine", "piper"]) == 0
+    assert chosen == ["omnivoice", "piper"]
+    assert all(speaker.closed for speaker in speakers)
+    assert "cached " in capsys.readouterr().out
+
+
+def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    import pitwall.audio.speaker as speaker_module
+    import pitwall.cli.voice as voice_module
+    from pitwall.audio.speaker import NullSpeaker
+    from pitwall.cli import main
+
+    settings = SpeechSettings(engine="omnivoice")
+    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
+    seen: list[SpeechSettings] = []
+
+    def make_speaker(speech: SpeechSettings) -> NullSpeaker:
+        seen.append(speech)
+        return NullSpeaker()
+
+    monkeypatch.setattr(speaker_module, "make_speaker", make_speaker)
+    assert main(["voice", "say"]) == 0
+    assert seen[-1].engine == "omnivoice"
+    assert "engine=omnivoice" in capsys.readouterr().out
+    assert main(["voice", "say", "--engine", "omnivoice", "test"]) == 0
+    assert seen[-1].engine == "omnivoice"
+
+
+def test_sync_render_regenerates_corrupt_cached_wav(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def synth(text: str) -> tuple[bytes, float]:
+        calls.append(text)
+        return SMALL_WAV, 0.01
+
+    speaker = OmniVoiceSpeaker(synth, None, FakePlayer(), "omnivoice", tmp_path, "key")
+    path = speaker._phrase_path((0, "line"))
+    assert path is not None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(SMALL_WAV[:-8])
+    try:
+        assert speaker.render("line") == (SMALL_WAV, 0.01)
+        assert calls == ["line"]
+        assert path.read_bytes() == SMALL_WAV
+    finally:
+        speaker.close()
+
+
+def test_warm_regenerates_corrupt_cache_and_removes_temporary_files(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def synth(text: str) -> tuple[bytes, float]:
+        calls.append(text)
+        return SMALL_WAV, 0.01
+
+    speaker = OmniVoiceSpeaker(synth, None, FakePlayer(), "omnivoice", tmp_path, "key")
+    path = speaker._phrase_path((0, "line"))
+    assert path is not None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(SMALL_WAV[:-8])
+    try:
+        assert speaker.warm([("line", 2)]) == 1
+        assert calls == ["line"]
+        assert path.read_bytes() == SMALL_WAV
+        assert not list(tmp_path.glob("*.tmp"))
     finally:
         speaker.close()
 

@@ -245,7 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     vsay = vsub.add_parser("say", help="audio check: speak a line through the speech backend")
     vsay.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
-    vsay.add_argument("--engine", choices=["auto", "piper", "sapi", "null"], default="auto")
+    vsay.add_argument(
+        "--engine",
+        choices=["auto", "piper", "sapi", "null", "omnivoice"],
+        default=None,
+        help="speech backend (default: configured speech.engine)",
+    )
     vsay.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
     vsay.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
     vsay.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
