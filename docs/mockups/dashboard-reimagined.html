@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>pitwall mockup: reimagined race-engineer dashboard</title>
+<!--
+  VISUAL PROPOSAL ONLY. This file does not touch the runtime: nothing in web/ changes,
+  no backend field is added. Vanilla HTML/CSS/JS, no CDN, no build step. Open it directly.
+  Sample values are hard-coded; each carries its real backend field in a comment.
+
+  Default state: RACE with an active battle (car behind, DEFENDING).
+  Alternate states:
+    - Contested race states (SC + battle, box near pit + battle, red-flag flush, the other
+      battle modes, weather crossover, battery modes) are commented-out blocks. Search
+      for "ALT:" and swap the block in.
+    - Body-class takeovers can be previewed with a URL hash, the same way the runtime
+      would set body classes: #phone #quali #cool #pit #menu #listen #stale #rain #lockup #fight-ahead #sandwich #fight-behind
+      (combine with "+", for example #quali+cool).
+    - Demo keys (motion check): A = ACK glow, N = NEG glow, R = new call / say-again glow,
+      V = voice open (steady lilac), V again = close as HEARD, Shift+V = close as MISSED,
+      M = toggle driver menu, P = page reset (snaps back to the default race layout).
+
+  Feedback items this mockup addresses:
+    Invariants. Status bar (LIVE/STALE + packet age), large call banner (priority bar,
+      current call, evidence line, one dim PREVIOUS line) and the muted footer keep fixed
+      positions and never reflow. 16:9, dark, monospace, tabular-nums, colour + word.
+     1 Layout: one 12-column grid. The right column is ONE auto-adaptive contextual zone
+       that replaces race/car/track cycling. No multi-row radio log anywhere.
+     2 Contextual-zone priority follows the radio urgency ladder (docs/04-audio-ui.md):
+       Safety > Execution (promoted when near pit entry) > Reply > Tactical > Info/Coaching.
+       Mirrors resolved_by (box clears blue flag) and the red-flag flush.
+     3 Page override = reset: P / UDP Action 4 snaps back to the race layout, no cycling.
+     4 Tyres: 2x2 plan view, whole-tile status colour, trend arrow in place of the status word, fitted group and a
+       separate laps_of_pace group with trend arrow.
+     5 Fuel: fixed tile, fuel_remaining_laps only (TODO for the two-part tile).
+     6 Damage: neutral numbers, amber >= 5 %, red >= 25 %, no whole-tile colour.
+     7 Strategy: PLAN A active, PLAN B dimmed, reactive PLAN C "BOX NOW" under SC,
+       on-plan / off-plan with plan_off_s.
+     8 Battle card: six modes, managing greyed, under_threat/defending lit red, pace and
+       closing text, pass/hold probability, gap rail glide (.rail .rc).
+       Multi-car fights: rows in track order (2 ahead, 2 behind) with a SCRAP / TRADING PLACES header.
+     9 Weather: compact fixed tile with icons, now / in 10 / in 30. A crossover marks its
+       forecast cell, names the compound and ETA, and adds a Safety card when close (#rain).
+    10 OV + SM chips side by side in the status bar.
+    11 BB + DIFF strip with suggestion arrows on bias and on-throttle only, underline =
+       already suited.
+    12 BATT tile: store_pct coloured by EnergyBudget.mode, icon + colour + word.
+    13 Driver feedback: one-shot edge glow (ACK green, NEG red, say-again = new call),
+       steady lilac while voice listens, HEARD / MISSED pulse on close. Reduced motion =
+       no motion. Commented full-screen tint variant.
+    14 Menu overlay: floating, bigger, scrim below the banner, left_s countdown.
+    15 Mindset pill: compact BAL / AGGR at the far right of the status bar.
+    16 Motion: existing tokens verbatim, marks a change then stops, reserved min-widths.
+    17 Footer diagnostics permanently muted. Only packet age in the status bar escalates.
+    18 Compact iPhone race page (body.phone): one-line banner, tyres, fuel, strategy,
+       ARM PHONE RADIO, no radio log, browser speech kept.
+    19 Quali: phase-driven layout, benchmark, cut-off pill, predicted cut-off, cool-down
+       lite debrief (last lap, gap to pole, sector consistency trend).
+-->
+<style>
+/* tokens: verbatim from web/style.css :root and the motion block */
+:root {
+  --bg: #0a0a0c; --panel: #121216; --line: #2a2a30;
+  --fg: #ececec; --soft: #c8c8d0; --dim: #a2a2ac; --faint: #62626c;
+  --ok: #37e07a; --warn: #ffc233; --crit: #ff4d4d; --cold: #5cc8ff;
+  --info: #b8b8ff; --aggr: #ff8a3d;
+  --font: "Cascadia Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(14px, 0.9vw, 24px);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-snap: cubic-bezier(.34, 1.56, .64, 1);
+  --t-fast: 160ms; --t-med: 320ms; --t-slow: 600ms;
+  /* gentle ease-in-out, used ONLY for continuous glides (gap rail, meter fills) */
+  --ease-glide: cubic-bezier(.45, 0, .55, 1);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+  font-family: var(--font); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+svg.ico { width: 1em; height: 1em; vertical-align: -.12em; fill: none; stroke: currentColor;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------------------------------------------------------------- grid ---
+   12 columns. Rows: status 3rem, banner 12rem, main, footer 2rem. Every zone has a
+   fixed cell; takeovers swap the contents of cells, never the cell positions. */
+body.dash { display: grid; height: 100vh; overflow: hidden;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: 3rem 12rem minmax(0, 1fr) 2rem; gap: 1px; background: var(--line); }
+:where(body.dash > *) { background: var(--bg); min-width: 0; min-height: 0; }
+.status { grid-column: 1 / -1; grid-row: 1; }
+.banner { grid-column: 1 / -1; grid-row: 2; }
+.tyres  { grid-column: 1 / 5;  grid-row: 3; }
+.tiles  { grid-column: 5 / 8;  grid-row: 3; }
+.ctx    { grid-column: 8 / 13; grid-row: 3; }
+.footer { grid-column: 1 / -1; grid-row: 4; }
+.zone { padding: .6rem .9rem; overflow: hidden; }
+h2 { margin: 0 0 .35rem; font-size: 1.15rem; letter-spacing: .12em; color: var(--soft); }
+
+/* colour transitions only (status tints, tiles, pills, numbers) */
+.status, .pill, .chip, .corner, .card, .tile, .big, .flag {
+  transition: background-color var(--t-med) ease, border-color var(--t-med) ease,
+    color var(--t-med) ease, box-shadow var(--t-med) ease; }
+
+/* ------------------------------------------------------------ A status ---
+   Fixed. Only colour moves. Packet age is the ONLY value outside the banner that
+   escalates: amber >= 500 ms, red >= 1000 ms (whole page greys at > 1 s, docs/15 §6). */
+.status { display: flex; align-items: center; gap: 1.2rem; padding: 0 .9rem; font-size: 1.5rem;
+  background: var(--panel); white-space: nowrap; overflow: hidden; }
+.status .live { color: var(--ok); font-weight: bold; min-width: 6ch; }
+.status .live::before { content: "● "; }
+.status #age { font-size: 1.1rem; color: var(--dim); display: inline-block; min-width: 9ch; }
+.status #age.warn { color: var(--warn); font-weight: bold; }
+.status #age.crit { color: var(--crit); font-weight: bold; }
+.status .spacer { flex: 1; }
+.status .sess { color: var(--soft); font-size: 1.25rem; }
+.status #lap { font-weight: bold; display: inline-block; min-width: 9ch; }
+.status #position { font-size: 2rem; font-weight: bold; padding: 0 .5rem; border-radius: .3rem;
+  background: var(--fg); color: var(--bg); line-height: 1.2; min-width: calc(3ch + 1rem);
+  text-align: center; }
+.flag { border: 2px solid var(--warn); color: var(--warn); border-radius: .3rem;
+  padding: .05rem .6rem; font-size: 1.2rem; letter-spacing: .1em; font-weight: bold; }
+.flag.sc { background: var(--warn); color: #000; }
+.flag.red { border-color: #fff; background: var(--crit); color: #fff; }
+body.sc .status, body.redflag .status, body.stale .status {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 1.2rem, var(--stripe) 1.2rem 2.4rem); }
+body.sc .status { background-color: color-mix(in srgb, var(--warn) 30%, var(--panel));
+  --stripe: color-mix(in srgb, var(--warn) 22%, transparent); }
+body.redflag .status { background-color: color-mix(in srgb, var(--crit) 55%, var(--panel));
+  --stripe: color-mix(in srgb, #fff 14%, transparent); }
+body.stale .status { background-color: color-mix(in srgb, var(--crit) 35%, var(--panel));
+  --stripe: color-mix(in srgb, var(--crit) 25%, transparent); }
+body.stale .status .live { color: #fff; }
+body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: grayscale(1); opacity: .4; }
+
+/* OV + SM chips (item 10): compact, side by side, fixed width so a state change never
+   shifts the lap/position text */
+.chips { display: inline-flex; gap: .35rem; }
+.chip { display: inline-block; min-width: 4.6ch; text-align: center; font-size: 1.15rem;
+  font-weight: bold; letter-spacing: .08em; border: 2px solid var(--line); color: var(--faint);
+  border-radius: .3rem; padding: 0 .4rem; line-height: 1.6rem; }
+.chip.ov { min-width: 8.5ch; }
+.chip.ov.avail { border-color: var(--ok); color: var(--ok); }
+.chip.ov.active { border-color: var(--ok); background: var(--ok); color: #000; }
+.chip.sm.on { border-color: var(--info); color: var(--info); }
+
+/* mindset pill (item 15): compact, far right */
+.pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: 0 .35rem; font-size: .95rem; letter-spacing: .1em; font-weight: bold; line-height: 1.5rem; }
+.pill.aggr { border-color: var(--aggr); background: var(--aggr); color: #000; }
+.voice { display: inline-block; min-width: 13ch; padding: 0 .5rem; border: 2px solid var(--info);
+  border-radius: .3rem; background: var(--info); color: #000; font-size: 1.05rem; font-weight: bold;
+  letter-spacing: .06em; line-height: 1.5rem; text-align: center; }
+.voice.heard { border-color: var(--ok); background: var(--ok); }
+.voice.missed { border-color: var(--warn); background: var(--warn); }
+
+/* ------------------------------------------------------------ B banner ---
+   Current call + evidence + ONE dim PREVIOUS line. No radio log on this screen:
+   the full call history lives in the debrief (/debrief/latest). */
+.banner { display: flex; align-items: stretch; gap: 1.2rem; padding: 0 1.2rem 0 0;
+  overflow: hidden; position: relative; }
+.banner .bar { width: 1rem; background: var(--info); }
+.banner.p1 .bar { background: var(--crit); }
+.banner.p2 .bar { background: var(--warn); }
+.banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
+.banner .body { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: center; gap: .45rem; }
+.banner .current { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.banner .text { font-size: 2.5rem; line-height: 1.1; font-weight: bold; flex: 1; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.banner .meta { text-align: right; color: var(--soft); font-size: 1.4rem; white-space: nowrap; }
+.banner .meta .pri { font-weight: bold; letter-spacing: .06em; color: var(--warn); }
+.banner.p1 .meta .pri { background: var(--crit); color: #fff; padding: 0 .4rem; border-radius: .25rem; }
+.banner .meta .started { color: var(--info); }
+.press { font-size: 1.2rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: .1rem .5rem; white-space: nowrap; min-width: 6ch; text-align: center; font-weight: bold; }
+.press.ack { border-color: var(--ok); color: var(--ok); }
+.press.neg { border-color: var(--crit); color: var(--crit); }
+.banner .evidence { color: var(--soft); font-size: 1.3rem; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.banner .evidence b { color: var(--dim); letter-spacing: .1em; font-size: .9em; }
+.banner .previous { border-top: 1px solid var(--line); padding-top: .4rem; color: var(--dim);
+  font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner .previous b { color: var(--dim); font-size: .85em; letter-spacing: .1em; }
+/* new call: bar stretches back, light sweep crosses once (web/style.css) */
+.banner.hit .bar { transform-origin: left center; animation: bar-hit 900ms var(--ease-out); }
+.banner.hit::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--sweep, rgba(184,184,255,.12)) 50%, transparent);
+  transform: translateX(-100%); animation: sweep 700ms var(--ease-out) forwards; }
+.banner.p1 { --sweep: rgba(255,77,77,.28); } .banner.p2 { --sweep: rgba(255,194,51,.18); }
+@keyframes bar-hit { 0% { transform: scaleX(2.2); filter: brightness(1.8); } 100% { transform: none; filter: none; } }
+@keyframes sweep { to { transform: translateX(100%); } }
+
+/* ------------------------------------------------------------- C tyres --- */
+.tyres { display: flex; flex-direction: column; gap: .5rem; }
+.t-head { display: flex; align-items: center; gap: .7rem; font-size: 1.3rem; white-space: nowrap; }
+.t-fit { display: inline-flex; align-items: baseline; gap: .6rem; }
+.comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; letter-spacing: .06em;
+  border: 2px solid var(--dim); background: var(--dim); color: #111; }
+.comp.soft { border-color: var(--crit); background: var(--crit); color: #fff; }
+.comp.medium { border-color: var(--warn); background: var(--warn); }
+.comp.hard { border-color: var(--fg); background: var(--fg); }
+.comp.inter { border-color: var(--ok); background: var(--ok); }
+.comp.wet { border-color: var(--cold); background: var(--cold); color: #fff; }
+.t-fit .age { font-weight: bold; min-width: 6ch; }
+.t-sep { width: 2px; align-self: stretch; background: var(--line); margin: 0 .2rem; }
+.t-pace { display: inline-flex; align-items: baseline; gap: .45rem; font-weight: bold;
+  padding: 0 .5rem; border-left: .35rem solid currentColor; }
+.t-pace.ok { color: var(--ok); } .t-pace.warn { color: var(--warn); } .t-pace.crit { color: var(--crit); }
+.t-pace small { font-size: .75em; font-weight: normal; }
+.car { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: .4rem; position: relative; min-height: 0; }
+.car::before { content: ""; position: absolute; left: 50%; top: -.3rem; bottom: -.3rem; width: 2px;
+  background: var(--faint); transform: translateX(-50%); }
+.corner { display: grid; grid-template-columns: auto 1fr; align-content: center; column-gap: .8rem;
+  grid-template-areas: "lbl lbl" "temp word" "meter meter" "det det" "tags tags"; border: 1px solid var(--line);
+  background: var(--panel); padding: .5rem .7rem; position: relative; z-index: 1; min-width: 0; }
+.corner .lbl { grid-area: lbl; color: var(--soft); font-size: 1.35rem; display: flex; justify-content: space-between; }
+.corner .lbl .brk { color: var(--dim); font-size: 1.15rem; }
+.corner .temp { grid-area: temp; font-size: 3rem; font-weight: bold; line-height: 1.1; min-width: 4ch; }
+.corner .word { grid-area: word; align-self: center; font-weight: bold; font-size: 1.5rem; letter-spacing: .12em; }
+.corner .det { grid-area: det; color: var(--soft); display: flex; gap: .8rem; align-items: baseline;
+  font-size: 1.25rem; white-space: nowrap; }
+.corner .det .wear { color: var(--soft); font-size: 1.1rem; min-width: 8ch; }
+.corner .det .wear b { color: var(--fg); font-size: 1.9rem; }
+.corner .det .surf { color: var(--dim); font-size: 1.1rem; }
+.corner.hot .temp, .corner.hot .word, .corner.hot .lbl span:first-child { color: var(--crit); }
+.corner.ok .temp, .corner.ok .word, .corner.ok .lbl span:first-child { color: var(--ok); }
+.corner.cold .temp, .corner.cold .word, .corner.cold .lbl span:first-child { color: var(--cold); }
+.corner.hot { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, var(--panel)); }
+.corner.cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 12%, var(--panel)); }
+.corner.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+/* tyre status flip: one ring pulse in the new colour (web/style.css) */
+.corner.flip { animation: flip 700ms var(--ease-out); }
+.corner.hot.flip { --ring: var(--crit); } .corner.cold.flip { --ring: var(--cold); } .corner.ok.flip { --ring: var(--ok); }
+@keyframes flip { 0% { box-shadow: 0 0 0 0 var(--ring, var(--info)); } 100% { box-shadow: 0 0 0 .9rem transparent; } }
+.corner.flip .temp { animation: temp-pop 700ms var(--ease-snap); }
+/* trend: tyre_inner_ema_fast vs tyre_inner_ema_slow per corner */
+/* Owner choice: the trend arrow replaces the status word, so the tile colour has no word beside it. */
+.corner .word { font-size: 2.4rem; letter-spacing: 0; line-height: 1; }
+.corner .trend.up { color: var(--crit); }
+.corner .trend.down { color: var(--cold); }
+.corner .trend.flat { color: var(--fg); }
+/* operating window meter: 60..130 °C scale, band = tyre_inner_cold_c 80 .. tyre_inner_hot_c 110
+   (thresholds.yaml). Fill reuses .meter i with the glide. */
+.corner .twin { grid-area: meter; margin: .3rem 0 .2rem; }
+.corner .twin i { background: currentColor; }
+.corner .twin b { position: absolute; left: 28.6%; width: 42.9%; top: -.2rem; bottom: -.2rem;
+  border-left: 2px solid var(--soft); border-right: 2px solid var(--soft); }
+.corner.ok .twin { color: var(--ok); } .corner.hot .twin { color: var(--crit); } .corner.cold .twin { color: var(--cold); }
+/* tags row keeps its height when empty, so a tag never pushes the tile */
+.corner .tags { grid-area: tags; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .3rem .4rem;
+  min-height: 3.6rem; margin-top: .25rem; }
+.tag { font-size: 1rem; font-weight: bold; letter-spacing: .08em; padding: 0 .35rem;
+  border: 1px solid currentColor; border-radius: 4px; white-space: nowrap; }
+.tag.warn { color: var(--warn); } .tag.crit { color: var(--crit); }
+.tag.lock { background: var(--aggr); border-color: var(--aggr); color: #000; }
+/* lock-up: orange border on that wheel while lockup_wheel is set (a few seconds), then gone.
+   Outline sits inside the status border, so the status colour and word stay readable. */
+body.lockup .corner.fl { outline: .3rem solid var(--aggr); outline-offset: -.3rem;
+  animation: flip 700ms var(--ease-out); --ring: var(--aggr); }
+body:not(.lockup) .lockup-only { display: none !important; }
+@keyframes temp-pop { 0% { transform: scale(1.12); } 100% { transform: none; } }
+
+/* BB + DIFF strip (item 11). Underline = already matches the setup-advisor target. */
+.setup { display: grid; grid-template-columns: auto 1fr 1fr; gap: .6rem; align-items: baseline;
+  font-size: 1.35rem; border-top: 1px solid var(--line); padding-top: .4rem; white-space: nowrap; }
+.setup .k { color: var(--soft); font-weight: bold; letter-spacing: .08em; font-size: 1.1rem; }
+.setup .v { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.setup .v.suited { text-decoration: underline; text-decoration-color: var(--ok);
+  text-decoration-thickness: 3px; text-underline-offset: .3rem; }
+.setup .sug { color: var(--warn); font-weight: bold; display: inline-block; min-width: 7ch; }
+.setup .sug.none { color: var(--faint); font-weight: normal; }
+.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
+
+/* ------------------------------------------------------- D fixed tiles --- */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr;
+  gap: .6rem; }
+.tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .45rem .7rem; min-width: 0; overflow: hidden; }
+.tile.wide { grid-column: 1 / -1; }
+.big { font-size: 2.4rem; font-weight: bold; line-height: 1.1; display: inline-block; min-width: 6ch; }
+.sub { color: var(--soft); font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fuel .big.ok { color: var(--ok); } .fuel .big.warn { color: var(--warn); } .fuel .big.crit { color: var(--crit); }
+/* BATT (item 12): colour by EnergyBudget.mode, always with icon + word */
+.batt .big { min-width: 4ch; }
+.batt .mode { font-weight: bold; font-size: 1.2rem; letter-spacing: .06em; }
+.batt.on_budget .mode { color: var(--fg); }
+.batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
+.batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
+.batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
+.meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
+  background: var(--line); overflow: hidden; }
+.meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
+  background: currentColor; transition: transform var(--t-slow) var(--ease-glide), background-color var(--t-med) ease; }
+/* weather (item 9) */
+.wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; text-align: center; }
+.wx .k { color: var(--dim); font-size: 1rem; letter-spacing: .1em; }
+.wx .pct { font-size: 1.9rem; font-weight: bold; min-width: 4ch; display: inline-block; }
+.wx .sky { color: var(--soft); font-size: 1rem; }
+.wx .wet .pct, .wx .wet .wxi { color: var(--cold); }
+.wx .storm .pct, .wx .storm .wxi { color: var(--crit); }
+/* crossover marker: the forecast cell where the crossover lands, colour + compound chip */
+.wx > div { border: 2px solid transparent; border-radius: 6px; }
+.wx > div.xo-warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.wx > div.xo-cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 10%, transparent); }
+.comp.xs { font-size: .8rem; padding: 0 .25rem; letter-spacing: .04em; vertical-align: .05rem; }
+.card .head .comp { font-size: 1.5rem; vertical-align: .25rem; }
+body:not(.rain) .rain-only, body.rain .dry-only { display: none !important; }
+svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; color: var(--soft); stroke-width: 1.8; }
+.cross { margin-top: .35rem; font-size: 1.25rem; font-weight: bold; padding: .1rem .5rem;
+  border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
+.cross.warn { border-color: var(--warn); color: var(--warn); }
+.cross.cold { border-color: var(--cold); color: var(--cold); }
+/* damage (item 6): neutral numbers, no tile colour */
+.dmg { display: grid; grid-template-columns: 1fr 1fr; gap: .1rem 1rem; font-size: 1.35rem; }
+.dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.dmg .n.warn { color: var(--warn); } .dmg .n.crit { color: var(--crit); }
+.dmg .none { color: var(--soft); }
+
+/* ------------------------------------------------- right contextual zone ---
+   ONE zone, auto-selected. Cards stack strictly by the radio urgency ladder
+   (docs/04-audio-ui.md): safety 0 > execution 1 (promoted -1 near pit entry) >
+   reply 2 > tactical 3 > info 4 / coaching 5. A higher card pushes lower cards down;
+   the ctx cell itself never moves or resizes. */
+.ctx { display: flex; flex-direction: column; gap: .5rem; }
+.ctx-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ctx-head .how { color: var(--dim); font-size: 1rem; letter-spacing: .06em; }
+.card { background: var(--panel); border: 2px solid var(--line); border-left-width: .45rem;
+  border-radius: 6px; padding: .4rem .8rem; min-width: 0; flex: none; animation: card-in var(--t-med) var(--ease-out); }
+@keyframes card-in { from { opacity: 0; } }
+.card .rank { color: var(--dim); font-size: .95rem; letter-spacing: .12em; }
+.card.safety { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.card.safety.red { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 18%, var(--panel)); }
+.card.exec { border-color: var(--crit); }
+.card.reply { border-color: var(--info); }
+.card .head { font-size: 2.2rem; font-weight: bold; letter-spacing: .04em; }
+.card.safety .head { color: var(--warn); } .card.safety.red .head { color: #fff; }
+.card.exec .head { color: var(--crit); }
+.card .line { font-size: 1.3rem; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .line b { color: var(--fg); }
+.card.info { font-size: 1.2rem; color: var(--soft); }
+
+/* battle card (item 8) */
+.battle .modes { display: flex; gap: .3rem; flex-wrap: nowrap; margin-bottom: .3rem; }
+.battle .modes span { font-size: .9rem; letter-spacing: .06em; border: 1px solid var(--line);
+  color: var(--faint); padding: 0 .3rem; border-radius: .25rem; white-space: nowrap; }
+.battle .modes span.on { border-color: var(--fg); color: var(--fg); font-weight: bold; }
+.battle .mode { font-size: 2rem; font-weight: bold; letter-spacing: .06em; }
+.battle.threat { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 14%, var(--panel));
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--crit) 35%, transparent); }
+.battle.threat .mode, .battle.threat .modes span.on { color: var(--crit); border-color: var(--crit); }
+.battle.attack .mode { color: var(--ok); }
+.battle.catching .mode { color: var(--warn); }
+.battle.calm { opacity: .55; } .battle.calm .mode { color: var(--dim); }
+.rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
+.rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
+.rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
+.rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
+  padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }
+.rv .tag.crit { border-color: var(--crit); background: var(--crit); color: #fff; }
+.pace { font-size: 1.5rem; font-weight: bold; text-transform: uppercase; white-space: nowrap; }
+.pace .crit { color: var(--crit); } .pace .ok { color: var(--ok); }
+.pace .prob { float: right; color: var(--fg); }
+.rail { position: relative; height: .9rem; margin: .3rem 0 .35rem; border-radius: .45rem; background: var(--line); }
+.rail .rz { position: absolute; left: 0; top: 0; bottom: 0; width: 33.33%; border-radius: .45rem 0 0 .45rem;
+  font-size: .7rem; line-height: .9rem; padding-left: .4rem; letter-spacing: .1em; color: var(--dim);
+  background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.rail .rc { position: absolute; top: 50%; width: 1.1rem; height: 1.1rem; border-radius: 50%;
+  left: calc(var(--g, 1) * (100% - 1.1rem)); transform: translateY(-50%); background: var(--fg);
+  box-shadow: 0 0 0 2px var(--bg);
+  transition: left var(--t-slow) var(--ease-glide), background-color var(--t-med) ease; }
+.rail.behind.in .rc { background: var(--crit); }
+.rail.ahead.in .rc { background: var(--ok); }
+.rail.in .rz { color: var(--fg); }
+
+/* multi-car battle (proposed): rows in track order, up to 2 ahead and 2 behind */
+.battle .grp { font-size: 1.5rem; font-weight: bold; letter-spacing: .06em; color: var(--warn);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .2rem; }
+.battle .grp.crit { color: var(--crit); } .battle .grp .ok { color: var(--ok); }
+.battle .grp .sub { color: var(--soft); font-weight: normal; }
+.battle.scrap:not(.threat) { border-color: var(--warn); }
+.battle .bcar .rv { grid-template-columns: 4.5rem minmax(0, 1fr) auto auto; }
+.battle .bcar .name { font-size: 1.4rem; }
+.battle .bcar .gap { font-size: 1.9rem; min-width: 4ch; }
+.battle .bcar .st { font-size: 1.1rem; font-weight: bold; letter-spacing: .08em; text-align: right; }
+.battle .bcar.defend .st, .battle .bcar.defend .side { color: var(--crit); }
+.battle .bcar.attack .st, .battle .bcar.attack .side { color: var(--ok); }
+.battle .bcar.train .st { color: var(--warn); }
+.battle .bcar.calm { opacity: .5; } .battle .bcar.calm .st { color: var(--dim); }
+.battle .bcar .rail { height: .6rem; margin: .1rem 0 .15rem; }
+.battle .bcar .rail .rz { font-size: 0; }
+.battle .bcar .rail .rc { width: .8rem; height: .8rem; left: calc(var(--g, 1) * (100% - .8rem)); }
+.rail.train .rc { background: var(--warn); }
+.battle .bcar .pace { font-size: 1.15rem; }
+.battle .you { font-size: 1.05rem; font-weight: bold; letter-spacing: .12em; text-align: center; color: var(--fg);
+  border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); margin: .2rem 0; }
+body:not(.fight-ahead) .fight-ahead-only, body:not(.sandwich) .sandwich-only,
+body:not(.fight-behind) .fight-behind-only { display: none !important; }
+body.fight-ahead .battle.single, body.sandwich .battle.single, body.fight-behind .battle.single { display: none; }
+
+/* strategy card (item 7) */
+.plan { display: flex; align-items: baseline; gap: .6rem; font-size: 1.35rem; white-space: nowrap; }
+.plan .pid { font-weight: bold; border: 2px solid var(--fg); border-radius: .3rem; padding: 0 .4rem; }
+.plan.alt { color: var(--dim); } .plan.alt .pid { border-color: var(--dim); }
+.plan.alt .comp { opacity: .55; }
+.plan .seq .comp { font-size: 1rem; padding: 0 .3rem; }
+.plan .seq .arr { color: var(--faint); }
+.plan .onp { margin-left: auto; font-weight: bold; color: var(--ok); }
+.plan .onp.off { color: var(--warn); }
+.plan.c { color: #fff; } .plan.c .pid { border-color: var(--crit); background: var(--crit); }
+.plan.c .boxnow { background: var(--crit); padding: 0 .5rem; border-radius: .3rem; font-weight: bold; }
+
+/* quali zone (item 19) */
+.qzone, .coolzone, .pitzone { display: none; }
+.ctx-head .h-quali, body.quali .ctx-head .h-race { display: none; }
+body.quali .ctx-head .h-quali { display: block; }
+body.quali .ctx-race { display: none; }
+body.quali .qzone { display: flex; flex-direction: column; gap: .5rem; }
+.qphase { display: flex; gap: .3rem; }
+.qphase span { flex: 1; text-align: center; font-size: 1.05rem; letter-spacing: .08em; border: 1px solid var(--line);
+  color: var(--faint); padding: .1rem 0; border-radius: .25rem; }
+.qphase span.on { border-color: var(--info); color: var(--info); font-weight: bold; }
+.qcut { display: flex; align-items: baseline; gap: .8rem; font-size: 1.6rem; font-weight: bold; }
+.qcut .pos { color: var(--dim); font-weight: normal; }
+.qcut .badge { font-size: 1.1rem; border: 2px solid var(--ok); color: var(--ok); border-radius: .3rem; padding: 0 .4rem; }
+.qcut .badge.out { border-color: var(--crit); color: var(--crit); }
+.qcut .m { margin-left: auto; font-size: 2.2rem; color: var(--ok); }
+.qbench { width: 100%; border-collapse: collapse; font-size: 1.3rem; }
+.qbench th, .qbench td { border: 1px solid var(--line); padding: .1rem .5rem; text-align: right; }
+.qbench th { color: var(--dim); font-weight: normal; font-size: 1rem; letter-spacing: .1em; }
+.qbench tbody th { text-align: left; }
+.qbench td { font-weight: bold; font-size: 2rem; }
+.qbench td.ok { color: var(--ok); } .qbench td.crit { color: var(--crit); }
+.qbench td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
+/* cool-down lite debrief: takes over the tyres + tiles cells only */
+body.cool .tyres, body.cool .tiles { display: none; }
+body.cool .coolzone { display: flex; flex-direction: column; gap: .8rem; grid-column: 1 / 8; grid-row: 3; }
+.cz-top { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.cz-top .v { font-size: 3.6rem; font-weight: bold; }
+.cz-top .v.crit { color: var(--crit); }
+.cz-sec { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+.cz-sec div { border: 2px solid var(--line); border-radius: 6px; padding: .4rem; text-align: center; font-size: 1.3rem; }
+.cz-sec .tr { display: block; font-size: 2.4rem; font-weight: bold; }
+.cz-sec .up { color: var(--ok); } .cz-sec .down { color: var(--warn); } .cz-sec .flat { color: var(--soft); }
+/* pit board: takes over the main row only; status, banner, footer stay where they are */
+body.pit .tyres, body.pit .tiles, body.pit .ctx { display: none; }
+body.pit .pitzone { display: flex; flex-direction: column; gap: .6rem; grid-column: 1 / -1; grid-row: 3; }
+.pb-release { font-size: 3.4rem; font-weight: bold; text-align: center; background: var(--ok); color: #000; border-radius: 6px; }
+
+/* ------------------------------------------------------------ G footer ---
+   Permanently muted (--soft / --dim). These values NEVER escalate colour, not even a
+   bad voice lag or SC: SC lives in the status bar flag and the safety card. */
+.footer { background: var(--panel); color: var(--soft); font-size: 1rem; display: flex; gap: 2rem;
+  align-items: center; padding: 0 .9rem; white-space: nowrap; }
+.footer span { color: var(--dim); display: inline-block; }
+.footer #rate { min-width: 9ch; } .footer #lag { min-width: 36ch; }
+
+/* --------------------------------------------- driver menu overlay (14) ---
+   Floating, bigger, wider. The scrim dims everything BELOW the banner so a safety call
+   stays readable while the menu is open. Gone on confirm / close / timeout. */
+.scrim { position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; top: calc(15rem + 2px);
+  background: rgba(10, 10, 12, .62); display: none; }
+.drvmenu { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); top: calc(15rem + 1.4rem);
+  width: min(46rem, 62vw); background: var(--panel); border: 3px solid var(--info);
+  box-shadow: 0 .6rem 2.4rem #000; font-size: 2.3rem; display: none; }
+body.menu .scrim, body.menu .drvmenu { display: block; }
+.drvmenu-head { display: flex; justify-content: space-between; align-items: baseline; padding: .4rem .9rem;
+  font-size: 1.3rem; letter-spacing: .14em; color: var(--info); border-bottom: 1px solid var(--line); }
+.drvmenu-head .left { color: var(--fg); font-weight: bold; min-width: 9ch; text-align: right; }
+.drvmenu .meter { margin: 0; border-radius: 0; height: .35rem; color: var(--info); }
+.drvmenu ol { list-style: none; margin: 0; padding: .3rem 0; }
+.drvmenu li { padding: .35rem .9rem; color: var(--dim); border-left: .5rem solid transparent; white-space: nowrap; }
+.drvmenu li.sel { color: var(--fg); font-weight: bold; border-left-color: var(--info);
+  background: color-mix(in srgb, var(--info) 18%, transparent); }
+
+/* ------------------------------------------ driver feedback glow (13) ---
+   Full-bleed edge glow, pointer-events none, above everything. One-shot kinds fire
+   ONCE and ease out in ~500 ms with --ease-out, then stop. This obeys the motion rule
+   (motion marks a change once, then stops). The only looping exception on the whole
+   dashboard stays the cool-down "car behind" crit flash (web/style.css .c-alert.crit).
+   Say-again is deliberately the SAME glow as a new call. Listening is a steady lilac
+   edge for as long as the voice window is open (no pulse); on close one pulse:
+   green HEARD, amber MISSED / NO REQUEST. The text chip / pill stays the readable record. */
+.fx { position: fixed; inset: 0; z-index: 30; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 62%,
+    color-mix(in srgb, var(--fx, var(--info)) 45%, transparent) 100%);
+  box-shadow: inset 0 0 0 .35rem var(--fx, var(--info)); }
+.fx.ack, .fx.heard { --fx: var(--ok); }
+.fx.neg { --fx: var(--crit); }
+.fx.missed { --fx: var(--warn); }
+.fx.call { --fx: var(--info); }
+.fx.once { animation: fx-once 500ms var(--ease-out) 1 forwards; }
+@keyframes fx-once { 0% { opacity: 1; } 100% { opacity: 0; } }
+.fx.listen { --fx: var(--info); opacity: .9; transition: opacity var(--t-fast) var(--ease-out); }
+/* ALT: full-screen tint variant instead of the edge glow (swap in to compare).
+.fx { box-shadow: none; background: color-mix(in srgb, var(--fx, var(--info)) 14%, transparent); }
+*/
+
+/* ------------------------------------------- compact iPhone page (18) ---
+   body.phone is new and distinct from the log-only body.radio. One-line banner,
+   tyres 2x2, fuel, strategy, ARM PHONE RADIO. No radio log. Previewed here as a
+   390 px column so the 1080p window can show it. */
+.arm { display: none; }
+html:has(body.phone) { font-size: 14px; }
+body.dash.phone { width: 390px; margin: 0 auto; height: auto; min-height: 100vh; overflow: visible;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto;
+  outline: 1px solid var(--line); }
+body.phone > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
+body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; gap: .6rem; padding: .4rem .6rem; }
+body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
+body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
+body.phone .setup, body.phone .t-pace small,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .damage,
+body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
+body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
+body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
+  text-overflow: ellipsis; }
+body.phone .car { min-height: 14rem; }
+body.phone .corner .temp { font-size: 2.4rem; }
+body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
+body.phone .t-head { font-size: 1.1rem; }
+body.phone .corner .det .surf { display: none; }
+body.phone .corner .tags { display: none; }
+body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
+body.phone .arm { display: block; margin: .6rem .9rem 1rem; padding: .8rem; font: inherit; font-size: 1.4rem;
+  font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
+body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
+
+/* reduced motion: no motion at all. Glows that only mark a change are not shown
+   (the chips carry the record); the steady listening edge stays, without a fade. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .fx.once { display: none; }
+}
+</style>
+</head>
+
+<!-- Default: race with an active battle.
+     Takeover classes the runtime would set: quali, cool, pit, menu, sc, redflag, stale, phone.
+     ALT body lines:
+       <body class="dash sc">        SC + battle (also swap in the ALT: SC blocks below)
+       <body class="dash redflag">   red-flag flush
+       <body class="dash quali">     qualifying, phase-driven
+       <body class="dash quali cool"> cool-down lite debrief
+       <body class="dash phone">     compact iPhone race page -->
+<body class="dash">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- weather icons, one per game weather type 0..5 -->
+  <symbol id="wx-0" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="wx-1" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1M9 20h8a3.5 3.5 0 0 0 0-7 4.8 4.8 0 0 0-9.2 1.3A2.9 2.9 0 0 0 9 20z"/></symbol>
+  <symbol id="wx-2" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
+  <symbol id="wx-3" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="wx-4" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="wx-5" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM13 15l-3 4h3l-2 4"/></symbol>
+</svg>
+<header class="status">
+  <span id="live" class="live">LIVE</span>                 <!-- live -->
+  <span id="age">age 42 ms</span>                         <!-- packet_age_ms: amber >= 500, red >= 1000 -->
+  <!-- ALT: <span id="age" class="warn">age 640 ms</span>  <span id="age" class="crit">age 1.2 s</span> -->
+  <span class="sess">ON TRACK</span>                       <!-- phase -->
+  <!-- ALT: SC  <span class="flag sc">⚠ SAFETY CAR</span>   red flag  <span class="flag red">⚠ RED FLAG</span> -->
+  <span class="spacer"></span>
+  <span class="sess">RACE · BAHRAIN</span>                 <!-- session_kind, track -->
+  <span id="lap">LAP 24/57</span>                          <!-- lap_num, total_laps -->
+  <span id="position">P5</span>                            <!-- position -->
+  <!-- OV and BO are the same game source (F1 26 Overtake Mode): show OV only.
+       SM is the separate straight-mode active-aero chip (relabel of the current #aero STR pill). -->
+  <span class="chips">
+    <span id="ov" class="chip ov active">OV 3.2s</span>   <!-- overtake_active=1, boost_on_s=3.2 -->
+    <!-- ALT: <span id="ov" class="chip ov avail">OV</span>   overtake_available=1, overtake_active=0
+         ALT: <span id="ov" class="chip ov">OV</span>          not available (dim) -->
+    <span id="sm" class="chip sm on">SM</span>             <!-- aero_mode===1 (Snapshot.active_aero_mode) -->
+  </span>
+  <span id="voice" class="voice" hidden>● LISTENING 2s</span> <!-- voice.listening, voice.left_s -->
+  <!-- Balanced/aggressive engine is being reworked separately; the pill is display only. -->
+  <span id="mindset" class="pill">BAL</span>               <!-- mindset='balanced' -->
+  <!-- ALT: <span id="mindset" class="pill aggr">AGGR</span> -->
+</header>
+
+<section id="banner" class="banner p2">
+  <div class="bar"></div>
+  <div class="body">
+    <div class="current">
+      <!-- call.text (dispatched text, verbatim) -->
+      <div id="call-text" class="text">Hamilton 0.6 behind with overtake. He's 3 tenths faster.</div>
+      <div class="meta"><span class="pri">● ACTION</span> L24 · 6s<br><span class="started">▶ started</span></div>
+      <div id="press" class="press ack">ACK ✓</div>   <!-- press feedback chip (ACK / NEG) -->
+    </div>
+    <!-- planned call evidence -->
+    <div class="evidence"><b>WHY</b> gap behind 0.6 s · closing 0.3 s/lap · OV active · hold 58%</div>
+    <div class="previous"><b>PREV · L23</b> Still on Plan A, window laps 26 to 28.</div>
+  </div>
+</section>
+<!-- ALT banner, SC:   class="banner p1"  text "Safety car. Box, box. Plan C. Cheap stop."  pri "⚠ URGENT"
+     ALT banner, red flag: class="banner p1"  text "Red flag. Box this lap."  (queue flushed, no PREV change) -->
+
+<section class="zone tyres">
+  <div class="t-head">
+    <span class="t-fit"><span class="comp medium">MEDIUM</span><span class="age">14 laps</span></span> <!-- tyre_visual, tyre_age_laps -->
+    <span class="t-sep"></span>
+    <!-- strategy.laps_of_pace (docs/18): green plenty / amber shrinking / red near cliff -->
+    <span class="t-pace warn">~6 laps of pace ▼ <small>SHRINKING</small></span>
+    <!-- ALT: <span class="t-pace ok">~18 laps of pace ▬ <small>PLENTY</small></span>
+         ALT: <span class="t-pace crit">~2 laps of pace ▼ <small>NEAR CLIFF</small></span> -->
+  </div>
+  <div class="car">
+    <!-- tyres.{fl,fr,rl,rr}.inner / .status / .surface / .wear ; brakes.{fl,..} -->
+    <!-- trend from tyre_inner_ema_fast - tyre_inner_ema_slow: ▲ heating / ▼ cooling / ▬ steady.
+         meter --f = (inner - 60) / 70. HOT WEAR tag: wear_hot_corner='fr', wear_hot_rate=1.9 %/lap.
+         Whole-car conditions (blister_max_pct, graining, overheat) show one tag on the worst corner.
+         #lockup previews lockup_wheel='fl' plus a blister tag. -->
+    <div class="corner ok fl"><div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div><div class="temp">104°</div><div class="word"><span class="trend up" title="heating">▲</span></div><div class="meter twin"><b></b><i style="--f:.63"></i></div><div class="det"><span class="wear">wear <b>31%</b></span><span class="surf">surf 101°</span></div><div class="tags"><span class="tag lock lockup-only">LOCKED</span></div></div>
+    <div class="corner hot flip"><div class="lbl"><span>FR</span><span class="brk">BRK 455°</span></div><div class="temp">112°</div><div class="word"><span class="trend up" title="heating">▲</span></div><div class="meter twin"><b></b><i style="--f:.74"></i></div><div class="det"><span class="wear">wear <b>38%</b></span><span class="surf">surf 115°</span></div><div class="tags"><span class="tag crit">HOT WEAR +1.9%/lap</span><span class="tag warn lockup-only">BLISTER 12%</span></div></div>
+    <!-- ALT conditions on the worst corner: <span class="tag warn">GRAINING</span>  <span class="tag crit">OVERHEAT</span> -->
+    <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div><div class="temp">96°</div><div class="word"><span class="trend flat" title="steady">▬</span></div><div class="meter twin"><b></b><i style="--f:.51"></i></div><div class="det"><span class="wear">wear <b>22%</b></span><span class="surf">surf 94°</span></div><div class="tags"></div></div>
+    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div><div class="temp">78°</div><div class="word"><span class="trend down" title="cooling">▼</span></div><div class="meter twin"><b></b><i style="--f:.26"></i></div><div class="det"><span class="wear">wear <b>21%</b></span><span class="surf">surf 76°</span></div><div class="tags"></div></div>
+  </div>
+  <!-- Arrows only on the live-adjustable values (bias, on-throttle diff). Off-throttle is display only. -->
+  <div class="setup">
+    <span class="k">BB</span>
+    <span><span class="v">56%</span> <span class="sug">▲ try 57</span></span>          <!-- front_brake_bias=56, setup advisor target 57 -->
+    <span></span>
+    <span class="k">DIFF</span>
+    <span>ON <span class="v suited">60%</span> <span class="sug none">✓ suited</span></span> <!-- setup_on_throttle_diff=60 = target -->
+    <span>OFF <span class="v suited">55%</span></span>                                      <!-- setup_off_throttle_diff=55, no arrow -->
+    <span class="legend">underlined = matches setup target · ▲▼ = suggested change</span>
+  </div>
+</section>
+
+<section class="zone tiles">
+  <div class="tile fuel">
+    <h2>FUEL AT FLAG</h2>
+    <!-- fuel_remaining_laps: game MFD laps spare/short at the flag (one decimal).
+         TODO: revisit switching to the two-part tile, absolute fuel_laps + coloured margin_laps
+         (FuelBudget in src/pitwall/model/budget.py), once the fuel_delta_laps target ownership
+         is defined (docs/15 §10 open question 1). -->
+    <div class="big ok">+0.4</div>
+    <div class="sub">laps SPARE</div>
+    <!-- ALT: <div class="big crit">−0.6</div><div class="sub">laps SHORT</div> -->
+  </div>
+  <!-- EnergyBudget.store_pct + EnergyBudget.mode (src/pitwall/model/budget.py, docs/18) -->
+  <div class="tile batt on_budget">
+    <h2>BATT</h2>
+    <div><span class="big">62%</span></div>
+    <div class="mode"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg> ON BUDGET</div>
+    <!-- ALT over:      <div class="tile batt over">  ... <svg class="ico" viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3 4"/></svg> OVER · SAVE
+         ALT under:     <div class="tile batt under"> ... <svg class="ico" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></svg> UNDER · CHARGING
+         ALT attack_ok: <div class="tile batt attack_ok"> ... bolt icon ... SPEND · ATTACK OK -->
+  </div>
+  <div class="tile wide weather">
+    <h2>WEATHER</h2>
+    <!-- track_info.weather_forecast[0..2], track_info.rain_chance_pct[0..2] -->
+    <div class="wx dry-only">
+      <!-- icon = weather type (0 clear .. 5 storm, web/app.js WEATHER_WORDS), always with its word.
+           Cell class: dry (neutral), wet (blue: type 3, or rain >= 40 %), storm (red: type >= 4), as wxTile() today. -->
+      <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-1"/></svg><span class="pct">5%</span><div class="sky">LIGHT CLOUD</div></div>
+      <div><div class="k">IN 10</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">10%</span><div class="sky">OVERCAST</div></div>
+      <div><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">25%</span><div class="sky">OVERCAST</div></div>
+      <!-- ALT rain coming: <div class="wet"><div class="k">IN 10</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">60%</span><div class="sky">LIGHT RAIN</div></div>
+           ALT storm:      <div class="storm"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-5"/></svg><span class="pct">90%</span><div class="sky">STORM</div></div> -->
+    </div>
+    <!-- Rain preview (#rain). Marker goes on the first forecast cell at or after
+         weather_crossover_min (SessionState, not in the payload yet). Colour by crossover:
+         to_inter amber, to_wet blue, to_dry amber. -->
+    <div class="wx rain-only">
+      <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">20%</span><div class="sky">OVERCAST</div></div>
+      <div class="wet xo-warn"><div class="k">IN 10 <span class="comp inter xs">INTER</span></div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">65%</span><div class="sky">LIGHT RAIN</div></div>
+      <div class="wet"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">70%</span><div class="sky">LIGHT RAIN</div></div>
+    </div>
+    <!-- track_info.weather_crossover: to_inter / to_wet / to_dry -->
+    <div class="cross dry-only">✓ no crossover</div>
+    <!-- weather_crossover='to_inter', weather_crossover_min=5, weather_crossover_pct=65 -->
+    <div class="cross warn rain-only">→ <span class="comp inter xs">INTER</span> in ~5 min · rain 65%</div>
+    <!-- ALT to_inter: <div class="cross warn">⚠ INTERS SOON · rain 60% in 10</div>
+         ALT to_wet:   <div class="cross cold">→ <span class="comp wet xs">WET</span> in ~10 min · rain 90%</div>  cell class="storm xo-cold"
+         ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
+  </div>
+  <div class="tile wide damage">
+    <h2>DAMAGE</h2>
+    <!-- damage.{front_left_wing,...} 0-100. Neutral numbers, amber >= 5, red >= 25.
+         The number is what the engineer speaks. No whole-tile colour. -->
+    <div class="dmg">
+      <span>FW L <span class="n warn">6%</span></span>
+      <span>Floor <span class="n">2%</span></span>
+    </div>
+    <!-- ALT none: <div class="dmg"><span class="none">✓ none</span></div>
+         ALT red:  <span>FW L <span class="n crit">31%</span></span> -->
+  </div>
+</section>
+
+<!-- ======================================================= right contextual zone =====
+     Auto-selected. Page swap (UDP Action 4 / P) is NOT a cycler: one press snaps back to this
+     default race layout. This replaces engine.cycle_page and ui.auto_page_manual_hold_s. -->
+<section class="zone ctx">
+  <div class="ctx-head"><h2 class="h-race">RACE · AUTO</h2><h2 class="h-quali">QUALI · AUTO</h2><span class="how h-race">safety › box › reply › battle › info</span></div>
+  <div class="ctx-race">
+
+    <!-- Rain crossover is Safety (docs/04 ladder), so it tops the zone. Proposal: the card shows
+         when weather_crossover is set and weather_crossover_min <= 5; further out, the tile marker alone.
+         Card colour follows the crossover: to_inter / to_dry amber, to_wet blue. -->
+    <div class="card safety rain-only">
+      <div class="rank">SAFETY</div>
+      <div class="head">☂ RAIN CROSSOVER → <span class="comp inter">INTER</span></div>
+      <div class="line">rain <b>65%</b> in <b>~5 min</b> · about 3 laps</div>
+    </div>
+
+  <!-- ALT: SC + battle. Safety card goes on top; battle stays below; PLAN C line appears in strategy.
+  <div class="card safety"><div class="rank">SAFETY</div><div class="head">⚠ SAFETY CAR</div>
+    <div class="line">lap 2 under SC · <b>pit loss 11.2 s</b> instead of 21.0 s</div></div>
+  -->
+  <!-- ALT: red-flag flush. Only this card remains: every queued non-safety card is flushed.
+  <div class="card safety red"><div class="rank">SAFETY · QUEUE FLUSHED</div><div class="head">⚠ RED FLAG</div>
+    <div class="line">box this lap · tyres free to change</div></div>
+  -->
+  <!-- ALT: box near pit entry + battle. Execution is promoted (rank -1) near pit entry and sits
+       above everything except safety. resolved_by: boxing clears the blue-flag card.
+  <div class="card exec"><div class="rank">EXECUTION · PROMOTED</div><div class="head">BOX NOW · PLAN A</div>
+    <div class="line">pit entry in <b>300 m</b> · hards · rejoin P7 behind Ocon +1.2</div></div>
+  <div class="card safety" hidden>blue flag (cleared by box, resolved_by)</div>
+  -->
+  <!-- ALT: reply to a menu / voice request (rank 2), sits above tactical.
+  <div class="card reply"><div class="rank">REPLY · GAP TO LEADER?</div><div class="head">+18.4 s</div>
+    <div class="line">leader Verstappen · stable over 3 laps</div></div>
+  -->
+
+    <!-- strategy.battle (docs/18 battle state) -->
+    <div class="card battle threat single">
+      <div class="modes">
+        <span>free air</span><span>catching</span><span>attacking</span>
+        <span class="on">defending</span><span>under threat</span><span>managing</span>
+      </div>
+      <div class="mode">◀ DEFENDING <span class="sub">· 2 laps</span></div>  <!-- battle.mode, battle.mode_laps -->
+      <div class="rv">
+        <span class="side">▼ BEHIND</span>
+        <span class="name">P6 HAMILTON <span class="tag crit">OV</span></span>   <!-- rival_behind.pos/name, .overtake -->
+        <span class="gap">−0.6</span>                                            <!-- rival_behind.gap_s -->
+      </div>
+      <!-- gap rail: 0-3 s, 1 s overtake range shaded, marker glides (.rail .rc, --g = gap / 3) -->
+      <div class="rail behind in"><div class="rz">1 S</div><div class="rc" style="--g: .2"></div></div>
+      <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div> <!-- battle.closing_behind_s, battle.hold_prob -->
+      <div class="rv" style="margin-top:.3rem; opacity:.6">
+        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS</span><span class="gap">+2.4</span>
+      </div>
+    </div>
+    <!-- PROPOSED multi-car battle (#fight-ahead, #sandwich, #fight-behind). Rows run in track order,
+         up to 2 ahead and 2 behind, each with its own state word, gap to us and rail.
+         New backend fields: rival_ahead2_{pos,name,gap_s,overtake}, rival_behind2_{...}, battle_swaps
+         (place changes inside battle_swap_window_s). Header from battle.result:
+           scrap                    "SCRAP · P3 to P5 · 5 swaps in 2 min"
+           swap_ahead / swap_behind "TRADING PLACES · Hamilton · 3 swaps in 2 min"
+           none                     the row modes, e.g. "DEFENDING + ATTACKING"
+         IN TRAIN = second car within 1 s of the car between it and us. -->
+    <div class="card battle attack scrap fight-ahead-only">
+      <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>  <!-- battle.result='scrap', battle_swaps -->
+      <div class="bcar train">  <!-- rival_ahead2 -->
+        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI</span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
+      </div>
+      <div class="bcar attack">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
+        <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar calm">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON</span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+      </div>
+    </div>
+    <div class="card battle threat sandwich-only">
+      <div class="grp crit">◀ DEFENDING <span class="sub">+</span> <span class="ok">▶ ATTACKING</span></div>
+      <div class="bcar attack">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
+        <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .23"></div></div>
+        <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar defend">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
+        <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .2"></div></div>
+        <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div>
+      </div>
+    </div>
+    <!-- ALT sandwich after 3 swaps with Hamilton (battle.result='swap_behind'):
+         <div class="grp crit">⇄ TRADING PLACES <span class="sub">· Hamilton · 3 swaps in 2 min</span></div> -->
+    <div class="card battle threat scrap fight-behind-only">
+      <div class="grp crit">⇄ SCRAP <span class="sub">· P5 to P7 · 4 swaps in 2 min</span></div>
+      <div class="bcar calm">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar defend">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
+        <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .13"></div></div>
+        <div class="pace"><span class="crit">▲ closing 0.2 s/lap</span><span class="prob">HOLD 51%</span></div>
+      </div>
+      <div class="bcar train">  <!-- rival_behind2 -->
+        <div class="rv"><span class="side">▼ P7</span><span class="name">RUSSELL <span class="tag crit">OV</span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
+        <div class="rail behind train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
+      </div>
+    </div>
+    <!-- ALT battle modes (swap the card class + .on chip + mode word):
+         free_air      class="card battle calm"     "FREE AIR · nobody in 3 s"
+         catching      class="card battle catching" "▶ CATCHING · in range in 4 laps" (battle.catch_laps)
+         attacking     class="card battle attack"   "▶ ATTACKING · pass 42%" + rail class="rail ahead in" (battle.pass_prob)
+         defending     class="card battle threat"   (default, lit red)
+         under_threat  class="card battle threat"   "◀ UNDER THREAT · in range in 3 laps" (battle.threat_laps)
+         managing      class="card battle calm"     "MANAGING · no threat" (greyed) -->
+
+    <!-- strategy.plans[], active_plan, on_plan, plan_off_s, plan_target_lap (docs/03 Plan A/B/C) -->
+    <div class="card strat">
+      <div class="rank">STRATEGY</div>
+      <div class="plan"><span class="pid">PLAN A</span>
+        <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span></span>
+        box L27 · window L26–28 <span class="onp">✓ ON PLAN</span></div>
+      <!-- ALT off plan: <span class="onp off">✗ OFF PLAN −4.0 s</span>  (plan_off_s) -->
+      <div class="plan alt"><span class="pid">PLAN B</span>
+        <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span> <span class="arr">→</span> <span class="comp soft">S</span></span>
+        2 stops · +3.1 s</div>                                   <!-- plans[1].delta_s -->
+      <!-- ALT under SC/VSC (plans[2], kind 'reactive'):
+      <div class="plan c"><span class="pid">PLAN C</span><span class="boxnow">BOX NOW</span> cheap stop saves 9.8 s</div>
+      -->
+    </div>
+
+    <div class="card info">◦ INFO · Ocon P7 pitted L23, rejoined 4.1 s behind Hamilton</div>
+  </div>
+
+  <!-- quali zone: shown by body.quali, automatic by phase (out_lap / garage / flying / in_lap) -->
+  <div class="qzone">
+    <div class="qphase"><span>GARAGE</span><span>OUT LAP</span><span class="on">FLYING</span><span>IN LAP</span></div> <!-- phase -->
+    <div class="card"><div class="qcut"><span>CUT-OFF</span><span class="pos">P9</span>
+      <span class="badge">THROUGH</span><span class="m">+0.21</span></div>               <!-- quali.through, margin_ms -->
+      <!-- ALT: <span class="badge out">OUT</span><span class="m" style="color:var(--crit)">−0.08</span> -->
+      <div class="line">predicted cut-off <b>1:31.904</b> · P10 Albon</div></div>    <!-- quali.cutoff_ms -->
+    <div class="card"><div class="qcut"><span>BENCHMARK</span><span class="pos">pole Leclerc</span><span class="m" style="color:var(--crit)">+0.38</span></div> <!-- pole.gap_ms -->
+      <table class="qbench"><thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th></tr></thead>
+        <tbody>
+          <tr><th>pole</th><td class="ok">−0.02</td><td class="crit worst">+0.29</td><td class="crit">+0.11</td></tr> <!-- pole.sector_gaps_ms, worst_sector -->
+          <tr><th>mate</th><td class="ok">−0.05</td><td class="crit worst">+0.12</td><td class="ok">−0.03</td></tr> <!-- teammate.sector_gaps_ms -->
+        </tbody></table>
+      <div class="line">mate Sainz <b>+0.04</b></div></div>                                <!-- teammate.gap_ms -->
+  </div>
+</section>
+
+<!-- cool-down lite debrief: shown by body.cool (quali.cool) over the tyres + tiles cells -->
+<section class="zone coolzone">
+  <h2>COOL-DOWN · LAST RUN</h2>
+  <div class="cz-top">
+    <div class="tile"><h2>LAST LAP</h2><div class="v">1:31.702</div></div>        <!-- cool.last_hot_ms -->
+    <div class="tile"><h2>GAP TO POLE</h2><div class="v crit">+0.38</div></div>  <!-- cool.pole.gap_ms -->
+  </div>
+  <h2>SECTOR CONSISTENCY vs previous run</h2>
+  <div class="cz-sec">
+    <div>S1<span class="tr up">▲</span>more consistent</div>
+    <div>S2<span class="tr down">▼</span>less consistent</div>
+    <div>S3<span class="tr flat">▬</span>same</div>
+  </div>
+  <!-- tyre window hit: belongs in the full debrief, kept out of the lite version.
+  <div class="tile"><h2>TYRE WINDOW</h2><div class="v">3 / 4 corners in window</div></div>
+  -->
+</section>
+
+<!-- pit board takeover (unchanged concept): body.pit, main row only -->
+<section class="zone pitzone">
+  <div class="pb-release">RELEASE · GO</div>
+  <div class="sub">pressures, next run and setup changes as today (web/index.html #pitboard)</div>
+</section>
+
+<footer class="footer">
+  <!-- muted forever; never escalates colour -->
+  <span id="rate">10 upd/s</span>                                                 <!-- client-derived frame rate -->
+  <span id="lag">voice lag 210 ms · screen lag 12 ms</span>  <!-- latency.trigger_to_speak_p99_ms, latency.packet_to_ws_p99_ms -->
+  <span>ERS 62%</span>                                                             <!-- ers_pct -->
+  <span>SC 0</span>                                                                <!-- safety_car -->
+</footer>
+
+<button class="arm" type="button" aria-pressed="false">ARM PHONE RADIO</button>
+
+<!-- driver menu: shown by body.menu (menu.open). menu.items, menu.index, menu.left_s -->
+<div class="scrim"></div>
+<aside class="drvmenu" aria-live="polite">
+  <div class="drvmenu-head">RADIO PIT <span class="left">closes 6s</span></div>
+  <div class="meter"><i style="--f:.75"></i></div>
+  <ol>
+    <li>Gap to leader?</li>
+    <li class="sel">Box this lap</li>
+    <li>Plan B?</li>
+    <li>Radio calls: normal</li>
+  </ol>
+</aside>
+
+<div id="fx" class="fx"></div>
+
+<script>
+// Mockup only: preview takeovers via URL hash and fire the feedback motion by key.
+(function () {
+  var body = document.body, fx = document.getElementById("fx");
+  var voice = document.getElementById("voice"), press = document.getElementById("press");
+  var KNOWN = ["phone", "quali", "cool", "pit", "menu", "listen", "stale", "sc", "redflag", "rain", "lockup", "fight-ahead", "sandwich", "fight-behind"];
+  function applyHash() {
+    KNOWN.forEach(function (c) { body.classList.remove(c); });
+    location.hash.replace("#", "").split("+").forEach(function (c) {
+      if (KNOWN.indexOf(c) >= 0) body.classList.add(c);
+    });
+    if (body.classList.contains("listen")) listen(true);
+  }
+  function once(kind) {                     // fires once, eases out, never loops
+    fx.className = "fx";
+    void fx.offsetWidth;
+    fx.className = "fx once " + kind;
+  }
+  function listen(open, outcome) {
+    if (open) { fx.className = "fx listen"; voice.hidden = false; voice.className = "voice";
+      voice.textContent = "● LISTENING 2s"; return; }
+    voice.className = "voice " + outcome;
+    voice.textContent = outcome === "heard" ? "HEARD ▸ BOX" : "MISSED ▸ ?";
+    once(outcome);
+  }
+  function newCall() {
+    var b = document.getElementById("banner");
+    b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit");
+    once("call");
+  }
+  document.addEventListener("keydown", function (e) {
+    var k = e.key.toLowerCase();
+    if (k === "a") { press.className = "press ack"; press.textContent = "ACK ✓"; once("ack"); }
+    else if (k === "n") { press.className = "press neg"; press.textContent = "NEG ✗"; once("neg"); }
+    else if (k === "r") newCall();
+    else if (k === "v") {
+      var open = fx.classList.contains("listen");
+      if (open) listen(false, e.shiftKey ? "missed" : "heard"); else listen(true);
+    }
+    else if (k === "m") body.classList.toggle("menu");
+    else if (k === "p") { history.replaceState(null, "", location.pathname); applyHash(); } // reset, not cycle
+  });
+  // Phone keeps the audio path: arming unlocks browser speech, as /radio does today.
+  document.querySelector(".arm").addEventListener("click", function () {
+    var b = this, on = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", String(on));
+    b.textContent = on ? "PHONE RADIO ARMED" : "ARM PHONE RADIO";
+    if (on && window.speechSynthesis) {
+      speechSynthesis.speak(new SpeechSynthesisUtterance(document.getElementById("call-text").textContent));
+    }
+  });
+  window.addEventListener("hashchange", applyHash);
+  applyHash();
+})();
+</script>
+</body>
+</html>
