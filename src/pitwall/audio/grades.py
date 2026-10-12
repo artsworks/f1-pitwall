@@ -34,7 +34,7 @@ class ScenarioResult:
 
 
 def load_workbook(path: Path) -> list[Scenario]:
-    workbook = yaml.safe_load(path.read_text())
+    workbook = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(workbook, dict) or workbook.get("kind") != "radio-grades":
         raise ValueError(f"{path}: expected kind: radio-grades")
     defaults = workbook.get("defaults", {}).get("policy", {})
