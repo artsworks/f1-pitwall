@@ -31,7 +31,7 @@
        Safety > Execution (promoted when near pit entry) > Reply > Tactical > Info/Coaching.
        Mirrors resolved_by (box clears blue flag) and the red-flag flush.
      3 Page override = reset: P / UDP Action 4 snaps back to the race layout, no cycling.
-     4 Tyres: 2x2 plan view, whole-tile status colour, status word, fitted group and a
+     4 Tyres: 2x2 plan view, whole-tile status colour, trend arrow in place of the status word, fitted group and a
        separate laps_of_pace group with trend arrow.
      5 Fuel: fixed tile, fuel_remaining_laps only (TODO for the two-part tile).
      6 Damage: neutral numbers, amber >= 5 %, red >= 25 %, no whole-tile colour.
@@ -219,7 +219,8 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .corner .word { grid-area: word; align-self: center; font-weight: bold; font-size: 1.5rem; letter-spacing: .12em; }
 .corner .det { grid-area: det; color: var(--soft); display: flex; gap: .8rem; align-items: baseline;
   font-size: 1.25rem; white-space: nowrap; }
-.corner .det .wear { font-weight: bold; color: var(--fg); font-size: 1.35rem; min-width: 8ch; }
+.corner .det .wear { color: var(--soft); font-size: 1.1rem; min-width: 8ch; }
+.corner .det .wear b { color: var(--fg); font-size: 1.9rem; }
 .corner .det .surf { color: var(--dim); font-size: 1.1rem; }
 .corner.hot .temp, .corner.hot .word, .corner.hot .lbl span:first-child { color: var(--crit); }
 .corner.ok .temp, .corner.ok .word, .corner.ok .lbl span:first-child { color: var(--ok); }
@@ -233,8 +234,11 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 @keyframes flip { 0% { box-shadow: 0 0 0 0 var(--ring, var(--info)); } 100% { box-shadow: 0 0 0 .9rem transparent; } }
 .corner.flip .temp { animation: temp-pop 700ms var(--ease-snap); }
 /* trend: tyre_inner_ema_fast vs tyre_inner_ema_slow per corner */
-.corner .word { display: flex; flex-direction: column; line-height: 1.2; }
-.corner .trend { color: var(--soft); font-size: 1.05rem; font-weight: normal; letter-spacing: .04em; min-width: 9ch; }
+/* Owner choice: the trend arrow replaces the status word, so the tile colour has no word beside it. */
+.corner .word { font-size: 2.4rem; letter-spacing: 0; line-height: 1; }
+.corner .trend.up { color: var(--crit); }
+.corner .trend.down { color: var(--cold); }
+.corner .trend.flat { color: var(--fg); }
 /* operating window meter: 60..130 °C scale, band = tyre_inner_cold_c 80 .. tyre_inner_hot_c 110
    (thresholds.yaml). Fill reuses .meter i with the glide. */
 .corner .twin { grid-area: meter; margin: .3rem 0 .2rem; }
@@ -491,7 +495,7 @@ body.phone .corner .temp { font-size: 2.4rem; }
 body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
 body.phone .t-head { font-size: 1.1rem; }
 body.phone .corner .det .surf { display: none; }
-body.phone .corner .trend .tw, body.phone .corner .tags { display: none; }
+body.phone .corner .tags { display: none; }
 body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
 body.phone .arm { display: block; margin: .6rem .9rem 1rem; padding: .8rem; font: inherit; font-size: 1.4rem;
   font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
@@ -581,11 +585,11 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
          meter --f = (inner - 60) / 70. HOT WEAR tag: wear_hot_corner='fr', wear_hot_rate=1.9 %/lap.
          Whole-car conditions (blister_max_pct, graining, overheat) show one tag on the worst corner.
          #lockup previews lockup_wheel='fl' plus a blister tag. -->
-    <div class="corner ok fl"><div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div><div class="temp">104°</div><div class="word">OK<span class="trend">▲ <span class="tw">heating</span></span></div><div class="meter twin"><b></b><i style="--f:.63"></i></div><div class="det"><span class="wear">wear 31%</span><span class="surf">surf 101°</span></div><div class="tags"><span class="tag lock lockup-only">LOCKED</span></div></div>
-    <div class="corner hot flip"><div class="lbl"><span>FR</span><span class="brk">BRK 455°</span></div><div class="temp">112°</div><div class="word">HOT<span class="trend">▲ <span class="tw">heating</span></span></div><div class="meter twin"><b></b><i style="--f:.74"></i></div><div class="det"><span class="wear">wear 38%</span><span class="surf">surf 115°</span></div><div class="tags"><span class="tag crit">HOT WEAR +1.9%/lap</span><span class="tag warn lockup-only">BLISTER 12%</span></div></div>
+    <div class="corner ok fl"><div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div><div class="temp">104°</div><div class="word"><span class="trend up" title="heating">▲</span></div><div class="meter twin"><b></b><i style="--f:.63"></i></div><div class="det"><span class="wear">wear <b>31%</b></span><span class="surf">surf 101°</span></div><div class="tags"><span class="tag lock lockup-only">LOCKED</span></div></div>
+    <div class="corner hot flip"><div class="lbl"><span>FR</span><span class="brk">BRK 455°</span></div><div class="temp">112°</div><div class="word"><span class="trend up" title="heating">▲</span></div><div class="meter twin"><b></b><i style="--f:.74"></i></div><div class="det"><span class="wear">wear <b>38%</b></span><span class="surf">surf 115°</span></div><div class="tags"><span class="tag crit">HOT WEAR +1.9%/lap</span><span class="tag warn lockup-only">BLISTER 12%</span></div></div>
     <!-- ALT conditions on the worst corner: <span class="tag warn">GRAINING</span>  <span class="tag crit">OVERHEAT</span> -->
-    <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div><div class="temp">96°</div><div class="word">OK<span class="trend">▬ <span class="tw">steady</span></span></div><div class="meter twin"><b></b><i style="--f:.51"></i></div><div class="det"><span class="wear">wear 22%</span><span class="surf">surf 94°</span></div><div class="tags"></div></div>
-    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div><div class="temp">78°</div><div class="word">COLD<span class="trend">▼ <span class="tw">cooling</span></span></div><div class="meter twin"><b></b><i style="--f:.26"></i></div><div class="det"><span class="wear">wear 21%</span><span class="surf">surf 76°</span></div><div class="tags"></div></div>
+    <div class="corner ok"><div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div><div class="temp">96°</div><div class="word"><span class="trend flat" title="steady">▬</span></div><div class="meter twin"><b></b><i style="--f:.51"></i></div><div class="det"><span class="wear">wear <b>22%</b></span><span class="surf">surf 94°</span></div><div class="tags"></div></div>
+    <div class="corner cold"><div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div><div class="temp">78°</div><div class="word"><span class="trend down" title="cooling">▼</span></div><div class="meter twin"><b></b><i style="--f:.26"></i></div><div class="det"><span class="wear">wear <b>21%</b></span><span class="surf">surf 76°</span></div><div class="tags"></div></div>
   </div>
   <!-- Arrows only on the live-adjustable values (bias, on-throttle diff). Off-throttle is display only. -->
   <div class="setup">
