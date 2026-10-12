@@ -34,7 +34,7 @@ def runtime_dir(recordings_dir: Path) -> Path:
 
 def read_recording_pointer(rt_dir: Path) -> Path | None:
     try:
-        text = (rt_dir / RECORDING_POINTER).read_text().strip()
+        text = (rt_dir / RECORDING_POINTER).read_text(encoding="utf-8").strip()
     except OSError:
         return None
     return Path(text) if text else None
@@ -130,7 +130,10 @@ class Supervisor:
         path = self.recorder.current_path
         if path is not None and path != self._pointer:
             self._pointer = path
-            (self.rt_dir / RECORDING_POINTER).write_text(str(path.resolve()))
+            (self.rt_dir / RECORDING_POINTER).write_text(
+                str(path.resolve()),
+                encoding="utf-8",
+            )
 
     def _spawn(self) -> None:
         with contextlib.suppress(OSError):
