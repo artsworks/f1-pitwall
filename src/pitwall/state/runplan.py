@@ -171,10 +171,10 @@ class RunTracker:
         decide: Callable[[], Plan],
         extend_cool: bool = False,
         fuel_short: bool = False,
+        fuel_cool_short: bool = False,
     ) -> HotLap | None:
         """Feed one Lap Data tick. `decide` plans after a hot lap; `extend_cool`
-        retains a cool plan, and `fuel_short` boxes after a cool lap. Returns the
-        HotLap completed on this tick, if any."""
+        retains a cool plan, and short fuel boxes after a cool lap or invalid start."""
         prev_ms, self._prev_lap_ms = self._prev_lap_ms, lap_time_ms
         prev_sector, self._prev_sector = self._prev_sector, sector
         if phase == "out_lap":
@@ -223,7 +223,7 @@ class RunTracker:
             elif not (self.kind == COOL and extend_cool):
                 self.plan = Plan("", "")
             if starts_invalid and self.plan.plan != "box":
-                self.plan = Plan("cool", "invalid")
+                self.plan = Plan("box", "fuel") if fuel_cool_short else Plan("cool", "invalid")
             self._start_lap(t, COOL if self.plan.plan == "cool" else HOT, ers_pct, lockups, spins)
             self._invalid = invalid
             self.next_lap_invalid = starts_invalid

@@ -17,4 +17,4 @@ server API expose the plan and its reason. Rules in
 `config/defaults/rules/qualifying.yaml` speak the plan and give cool-lap reminders.
 
 The dashboard API includes the plan, but the web page does not yet show a plan panel.
-A cool-lap push call needs enough fuel for a hot lap.
+A push call after a cool lap needs fuel for a hot lap. Another cool lap, or a retry after a deleted lap, needs fuel for a cool lap and a hot lap.

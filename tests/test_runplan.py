@@ -72,6 +72,7 @@ def _feed(
     invalid: bool = False,
     extend_cool: bool = False,
     fuel_short: bool = False,
+    fuel_cool_short: bool = False,
 ) -> HotLap | None:
     return rt.update(
         t=t,
@@ -90,6 +91,7 @@ def _feed(
         decide=lambda: plan,
         extend_cool=extend_cool,
         fuel_short=fuel_short,
+        fuel_cool_short=fuel_cool_short,
     )
 
 
@@ -186,6 +188,24 @@ def test_run_tracker_carries_track_limits_into_next_lap() -> None:
     )
     done = _feed(rt2, 64.0, 50, 5.0, 0)
     assert done is not None and done.invalid and rt2.plan == PUSH and not rt2.next_lap_invalid
+
+
+@pytest.mark.parametrize(
+    ("fuel_cool_short", "expected_plan"),
+    [
+        (True, Plan("box", "fuel")),
+        (False, Plan("cool", "invalid")),
+    ],
+)
+def test_run_tracker_invalid_hot_lap_reserves_cool_and_hot_fuel(
+    fuel_cool_short: bool, expected_plan: Plan
+) -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    _feed(rt, 60.0, 70_000, 4100.0, 2)
+    _feed(rt, 64.0, 50, 5.0, 0, invalid=True, fuel_cool_short=fuel_cool_short)
+    assert rt.plan == expected_plan
 
 
 def test_run_tracker_ignores_flashback() -> None:
@@ -333,6 +353,17 @@ def test_cool_hot_mode_requires_fuel_for_hot_lap() -> None:
     assert "cool_hot_mode" not in ids
     ids = _ids(_qsnap(cool_prep=True, fuel_for_hot_lap=True))
     assert "cool_hot_mode" in ids
+
+
+def test_lap_deleted_requires_fuel_for_cool_and_hot_lap() -> None:
+    base = {
+        "run_lap_kind": "hot",
+        "current_lap_invalid": True,
+        "time_for_cool_and_hot": True,
+        "fuel_for_hot_lap": True,
+    }
+    assert "lap_deleted" not in _ids(_qsnap(fuel_for_cool_and_hot=False, **base))
+    assert "lap_deleted" in _ids(_qsnap(fuel_for_cool_and_hot=True, **base))
 
 
 def test_cool_payload_swaps_layout() -> None:
