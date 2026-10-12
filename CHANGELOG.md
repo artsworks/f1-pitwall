@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.5.1 (2026-10-12)
+
+### Bug Fixes
+
+- Write and read text files as utf-8 so Windows cp1252 no longer crashes debrief
+  ([#80](https://github.com/artsworks/f1-pitwall/pull/80),
+  [`06a1140`](https://github.com/artsworks/f1-pitwall/commit/06a11401dbea7786202ee804fb04a62ed1d73c1d))
+
+
 ## v0.5.0 (2026-10-12)
 
 ### Features
