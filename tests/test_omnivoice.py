@@ -462,6 +462,40 @@ def test_voice_warm_auto_resolves_null_and_piper(monkeypatch, capsys) -> None:  
     assert "cached " in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    ("text", "templates", "expected"),
+    [
+        ("P5. Good start", ["P{position}. Good start"], True),
+        (
+            "Rival ahead, 1.2",
+            ["{rival_ahead_name} ahead, {gap_ahead_s:.1f}"],
+            False,
+        ),
+        (
+            "Battery 47. Keep harvesting",
+            ["Battery {ers_store_pct:.0f}. Keep harvesting"],
+            False,
+        ),
+        ("Box, Battery's 47", ["Box, {run_plan_why}"], False),
+        ("Box, No fuel for another lap", ["Box, {run_plan_why}"], True),
+        ("He's three tenths faster", ["He's {battle_pace_behind}"], False),
+        ("5 second penalty", ["{penalty_s} second penalty"], True),
+        ("Radio check", ["Radio check"], True),
+        ("Unknown line", ["Box {plan_spoken}"], True),
+        (
+            "Box Plan B",
+            ["{rival_ahead_name} {gap_ahead_s:.1f}", "Box {plan_spoken}"],
+            True,
+        ),
+        ("Line {x}", [], False),
+    ],
+)
+def test_reusable_filters_volatile_slots(text: str, templates: list[str], expected: bool) -> None:
+    from pitwall.cli.voice import _reusable
+
+    assert _reusable(text, templates) is expected
+
+
 def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.speaker as speaker_module
     import pitwall.cli.voice as voice_module
@@ -534,13 +568,35 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
         _, calls = asyncio.run(run_replay(recording, expected_engine, None))
     finally:
         expected_engine.dispatcher.log.close()
+    from pitwall.cli.voice import _reusable
+
+    rule_engine = expected_engine.rule_engine
+    templates: dict[str, list[str]] = {}
+    if rule_engine is not None:
+        for rule in rule_engine.rules:
+            definition = rule.defn
+            templates[definition.id] = [
+                *definition.say_pool(),
+                *(text for escalation in definition.escalate for text in escalation.say),
+                *(text for severity in definition.severity for text in severity.say),
+                *definition.say_many,
+            ]
+    reusable_calls = [
+        call for call in calls if _reusable(call.text, templates.get(call.rule_id, ()))
+    ]
+    dropped_calls = {
+        (call.rule_id, call.text)
+        for call in calls
+        if not _reusable(call.text, templates.get(call.rule_id, ()))
+    }
+    dropped_texts = {text for _, text in dropped_calls}
     startup = [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
     expected_phrases = list(
         dict.fromkeys(
             [
                 *startup,
                 *sorted(
-                    {(call.text, call.priority) for call in calls},
+                    {(call.text, call.priority) for call in reusable_calls},
                     key=lambda phrase: (phrase[1], phrase[0]),
                 ),
             ]
@@ -563,7 +619,14 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
     assert speech == expected_texts
     assert not (recording_dir / "decisions.jsonl").exists()
     assert not (tmp_path / "pitwall.sqlite").exists()
-    assert f"cached {len(expected_texts)} phrases" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert f"cached {len(expected_texts)} phrases" in output
+    if dropped_texts:
+        assert (
+            f"voice warm: skipped {len(dropped_texts)} lines with names or measured values"
+            in output
+        )
+        assert dropped_texts.isdisjoint(speech)
 
 
 def test_startup_prerender_uses_omnivoice_audio_without_piper(
