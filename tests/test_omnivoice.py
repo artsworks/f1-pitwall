@@ -86,7 +86,7 @@ def fake_server() -> tuple[str, FakeServerState]:
         thread.join(timeout=2)
 
 
-DEPRECATED_FIELDS: dict[str, object] = {
+OLD_PROFILE_FIELDS: dict[str, object] = {
     "omnivoice_voice": "test-voice",
     "omnivoice_seed": 17,
     "omnivoice_language": "French",
@@ -117,7 +117,7 @@ def _wait_for(predicate, timeout_s: float = 2.0) -> None:  # type: ignore[no-unt
     raise AssertionError("condition was not met")
 
 
-@pytest.mark.parametrize("deprecated", [{}, DEPRECATED_FIELDS])
+@pytest.mark.parametrize("deprecated", [{}, OLD_PROFILE_FIELDS])
 def test_synth_posts_text_only_and_returns_wav(
     fake_server, tmp_path: Path, deprecated: dict[str, object]
 ) -> None:  # type: ignore[no-untyped-def]
@@ -194,7 +194,7 @@ def test_make_omnivoice_speaker_uses_piper_provisional_audio(
     url, state = fake_server
     tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
     monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
-    speaker = make_omnivoice_speaker(_settings(url, tmp_path, **DEPRECATED_FIELDS), FakePlayer())
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, **OLD_PROFILE_FIELDS), FakePlayer())
     try:
         assert state.requests == [("/v1/models", {})]
         assert speaker._fallback is None
@@ -229,11 +229,21 @@ def test_omnivoice_cache_key_tracks_client_inputs_only() -> None:
     baseline = omnivoice_cache_key(settings, "model.gguf")
 
     assert omnivoice_cache_key(settings, "model.gguf") == baseline
-    deprecated = settings.model_copy(update=DEPRECATED_FIELDS)
-    assert omnivoice_cache_key(deprecated, "model.gguf") == baseline
     assert omnivoice_cache_key(settings, "other-model.gguf") != baseline
     changed = settings.model_copy(update={"radio_click": False})
     assert omnivoice_cache_key(changed, "model.gguf") != baseline
+
+
+def test_old_profile_omnivoice_fields_are_ignored(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.config.loader import ConfigStore
+
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(json.dumps({"speech": OLD_PROFILE_FIELDS}), encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    speech = ConfigStore().current().speech
+
+    assert not any(hasattr(speech, name) for name in OLD_PROFILE_FIELDS)
 
 
 def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
