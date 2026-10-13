@@ -1,0 +1,4 @@
+track_id: 17
+name: spielberg
+fuel_kg_per_lap: 1.003
+thresholds: {energy_over_tolerance_j: 490000}
