@@ -2,6 +2,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,12 +13,24 @@ concurrency:
 
 jobs:
   release:
+    # Only feat, fix, perf and breaking changes bump the version, so skip the job for other titles.
+    # Run it by hand to release commits a skipped or failed run left behind.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.head_commit.message, 'feat') ||
+      startsWith(github.event.head_commit.message, 'fix') ||
+      startsWith(github.event.head_commit.message, 'perf') ||
+      contains(github.event.head_commit.message, '!:') ||
+      contains(github.event.head_commit.message, 'BREAKING CHANGE')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       # Bumps pyproject.toml, runs `uv lock`, updates CHANGELOG.md, commits, tags and pushes.
       # No GitHub Release: publish.upload_to_vcs_release is false and `publish` is never run.
       - name: Version
