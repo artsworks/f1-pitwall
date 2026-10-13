@@ -81,7 +81,7 @@ reflow between sessions, and empty zones keep their space when values are absent
 │   BB 56%  DIFF ON 60%  │ DAMAGE           │   TACTICAL  battle, strategy     │
 │                        │                  │   INFO      rival pitted, penalty│
 ├────────────────────────┴──────────────────┴──────────────────────────────────┤
-│ G FOOTER  update rate · voice lag · screen lag · ERS · SC                    │ 2 rem
+│ G FOOTER  update rate · voice queue · TTS · screen lag · ERS · SC             │ 2 rem
 └──────────────────────────────────────────────────────────────────────────────┘
    ◄──── cols 1–4 ────►  ◄── cols 5–7 ──►   ◄──────── cols 8–12 ────────►
 ```
@@ -206,7 +206,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Brakes | `brakes.{fl,fr,rl,rr}` | Secondary `BRK 412°` in each tyre tile's top-right; neutral until a calibrated brake threshold exists |
 | ERS | `ers_pct` | Footer `⚡ BATTERY 62%` |
 | SC | `safety_car` | Footer `TRACK GREEN`; non-zero shows `⚠ SAFETY CAR` / `⚠ VSC` as a status-bar chip and paints the status bar background amber with the word `SAFETY CAR` / `VSC` |
-| Latency | `latency.trigger_to_speak_p99_ms`, `latency.packet_to_ws_p99_ms` | Footer, dim |
+| Latency | `latency.queue_count`, `latency.queue_oldest_s`, `latency.queue_wait_p99_ms`, `latency.tts_p99_ms`, `latency.packet_to_ws_p99_ms` | Footer, dim |
 | Protocol mismatch | close code 4001 / `v !== 1` | Banner replaced by red `PROTOCOL MISMATCH — RELOAD`; no reconnect |
 
 Fields **not** rendered on purpose: `session_type` (raw enum), `latency` beyond p99.

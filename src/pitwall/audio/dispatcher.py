@@ -3,9 +3,11 @@ and speak-time revalidation (docs/04). Sinks implement speak()/cancel()."""
 
 from __future__ import annotations
 
+import collections
 import heapq
 import itertools
 import random
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -74,6 +76,8 @@ class Call:
     lap: int
     t: float
     trigger_t: float
+    handoff_age_s: float = 0.0
+    max_age_s: float | None = None
     still_true: Any = None
     current: Any = None
     conflict_group: str = ""
@@ -134,8 +138,10 @@ class Dispatcher:
         self.log = decision_log or DecisionLog()
         self.sinks = [LogSink()] if sinks is None else sinks
         self.metrics = metrics or Metrics()
+        self.metrics.queue_source = self.queue_status
         self.budget_override = budget_override
         self._queue: list[_Queued] = []
+        self._dropped: collections.deque[str] = collections.deque()
         self._counter = itertools.count()
         self._last_fired: dict[str, float] = {}  # rule_id -> t
         self._fires_this_stint: dict[str, int] = {}
@@ -563,10 +569,37 @@ class Dispatcher:
 
     # -- output --------------------------------------------------------------
 
+    def _stale(self, call: Call, now: float) -> bool:
+        return (
+            "reply" not in call.tags
+            and "menu" not in call.tags
+            and now - call.trigger_t > self.policy.max_call_age_s
+        )
+
+    def note_dropped(self, call_id: str) -> None:
+        self._dropped.append(call_id)
+
+    def queue_status(self, now: float | None = None) -> tuple[int, float]:
+        if now is None:
+            now = self.latest_snapshot.now if self.latest_snapshot is not None else self.clock.now()
+        queued = [item.call for item in self._queue if "menu" not in item.call.tags]
+        oldest = max((now - call.trigger_t for call in queued), default=0.0)
+        return len(queued), oldest
+
     def drain(self, now: float | None = None) -> list[Call]:
         """Pop due calls in urgency order and return calls emitted."""
         if now is None:
             now = self.latest_snapshot.now if self.latest_snapshot is not None else self.clock.now()
+        while self._dropped:
+            call_id = self._dropped.popleft()
+            for index, (call, _) in enumerate(self._spoken_calls):
+                if call.id == call_id:
+                    del self._spoken_calls[index]
+                    if self._current is call:
+                        self._current = None
+                    self._log_call(call, "suppressed", "stale")
+                    break
+            self.metrics.forget_handoff(call_id)
         emitted: list[Call] = []
         held: list[_Queued] = []
         speaking = self._current
@@ -578,6 +611,10 @@ class Dispatcher:
             q = heapq.heappop(self._queue)
             call = q.call
             prompt = "menu" in call.tags
+            if self._stale(call, now):
+                self._log_call(call, "suppressed", "stale")
+                self._booking_undo.pop(call.id, None)
+                continue
             waits_for_straight = call.priority == 3 and self.policy.p3_straight_only
             deadline_ms = call.deadline_ms
             if waits_for_straight:
@@ -653,17 +690,26 @@ class Dispatcher:
                 speaking = call
             spoken_t = self.clock.now()
             muted = call.screen_only or self._silenced(call)
+            call.handoff_age_s = now - call.trigger_t
+            call.max_age_s = (
+                None if "reply" in call.tags or "menu" in call.tags else self.policy.max_call_age_s
+            )
+            audio_handed_off = False
             for sink in self.sinks:
                 if prompt and not sink.speaks_audio:
                     continue
                 if muted and sink.speaks_audio:
                     continue
                 sink.speak(call)
+                if sink.speaks_audio:
+                    audio_handed_off = True
+            if audio_handed_off:
+                self.metrics.note_handoff(call.id, time.time())
             self._current = call
             if prompt:
                 self._booking_undo.pop(call.id, None)
                 continue  # menu item names: audio only, not logged or repeatable
-            self.metrics.note_trigger_to_speak(call.trigger_t, spoken_t)
+            self.metrics.note_queue_wait(call.trigger_t, spoken_t)
             self._spoken_calls.append((call, now + len(call.text) / _CHARS_PER_SECOND))
             self._spoken_calls = self._spoken_calls[-16:]
             self._log_call(call, "fired", None)
@@ -716,6 +762,8 @@ class Dispatcher:
         )
 
     def _digest_call_ready(self, call: Call, now: float, on_straight: bool) -> bool:
+        if self._stale(call, now):
+            return False
         if call.flushes_queue:
             return False
         deadline_ms = call.deadline_ms

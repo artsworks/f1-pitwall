@@ -397,9 +397,15 @@ def cmd_start(args: argparse.Namespace) -> int:
         input=settings.input,
     )
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
-    speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
+
+    def on_spoken(cid: str, t: float) -> None:
+        hub.spoken(cid, t)
+        dispatcher.metrics.note_spoken(cid, t)
+
+    speaker.on_spoken = on_spoken
     if isinstance(speaker, PiperSpeaker):
         speaker.on_audio = hub.audio
+        speaker.on_dropped = dispatcher.note_dropped
         hub.streams_audio = True
     engine = Engine(
         store,

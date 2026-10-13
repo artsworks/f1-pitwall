@@ -1,4 +1,5 @@
 import io
+import sys
 import threading
 import time
 import wave
@@ -16,7 +17,7 @@ from pitwall.audio.piper_tts import (
     radio_blip,
     to_wav,
 )
-from pitwall.audio.speaker import NullSpeaker, make_speaker
+from pitwall.audio.speaker import NullSpeaker, SapiSpeaker, make_speaker
 from pitwall.config.models import SpeechSettings
 
 
@@ -77,6 +78,49 @@ def test_piper_speaker_plays_reports_and_caches() -> None:
     _wait_for(lambda: spoken == ["a", "b"])
     assert player.played == [b"front left cold", b"front left cold"]
     assert synthed == ["front left cold"]
+    sp.close()
+
+
+def test_piper_drops_calls_that_age_during_synthesis() -> None:
+    player = FakePlayer()
+    spoken: list[str] = []
+    dropped: list[str] = []
+
+    def slow_synth(text: str) -> tuple[bytes, float]:
+        time.sleep(0.3)
+        return text.encode(), 0.0
+
+    sp = PiperSpeaker(slow_synth, player)
+    sp.on_spoken = lambda cid, t: spoken.append(cid)
+    sp.on_dropped = dropped.append
+    call = _call("stale")
+    call.handoff_age_s = 9.9
+    call.max_age_s = 10.0
+    sp.speak(call)
+    _wait_for(lambda: dropped == ["stale"])
+
+    assert player.played == []
+    assert spoken == []
+    sp.close()
+
+
+def test_piper_plays_calls_without_an_age_cap() -> None:
+    player = FakePlayer()
+    spoken: list[str] = []
+
+    def slow_synth(text: str) -> tuple[bytes, float]:
+        time.sleep(0.3)
+        return text.encode(), 0.0
+
+    sp = PiperSpeaker(slow_synth, player)
+    sp.on_spoken = lambda cid, t: spoken.append(cid)
+    call = _call("reply")
+    call.handoff_age_s = 9.9
+    call.max_age_s = None
+    sp.speak(call)
+    _wait_for(lambda: spoken == ["reply"])
+
+    assert player.played == [b"box box"]
     sp.close()
 
 
@@ -234,7 +278,8 @@ def test_missing_voice_falls_back(tmp_path: Path) -> None:
     s = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="pitwall voice get"):
         make_piper_synth(s)
-    assert isinstance(make_speaker(s), NullSpeaker)
+    expected = SapiSpeaker if sys.platform == "win32" else NullSpeaker
+    assert isinstance(make_speaker(s), expected)
 
 
 def test_speech_disabled_makes_null_speaker() -> None:
