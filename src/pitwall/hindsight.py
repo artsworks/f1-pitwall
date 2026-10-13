@@ -61,7 +61,7 @@ def _setup_rules(value: SetupRules | Mapping[str, Any] | None) -> SetupRules:
 
     from pitwall.config.loader import DEFAULTS_DIR
 
-    defaults = yaml.safe_load((DEFAULTS_DIR / "setup_rules.yaml").read_text())
+    defaults = yaml.safe_load((DEFAULTS_DIR / "setup_rules.yaml").read_text(encoding="utf-8"))
     return parse_setup_rules(defaults)
 
 

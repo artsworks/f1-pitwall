@@ -98,7 +98,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
         out_dir = Path(args.out) if args.out else default
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{uid}.json"
-        path.write_text(json.dumps(digest, indent=2, default=str))
+        path.write_text(json.dumps(digest, indent=2, default=str), encoding="utf-8")
         print(f"digest: {path}")
     return 0
 
@@ -116,7 +116,7 @@ def cmd_debrief(args: argparse.Namespace) -> int:
         return 1
     path = Path(args.out) if args.out else Path(f"debrief-{uid}.html")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_debrief(db, uid, settings))
+    path.write_text(render_debrief(db, uid, settings), encoding="utf-8")
     print(f"debrief: {path}")
     return 0
 
@@ -227,7 +227,7 @@ def cmd_propose(args: argparse.Namespace) -> int:
     result = propose_thresholds(db, settings, args.candidate_rules)
     output = yaml.safe_dump(result, sort_keys=False)
     if args.out:
-        Path(args.out).write_text(output)
+        Path(args.out).write_text(output, encoding="utf-8")
         print(f"propose: review {args.out} before editing YAML")
     else:
         print(output)
@@ -420,7 +420,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         )
         baseline: dict[str, Any] | None = None
         if baseline_path.exists():
-            loaded = json.loads(baseline_path.read_text())
+            loaded = json.loads(baseline_path.read_text(encoding="utf-8"))
             if not isinstance(loaded, dict):
                 raise ValueError(f"{baseline_path}: baseline must be a JSON object")
             baseline = loaded
@@ -444,7 +444,10 @@ def cmd_bench(args: argparse.Namespace) -> int:
         if args.out:
             output = Path(args.out).expanduser()
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+            output.write_text(
+                json.dumps(scorecard, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
     except OSError as exc:
         print(f"bench: {exc}")
         return 1
@@ -515,7 +518,10 @@ def cmd_bench(args: argparse.Namespace) -> int:
         else:
             try:
                 baseline_path.parent.mkdir(parents=True, exist_ok=True)
-                baseline_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n")
+                baseline_path.write_text(
+                    json.dumps(scorecard, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
                 metrics = scorecard["metrics"]
                 history_entry = {
                     "date": datetime.now(UTC).date().isoformat(),
@@ -530,7 +536,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
                 }
                 history_path = scenarios_dir / "history.jsonl"
                 history_path.parent.mkdir(parents=True, exist_ok=True)
-                with history_path.open("a") as stream:
+                with history_path.open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps(history_entry, sort_keys=True) + "\n")
             except OSError as exc:
                 print(f"bench: {exc}")
@@ -553,7 +559,7 @@ def _bench_history(scenarios_dir: Path, window: int) -> int:
 
     history = scenarios_dir / "history.jsonl"
     try:
-        lines = history.read_text().splitlines() if history.exists() else []
+        lines = history.read_text(encoding="utf-8").splitlines() if history.exists() else []
         entries = [json.loads(line) for line in lines if line.strip()]
         history_lines = [line for line in lines if line.strip()]
         for line in history_lines[-window:]:

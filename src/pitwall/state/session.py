@@ -1411,6 +1411,7 @@ class SessionState:
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
                 throttle=self.throttle,
+                compound=self.tyre_compound,
             )
 
     def answer_push_check(self, push: bool) -> None:
@@ -1475,11 +1476,15 @@ class SessionState:
         return extend
 
     def _ers_need_pct(self) -> float:
-        """Battery wanted at the line to push: the configured floor, or what the
-        last hot lap spent (all of its start charge if it ran flat)."""
-        need = self._th("cool_ers_min_pct", 40.0)
+        """Battery wanted at the line to push: the configured floor (lower on
+        inters and wets), or what the last hot lap on this compound spent (all
+        of its start charge if it ran flat)."""
+        if self.tyre_compound in (7, 8):
+            need = self._th("cool_wet_ers_min_pct", 20.0)
+        else:
+            need = self._th("cool_ers_min_pct", 40.0)
         last = self.run.last_hot
-        if last is not None:
+        if last is not None and last.compound == self.tyre_compound:
             used = last.ers_start_pct - last.ers_end_pct
             if last.ers_end_pct <= 5.0:
                 used = max(used, last.ers_start_pct)

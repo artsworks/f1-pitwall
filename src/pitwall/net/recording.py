@@ -235,7 +235,7 @@ class RecordingWriter:
 
 
 def write_index(path: Path, entries: list[IndexEntry]) -> None:
-    path.write_text(json.dumps([e.to_dict() for e in entries]))
+    path.write_text(json.dumps([e.to_dict() for e in entries]), encoding="utf-8")
 
 
 class RecordingRotator:
@@ -409,7 +409,7 @@ def read_index(path: Path) -> list[dict[str, Any]]:
     idx = index_path_for(path)
     if not idx.exists():
         return []
-    data = json.loads(idx.read_text())
+    data = json.loads(idx.read_text(encoding="utf-8"))
     return list(data)
 
 
