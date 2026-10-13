@@ -73,6 +73,24 @@ def test_insert_call_stores_press_grade() -> None:
     assert grade["grade"] == "good" and grade["source"] == "press"
 
 
+def test_insert_call_stores_no_response_outcome() -> None:
+    db = Database(":memory:")
+    db.insert_call(
+        23,
+        {
+            "t": 1.0,
+            "outcome": "no_response",
+            "call_id": "call-1",
+            "rule_id": "cool_push_check",
+            "suppressed_by": "ack",
+        },
+    )
+
+    call = db.calls_for_session(23)[0]
+    assert call["outcome"] == "no_response"
+    assert call["suppressed_by"] == "ack"
+
+
 def test_insert_call_skips_press_grades_for_synthetic_sessions() -> None:
     db = Database(":memory:")
     real_uid = 22

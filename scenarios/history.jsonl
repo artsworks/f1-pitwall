@@ -1,2 +1,3 @@
 {"check_pass_rate": 0.8823529411764706, "date": "2026-10-07", "guards": "5/5", "note": "Starter Brazil scenarios: 5 guards, 2 targets", "real_accuracy": null, "real_graded": 0, "score": 88.2, "targets": "0/2", "targets_passed": 0}
+{"check_pass_rate": 0.8947368421052632, "date": "2026-10-12", "guards": "6/6", "note": "Add Brazil Q1 cool push confirmation guard scenario", "real_accuracy": null, "real_graded": 0, "score": 89.5, "targets": "0/2", "targets_passed": 0}
 {"check_pass_rate": 0.8947368421052632, "date": "2026-10-12", "guards": "5/5", "note": "quali fuel gate: box at the line when fuel is short, gate cool-lap push calls", "real_accuracy": null, "real_graded": 0, "score": 89.5, "targets": "1/3", "targets_passed": 1}

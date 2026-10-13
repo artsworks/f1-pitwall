@@ -18,5 +18,11 @@ because a wet hot lap spends less battery, so back-to-back hot laps are allowed.
 server API expose the plan and its reason. Rules in
 `config/defaults/rules/qualifying.yaml` speak the plan and give cool-lap reminders.
 
+On a cool lap, the push check starts after 400 m when the current lap time stays within the
+configured cool-pace allowance of the best-lap projection, at least 40% of sector 1 samples
+use full throttle, and ERS is not in recharge mode. The driver has five seconds after the
+prompt ends. A single press or silence switches the lap to push. A double press keeps the
+lap cool for the rest of that lap.
+
 The dashboard API includes the plan, but the web page does not yet show a plan panel.
 A push call after a cool lap needs fuel for a hot lap. Another cool lap, or a retry after a deleted lap, needs fuel for a cool lap and a hot lap.

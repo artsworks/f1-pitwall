@@ -533,6 +533,140 @@ def test_rule_reply_and_longer_response_window() -> None:
     assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]
 
 
+def test_no_response_uses_configured_window_and_logs_assumed_answer() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+    assert len(d.drain(0.0)) == 1
+    end_t = d._spoken_calls[-1][1]
+
+    d.submit([], _snap(end_t + 5.1))
+    d.drain()
+
+    assert responses == [("cool_push_check", "ack")]
+    record = next(row for row in _log(buf) if row["outcome"] == "no_response")
+    assert record["rule_id"] == "cool_push_check"
+    assert record["assumed_answer"] == "ack"
+    assert record["suppressed_by"] == "ack"
+
+
+def test_no_response_uses_input_window_when_rule_does_not_override_it() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(response_window_s=2.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [_cand("prompt", priority=1, text="Confirm?", no_response="neg")],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    end_t = d._spoken_calls[-1][1]
+
+    d.submit([], _snap(end_t + 1.9))
+    d.drain()
+    assert not responses
+    d.submit([], _snap(end_t + 2.1))
+    d.drain()
+    assert responses == [("prompt", "neg")]
+
+
+@pytest.mark.parametrize(("kind", "answer"), [("ack", "ack"), ("neg", "neg")])
+def test_press_answers_no_response_prompt_without_later_timeout(kind: str, answer: str) -> None:
+    from pitwall.input.press import Press
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, result, _: responses.append((rule_id, result))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    end_t = d._spoken_calls[-1][1]
+    press_t = end_t + 1.0
+
+    d.on_press(Press(kind, press_t), _snap(press_t))
+    d.submit([], _snap(end_t + 5.1))
+    d.drain()
+
+    assert responses == [("cool_push_check", answer)]
+    assert not any(row["outcome"] == "no_response" for row in _log(buf))
+
+
+def test_reset_session_clears_awaiting_no_response_calls() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [_cand("prompt", priority=1, text="Confirm?", response_window_s=1, no_response="ack")],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    assert d._awaiting_responses
+
+    d.reset_session(2)
+    d.submit([], _snap(100.0))
+    d.drain()
+
+    assert not d._awaiting_responses
+    assert not responses
+
+
+def test_deadline_drop_assumes_no_response() -> None:
+    d, _, buf = _dispatcher(deadlines_s={1: 0.5}, min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+
+    assert d.drain(1.0) == []
+    assert responses == [("cool_push_check", "ack")]
+    assert any(row["outcome"] == "no_response" for row in _log(buf))
+
+
+def test_rule_without_no_response_does_not_timeout() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit([_cand("ordinary", priority=1, text="Hello")], _snap(0.0))
+    d.drain(0.0)
+    d.submit([], _snap(100.0))
+    d.drain()
+
+    assert not responses
+    assert not any(row["outcome"] == "no_response" for row in _log(buf))
+
+
 class AudioSink(CollectSink):
     speaks_audio = True
 

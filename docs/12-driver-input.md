@@ -233,6 +233,8 @@ defaults to 8 s after the call finishes. With no such call:
 
 The packaged response window is 3 s after the call finishes. Strategy calls can set their
 own `response_window_s`.
+Rules can set `no_response` to `ack` or `neg`. The dispatcher applies that answer when the
+response window expires.
 
 | Call type | Acknowledge | Negative |
 |---|---|---|

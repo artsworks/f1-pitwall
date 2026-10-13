@@ -669,6 +669,7 @@ class Snapshot:
     run_plan_reason: str = ""
     run_plan_why: str = ""
     cool_lap: bool = False
+    cool_push_suspect: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
     fuel_for_hot_lap: bool = False  # fuel at the line covers one more hot lap
     fuel_for_cool_and_hot: bool = False  # fuel at the line covers a cool lap and a hot lap
@@ -1413,10 +1414,17 @@ class SessionState:
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
+                throttle=self.throttle,
                 fuel_short=self.fuel_remaining_laps < self._th("fuel_push_need_laps", 2.0),
                 fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
                 compound=self.tyre_compound,
             )
+
+    def answer_push_check(self, push: bool) -> None:
+        if push:
+            self.run.confirm_push()
+        else:
+            self.run.hold_cool()
 
     def _is_sprint(self) -> bool:
         if self._kind() != "race" or self.session_type not in self.weekend_structure:
@@ -2568,6 +2576,20 @@ class SessionState:
                 f"rears {(inner.rl + inner.rr) / 2:.0f}"
             )
         cool_lap = phase == "flying" and run.kind == COOL
+        cool_pace_pct = self._th("cool_pace_pct", 10.0)
+        ers_recharge_mode = self._th("ers_recharge_mode", -1)
+        cool_push_suspect = (
+            cool_lap
+            and not run.cool_held
+            and self.sector == 0
+            and player_best > 0
+            and self.track_length_m > 0
+            and self.lap_distance >= self._th("cool_push_check_m", 400.0)
+            and self.current_lap_time_ms
+            <= player_best * self.lap_distance / self.track_length_m * (1 + cool_pace_pct / 100)
+            and run.full_throttle_share >= self._th("cool_push_throttle_share", 0.4)
+            and (ers_recharge_mode < 0 or self.ers_deploy_mode != ers_recharge_mode)
+        )
         to_hot = (
             self.track_length_m - self._th("cool_hot_mode_m", 600.0) - self.lap_distance
             if cool_lap and self.track_length_m > 0
@@ -2637,6 +2659,7 @@ class SessionState:
             run_plan_reason=plan.reason,
             run_plan_why=why,
             cool_lap=cool_lap,
+            cool_push_suspect=cool_push_suspect,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
             fuel_for_hot_lap=fuel_at_line >= self._th("fuel_push_need_laps", 2.0),
             fuel_for_cool_and_hot=fuel_at_line >= self._th("fuel_cool_need_laps", 3.0),

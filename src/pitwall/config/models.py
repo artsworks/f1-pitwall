@@ -331,6 +331,7 @@ class RuleDefModel(BaseModel):
     on_ack: str | list[str] = ""
     on_neg: str | list[str] = ""
     response_window_s: float | None = None  # overrides input.response_window_s
+    no_response: Literal["", "ack", "neg"] = ""
 
     def urgency_class(self, priority: int | None = None) -> str:
         priority = priority or self.priority
