@@ -4,6 +4,7 @@ import argparse
 import json
 from collections.abc import Coroutine
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pitwall.learnpack
@@ -47,7 +48,7 @@ def _fake_serve(uid: int):  # type: ignore[no-untyped-def]
 
 
 def _start_args() -> argparse.Namespace:
-    return argparse.Namespace(child=False, no_watchdog=True, record=None)
+    return argparse.Namespace(child=False, no_watchdog=True, record=None, log_level="warning")
 
 
 def test_start_leaves_session_open_and_clears_heartbeat_on_clean_ctrl_c(
@@ -100,3 +101,36 @@ def test_start_second_ctrl_c_during_pack_write_exits_quietly(
     assert cli.cmd_start(_start_args()) == 0
     assert "learning pack: interrupted" in capsys.readouterr().out
     assert Database(db_path).read_heartbeat() is None
+
+
+def test_start_supervised_forwards_log_level(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    settings = SimpleNamespace(
+        recording=SimpleNamespace(profile="off", directory=str(tmp_path), enabled=False),
+        connection=SimpleNamespace(udp_host="127.0.0.1", udp_port=20777),
+        engine="test",
+    )
+    store = SimpleNamespace(current=lambda: settings)
+    captured: dict[str, Any] = {}
+
+    class FakeSupervisor:
+        def __init__(
+            self,
+            _engine: str,
+            _recorder: Any,
+            cmd: list[str],
+            _directory: Path,
+            **_kwargs: Any,
+        ) -> None:
+            captured["cmd"] = cmd
+
+        def run(self) -> None:
+            captured["ran"] = True
+
+    monkeypatch.setattr(cli, "Supervisor", FakeSupervisor)
+    monkeypatch.setattr(cli, "runtime_dir", lambda _directory: tmp_path / "runtime")
+
+    args = argparse.Namespace(record=None, log_level="debug")
+    assert cli._start_supervised(args, store) == 0
+
+    assert captured["cmd"][3:] == ["--log-level", "debug", "start", "--child"]
+    assert captured["ran"]

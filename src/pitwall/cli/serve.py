@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import re
 import sqlite3
@@ -31,6 +32,8 @@ from pitwall.supervisor import (
 if TYPE_CHECKING:
     from pitwall.config.models import Settings
     from pitwall.server.hub import Hub
+
+log = logging.getLogger(__name__)
 
 BannerEntry = tuple[str, str | None]
 _BANNER_GROUPS = {
@@ -150,12 +153,11 @@ async def _state_broadcast(
             c = engine.ingest.census(now=now)
             accepted = sum(p["accepted"] for p in c["packets"].values())
             rate = c["packets"].get(str(int(PacketId.CAR_TELEMETRY)), {}).get("rate_hz", 0.0)
-            print(
+            log.debug(
                 f"udp: {c['raw_datagrams']} datagrams, {accepted} accepted, "
                 f"unsupported={c['dropped_unsupported']} malformed={c['dropped_malformed']} "
                 f"size_mismatch={sum(p['dropped_size_mismatch'] for p in c['packets'].values())} "
-                f"telemetry {rate:.0f} Hz",
-                flush=True,
+                f"telemetry {rate:.0f} Hz"
             )
         snap = engine.last_snapshot or engine.state.snapshot(engine.clock.now())
         if snap.last_packet_t is not None and not seen_packet:
@@ -519,7 +521,15 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
             profile=profile,
             compress=settings.recording.compress_on_close,
         )
-    cmd = [sys.executable, "-m", "pitwall", "start", "--child"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "pitwall",
+        "--log-level",
+        args.log_level,
+        "start",
+        "--child",
+    ]
     if args.record:
         cmd += ["--record", args.record]
     host, port = settings.connection.udp_host, settings.connection.udp_port

@@ -40,6 +40,12 @@ from pitwall.net.profile import PROFILES
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pitwall")
+    p.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        default="warning",
+        help="console log level (default warning)",
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     rep = sub.add_parser("replay", help="replay a recording through the engine")

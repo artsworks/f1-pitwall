@@ -146,15 +146,15 @@ def _voice_warm(args: argparse.Namespace) -> int:
                 print(f"voice warm: {exc}")
                 return 1
             with tempfile.TemporaryDirectory(prefix="pitwall-voice-warm-") as directory:
-                engine = build_engine(
+                replay_engine = build_engine(
                     clock=VirtualClock(),
                     sinks=[],
                     decision_log_path=Path(directory) / "decisions.jsonl",
                 )
                 try:
-                    _, calls = asyncio.run(run_replay(path, engine, None))
+                    _, calls = asyncio.run(run_replay(path, replay_engine, None))
                 finally:
-                    engine.dispatcher.log.close()
+                    replay_engine.dispatcher.log.close()
             phrases = sorted(
                 {(call.text, call.priority) for call in calls},
                 key=lambda phrase: (phrase[1], phrase[0]),
@@ -163,6 +163,13 @@ def _voice_warm(args: argparse.Namespace) -> int:
             phrases = common_phrases(speech.warm_phrases)
         count = speaker.warm(phrases)
         print(f"cached {count} phrases for {speaker.name}")
+        if engine == "omnivoice":
+            from pitwall.audio.omnivoice_tts import render_stats_summary
+
+            for mode in ("sync", "background"):
+                summary = render_stats_summary(mode)
+                if summary is not None:
+                    print(summary)
         return 0
     finally:
         speaker.close()

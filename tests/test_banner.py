@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -69,25 +70,30 @@ def test_pin_box_uses_equal_width_ascii_lines_for_cp1252(monkeypatch) -> None:  
     assert "(LAN devices only)" in "\n".join(lines)
 
 
-def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_state_broadcast_logs_status_and_prints_pin_once_after_first_packet(
+    monkeypatch, capsys, caplog
+) -> None:  # type: ignore[no-untyped-def]
     import pitwall.server.app as server_app
 
     monkeypatch.setattr(server_app, "state_payload", lambda *_args, **_kwargs: {})
+    caplog.set_level(logging.DEBUG, logger="pitwall.cli.serve")
 
     class StopBroadcast(Exception):
         pass
 
     class FakeClock:
         sleeps = 0
+        current = 0.0
 
         def now(self) -> float:
-            return 0.0
+            return self.current
 
         async def sleep(self, _period: float) -> None:
             self.sleeps += 1
             if self.sleeps == 1:
                 state.last_packet_t = 1.0
-            elif self.sleeps == 3:
+                self.current = 10.0
+            elif self.sleeps == 2:
                 raise StopBroadcast
 
     clock = FakeClock()
@@ -95,6 +101,14 @@ def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys)
     engine = SimpleNamespace(
         last_snapshot=None,
         clock=clock,
+        ingest=SimpleNamespace(
+            census=lambda **_kwargs: {
+                "raw_datagrams": 0,
+                "dropped_unsupported": 0,
+                "dropped_malformed": 0,
+                "packets": {},
+            }
+        ),
         state=SimpleNamespace(
             snapshot=lambda _now: SimpleNamespace(last_packet_t=state.last_packet_t)
         ),
@@ -128,6 +142,14 @@ def test_state_broadcast_prints_pin_once_after_first_packet(monkeypatch, capsys)
     output = capsys.readouterr().out
     assert output.count("telemetry connected") == 1
     assert output.count("1234") == 1
+    assert "udp: " not in output
+    status_records = [
+        record
+        for record in caplog.records
+        if record.name == "pitwall.cli.serve" and record.getMessage().startswith("udp: ")
+    ]
+    assert len(status_records) == 1
+    assert status_records[0].levelno == logging.DEBUG
 
 
 class _StopBroadcast(Exception):

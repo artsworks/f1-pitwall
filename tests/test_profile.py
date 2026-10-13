@@ -95,4 +95,9 @@ def test_start_parser_accepts_record_flag() -> None:
 
     args = build_parser().parse_args(["start", "--record", "full"])
     assert args.record == "full"
-    assert build_parser().parse_args(["start"]).record is None
+    assert args.log_level == "warning"
+    default_args = build_parser().parse_args(["start"])
+    assert default_args.record is None
+    assert default_args.log_level == "warning"
+    debug_args = build_parser().parse_args(["--log-level", "debug", "start"])
+    assert debug_args.log_level == "debug"
