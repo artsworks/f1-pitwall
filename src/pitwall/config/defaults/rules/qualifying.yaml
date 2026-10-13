@@ -339,7 +339,7 @@ rules:
     priority: 1
     urgency: execution
     resolved_by: [quali_through]
-    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and time_for_cool_and_hot"
+    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and time_for_cool_and_hot and fuel_for_cool_and_hot"
     clear_when: "not current_lap_invalid"
     requires: [lap_data]
     say:
@@ -375,7 +375,7 @@ rules:
     priority: 1
     urgency: execution
     resolved_by: [quali_through]
-    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and not time_for_cool_and_hot"
+    when: "phase == 'flying' and run_lap_kind == 'hot' and current_lap_invalid and not time_for_cool_and_hot and fuel_for_hot_lap"
     clear_when: "not current_lap_invalid"
     requires: [lap_data]
     say:
@@ -388,7 +388,7 @@ rules:
     sessions: [qualifying]
     priority: 1
     urgency: execution
-    when: "cool_prep and not cool_extend"
+    when: "cool_prep and not cool_extend and fuel_for_hot_lap"
     clear_when: "not cool_lap"
     requires: [lap_data, car_status]
     say:

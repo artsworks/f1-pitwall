@@ -1,20 +1,20 @@
 {
-  "created_at": "2026-10-07T08:53:05.515458+00:00",
+  "created_at": "2026-10-12T23:31:16.315966+00:00",
   "metrics": {
     "by_rule": {},
-    "check_pass_rate": 0.8823529411764706,
-    "checks_passed": 15,
-    "checks_total": 17,
+    "check_pass_rate": 0.8947368421052632,
+    "checks_passed": 17,
+    "checks_total": 19,
     "guards_passed": 5,
     "guards_total": 5,
     "laps_of_pace_mae": null,
     "real_accuracy": null,
     "real_good": 0,
     "real_graded": 0,
-    "score": 88.2,
+    "score": 89.5,
     "stop_cost_mae_s": null,
-    "targets_passed": 0,
-    "targets_total": 2
+    "targets_passed": 1,
+    "targets_total": 3
   },
   "scenarios": {
     "brazil-penalty": {
@@ -39,6 +39,49 @@
       "result": "pass",
       "status": "guard",
       "title": "Five second corner-cutting penalty on lap 5"
+    },
+    "brazil-quali-fuel-out": {
+      "checks": [
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "plan_box"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            4,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "cool_hot_mode",
+            "cool_extend",
+            "plan_push",
+            "plan_push_now",
+            "next_lap_invalid",
+            "lap_deleted",
+            "lap_deleted_last"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "No push call when fuel runs out in qualifying"
     },
     "brazil-race-real": {
       "checks": [

@@ -670,6 +670,8 @@ class Snapshot:
     run_plan_why: str = ""
     cool_lap: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    fuel_for_hot_lap: bool = False  # fuel at the line covers one more hot lap
+    fuel_for_cool_and_hot: bool = False  # fuel at the line covers a cool lap and a hot lap
     next_lap_invalid: bool = False  # track limits deleted this lap before it started
     cool_elapsed_s: float = 0.0
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
@@ -1411,6 +1413,8 @@ class SessionState:
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
+                fuel_short=self.fuel_remaining_laps < self._th("fuel_push_need_laps", 2.0),
+                fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
                 compound=self.tyre_compound,
             )
 
@@ -1454,16 +1458,25 @@ class SessionState:
             fuel_cool_laps=self._th("fuel_cool_need_laps", 3.0),
         )
 
+    def _fuel_at_line(self) -> float:
+        if self.track_length_m <= 0:
+            return self.fuel_remaining_laps
+        return self.fuel_remaining_laps - (
+            max(0.0, self.track_length_m - self.lap_distance) / self.track_length_m
+        )
+
     def _cool_extend(self) -> bool:
-        """Cool lap ending with too little battery and time for another cool lap.
-        Fixed from the hot-mode point to the line, so pushing for the line
-        cannot flip "hot lap mode" into "one more cool lap"."""
+        """Extend a cool lap only when time and fuel cover a cool and hot lap."""
         if self.run.kind != COOL:
             return False
         latch = self._cool_latch
         if latch is not None and latch[0] == self.run.cool_start_t:
             return latch[1]
-        extend = self.ers_store_pct < self._ers_need_pct() and self._time_for_cool_and_hot()
+        extend = (
+            self.ers_store_pct < self._ers_need_pct()
+            and self._time_for_cool_and_hot()
+            and self._fuel_at_line() >= self._th("fuel_cool_need_laps", 3.0)
+        )
         hot_mode_m = self.track_length_m - self._th("cool_hot_mode_m", 600.0)
         if self.track_length_m > 0 and self.lap_distance >= hot_mode_m:
             self._cool_latch = (self.run.cool_start_t, extend)
@@ -2560,6 +2573,7 @@ class SessionState:
             if cool_lap and self.track_length_m > 0
             else 0.0
         )
+        fuel_at_line = self._fuel_at_line()
         plan = run.plan
         why = ""
         if plan.reason == "battery":
@@ -2624,6 +2638,8 @@ class SessionState:
             run_plan_why=why,
             cool_lap=cool_lap,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            fuel_for_hot_lap=fuel_at_line >= self._th("fuel_push_need_laps", 2.0),
+            fuel_for_cool_and_hot=fuel_at_line >= self._th("fuel_cool_need_laps", 3.0),
             next_lap_invalid=run.next_lap_invalid,
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),
