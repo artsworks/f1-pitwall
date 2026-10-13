@@ -6,6 +6,24 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.10.0 (2026-10-13)
+
+### Documentation
+
+- Add AGENTS.md with skills and do-not-commit list
+  ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+- **skills**: Add track overlay sync skill ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+### Features
+
+- **tracks**: Promote learned fuel and thresholds for tracks 0, 5, 7, 10, 17
+  ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+
 ## v0.9.0 (2026-10-13)
 
 ### Features
