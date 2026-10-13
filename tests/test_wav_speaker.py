@@ -342,7 +342,7 @@ def test_provisional_logs_background_render(caplog) -> None:  # type: ignore[no-
         def provisional(self, text: str, priority: int) -> tuple[bytes, float]:
             return super().render(text, priority)
 
-    caplog.set_level(logging.INFO, logger="pitwall.audio.wav_speaker")
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.wav_speaker")
     speaker = WavSpeaker(ProvisionalRenderer(), FakePlayer())
     try:
         speaker.speak(make_call("provisional-log", text="line"))

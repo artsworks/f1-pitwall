@@ -136,7 +136,7 @@ def test_synth_posts_text_only_and_returns_wav(
 ) -> None:  # type: ignore[no-untyped-def]
     url, state = fake_server
     settings = _settings(url, tmp_path, **deprecated)
-    caplog.set_level(logging.INFO, logger="pitwall.audio.omnivoice_tts")
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.omnivoice_tts")
 
     wav, seconds = make_omnivoice_synth(settings)("Box this lap.")
 
@@ -158,7 +158,7 @@ def test_background_synth_logs_background_mode_and_timeout(
 ) -> None:  # type: ignore[no-untyped-def]
     url, _ = fake_server
     settings = _settings(url, tmp_path)
-    caplog.set_level(logging.INFO, logger="pitwall.audio.omnivoice_tts")
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.omnivoice_tts")
 
     OmniVoiceRenderer(settings, "voice-model.gguf", None).render(
         "Box this lap.", 2, background=True

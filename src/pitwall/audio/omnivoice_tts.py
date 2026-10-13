@@ -127,7 +127,7 @@ def make_omnivoice_synth(
                 exc,
             )
             raise
-        log.info(
+        log.debug(
             "omnivoice render %.2fs (%s, %.2fs audio, timeout=%.1fs): %r",
             elapsed,
             mode,

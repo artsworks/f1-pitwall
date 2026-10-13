@@ -107,6 +107,8 @@ uv run pitwall voice warm --engine omnivoice --replay latest
 
 `voice warm --engine omnivoice` then prints the OmniVoice render times: min, p50, p95 and max. Use them to choose `omnivoice_timeout_s`. That timeout applies only when Pitwall waits for OmniVoice with no Piper voice. Background renders wait up to 120 seconds.
 
+Add `--log-level` before the command to print more detail. `--log-level info` prints OmniVoice render stats every 10 renders. `--log-level debug` also prints each render time and the UDP packet counts every 10 seconds. For example, run `uv run pitwall --log-level debug start`.
+
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
 OmniVoice falls back to Piper, then SAPI on Windows or null on other systems.
