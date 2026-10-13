@@ -284,6 +284,7 @@ def test_omnivoice_cache_key_tracks_voice_configuration() -> None:
 def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.speaker as speaker_module
     import pitwall.cli.voice as voice_module
+    from pitwall.audio.speaker import EngineSpec
     from pitwall.cli import main
 
     class FakeSpeaker:
@@ -304,13 +305,23 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch,
     seen: list[str] = []
     speakers: list[FakeSpeaker] = []
 
-    def make_speaker(speech: SpeechSettings) -> FakeSpeaker:
-        seen.append(speech.engine)
-        speaker = FakeSpeaker()
-        speakers.append(speaker)
-        return speaker
+    def make_factory(engine: str):
+        def factory(_speech: SpeechSettings) -> FakeSpeaker:
+            seen.append(engine)
+            speaker = FakeSpeaker()
+            speakers.append(speaker)
+            return speaker
 
-    monkeypatch.setattr(speaker_module, "make_speaker", make_speaker)
+        return factory
+
+    monkeypatch.setattr(
+        speaker_module,
+        "ENGINES",
+        {
+            "omnivoice": EngineSpec("omnivoice", make_factory("omnivoice"), "piper"),
+            "piper": EngineSpec("piper", make_factory("piper"), None),
+        },
+    )
     assert main(["voice", "warm"]) == 0
     assert main(["voice", "warm", "--engine", "piper"]) == 0
     assert seen == ["omnivoice", "piper"]
@@ -319,18 +330,74 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch,
 
 
 def test_voice_warm_rejects_non_warmable_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
-    import pitwall.audio.speaker as speaker_module
     import pitwall.cli.voice as voice_module
-    from pitwall.audio.speaker import NullSpeaker
     from pitwall.cli import main
 
     settings = SpeechSettings(engine="null")
     store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
-    monkeypatch.setattr(speaker_module, "make_speaker", lambda _settings: NullSpeaker())
 
     assert main(["voice", "warm"]) == 1
     assert "does not support phrase warming" in capsys.readouterr().out
+
+
+def test_voice_warm_reports_unknown_configured_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.cli.voice as voice_module
+    from pitwall.cli import main
+
+    settings = SpeechSettings(engine="unknown")
+    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
+
+    assert main(["voice", "warm"]) == 1
+    assert capsys.readouterr().out.strip() == "unknown speech engine: unknown"
+
+
+def test_voice_warm_unreachable_omnivoice_does_not_warm_piper(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.speaker as speaker_module
+    import pitwall.cli.voice as voice_module
+    from pitwall.audio.speaker import EngineSpec
+    from pitwall.cli import main
+
+    cache_dir = tmp_path / "voices" / ".phrases"
+    piper_created: list[bool] = []
+
+    class FakePiperSpeaker:
+        name = "piper"
+
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "cached.wav").write_bytes(b"wav")
+            return len(phrases)
+
+        def close(self) -> None:
+            pass
+
+    def make_piper(_speech: SpeechSettings) -> FakePiperSpeaker:
+        piper_created.append(True)
+        return FakePiperSpeaker()
+
+    piper_spec = speaker_module.ENGINES["piper"]
+    monkeypatch.setitem(
+        speaker_module.ENGINES,
+        "piper",
+        EngineSpec("piper", make_piper, piper_spec.fallback),
+    )
+    settings = SpeechSettings(
+        engine="auto",
+        omnivoice_url="http://127.0.0.1:1",
+        omnivoice_timeout_s=0.2,
+        voices_dir=str(tmp_path / "voices"),
+    )
+    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
+
+    assert main(["voice", "warm", "--engine", "omnivoice"]) == 1
+    assert "omnivoice unavailable:" in capsys.readouterr().out
+    assert piper_created == []
+    assert not cache_dir.exists()
 
 
 def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]

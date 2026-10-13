@@ -114,12 +114,21 @@ def _voice_piper(action: str, names: list[str]) -> int:
 
 def _voice_warm(args: argparse.Namespace) -> int:
     from pitwall.audio.piper_tts import common_phrases
-    from pitwall.audio.speaker import WarmableSpeaker, make_speaker
+    from pitwall.audio.speaker import ENGINES, WarmableSpeaker
 
     settings = ConfigStore().current()
     speech = settings.speech
-    engine = speech.engine if args.engine == "auto" else args.engine
-    speaker = make_speaker(speech.model_copy(update={"engine": engine}))
+    engine = args.engine if args.engine != "auto" else speech.engine
+    if engine == "auto":
+        engine = "piper"
+    if engine not in ENGINES:
+        print(f"unknown speech engine: {engine}")
+        return 1
+    try:
+        speaker = ENGINES[engine].factory(speech)
+    except Exception as exc:
+        print(f"{engine} unavailable: {exc}")
+        return 1
     if not isinstance(speaker, WarmableSpeaker):
         print(f"{speaker.name} does not support phrase warming")
         speaker.close()

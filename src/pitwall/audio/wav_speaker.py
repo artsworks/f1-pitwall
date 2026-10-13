@@ -72,19 +72,18 @@ class WinsoundPlayer:
     def play(self, wav: bytes) -> None:
         import winsound
 
-        windows_audio = cast(Any, winsound)
         self._slot ^= 1
         path = self._dir / f"call{self._slot}.wav"
         path.write_bytes(wav)
-        windows_audio.PlaySound(
+        winsound.PlaySound(  # type: ignore[attr-defined]
             str(path),
-            windows_audio.SND_FILENAME | windows_audio.SND_ASYNC | windows_audio.SND_NODEFAULT,
+            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,  # type: ignore[attr-defined]
         )
 
     def stop(self) -> None:
         import winsound
 
-        cast(Any, winsound).PlaySound(None, 0)
+        winsound.PlaySound(None, 0)  # type: ignore[attr-defined]
 
 
 class NullPlayer:
@@ -255,12 +254,18 @@ class WavSpeaker:
         self._state_lock = threading.RLock()
         self._q: queue.PriorityQueue[tuple[int, int, Call | None]] = queue.PriorityQueue()
         self._received: dict[str, float] = {}
+        self._fallback_calls: dict[str, int] = {}
         self._seq = itertools.count()
         self._cancelled: set[str] = set()
         self._gen = 0
         self._urgent = threading.Event()
         self._background_queue: queue.Queue[tuple[tuple[int, str], str, int] | None] = queue.Queue()
         self._pending: set[tuple[int, str]] = set()
+        if fallback is not None:
+            fallback.on_spoken = self._fallback_spoken
+            fallback_callbacks = cast(Any, fallback)
+            if hasattr(fallback_callbacks, "on_dropped"):
+                fallback_callbacks.on_dropped = self._fallback_dropped
         self._has_provisional = callable(getattr(renderer, "provisional", None))
         self._thread = threading.Thread(target=self._worker, daemon=True, name="wav-speaker")
         self._thread.start()
@@ -399,45 +404,36 @@ class WavSpeaker:
                     getattr(fallback, "name", type(fallback).__name__),
                     exc,
                 )
-                outcome_lock = threading.Lock()
-                settled = False
-
-                def on_fallback_spoken(call_id: str, spoken_at: float) -> None:
-                    nonlocal settled
-                    with outcome_lock:
-                        if settled or call_id != call.id:
-                            return
-                        settled = True
-                    with self._state_lock:
-                        if not self._current(generation):
-                            return
-                        callback = self.on_spoken
-                    if callback is not None:
-                        try:
-                            callback(call_id, spoken_at)
-                        except Exception:
-                            log.exception("%s fallback spoken callback failed", self.name)
-
-                def on_fallback_dropped(call_id: str) -> None:
-                    nonlocal settled
-                    with outcome_lock:
-                        if settled or call_id != call.id:
-                            return
-                        settled = True
-                    self._drop(call_id, generation)
-
-                fallback.on_spoken = on_fallback_spoken
-                fallback_callbacks = cast(Any, fallback)
-                if hasattr(fallback_callbacks, "on_dropped"):
-                    fallback_callbacks.on_dropped = on_fallback_dropped
+                self._fallback_calls[call.id] = generation
                 try:
                     fallback.speak(call)
                 except Exception as fallback_exc:
                     log.warning("%s fallback failed: %s", self.name, fallback_exc)
-                    on_fallback_dropped(call.id)
+                    fallback_generation = self._fallback_calls.pop(call.id, None)
+                    if fallback_generation is not None:
+                        self._drop(call.id, fallback_generation)
                 return
             log.warning("%s synthesis failed: %s", self.name, exc)
             self._drop(call.id, generation)
+
+    def _fallback_spoken(self, call_id: str, spoken_at: float) -> None:
+        with self._state_lock:
+            generation = self._fallback_calls.pop(call_id, None)
+            if generation is None or not self._current(generation):
+                return
+            callback = self.on_spoken
+            if callback is not None:
+                try:
+                    callback(call_id, spoken_at)
+                except Exception:
+                    log.exception("%s fallback spoken callback failed", self.name)
+
+    def _fallback_dropped(self, call_id: str) -> None:
+        with self._state_lock:
+            generation = self._fallback_calls.pop(call_id, None)
+            if generation is None or not self._current(generation):
+                return
+        self._drop(call_id, generation)
 
     def _drop(self, call_id: str, generation: int) -> None:
         with self._state_lock:
@@ -526,6 +522,7 @@ class WavSpeaker:
                     break
             self._cancelled.clear()
             self._received.clear()
+            self._fallback_calls.clear()
             self._urgent.clear()
             self._player.stop()
 

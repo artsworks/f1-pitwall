@@ -248,7 +248,6 @@ def test_render_failure_falls_back_with_same_call_and_callbacks() -> None:
     dropped: list[str] = []
     speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
     speaker.on_dropped = dropped.append
-    fallback.on_dropped = lambda call_id: dropped.append(f"fallback:{call_id}")
     call = make_call("same-call", text="bad")
     try:
         speaker.speak(call)
@@ -261,6 +260,60 @@ def test_render_failure_falls_back_with_same_call_and_callbacks() -> None:
     finally:
         speaker.close()
     assert fallback.closed
+
+
+def test_fallback_callbacks_are_correlated_once_and_cleared_by_flush() -> None:
+    renderer = FakeRenderer(fail_text="bad")
+    fallback = _DeferredFallback()
+    speaker = WavSpeaker(renderer, FakePlayer(), fallback=fallback)
+    spoken: list[str] = []
+    dropped: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("first", text="bad"))
+        speaker.speak(make_call("second", text="bad"))
+        _wait_for(lambda: len(fallback.calls) == 2)
+
+        fallback.fire_spoken("first")
+        fallback.fire_spoken("first")
+        fallback.fire_spoken("second")
+        assert spoken == ["first", "second"]
+        assert dropped == []
+
+        speaker.speak(make_call("dropped", text="bad"))
+        _wait_for(lambda: len(fallback.calls) == 3)
+        fallback.fire_dropped("dropped")
+        fallback.fire_dropped("dropped")
+        fallback.fire_spoken("dropped")
+        assert dropped == ["dropped"]
+        assert spoken == ["first", "second"]
+
+        speaker.speak(make_call("before-flush", text="bad"))
+        _wait_for(lambda: len(fallback.calls) == 4)
+        speaker.flush()
+        fallback.fire_spoken("before-flush")
+        assert spoken == ["first", "second"]
+    finally:
+        speaker.close()
+
+
+def test_fallback_speak_error_drops_call_once() -> None:
+    class RaisingFallback(_Fallback):
+        def speak(self, call: Call) -> None:
+            self.calls.append(call)
+            raise RuntimeError("fallback unavailable")
+
+    fallback = RaisingFallback()
+    speaker = WavSpeaker(FakeRenderer(fail_text="bad"), FakePlayer(), fallback=fallback)
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("failed", text="bad"))
+        _wait_for(lambda: dropped == ["failed"])
+        assert speaker._fallback_calls == {}
+    finally:
+        speaker.close()
 
 
 class _Fallback:
@@ -282,6 +335,19 @@ class _Fallback:
 
     def close(self) -> None:
         self.closed = True
+
+
+class _DeferredFallback(_Fallback):
+    def speak(self, call: Call) -> None:
+        self.calls.append(call)
+
+    def fire_spoken(self, call_id: str) -> None:
+        if self.on_spoken is not None:
+            self.on_spoken(call_id, time.time())
+
+    def fire_dropped(self, call_id: str) -> None:
+        if self.on_dropped is not None:
+            self.on_dropped(call_id)
 
 
 @pytest.mark.parametrize("text", ["bad-render", "bad-wav"])

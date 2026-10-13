@@ -133,8 +133,7 @@ def _speak_one(
         try:
             import winsound
 
-            windows_audio = cast(Any, winsound)
-            windows_audio.PlaySound(blip, windows_audio.SND_MEMORY)
+            winsound.PlaySound(blip, winsound.SND_MEMORY)  # type: ignore[attr-defined]
         except Exception:
             pass
     flags = SVSF_ASYNC | (SVSF_PURGE_BEFORE_SPEAK if call.priority == 1 else 0)
@@ -163,8 +162,8 @@ class SapiSpeaker:
             raise RuntimeError("SapiSpeaker requires Windows")
         import winsound  # noqa: F401
 
-        import pythoncom  # noqa: F401
-        import win32com.client  # noqa: F401
+        import pythoncom  # type: ignore[import-untyped, unused-ignore]  # noqa: F401
+        import win32com.client  # type: ignore[import-untyped, unused-ignore]  # noqa: F401
 
         self._settings: SpeechSettings = settings
         self.on_spoken: Callable[[str, float], None] | None = None

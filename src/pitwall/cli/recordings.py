@@ -121,8 +121,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 synthetic=synthetic,
             )
             wire_speaker(speaker, hub, eng.dispatcher)
-            if getattr(eng, "speaker_name", "null") == "null":
-                eng.speaker_name = speaker.name
+            eng.speaker_name = speaker.name
             if args.mask_restricted:
                 eng.ingest.transform = mask_restricted
             return eng
