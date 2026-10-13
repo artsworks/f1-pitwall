@@ -28,6 +28,7 @@ class HotLap:
     lockups: int
     spins: int
     invalid: bool
+    compound: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +171,7 @@ class RunTracker:
         cool_pace_pct: float,
         decide: Callable[[], Plan],
         extend_cool: bool = False,
+        compound: int = 0,
     ) -> HotLap | None:
         """Feed one Lap Data tick. `decide` is a zero-arg callable returning the
         Plan for the line just crossed after a hot lap; `extend_cool` keeps a
@@ -215,6 +217,7 @@ class RunTracker:
                     lockups=lockups - self._lockups0,
                     spins=spins - self._spins0,
                     invalid=self._invalid,
+                    compound=compound,
                 )
                 self.last_hot = done
                 self.plan = decide()

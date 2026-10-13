@@ -600,6 +600,8 @@ class Snapshot:
     battle_pace_behind: str = ""
     battle_swaps: int = 0  # place changes inside battle_swap_window_s
     player_last_lap_ms: int = 0
+    # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
+    player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -1409,6 +1411,7 @@ class SessionState:
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
+                compound=self.tyre_compound,
             )
 
     def _is_sprint(self) -> bool:
@@ -1467,11 +1470,15 @@ class SessionState:
         return extend
 
     def _ers_need_pct(self) -> float:
-        """Battery wanted at the line to push: the configured floor, or what the
-        last hot lap spent (all of its start charge if it ran flat)."""
-        need = self._th("cool_ers_min_pct", 40.0)
+        """Battery wanted at the line to push: the configured floor (lower on
+        inters and wets), or what the last hot lap on this compound spent (all
+        of its start charge if it ran flat)."""
+        if self.tyre_compound in (7, 8):
+            need = self._th("cool_wet_ers_min_pct", 20.0)
+        else:
+            need = self._th("cool_ers_min_pct", 40.0)
         last = self.run.last_hot
-        if last is not None:
+        if last is not None and last.compound == self.tyre_compound:
             used = last.ers_start_pct - last.ers_end_pct
             if last.ers_end_pct <= 5.0:
                 used = max(used, last.ers_start_pct)
@@ -2279,6 +2286,16 @@ class SessionState:
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)
         laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
+        history = self._histories.get(self._player_idx)
+        player_recent_laps = (
+            tuple(
+                (index + 1, lap.lap_time_ms, lap.sector1_ms, lap.sector2_ms, lap.sector3_ms)
+                for index, lap in enumerate(history.laps[: max(0, history.num_laps - 1)])
+                if lap.lap_time_ms != 0
+            )[-3:]
+            if history is not None
+            else ()
+        )
         return Snapshot(
             now=now,
             session_time=st,
@@ -2378,6 +2395,7 @@ class SessionState:
             player_last_lap_ms=(
                 cars[self._player_idx].last_lap_time_ms if 0 <= self._player_idx < len(cars) else 0
             ),
+            player_recent_laps=player_recent_laps,
             player_best_s1_ms=player_best_s1,
             player_best_s2_ms=player_best_s2,
             player_best_s3_ms=player_best_s3,

@@ -6,6 +6,70 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.7.0 (2026-10-13)
+
+### Bug Fixes
+
+- **web**: Fit last lap, energy and damage text in the tiles
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+### Documentation
+
+- Refresh dashboard screens for last two laps tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- Refresh dashboard screens for per-lap rows
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+### Features
+
+- **web**: Show last three laps with two sector comparison rows
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Show last two laps with sector deltas, drop energy tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Show per-lap rows with lap and sector deltas
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Shrink damage to a strip and add a last laps tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Shrink damage to a strip and add last lap and energy tiles
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+
+## v0.6.0 (2026-10-12)
+
+### Bug Fixes
+
+- **quali**: Learn battery use per compound ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+### Features
+
+- **quali**: Lower battery floor on inters and wets for back-to-back hot laps
+  ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+
+## v0.5.1 (2026-10-12)
+
+### Bug Fixes
+
+- Write and read text files as utf-8 so Windows cp1252 no longer crashes debrief
+  ([#80](https://github.com/artsworks/f1-pitwall/pull/80),
+  [`06a1140`](https://github.com/artsworks/f1-pitwall/commit/06a11401dbea7786202ee804fb04a62ed1d73c1d))
+
+
 ## v0.5.0 (2026-10-12)
 
 ### Features

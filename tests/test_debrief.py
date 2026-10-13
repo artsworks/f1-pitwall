@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 
 from fastapi.testclient import TestClient
 
@@ -235,6 +238,54 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
         == 400
     )
     db.close()
+
+
+def test_debrief_cli_writes_unicode_html_under_ascii_locale(tmp_path) -> None:
+    db_path = tmp_path / "session.sqlite"
+    uid = 170
+    db = Database(db_path)
+    db.upsert_session(uid, track_id=16, session_type=15)
+    fit = DegFit(90_000, 100.0, 0.0, 2, 50.0, 1.0, "fit")
+    db.upsert_stint(uid, 0, 19, 1, 3, fit)
+    db.upsert_stint(uid, 0, 18, 4, 6, fit)
+    db.close()
+
+    html_path = tmp_path / "debrief.html"
+    env = os.environ.copy()
+    env.update(
+        LC_ALL="C",
+        LANG="C",
+        PYTHONCOERCECLOCALE="0",
+        PYTHONUTF8="0",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "\n".join(
+                (
+                    "import argparse",
+                    "import sys",
+                    "import pitwall.cli.learn as learn",
+                    "from pitwall.config.models import Settings",
+                    "class Store:",
+                    "    def current(self): return Settings()",
+                    "learn.ConfigStore = Store",
+                    "raise SystemExit(learn.cmd_debrief(argparse.Namespace(",
+                    "    db=sys.argv[1], session=sys.argv[2], out=sys.argv[3])))",
+                )
+            ),
+            str(db_path),
+            str(uid),
+            str(html_path),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "→" in html_path.read_text(encoding="utf-8")
 
 
 def test_debrief_latest_404_and_empty_index() -> None:

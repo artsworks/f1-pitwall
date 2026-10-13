@@ -351,6 +351,7 @@
     renderSetupStrip(p);
     renderFuel(p, s);
     renderBatt(p, s);
+    renderLap(p);
     renderWeather(t);
     renderDamage(p.damage);
     renderCtx(p, s, t);
@@ -474,6 +475,33 @@
     }
   }
 
+  function renderLap(p) {
+    var r = p.race || {}, laps = Array.isArray(r.recent_laps) ? r.recent_laps : [];
+    var recent = laps.slice(-3), offset = 3 - recent.length, slots = [null, null, null];
+    for (var i = 0; i < recent.length; i++) slots[offset + i] = recent[i];
+    [1, 2].forEach(function (row) {
+      var older = slots[row - 1], newer = slots[row];
+      var labelId = "cmp-" + row + "-label";
+      var lapDelta = older && newer ? newer.time_ms - older.time_ms : null;
+      setText(labelId, newer ? "L" + newer.lap + " " + lapTime(newer.time_ms) :
+        (row === 2 && !recent.length ? "no lap yet" : "--"));
+      var lapDeltaId = "cmp-" + row + "-delta";
+      setText(lapDeltaId, lapDelta === null ? "--" : "Δ " + signed(lapDelta) + "s");
+      setClass(lapDeltaId, "cmp-delta" +
+        (lapDelta < 0 ? " ok" : lapDelta > 0 ? " warn" : ""));
+      for (var sector = 0; sector < 3; sector++) {
+        var before = older && older.sectors_ms ? older.sectors_ms[sector] : null;
+        var after = newer && newer.sectors_ms ? newer.sectors_ms[sector] : null;
+        var delta = typeof before === "number" && before !== 0 &&
+          typeof after === "number" && after !== 0 ? after - before : null;
+        var id = "cmp-" + row + "-s" + (sector + 1);
+        setText(id, delta === null ? "--" : signed(delta) + "s");
+        setClass(id, "value" +
+          (delta < 0 ? " ok" : delta > 0 ? " warn" : ""));
+      }
+    });
+  }
+
   // Weather: icon + word per forecast slot, rain chance, crossover marker on the
   // first slot at or after weather_crossover_min (slots are now / 10 / 30 min).
   var WEATHER_WORDS = { 0: "CLEAR", 1: "LIGHT CLOUD", 2: "OVERCAST", 3: "LIGHT RAIN", 4: "HEAVY RAIN", 5: "STORM" };
@@ -519,17 +547,23 @@
     var box = el("damage");
     if (!box || !d) return;
     box.innerHTML = "";
+    var count = 0;
     DMG_PARTS.forEach(function (pair) {
       var val = d[pair[0]];
       if (!(val > 0)) return;
       var row = span(pair[1] + " ", "");
       row.appendChild(span(val + "%", "n" + (val >= 25 ? " crit" : val >= 5 ? " warn" : "")));
       box.appendChild(row);
+      count += 1;
     });
     [["drs_fault", "DRS fault"], ["ers_fault", "ERS fault"]].forEach(function (pair) {
-      if (d[pair[0]]) box.appendChild(span(pair[1], "n crit"));
+      if (d[pair[0]]) {
+        box.appendChild(span(pair[1], "n crit"));
+        count += 1;
+      }
     });
     if (!box.childNodes.length) box.appendChild(span("✓ none", "none"));
+    box.className = "dmg" + (count > 3 ? " many" : "");
   }
 
   function card(id, show, cls, head, line, rank) {

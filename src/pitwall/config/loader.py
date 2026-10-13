@@ -35,7 +35,7 @@ def _load_yaml_dir(path: Path, *, exclude_dir: Path | None = None) -> dict[str, 
         return merged
     files = (f for f in path.rglob("*.yaml") if exclude_dir is None or exclude_dir not in f.parents)
     for f in sorted(files, key=lambda p: (p.stem != "shared", str(p))):
-        data = yaml.safe_load(f.read_text()) or {}
+        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
         rules = data.get("rules")
         if rules and merged.get("rules"):
             merged["rules"] = merged["rules"] + rules
@@ -97,7 +97,10 @@ class ConfigStore:
             if custom_rules is not None:
                 merged["rules"] = custom_rules
         if not self._isolated and self._profile is not None and self._profile.exists():
-            merged = _deep_merge(merged, yaml.safe_load(self._profile.read_text()) or {})
+            merged = _deep_merge(
+                merged,
+                yaml.safe_load(self._profile.read_text(encoding="utf-8")) or {},
+            )
         overlay = None if self._isolated else self._load_track_overlay()
         if overlay is not None:
             overlay_thresholds = overlay.get("thresholds")
@@ -122,7 +125,10 @@ class ConfigStore:
             Path.home() / ".pitwall" / "tracks" / f"{self._track_id}.yaml",
         ):
             if path.is_file():
-                overlay = _deep_merge(overlay, yaml.safe_load(path.read_text()) or {})
+                overlay = _deep_merge(
+                    overlay,
+                    yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                )
         if not overlay:
             return None
         overlay.setdefault("track_id", self._track_id)
