@@ -75,8 +75,8 @@ speech:
 driver replies, and menu labels. Lines with slots such as `{lap}` cannot be cached. Run
 `voice warm --replay latest` to cache lines from a real session. It skips lines with
 driver names or measured values, such as gaps and battery levels, because those rarely
-repeat. At startup, Pitwall
-renders the startup lines with the selected engine before it speaks them.
+repeat. At startup, Pitwall renders the startup lines with the selected engine before it
+speaks them.
 
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
 1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.
