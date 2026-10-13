@@ -57,6 +57,18 @@ voice, rate, pitch, volume, language, units (°C/°F, kg/lb), driver name used o
 theme, font scale, layout (phone landscape / monitor), colour-blind-safe palette,
 visual-only mode.
 
+**Speech engine.** `speech.engine` selects an engine id from the registry in `src/pitwall/audio/speaker.py`. If the engine fails to load, Pitwall tries the fallback id. An unknown id prints a warning, and Pitwall uses `auto`.
+
+| Engine id | Fields | Fallback |
+|---|---|---|
+| `auto` | none | On Windows, resolves to `piper` if the Piper voice file exists, else `sapi`. On other systems, resolves to `null`. |
+| `piper` | `piper_voice`, `piper_speed`, `voices_dir`, `tone_urgent_speed`, `tone_urgent_expression`, `tone_calm_speed`, `tone_calm_expression` | `sapi` on Windows, else `null` |
+| `omnivoice` | `omnivoice_url`, `omnivoice_voice`, `omnivoice_seed`, `omnivoice_language`, `omnivoice_timeout_s`, `omnivoice_voice_version`, `omnivoice_ref_wav`, `omnivoice_ref_text`, and the Piper fields for cold lines | `piper` |
+| `sapi` | `voice` | `null` |
+| `null` | none | none |
+
+All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` sets how many phrases `pitwall voice warm` renders. A new engine registers its id with `register_engine()`. See `.agents/skills/tts-engine-contract/SKILL.md`.
+
 **Verbosity presets** let one control replace six separate settings:
 
 | Preset | Speaks | Budget/lap | Typical use |

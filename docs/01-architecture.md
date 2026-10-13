@@ -61,6 +61,8 @@ A rule produces a candidate *call* (text, priority, tags) or nothing.
 The dispatcher uses a priority queue with preemption, cooldowns, deduplication, a global
 rate budget, and speak-time revalidation. It emits to the WebSocket. See `04-audio-ui.md`.
 
+The dispatcher hands each audio call to a speaker. `audio/speaker.py` holds the speaker contract and the engine registry, and `speech.engine` picks the engine id. `pitwall start` and `pitwall replay --serve` connect every engine with `wire_speaker()`, so they have no engine-specific code. Vendor modules such as `piper_tts.py` and `omnivoice_tts.py` only render WAV bytes for `WavSpeaker`.
+
 ### 5. Clients
 The client is one page served over the LAN for a phone or second monitor. It renders a
 high-contrast state view and radio log. The backend on the game PC plays speech
@@ -108,7 +110,7 @@ See `09-performance.md`.
 | Storage | SQLite (stdlib) | zero-ops, queryable, portable |
 | Config | YAML + pydantic | validated, hot-reloadable |
 | Frontend | vanilla HTML/CSS/JS, vendored | no build, no CDN, works offline |
-| Speech | Windows SAPI and Piper | offline, no browser gesture or focus problems |
+| Speech | Piper, Windows SAPI, opt-in OmniVoice on the LAN | no internet, no browser gesture or focus problems |
 | Input | UDP Action via `BUTN`; Windows keyboard hook | wheel and spacebar (`12-driver-input.md`) |
 | Tooling | uv, ruff, mypy, pytest | fast, standard |
 
