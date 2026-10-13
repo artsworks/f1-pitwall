@@ -23,9 +23,15 @@ The dispatcher calls `speak(call)` with the whole dispatcher `Call`.
 
 | Callback | When the engine calls it | Wired to |
 |---|---|---|
-| `on_spoken(call_id, wall_time)` | Local playback starts | `hub.spoken` and `Metrics.note_spoken` |
-| `on_audio(call_id, priority, wav_bytes)` | After playback starts, with the complete WAV | `hub.audio` |
+| `on_audio(call_id, priority, wav_bytes)` | Right after local playback starts, with the complete WAV | `hub.audio` |
+| `on_spoken(call_id, wall_time)` | After `on_audio`, with the playback start time | `hub.spoken` and `Metrics.note_spoken` |
 | `on_dropped(call_id)` | The engine drops the call (age limit, or a render failure with no fallback) | `dispatcher.note_dropped` and `hub.cancel` |
+
+For each call, keep this order:
+
+1. Start local playback.
+2. Call `on_audio`, if the engine streams.
+3. Call `on_spoken`.
 
 - Call each callback at most once per call.
 - A dropped call gets `on_dropped` and no `on_spoken`.
