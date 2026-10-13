@@ -24,7 +24,7 @@ class DecisionLog:
     ) -> None:
         self.config_hash = config_hash
         self.mindset = mindset
-        self._fp = fp if fp is not None else (path.open("a") if path else None)
+        self._fp = fp if fp is not None else (path.open("a", encoding="utf-8") if path else None)
         self.db = db
         self._session_uid = session_uid_source
 

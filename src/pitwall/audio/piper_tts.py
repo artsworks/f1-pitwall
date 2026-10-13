@@ -355,7 +355,7 @@ def common_phrases(limit: int = 150) -> list[tuple[str, int]]:
     root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
     phrases: set[tuple[str, int]] = set()
     for path in sorted(root.glob("*.yaml")):
-        for rule in yaml.safe_load(path.read_text()).get("rules", []):
+        for rule in yaml.safe_load(path.read_text(encoding="utf-8")).get("rules", []):
             for text in rule.get("say", []):
                 if "{" not in text:
                     phrases.add((text, int(rule.get("priority", 2))))

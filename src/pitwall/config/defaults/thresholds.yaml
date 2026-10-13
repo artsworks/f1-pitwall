@@ -76,6 +76,7 @@ thresholds:
   prep_behind_s: 4           # push-lap car behind closing within this = let it by
   # Run plan / cool-down lap (docs/17)
   cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
+  cool_wet_ers_min_pct: 20   # inters/wets: battery floor at the line to push; a wet hot lap spends ~3-10% (Brazil wet quali)
   cool_ers_need_max_pct: 70  # cap on the learned battery need
   # Interlagos quali recordings: hot laps burn 0.92-1.01 laps. Cool laps
   # burn 0.87-0.95. Require fuel for one hot lap or cool + hot at the line.

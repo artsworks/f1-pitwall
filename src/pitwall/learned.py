@@ -22,7 +22,7 @@ from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 def _yaml(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return data if isinstance(data, dict) else {}
 
 

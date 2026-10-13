@@ -28,6 +28,7 @@ class HotLap:
     lockups: int
     spins: int
     invalid: bool
+    compound: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,9 +173,13 @@ class RunTracker:
         extend_cool: bool = False,
         fuel_short: bool = False,
         fuel_cool_short: bool = False,
+        compound: int = 0,
     ) -> HotLap | None:
-        """Feed one Lap Data tick. `decide` plans after a hot lap; `extend_cool`
-        retains a cool plan, and short fuel boxes after a cool lap or invalid start."""
+        """Feed one Lap Data tick and return any completed HotLap.
+
+        `decide` plans after a hot lap; `extend_cool` keeps a cool plan.
+        Short fuel boxes after a cool lap or invalid start.
+        """
         prev_ms, self._prev_lap_ms = self._prev_lap_ms, lap_time_ms
         prev_sector, self._prev_sector = self._prev_sector, sector
         if phase == "out_lap":
@@ -215,6 +220,7 @@ class RunTracker:
                     lockups=lockups - self._lockups0,
                     spins=spins - self._spins0,
                     invalid=self._invalid,
+                    compound=compound,
                 )
                 self.last_hot = done
                 self.plan = decide()
