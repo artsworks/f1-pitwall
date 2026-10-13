@@ -252,6 +252,8 @@ const NAV = [
 ];
 const motion = matchMedia("(prefers-reduced-motion: no-preference)").matches;
 if (motion) document.documentElement.classList.add("motion");
+const HUB_ONLY = new Set(["12-driver-input", "21-voice-command", "15-dashboard-design", "19-guest-tower", "22-setup-advisor", "16-debrief-design", "13-league-multiplayer",
+  "06-direction-changes", "23-synthetic-recordings", "25-report-analysis-prompt", "10-angles-not-yet-considered", "11-open-questions", "14-adversarial-review", "00-review-of-v1"]);
 const ADRS = grp("Decisions (ADRs)").filter(d => d[0] !== "adr/README");
 
 function renderNav(filter = $("#filter").value) {
@@ -262,7 +264,7 @@ function renderNav(filter = $("#filter").value) {
   $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + (hit(byId["getting-started"]) ? link(byId["getting-started"]) : "") +
     `<a href="#/developer" data-id="developer">Developer guide</a>` + NAV.map(([g, docs]) => {
     const items = docs.flatMap(d => {
-      if (d[0] !== "adr/README") return hit(d) ? [link(d)] : [];
+      if (d[0] !== "adr/README") return hit(d) && (f || !HUB_ONLY.has(d[0]) || d[0] === id) ? [link(d)] : [];
       const adrs = ADRS.filter(a => f ? hit(a) : a[0] === id);
       return hit(d) || adrs.length ? [link(d), ...adrs.map(a => link(a, true))] : [];
     });
