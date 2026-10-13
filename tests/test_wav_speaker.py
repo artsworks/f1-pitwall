@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import threading
 import time
 import wave
@@ -342,6 +343,34 @@ def test_provisional_audio_fills_cache_in_background_and_reuses_disk(
     finally:
         restarted_renderer.background_release.set()
         restarted.close()
+
+
+def test_provisional_logs_background_render(caplog) -> None:  # type: ignore[no-untyped-def]
+    class ProvisionalRenderer(FakeRenderer):
+        def provisional(self, text: str, priority: int) -> tuple[bytes, float]:
+            return super().render(text, priority)
+
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if not background:
+                raise TimeoutError("foreground wait expired")
+            return super().render(text, priority, background=background)
+
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.wav_speaker")
+    speaker = WavSpeaker(ProvisionalRenderer(), FakePlayer())
+    try:
+        speaker.speak(make_call("provisional-log", text="line"))
+        _wait_for(
+            lambda: any(
+                "background render complete in" in record.getMessage() for record in caplog.records
+            )
+        )
+        assert any(
+            "background render complete in" in record.getMessage() for record in caplog.records
+        )
+    finally:
+        speaker.close()
 
 
 class WaitingRenderer(FakeRenderer):

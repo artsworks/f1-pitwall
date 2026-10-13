@@ -113,6 +113,10 @@ uv run pitwall voice warm --engine omnivoice --replay latest
 At startup, Pitwall waits for OmniVoice to render the startup lines before it speaks them.
 It plays Piper only if that render fails.
 
+`voice warm --engine omnivoice` then prints the OmniVoice render times: min, p50, p95 and max. Warming uses the background path, so these times are the full render times. Use the p95 to choose `omnivoice_wait_s`. A cold line that takes longer than `omnivoice_wait_s` plays Piper instead.
+
+Add `--log-level` before the command to print more detail. `--log-level info` prints OmniVoice render stats every 10 renders. `--log-level debug` also prints each render time and the UDP packet counts every 10 seconds. For example, run `uv run pitwall --log-level debug start`.
+
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
 OmniVoice falls back to Piper, then SAPI on Windows or null on other systems.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import threading
 import time
 import wave
@@ -17,10 +18,13 @@ import pytest
 
 from pitwall.audio.omnivoice_tts import (
     OmniVoiceError,
+    OmniVoiceRenderer,
+    _record_render,
     fetch_model_id,
     make_omnivoice_speaker,
     make_omnivoice_synth,
     omnivoice_cache_key,
+    render_stats_summary,
 )
 from pitwall.audio.piper_tts import to_wav
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
@@ -30,6 +34,15 @@ from tests.audio_contract import FakePlayer, assert_pitwall_wav, make_call
 
 SMALL_WAV = to_wav(np.zeros(240, dtype=np.float32), 24_000)
 PIPER_WAV = to_wav(np.zeros(480, dtype=np.float32), 24_000)
+
+
+@pytest.fixture(autouse=True)
+def clear_render_stats() -> None:
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    with omnivoice_module._stats_lock:
+        omnivoice_module._render_times.clear()
+        omnivoice_module._render_counts.clear()
 
 
 @dataclass
@@ -121,18 +134,42 @@ def _wait_for(predicate, timeout_s: float = 2.0) -> None:  # type: ignore[no-unt
 
 @pytest.mark.parametrize("deprecated", [{}, OLD_PROFILE_FIELDS])
 def test_synth_posts_text_only_and_returns_wav(
-    fake_server, tmp_path: Path, deprecated: dict[str, object]
+    fake_server, tmp_path: Path, deprecated: dict[str, object], caplog
 ) -> None:  # type: ignore[no-untyped-def]
     url, state = fake_server
     settings = _settings(url, tmp_path, **deprecated)
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.omnivoice_tts")
 
     wav, seconds = make_omnivoice_synth(settings)("Box this lap.")
 
     assert wav == SMALL_WAV
     assert seconds == pytest.approx(0.01)
+    assert any(
+        "omnivoice render" in record.getMessage()
+        and "(sync," in record.getMessage()
+        and "timeout=1.0s" in record.getMessage()
+        for record in caplog.records
+    )
     assert state.requests == [
         ("/v1/audio/speech", {"input": "Box this lap.", "response_format": "wav"})
     ]
+
+
+def test_background_synth_logs_background_mode_and_timeout(
+    fake_server, tmp_path: Path, caplog
+) -> None:  # type: ignore[no-untyped-def]
+    url, _ = fake_server
+    settings = _settings(url, tmp_path)
+    caplog.set_level(logging.DEBUG, logger="pitwall.audio.omnivoice_tts")
+
+    OmniVoiceRenderer(settings, "voice-model.gguf", None).render(
+        "Box this lap.", 2, background=True
+    )
+
+    assert any(
+        "(background," in record.getMessage() and "timeout=120.0s" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_synth_prepends_radio_click(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -146,7 +183,9 @@ def test_synth_prepends_radio_click(fake_server, tmp_path: Path) -> None:  # typ
 
 
 @pytest.mark.parametrize("failure", ["status", "timeout"])
-def test_synth_wraps_server_failure_and_timeout(fake_server, tmp_path: Path, failure: str) -> None:  # type: ignore[no-untyped-def]
+def test_synth_wraps_server_failure_and_timeout(
+    fake_server, tmp_path: Path, failure: str, caplog
+) -> None:  # type: ignore[no-untyped-def]
     url, state = fake_server
     timeout_s = 1.0
     if failure == "status":
@@ -155,10 +194,35 @@ def test_synth_wraps_server_failure_and_timeout(fake_server, tmp_path: Path, fai
         state.speech_delay_s = 0.5
         timeout_s = 0.2
 
+    caplog.set_level(logging.WARNING, logger="pitwall.audio.omnivoice_tts")
     with pytest.raises(OmniVoiceError) as error:
         make_omnivoice_synth(_settings(url, tmp_path), timeout_s=timeout_s)("test")
+    assert any("omnivoice render failed after" in record.getMessage() for record in caplog.records)
+    assert render_stats_summary("sync") is None
     if failure == "status":
         assert "synthesis failed" in str(error.value)
+
+
+def test_render_stats_summary_logs_every_tenth_success(caplog) -> None:  # type: ignore[no-untyped-def]
+    caplog.set_level(logging.INFO, logger="pitwall.audio.omnivoice_tts")
+
+    for elapsed in range(1, 10):
+        _record_render("sync", float(elapsed))
+    assert not any(
+        "omnivoice render stats (sync)" in record.getMessage() for record in caplog.records
+    )
+
+    _record_render("sync", 10.0)
+
+    stats_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if "omnivoice render stats (sync)" in record.getMessage()
+    ]
+    assert len(stats_lines) == 1
+    assert render_stats_summary("sync") == (
+        "omnivoice render stats (sync) n=10 min=1.00s p50=5.50s p95=9.55s max=10.00s"
+    )
 
 
 def test_fetch_model_id_reads_first_model(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -621,6 +685,7 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
     assert not (tmp_path / "pitwall.sqlite").exists()
     output = capsys.readouterr().out
     assert f"cached {len(expected_texts)} phrases" in output
+    assert "omnivoice render stats (background) n=" in output
     if dropped_texts:
         assert (
             f"voice warm: skipped {len(dropped_texts)} lines with names or measured values"

@@ -5,9 +5,12 @@ import io
 import json
 import logging
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 import wave
+from collections import deque
 from pathlib import Path
 from typing import cast
 
@@ -33,6 +36,10 @@ from pitwall.config.models import SpeechSettings
 log = logging.getLogger(__name__)
 
 BACKGROUND_TIMEOUT_S = 120.0
+_STATS_WINDOW = 500
+_stats_lock = threading.Lock()
+_render_times: dict[str, deque[float]] = {}
+_render_counts: dict[str, int] = {}
 
 
 class OmniVoiceError(RuntimeError):
@@ -81,31 +88,79 @@ def _post_json(url: str, payload: dict[str, object], timeout_s: float) -> bytes:
     return _request(url, data=data, timeout_s=timeout_s)
 
 
-def make_omnivoice_synth(settings: SpeechSettings, timeout_s: float | None = None) -> Synth:
+def make_omnivoice_synth(
+    settings: SpeechSettings, timeout_s: float | None = None, *, mode: str = "sync"
+) -> Synth:
     timeout = settings.omnivoice_timeout_s if timeout_s is None else timeout_s
     endpoint = settings.omnivoice_url.rstrip("/") + "/v1/audio/speech"
 
     def synth(text: str) -> tuple[bytes, float]:
-        response = _post_json(
-            endpoint,
-            {"input": text, "response_format": "wav"},
-            timeout,
-        )
+        start = time.monotonic()
         try:
-            seconds = wav_info(response)
-            with wave.open(io.BytesIO(response), "rb") as reader:
-                sample_rate = reader.getframerate()
-                if settings.radio_click:
-                    frames = reader.getnframes()
-                    audio = np.frombuffer(reader.readframes(frames), dtype="<i2").astype(np.float32)
-                    samples = np.concatenate((radio_blip(sample_rate), audio / 32767.0))
-                    response = to_wav(samples, sample_rate)
-                    seconds = wav_info(response)
-        except (InvalidWav, wave.Error, EOFError, ZeroDivisionError) as exc:
-            raise OmniVoiceError(f"OmniVoice returned invalid WAV audio: {exc}") from exc
+            response = _post_json(
+                endpoint,
+                {"input": text, "response_format": "wav"},
+                timeout,
+            )
+            elapsed = time.monotonic() - start
+            try:
+                seconds = wav_info(response)
+                with wave.open(io.BytesIO(response), "rb") as reader:
+                    sample_rate = reader.getframerate()
+                    if settings.radio_click:
+                        frames = reader.getnframes()
+                        audio = np.frombuffer(reader.readframes(frames), dtype="<i2").astype(
+                            np.float32
+                        )
+                        samples = np.concatenate((radio_blip(sample_rate), audio / 32767.0))
+                        response = to_wav(samples, sample_rate)
+                        seconds = wav_info(response)
+            except (InvalidWav, wave.Error, EOFError, ZeroDivisionError) as exc:
+                raise OmniVoiceError(f"OmniVoice returned invalid WAV audio: {exc}") from exc
+        except OmniVoiceError as exc:
+            log.warning(
+                "omnivoice render failed after %.2fs (%s, timeout=%.1fs): %r: %s",
+                time.monotonic() - start,
+                mode,
+                timeout,
+                text,
+                exc,
+            )
+            raise
+        log.debug(
+            "omnivoice render %.2fs (%s, %.2fs audio, timeout=%.1fs): %r",
+            elapsed,
+            mode,
+            seconds,
+            timeout,
+            text,
+        )
+        _record_render(mode, elapsed)
         return response, seconds
 
     return synth
+
+
+def _record_render(mode: str, elapsed: float) -> None:
+    with _stats_lock:
+        times = _render_times.setdefault(mode, deque(maxlen=_STATS_WINDOW))
+        times.append(elapsed)
+        count = _render_counts.get(mode, 0) + 1
+        _render_counts[mode] = count
+    if count % 10 == 0:
+        log.info("%s", render_stats_summary(mode))
+
+
+def render_stats_summary(mode: str) -> str | None:
+    with _stats_lock:
+        times = list(_render_times.get(mode, ()))
+    if not times:
+        return None
+    p50, p95 = np.percentile(times, [50, 95])
+    return (
+        f"omnivoice render stats ({mode}) n={len(times)} min={min(times):.2f}s "
+        f"p50={p50:.2f}s p95={p95:.2f}s max={max(times):.2f}s"
+    )
 
 
 def fetch_model_id(settings: SpeechSettings) -> str:
@@ -143,7 +198,9 @@ class OmniVoiceRenderer:
         # The foreground timeout is the playback grace period for cold lines, not the
         # health-check timeout.
         self._synth = make_omnivoice_synth(settings, timeout_s=self._wait_s)
-        self._background_synth = make_omnivoice_synth(settings, timeout_s=BACKGROUND_TIMEOUT_S)
+        self._background_synth = make_omnivoice_synth(
+            settings, timeout_s=BACKGROUND_TIMEOUT_S, mode="background"
+        )
 
     def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
         if background:
