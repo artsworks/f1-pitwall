@@ -37,7 +37,7 @@ class ProcessStats:
         """Return working set and peak working set in MB."""
         if self._handle is None:
             return 0.0, 0.0
-        import win32process  # type: ignore[import-untyped, unused-ignore]
+        import win32process  # type: ignore[import-untyped]
 
         m = win32process.GetProcessMemoryInfo(self._handle)
         return m["WorkingSetSize"] / 2**20, m["PeakWorkingSetSize"] / 2**20

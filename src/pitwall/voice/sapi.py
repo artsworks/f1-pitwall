@@ -34,7 +34,7 @@ EventSink = Callable[[str, str, float, float], None]
 
 
 def _phrase(result: Any) -> tuple[str, float]:
-    import win32com.client  # type: ignore[import-untyped, unused-ignore]
+    import win32com.client  # type: ignore[import-untyped]
 
     res = win32com.client.Dispatch(result)
     info = res.PhraseInfo
@@ -118,7 +118,7 @@ class SapiRecognizer:
     ) -> None:
         if sys.platform != "win32":
             raise RuntimeError("SapiRecognizer requires Windows")
-        import pythoncom  # type: ignore[import-untyped, unused-ignore]
+        import pythoncom  # type: ignore[import-untyped]
         import win32com.client
 
         pythoncom.CoInitialize()
