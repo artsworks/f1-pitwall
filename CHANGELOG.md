@@ -6,6 +6,25 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.7.1 (2026-10-13)
+
+### Bug Fixes
+
+- **quali**: Gate cool-lap pushes on projected fuel
+  ([#78](https://github.com/artsworks/f1-pitwall/pull/78),
+  [`3a3c9f2`](https://github.com/artsworks/f1-pitwall/commit/3a3c9f2f348380707fe76112e290733740680340))
+
+- **quali**: Reserve cool + hot fuel for extra cool laps and retries
+  ([#78](https://github.com/artsworks/f1-pitwall/pull/78),
+  [`3a3c9f2`](https://github.com/artsworks/f1-pitwall/commit/3a3c9f2f348380707fe76112e290733740680340))
+
+### Continuous Integration
+
+- Skip docs-only runs, cancel superseded PR runs, skip non-releasing release jobs
+  ([#82](https://github.com/artsworks/f1-pitwall/pull/82),
+  [`4c45f95`](https://github.com/artsworks/f1-pitwall/commit/4c45f956356a28af6442418fc10e1fbd9b79479f))
+
+
 ## v0.7.0 (2026-10-13)
 
 ### Bug Fixes
