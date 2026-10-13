@@ -6,6 +6,63 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.11.0 (2026-10-13)
+
+### Bug Fixes
+
+- **audio**: Close phrase-cache temp fd before writing
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: Handle playback and fallback edge cases
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: Harden OmniVoice fallback, warm/say engine and phrase cache
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: Route fallback callbacks and warm selected engine
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **voice**: Restore pywin32 type-ignore comments
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+### Documentation
+
+- Focus the landing page and move dev docs behind a developer guide
+  ([#84](https://github.com/artsworks/f1-pitwall/pull/84),
+  [`f535e5a`](https://github.com/artsworks/f1-pitwall/commit/f535e5a26fdc58bb0aa8ceb6d30c727cba1f73fd))
+
+- Trim Design and Reference sidebar links to core docs
+  ([#84](https://github.com/artsworks/f1-pitwall/pull/84),
+  [`f535e5a`](https://github.com/artsworks/f1-pitwall/commit/f535e5a26fdc58bb0aa8ceb6d30c727cba1f73fd))
+
+- **audio**: Document the speech engine contract
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: State the callback order in the engine skill
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+### Features
+
+- **audio**: Add opt-in OmniVoice TTS backend
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: Add vendor-independent speaker contract
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+- **audio**: Add vendor-independent speech engine contract
+  ([#73](https://github.com/artsworks/f1-pitwall/pull/73),
+  [`04ee075`](https://github.com/artsworks/f1-pitwall/commit/04ee075e7037bf37e06d5162abc56ae2c6ad8038))
+
+
 ## v0.10.0 (2026-10-13)
 
 ### Documentation
