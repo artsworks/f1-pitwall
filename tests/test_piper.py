@@ -1,5 +1,4 @@
 import io
-import sys
 import threading
 import time
 import wave
@@ -17,7 +16,7 @@ from pitwall.audio.piper_tts import (
     radio_blip,
     to_wav,
 )
-from pitwall.audio.speaker import NullSpeaker, SapiSpeaker, make_speaker
+from pitwall.audio.speaker import NullSpeaker, make_speaker
 from pitwall.config.models import SpeechSettings
 
 
@@ -278,8 +277,7 @@ def test_missing_voice_falls_back(tmp_path: Path) -> None:
     s = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="pitwall voice get"):
         make_piper_synth(s)
-    expected = SapiSpeaker if sys.platform == "win32" else NullSpeaker
-    assert isinstance(make_speaker(s), expected)
+    assert isinstance(make_speaker(s), NullSpeaker)
 
 
 def test_speech_disabled_makes_null_speaker() -> None:

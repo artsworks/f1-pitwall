@@ -161,14 +161,14 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
 
     P1 is the urgent read (quicker, more pitch/energy variation), P3 the calm
     one (a touch slower and flatter), P2 the voice's normal delivery."""
+    from piper import PiperVoice, SynthesisConfig
+
     path = voice_path(settings)
     if not path.exists():
         raise FileNotFoundError(
             f"Piper voice {settings.piper_voice} not found in {settings.voices_dir}/ "
             f"(run: pitwall voice get {settings.piper_voice})"
         )
-    from piper import PiperVoice, SynthesisConfig
-
     voice = PiperVoice.load(path)
     rate = max(-10, min(10, settings.rate))
     base_length = (1.0 - 0.04 * rate) / max(0.5, min(2.0, settings.piper_speed))
