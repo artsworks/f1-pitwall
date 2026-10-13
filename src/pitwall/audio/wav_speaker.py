@@ -391,6 +391,11 @@ class WavSpeaker:
             if result is not None:
                 seconds = wav_info(result[0])
                 self._queue_background(key, call.text, call.priority)
+                log.info(
+                    "%s provisional playback for %r; queued background render",
+                    self.name,
+                    call.text,
+                )
                 return result[0], seconds
         return self.render(call.text, call.priority)
 
@@ -408,8 +413,16 @@ class WavSpeaker:
             key, text, priority = item
             try:
                 if self._cached(key) is None:
+                    start = time.monotonic()
                     wav, _ = self._renderer.render(text, priority, background=True)
+                    elapsed = time.monotonic() - start
                     self._remember(key, (wav, wav_info(wav)), disk=True, disk_required=False)
+                    log.info(
+                        "%s background render complete in %.2fs for %r",
+                        self.name,
+                        elapsed,
+                        text,
+                    )
             except Exception as exc:
                 log.warning("%s background synthesis failed for %r: %s", self.name, text, exc)
             finally:
