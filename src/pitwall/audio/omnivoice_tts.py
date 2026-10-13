@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import json
@@ -89,13 +88,7 @@ def make_omnivoice_synth(settings: SpeechSettings, timeout_s: float | None = Non
     def synth(text: str) -> tuple[bytes, float]:
         response = _post_json(
             endpoint,
-            {
-                "input": text,
-                "voice": settings.omnivoice_voice,
-                "language": settings.omnivoice_language,
-                "response_format": "wav",
-                "seed": settings.omnivoice_seed,
-            },
+            {"input": text, "response_format": "wav"},
             timeout,
         )
         try:
@@ -115,40 +108,6 @@ def make_omnivoice_synth(settings: SpeechSettings, timeout_s: float | None = Non
     return synth
 
 
-def register_voice(settings: SpeechSettings) -> str:
-    if not settings.omnivoice_voice.strip():
-        raise OmniVoiceError("speech.omnivoice_voice must be set")
-    if not settings.omnivoice_ref_wav.strip():
-        raise OmniVoiceError("speech.omnivoice_ref_wav must point to a reference WAV")
-    if not settings.omnivoice_ref_text.strip():
-        raise OmniVoiceError("speech.omnivoice_ref_text must point to a transcript text file")
-
-    wav_path = Path(settings.omnivoice_ref_wav).expanduser()
-    text_path = Path(settings.omnivoice_ref_text).expanduser()
-    if not wav_path.is_file():
-        raise OmniVoiceError(f"reference WAV not found: {wav_path}")
-    if not text_path.is_file():
-        raise OmniVoiceError(f"reference transcript not found: {text_path}")
-    try:
-        wav_data = wav_path.read_bytes()
-        transcript = text_path.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        raise OmniVoiceError(f"could not read OmniVoice reference files: {exc}") from exc
-    if not transcript:
-        raise OmniVoiceError(f"reference transcript is empty: {text_path}")
-
-    _post_json(
-        settings.omnivoice_url.rstrip("/") + "/v1/audio/voices",
-        {
-            "name": settings.omnivoice_voice,
-            "ref_text": transcript,
-            "wav_b64": base64.b64encode(wav_data).decode("ascii"),
-        },
-        settings.omnivoice_timeout_s,
-    )
-    return hashlib.sha256(wav_data + transcript.encode()).hexdigest()
-
-
 def fetch_model_id(settings: SpeechSettings) -> str:
     endpoint = settings.omnivoice_url.rstrip("/") + "/v1/models"
     response = _request(endpoint, data=None, timeout_s=settings.omnivoice_timeout_s)
@@ -162,17 +121,8 @@ def fetch_model_id(settings: SpeechSettings) -> str:
     return model_id
 
 
-def omnivoice_cache_key(settings: SpeechSettings, model_id: str, ref_identity: str) -> str:
-    payload = {
-        "model_id": model_id,
-        "omnivoice_voice": settings.omnivoice_voice,
-        "ref_identity": ref_identity,
-        "seed": settings.omnivoice_seed,
-        "language": settings.omnivoice_language,
-        "response_format": "wav",
-        "omnivoice_voice_version": settings.omnivoice_voice_version,
-        "radio_click": settings.radio_click,
-    }
+def omnivoice_cache_key(settings: SpeechSettings, model_id: str) -> str:
+    payload = {"model_id": model_id, "radio_click": settings.radio_click}
     encoded = json.dumps(payload, sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
 
@@ -184,11 +134,10 @@ class OmniVoiceRenderer:
         self,
         settings: SpeechSettings,
         model_id: str,
-        ref_identity: str,
         fallback_tones: dict[int, Synth] | None,
     ) -> None:
-        self.label = f"omnivoice ({settings.omnivoice_voice})"
-        self.cache_identity = omnivoice_cache_key(settings, model_id, ref_identity)
+        self.label = f"omnivoice ({model_id})"
+        self.cache_identity = omnivoice_cache_key(settings, model_id)
         self.fallback_tones = fallback_tones
         self._synth = make_omnivoice_synth(settings)
         self._background_synth = make_omnivoice_synth(settings, timeout_s=BACKGROUND_TIMEOUT_S)
@@ -205,7 +154,6 @@ class OmniVoiceRenderer:
 
 def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = None) -> WavSpeaker:
     model_id = fetch_model_id(settings)
-    ref_identity = register_voice(settings)
     try:
         fallback_tones = make_piper_tone_synths(settings)
     except Exception as exc:
@@ -218,7 +166,7 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
         fallback = make_speaker(
             settings.model_copy(update={"engine": "sapi" if sys.platform == "win32" else "null"})
         )
-    renderer = OmniVoiceRenderer(settings, model_id, ref_identity, fallback_tones)
+    renderer = OmniVoiceRenderer(settings, model_id, fallback_tones)
     return WavSpeaker(
         renderer,
         player or default_player(),
