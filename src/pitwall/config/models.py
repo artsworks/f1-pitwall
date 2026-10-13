@@ -259,7 +259,10 @@ class SpeechSettings(BaseModel):
     piper_voice: str = "en_GB-northern_english_male-medium"
     piper_speed: float = 1.3
     omnivoice_url: str = "http://127.0.0.1:8080"
-    omnivoice_timeout_s: float = 2.5
+    omnivoice_timeout_s: float = 2.5  # startup /v1/models health-check timeout
+    # How long a cold (uncached) line waits for OmniVoice WAV before Piper provisional
+    # audio plays. 0 restores instant Piper.
+    omnivoice_wait_s: float = 5.0
     voices_dir: str = "voices"
     warm_phrases: int = 150  # fixed phrases pre-rendered by `pitwall voice warm`
     rate: int = 0

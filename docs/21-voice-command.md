@@ -342,7 +342,7 @@ another machine. The architecture allows all three without backend code changes.
 | Close reaching the recogniser (tap: `BUTN` → backend → voice process on loopback) | 10–40 ms |
 | Recogniser finalise (small model, streaming already consumed the audio) | 100–300 ms |
 | Intent match + `menu.answer()` | < 5 ms |
-| Render by the selected engine. Cached replies take 0 ms. Uncached Piper takes about 40 ms. Uncached OmniVoice plays Piper first, or waits up to `omnivoice_timeout_s` without Piper. | 0–60 ms with Piper |
+| Render by the selected engine. Cached replies take 0 ms. Uncached Piper takes about 40 ms. Uncached OmniVoice waits up to `omnivoice_wait_s` (5 s), then plays Piper. With `omnivoice_wait_s: 0`, Piper plays at once. | 0–60 ms cached or with `omnivoice_wait_s: 0`, up to 5 s for uncached OmniVoice |
 | Playback start (winsound / device) | ~50 ms |
 | **Total** | **~0.2–0.5 s after a closing tap; ~1.2–1.5 s after the last word on silence close** — the pause a real engineer takes before answering |
 

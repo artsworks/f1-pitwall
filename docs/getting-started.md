@@ -90,13 +90,14 @@ Set these values under `speech`:
 engine: omnivoice
 omnivoice_url: "http://192.168.1.30:8080"
 omnivoice_timeout_s: 2.5
+omnivoice_wait_s: 5.0
 ```
 
 Start `tts-server` with `--locked`, `--ref-audio` and `--ref-text`. The server owns the voice, seed and steps. Pitwall sends only the text.
 
 Phrase WAV files live in `voices/.phrases`. The cache key changes when the text, the server model or `radio_click` changes. After you change the voice, seed or steps on the server, delete `voices/.phrases`.
 
-Cold lines play Piper first when a Piper voice is available. Pitwall renders OmniVoice in the background. Later requests play cached OmniVoice audio.
+A cold line waits up to `omnivoice_wait_s` (default 5 seconds) for OmniVoice audio. If OmniVoice is slow or fails, Pitwall plays Piper and renders OmniVoice in the background. Later requests play the cached OmniVoice audio. Set `omnivoice_wait_s: 0` to play Piper at once. `omnivoice_timeout_s` is the timeout for the startup check of the server.
 
 Warm common lines or lines from a recording:
 

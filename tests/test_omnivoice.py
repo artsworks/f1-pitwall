@@ -28,6 +28,7 @@ from pitwall.config.models import SpeechSettings
 from tests.audio_contract import FakePlayer, assert_pitwall_wav, make_call
 
 SMALL_WAV = to_wav(np.zeros(240, dtype=np.float32), 24_000)
+PIPER_WAV = to_wav(np.zeros(480, dtype=np.float32), 24_000)
 
 
 @dataclass
@@ -192,13 +193,54 @@ def test_make_omnivoice_speaker_uses_piper_provisional_audio(
     import pitwall.audio.omnivoice_tts as omnivoice_module
 
     url, state = fake_server
-    tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
+    tones = {priority: lambda _text: (PIPER_WAV, 0.02) for priority in (1, 2, 3)}
     monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
-    speaker = make_omnivoice_speaker(_settings(url, tmp_path, **OLD_PROFILE_FIELDS), FakePlayer())
+    player = FakePlayer()
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, **OLD_PROFILE_FIELDS), player)
     try:
         assert state.requests == [("/v1/models", {})]
         assert speaker._fallback is None
-        assert speaker._renderer.provisional("test", 2) == (SMALL_WAV, 0.01)
+        assert speaker._renderer.provisional("test", 2) == (PIPER_WAV, 0.02)
+        speaker.speak(make_call("cold", text="Box this lap."))
+        _wait_for(lambda: bool(player.played))
+        assert player.played == [SMALL_WAV]
+        assert [path for path, _ in state.requests] == ["/v1/models", "/v1/audio/speech"]
+    finally:
+        speaker.close()
+
+
+@pytest.mark.parametrize(
+    ("updates", "wait_s", "cached"),
+    [
+        ({"speech_delay_s": 0.5}, 0.2, True),
+        ({"speech_status": 500}, 1.0, False),
+        ({}, 0.0, True),
+    ],
+    ids=["slow", "error", "wait-disabled"],
+)
+def test_omnivoice_speaker_plays_piper_when_wait_fails(
+    fake_server, tmp_path: Path, monkeypatch, updates: dict[str, Any], wait_s: float, cached: bool
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, state = fake_server
+    for name, value in updates.items():
+        setattr(state, name, value)
+    tones = {priority: lambda _text: (PIPER_WAV, 0.02) for priority in (1, 2, 3)}
+    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
+    player = FakePlayer()
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, omnivoice_wait_s=wait_s), player)
+    phrases = tmp_path / "voices" / ".phrases"
+    try:
+        speaker.speak(make_call("cold", text="Box this lap."))
+        _wait_for(lambda: bool(player.played))
+        assert player.played == [PIPER_WAV]
+        _wait_for(lambda: not speaker._pending)
+        cache = list(phrases.glob("*.wav")) if phrases.is_dir() else []
+        assert [path.read_bytes() for path in cache] == ([SMALL_WAV] if cached else [])
+        if wait_s == 0:
+            speech = [path for path, _ in state.requests if path == "/v1/audio/speech"]
+            assert speech == ["/v1/audio/speech"]
     finally:
         speaker.close()
 
@@ -207,12 +249,14 @@ def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, mon
     import pitwall.audio.omnivoice_tts as omnivoice_module
 
     url, _ = fake_server
-    tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
+    tones = {priority: lambda _text: (PIPER_WAV, 0.02) for priority in (1, 2, 3)}
     monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
     speaker = make_omnivoice_speaker(_settings(url, tmp_path), FakePlayer())
     events: list[str] = []
+    streamed: list[bytes] = []
     speaker.on_audio = lambda _call_id, _priority, wav: (
         assert_pitwall_wav(wav),
+        streamed.append(wav),
         events.append("audio"),
     )
     speaker.on_spoken = lambda _call_id, _time: events.append("spoken")
@@ -220,6 +264,7 @@ def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, mon
         speaker.speak(make_call("omnivoice-contract", text="Box this lap."))
         _wait_for(lambda: events.count("spoken") == 1)
         assert events == ["audio", "spoken"]
+        assert streamed == [SMALL_WAV]
     finally:
         speaker.close()
 
