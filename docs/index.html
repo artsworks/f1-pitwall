@@ -14,7 +14,11 @@ a{color:var(--link)}
 header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--bg)}
 header .brand{font-weight:700;text-decoration:none;color:var(--fg);white-space:nowrap}
 header .brand span{color:var(--accent)}
-header .gh{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none}
+header .top{display:flex;gap:2px;margin-left:auto}
+header .top a{padding:4px 10px;border-radius:6px;font-size:14px;font-weight:600;color:var(--fg);text-decoration:none}
+header .top a:hover{background:var(--panel)}
+header .top a.active{color:var(--accent)}
+header .gh{margin-left:6px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none}
 header .gh:hover{border-color:var(--fg)}
 header .gh svg{width:16px;height:16px;fill:currentColor}
 #menu{display:none;background:none;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer}
@@ -65,7 +69,7 @@ article:has(.landing){max-width:none}
 .hero h1{font-size:44px;line-height:1.1;margin:6px 0 10px;letter-spacing:-.01em}
 .hero h1 span{color:var(--accent)}
 .hero .pitch{font-size:21px;line-height:1.45;color:var(--fg);max-width:760px;margin:0 0 12px}
-.hero .shot{display:block;margin:22px 0 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0a0a0a;box-shadow:0 14px 36px rgba(0,0,0,.18)}
+.hero .shot{position:relative;display:block;margin:22px 0 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0a0a0a;box-shadow:0 14px 36px rgba(0,0,0,.18)}
 .hero .shot img{display:block;width:100%;height:auto}
 .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:3px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);text-decoration:none}
 .badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
@@ -87,14 +91,6 @@ article:has(.landing){max-width:none}
 .flow li.out{display:flex;flex-direction:column;gap:6px;padding:0;border:0;background:none}
 .flow li.out span{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--panel)}
 .flow-note{font-size:14px;color:var(--muted);margin:0 0 6px}
-.milestones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:16px 0}
-.milestones a{display:block;border:1px solid var(--line);border-top:4px solid var(--built);border-radius:8px;padding:10px 12px;text-decoration:none;color:var(--fg);font-size:13px;background:var(--panel)}
-.milestones a.done{border-top-color:var(--ok)}
-.milestones a:hover{border-color:var(--accent)}
-.milestones b{display:block;font-size:17px}
-.milestones .st{display:block;font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--built);margin:2px 0 4px}
-.milestones .done .st{color:var(--ok)}
-.milestones small{display:block;color:var(--muted);line-height:1.4}
 .works{columns:2;column-gap:28px;padding-left:20px;font-size:15px}
 .works li{break-inside:avoid;margin-bottom:6px}
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px;margin:12px 0 20px}
@@ -110,8 +106,36 @@ article:has(.landing){max-width:none}
 .next a b{display:block;font-size:16px;margin-bottom:4px}
 .next a span{color:var(--muted)}
 .next a em{display:inline-block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-bottom:6px}
-.landing .dive h3{margin:22px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .foot{font-size:13px;color:var(--muted);margin-top:30px}
+.shot .frame{position:relative;display:block}
+.shot .open{display:block;padding:8px 14px;border-top:1px solid #222;color:#e6e8eb;font-size:13px;font-weight:600;text-align:right;transition:color .2s}
+.hero .shot:hover .open,.hero .shot:focus-visible .open{color:#ff5a4f}
+.shot .live{position:absolute;left:14px;bottom:14px;max-width:calc(100% - 28px);display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:rgba(10,10,10,.85);border:1px solid rgba(255,255,255,.14);color:#f2f2f2;font:13px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden}
+.shot .live b{color:#ff5a4f;font-size:11px;letter-spacing:.06em}
+.shot .live .dot{flex:none;width:8px;height:8px;border-radius:50%;background:#ff5a4f}
+.shot .live .say{overflow:hidden;text-overflow:ellipsis;min-height:1.3em}
+.shot .live .caret{display:none;flex:none;width:7px;height:14px;margin-left:-6px;background:#f2f2f2}
+.devcard{display:flex;align-items:center;gap:18px;max-width:900px;margin:40px 0 10px;padding:20px 24px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);text-decoration:none}
+.devcard:hover{border-color:var(--accent)}
+.devcard b{display:block;font-size:20px;margin-bottom:2px}
+.devcard span{color:var(--muted);font-size:15px}
+.devcard i{margin-left:auto;font-style:normal;font-size:26px;color:var(--accent)}
+.hub .badge{margin-right:8px}
+@media (prefers-reduced-motion:no-preference){
+  .motion .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+  .motion .reveal.in{opacity:1;transform:none}
+  .motion .reveal :is(.radio,.flow li){opacity:0;transform:translateX(-6px);transition:opacity .45s ease,transform .45s ease;transition-delay:calc(.2s + var(--i,0)*.1s)}
+  .motion .reveal.in :is(.radio,.flow li){opacity:1;transform:none}
+  .motion .hero .shot{transition:transform .3s ease,box-shadow .3s ease}
+  .motion .hero .shot:hover{transform:translateY(-3px);box-shadow:0 20px 44px rgba(0,0,0,.24)}
+  .motion .shot .live .dot{animation:pulse 1.6s ease-in-out infinite}
+  .motion .shot .live .caret{display:block;animation:blink 1s steps(1) infinite}
+  .motion .devcard i{transition:transform .25s ease}
+  .motion .devcard:hover i{transform:translateX(4px)}
+  @keyframes pulse{50%{opacity:.35;transform:scale(.8)}}
+  @keyframes blink{50%{opacity:0}}
+}
+@media (min-width:861px){body.home nav{display:none}body.home .layout{grid-template-columns:minmax(0,1fr)}}
 @media (min-width:1500px){
   .hero{display:grid;grid-template-columns:minmax(380px,1fr) minmax(0,2fr);gap:48px;align-items:center;padding:16px 0 12px}
   .hero .shot{margin:0}
@@ -130,6 +154,9 @@ article:has(.landing){max-width:none}
 }
 @media (max-width:860px){
   #menu{display:inline-block}
+  header .top{display:none}
+  header .gh{margin-left:auto}
+  .shot .live{left:8px;bottom:8px;max-width:calc(100% - 16px);font-size:11px;padding:5px 9px}
   .layout{grid-template-columns:1fr}
   nav{display:none;position:fixed;top:53px;left:0;right:0;bottom:0;height:auto;background:var(--bg);z-index:4;border:0}
   body.nav-open nav{display:block}
@@ -138,17 +165,17 @@ article:has(.landing){max-width:none}
   .hero .pitch{font-size:18px}
   .flow{flex-direction:column;gap:22px}
   .flow li+li::before{content:"↓";left:50%;top:-19px;transform:translateX(-50%)}
-  .milestones{grid-template-columns:repeat(2,minmax(0,1fr))}
   .works{columns:1}
   .calls{grid-template-columns:1fr}
 }
-@media print{header,nav,.pager,.toc{display:none}.layout{display:block}main{padding:0}}
+@media print{header,nav,.pager,.toc{display:none}.reveal,.reveal *{opacity:1!important;transform:none!important}.layout{display:block}main{padding:0}}
 </style>
 </head>
 <body>
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
+  <div class="top"><a href="#/getting-started" data-id="getting-started">Getting started</a><a href="#/developer" data-id="developer">Developer guide</a></div>
   <a class="gh" href="https://github.com/artsworks/f1-pitwall"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
 </header>
 <div class="layout">
@@ -219,10 +246,14 @@ const cache = {};
 
 const grp = name => GROUPS.find(g => g[0] === name)[1];
 const NAV = [
-  ["Start here", [...grp("Start here"), byId["adr/README"]]],
+  ["Project", [byId.status, byId["05-roadmap"], byId["adr/README"]]],
   ["Design", grp("Core design")],
   ["Reference", [...grp("In depth"), ...grp("Reference and provenance")]]
 ];
+const motion = matchMedia("(prefers-reduced-motion: no-preference)").matches;
+if (motion) document.documentElement.classList.add("motion");
+const HUB_ONLY = new Set(["12-driver-input", "21-voice-command", "15-dashboard-design", "19-guest-tower", "22-setup-advisor", "16-debrief-design", "13-league-multiplayer",
+  "06-direction-changes", "23-synthetic-recordings", "25-report-analysis-prompt", "10-angles-not-yet-considered", "11-open-questions", "14-adversarial-review", "00-review-of-v1"]);
 const ADRS = grp("Decisions (ADRs)").filter(d => d[0] !== "adr/README");
 
 function renderNav(filter = $("#filter").value) {
@@ -230,9 +261,10 @@ function renderNav(filter = $("#filter").value) {
   const hit = d => !f || (d[1] + " " + d[2] + " " + d[0]).toLowerCase().includes(f);
   const link = (d, sub) => `<a${sub ? ' class="sub"' : ""} href="#/${d[0]}" data-id="${d[0]}">${d[1]}</a>`;
   const id = current();
-  $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + NAV.map(([g, docs]) => {
+  $("#navlist").innerHTML = `<a href="#/" data-id="">Overview</a>` + (hit(byId["getting-started"]) ? link(byId["getting-started"]) : "") +
+    `<a href="#/developer" data-id="developer">Developer guide</a>` + NAV.map(([g, docs]) => {
     const items = docs.flatMap(d => {
-      if (d[0] !== "adr/README") return hit(d) ? [link(d)] : [];
+      if (d[0] !== "adr/README") return hit(d) && (f || !HUB_ONLY.has(d[0]) || d[0] === id) ? [link(d)] : [];
       const adrs = ADRS.filter(a => f ? hit(a) : a[0] === id);
       return hit(d) || adrs.length ? [link(d), ...adrs.map(a => link(a, true))] : [];
     });
@@ -243,7 +275,7 @@ function renderNav(filter = $("#filter").value) {
 function current() { return decodeURIComponent(location.hash.replace(/^#\/?/, "").split("#")[0]); }
 function markActive() {
   const id = current();
-  document.querySelectorAll("#navlist a").forEach(a => a.classList.toggle("active", a.dataset.id === id));
+  document.querySelectorAll("#navlist a, header .top a").forEach(a => a.classList.toggle("active", a.dataset.id === id));
 }
 
 function overview() {
@@ -264,28 +296,14 @@ function overview() {
     ["Rules", "YAML conditions with hysteresis"],
     ["Dispatcher", "Priority, cooldown and call budget"]
   ];
-  const milestones = [
-    ["M0", "Done", "done", "Capture and replay"],
-    ["M1", "Done", "done", "One call, end to end. Out-lap call inside 300 ms"],
-    ["M2", "Done", "done", "Qualifying. Driven from Q1 to Q3"],
-    ["M3", "Done", "done", "Race. 25% and 100% races reviewed"],
-    ["M4", "Done", "done", "Better over time. Debrief, calibration and evaluation"]
-  ];
   const works = [
     "<b>Qualifying.</b> f1-pitwall advises on release into traffic, aborts and the run plan. It also gives fuel, battery and tyre-pressure advice.",
     "<b>Race strategy.</b> f1-pitwall keeps Plans A, B and C, calls pit windows, undercuts, overcuts and SC or VSC stops, and updates the plan after a stop.",
     "<b>Tyres, fuel and ERS.</b> Tyre life is the lower of worst-corner wear life and pace-cliff life.",
     "<b>Learning.</b> f1-pitwall grades each session. <code>pitwall calibrate</code>, <code>evaluate</code>, <code>propose</code> and <code>stats --learned</code> show and apply what it learnt.",
-    "<b>Debrief.</b> f1-pitwall exports a standalone HTML debrief and serves an editable <code>/debrief/&lt;uid&gt;</code> page.",
+    "<b>Debrief.</b> f1-pitwall exports a standalone HTML debrief and serves an editable debrief page at <code>/debrief</code>.",
     "<b>Voice and phone.</b> Piper caches spoken phrases. A phone PWA works as a second radio.",
     "<b>Recovery.</b> The watchdog restarts a failed or stalled engine while the recorder keeps running."
-  ];
-  const next = [
-    ["21-voice-command", "Design only", "Voice command", "Tap a wheel button, say \"gap ahead?\" and f1-pitwall answers. It recognises a fixed list of about 40 phrases, offline, without an LLM."],
-    ["19-guest-tower", "Design only", "Guest timing tower", "A /tower screen for guests watching from the garage. It shows the full field, sectors, pace and a plain-words summary of our race."],
-    ["22-setup-advisor", "Proposal", "Setup advisor", "Suggests setup changes from stored tyre, wear and pace history. It knows what parc fermé allows and keeps its rules in YAML tables."],
-    ["13-league-multiplayer", "Goal", "Friends league", "Supports a league of three friends and an AI grid. It treats hidden rival data as unknown."],
-    ["16-debrief-design", "Deferred", "Debrief LLM layer", "Adds optional coaching and Q&A over the debrief and session history if you set an API key. The rules still make every decision."]
   ];
   const screens = [
     ["Qualifying", [
@@ -311,57 +329,100 @@ function overview() {
   ];
   const tall = f => f.startsWith("phone-");
   $("#content").innerHTML = `<div class="landing">
-    <section class="hero">
+    <section class="hero reveal">
       <div>
-      <a class="badge" href="#/status">M0 to M4 done</a>
       <h1>f1<span>-</span>pitwall</h1>
       <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
-      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard. Here you find the design docs, the decision records and the status of each milestone.</p>
+      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard and on your phone.</p>
       <div class="cta">
         <a class="btn primary" href="#/getting-started">Getting started</a>
         <a class="btn" href="mockups/dashboard-reimagined.html">Dashboard mockup</a>
         <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
       </div>
       </div>
-      <a class="shot" href="assets/screens/race-box-call.webp"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"></a>
+      <a class="shot" href="mockups/dashboard-reimagined.html" aria-label="Open the interactive dashboard mockup"><span class="frame"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"><span class="live" aria-hidden="true"><span class="dot"></span><b>RADIO</b><span class="say"></span><span class="caret"></span></span></span><span class="open" aria-hidden="true">Open the interactive mockup ↗</span></a>
     </section>
 
+    <section class="reveal">
     <h2>Screens</h2>
     <p class="lede">Dashboard and phone shots come from synthetic replays. Select a screen to open it at full size.</p>
     <div class="gallery">${screens.map(([g, list]) => `<div class="group${list.some(([f]) => tall(f)) ? " phone" : ""}"><h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
       `<figure${tall(f) ? ` class="tall"` : ""}><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" ${tall(f) ? `width="390" height="844"` : `width="1920" height="1080"`}></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div></div>`).join("")}</div>
+    </section>
 
+    <section class="reveal">
     <h2>What it calls on the radio</h2>
-    <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake (<a href="#/adr/0008-natural-phrasing-without-an-llm">ADR 0008</a>).</p>
-    <div class="calls">${calls.map(([t, d, ex]) => `<div><b>${t}</b><p>${d}</p>${ex.map(x => `<div class="radio">${x}</div>`).join("")}</div>`).join("")}</div>
+    <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake.</p>
+    <div class="calls">${calls.map(([t, d, ex]) => `<div><b>${t}</b><p>${d}</p>${ex.map((x, i) => `<div class="radio" style="--i:${i}">${x}</div>`).join("")}</div>`).join("")}</div>
+    </section>
 
+    <section class="reveal">
     <h2>How it works</h2>
     <ol class="flow" aria-label="Pipeline">
-      ${flow.map(([t, d]) => `<li><b>${t}</b>${d}</li>`).join("")}
-      <li class="out"><span><b>Speech</b>Piper or SAPI on your headset</span><span><b>Dashboard</b>WebSocket on port 8000</span></li>
+      ${flow.map(([t, d], i) => `<li style="--i:${i}"><b>${t}</b>${d}</li>`).join("")}
+      <li class="out" style="--i:${flow.length}"><span><b>Speech</b>Piper or SAPI on your headset</span><span><b>Dashboard</b>WebSocket on port 8000</span></li>
     </ol>
-    <p class="flow-note">Recordings replay through the same ingest, state and rules path. <a href="#/01-architecture">Read the architecture</a>.</p>
+    <p class="flow-note">Recordings replay through the same ingest, state and rules path.</p>
     <div class="pillars">
       <div><b>Record and replay</b>f1-pitwall records every session raw. You tune strategy offline against the recordings.</div>
       <div><b>Rules as data</b>Each call is a declarative rule. The rule has its own hysteresis, cooldown, phrasing and replay test.</div>
       <div><b>Mindset control</b>Choose balanced or aggressive. The setting biases pit windows, energy use, tyres and rival focus.</div>
     </div>
+    </section>
 
-    <h2>Where it stands</h2>
-    <div class="milestones">${milestones.map(([m, st, cls, d]) => `<a class="${cls}" href="#/status"><b>${m}</b><span class="st">${st}</span><small>${d}</small></a>`).join("")}</div>
-    <h3>What works today</h3>
+    <section class="reveal">
+    <h2>What works today</h2>
     <ul class="works">${works.map(w => `<li>${w}</li>`).join("")}</ul>
-    <p><a href="#/status">Full status, evidence and known gaps</a> · <a href="#/05-roadmap">Roadmap</a></p>
+    <a class="devcard" href="#/developer"><span><b>Developer guide</b>Architecture, strategy design, decision records, build status and the roadmap.</span><i aria-hidden="true">→</i></a>
+    </section>
+  </div>`;
+  reveal();
+  heroRadio($(".shot .say"), ["Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]);
+}
 
-    <h2>What's next</h2>
-    <p class="lede">Ideas from the roadmap's "Later, if wanted" list. Each one has a design doc.</p>
-    <div class="next">${next.map(([id, tag, t, d]) => `<a href="#/${id}"><em>${tag}</em><b>${t}</b><span>${d}</span></a>`).join("")}</div>
+let io;
+function reveal() {
+  io?.disconnect();
+  const els = document.querySelectorAll(".landing .reveal");
+  if (!motion || !("IntersectionObserver" in window)) { els.forEach(e => e.classList.add("in")); return; }
+  io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { rootMargin: "0px 0px -10% 0px" });
+  els.forEach(e => io.observe(e));
+}
 
-    <h2>Dive into the docs</h2>
-    <div class="dive">` +
-    GROUPS.map(([g, docs]) => `<h3>${g}</h3><div class="cards">` +
+function heroRadio(el, lines) {
+  if (!motion) { el.textContent = lines[0]; return; }
+  let li = 0, ci = 0;
+  const tick = () => {
+    if (!el.isConnected) return;
+    const s = lines[li];
+    el.textContent = s.slice(0, ++ci);
+    if (ci < s.length) return setTimeout(tick, 38);
+    li = (li + 1) % lines.length; ci = 0;
+    setTimeout(() => { if (el.isConnected) { el.textContent = ""; setTimeout(tick, 400); } }, 3200);
+  };
+  setTimeout(tick, 900);
+}
+
+function devGuide() {
+  document.title = "Developer guide · f1-pitwall";
+  const next = [
+    ["21-voice-command", "Design only", "Voice command", "Tap a wheel button, say \"gap ahead?\" and f1-pitwall answers. It recognises a fixed list of about 40 phrases, offline, without an LLM."],
+    ["19-guest-tower", "Design only", "Guest timing tower", "A /tower screen for guests watching from the garage. It shows the full field, sectors, pace and a plain-words summary of our race."],
+    ["22-setup-advisor", "Proposal", "Setup advisor", "Suggests setup changes from stored tyre, wear and pace history. It knows what parc fermé allows and keeps its rules in YAML tables."],
+    ["13-league-multiplayer", "Goal", "Friends league", "Supports a league of three friends and an AI grid. It treats hidden rival data as unknown."],
+    ["16-debrief-design", "Deferred", "Debrief LLM layer", "Adds optional coaching and Q&A over the debrief and session history if you set an API key. The rules still make every decision."]
+  ];
+  $("#content").innerHTML = `<div class="hub">
+    <h1>Developer guide</h1>
+    <p>Design docs, decision records and build status for people who work on f1-pitwall.</p>
+    <p><a class="badge" href="#/status">M0 to M4 done</a><a href="#/status">Status, evidence and known gaps</a> · <a href="#/05-roadmap">Roadmap</a></p>` +
+    GROUPS.map(([g, docs]) => `<h2>${g}</h2><div class="cards">` +
       docs.filter(d => !/^adr\/\d/.test(d[0])).map(d => `<a href="#/${d[0]}"><b>${d[1]}</b><span>${d[2]}</span></a>`).join("") + `</div>`).join("") +
-    `</div>
+    `<h2>Designs not built yet</h2>
+    <p>Ideas from the roadmap's "Later, if wanted" list. Each one has a design doc.</p>
+    <div class="next">${next.map(([id, tag, t, d]) => `<a href="#/${id}"><em>${tag}</em><b>${t}</b><span>${d}</span></a>`).join("")}</div>
     <p class="foot">Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>
   </div>`;
 }
@@ -428,8 +489,10 @@ function route() {
   document.body.classList.remove("nav-open");
   $("#menu").setAttribute("aria-expanded", "false");
   const [id, frag] = location.hash.replace(/^#\/?/, "").split("#").map(decodeURIComponent);
+  document.body.classList.toggle("home", !id);
   renderNav();
   if (!id) { overview(); window.scrollTo(0, 0); return; }
+  if (id === "developer") { devGuide(); window.scrollTo(0, 0); return; }
   const loaded = $(".path") && document.title.startsWith(byId[id]?.[1] || "\0");
   if (loaded && frag) { document.getElementById(frag)?.scrollIntoView(); return; }
   showDoc(id, frag);
