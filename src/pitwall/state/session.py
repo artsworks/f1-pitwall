@@ -600,6 +600,8 @@ class Snapshot:
     battle_pace_behind: str = ""
     battle_swaps: int = 0  # place changes inside battle_swap_window_s
     player_last_lap_ms: int = 0
+    # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
+    player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -669,6 +671,8 @@ class Snapshot:
     cool_lap: bool = False
     cool_push_suspect: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    fuel_for_hot_lap: bool = False  # fuel at the line covers one more hot lap
+    fuel_for_cool_and_hot: bool = False  # fuel at the line covers a cool lap and a hot lap
     next_lap_invalid: bool = False  # track limits deleted this lap before it started
     cool_elapsed_s: float = 0.0
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
@@ -1411,6 +1415,8 @@ class SessionState:
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
                 throttle=self.throttle,
+                fuel_short=self.fuel_remaining_laps < self._th("fuel_push_need_laps", 2.0),
+                fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
                 compound=self.tyre_compound,
             )
 
@@ -1460,16 +1466,25 @@ class SessionState:
             fuel_cool_laps=self._th("fuel_cool_need_laps", 3.0),
         )
 
+    def _fuel_at_line(self) -> float:
+        if self.track_length_m <= 0:
+            return self.fuel_remaining_laps
+        return self.fuel_remaining_laps - (
+            max(0.0, self.track_length_m - self.lap_distance) / self.track_length_m
+        )
+
     def _cool_extend(self) -> bool:
-        """Cool lap ending with too little battery and time for another cool lap.
-        Fixed from the hot-mode point to the line, so pushing for the line
-        cannot flip "hot lap mode" into "one more cool lap"."""
+        """Extend a cool lap only when time and fuel cover a cool and hot lap."""
         if self.run.kind != COOL:
             return False
         latch = self._cool_latch
         if latch is not None and latch[0] == self.run.cool_start_t:
             return latch[1]
-        extend = self.ers_store_pct < self._ers_need_pct() and self._time_for_cool_and_hot()
+        extend = (
+            self.ers_store_pct < self._ers_need_pct()
+            and self._time_for_cool_and_hot()
+            and self._fuel_at_line() >= self._th("fuel_cool_need_laps", 3.0)
+        )
         hot_mode_m = self.track_length_m - self._th("cool_hot_mode_m", 600.0)
         if self.track_length_m > 0 and self.lap_distance >= hot_mode_m:
             self._cool_latch = (self.run.cool_start_t, extend)
@@ -2292,6 +2307,16 @@ class SessionState:
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)
         laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
+        history = self._histories.get(self._player_idx)
+        player_recent_laps = (
+            tuple(
+                (index + 1, lap.lap_time_ms, lap.sector1_ms, lap.sector2_ms, lap.sector3_ms)
+                for index, lap in enumerate(history.laps[: max(0, history.num_laps - 1)])
+                if lap.lap_time_ms != 0
+            )[-3:]
+            if history is not None
+            else ()
+        )
         return Snapshot(
             now=now,
             session_time=st,
@@ -2391,6 +2416,7 @@ class SessionState:
             player_last_lap_ms=(
                 cars[self._player_idx].last_lap_time_ms if 0 <= self._player_idx < len(cars) else 0
             ),
+            player_recent_laps=player_recent_laps,
             player_best_s1_ms=player_best_s1,
             player_best_s2_ms=player_best_s2,
             player_best_s3_ms=player_best_s3,
@@ -2569,6 +2595,7 @@ class SessionState:
             if cool_lap and self.track_length_m > 0
             else 0.0
         )
+        fuel_at_line = self._fuel_at_line()
         plan = run.plan
         why = ""
         if plan.reason == "battery":
@@ -2634,6 +2661,8 @@ class SessionState:
             cool_lap=cool_lap,
             cool_push_suspect=cool_push_suspect,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            fuel_for_hot_lap=fuel_at_line >= self._th("fuel_push_need_laps", 2.0),
+            fuel_for_cool_and_hot=fuel_at_line >= self._th("fuel_cool_need_laps", 3.0),
             next_lap_invalid=run.next_lap_invalid,
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),
