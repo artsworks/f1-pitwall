@@ -80,6 +80,49 @@ def test_piper_speaker_plays_reports_and_caches() -> None:
     sp.close()
 
 
+def test_piper_drops_calls_that_age_during_synthesis() -> None:
+    player = FakePlayer()
+    spoken: list[str] = []
+    dropped: list[str] = []
+
+    def slow_synth(text: str) -> tuple[bytes, float]:
+        time.sleep(0.3)
+        return text.encode(), 0.0
+
+    sp = PiperSpeaker(slow_synth, player)
+    sp.on_spoken = lambda cid, t: spoken.append(cid)
+    sp.on_dropped = dropped.append
+    call = _call("stale")
+    call.handoff_age_s = 9.9
+    call.max_age_s = 10.0
+    sp.speak(call)
+    _wait_for(lambda: dropped == ["stale"])
+
+    assert player.played == []
+    assert spoken == []
+    sp.close()
+
+
+def test_piper_plays_calls_without_an_age_cap() -> None:
+    player = FakePlayer()
+    spoken: list[str] = []
+
+    def slow_synth(text: str) -> tuple[bytes, float]:
+        time.sleep(0.3)
+        return text.encode(), 0.0
+
+    sp = PiperSpeaker(slow_synth, player)
+    sp.on_spoken = lambda cid, t: spoken.append(cid)
+    call = _call("reply")
+    call.handoff_age_s = 9.9
+    call.max_age_s = None
+    sp.speak(call)
+    _wait_for(lambda: spoken == ["reply"])
+
+    assert player.played == [b"box box"]
+    sp.close()
+
+
 def test_prerendered_phrases_survive_restart_and_keep_tone_separate(tmp_path: Path) -> None:
     synthed: list[str] = []
     wav = to_wav(np.zeros(160), 16_000)

@@ -538,7 +538,7 @@ def write_overlays(
     for track in report.get("tracks", []):
         track_id = int(track["track_id"])
         path = root / f"{track_id}.yaml"
-        existing = yaml.safe_load(path.read_text()) if path.exists() else {}
+        existing = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
         data = existing if isinstance(existing, dict) else {}
         changed = False
         fuel_n = int(track.get("fuel_burn_n", 0))
@@ -612,7 +612,7 @@ def write_overlays(
             continue
         root.mkdir(parents=True, exist_ok=True)
         ordered = sorted_yaml(data)
-        path.write_text(yaml.safe_dump(ordered, sort_keys=False))
+        path.write_text(yaml.safe_dump(ordered, sort_keys=False), encoding="utf-8")
         paths.append(path)
     return paths
 

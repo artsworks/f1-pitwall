@@ -67,6 +67,7 @@ class PolicySettings(BaseModel):
     calls_per_lap: int | None = None  # None -> verbosity preset table
     min_gap_s: float = 3.0
     min_gap_defer_s: float = 10.0  # a call inside min_gap waits up to this long, else dropped
+    max_call_age_s: float = 10.0  # drop a call this long after its trigger, replies and menu exempt
     dedupe_window_s: float = 20.0
     quiet: bool = False
     mute_until_lap: int = 0
@@ -339,6 +340,7 @@ class RuleDefModel(BaseModel):
     on_ack: str | list[str] = ""
     on_neg: str | list[str] = ""
     response_window_s: float | None = None  # overrides input.response_window_s
+    no_response: Literal["", "ack", "neg"] = ""
 
     def urgency_class(self, priority: int | None = None) -> str:
         priority = priority or self.priority

@@ -113,7 +113,6 @@ def cmd_replay(args: argparse.Namespace) -> int:
         # - Without a downloaded voice (`pitwall voice get`) make_speaker falls back
         #   to SAPI or null, no WAVs stream, and the browser reads calls itself.
         speaker = make_speaker(ConfigStore().current().speech)
-        speaker.on_spoken = lambda cid, t: hub.spoken(cid, t)
         if isinstance(speaker, PiperSpeaker):
             speaker.on_audio = hub.audio
             hub.streams_audio = True
@@ -129,6 +128,14 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 db=seed_db,
                 synthetic=synthetic,
             )
+
+            def on_spoken(cid: str, t: float) -> None:
+                hub.spoken(cid, t)
+                eng.metrics.note_spoken(cid, t)
+
+            speaker.on_spoken = on_spoken
+            if isinstance(speaker, PiperSpeaker):
+                speaker.on_dropped = eng.dispatcher.note_dropped
             if args.mask_restricted:
                 eng.ingest.transform = mask_restricted
             return eng

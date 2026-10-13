@@ -226,6 +226,7 @@ class PiperSpeaker:
         self.name = label
         self.on_spoken: Callable[[str, float], None] | None = None
         self.on_audio: Callable[[str, int, bytes], None] | None = None
+        self.on_dropped: Callable[[str], None] | None = None
         self._synth = synth
         self._tones = tones or {}
         self._player = player
@@ -233,6 +234,7 @@ class PiperSpeaker:
         self._cache_key = cache_key
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
         self._q: queue.PriorityQueue[tuple[int, int, Call | None]] = queue.PriorityQueue()
+        self._received: dict[str, float] = {}
         self._seq = itertools.count()
         self._cancelled: set[str] = set()
         self._gen = 0
@@ -244,6 +246,7 @@ class PiperSpeaker:
     def speak(self, call: Call) -> None:
         if call.priority == 1:
             self._urgent.set()
+        self._received[call.id] = time.monotonic()
         self._q.put((call.priority, next(self._seq), call))
 
     def cancel(self, call_id: str) -> None:
@@ -264,6 +267,7 @@ class PiperSpeaker:
             except queue.Empty:
                 break
         self._cancelled.clear()
+        self._received.clear()
         self._player.stop()
 
     def close(self) -> None:
@@ -311,6 +315,7 @@ class PiperSpeaker:
             _, _, call = self._q.get()
             if call is None:
                 return
+            received = self._received.pop(call.id, time.monotonic())
             gen = self._gen
             if call.id in self._cancelled:
                 self._cancelled.discard(call.id)
@@ -327,6 +332,13 @@ class PiperSpeaker:
                 continue
             if call.priority == 1:
                 self._urgent.clear()
+            if (
+                call.max_age_s is not None
+                and call.handoff_age_s + (time.monotonic() - received) > call.max_age_s
+            ):
+                if self.on_dropped is not None:
+                    self.on_dropped(call.id)
+                continue
             self._player.play(wav)
             if self.on_audio is not None and call.id not in self._cancelled:
                 try:
@@ -369,7 +381,7 @@ def common_phrases(limit: int = 150) -> list[tuple[str, int]]:
     root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
     phrases: set[tuple[str, int]] = set()
     for path in sorted(root.glob("*.yaml")):
-        for rule in yaml.safe_load(path.read_text()).get("rules", []):
+        for rule in yaml.safe_load(path.read_text(encoding="utf-8")).get("rules", []):
             for text in rule.get("say", []):
                 if "{" not in text:
                     phrases.add((text, int(rule.get("priority", 2))))

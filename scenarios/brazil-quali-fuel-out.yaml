@@ -1,0 +1,16 @@
+id: brazil-quali-fuel-out
+title: No push call when fuel runs out in qualifying
+status: target
+source:
+  session_uid: "0x7d35bd82a4214735"
+  sha256: "e4fb8a54fe74e0404c41602b84c720c97d4e2517d34def680fdf29101d480e2f"
+  where: "Brazil short qualifying, 13 Oct 2026, ran out of fuel on lap 5. session_7d35bd82a4214735_1791843503.f1bin.zst"
+expect:
+  fire:
+    - {rule: plan_box, laps: [5, 5]}
+  absent:
+    - {rule: [cool_hot_mode, cool_extend, plan_push, plan_push_now, next_lap_invalid, lap_deleted, lap_deleted_last], laps: [4, 5]}
+why: >-
+  He crossed the line to start lap 5 with 0.87 laps of fuel and ran dry on that lap.
+  A hot lap here burns up to 1.01 laps. Pitwall must call the garage at the line, not push.
+  Today cool_hot_mode tells him to push near the end of lap 4.

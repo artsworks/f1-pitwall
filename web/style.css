@@ -211,7 +211,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
 
 /* ------------------------------------------------------- D fixed tiles --- */
-.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr;
+.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto;
   gap: .6rem; }
 .tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
   padding: .45rem .7rem; min-width: 0; overflow: hidden; }
@@ -219,6 +219,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .big { font-size: 2.4rem; font-weight: bold; line-height: 1.1; display: inline-block; min-width: 6ch; }
 .sub { color: var(--soft); font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fuel .big.ok { color: var(--ok); } .fuel .big.warn { color: var(--warn); } .fuel .big.crit { color: var(--crit); }
+.fuel .sub { font-size: 1rem; }
 /* BATT (item 12): colour by EnergyBudget.mode, always with icon + word */
 .batt .big { min-width: 4ch; }
 .batt .mode { font-weight: bold; font-size: 1.2rem; letter-spacing: .06em; }
@@ -226,6 +227,20 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
+.lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
+.lastlap { display: flex; flex-direction: column; }
+.lastlap .lap-comparisons { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-height: 0; }
+.lastlap .lap-comparison { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-width: 0; min-height: 0; }
+.lastlap .lap-comparison-header { display: flex; flex: 0 0 auto; align-items: baseline;
+  justify-content: space-between; gap: .3rem; min-width: 0; }
+.lastlap .cmp-label, .lastlap .cmp-delta { font-size: 1.2rem; font-weight: bold; white-space: nowrap; }
+.lastlap .cmp-label { min-width: 0; }
+.lastlap .lap-sectors { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem; min-height: 0; }
+.lastlap .label { color: var(--soft); font-size: .9rem; letter-spacing: .06em; }
+.lastlap .lap-sector { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
+.lastlap .lap-sector .value { font-size: 1.35rem; font-weight: bold; white-space: nowrap; }
 .meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
   background: var(--line); overflow: hidden; }
 .meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
@@ -248,9 +263,14 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
   border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
 .cross.warn { border-color: var(--warn); color: var(--warn); }
 .cross.cold { border-color: var(--cold); color: var(--cold); }
-/* damage (item 6): neutral numbers, no tile colour */
-.dmg { display: grid; grid-template-columns: 1fr 1fr; gap: .1rem 1rem; font-size: 1.35rem; }
+.tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; min-height: min-content; }
+.tile.damage:has(.dmg.many) { min-height: 6rem; }
+.tile.damage h2 { margin: 0; }
+.dmg { display: flex; flex: 1; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
+.dmg > * { white-space: nowrap; }
+.dmg.many { font-size: 1.05rem; column-gap: .8rem; }
 .dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.dmg.many .n { min-width: 0; }
 .dmg .n.warn { color: var(--warn); } .dmg .n.crit { color: var(--crit); }
 .dmg .none { color: var(--soft); }
 
@@ -444,7 +464,7 @@ body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; ga
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
-body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .damage,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
 body.phone .banner { position: sticky; top: var(--status-h, 3.2rem); z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;

@@ -34,7 +34,7 @@
      4 Tyres: 2x2 plan view, whole-tile status colour, trend arrow in place of the status word, fitted group and a
        separate laps_of_pace group with trend arrow.
      5 Fuel: fixed tile, fuel_remaining_laps only (TODO for the two-part tile).
-     6 Damage: neutral numbers, amber >= 5 %, red >= 25 %, no whole-tile colour.
+    6 Damage: strip under LAST 2 LAPS, neutral numbers, amber >= 5 %, red >= 25 %, smaller text past 3 entries.
      7 Strategy: PLAN A active, PLAN B dimmed, reactive PLAN C "BOX NOW" under SC,
        on-plan / off-plan with plan_off_s.
      8 Battle card: six modes, managing greyed, under_threat/defending lit red, pace and
@@ -57,6 +57,7 @@
        ARM PHONE RADIO, no radio log, browser speech kept.
     19 Quali: phase-driven layout, benchmark, cut-off pill, predicted cut-off, cool-down
        lite debrief (last lap, gap to pole, sector consistency trend).
+    20 LAST LAPS: two rows show the newer lap and its time delta, with S1/S2/S3 deltas below.
 -->
 <style>
 /* tokens: verbatim from web/style.css :root and the motion block */
@@ -273,7 +274,7 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
 
 /* ------------------------------------------------------- D fixed tiles --- */
-.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr;
+.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto;
   gap: .6rem; }
 .tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
   padding: .45rem .7rem; min-width: 0; overflow: hidden; }
@@ -281,6 +282,7 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .big { font-size: 2.4rem; font-weight: bold; line-height: 1.1; display: inline-block; min-width: 6ch; }
 .sub { color: var(--soft); font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fuel .big.ok { color: var(--ok); } .fuel .big.warn { color: var(--warn); } .fuel .big.crit { color: var(--crit); }
+.fuel .sub { font-size: 1rem; }
 /* BATT (item 12): colour by EnergyBudget.mode, always with icon + word */
 .batt .big { min-width: 4ch; }
 .batt .mode { font-weight: bold; font-size: 1.2rem; letter-spacing: .06em; }
@@ -288,6 +290,20 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
+.lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
+.lastlap { display: flex; flex-direction: column; }
+.lastlap .lap-comparisons { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-height: 0; }
+.lastlap .lap-comparison { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-width: 0; min-height: 0; }
+.lastlap .lap-comparison-header { display: flex; flex: 0 0 auto; align-items: baseline;
+  justify-content: space-between; gap: .3rem; min-width: 0; }
+.lastlap .cmp-label, .lastlap .cmp-delta { font-size: 1.2rem; font-weight: bold; white-space: nowrap; }
+.lastlap .cmp-label { min-width: 0; }
+.lastlap .lap-sectors { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem; min-height: 0; }
+.lastlap .label { color: var(--soft); font-size: .9rem; letter-spacing: .06em; }
+.lastlap .lap-sector { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
+.lastlap .lap-sector .value { font-size: 1.35rem; font-weight: bold; white-space: nowrap; }
 .meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
   background: var(--line); overflow: hidden; }
 .meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
@@ -311,9 +327,14 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
   border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
 .cross.warn { border-color: var(--warn); color: var(--warn); }
 .cross.cold { border-color: var(--cold); color: var(--cold); }
-/* damage (item 6): neutral numbers, no tile colour */
-.dmg { display: grid; grid-template-columns: 1fr 1fr; gap: .1rem 1rem; font-size: 1.35rem; }
+.tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; min-height: min-content; }
+.tile.damage:has(.dmg.many) { min-height: 6rem; }
+.tile.damage h2 { margin: 0; }
+.dmg { display: flex; flex: 1; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
+.dmg > * { white-space: nowrap; }
+.dmg.many { font-size: 1.05rem; column-gap: .8rem; }
 .dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.dmg.many .n { min-width: 0; }
 .dmg .n.warn { color: var(--warn); } .dmg .n.crit { color: var(--crit); }
 .dmg .none { color: var(--soft); }
 
@@ -449,8 +470,8 @@ body.pit .pitzone { display: flex; flex-direction: column; gap: .6rem; grid-colu
 .pb-release { font-size: 3.4rem; font-weight: bold; text-align: center; background: var(--ok); color: #000; border-radius: 6px; }
 
 /* ------------------------------------------------------------ G footer ---
-   Permanently muted (--soft / --dim). These values NEVER escalate colour, not even a
-   bad voice lag or SC: SC lives in the status bar flag and the safety card. */
+   Permanently muted (--soft / --dim). Queue and TTS metrics do not change the footer colour.
+   Safety car state appears in the status bar and safety card. */
 .footer { background: var(--panel); color: var(--soft); font-size: 1rem; display: flex; gap: 2rem;
   align-items: center; padding: 0 .9rem; white-space: nowrap; }
 .footer span { color: var(--dim); display: inline-block; }
@@ -511,7 +532,7 @@ body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; ga
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
-body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .damage,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
 body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
@@ -677,16 +698,51 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
          ALT to_wet:   <div class="cross cold">→ <span class="comp wet xs">WET</span> in ~10 min · rain 90%</div>  cell class="storm xo-cold"
          ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
   </div>
+  <div id="lastlap" class="tile wide lastlap">
+    <h2>LAST LAPS</h2>
+    <div class="lap-comparisons">
+      <div id="cmp-1" class="lap-comparison">
+        <div class="lap-comparison-header">
+          <span id="cmp-1-label" class="cmp-label">L23 1:32.6</span>
+          <strong id="cmp-1-delta" class="cmp-delta warn">Δ +0.1s</strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value warn">+0.1s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value warn">+0.2s</strong></div>
+        </div>
+      </div>
+      <div id="cmp-2" class="lap-comparison">
+        <div class="lap-comparison-header">
+          <span id="cmp-2-label" class="cmp-label">L24 1:32.4</span>
+          <strong id="cmp-2-delta" class="cmp-delta ok">Δ −0.2s</strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value warn">+0.3s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value ok">−0.3s</strong></div>
+        </div>
+      </div>
+    </div>
+    <!-- race.recent_laps: [{lap, time_ms, sectors_ms: [s1, s2, s3]}]
+         ALT no laps: cmp-1 all --, cmp-2 label "no lap yet" and all other values --
+         ALT one lap: cmp-1 all --, cmp-2 label "L24 1:32.1" and delta and sectors -- -->
+  </div>
   <div class="tile wide damage">
     <h2>DAMAGE</h2>
     <!-- damage.{front_left_wing,...} 0-100. Neutral numbers, amber >= 5, red >= 25.
+         Entries wrap when needed, with smaller text past 3 entries.
          The number is what the engineer speaks. No whole-tile colour. -->
-    <div class="dmg">
+    <div id="damage" class="dmg">
       <span>FW L <span class="n warn">6%</span></span>
       <span>Floor <span class="n">2%</span></span>
     </div>
     <!-- ALT none: <div class="dmg"><span class="none">✓ none</span></div>
-         ALT red:  <span>FW L <span class="n crit">31%</span></span> -->
+         ALT red:  <span>FW L <span class="n crit">31%</span></span>
+         ALT busy: <div class="dmg many"><span>FW L <span class="n warn">6%</span></span>
+           <span>FW R <span class="n warn">8%</span></span><span>RW 3%</span><span>Floor 2%</span>
+           <span>Diffuser 1%</span><span>Sidepod 3%</span><span>Gearbox 1%</span>
+           <span>Engine 1%</span><span class="n crit">DRS fault</span><span class="n crit">ERS fault</span></div> -->
   </div>
 </section>
 
@@ -870,7 +926,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 <footer class="footer">
   <!-- muted forever; never escalates colour -->
   <span id="rate">10 upd/s</span>                                                 <!-- client-derived frame rate -->
-  <span id="lag">voice lag 210 ms · screen lag 12 ms</span>  <!-- latency.trigger_to_speak_p99_ms, latency.packet_to_ws_p99_ms -->
+  <span id="lag">queue 2 · oldest 3.4 s · TTS 210 ms · screen lag 12 ms</span>  <!-- latency.queue_count, latency.queue_oldest_s, latency.tts_p99_ms, latency.packet_to_ws_p99_ms -->
   <span>ERS 62%</span>                                                             <!-- ers_pct -->
   <span>SC 0</span>                                                                <!-- safety_car -->
 </footer>

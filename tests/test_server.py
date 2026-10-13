@@ -65,6 +65,13 @@ def test_websocket_hello_and_state_shape() -> None:
         ws.send_json({"type": "hello", "v": 1, "last_seq": 7})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
+        assert set(snap["payload"]["latency"]) == {
+            "queue_count",
+            "queue_oldest_s",
+            "queue_wait_p99_ms",
+            "tts_p99_ms",
+            "packet_to_ws_p99_ms",
+        }
         for key in ("live", "tyres", "brakes", "phase", "latency"):
             assert key in snap["payload"]
         assert snap["payload"]["voice"] == {"available": False, "listening": False}
@@ -514,6 +521,33 @@ def test_state_payload_quali_zone() -> None:
     )
     assert flying["quali"]["lap"] == {"projected_ms": 90_700, "delta_ms": 700, "abort": True}
     assert "release" not in flying["quali"]
+
+
+def test_state_payload_race_lap_times() -> None:
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    race = state_payload(
+        Snapshot(
+            now=1.0,
+            session_kind="race",
+            player_recent_laps=(
+                (23, 92_304, 30_500, 31_000, 30_804),
+                (24, 92_104, 30_400, 31_000, 30_704),
+            ),
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    default = state_payload(Snapshot(now=1.0), settings=settings, metrics=Metrics(), quiet=False)
+
+    assert race["race"]["recent_laps"] == [
+        {"lap": 23, "time_ms": 92_304, "sectors_ms": [30_500, 31_000, 30_804]},
+        {"lap": 24, "time_ms": 92_104, "sectors_ms": [30_400, 31_000, 30_704]},
+    ]
+    assert default["race"]["recent_laps"] == []
 
 
 def test_state_payload_quali_pole_available_outside_cool_lap() -> None:

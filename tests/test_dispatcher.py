@@ -11,6 +11,7 @@ from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.digest import call_quality
+from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
@@ -94,7 +95,9 @@ def test_cooldown_and_dedupe() -> None:
     assert d.drain(10.0) == []  # cooldown
     d.submit([_cand("b", text="hi")], _snap(10.0))
     assert d.drain(10.0) == []  # same text inside dedupe window
-    d.submit([_cand("a", cooldown_s=30, text="hi")], _snap(31.0))
+    fresh = _cand("a", cooldown_s=30, text="hi")
+    fresh.trigger_t = 31.0
+    d.submit([fresh], _snap(31.0))
     assert len(d.drain(31.0)) == 1
 
 
@@ -138,6 +141,121 @@ def test_p3_deadline_starts_after_3_second_p2_speech() -> None:
     assert held.ready_t == pytest.approx(speech_end)
     assert [call.rule_id for call in d.drain(speech_end)] == ["p3"]
     assert sink.spoken == [p2_text, "info"]
+
+
+@pytest.mark.parametrize(("drain_t", "expected"), [(10.4, "fired"), (10.6, "stale")])
+def test_p3_waiting_on_min_gap_expires_from_its_trigger(drain_t: float, expected: str) -> None:
+    d, sink, buf = _dispatcher(min_gap_s=3.0)
+    d.submit([_cand("p2", text="p2")], Snapshot(now=0.0))
+    d.drain(0.0)
+
+    p3 = _cand("p3", priority=3, text="info")
+    p3.trigger_t = 0.5
+    d.submit([p3], Snapshot(now=0.5))
+    assert d.drain(0.5) == []
+    assert d._queue[0].call.not_before > 0.5
+    d.submit([], Snapshot(now=drain_t, on_straight=True))
+
+    emitted = d.drain(drain_t)
+    rows = [row for row in _log(buf) if row["rule_id"] == "p3"]
+    if expected == "fired":
+        assert [call.rule_id for call in emitted] == ["p3"]
+        assert any(row["outcome"] == "fired" for row in rows)
+        assert sink.spoken == ["p2", "info"]
+    else:
+        assert not emitted
+        assert any(
+            row["outcome"] == "suppressed" and row["suppressed_by"] == "stale" for row in rows
+        )
+        assert not any(row["outcome"] == "fired" for row in rows)
+        assert sink.spoken == ["p2"]
+
+
+def test_stale_call_held_behind_long_speech_is_suppressed() -> None:
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
+    long_text = "p" * 200
+    d.submit([_cand("long", text=long_text)], Snapshot(now=0.0))
+    d.drain(0.0)
+
+    held = _cand("held")
+    held.trigger_t = 0.5
+    d.submit([held], Snapshot(now=0.5))
+    assert d.drain(0.5) == []
+    assert d._queue[0].call.ready_t > 10.5
+    d.submit([], Snapshot(now=13.5))
+
+    assert d.drain(13.5) == []
+    rows = [row for row in _log(buf) if row["rule_id"] == "held"]
+    assert any(row["outcome"] == "suppressed" and row["suppressed_by"] == "stale" for row in rows)
+    assert not any(row["outcome"] == "fired" for row in rows)
+    assert sink.spoken == [long_text]
+
+
+def test_reply_tag_exempts_old_queued_call_from_age_cap() -> None:
+    d, sink, _ = _dispatcher(min_gap_s=0.0)
+    reply = _cand("reply", tags=["reply"])
+    d.submit([reply], Snapshot(now=0.0))
+    queued = d._queue[0].call
+    queued.not_before = 11.0
+    d.submit([], Snapshot(now=11.0))
+
+    emitted = d.drain(11.0)
+
+    assert emitted == [queued]
+    assert sink.spoken == ["reply"]
+    assert queued.max_age_s is None
+
+
+def test_dropped_call_is_removed_and_logged_on_drain() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("dropped")], Snapshot(now=0.0))
+    call = d.drain(0.0)[0]
+
+    d.note_dropped(call.id)
+    assert d.drain(1.0) == []
+
+    assert d._current is None
+    assert not any(spoken.id == call.id for spoken, _ in d._spoken_calls)
+    assert any(
+        row["rule_id"] == "dropped"
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "stale"
+        for row in _log(buf)
+    )
+
+
+def test_queue_status_and_call_handoff_fields() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    first = _cand("first")
+    second = _cand("second")
+    second.trigger_t = 0.5
+    d.submit([first, second], Snapshot(now=0.0))
+    d.menu_prompt("menu item", Snapshot(now=0.5))
+
+    assert d.queue_status(5.0) == (2, 5.0)
+    d.submit([], Snapshot(now=6.0))
+    assert d.metrics.summary()["voice_queue"] == {"count": 2, "oldest_s": 6.0}
+
+    fired, _, _ = _dispatcher(min_gap_s=0.0)
+    fired.submit([_cand("normal")], Snapshot(now=0.0))
+    call = fired.drain(2.0)[0]
+    assert call.handoff_age_s == 2.0
+    assert call.max_age_s == 10.0
+
+
+def test_metrics_track_queue_wait_and_one_tts_sample_per_call() -> None:
+    metrics = Metrics()
+    metrics.note_queue_wait(10.0, 10.25)
+    metrics.note_handoff("call", 100.0)
+    metrics.note_spoken("call", 100.05)
+    metrics.note_spoken("call", 100.10)
+
+    summary = metrics.summary()
+
+    assert summary["queue_wait_ms"]["p99"] == pytest.approx(250.0)
+    assert summary["tts_ms"]["mean"] == pytest.approx(50.0)
+    assert summary["voice_queue"] == {"count": 0, "oldest_s": 0.0}
+    assert "trigger_to_speak_ms" not in summary
 
 
 def test_revalidation() -> None:
@@ -424,9 +542,14 @@ def test_negative_backoff_mutes_not_p1() -> None:
     d.on_press(Press("neg", 1.0), _snap(1.0, lap=1))
     # muted for 3 laps
     for lap in (2, 3):
-        d.submit([_cand("a", text="again")], _snap(10.0 + lap, lap=lap))
+        now = 10.0 + lap
+        candidate = _cand("a", text="again")
+        candidate.trigger_t = now
+        d.submit([candidate], _snap(now, lap=lap))
         assert d.drain(10.0 + lap) == []
-    d.submit([_cand("a", text="again")], _snap(20.0, lap=4))
+    fresh = _cand("a", text="again")
+    fresh.trigger_t = 20.0
+    d.submit([fresh], _snap(20.0, lap=4))
     assert len(d.drain(20.0)) == 1
     # P1 is never muted
     d2, _, _ = _dispatcher(min_gap_s=0.0)
@@ -443,9 +566,13 @@ def test_neg_no_target_sets_quiet_until_p1_speaks() -> None:
 
     d.on_press(Press("neg", 10.0), _snap(10.0))
     assert d.quiet_until is not None
-    d.submit([_cand("a", text="info")], _snap(11.0))
+    info = _cand("a", text="info")
+    info.trigger_t = 11.0
+    d.submit([info], _snap(11.0))
     assert d.drain(11.0) == []
-    d.submit([_cand("crit", priority=1, text="danger")], _snap(11.0))
+    danger = _cand("crit", priority=1, text="danger")
+    danger.trigger_t = 11.0
+    d.submit([danger], _snap(11.0))
     assert len(d.drain(11.0)) == 1  # P1 still speaks
 
 
@@ -531,6 +658,140 @@ def test_rule_reply_and_longer_response_window() -> None:
     d.on_press(Press("neg", 16.0), _snap(16.0))  # past the default 8 s window
     assert d.quiet_until is None
     assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]
+
+
+def test_no_response_uses_configured_window_and_logs_assumed_answer() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+    assert len(d.drain(0.0)) == 1
+    end_t = d._spoken_calls[-1][1]
+
+    d.submit([], _snap(end_t + 5.1))
+    d.drain()
+
+    assert responses == [("cool_push_check", "ack")]
+    record = next(row for row in _log(buf) if row["outcome"] == "no_response")
+    assert record["rule_id"] == "cool_push_check"
+    assert record["assumed_answer"] == "ack"
+    assert record["suppressed_by"] == "ack"
+
+
+def test_no_response_uses_input_window_when_rule_does_not_override_it() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.input = InputSettings(response_window_s=2.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [_cand("prompt", priority=1, text="Confirm?", no_response="neg")],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    end_t = d._spoken_calls[-1][1]
+
+    d.submit([], _snap(end_t + 1.9))
+    d.drain()
+    assert not responses
+    d.submit([], _snap(end_t + 2.1))
+    d.drain()
+    assert responses == [("prompt", "neg")]
+
+
+@pytest.mark.parametrize(("kind", "answer"), [("ack", "ack"), ("neg", "neg")])
+def test_press_answers_no_response_prompt_without_later_timeout(kind: str, answer: str) -> None:
+    from pitwall.input.press import Press
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, result, _: responses.append((rule_id, result))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    end_t = d._spoken_calls[-1][1]
+    press_t = end_t + 1.0
+
+    d.on_press(Press(kind, press_t), _snap(press_t))
+    d.submit([], _snap(end_t + 5.1))
+    d.drain()
+
+    assert responses == [("cool_push_check", answer)]
+    assert not any(row["outcome"] == "no_response" for row in _log(buf))
+
+
+def test_reset_session_clears_awaiting_no_response_calls() -> None:
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [_cand("prompt", priority=1, text="Confirm?", response_window_s=1, no_response="ack")],
+        _snap(0.0),
+    )
+    d.drain(0.0)
+    assert d._awaiting_responses
+
+    d.reset_session(2)
+    d.submit([], _snap(100.0))
+    d.drain()
+
+    assert not d._awaiting_responses
+    assert not responses
+
+
+def test_deadline_drop_assumes_no_response() -> None:
+    d, _, buf = _dispatcher(deadlines_s={1: 0.5}, min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit(
+        [
+            _cand(
+                "cool_push_check",
+                priority=1,
+                text="Confirm?",
+                response_window_s=5.0,
+                no_response="ack",
+            )
+        ],
+        _snap(0.0),
+    )
+
+    assert d.drain(1.0) == []
+    assert responses == [("cool_push_check", "ack")]
+    assert any(row["outcome"] == "no_response" for row in _log(buf))
+
+
+def test_rule_without_no_response_does_not_timeout() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    responses: list[tuple[str, str]] = []
+    d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
+    d.submit([_cand("ordinary", priority=1, text="Hello")], _snap(0.0))
+    d.drain(0.0)
+    d.submit([], _snap(100.0))
+    d.drain()
+
+    assert not responses
+    assert not any(row["outcome"] == "no_response" for row in _log(buf))
 
 
 class AudioSink(CollectSink):

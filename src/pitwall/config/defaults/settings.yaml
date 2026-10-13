@@ -57,6 +57,7 @@ policy:
   calls_per_lap: 12
   min_gap_s: 3.0
   min_gap_defer_s: 10.0     # a call inside min_gap waits in the queue up to this long
+  max_call_age_s: 10.0      # trigger-age cap; replies and menu prompts are exempt
   dedupe_window_s: 20.0
   quiet: false
   mute_until_lap: 0

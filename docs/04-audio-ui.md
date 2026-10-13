@@ -61,6 +61,10 @@ TTL is only a backstop for a stalled client. Conflict groups keep a queued call 
 its current predicate holds. A call waiting behind speech starts its deadline when speech
 ends.
 
+The `max_call_age_s` cap measures from `trigger_t` and does not reset while a call waits or
+is held. Replies and menu prompts are exempt. The Piper worker drops calls that exceed the
+cap before playback.
+
 Execution calls with a decision point calculate the time to pit entry or the finish line.
 The dispatcher promotes calls inside `decision_near_s` and logs distance and time.
 Calls inside `decision_missed_s` lose conflicts because their action window has closed.

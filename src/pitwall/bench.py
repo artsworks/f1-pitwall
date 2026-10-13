@@ -154,7 +154,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
 
 def parse_scenario(path: Path) -> Scenario:
     try:
-        raw = yaml.safe_load(path.read_text())
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     data = _mapping(raw, path, "scenario")
@@ -215,7 +215,7 @@ def load_scenarios(directory: Path, only: Sequence[str] | None = None) -> list[S
     paths = sorted(directory.glob("*.yaml"), key=lambda p: p.stem)
     scenarios = []
     for path in paths:
-        raw = yaml.safe_load(path.read_text())
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         if isinstance(raw, dict) and raw.get("kind") == "radio-grades":
             continue
         scenarios.append(parse_scenario(path))

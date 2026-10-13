@@ -91,7 +91,7 @@ class ReviewController:
         self.grades_path = grades_path_for(self.path)
         self._grades: dict[str, dict[str, Any]] = {}
         if self.grades_path.exists():
-            for line in self.grades_path.read_text().splitlines():
+            for line in self.grades_path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     row = json.loads(line)
                     self._grades[str(row.get("call_id"))] = row
@@ -226,7 +226,7 @@ class ReviewController:
                 d["grade"] = grade
         self.db.grade_call(session_uid, call_id, rule_id, grade, note)
         tune_from_db(self.db, self.thresholds)
-        with self.grades_path.open("a") as f:
+        with self.grades_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
         return row
 

@@ -604,6 +604,20 @@ def state_payload(
         "race": {
             "phase": snapshot.race_phase,
             "laps_remaining": snapshot.laps_remaining,
+            "recent_laps": [
+                {
+                    "lap": lap_num,
+                    "time_ms": lap_time_ms,
+                    "sectors_ms": [sector1_ms, sector2_ms, sector3_ms],
+                }
+                for (
+                    lap_num,
+                    lap_time_ms,
+                    sector1_ms,
+                    sector2_ms,
+                    sector3_ms,
+                ) in snapshot.player_recent_laps
+            ],
             "sc_laps": snapshot.sc_laps,
             "gap_ahead_s": _finite(snapshot.gap_ahead_s),
             "gap_behind_s": _finite(snapshot.gap_behind_s),
@@ -666,7 +680,10 @@ def state_payload(
         "track_info": track_payload(snapshot),
         "setup": setup_payload(snapshot),
         "latency": {
-            "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
+            "queue_count": int(lat["voice_queue"]["count"]),
+            "queue_oldest_s": lat["voice_queue"]["oldest_s"],
+            "queue_wait_p99_ms": lat["queue_wait_ms"]["p99"],
+            "tts_p99_ms": lat["tts_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],
         },
     }

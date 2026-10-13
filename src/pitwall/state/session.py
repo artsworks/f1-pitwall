@@ -600,6 +600,8 @@ class Snapshot:
     battle_pace_behind: str = ""
     battle_swaps: int = 0  # place changes inside battle_swap_window_s
     player_last_lap_ms: int = 0
+    # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
+    player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -667,7 +669,10 @@ class Snapshot:
     run_plan_reason: str = ""
     run_plan_why: str = ""
     cool_lap: bool = False
+    cool_push_suspect: bool = False
     cool_prep: bool = False  # final approach of a cool lap: switch back to hot-lap mode
+    fuel_for_hot_lap: bool = False  # fuel at the line covers one more hot lap
+    fuel_for_cool_and_hot: bool = False  # fuel at the line covers a cool lap and a hot lap
     next_lap_invalid: bool = False  # track limits deleted this lap before it started
     cool_elapsed_s: float = 0.0
     ers_need_pct: float = 0.0  # battery wanted at the line before pushing
@@ -1409,7 +1414,17 @@ class SessionState:
                 cool_pace_pct=self._th("cool_pace_pct", 10.0),
                 decide=self._decide_plan,
                 extend_cool=self._cool_extend(),
+                throttle=self.throttle,
+                fuel_short=self.fuel_remaining_laps < self._th("fuel_push_need_laps", 2.0),
+                fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
+                compound=self.tyre_compound,
             )
+
+    def answer_push_check(self, push: bool) -> None:
+        if push:
+            self.run.confirm_push()
+        else:
+            self.run.hold_cool()
 
     def _is_sprint(self) -> bool:
         if self._kind() != "race" or self.session_type not in self.weekend_structure:
@@ -1451,27 +1466,40 @@ class SessionState:
             fuel_cool_laps=self._th("fuel_cool_need_laps", 3.0),
         )
 
+    def _fuel_at_line(self) -> float:
+        if self.track_length_m <= 0:
+            return self.fuel_remaining_laps
+        return self.fuel_remaining_laps - (
+            max(0.0, self.track_length_m - self.lap_distance) / self.track_length_m
+        )
+
     def _cool_extend(self) -> bool:
-        """Cool lap ending with too little battery and time for another cool lap.
-        Fixed from the hot-mode point to the line, so pushing for the line
-        cannot flip "hot lap mode" into "one more cool lap"."""
+        """Extend a cool lap only when time and fuel cover a cool and hot lap."""
         if self.run.kind != COOL:
             return False
         latch = self._cool_latch
         if latch is not None and latch[0] == self.run.cool_start_t:
             return latch[1]
-        extend = self.ers_store_pct < self._ers_need_pct() and self._time_for_cool_and_hot()
+        extend = (
+            self.ers_store_pct < self._ers_need_pct()
+            and self._time_for_cool_and_hot()
+            and self._fuel_at_line() >= self._th("fuel_cool_need_laps", 3.0)
+        )
         hot_mode_m = self.track_length_m - self._th("cool_hot_mode_m", 600.0)
         if self.track_length_m > 0 and self.lap_distance >= hot_mode_m:
             self._cool_latch = (self.run.cool_start_t, extend)
         return extend
 
     def _ers_need_pct(self) -> float:
-        """Battery wanted at the line to push: the configured floor, or what the
-        last hot lap spent (all of its start charge if it ran flat)."""
-        need = self._th("cool_ers_min_pct", 40.0)
+        """Battery wanted at the line to push: the configured floor (lower on
+        inters and wets), or what the last hot lap on this compound spent (all
+        of its start charge if it ran flat)."""
+        if self.tyre_compound in (7, 8):
+            need = self._th("cool_wet_ers_min_pct", 20.0)
+        else:
+            need = self._th("cool_ers_min_pct", 40.0)
         last = self.run.last_hot
-        if last is not None:
+        if last is not None and last.compound == self.tyre_compound:
             used = last.ers_start_pct - last.ers_end_pct
             if last.ers_end_pct <= 5.0:
                 used = max(used, last.ers_start_pct)
@@ -2279,6 +2307,16 @@ class SessionState:
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)
         laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
+        history = self._histories.get(self._player_idx)
+        player_recent_laps = (
+            tuple(
+                (index + 1, lap.lap_time_ms, lap.sector1_ms, lap.sector2_ms, lap.sector3_ms)
+                for index, lap in enumerate(history.laps[: max(0, history.num_laps - 1)])
+                if lap.lap_time_ms != 0
+            )[-3:]
+            if history is not None
+            else ()
+        )
         return Snapshot(
             now=now,
             session_time=st,
@@ -2378,6 +2416,7 @@ class SessionState:
             player_last_lap_ms=(
                 cars[self._player_idx].last_lap_time_ms if 0 <= self._player_idx < len(cars) else 0
             ),
+            player_recent_laps=player_recent_laps,
             player_best_s1_ms=player_best_s1,
             player_best_s2_ms=player_best_s2,
             player_best_s3_ms=player_best_s3,
@@ -2537,11 +2576,26 @@ class SessionState:
                 f"rears {(inner.rl + inner.rr) / 2:.0f}"
             )
         cool_lap = phase == "flying" and run.kind == COOL
+        cool_pace_pct = self._th("cool_pace_pct", 10.0)
+        ers_recharge_mode = self._th("ers_recharge_mode", -1)
+        cool_push_suspect = (
+            cool_lap
+            and not run.cool_held
+            and self.sector == 0
+            and player_best > 0
+            and self.track_length_m > 0
+            and self.lap_distance >= self._th("cool_push_check_m", 400.0)
+            and self.current_lap_time_ms
+            <= player_best * self.lap_distance / self.track_length_m * (1 + cool_pace_pct / 100)
+            and run.full_throttle_share >= self._th("cool_push_throttle_share", 0.4)
+            and (ers_recharge_mode < 0 or self.ers_deploy_mode != ers_recharge_mode)
+        )
         to_hot = (
             self.track_length_m - self._th("cool_hot_mode_m", 600.0) - self.lap_distance
             if cool_lap and self.track_length_m > 0
             else 0.0
         )
+        fuel_at_line = self._fuel_at_line()
         plan = run.plan
         why = ""
         if plan.reason == "battery":
@@ -2605,7 +2659,10 @@ class SessionState:
             run_plan_reason=plan.reason,
             run_plan_why=why,
             cool_lap=cool_lap,
+            cool_push_suspect=cool_push_suspect,
             cool_prep=cool_lap and self.track_length_m > 0 and to_hot <= 0,
+            fuel_for_hot_lap=fuel_at_line >= self._th("fuel_push_need_laps", 2.0),
+            fuel_for_cool_and_hot=fuel_at_line >= self._th("fuel_cool_need_laps", 3.0),
             next_lap_invalid=run.next_lap_invalid,
             ers_need_pct=round(self._ers_need_pct()),
             cool_extend=cool_lap and self._cool_extend(),

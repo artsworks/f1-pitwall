@@ -307,6 +307,7 @@ class Engine:
         self.synthetic_source = synthetic_source
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
+        self.dispatcher.on_response = self._on_dispatcher_response
         self.learning_pack_dir = learning_pack_dir
         self.learning_pack_keep_days = learning_pack_keep_days
         self.metrics = dispatcher.metrics
@@ -402,6 +403,10 @@ class Engine:
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
         state.session_end_listeners.append(self.fold_open_stint)
+
+    def _on_dispatcher_response(self, rule_id: str, answer: str, _snapshot: Snapshot) -> None:
+        if rule_id == "cool_push_check":
+            self.state.answer_push_check(answer == "ack")
 
     @property
     def tick_period(self) -> float:

@@ -6,6 +6,137 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.10.0 (2026-10-13)
+
+### Documentation
+
+- Add AGENTS.md with skills and do-not-commit list
+  ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+- **skills**: Add track overlay sync skill ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+### Features
+
+- **tracks**: Promote learned fuel and thresholds for tracks 0, 5, 7, 10, 17
+  ([#83](https://github.com/artsworks/f1-pitwall/pull/83),
+  [`e401a12`](https://github.com/artsworks/f1-pitwall/commit/e401a1277ca312bb4974e086e114a6df8bb7a46f))
+
+
+## v0.9.0 (2026-10-13)
+
+### Features
+
+- **radio**: Drop calls older than 10 s, split voice queue and TTS latency
+  ([#81](https://github.com/artsworks/f1-pitwall/pull/81),
+  [`ce1ea88`](https://github.com/artsworks/f1-pitwall/commit/ce1ea880f066bf8403ee17ae90afcf2680244329))
+
+### Testing
+
+- Drop Windows-only test tweaks unrelated to the age cap
+  ([#81](https://github.com/artsworks/f1-pitwall/pull/81),
+  [`ce1ea88`](https://github.com/artsworks/f1-pitwall/commit/ce1ea880f066bf8403ee17ae90afcf2680244329))
+
+
+## v0.8.0 (2026-10-13)
+
+### Documentation
+
+- **skills**: Add replay history and press timing notes for dashboard tests
+  ([#79](https://github.com/artsworks/f1-pitwall/pull/79),
+  [`2be063e`](https://github.com/artsworks/f1-pitwall/commit/2be063e4afd312e588ac84cb3ee9f3050c0830f6))
+
+### Features
+
+- **quali**: Confirm push laps flagged as cool
+  ([#79](https://github.com/artsworks/f1-pitwall/pull/79),
+  [`2be063e`](https://github.com/artsworks/f1-pitwall/commit/2be063e4afd312e588ac84cb3ee9f3050c0830f6))
+
+
+## v0.7.1 (2026-10-13)
+
+### Bug Fixes
+
+- **quali**: Gate cool-lap pushes on projected fuel
+  ([#78](https://github.com/artsworks/f1-pitwall/pull/78),
+  [`3a3c9f2`](https://github.com/artsworks/f1-pitwall/commit/3a3c9f2f348380707fe76112e290733740680340))
+
+- **quali**: Reserve cool + hot fuel for extra cool laps and retries
+  ([#78](https://github.com/artsworks/f1-pitwall/pull/78),
+  [`3a3c9f2`](https://github.com/artsworks/f1-pitwall/commit/3a3c9f2f348380707fe76112e290733740680340))
+
+### Continuous Integration
+
+- Skip docs-only runs, cancel superseded PR runs, skip non-releasing release jobs
+  ([#82](https://github.com/artsworks/f1-pitwall/pull/82),
+  [`4c45f95`](https://github.com/artsworks/f1-pitwall/commit/4c45f956356a28af6442418fc10e1fbd9b79479f))
+
+
+## v0.7.0 (2026-10-13)
+
+### Bug Fixes
+
+- **web**: Fit last lap, energy and damage text in the tiles
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+### Documentation
+
+- Refresh dashboard screens for last two laps tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- Refresh dashboard screens for per-lap rows
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+### Features
+
+- **web**: Show last three laps with two sector comparison rows
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Show last two laps with sector deltas, drop energy tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Show per-lap rows with lap and sector deltas
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Shrink damage to a strip and add a last laps tile
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+- **web**: Shrink damage to a strip and add last lap and energy tiles
+  ([#77](https://github.com/artsworks/f1-pitwall/pull/77),
+  [`dbbe8ca`](https://github.com/artsworks/f1-pitwall/commit/dbbe8cac2c641e07ef4b464a4a7cb41b6b912f41))
+
+
+## v0.6.0 (2026-10-12)
+
+### Bug Fixes
+
+- **quali**: Learn battery use per compound ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+### Features
+
+- **quali**: Lower battery floor on inters and wets for back-to-back hot laps
+  ([#76](https://github.com/artsworks/f1-pitwall/pull/76),
+  [`c7d8da3`](https://github.com/artsworks/f1-pitwall/commit/c7d8da395483b931ae3f2ee95e07e4a5fdd0f8d5))
+
+
+## v0.5.1 (2026-10-12)
+
+### Bug Fixes
+
+- Write and read text files as utf-8 so Windows cp1252 no longer crashes debrief
+  ([#80](https://github.com/artsworks/f1-pitwall/pull/80),
+  [`06a1140`](https://github.com/artsworks/f1-pitwall/commit/06a11401dbea7786202ee804fb04a62ed1d73c1d))
+
+
 ## v0.5.0 (2026-10-12)
 
 ### Features
