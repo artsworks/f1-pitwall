@@ -89,18 +89,12 @@ Set these values under `speech`:
 ```yaml
 engine: omnivoice
 omnivoice_url: "http://192.168.1.30:8080"
-omnivoice_voice: race-engineer
-omnivoice_seed: 42
-omnivoice_language: English
 omnivoice_timeout_s: 2.5
-omnivoice_voice_version: "1"
-omnivoice_ref_wav: "voices/reference.wav"
-omnivoice_ref_text: "voices/reference.txt"
 ```
 
-Pitwall registers the voice at startup from `omnivoice_ref_wav` and `omnivoice_ref_text`. The server does not need `--ref-audio`.
+Start `tts-server` with `--locked`, `--ref-audio` and `--ref-text`. The server owns the voice, seed and steps. Pitwall sends only the text.
 
-Keep `omnivoice_seed` fixed for repeatable audio and cache hits. Phrase WAV files live in `voices/.phrases`. The cache key changes when the model, voice, reference files, seed, language, or voice version changes. Increase `omnivoice_voice_version` after changing the voice.
+Phrase WAV files live in `voices/.phrases`. The cache key changes when the text, the server model or `radio_click` changes. After you change the voice, seed or steps on the server, delete `voices/.phrases`.
 
 Cold lines play Piper first when a Piper voice is available. Pitwall renders OmniVoice in the background. Later requests play cached OmniVoice audio.
 
@@ -111,7 +105,7 @@ uv run pitwall voice warm --engine omnivoice
 uv run pitwall voice warm --engine omnivoice --replay latest
 ```
 
-The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same model, voice files, seed, language, and version. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
+The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
 OmniVoice falls back to Piper, then SAPI on Windows or null on other systems.
 

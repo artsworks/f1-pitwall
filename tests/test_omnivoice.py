@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import io
 import json
 import threading
@@ -22,7 +21,6 @@ from pitwall.audio.omnivoice_tts import (
     make_omnivoice_speaker,
     make_omnivoice_synth,
     omnivoice_cache_key,
-    register_voice,
 )
 from pitwall.audio.piper_tts import to_wav
 from pitwall.audio.wav_speaker import NullPlayer, WavSpeaker, default_player
@@ -69,8 +67,6 @@ def fake_server() -> tuple[str, FakeServerState]:
                     self._send(state.speech_status, b'{"error":"synthesis failed"}')
                 else:
                     self._send(200, SMALL_WAV, "audio/wav")
-            elif self.path == "/v1/audio/voices":
-                self._send(200, b'{"name":"test-voice","status":"registered"}')
             else:
                 self._send(404, b'{"error":"not found"}')
 
@@ -90,19 +86,20 @@ def fake_server() -> tuple[str, FakeServerState]:
         thread.join(timeout=2)
 
 
+DEPRECATED_FIELDS: dict[str, object] = {
+    "omnivoice_voice": "test-voice",
+    "omnivoice_seed": 17,
+    "omnivoice_language": "French",
+    "omnivoice_voice_version": "9",
+    "omnivoice_ref_wav": "missing.wav",
+    "omnivoice_ref_text": "missing.txt",
+}
+
+
 def _settings(url: str, tmp_path: Path, **updates: object) -> SpeechSettings:
-    wav_path = tmp_path / "reference.wav"
-    text_path = tmp_path / "reference.txt"
-    wav_path.write_bytes(SMALL_WAV)
-    text_path.write_text("  reference words \n", encoding="utf-8")
     values: dict[str, object] = {
         "engine": "omnivoice",
         "omnivoice_url": url,
-        "omnivoice_voice": "test-voice",
-        "omnivoice_seed": 17,
-        "omnivoice_language": "English",
-        "omnivoice_ref_wav": str(wav_path),
-        "omnivoice_ref_text": str(text_path),
         "omnivoice_timeout_s": 1.0,
         "voices_dir": str(tmp_path / "voices"),
         "radio_click": False,
@@ -120,27 +117,20 @@ def _wait_for(predicate, timeout_s: float = 2.0) -> None:  # type: ignore[no-unt
     raise AssertionError("condition was not met")
 
 
-def test_synth_posts_exact_request_and_returns_wav(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize("deprecated", [{}, DEPRECATED_FIELDS])
+def test_synth_posts_text_only_and_returns_wav(
+    fake_server, tmp_path: Path, deprecated: dict[str, object]
+) -> None:  # type: ignore[no-untyped-def]
     url, state = fake_server
-    settings = _settings(url, tmp_path)
+    settings = _settings(url, tmp_path, **deprecated)
 
     wav, seconds = make_omnivoice_synth(settings)("Box this lap.")
 
     assert wav == SMALL_WAV
     assert seconds == pytest.approx(0.01)
     assert state.requests == [
-        (
-            "/v1/audio/speech",
-            {
-                "input": "Box this lap.",
-                "voice": "test-voice",
-                "language": "English",
-                "response_format": "wav",
-                "seed": 17,
-            },
-        )
+        ("/v1/audio/speech", {"input": "Box this lap.", "response_format": "wav"})
     ]
-    assert type(state.requests[0][1]["seed"]) is int
 
 
 def test_synth_prepends_radio_click(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -167,31 +157,6 @@ def test_synth_wraps_server_failure_and_timeout(fake_server, tmp_path: Path, fai
         make_omnivoice_synth(_settings(url, tmp_path), timeout_s=timeout_s)("test")
     if failure == "status":
         assert "synthesis failed" in str(error.value)
-
-
-def test_register_voice_posts_reference_and_returns_identity(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    url, state = fake_server
-    settings = _settings(url, tmp_path)
-
-    identity = register_voice(settings)
-
-    request = state.requests[-1]
-    assert request[0] == "/v1/audio/voices"
-    assert request[1]["name"] == "test-voice"
-    assert request[1]["ref_text"] == "reference words"
-    assert request[1]["wav_b64"] == base64.b64encode(SMALL_WAV).decode("ascii")
-    assert identity
-
-
-def test_register_voice_reports_missing_reference_files(tmp_path: Path) -> None:
-    settings = SpeechSettings(
-        omnivoice_voice="voice",
-        omnivoice_ref_wav=str(tmp_path / "missing.wav"),
-        omnivoice_ref_text=str(tmp_path / "missing.txt"),
-    )
-
-    with pytest.raises(OmniVoiceError, match="reference WAV not found"):
-        register_voice(settings)
 
 
 def test_fetch_model_id_reads_first_model(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -226,11 +191,12 @@ def test_make_omnivoice_speaker_uses_piper_provisional_audio(
 ) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.omnivoice_tts as omnivoice_module
 
-    url, _ = fake_server
+    url, state = fake_server
     tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
     monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
-    speaker = make_omnivoice_speaker(_settings(url, tmp_path), FakePlayer())
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, **DEPRECATED_FIELDS), FakePlayer())
     try:
+        assert state.requests == [("/v1/models", {})]
         assert speaker._fallback is None
         assert speaker._renderer.provisional("test", 2) == (SMALL_WAV, 0.01)
     finally:
@@ -258,27 +224,16 @@ def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, mon
         speaker.close()
 
 
-def test_omnivoice_cache_key_tracks_voice_configuration() -> None:
-    settings = SpeechSettings(
-        omnivoice_voice="voice",
-        omnivoice_voice_version="1",
-        omnivoice_seed=42,
-        omnivoice_language="English",
-    )
-    baseline = omnivoice_cache_key(settings, "model.gguf", "ref")
+def test_omnivoice_cache_key_tracks_client_inputs_only() -> None:
+    settings = SpeechSettings(radio_click=True)
+    baseline = omnivoice_cache_key(settings, "model.gguf")
 
-    assert omnivoice_cache_key(settings, "model.gguf", "ref") == baseline
-    changes = [
-        ({"omnivoice_voice_version": "2"}, "model.gguf", "ref"),
-        ({"omnivoice_seed": 43}, "model.gguf", "ref"),
-        ({"omnivoice_voice": "other"}, "model.gguf", "ref"),
-        ({}, "model.gguf", "other-ref"),
-        ({}, "other-model.gguf", "ref"),
-        ({"omnivoice_language": "French"}, "model.gguf", "ref"),
-    ]
-    for update, model_id, ref_identity in changes:
-        changed = settings.model_copy(update=update)
-        assert omnivoice_cache_key(changed, model_id, ref_identity) != baseline
+    assert omnivoice_cache_key(settings, "model.gguf") == baseline
+    deprecated = settings.model_copy(update=DEPRECATED_FIELDS)
+    assert omnivoice_cache_key(deprecated, "model.gguf") == baseline
+    assert omnivoice_cache_key(settings, "other-model.gguf") != baseline
+    changed = settings.model_copy(update={"radio_click": False})
+    assert omnivoice_cache_key(changed, "model.gguf") != baseline
 
 
 def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
