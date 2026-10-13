@@ -241,6 +241,13 @@ def test_background_cache_write_failure_is_best_effort(monkeypatch, tmp_path: Pa
         def provisional(self, _text: str, _priority: int) -> tuple[bytes, float]:
             return self.provisional_wav, self.provisional_seconds
 
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if not background:
+                raise TimeoutError("foreground wait expired")
+            return super().render(text, priority, background=background)
+
     def fail_write(_path: Path, _wav: bytes) -> None:
         raise PermissionError("cache is read-only")
 
@@ -306,9 +313,10 @@ def test_provisional_audio_fills_cache_in_background_and_reuses_disk(
         def render(
             self, text: str, priority: int, *, background: bool = False
         ) -> tuple[bytes, float]:
-            if background:
-                self.background_entered.set()
-                self.background_release.wait(2.0)
+            if not background:
+                raise TimeoutError("foreground wait expired")
+            self.background_entered.set()
+            self.background_release.wait(2.0)
             return super().render(text, priority, background=background)
 
     renderer = ProvisionalRenderer()
@@ -342,6 +350,13 @@ def test_provisional_logs_background_render(caplog) -> None:  # type: ignore[no-
         def provisional(self, text: str, priority: int) -> tuple[bytes, float]:
             return super().render(text, priority)
 
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if not background:
+                raise TimeoutError("foreground wait expired")
+            return super().render(text, priority, background=background)
+
     caplog.set_level(logging.DEBUG, logger="pitwall.audio.wav_speaker")
     speaker = WavSpeaker(ProvisionalRenderer(), FakePlayer())
     try:
@@ -351,10 +366,55 @@ def test_provisional_logs_background_render(caplog) -> None:  # type: ignore[no-
                 "background render complete in" in record.getMessage() for record in caplog.records
             )
         )
-        assert any("provisional playback for" in record.getMessage() for record in caplog.records)
         assert any(
             "background render complete in" in record.getMessage() for record in caplog.records
         )
+    finally:
+        speaker.close()
+
+
+class WaitingRenderer(FakeRenderer):
+    per_priority = False
+
+    def __init__(self, *, delay_s: float = 0.0) -> None:
+        super().__init__(delay_s=delay_s)
+        self.provisional_calls = 0
+
+    def provisional(self, _text: str, _priority: int) -> tuple[bytes, float]:
+        self.provisional_calls += 1
+        wav = pcm_to_wav([np.zeros(160, dtype=np.int16)], 16_000)
+        return wav, wav_info(wav)
+
+
+def test_provisional_renderer_plays_foreground_render_and_caches_it(tmp_path: Path) -> None:
+    renderer = WaitingRenderer()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player, cache_dir=tmp_path)
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("cold", text="line"))
+        _wait_for(lambda: spoken == ["cold"])
+        path = speaker._phrase_path((0, "line"))
+        assert path is not None
+        assert player.played == [path.read_bytes()]
+        assert renderer.calls == [("line", 2, False)]
+        assert renderer.provisional_calls == 0
+        assert not speaker._pending
+    finally:
+        speaker.close()
+
+
+def test_provisional_renderer_drops_call_that_expires_while_waiting() -> None:
+    renderer = WaitingRenderer(delay_s=0.08)
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("expired", text="line", max_age_s=0.01))
+        _wait_for(lambda: dropped == ["expired"])
+        assert player.played == []
     finally:
         speaker.close()
 

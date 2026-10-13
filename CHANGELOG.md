@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.13.0 (2026-10-13)
+
+### Features
+
+- **audio**: Wait for OmniVoice before Piper provisional audio
+  ([#88](https://github.com/artsworks/f1-pitwall/pull/88),
+  [`06e7262`](https://github.com/artsworks/f1-pitwall/commit/06e7262adddbc57578ed9e5983afe376b3add370))
+
+
 ## v0.12.0 (2026-10-13)
 
 ### Documentation

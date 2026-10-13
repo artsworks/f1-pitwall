@@ -63,11 +63,13 @@ visual-only mode.
 |---|---|---|
 | `auto` | none | On Windows, resolves to `piper` if the Piper voice file exists, else `sapi`. On other systems, resolves to `null`. |
 | `piper` | `piper_voice`, `piper_speed`, `voices_dir`, `tone_urgent_speed`, `tone_urgent_expression`, `tone_calm_speed`, `tone_calm_expression` | `sapi` on Windows, else `null` |
-| `omnivoice` | `omnivoice_url`, `omnivoice_timeout_s`, and the Piper fields for cold lines | `piper` |
+| `omnivoice` | `omnivoice_url`, `omnivoice_timeout_s`, `omnivoice_wait_s`, and the Piper fields for cold lines | `piper` |
 | `sapi` | `voice` | `null` |
 | `null` | none | none |
 
 The OmniVoice server owns the voice, seed, temperatures and steps. Pitwall sends only the text. Pitwall ignores the older `omnivoice_voice`, `omnivoice_seed`, `omnivoice_language`, `omnivoice_voice_version`, `omnivoice_ref_wav` and `omnivoice_ref_text` fields. The phrase cache key covers only the text, the server model id and `radio_click`. After you change the voice, seed or steps on the server, delete `voices_dir/.phrases`.
+
+`omnivoice_timeout_s` (default 2.5) is the timeout for the `/v1/models` check at startup. `omnivoice_wait_s` (default 5.0) is how long a cold line waits for OmniVoice audio before Piper plays. Set `omnivoice_wait_s` to 0 to play Piper at once. The call still drops if its age passes `max_call_age_s` during the wait.
 
 All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` sets how many phrases `pitwall voice warm` renders. A new engine registers its id with `register_engine()`. See `.agents/skills/tts-engine-contract/SKILL.md`.
 

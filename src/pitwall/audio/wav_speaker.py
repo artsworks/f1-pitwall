@@ -386,18 +386,27 @@ class WavSpeaker:
         if hit is not None:
             return hit
         provisional = getattr(self._renderer, "provisional", None)
-        if callable(provisional):
-            result = provisional(call.text, call.priority)
-            if result is not None:
-                seconds = wav_info(result[0])
-                self._queue_background(key, call.text, call.priority)
-                log.debug(
-                    "%s provisional playback for %r; queued background render",
-                    self.name,
-                    call.text,
-                )
-                return result[0], seconds
-        return self.render(call.text, call.priority)
+        if not callable(provisional):
+            return self.render(call.text, call.priority)
+        # Wait up to omnivoice_wait_s for OmniVoice. Fall back to Piper on failure so the
+        # line still speaks.
+        try:
+            wav, _ = self._renderer.render(call.text, call.priority, background=False)
+            result = wav, wav_info(wav)
+            self._remember(key, result, disk=True, disk_required=False)
+            return result
+        except Exception as exc:
+            fallback = provisional(call.text, call.priority)
+            if fallback is None:
+                raise
+            log.warning(
+                "%s render did not finish for %r; playing provisional audio: %s",
+                self.name,
+                call.text,
+                exc,
+            )
+            self._queue_background(key, call.text, call.priority)
+            return fallback[0], wav_info(fallback[0])
 
     def _queue_background(self, key: tuple[int, str], text: str, priority: int) -> None:
         with self._cache_lock:
