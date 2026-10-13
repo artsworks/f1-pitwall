@@ -470,8 +470,8 @@ body.pit .pitzone { display: flex; flex-direction: column; gap: .6rem; grid-colu
 .pb-release { font-size: 3.4rem; font-weight: bold; text-align: center; background: var(--ok); color: #000; border-radius: 6px; }
 
 /* ------------------------------------------------------------ G footer ---
-   Permanently muted (--soft / --dim). These values NEVER escalate colour, not even a
-   bad voice lag or SC: SC lives in the status bar flag and the safety card. */
+   Permanently muted (--soft / --dim). Queue and TTS metrics do not change the footer colour.
+   Safety car state appears in the status bar and safety card. */
 .footer { background: var(--panel); color: var(--soft); font-size: 1rem; display: flex; gap: 2rem;
   align-items: center; padding: 0 .9rem; white-space: nowrap; }
 .footer span { color: var(--dim); display: inline-block; }
@@ -926,7 +926,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 <footer class="footer">
   <!-- muted forever; never escalates colour -->
   <span id="rate">10 upd/s</span>                                                 <!-- client-derived frame rate -->
-  <span id="lag">voice lag 210 ms · screen lag 12 ms</span>  <!-- latency.trigger_to_speak_p99_ms, latency.packet_to_ws_p99_ms -->
+  <span id="lag">queue 2 · oldest 3.4 s · TTS 210 ms · screen lag 12 ms</span>  <!-- latency.queue_count, latency.queue_oldest_s, latency.tts_p99_ms, latency.packet_to_ws_p99_ms -->
   <span>ERS 62%</span>                                                             <!-- ers_pct -->
   <span>SC 0</span>                                                                <!-- safety_car -->
 </footer>

@@ -359,7 +359,8 @@
     setText("ers", "ERS " + fmt(p.ers_pct, 0) + "%");
     setText("sc", "SC " + sc);
     if (p.latency) {
-      setText("latency", "voice lag " + fmt(p.latency.trigger_to_speak_p99_ms, 0) +
+      setText("latency", "queue " + p.latency.queue_count + " · oldest " +
+        fmt(p.latency.queue_oldest_s, 1) + " s · TTS " + fmt(p.latency.tts_p99_ms, 0) +
         " ms · screen lag " + fmt(p.latency.packet_to_ws_p99_ms, 0) + " ms");
     }
   }

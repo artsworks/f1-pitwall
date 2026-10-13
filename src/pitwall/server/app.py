@@ -680,7 +680,10 @@ def state_payload(
         "track_info": track_payload(snapshot),
         "setup": setup_payload(snapshot),
         "latency": {
-            "trigger_to_speak_p99_ms": lat["trigger_to_speak_ms"]["p99"],
+            "queue_count": int(lat["voice_queue"]["count"]),
+            "queue_oldest_s": lat["voice_queue"]["oldest_s"],
+            "queue_wait_p99_ms": lat["queue_wait_ms"]["p99"],
+            "tts_p99_ms": lat["tts_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],
         },
     }

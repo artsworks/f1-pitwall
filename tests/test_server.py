@@ -65,6 +65,13 @@ def test_websocket_hello_and_state_shape() -> None:
         ws.send_json({"type": "hello", "v": 1, "last_seq": 7})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
+        assert set(snap["payload"]["latency"]) == {
+            "queue_count",
+            "queue_oldest_s",
+            "queue_wait_p99_ms",
+            "tts_p99_ms",
+            "packet_to_ws_p99_ms",
+        }
         for key in ("live", "tyres", "brakes", "phase", "latency"):
             assert key in snap["payload"]
         assert snap["payload"]["voice"] == {"available": False, "listening": False}
