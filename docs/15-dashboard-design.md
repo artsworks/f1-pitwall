@@ -31,7 +31,7 @@ is unchanged; planned call-history additions are listed below.
 **Non-goals**
 
 - Not a telemetry gauge cluster. No speed, RPM, gear, throttle/brake traces, g-forces,
-  minimap, sector deltas, per-lap tables. If the game HUD already shows it, we don't.
+  minimap, full sector telemetry or per-lap history table. If the game HUD already shows it, we don't.
 - The screen does not control the session. Every mid-race control (ACK / NEG, mindset,
   quiet) has a wheel or keyboard binding (`12-driver-input.md`). The screen only
   *displays* their state.
@@ -78,7 +78,7 @@ reflow between sessions, and empty zones keep their space when values are absent
 │   FL 103° ▲ │ FR 98° ▬ │   +0.4    62%    │   SAFETY    SC, red flag, rain   │
 │   wear 38%  │ wear 35% │ WEATHER now/10/30│   EXECUTION box now              │
 │   RL 94° ▼  │ RR 95° ▬ │   crossover ETA  │   REPLY     menu answer          │
-│   BB 56%  DIFF ON 60%  │ LAST 3 LAPS      │   TACTICAL  battle, strategy     │
+│   BB 56%  DIFF ON 60%  │ LAST LAPS        │   TACTICAL  battle, strategy     │
 │                        │ DAMAGE strip     │   INFO      rival pitted, penalty│
 ├────────────────────────┴──────────────────┴──────────────────────────────────┤
 │ G FOOTER  update rate · voice lag · screen lag · ERS · SC                    │ 2 rem
@@ -101,8 +101,9 @@ Zone rules:
   replaces the status word, which is an owner exception to the colour plus word rule.
   The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
   orange LOCKED border. The BB and DIFF strip sits under the grid.
-- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, the last
-  three completed lap times with two sector comparison rows, and a damage strip at the bottom.
+- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, and two
+  LAST LAPS rows. Each row shows the newer lap and time, then lap and sector deltas against
+  the lap before. Keep the last three laps so the oldest is the baseline. Damage stays at the bottom.
   Weather shows an icon and rain chance for now, 10 and 30 min. The crossover slot gets
   a marker, and a line under it gives the target compound and ETA.
 - **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
@@ -198,7 +199,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` (game MFD: laps spare or short at the flag, not laps in tank) | `+0.4 laps`, one decimal, shown when the backend delta is unavailable |
 | Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries in a strip under the tiles; wraps only when needed; amber ≥ 5 %, red ≥ 25 %; smaller text past 3 entries; `✓ none` when all values and faults are zero |
-| Last 3 laps | `race.recent_laps[{lap,time_ms,sectors_ms}]` | Show up to three lap times, oldest left and newest right. Rows compare L23 vs L22, then L24 vs L23, with sector deltas only. Negative deltas are green and positive deltas are amber. Fill lap times from the right. Missing rows and sectors show `--`; a sector delta is `--` if either value is 0 |
+| Last laps | `race.recent_laps[{lap,time_ms,sectors_ms}]` | Two rows compare the newer lap with the lap before. Each shows its lap and time, lap delta, and S1/S2/S3 deltas. Keep three laps so the oldest is the baseline. Negative deltas are green and positive deltas are amber. With no laps, row 2 says `no lap yet`. With one lap, row 2 shows its time and `--` for the delta and sectors. Missing rows and sectors show `--`; a sector delta is `--` if either value is 0 |
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |

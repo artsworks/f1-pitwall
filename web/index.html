@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=28">
+  <link rel="stylesheet" href="/static/style.css?v=29">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -100,24 +100,29 @@
       <div id="cross" class="cross">--</div>
     </div>
     <div id="lastlap" class="tile wide lastlap">
-      <h2>LAST 3 LAPS</h2>
-      <div class="lap-times">
-        <span id="lap-t1" class="lap-time">--</span>
-        <span id="lap-t2" class="lap-time">--</span>
-        <span id="lap-t3" class="lap-time">no lap yet</span>
-      </div>
+      <h2>LAST LAPS</h2>
       <div class="lap-comparisons">
         <div id="cmp-1" class="lap-comparison">
-          <span id="cmp-1-label" class="cmp-label">--</span>
-          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value">--</strong></div>
-          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value">--</strong></div>
-          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value">--</strong></div>
+          <div class="lap-comparison-header">
+            <span id="cmp-1-label" class="cmp-label">--</span>
+            <strong id="cmp-1-delta" class="cmp-delta">--</strong>
+          </div>
+          <div class="lap-sectors">
+            <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value">--</strong></div>
+            <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value">--</strong></div>
+            <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value">--</strong></div>
+          </div>
         </div>
         <div id="cmp-2" class="lap-comparison">
-          <span id="cmp-2-label" class="cmp-label">--</span>
-          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value">--</strong></div>
-          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value">--</strong></div>
-          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value">--</strong></div>
+          <div class="lap-comparison-header">
+            <span id="cmp-2-label" class="cmp-label">no lap yet</span>
+            <strong id="cmp-2-delta" class="cmp-delta">--</strong>
+          </div>
+          <div class="lap-sectors">
+            <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value">--</strong></div>
+            <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value">--</strong></div>
+            <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value">--</strong></div>
+          </div>
         </div>
       </div>
     </div>
@@ -246,7 +251,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=29"></script>
+  <script src="/static/app.js?v=30"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

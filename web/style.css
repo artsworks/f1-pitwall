@@ -228,17 +228,19 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
 .lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
-.lastlap .lap-times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: baseline; gap: .35rem; margin: .1rem 0 .3rem; }
-.lastlap .lap-time { min-width: 0; font-size: 1rem; font-weight: bold; white-space: nowrap; }
-.lastlap .lap-comparisons { display: grid; gap: .25rem; }
-.lastlap .lap-comparison { display: grid; grid-template-columns: minmax(6.3rem, auto) repeat(3, minmax(0, 1fr));
-  align-items: stretch; gap: .3rem; min-width: 0; }
-.lastlap .cmp-label { align-self: center; color: var(--soft); font-size: .75rem; white-space: nowrap; }
-.lastlap .label { color: var(--soft); font-size: .7rem; letter-spacing: .06em; }
-.lastlap .lap-sector { display: flex; align-items: baseline; justify-content: space-between; gap: .2rem;
-  min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
-.lastlap .lap-sector .value { font-size: .9rem; font-weight: bold; white-space: nowrap; }
+.lastlap { display: flex; flex-direction: column; }
+.lastlap .lap-comparisons { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-height: 0; }
+.lastlap .lap-comparison { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-width: 0; min-height: 0; }
+.lastlap .lap-comparison-header { display: flex; flex: 0 0 auto; align-items: baseline;
+  justify-content: space-between; gap: .3rem; min-width: 0; }
+.lastlap .cmp-label, .lastlap .cmp-delta { font-size: 1.2rem; font-weight: bold; white-space: nowrap; }
+.lastlap .cmp-label { min-width: 0; }
+.lastlap .lap-sectors { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem; min-height: 0; }
+.lastlap .label { color: var(--soft); font-size: .9rem; letter-spacing: .06em; }
+.lastlap .lap-sector { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
+.lastlap .lap-sector .value { font-size: 1.35rem; font-weight: bold; white-space: nowrap; }
 .meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
   background: var(--line); overflow: hidden; }
 .meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));

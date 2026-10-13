@@ -57,7 +57,7 @@
        ARM PHONE RADIO, no radio log, browser speech kept.
     19 Quali: phase-driven layout, benchmark, cut-off pill, predicted cut-off, cool-down
        lite debrief (last lap, gap to pole, sector consistency trend).
-    20 LAST 3 LAPS: show three completed lap times and sector deltas for each consecutive pair.
+    20 LAST LAPS: two rows show the newer lap and its time delta, with S1/S2/S3 deltas below.
 -->
 <style>
 /* tokens: verbatim from web/style.css :root and the motion block */
@@ -291,17 +291,19 @@ body:not(.lockup) .lockup-only { display: none !important; }
 .batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
 .batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
 .lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
-.lastlap .lap-times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: baseline; gap: .35rem; margin: .1rem 0 .3rem; }
-.lastlap .lap-time { min-width: 0; font-size: 1rem; font-weight: bold; white-space: nowrap; }
-.lastlap .lap-comparisons { display: grid; gap: .25rem; }
-.lastlap .lap-comparison { display: grid; grid-template-columns: minmax(6.3rem, auto) repeat(3, minmax(0, 1fr));
-  align-items: stretch; gap: .3rem; min-width: 0; }
-.lastlap .cmp-label { align-self: center; color: var(--soft); font-size: .75rem; white-space: nowrap; }
-.lastlap .label { color: var(--soft); font-size: .7rem; letter-spacing: .06em; }
-.lastlap .lap-sector { display: flex; align-items: baseline; justify-content: space-between; gap: .2rem;
-  min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
-.lastlap .lap-sector .value { font-size: .9rem; font-weight: bold; white-space: nowrap; }
+.lastlap { display: flex; flex-direction: column; }
+.lastlap .lap-comparisons { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-height: 0; }
+.lastlap .lap-comparison { display: flex; flex: 1; flex-direction: column; gap: .3rem; min-width: 0; min-height: 0; }
+.lastlap .lap-comparison-header { display: flex; flex: 0 0 auto; align-items: baseline;
+  justify-content: space-between; gap: .3rem; min-width: 0; }
+.lastlap .cmp-label, .lastlap .cmp-delta { font-size: 1.2rem; font-weight: bold; white-space: nowrap; }
+.lastlap .cmp-label { min-width: 0; }
+.lastlap .lap-sectors { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem; min-height: 0; }
+.lastlap .label { color: var(--soft); font-size: .9rem; letter-spacing: .06em; }
+.lastlap .lap-sector { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .1rem .25rem; }
+.lastlap .lap-sector .value { font-size: 1.35rem; font-weight: bold; white-space: nowrap; }
 .meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
   background: var(--line); overflow: hidden; }
 .meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
@@ -697,29 +699,34 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
          ALT to_dry:   <div class="cross warn">→ <span class="comp medium xs">SLICK</span> in ~10 min · rain 20%</div>  cell class="xo-warn" -->
   </div>
   <div id="lastlap" class="tile wide lastlap">
-    <h2>LAST 3 LAPS</h2>
-    <div class="lap-times">
-      <span id="lap-t1" class="lap-time">L22 1:32.5</span>
-      <span id="lap-t2" class="lap-time">L23 1:32.6</span>
-      <span id="lap-t3" class="lap-time">L24 1:32.4</span>
-    </div>
+    <h2>LAST LAPS</h2>
     <div class="lap-comparisons">
       <div id="cmp-1" class="lap-comparison">
-        <span id="cmp-1-label" class="cmp-label">L23 vs L22</span>
-        <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value warn">+0.1s</strong></div>
-        <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value ok">−0.2s</strong></div>
-        <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value warn">+0.2s</strong></div>
+        <div class="lap-comparison-header">
+          <span id="cmp-1-label" class="cmp-label">L23 1:32.6</span>
+          <strong id="cmp-1-delta" class="cmp-delta warn">Δ +0.1s</strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value warn">+0.1s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value warn">+0.2s</strong></div>
+        </div>
       </div>
       <div id="cmp-2" class="lap-comparison">
-        <span id="cmp-2-label" class="cmp-label">L24 vs L23</span>
-        <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value ok">−0.2s</strong></div>
-        <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value warn">+0.3s</strong></div>
-        <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value ok">−0.3s</strong></div>
+        <div class="lap-comparison-header">
+          <span id="cmp-2-label" class="cmp-label">L24 1:32.4</span>
+          <strong id="cmp-2-delta" class="cmp-delta ok">Δ −0.2s</strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value warn">+0.3s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value ok">−0.3s</strong></div>
+        </div>
       </div>
     </div>
     <!-- race.recent_laps: [{lap, time_ms, sectors_ms: [s1, s2, s3]}]
-         ALT no laps: lap-t1 --, lap-t2 --, lap-t3 "no lap yet", both rows --
-         ALT one lap: lap-t1 --, lap-t2 --, lap-t3 "L24 1:32.1", both rows -- -->
+         ALT no laps: cmp-1 all --, cmp-2 label "no lap yet" and all other values --
+         ALT one lap: cmp-1 all --, cmp-2 label "L24 1:32.1" and delta and sectors -- -->
   </div>
   <div class="tile wide damage">
     <h2>DAMAGE</h2>
