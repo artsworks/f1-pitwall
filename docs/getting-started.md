@@ -74,8 +74,7 @@ speech:
 `voice warm` caches startup lines, fixed rule lines, severity and escalation variants,
 driver replies, and menu labels. Lines with slots such as `{lap}` cannot be cached. Run
 `voice warm --replay latest` to cache lines from a real session. At startup, Pitwall
-renders the startup lines with the selected engine before speaking them. Pitwall plays
-Piper only if that render fails.
+renders the startup lines with the selected engine before it speaks them.
 
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
 1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.
@@ -109,11 +108,8 @@ uv run pitwall voice warm --engine omnivoice
 uv run pitwall voice warm --engine omnivoice --replay latest
 ```
 
-`voice warm` caches startup lines, fixed rule lines, severity and escalation variants,
-driver replies, and menu labels. Lines with slots such as `{lap}` cannot be cached. Run
-`voice warm --replay latest` to cache lines from a real session. At startup, Pitwall
-renders the startup lines with the selected engine before speaking them. Pitwall plays
-Piper only if that render fails.
+At startup, Pitwall waits for OmniVoice to render the startup lines before it speaks them.
+It plays Piper only if that render fails.
 
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
