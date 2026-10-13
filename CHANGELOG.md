@@ -6,6 +6,34 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.14.0 (2026-10-13)
+
+### Chores
+
+- **audio**: Log OmniVoice render timing and add --log-level
+  ([#89](https://github.com/artsworks/f1-pitwall/pull/89),
+  [`7f0dc4f`](https://github.com/artsworks/f1-pitwall/commit/7f0dc4fd3883585cac6d50964eea139e4e7c737d))
+
+### Documentation
+
+- Rewrap the voice warm paragraph ([#90](https://github.com/artsworks/f1-pitwall/pull/90),
+  [`22285bd`](https://github.com/artsworks/f1-pitwall/commit/22285bde64b3dfad8cb24ac347ea0f6b758315d5))
+
+- State the startup prerender once per engine section
+  ([#90](https://github.com/artsworks/f1-pitwall/pull/90),
+  [`22285bd`](https://github.com/artsworks/f1-pitwall/commit/22285bde64b3dfad8cb24ac347ea0f6b758315d5))
+
+### Features
+
+- **audio**: Pre-render startup lines and widen the voice warm list
+  ([#90](https://github.com/artsworks/f1-pitwall/pull/90),
+  [`22285bd`](https://github.com/artsworks/f1-pitwall/commit/22285bde64b3dfad8cb24ac347ea0f6b758315d5))
+
+- **audio**: Skip names and measured values in voice warm --replay
+  ([#90](https://github.com/artsworks/f1-pitwall/pull/90),
+  [`22285bd`](https://github.com/artsworks/f1-pitwall/commit/22285bde64b3dfad8cb24ac347ea0f6b758315d5))
+
+
 ## v0.13.0 (2026-10-13)
 
 ### Features
