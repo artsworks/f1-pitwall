@@ -2027,8 +2027,10 @@ class Engine:
 
     def rejoin_text(self) -> str:
         """Spoken after a successful recover()."""
+        from pitwall.audio.speaker import REJOIN_OPENER
+
         st = self.state
-        parts = ["Back with you."]
+        parts = [REJOIN_OPENER]
         if st.lap_num > 0:
             parts.append(f"Lap {st.lap_num}" + (f", P{st.position}." if st.position else "."))
         if st.total_laps > 0 and st.lap_num > 0:

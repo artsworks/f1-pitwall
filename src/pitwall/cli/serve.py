@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import re
 import sqlite3
 import sys
-from collections.abc import Callable, Coroutine
+import threading
+from collections.abc import Callable, Coroutine, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
+from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, Speaker, WarmableSpeaker
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
     from pitwall.server.hub import Hub
 
 BannerEntry = tuple[str, str | None]
+log = logging.getLogger(__name__)
 _BANNER_GROUPS = {
     "dashboard": 0,
     "LAN": 0,
@@ -45,6 +49,47 @@ _BANNER_GROUPS = {
     "learning": 2,
     "pitwall": 2,
 }
+
+
+def _speak_startup(
+    speaker: Speaker,
+    lines: Sequence[tuple[str, str]],
+    now: Callable[[], float],
+    *,
+    prerender: bool,
+) -> threading.Thread | None:
+    def speak_lines() -> None:
+        for call_id, text in lines:
+            t = now()
+            speaker.speak(
+                Call(
+                    id=call_id,
+                    rule_id="startup",
+                    priority=STARTUP_PRIORITY,
+                    text=text,
+                    tags=[],
+                    deadline_ms=5000,
+                    lap=0,
+                    t=t,
+                    trigger_t=t,
+                )
+            )
+
+    if prerender and isinstance(speaker, WarmableSpeaker):
+
+        def warm_and_speak() -> None:
+            try:
+                speaker.warm([(text, STARTUP_PRIORITY) for _, text in lines])
+            except Exception as exc:
+                log.warning("startup lines not pre-rendered: %s", exc)
+            speak_lines()
+
+        thread = threading.Thread(target=warm_and_speak, daemon=True, name="startup-voice")
+        thread.start()
+        return thread
+
+    speak_lines()
+    return None
 
 
 def _lan_ip() -> str:
@@ -447,29 +492,8 @@ def cmd_start(args: argparse.Namespace) -> int:
         else "off"
     )
     if settings.speech.enabled:
-        t0 = clock.now()
-        lines = (
-            (("rejoin", engine.rejoin_text()),)
-            if recovered is not None
-            else (
-                ("startup", "Pit wall online."),
-                ("startup-radio-check", "Radio check, radio check."),
-            )
-        )
-        for call_id, text in lines:
-            speaker.speak(
-                Call(
-                    id=call_id,
-                    rule_id="startup",
-                    priority=3,
-                    text=text,
-                    tags=[],
-                    deadline_ms=5000,
-                    lap=0,
-                    t=t0,
-                    trigger_t=t0,
-                )
-            )
+        lines = (("rejoin", engine.rejoin_text()),) if recovered is not None else STARTUP_LINES
+        _speak_startup(speaker, lines, clock.now, prerender=recovered is None)
     clean = False
     try:
         asyncio.run(_serve(engine, hub, store, live(), banner=banner))

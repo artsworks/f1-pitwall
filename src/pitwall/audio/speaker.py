@@ -28,6 +28,12 @@ log = logging.getLogger(__name__)
 
 SVSF_ASYNC = 1
 SVSF_PURGE_BEFORE_SPEAK = 4
+STARTUP_LINES: tuple[tuple[str, str], ...] = (
+    ("startup", "Pit wall online."),
+    ("startup-radio-check", "Radio check, radio check."),
+)
+STARTUP_PRIORITY = 3
+REJOIN_OPENER = "Back with you."
 
 
 class Speaker(Protocol):
@@ -275,7 +281,7 @@ register_engine(EngineSpec("sapi", _make_sapi, "null"))
 register_engine(EngineSpec("null", _make_null, None))
 
 
-def _auto_engine(settings: SpeechSettings) -> str:
+def auto_engine(settings: SpeechSettings) -> str:
     if sys.platform == "win32":
         from pitwall.audio.piper_tts import voice_path
 
@@ -315,11 +321,11 @@ def make_speaker(settings: SpeechSettings) -> Speaker:
         return NullSpeaker()
     engine = settings.engine
     if engine == "auto":
-        engine = _auto_engine(settings)
+        engine = auto_engine(settings)
     elif engine not in ENGINES:
         registered = ", ".join(sorted(ENGINES))
         log.warning("Unknown speech engine %r; registered engines: %s", engine, registered)
-        engine = _auto_engine(settings)
+        engine = auto_engine(settings)
     visited: set[str] = set()
     while engine in ENGINES and engine not in visited:
         visited.add(engine)

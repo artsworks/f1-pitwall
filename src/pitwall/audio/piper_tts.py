@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +36,7 @@ from pitwall.audio.wav_speaker import (
 from pitwall.audio.wav_speaker import (
     to_wav as to_wav,
 )
-from pitwall.config.models import SpeechSettings
+from pitwall.config.models import RuleDefModel, SpeechSettings
 
 SUGGESTED_VOICES = (
     "en_GB-northern_english_male-medium",
@@ -150,12 +151,40 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
     )
 
 
-def common_phrases(limit: int = 150) -> list[tuple[str, int]]:
+def common_phrases(
+    limit: int = 150, extra: Iterable[tuple[str, int]] = ()
+) -> list[tuple[str, int]]:
+    from pitwall.audio.speaker import REJOIN_OPENER, STARTUP_LINES, STARTUP_PRIORITY
+
     root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
     phrases: set[tuple[str, int]] = set()
+
+    def add(text: str, priority: int) -> None:
+        if text and "{" not in text:
+            phrases.add((text, priority))
+
     for path in sorted(root.glob("*.yaml")):
         for rule in yaml.safe_load(path.read_text(encoding="utf-8")).get("rules", []):
-            for text in rule.get("say", []):
-                if "{" not in text:
-                    phrases.add((text, int(rule.get("priority", 2))))
-    return sorted(phrases, key=lambda item: (item[1], item[0]))[:limit]
+            definition = RuleDefModel.model_validate(rule)
+            priority = definition.priority
+            for text in (
+                *definition.say_pool(),
+                *(text for escalation in definition.escalate for text in escalation.say),
+                *definition.say_many,
+            ):
+                add(text, priority)
+            for severity in definition.severity:
+                for text in severity.say:
+                    add(text, severity.priority or priority)
+            for reply in (definition.on_ack, definition.on_neg):
+                replies = [reply] if isinstance(reply, str) else reply
+                for text in replies:
+                    add(text, 1)
+
+    add(REJOIN_OPENER, STARTUP_PRIORITY)
+    for text, extra_priority in extra:
+        add(text, extra_priority)
+
+    startup = [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+    ordered = startup + sorted(phrases.difference(startup), key=lambda item: (item[1], item[0]))
+    return ordered[: max(0, limit)]

@@ -16,7 +16,13 @@ from pitwall.audio.piper_tts import (
     radio_blip,
     to_wav,
 )
-from pitwall.audio.speaker import NullSpeaker, make_speaker
+from pitwall.audio.speaker import (
+    REJOIN_OPENER,
+    STARTUP_LINES,
+    STARTUP_PRIORITY,
+    NullSpeaker,
+    make_speaker,
+)
 from pitwall.audio.wav_speaker import WavSpeaker
 from pitwall.config.models import SpeechSettings
 from tests.audio_contract import FakePlayer
@@ -53,8 +59,15 @@ def test_prerendered_phrases_survive_restart_and_keep_tone_separate(
 
 def test_common_phrases_limit() -> None:
     every = common_phrases(10_000)
-    assert len(every) >= 129
-    assert common_phrases() == every
+    assert common_phrases(2) == [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+    assert (REJOIN_OPENER, STARTUP_PRIORITY) in every
+    assert ("About a lap left in the tyres", 3) in every
+    assert ("Another hit. Checking the car again", 1) in every
+    assert ("Copy. Go get it", 1) in every
+    assert ("extra phrase", 1) in common_phrases(10_000, [("extra phrase", 1)])
+    assert all("{" not in text for text, _ in every)
+    assert len(every) > 150
+    assert common_phrases() == every[:150]
     assert len(common_phrases(10)) == 10
 
 

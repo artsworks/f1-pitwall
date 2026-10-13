@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pitwall.learnpack
+from pitwall.audio.dispatcher import Call
+from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
 from pitwall.cli import serve as cli
 from pitwall.store.db import Database, _uid_to_sql
 
@@ -48,6 +50,89 @@ def _fake_serve(uid: int):  # type: ignore[no-untyped-def]
 
 def _start_args() -> argparse.Namespace:
     return argparse.Namespace(child=False, no_watchdog=True, record=None)
+
+
+def test_speak_startup_warms_before_speaking_at_current_time() -> None:
+    events: list[tuple[str, object]] = []
+    clock = [10.0]
+
+    class Warmable:
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            events.append(("warm", phrases))
+            clock[0] = 20.0
+            return len(phrases)
+
+        def speak(self, call: Call) -> None:
+            events.append(("speak", call))
+
+    speaker = Warmable()
+    thread = cli._speak_startup(speaker, STARTUP_LINES, lambda: clock[0], prerender=True)
+
+    assert thread is not None
+    assert thread.name == "startup-voice"
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert events[0] == (
+        "warm",
+        [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES],
+    )
+    calls = [event for name, event in events if name == "speak"]
+    assert len(calls) == len(STARTUP_LINES)
+    for (call_id, text), event in zip(STARTUP_LINES, calls, strict=True):
+        assert isinstance(event, Call)
+        assert (event.id, event.rule_id, event.priority, event.text) == (
+            call_id,
+            "startup",
+            STARTUP_PRIORITY,
+            text,
+        )
+        assert (event.deadline_ms, event.lap, event.tags, event.t, event.trigger_t) == (
+            5000,
+            0,
+            [],
+            20.0,
+            20.0,
+        )
+
+
+def test_speak_startup_speaks_after_warm_failure(caplog) -> None:  # type: ignore[no-untyped-def]
+    spoken: list[Call] = []
+
+    class Warmable:
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            raise RuntimeError("render failed")
+
+        def speak(self, call: Call) -> None:
+            spoken.append(call)
+
+    thread = cli._speak_startup(Warmable(), STARTUP_LINES, lambda: 1.0, prerender=True)
+
+    assert thread is not None
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert [call.text for call in spoken] == [text for _, text in STARTUP_LINES]
+    assert "startup lines not pre-rendered: render failed" in caplog.text
+
+
+def test_speak_startup_skips_warming_when_unavailable_or_disabled() -> None:
+    class Direct:
+        def __init__(self) -> None:
+            self.calls: list[Call] = []
+
+        def speak(self, call: Call) -> None:
+            self.calls.append(call)
+
+    class Warmable(Direct):
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            raise AssertionError("warm should not run")
+
+    direct = Direct()
+    assert cli._speak_startup(direct, STARTUP_LINES, lambda: 1.0, prerender=True) is None
+    assert [call.text for call in direct.calls] == [text for _, text in STARTUP_LINES]
+
+    warmable = Warmable()
+    assert cli._speak_startup(warmable, STARTUP_LINES, lambda: 1.0, prerender=False) is None
+    assert [call.text for call in warmable.calls] == [text for _, text in STARTUP_LINES]
 
 
 def test_start_leaves_session_open_and_clears_heartbeat_on_clean_ctrl_c(

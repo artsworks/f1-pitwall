@@ -93,7 +93,7 @@ def test_registry_walks_factory_fallback_and_unknown_ids(
 
     with caplog.at_level(logging.WARNING):
         assert make_speaker(SpeechSettings(engine=broken_spec.id)) is good
-        monkeypatch.setattr("pitwall.audio.speaker._auto_engine", lambda _settings: good_spec.id)
+        monkeypatch.setattr("pitwall.audio.speaker.auto_engine", lambda _settings: good_spec.id)
         assert make_speaker(SpeechSettings(engine="missing-engine")) is good
     assert "factory failed" in caplog.text
     assert "missing-engine" in caplog.text

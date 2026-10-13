@@ -114,13 +114,19 @@ def _voice_piper(action: str, names: list[str]) -> int:
 
 def _voice_warm(args: argparse.Namespace) -> int:
     from pitwall.audio.piper_tts import common_phrases
-    from pitwall.audio.speaker import ENGINES, WarmableSpeaker
+    from pitwall.audio.speaker import (
+        ENGINES,
+        STARTUP_LINES,
+        STARTUP_PRIORITY,
+        WarmableSpeaker,
+        auto_engine,
+    )
 
     settings = ConfigStore().current()
     speech = settings.speech
     engine = args.engine if args.engine != "auto" else speech.engine
     if engine == "auto":
-        engine = "piper"
+        engine = auto_engine(speech)
     if engine not in ENGINES:
         print(f"unknown speech engine: {engine}")
         return 1
@@ -155,12 +161,24 @@ def _voice_warm(args: argparse.Namespace) -> int:
                     _, calls = asyncio.run(run_replay(path, engine, None))
                 finally:
                     engine.dispatcher.log.close()
-            phrases = sorted(
+            replay_phrases = sorted(
                 {(call.text, call.priority) for call in calls},
                 key=lambda phrase: (phrase[1], phrase[0]),
             )
+            startup = [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+            phrases = list(dict.fromkeys([*startup, *replay_phrases]))
         else:
-            phrases = common_phrases(speech.warm_phrases)
+            extra = [
+                (reply, 1)
+                for reply in (
+                    *settings.input.ack_replies,
+                    *settings.input.neg_replies,
+                    *settings.input.bookmark_replies,
+                )
+            ]
+            if settings.menu.speak_on_scroll:
+                extra.extend((item.label, 1) for item in settings.menu.items)
+            phrases = common_phrases(speech.warm_phrases, extra)
         count = speaker.warm(phrases)
         print(f"cached {count} phrases for {speaker.name}")
         return 0
