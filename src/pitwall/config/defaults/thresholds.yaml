@@ -78,17 +78,18 @@ thresholds:
   cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
   cool_wet_ers_min_pct: 20   # inters/wets: battery floor at the line to push; a wet hot lap spends ~3-10% (Brazil wet quali)
   cool_ers_need_max_pct: 70  # cap on the learned battery need
-  # Fuel (game's "laps remaining") needed at the line after a hot lap. No in
-  # lap: the game can return to the garage from the menu. Q2/Q3 recordings: a
-  # hot lap burns ~0.8-0.9, a cool lap ~0.9.
-  fuel_push_need_laps: 0.9   # one more hot lap
-  fuel_cool_need_laps: 1.8   # cool + hot lap
+  # Interlagos quali recordings: hot laps burn 0.92-1.01 laps. Cool laps
+  # burn 0.87-0.95. Require fuel for one hot lap or cool + hot at the line.
+  fuel_push_need_laps: 1.1   # one more hot lap
+  fuel_cool_need_laps: 2.1   # cool + hot lap
   slow_car_warn_s: 5         # hot lap: warn when a slow car ahead is this many seconds from being caught
   slow_car_delta_kmh: 60     # a flying-lap car this much slower counts as slow too
   slow_car_crawl_kmh: 40     # car ahead this slow with all wheels on tarmac or kerb counts as crawling
   cool_tyre_hot_c: 104       # hottest carcass at the line at or above this -> cool
   cool_lap_factor: 1.3       # cool lap length as a multiple of the best lap
   cool_pace_pct: 10          # sector 1 this much slower than best = driver is cooling
+  cool_push_check_m: 400     # minimum distance before checking for push pace on a cool lap
+  cool_push_throttle_share: 0.4 # minimum full-throttle sample share for a push check
   cool_hot_mode_m: 600       # metres before the line to switch back to hot-lap mode
   cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
   ers_recharge_mode: 0       # ers_deploy_mode value for recharge (Q3 recording: battery only rises in 0); -1 = don't check

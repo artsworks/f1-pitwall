@@ -544,6 +544,8 @@ def test_invalid_hot_lap_calls() -> None:
         "session_kind": "qualifying",
         "run_lap_kind": "hot",
         "current_lap_invalid": 1,
+        "fuel_for_hot_lap": True,
+        "fuel_for_cool_and_hot": True,
     }
     t = _texts(_engine(), **base, time_for_cool_and_hot=True)
     assert "lap_deleted" in t and "lap_deleted_last" not in t
@@ -559,6 +561,7 @@ def test_cool_lap_extends_when_battery_short() -> None:
         "run_lap_kind": "cool",
         "ers_store_pct": 34.0,
         "ers_need_pct": 60.0,
+        "fuel_for_hot_lap": True,
     }
     t = _texts(_engine(), **base, cool_extend=True)
     assert "cool_extend" in t and "cool_hot_mode" not in t and "60" in t["cool_extend"]
@@ -578,6 +581,7 @@ def test_cool_extend_fixed_from_hot_mode_to_the_line() -> None:
     st._time_for_cool_and_hot = lambda: True  # type: ignore[method-assign]
     st.run.kind = COOL
     st.run.cool_start_t = 300.0
+    st.fuel_remaining_laps = 10.0
     st.ers_store_pct, st.lap_distance = 100.0, 5300.0
     assert st._cool_extend() is False
     st.ers_store_pct, st.lap_distance = 68.9, 5532.0
@@ -586,6 +590,32 @@ def test_cool_extend_fixed_from_hot_mode_to_the_line() -> None:
     assert st._cool_extend() is False
     st.run.cool_start_t = 400.0  # next cool lap decides again
     st.lap_distance = 5300.0
+    assert st._cool_extend() is True
+
+
+def test_cool_extend_requires_fuel_for_cool_and_hot_at_hot_mode() -> None:
+    from pitwall.state.runplan import COOL
+
+    st = SessionState(thresholds=ConfigStore().current().thresholds)
+    st.track_length_m = 4300.0
+    st._ers_need_pct = lambda: 60.0  # type: ignore[method-assign]
+    st._time_for_cool_and_hot = lambda: True  # type: ignore[method-assign]
+    st.run.kind = COOL
+    st.run.cool_start_t = 300.0
+    st.ers_store_pct = 30.0
+    st.lap_distance = 3800.0
+    st.fuel_remaining_laps = 1.5 + 500.0 / 4300.0
+    assert abs(st._fuel_at_line() - 1.5) < 1e-9
+    assert st._cool_extend() is False
+    st.lap_distance = 5.0
+    assert st._cool_extend() is False
+
+    st.run.cool_start_t = 400.0
+    st.lap_distance = 3800.0
+    st.fuel_remaining_laps = 2.5 + 500.0 / 4300.0
+    assert abs(st._fuel_at_line() - 2.5) < 1e-9
+    assert st._cool_extend() is True
+    st.lap_distance = 5.0
     assert st._cool_extend() is True
 
 

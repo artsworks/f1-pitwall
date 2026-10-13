@@ -8,6 +8,7 @@ import pytest
 
 from pitwall.config.loader import ConfigStore
 from pitwall.metrics import Metrics
+from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.server.app import state_payload
@@ -69,6 +70,11 @@ def _feed(
     plan: Plan = PUSH,
     phase: str = "flying",
     best_s1: int = 20_000,
+    throttle: float = 0.0,
+    invalid: bool = False,
+    extend_cool: bool = False,
+    fuel_short: bool = False,
+    fuel_cool_short: bool = False,
 ) -> HotLap | None:
     return rt.update(
         t=t,
@@ -78,13 +84,17 @@ def _feed(
         sector=sector,
         sector1_ms=s1,
         sector2_ms=0,
-        invalid=False,
+        invalid=invalid,
         ers_pct=ers,
         lockups=0,
         spins=0,
         best_s1_ms=best_s1,
         cool_pace_pct=10.0,
         decide=lambda: plan,
+        throttle=throttle,
+        extend_cool=extend_cool,
+        fuel_short=fuel_short,
+        fuel_cool_short=fuel_cool_short,
     )
 
 
@@ -183,6 +193,24 @@ def test_run_tracker_carries_track_limits_into_next_lap() -> None:
     assert done is not None and done.invalid and rt2.plan == PUSH and not rt2.next_lap_invalid
 
 
+@pytest.mark.parametrize(
+    ("fuel_cool_short", "expected_plan"),
+    [
+        (True, Plan("box", "fuel")),
+        (False, Plan("cool", "invalid")),
+    ],
+)
+def test_run_tracker_invalid_hot_lap_reserves_cool_and_hot_fuel(
+    fuel_cool_short: bool, expected_plan: Plan
+) -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    _feed(rt, 60.0, 70_000, 4100.0, 2)
+    _feed(rt, 64.0, 50, 5.0, 0, invalid=True, fuel_cool_short=fuel_cool_short)
+    assert rt.plan == expected_plan
+
+
 def test_run_tracker_ignores_flashback() -> None:
     rt = RunTracker()
     _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
@@ -191,6 +219,121 @@ def test_run_tracker_ignores_flashback() -> None:
     rt.note_rewind()
     assert _feed(rt, 41.0, 30_000, 300.0, 1) is None
     assert rt.crossings == 1
+
+
+def test_run_tracker_full_throttle_share_resets_each_lap() -> None:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0, throttle=1.0)
+    _feed(rt, 2.0, 200, 200.0, 0, throttle=0.0)
+    _feed(rt, 3.0, 15_000, 700.0, 1, throttle=1.0)
+    assert rt.full_throttle_share == pytest.approx(0.5)
+
+    _feed(rt, 60.0, 90_000, 4200.0, 2)
+    _feed(rt, 61.0, 50, 5.0, 0, plan=Plan("cool", "battery"), throttle=0.0)
+    _feed(rt, 62.0, 200, 200.0, 0, throttle=0.0)
+    assert rt.full_throttle_share == 0.0
+
+
+def test_run_tracker_confirm_push_and_hold_cool() -> None:
+    rt = RunTracker()
+    rt.kind = COOL
+    rt.plan = Plan("cool", "battery")
+    rt.confirm_push()
+    assert rt.kind == HOT
+    assert rt.plan == Plan("push", "driver")
+
+    rt.kind = HOT
+    rt.plan = Plan("push", "ready")
+    rt.confirm_push()
+    assert rt.kind == HOT
+    assert rt.plan == Plan("push", "ready")
+
+    rt.kind = COOL
+    rt.plan = Plan("cool", "battery")
+    rt.hold_cool()
+    _feed(rt, 1.0, 14_000, 500.0, 0)
+    _feed(rt, 2.0, 20_000, 1200.0, 1, s1=18_000)
+    assert rt.kind == COOL
+    assert rt.plan == Plan("cool", "battery")
+
+
+def _push_suspect(
+    *,
+    distance: float = 500.0,
+    current_lap_time_ms: int = 10_500,
+    ers_deploy_mode: int = 2,
+    cool_held: bool = False,
+) -> bool:
+    settings = ConfigStore().current()
+    thresholds = dict(settings.thresholds)
+    thresholds.update(
+        cool_pace_pct=10.0,
+        cool_push_check_m=400.0,
+        cool_push_throttle_share=0.4,
+        ers_recharge_mode=0,
+    )
+    state = SessionState(thresholds=thresholds)
+    state.track_length_m = 4294.0
+    state.lap_distance = distance
+    state.current_lap_time_ms = current_lap_time_ms
+    state.ers_deploy_mode = ers_deploy_mode
+    for i, throttle in enumerate((1.0, 1.0, 0.0, 0.0, 1.0)):
+        _feed(state.run, float(i + 1), 100 * (i + 1), 100.0 + i, 0, throttle=throttle)
+    state.run.kind = COOL
+    state.run.plan = Plan("cool", "battery")
+    state.run.cool_held = cool_held
+    view = state._cool_view(
+        0.0,
+        "qualifying",
+        "flying",
+        92_000,
+        (),
+        Corners(90.0, 90.0, 90.0, 90.0),
+    )
+    return bool(view["cool_push_suspect"])
+
+
+def test_cool_push_suspect_uses_pace_throttle_and_recharge_gates() -> None:
+    assert _push_suspect()
+    assert not _push_suspect(ers_deploy_mode=0)
+    assert not _push_suspect(current_lap_time_ms=15_000)
+    assert not _push_suspect(cool_held=True)
+    assert not _push_suspect(distance=399.0)
+
+
+def _cool_state() -> SessionState:
+    state = SessionState(thresholds=ConfigStore().current().thresholds)
+    state.session_type = 5
+    state.driver_status = DriverStatus.FLYING_LAP
+    state.lap_num = 3
+    state.track_length_m = 4294.0
+    state.lap_distance = 500.0
+    state.current_lap_time_ms = 10_500
+    state.ers_deploy_mode = 2
+    state._best_laps[0] = 92_000
+    state.run.kind = COOL
+    state.run.plan = Plan("cool", "battery")
+    return state
+
+
+def test_answer_push_check_updates_snapshot_and_quali_payload() -> None:
+    settings = ConfigStore().current()
+    state = _cool_state()
+    assert state.snapshot(1.0).cool_lap
+
+    state.answer_push_check(True)
+    snapshot = state.snapshot(2.0)
+    assert not snapshot.cool_lap
+    assert snapshot.run_plan == "push"
+    assert snapshot.run_plan_reason == "driver"
+    payload = state_payload(snapshot, settings=settings, metrics=Metrics(), quiet=False)
+    assert "cool" not in payload["quali"]
+
+    state = _cool_state()
+    state.answer_push_check(False)
+    assert state.snapshot(1.0).cool_lap
+    assert state.run.cool_held
 
 
 def _rules() -> RuleEngine:
@@ -260,6 +403,7 @@ def test_cool_lap_coaching_rules() -> None:
         "track_length_m": 4300.0,
         "lap_distance": 1000.0,
         "ers_store_pct": 40.0,
+        "fuel_for_hot_lap": True,
     }
     # plan_cool already said "recharge"; the separate reminder is for driver-initiated cools
     assert "cool_recharge" not in _ids(_qsnap(sector=0, **cool))
@@ -297,6 +441,7 @@ def test_cool_lap_coaching_rules() -> None:
         )
     )
     assert {"cool_status", "cool_vs_pole", "cool_mistakes"} <= set(ids)
+
     assert ids["cool_vs_pole"] in (
         "2.2 to pole. Most in sector 2, 1.9",
         "2.2 to pole. Sector 2, 1.9",
@@ -320,6 +465,44 @@ def test_cool_lap_coaching_rules() -> None:
     assert "cool_car_behind" not in _ids(_qsnap(hot_car_behind_s=math.inf, **cool))
     ids = _ids(_qsnap(cool_prep=True, tyre_inner_front_c=96.0, **cool))
     assert "cool_hot_mode" in ids and "cool_status" not in ids
+
+
+def test_cool_push_rule_suppresses_recharge_check_and_plan_push() -> None:
+    cool = {
+        "cool_lap": True,
+        "run_lap_kind": "cool",
+        "run_plan": "cool",
+        "run_plan_reason": "battery",
+        "sector": 0,
+        "cool_push_suspect": True,
+        "cool_elapsed_s": 30.0,
+        "ers_deploy_mode": 2,
+        "ers_store_pct": 40.0,
+        "track_length_m": 4300.0,
+        "lap_distance": 1000.0,
+    }
+    ids = _ids(_qsnap(**cool))
+    assert "cool_push_check" in ids
+    assert "cool_recharge_check" not in ids
+    assert "plan_push" not in _ids(_qsnap(sector=0, run_plan="push", run_plan_reason="driver"))
+
+
+def test_cool_hot_mode_requires_fuel_for_hot_lap() -> None:
+    ids = _ids(_qsnap(cool_prep=True, fuel_for_hot_lap=False))
+    assert "cool_hot_mode" not in ids
+    ids = _ids(_qsnap(cool_prep=True, fuel_for_hot_lap=True))
+    assert "cool_hot_mode" in ids
+
+
+def test_lap_deleted_requires_fuel_for_cool_and_hot_lap() -> None:
+    base = {
+        "run_lap_kind": "hot",
+        "current_lap_invalid": True,
+        "time_for_cool_and_hot": True,
+        "fuel_for_hot_lap": True,
+    }
+    assert "lap_deleted" not in _ids(_qsnap(fuel_for_cool_and_hot=False, **base))
+    assert "lap_deleted" in _ids(_qsnap(fuel_for_cool_and_hot=True, **base))
 
 
 def test_cool_payload_swaps_layout() -> None:
@@ -495,7 +678,72 @@ def test_run_tracker_extends_cool_lap() -> None:
     assert rt.kind == COOL and rt.plan == Plan("cool", "battery")
 
 
+def _cool_run() -> RunTracker:
+    rt = RunTracker()
+    _feed(rt, 0.0, 0, 100.0, 0, phase="out_lap")
+    _feed(rt, 1.0, 100, 10.0, 0)
+    _feed(rt, 60.0, 75_000, 5000.0, 2)
+    _feed(rt, 61.0, 50, 5.0, 0, plan=Plan("cool", "battery"))
+    _feed(rt, 150.0, 100_000, 5000.0, 2)
+    assert rt.kind == COOL
+    return rt
+
+
+@pytest.mark.parametrize(
+    ("fuel_short", "extend_cool", "expected_plan", "expected_kind"),
+    [
+        (True, False, Plan("box", "fuel"), HOT),
+        (True, True, Plan("box", "fuel"), HOT),
+        (False, False, Plan("", ""), HOT),
+        (False, True, Plan("cool", "battery"), COOL),
+    ],
+)
+def test_run_tracker_cool_crossing_respects_fuel_gate(
+    fuel_short: bool,
+    extend_cool: bool,
+    expected_plan: Plan,
+    expected_kind: str,
+) -> None:
+    rt = _cool_run()
+    _feed(
+        rt,
+        151.0,
+        50,
+        5.0,
+        0,
+        fuel_short=fuel_short,
+        extend_cool=extend_cool,
+    )
+    assert rt.plan == expected_plan and rt.kind == expected_kind
+
+
+def test_run_tracker_fuel_box_survives_invalid_new_lap() -> None:
+    rt = _cool_run()
+    _feed(rt, 151.0, 50, 5.0, 0, fuel_short=True, invalid=True)
+    assert rt.plan == Plan("box", "fuel")
+    assert rt.kind == HOT and rt.next_lap_invalid
+
+
 def test_fuel_thresholds_configurable() -> None:
+    thresholds = ConfigStore(isolated=True).current().thresholds
+    fuel_push_laps = float(thresholds["fuel_push_need_laps"])
+    fuel_cool_laps = float(thresholds["fuel_cool_need_laps"])
+    assert fuel_push_laps >= 1.01
+
+    # Brazil short-quali recording: at 1.0 lap, do not start a hot lap.
+    assert _plan(
+        fuel_laps=1.0,
+        fuel_push_laps=fuel_push_laps,
+        fuel_cool_laps=fuel_cool_laps,
+    ) == Plan("box", "fuel")
+    # Brazil short-quali recording: 0.976 laps at 3866 m projects below the threshold.
+    assert _plan(
+        ers_pct=0.0,
+        fuel_laps=0.976,
+        fuel_push_laps=fuel_push_laps,
+        fuel_cool_laps=fuel_cool_laps,
+    ) == Plan("box", "fuel")
+
     # Q2 recording: 2.84 laps at the line was enough for cool + hot + in.
     assert _plan(ers_pct=0.0, fuel_laps=2.84, fuel_cool_laps=2.2) == Plan("cool", "battery")
     assert _plan(ers_pct=0.0, fuel_laps=2.0, fuel_cool_laps=2.2) == Plan("push_now", "fuel")
