@@ -508,7 +508,7 @@ def test_session_history_recent_player_laps() -> None:
             PacketId.SESSION_HISTORY,
             {
                 "car_idx": 0,
-                "num_laps": 4,
+                "num_laps": 5,
                 "laps": {
                     0: {
                         "lap_time_ms": 91_000,
@@ -523,7 +523,13 @@ def test_session_history_recent_player_laps() -> None:
                         "sector2_ms_part": 31_000,
                         "sector3_ms_part": 31_000,
                     },
-                    3: {"lap_time_ms": 94_000},
+                    3: {
+                        "lap_time_ms": 94_000,
+                        "sector1_ms_part": 31_000,
+                        "sector2_ms_part": 31_500,
+                        "sector3_ms_part": 31_500,
+                    },
+                    4: {"lap_time_ms": 95_000},
                 },
             },
         ),
@@ -532,6 +538,7 @@ def test_session_history_recent_player_laps() -> None:
     assert state.snapshot(0.0).player_recent_laps == (
         (1, 91_000, 30_000, 30_500, 30_500),
         (3, 93_000, 31_000, 31_000, 31_000),
+        (4, 94_000, 31_000, 31_500, 31_500),
     )
 
     ingest, state = _state()
@@ -548,11 +555,11 @@ def test_session_history_recent_player_laps() -> None:
 
 def test_race_stream_player_history_has_valid_sectors() -> None:
     ingest, state = _state()
-    for session_time, packet in race_stream(RaceSpec(laps=3, dt=1.0, player_history=True)):
+    for session_time, packet in race_stream(RaceSpec(laps=4, dt=1.0, player_history=True)):
         _send(ingest, packet, session_time)
 
     recent_laps = state.snapshot(0.0).player_recent_laps
-    assert len(recent_laps) == 2
+    assert [lap[0] for lap in recent_laps] == [1, 2, 3]
     assert all(
         s1_ms + s2_ms + s3_ms == lap_time_ms for _, lap_time_ms, s1_ms, s2_ms, s3_ms in recent_laps
     )

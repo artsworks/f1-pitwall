@@ -476,20 +476,26 @@
 
   function renderLap(p) {
     var r = p.race || {}, laps = Array.isArray(r.recent_laps) ? r.recent_laps : [];
-    var previous = laps.length > 1 ? laps[laps.length - 2] : null;
-    var last = laps.length ? laps[laps.length - 1] : null;
-    var lapDelta = previous && last ? last.time_ms - previous.time_ms : null;
-    setText("lap-prev", previous ? "L" + previous.lap + " " + lapTime(previous.time_ms) : "--");
-    setText("lap-last", last ? "L" + last.lap + " " + lapTime(last.time_ms) : "no lap yet");
-    setText("lap-delta", lapDelta === null ? "--" : signed(lapDelta) + "s");
-    setClass("lap-delta", "value" + (lapDelta < 0 ? " ok" : lapDelta > 0 ? " warn" : ""));
-    var sectorsBefore = previous && previous.sectors_ms;
-    var sectorsLast = last && last.sectors_ms;
-    ["sec-1", "sec-2", "sec-3"].forEach(function (id, index) {
-      var before = sectorsBefore && sectorsBefore[index], after = sectorsLast && sectorsLast[index];
-      var delta = before && after ? after - before : null;
-      setText(id, delta === null ? "--" : signed(delta) + "s");
-      setClass(id, "value" + (delta < 0 ? " ok" : delta > 0 ? " warn" : ""));
+    var recent = laps.slice(-3), offset = 3 - recent.length, slots = [null, null, null];
+    for (var i = 0; i < recent.length; i++) slots[offset + i] = recent[i];
+    for (var i = 0; i < 3; i++) {
+      var lap = slots[i];
+      setText("lap-t" + (i + 1), lap ? "L" + lap.lap + " " + lapTime(lap.time_ms) :
+        (i === 2 && !recent.length ? "no lap yet" : "--"));
+    }
+    [1, 2].forEach(function (row) {
+      var older = slots[row - 1], newer = slots[row];
+      var labelId = "cmp-" + row + "-label";
+      setText(labelId, older && newer ? "L" + newer.lap + " vs L" + older.lap : "--");
+      for (var sector = 0; sector < 3; sector++) {
+        var before = older && older.sectors_ms ? older.sectors_ms[sector] : null;
+        var after = newer && newer.sectors_ms ? newer.sectors_ms[sector] : null;
+        var delta = typeof before === "number" && before !== 0 &&
+          typeof after === "number" && after !== 0 ? after - before : null;
+        var id = "cmp-" + row + "-s" + (sector + 1);
+        setText(id, delta === null ? "--" : signed(delta) + "s");
+        setClass(id, "value" + (delta < 0 ? " ok" : delta > 0 ? " warn" : ""));
+      }
     });
   }
 

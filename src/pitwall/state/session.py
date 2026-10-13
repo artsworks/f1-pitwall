@@ -600,6 +600,7 @@ class Snapshot:
     battle_pace_behind: str = ""
     battle_swaps: int = 0  # place changes inside battle_swap_window_s
     player_last_lap_ms: int = 0
+    # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
     player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
     # M2: per-car lap data (all 24 cars)
@@ -2286,7 +2287,7 @@ class SessionState:
                 (index + 1, lap.lap_time_ms, lap.sector1_ms, lap.sector2_ms, lap.sector3_ms)
                 for index, lap in enumerate(history.laps[: max(0, history.num_laps - 1)])
                 if lap.lap_time_ms != 0
-            )[-2:]
+            )[-3:]
             if history is not None
             else ()
         )
