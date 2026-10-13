@@ -73,6 +73,7 @@ class RaceSpec:
     rival_overtake_cars: tuple[int, ...] = ()
     gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
     ers_store_j: float = 3_000_000.0
+    player_history: bool = False
 
 
 def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
@@ -217,6 +218,33 @@ def _history(i: int, laps: list[int]) -> dict[str, object]:
     }
 
 
+def _player_history(lap_times: list[int]) -> dict[str, object]:
+    variations = ((120, -30, -90), (-50, 100, -50), (-70, -70, 140))
+    laps: dict[int, dict[str, int]] = {}
+    for index, lap_time_ms in enumerate(lap_times):
+        third_ms = lap_time_ms // 3
+        s1_offset, s2_offset, _ = variations[index % len(variations)]
+        s1_ms = third_ms + s1_offset
+        s2_ms = third_ms + s2_offset
+        laps[index] = {
+            "lap_time_ms": lap_time_ms,
+            "sector1_ms_part": s1_ms,
+            "sector2_ms_part": s2_ms,
+            "sector3_ms_part": lap_time_ms - s1_ms - s2_ms,
+            "lap_valid_bit_flags": 0x0F,
+        }
+    laps[len(lap_times)] = {"lap_time_ms": 0, "lap_valid_bit_flags": 0}
+    return {
+        "car_idx": 0,
+        "num_laps": len(lap_times) + 1,
+        "num_tyre_stints": 1,
+        "laps": laps,
+        "tyre_stints": {
+            0: {"end_lap": 255, "tyre_actual_compound": 17, "tyre_visual_compound": 17}
+        },
+    }
+
+
 def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     pkts: list[tuple[float, bytes]] = []
     t = 0.0
@@ -260,6 +288,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     )
     event(b"LGOT")
     history: dict[int, list[int]] = {1: [], 2: [], 3: []}
+    player_lap_times: list[int] = []
     stint_start = 1
     player_wear0 = 0.0
     player_last_ms = 0
@@ -448,6 +477,8 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 telemetry_car["tyres_surface_temperature"] = (int(surface),) * 4
             emit(PacketId.CAR_TELEMETRY, {"cars": {0: telemetry_car}})
             if f % int(2 / spec.dt) == 0:
+                if spec.player_history:
+                    emit(PacketId.SESSION_HISTORY, _player_history(player_lap_times[-100:]))
                 for i in (1, 2, 3):
                     if history[i]:
                         emit(PacketId.SESSION_HISTORY, _history(i, history[i][-100:]))
@@ -457,6 +488,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 event(b"PENA", struct.pack("<BBBBBBB", 4, 7, 0, 255, 5, lap, 0))  # time penalty
             t += spec.dt
         player_last_ms = lap_ms
+        player_lap_times.append(lap_ms)
         for i in (1, 2, 3):
             pit = spec.rival_pit_lap if i == 1 else None
             rival_age = lap - (pit + 1) if pit is not None and lap > pit else lap - 1

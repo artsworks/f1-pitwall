@@ -17,6 +17,7 @@ from pitwall.state.session import (
     thermal_window,
 )
 
+from .race_synth import RaceSpec, race_stream
 from .synth import make_event_packet, pack_packet
 
 
@@ -543,6 +544,18 @@ def test_session_history_recent_player_laps() -> None:
         0.0,
     )
     assert state.snapshot(0.0).player_recent_laps == ()
+
+
+def test_race_stream_player_history_has_valid_sectors() -> None:
+    ingest, state = _state()
+    for session_time, packet in race_stream(RaceSpec(laps=3, dt=1.0, player_history=True)):
+        _send(ingest, packet, session_time)
+
+    recent_laps = state.snapshot(0.0).player_recent_laps
+    assert len(recent_laps) == 2
+    assert all(
+        s1_ms + s2_ms + s3_ms == lap_time_ms for _, lap_time_ms, s1_ms, s2_ms, s3_ms in recent_laps
+    )
 
 
 def test_tyre_sets_snapshot() -> None:
