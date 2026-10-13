@@ -71,8 +71,12 @@ speech:
   warm_phrases: 50
 ```
 
-Only phrases without slots such as `{lap}` can be cached. A value above the number of
-fixed phrases caches nothing extra.
+`voice warm` caches startup lines, fixed rule lines, severity and escalation variants,
+driver replies, and menu labels. Lines with slots such as `{lap}` cannot be cached. Run
+`voice warm --replay latest` to cache lines from a real session. It skips lines with
+driver names or measured values, such as gaps and battery levels, because those rarely
+repeat. At startup, Pitwall renders the startup lines with the selected engine before it
+speaks them.
 
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
 1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.
@@ -105,6 +109,9 @@ Warm common lines or lines from a recording:
 uv run pitwall voice warm --engine omnivoice
 uv run pitwall voice warm --engine omnivoice --replay latest
 ```
+
+At startup, Pitwall waits for OmniVoice to render the startup lines before it speaks them.
+It plays Piper only if that render fails.
 
 `voice warm --engine omnivoice` then prints the OmniVoice render times: min, p50, p95 and max. Warming uses the background path, so these times are the full render times. Use the p95 to choose `omnivoice_wait_s`. A cold line that takes longer than `omnivoice_wait_s` plays Piper instead.
 

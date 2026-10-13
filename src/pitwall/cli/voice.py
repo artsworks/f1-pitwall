@@ -2,14 +2,62 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
+import string
 import sys
 import tempfile
 import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from pitwall.audio.dispatcher import Call
 from pitwall.config.loader import ConfigStore
+
+_MEASURED_WORDS = frozenset({"battle_pace_ahead", "battle_pace_behind"})
+_INTEGER = re.compile(r"-?\d+")
+
+
+def _volatile_slot(name: str, spec: str, value: str) -> bool:
+    return (
+        name.endswith(("_name", "_pct"))
+        or name in _MEASURED_WORDS
+        or spec.endswith(("f", "e", "g", "%"))
+        or (any(c.isdigit() for c in value) and not _INTEGER.fullmatch(value))
+    )
+
+
+def _reusable(text: str, templates: Sequence[str]) -> bool:
+    """Return whether a rendered line can be reused across sessions."""
+    if "{" in text:
+        return False
+
+    matched = False
+    formatter = string.Formatter()
+    for template in templates:
+        pattern: list[str] = []
+        fields: list[tuple[str, str]] = []
+        for literal, field_name, format_spec, _conversion in formatter.parse(template):
+            pattern.append(re.escape(literal))
+            if field_name is not None:
+                pattern.append("(.+?)")
+                fields.append((field_name, format_spec or ""))
+
+        if not fields:
+            if text == template:
+                return True
+            continue
+
+        match = re.fullmatch("".join(pattern), text, flags=re.S)
+        if match is None:
+            continue
+        matched = True
+        if all(
+            not _volatile_slot(name, spec, value)
+            for (name, spec), value in zip(fields, match.groups(), strict=True)
+        ):
+            return True
+    return not matched
 
 
 def cmd_voice(args: argparse.Namespace) -> int:
@@ -114,13 +162,19 @@ def _voice_piper(action: str, names: list[str]) -> int:
 
 def _voice_warm(args: argparse.Namespace) -> int:
     from pitwall.audio.piper_tts import common_phrases
-    from pitwall.audio.speaker import ENGINES, WarmableSpeaker
+    from pitwall.audio.speaker import (
+        ENGINES,
+        STARTUP_LINES,
+        STARTUP_PRIORITY,
+        WarmableSpeaker,
+        auto_engine,
+    )
 
     settings = ConfigStore().current()
     speech = settings.speech
     engine = args.engine if args.engine != "auto" else speech.engine
     if engine == "auto":
-        engine = "piper"
+        engine = auto_engine(speech)
     if engine not in ENGINES:
         print(f"unknown speech engine: {engine}")
         return 1
@@ -155,12 +209,46 @@ def _voice_warm(args: argparse.Namespace) -> int:
                     _, calls = asyncio.run(run_replay(path, replay_engine, None))
                 finally:
                     replay_engine.dispatcher.log.close()
-            phrases = sorted(
-                {(call.text, call.priority) for call in calls},
+            rule_engine = replay_engine.rule_engine
+            templates: dict[str, list[str]] = {}
+            if rule_engine is not None:
+                for rule in rule_engine.rules:
+                    definition = rule.defn
+                    templates[definition.id] = [
+                        *definition.say_pool(),
+                        *(text for escalation in definition.escalate for text in escalation.say),
+                        *(text for severity in definition.severity for text in severity.say),
+                        *definition.say_many,
+                    ]
+            dropped_texts = {
+                call.text
+                for call in calls
+                if not _reusable(call.text, templates.get(call.rule_id, ()))
+            }
+            replay_phrases = sorted(
+                {
+                    (call.text, call.priority)
+                    for call in calls
+                    if _reusable(call.text, templates.get(call.rule_id, ()))
+                },
                 key=lambda phrase: (phrase[1], phrase[0]),
             )
+            startup = [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+            phrases = list(dict.fromkeys([*startup, *replay_phrases]))
         else:
-            phrases = common_phrases(speech.warm_phrases)
+            extra = [
+                (reply, 1)
+                for reply in (
+                    *settings.input.ack_replies,
+                    *settings.input.neg_replies,
+                    *settings.input.bookmark_replies,
+                )
+            ]
+            if settings.menu.speak_on_scroll:
+                extra.extend((item.label, 1) for item in settings.menu.items)
+            phrases = common_phrases(speech.warm_phrases, extra)
+        if args.replay and dropped_texts:
+            print(f"voice warm: skipped {len(dropped_texts)} lines with names or measured values")
         count = speaker.warm(phrases)
         print(f"cached {count} phrases for {speaker.name}")
         if engine == "omnivoice":

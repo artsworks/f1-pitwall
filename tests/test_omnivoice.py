@@ -27,8 +27,9 @@ from pitwall.audio.omnivoice_tts import (
     render_stats_summary,
 )
 from pitwall.audio.piper_tts import to_wav
+from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
 from pitwall.audio.wav_speaker import NullPlayer, WavSpeaker, default_player
-from pitwall.config.models import SpeechSettings
+from pitwall.config.models import Settings, SpeechSettings
 from tests.audio_contract import FakePlayer, assert_pitwall_wav, make_call
 
 SMALL_WAV = to_wav(np.zeros(240, dtype=np.float32), 24_000)
@@ -366,15 +367,21 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch,
 
         def __init__(self) -> None:
             self.closed = False
+            self.phrases: list[tuple[str, int]] = []
 
         def warm(self, phrases: list[tuple[str, int]]) -> int:
+            self.phrases = phrases
             return len(phrases)
 
         def close(self) -> None:
             self.closed = True
 
     settings = SpeechSettings(engine="omnivoice")
-    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    config = Settings(
+        speech=settings,
+        menu={"items": [{"id": "race-pace", "label": "Race pace"}]},
+    )
+    store = SimpleNamespace(current=lambda: config)
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
     seen: list[str] = []
     speakers: list[FakeSpeaker] = []
@@ -400,6 +407,9 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch,
     assert main(["voice", "warm", "--engine", "piper"]) == 0
     assert seen == ["omnivoice", "piper"]
     assert all(speaker.closed for speaker in speakers)
+    assert speakers[0].phrases[:2] == [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+    assert ("Copy.", 1) in speakers[0].phrases
+    assert ("Race pace", 1) in speakers[0].phrases
     assert "cached " in capsys.readouterr().out
 
 
@@ -408,7 +418,8 @@ def test_voice_warm_rejects_non_warmable_engine(monkeypatch, capsys) -> None:  #
     from pitwall.cli import main
 
     settings = SpeechSettings(engine="null")
-    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    config = Settings(speech=settings)
+    store = SimpleNamespace(current=lambda: config)
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
 
     assert main(["voice", "warm"]) == 1
@@ -420,7 +431,8 @@ def test_voice_warm_reports_unknown_configured_engine(monkeypatch, capsys) -> No
     from pitwall.cli import main
 
     settings = SpeechSettings(engine="unknown")
-    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    config = Settings(speech=settings)
+    store = SimpleNamespace(current=lambda: config)
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
 
     assert main(["voice", "warm"]) == 1
@@ -465,13 +477,87 @@ def test_voice_warm_unreachable_omnivoice_does_not_warm_piper(
         omnivoice_timeout_s=0.2,
         voices_dir=str(tmp_path / "voices"),
     )
-    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    config = Settings(speech=settings)
+    store = SimpleNamespace(current=lambda: config)
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
 
     assert main(["voice", "warm", "--engine", "omnivoice"]) == 1
     assert "omnivoice unavailable:" in capsys.readouterr().out
     assert piper_created == []
     assert not cache_dir.exists()
+
+
+def test_voice_warm_auto_resolves_null_and_piper(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.speaker as speaker_module
+    import pitwall.cli.voice as voice_module
+    from pitwall.audio.speaker import EngineSpec
+    from pitwall.cli import main
+
+    settings = SpeechSettings(engine="auto")
+    config = Settings(speech=settings)
+    monkeypatch.setattr(
+        voice_module, "ConfigStore", lambda: SimpleNamespace(current=lambda: config)
+    )
+    monkeypatch.setattr(speaker_module, "auto_engine", lambda _speech: "null")
+
+    assert main(["voice", "warm"]) == 1
+    assert "does not support phrase warming" in capsys.readouterr().out
+
+    warmed: list[list[tuple[str, int]]] = []
+
+    class FakeSpeaker:
+        name = "piper"
+
+        def warm(self, phrases: list[tuple[str, int]]) -> int:
+            warmed.append(phrases)
+            return len(phrases)
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(speaker_module, "auto_engine", lambda _speech: "piper")
+    monkeypatch.setitem(
+        speaker_module.ENGINES,
+        "piper",
+        EngineSpec("piper", lambda _speech: FakeSpeaker(), None),
+    )
+    assert main(["voice", "warm"]) == 0
+    assert len(warmed) == 1
+    assert "cached " in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("text", "templates", "expected"),
+    [
+        ("P5. Good start", ["P{position}. Good start"], True),
+        (
+            "Rival ahead, 1.2",
+            ["{rival_ahead_name} ahead, {gap_ahead_s:.1f}"],
+            False,
+        ),
+        (
+            "Battery 47. Keep harvesting",
+            ["Battery {ers_store_pct:.0f}. Keep harvesting"],
+            False,
+        ),
+        ("Box, Battery's 47", ["Box, {run_plan_why}"], False),
+        ("Box, No fuel for another lap", ["Box, {run_plan_why}"], True),
+        ("He's three tenths faster", ["He's {battle_pace_behind}"], False),
+        ("5 second penalty", ["{penalty_s} second penalty"], True),
+        ("Radio check", ["Radio check"], True),
+        ("Unknown line", ["Box {plan_spoken}"], True),
+        (
+            "Box Plan B",
+            ["{rival_ahead_name} {gap_ahead_s:.1f}", "Box {plan_spoken}"],
+            True,
+        ),
+        ("Line {x}", [], False),
+    ],
+)
+def test_reusable_filters_volatile_slots(text: str, templates: list[str], expected: bool) -> None:
+    from pitwall.cli.voice import _reusable
+
+    assert _reusable(text, templates) is expected
 
 
 def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -546,16 +632,42 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
         _, calls = asyncio.run(run_replay(recording, expected_engine, None))
     finally:
         expected_engine.dispatcher.log.close()
-    expected = list(
+    from pitwall.cli.voice import _reusable
+
+    rule_engine = expected_engine.rule_engine
+    templates: dict[str, list[str]] = {}
+    if rule_engine is not None:
+        for rule in rule_engine.rules:
+            definition = rule.defn
+            templates[definition.id] = [
+                *definition.say_pool(),
+                *(text for escalation in definition.escalate for text in escalation.say),
+                *(text for severity in definition.severity for text in severity.say),
+                *definition.say_many,
+            ]
+    reusable_calls = [
+        call for call in calls if _reusable(call.text, templates.get(call.rule_id, ()))
+    ]
+    dropped_calls = {
+        (call.rule_id, call.text)
+        for call in calls
+        if not _reusable(call.text, templates.get(call.rule_id, ()))
+    }
+    dropped_texts = {text for _, text in dropped_calls}
+    startup = [(text, STARTUP_PRIORITY) for _, text in STARTUP_LINES]
+    expected_phrases = list(
         dict.fromkeys(
-            text
-            for text, _ in sorted(
-                {(call.text, call.priority) for call in calls},
-                key=lambda phrase: (phrase[1], phrase[0]),
-            )
+            [
+                *startup,
+                *sorted(
+                    {(call.text, call.priority) for call in reusable_calls},
+                    key=lambda phrase: (phrase[1], phrase[0]),
+                ),
+            ]
         )
     )
-    assert expected
+    expected_texts = list(dict.fromkeys(text for text, _ in expected_phrases))
+    assert expected_phrases
 
     import pitwall.audio.omnivoice_tts as omnivoice_module
     from pitwall.cli import main
@@ -568,9 +680,54 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
     assert main(["voice", "warm", "--engine", "omnivoice", "--replay", str(recording)]) == 0
     speech = [payload["input"] for path, payload in state.requests if path == "/v1/audio/speech"]
 
-    assert speech == expected
+    assert speech == expected_texts
     assert not (recording_dir / "decisions.jsonl").exists()
     assert not (tmp_path / "pitwall.sqlite").exists()
     output = capsys.readouterr().out
-    assert f"cached {len(expected)} phrases" in output
+    assert f"cached {len(expected_texts)} phrases" in output
     assert "omnivoice render stats (background) n=" in output
+    if dropped_texts:
+        assert (
+            f"voice warm: skipped {len(dropped_texts)} lines with names or measured values"
+            in output
+        )
+        assert dropped_texts.isdisjoint(speech)
+
+
+def test_startup_prerender_uses_omnivoice_audio_without_piper(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+    from pitwall.cli.serve import _speak_startup
+
+    url, state = fake_server
+    piper_calls: list[str] = []
+
+    def piper_tone(text: str) -> tuple[bytes, float]:
+        piper_calls.append(text)
+        return PIPER_WAV, 0.02
+
+    monkeypatch.setattr(
+        omnivoice_module,
+        "make_piper_tone_synths",
+        lambda _settings: {1: piper_tone, 2: piper_tone, 3: piper_tone},
+    )
+    player = FakePlayer()
+    speaker = make_omnivoice_speaker(
+        _settings(url, tmp_path, omnivoice_wait_s=0),
+        player,
+    )
+
+    thread = _speak_startup(speaker, STARTUP_LINES, time.monotonic, prerender=True)
+    assert thread is not None
+    assert thread.name == "startup-voice"
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    _wait_for(lambda: len(player.played) == len(STARTUP_LINES))
+    speaker.close()
+
+    speech = [payload["input"] for path, payload in state.requests if path == "/v1/audio/speech"]
+    assert speech == [text for _, text in STARTUP_LINES]
+    assert player.played == [SMALL_WAV, SMALL_WAV]
+    assert all(wav != PIPER_WAV for wav in player.played)
+    assert piper_calls == []
