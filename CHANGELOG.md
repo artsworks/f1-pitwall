@@ -6,6 +6,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.8.0 (2026-10-13)
+
+### Documentation
+
+- **skills**: Add replay history and press timing notes for dashboard tests
+  ([#79](https://github.com/artsworks/f1-pitwall/pull/79),
+  [`2be063e`](https://github.com/artsworks/f1-pitwall/commit/2be063e4afd312e588ac84cb3ee9f3050c0830f6))
+
+### Features
+
+- **quali**: Confirm push laps flagged as cool
+  ([#79](https://github.com/artsworks/f1-pitwall/pull/79),
+  [`2be063e`](https://github.com/artsworks/f1-pitwall/commit/2be063e4afd312e588ac84cb3ee9f3050c0830f6))
+
+
 ## v0.7.1 (2026-10-13)
 
 ### Bug Fixes
