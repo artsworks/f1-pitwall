@@ -6,6 +6,27 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.12.0 (2026-10-13)
+
+### Documentation
+
+- **mockup**: Add looping demo race to the reimagined dashboard
+  ([#86](https://github.com/artsworks/f1-pitwall/pull/86),
+  [`a5896d7`](https://github.com/artsworks/f1-pitwall/commit/a5896d72b632ee4fdf234e9df04aa93e309a9b57))
+
+### Features
+
+- **audio**: Send only text to OmniVoice locked server
+  ([#87](https://github.com/artsworks/f1-pitwall/pull/87),
+  [`3cdbf65`](https://github.com/artsworks/f1-pitwall/commit/3cdbf65d8bcaf6e1efcd59f180f4d4f36f0f1a1b))
+
+### Refactoring
+
+- **config**: Drop unused OmniVoice settings fields
+  ([#87](https://github.com/artsworks/f1-pitwall/pull/87),
+  [`3cdbf65`](https://github.com/artsworks/f1-pitwall/commit/3cdbf65d8bcaf6e1efcd59f180f4d4f36f0f1a1b))
+
+
 ## v0.11.0 (2026-10-13)
 
 ### Bug Fixes
