@@ -139,12 +139,18 @@ class OmniVoiceRenderer:
         self.label = f"omnivoice ({model_id})"
         self.cache_identity = omnivoice_cache_key(settings, model_id)
         self.fallback_tones = fallback_tones
-        self._synth = make_omnivoice_synth(settings)
+        self._wait_s = settings.omnivoice_wait_s
+        # The foreground timeout is the playback grace period for cold lines, not the
+        # health-check timeout.
+        self._synth = make_omnivoice_synth(settings, timeout_s=self._wait_s)
         self._background_synth = make_omnivoice_synth(settings, timeout_s=BACKGROUND_TIMEOUT_S)
 
     def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
-        synth = self._background_synth if background else self._synth
-        return synth(text)
+        if background:
+            return self._background_synth(text)
+        if self._wait_s <= 0:
+            raise OmniVoiceError("omnivoice_wait_s is 0; skipping the foreground render")
+        return self._synth(text)
 
     def provisional(self, text: str, priority: int) -> tuple[bytes, float] | None:
         if self.fallback_tones is None:

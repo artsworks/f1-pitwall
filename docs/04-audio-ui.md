@@ -147,6 +147,8 @@ Each `audio` frame carries one complete WAV in base64. The WAV is RIFF, mono, 16
 
 `WavSpeaker` in `wav_speaker.py` is the translation layer for WAV engines. It owns the queue, P1 preemption, cancellation, age drops, the phrase cache, the player and the callbacks. A vendor adapter is a `WavRenderer`. Its `render(text, priority)` returns `(wav_bytes, seconds)`. It also gives a `label`, a `cache_identity` and `per_priority`. If a vendor returns PCM or chunks, the adapter collects them in order and converts them with `pcm_to_wav()`. Convert MP3 or Opus to PCM first. If rendering fails, `WavSpeaker` plays the call on its fallback speaker, or calls `on_dropped`.
 
+A renderer can also give `provisional(text, priority)`. On a cache miss, `WavSpeaker` first waits for `render(..., background=False)`. If that render fails or times out, `WavSpeaker` plays the provisional audio and queues `render(..., background=True)` to fill the cache. OmniVoice waits up to `omnivoice_wait_s` and uses Piper as its provisional audio. The age check runs after the wait, so a call that passes `max_age_s` while it waits is dropped.
+
 **Mixing with game audio:** the radio shares the game headset. Give it a separate volume
 setting and play a short radio "click" before each call. Do not duck game audio. If calls
 are hard to hear, lower the in-game volume or send the radio to another device.
