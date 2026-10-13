@@ -1,10 +1,4 @@
-"""Piper neural TTS backend: offline, natural voice, SAPI kept as fallback.
-
-`PiperSpeaker` renders each call to a WAV (optional radio blip + speech) on
-its worker thread and hands it to a `Player`; `on_spoken` fires at playback
-start. An optional `on_audio` callback receives each played WAV for phone
-streaming. Rendered WAVs are cached by text, so repeated calls skip synthesis.
-A P1 call preempts whatever is playing; queued calls play in priority order.
+"""Piper WAV renderer and voice management.
 
 Voices are downloaded once into `speech.voices_dir` (`pitwall voice get`).
 """
@@ -12,24 +6,35 @@ Voices are downloaded once into `speech.voices_dir` (`pitwall voice get`).
 from __future__ import annotations
 
 import hashlib
-import io
-import itertools
 import json
-import queue
-import sys
-import tempfile
-import threading
-import time
-import wave
-from collections import OrderedDict
-from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
 
 import numpy as np
 import yaml
 
-from pitwall.audio.dispatcher import Call
+from pitwall.audio.wav_speaker import (
+    CACHE_SIZE as CACHE_SIZE,
+)
+from pitwall.audio.wav_speaker import (
+    NullPlayer as NullPlayer,
+)
+from pitwall.audio.wav_speaker import (
+    Player,
+    Synth,
+    WavSpeaker,
+)
+from pitwall.audio.wav_speaker import (
+    WinsoundPlayer as WinsoundPlayer,
+)
+from pitwall.audio.wav_speaker import (
+    default_player as default_player,
+)
+from pitwall.audio.wav_speaker import (
+    radio_blip as radio_blip,
+)
+from pitwall.audio.wav_speaker import (
+    to_wav as to_wav,
+)
 from pitwall.config.models import SpeechSettings
 
 SUGGESTED_VOICES = (
@@ -38,63 +43,7 @@ SUGGESTED_VOICES = (
     "en_US-ryan-high",
     "en_US-lessac-medium",
 )
-CACHE_SIZE = 64
 PIPER_NOISE_SCALE = 0.667  # Piper's default phoneme noise; scaled per tone
-BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
-BLIP_PIP_GAP_S = 0.03
-BLIP_GAP_S = 0.06
-BLIP_AMP = 0.16
-BLIP_H2 = 0.12
-BLIP_ATTACK_S = 0.012
-BLIP_RELEASE_S = 0.008
-
-Synth = Callable[[str], tuple[bytes, float]]
-
-
-class Player(Protocol):
-    def play(self, wav: bytes) -> None: ...
-
-    def stop(self) -> None: ...
-
-
-class WinsoundPlayer:
-    """Async playback via winsound; SND_ASYNC needs a file, not memory."""
-
-    def __init__(self) -> None:
-        if sys.platform != "win32":
-            raise RuntimeError("WinsoundPlayer requires Windows")
-        import winsound  # noqa: F401
-
-        self._dir: Path = Path(tempfile.mkdtemp(prefix="pitwall-tts-"))
-        self._slot: int = 0
-
-    def play(self, wav: bytes) -> None:
-        import winsound
-
-        self._slot ^= 1
-        path = self._dir / f"call{self._slot}.wav"
-        path.write_bytes(wav)
-        winsound.PlaySound(  # type: ignore[attr-defined]
-            str(path),
-            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,  # type: ignore[attr-defined]
-        )
-
-    def stop(self) -> None:
-        import winsound
-
-        winsound.PlaySound(None, 0)  # type: ignore[attr-defined]
-
-
-class NullPlayer:
-    def play(self, wav: bytes) -> None:
-        pass
-
-    def stop(self) -> None:
-        pass
-
-
-def default_player() -> Player:
-    return WinsoundPlayer() if sys.platform == "win32" else NullPlayer()
 
 
 def voice_path(settings: SpeechSettings, name: str | None = None) -> Path:
@@ -115,52 +64,6 @@ def download_voice(settings: SpeechSettings, name: str) -> Path:
     d.mkdir(parents=True, exist_ok=True)
     _download(name, d)
     return voice_path(settings, name)
-
-
-def _blip_envelope(sample_count: int, sample_rate: int, tau_s: float) -> np.ndarray:
-    t = np.arange(sample_count) / sample_rate
-    attack_samples = int(sample_rate * BLIP_ATTACK_S)
-    envelope = np.exp(-np.maximum(t - BLIP_ATTACK_S, 0) / tau_s)
-    envelope[:attack_samples] *= 0.5 - 0.5 * np.cos(
-        np.pi * np.arange(attack_samples) / attack_samples
-    )
-    release_samples = int(sample_rate * BLIP_RELEASE_S)
-    envelope[-release_samples:] *= 0.5 + 0.5 * np.cos(
-        np.pi * np.arange(release_samples) / release_samples
-    )
-    return envelope
-
-
-def _pip(sample_rate: int, hz: float, seconds: float, tau_s: float) -> np.ndarray:
-    sample_count = int(sample_rate * seconds)
-    phase = 2 * np.pi * hz * np.arange(1, sample_count + 1) / sample_rate
-    tone = np.sin(phase) + BLIP_H2 * np.sin(2 * phase)
-    pip: np.ndarray = (
-        BLIP_AMP * tone * _blip_envelope(sample_count, sample_rate, tau_s) / (1 + BLIP_H2)
-    )
-    return pip
-
-
-def radio_blip(sample_rate: int) -> np.ndarray:
-    """Return the soft radio blip followed by its silent gap."""
-    pips = [_pip(sample_rate, hz, seconds, tau_s) for hz, seconds, tau_s in BLIP_PIPS]
-    pip_gap = np.zeros(int(sample_rate * BLIP_PIP_GAP_S))
-    parts: list[np.ndarray] = []
-    for pip in pips:
-        parts += [pip, pip_gap]
-    parts[-1] = np.zeros(int(sample_rate * BLIP_GAP_S))
-    return np.concatenate(parts)
-
-
-def to_wav(samples: np.ndarray, sample_rate: int) -> bytes:
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(pcm.tobytes())
-    return buf.getvalue()
 
 
 def make_piper_synth(settings: SpeechSettings) -> Synth:
@@ -210,150 +113,22 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
     return {prio: make(speed, expr) for prio, (speed, expr) in tones.items()}
 
 
-class PiperSpeaker:
-    name = "piper"
-    speaks_audio = True
+class PiperRenderer:
+    per_priority = True
 
     def __init__(
-        self,
-        synth: Synth,
-        player: Player,
-        label: str = "piper",
-        tones: dict[int, Synth] | None = None,
-        cache_dir: Path | None = None,
-        cache_key: str = "",
+        self, tones: dict[int, Synth], synth: Synth, label: str, cache_identity: str
     ) -> None:
-        self.name = label
-        self.on_spoken: Callable[[str, float], None] | None = None
-        self.on_audio: Callable[[str, int, bytes], None] | None = None
-        self.on_dropped: Callable[[str], None] | None = None
-        self._synth = synth
-        self._tones = tones or {}
-        self._player = player
-        self._cache_dir = cache_dir
-        self._cache_key = cache_key
-        self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
-        self._q: queue.PriorityQueue[tuple[int, int, Call | None]] = queue.PriorityQueue()
-        self._received: dict[str, float] = {}
-        self._seq = itertools.count()
-        self._cancelled: set[str] = set()
-        self._gen = 0
-        self._urgent = threading.Event()
-        self.busy_until = 0.0
-        self._thread = threading.Thread(target=self._worker, daemon=True, name="piper")
-        self._thread.start()
+        self.tones = tones
+        self.synth = synth
+        self.label = label
+        self.cache_identity = cache_identity
 
-    def speak(self, call: Call) -> None:
-        if call.priority == 1:
-            self._urgent.set()
-        self._received[call.id] = time.monotonic()
-        self._q.put((call.priority, next(self._seq), call))
-
-    def cancel(self, call_id: str) -> None:
-        self._cancelled.add(call_id)
-
-    def _phrase_path(self, key: tuple[int, str]) -> Path | None:
-        if self._cache_dir is None:
-            return None
-        digest = hashlib.sha256(json.dumps((self._cache_key, key)).encode()).hexdigest()
-        return self._cache_dir / f"{digest}.wav"
-
-    def flush(self) -> None:
-        """Drop queued and in-flight calls. Replay seeks restart call ids."""
-        self._gen += 1
-        while True:
-            try:
-                self._q.get_nowait()
-            except queue.Empty:
-                break
-        self._cancelled.clear()
-        self._received.clear()
-        self._player.stop()
-
-    def close(self) -> None:
-        self._q.put((-1, next(self._seq), None))
-        self._thread.join(timeout=2.0)
-        self._player.stop()
-
-    def render(self, text: str, priority: int = 2) -> tuple[bytes, float]:
-        synth = self._tones.get(priority)
-        key = (priority if synth is not None else 0, text)
-        hit = self._cache.get(key)
-        if hit is not None:
-            self._cache.move_to_end(key)
-            return hit
-        disk_path = self._phrase_path(key)
-        if disk_path is not None and disk_path.is_file():
-            wav = disk_path.read_bytes()
-            with wave.open(io.BytesIO(wav)) as reader:
-                seconds = reader.getnframes() / reader.getframerate()
-            out = wav, seconds
-        else:
-            out = (synth or self._synth)(text)
-        self._cache[key] = out
-        if len(self._cache) > CACHE_SIZE:
-            self._cache.popitem(last=False)
-        return out
-
-    def warm(self, phrases: list[tuple[str, int]]) -> int:
-        if self._cache_dir is None:
-            return 0
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-        for text, priority in phrases:
-            wav, _ = self.render(text, priority)
-            key = (priority if priority in self._tones else 0, text)
-            path = self._phrase_path(key)
-            if path is not None and not path.exists():
-                path.write_bytes(wav)
-        return len(phrases)
-
-    def _render_failed(self, call: Call, exc: Exception) -> None:
-        print(f"speech: piper synthesis failed: {exc!r}", file=sys.stderr)
-
-    def _worker(self) -> None:
-        while True:
-            _, _, call = self._q.get()
-            if call is None:
-                return
-            received = self._received.pop(call.id, time.monotonic())
-            gen = self._gen
-            if call.id in self._cancelled:
-                self._cancelled.discard(call.id)
-                continue
-            try:
-                wav, seconds = self.render(call.text, call.priority)
-            except Exception as exc:
-                self._render_failed(call, exc)
-                continue
-            if gen != self._gen:
-                continue
-            if call.id in self._cancelled:
-                self._cancelled.discard(call.id)
-                continue
-            if call.priority == 1:
-                self._urgent.clear()
-            if (
-                call.max_age_s is not None
-                and call.handoff_age_s + (time.monotonic() - received) > call.max_age_s
-            ):
-                if self.on_dropped is not None:
-                    self.on_dropped(call.id)
-                continue
-            self._player.play(wav)
-            if self.on_audio is not None and call.id not in self._cancelled:
-                try:
-                    self.on_audio(call.id, call.priority, wav)
-                except Exception as exc:
-                    print(f"speech: piper audio stream failed: {exc!r}", file=sys.stderr)
-            self.busy_until = time.monotonic() + seconds
-            if self.on_spoken is not None:
-                self.on_spoken(call.id, time.time())
-            if self._urgent.wait(seconds):
-                self._player.stop()
+    def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
+        return self.tones.get(priority, self.synth)(text)
 
 
-def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -> PiperSpeaker:
-    player = player or default_player()
+def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -> WavSpeaker:
     tones = make_piper_tone_synths(settings)
     model = voice_path(settings)
     identity = hashlib.sha256(
@@ -366,15 +141,13 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    speaker = PiperSpeaker(
-        tones[2],
-        player,
-        label=f"piper ({settings.piper_voice})",
-        tones=tones,
+    label = f"piper ({settings.piper_voice})"
+    renderer = PiperRenderer(tones, tones[2], label, identity)
+    return WavSpeaker(
+        renderer,
+        player or default_player(),
         cache_dir=Path(settings.voices_dir) / ".phrases",
-        cache_key=identity,
     )
-    return speaker
 
 
 def common_phrases(limit: int = 150) -> list[tuple[str, int]]:

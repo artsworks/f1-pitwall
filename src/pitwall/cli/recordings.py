@@ -97,30 +97,22 @@ def cmd_replay(args: argparse.Namespace) -> int:
     clock = VirtualClock() if speed is None else ReplayClock(speed, start=(from_us or 0) / 1e6)
     if args.serve:
         from pitwall.audio.dispatcher import LogSink
-        from pitwall.audio.piper_tts import PiperSpeaker
-        from pitwall.audio.speaker import make_speaker
+        from pitwall.audio.speaker import FlushableSpeaker, make_speaker, wire_speaker
         from pitwall.server.hub import Hub
         from pitwall.server.review import ReviewController
 
         hub = Hub()
         seed_db = Database(args.seed_db)
 
-        # Same speaker wiring as live `cmd_start`. Limits:
-        # - Piper synthesises in real time, so audio keeps pace only at --speed 1
-        #   (maybe 2). Faster replays lag behind the dashboard.
-        # - WinsoundPlayer also plays on the serving PC, so with browser SOUND on
-        #   the same machine you hear each call twice.
-        # - Without a downloaded voice (`pitwall voice get`) make_speaker falls back
-        #   to SAPI or null, no WAVs stream, and the browser reads calls itself.
+        # Same speaker wiring as live `cmd_start`. Slow renderers may lag at high
+        # replay speeds. Local playback can sound twice when browser audio is on.
+        # Non-streaming speakers leave browser call playback available.
         speaker = make_speaker(ConfigStore().current().speech)
-        if isinstance(speaker, PiperSpeaker):
-            speaker.on_audio = hub.audio
-            hub.streams_audio = True
 
         def _engine_factory(clk: Clock) -> Engine:
             # Play and seek rebuild the engine, and call ids restart at c-1.
             # Drop the old engine's pending audio so it can't play or mark new calls.
-            if isinstance(speaker, PiperSpeaker):
+            if isinstance(speaker, FlushableSpeaker):
                 speaker.flush()
             eng = build_engine(
                 clock=clk,
@@ -128,14 +120,9 @@ def cmd_replay(args: argparse.Namespace) -> int:
                 db=seed_db,
                 synthetic=synthetic,
             )
-
-            def on_spoken(cid: str, t: float) -> None:
-                hub.spoken(cid, t)
-                eng.metrics.note_spoken(cid, t)
-
-            speaker.on_spoken = on_spoken
-            if isinstance(speaker, PiperSpeaker):
-                speaker.on_dropped = eng.dispatcher.note_dropped
+            wire_speaker(speaker, hub, eng.dispatcher)
+            if getattr(eng, "speaker_name", "null") == "null":
+                eng.speaker_name = speaker.name
             if args.mask_restricted:
                 eng.ingest.transform = mask_restricted
             return eng

@@ -34,7 +34,7 @@ EventSink = Callable[[str, str, float, float], None]
 
 
 def _phrase(result: Any) -> tuple[str, float]:
-    import win32com.client  # type: ignore[import-untyped]
+    import win32com.client
 
     res = win32com.client.Dispatch(result)
     info = res.PhraseInfo
@@ -118,13 +118,14 @@ class SapiRecognizer:
     ) -> None:
         if sys.platform != "win32":
             raise RuntimeError("SapiRecognizer requires Windows")
-        import pythoncom  # type: ignore[import-untyped]
+        import pythoncom
         import win32com.client
 
         pythoncom.CoInitialize()
         self._pythoncom: Any = pythoncom
         t0 = time.monotonic()
-        reco: Any = win32com.client.gencache.EnsureDispatch("SAPI.SpInprocRecognizer")
+        client: Any = win32com.client
+        reco: Any = client.gencache.EnsureDispatch("SAPI.SpInprocRecognizer")
         recs = reco.GetRecognizers()
         if recs.Count == 0:
             raise RuntimeError("no SAPI recogniser installed (Settings > Time & language > Speech)")
@@ -159,7 +160,7 @@ class SapiRecognizer:
             except Exception:
                 self.props[prop] = False
         ctx: Any = reco.CreateRecoContext()
-        events: Any = win32com.client.WithEvents(ctx, _Events)
+        events: Any = client.WithEvents(ctx, _Events)
         events.sink = on_event
         g: Any = ctx.CreateGrammar(1)
         self.grammar_mode = self._load(g, grammar, grammar_mode)

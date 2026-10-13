@@ -65,7 +65,7 @@ policy:
   p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
-  engine: "auto"          # auto = piper if downloaded, else SAPI on Windows; omnivoice is opt-in
+  engine: "auto"          # auto selects the platform default; registered engines can use their id
   voice: null             # SAPI voice name filter
   piper_voice: "en_GB-northern_english_male-medium"
   piper_speed: 1.3        # >1 faster; 1.0 = voice natural pace

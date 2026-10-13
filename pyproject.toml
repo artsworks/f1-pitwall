@@ -32,6 +32,7 @@ dev = [
     "mypy",
     "types-PyYAML",
     "python-semantic-release~=10.6.2",
+    "types-pywin32>=312.0.0.20261006",
 ]
 
 [tool.semantic_release]

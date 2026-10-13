@@ -313,8 +313,7 @@ def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, obj
 
 
 def cmd_start(args: argparse.Namespace) -> int:
-    from pitwall.audio.piper_tts import PiperSpeaker
-    from pitwall.audio.speaker import make_speaker
+    from pitwall.audio.speaker import make_speaker, wire_speaker
     from pitwall.doctor import set_below_normal_priority
     from pitwall.net.recording import RecordingRotator
     from pitwall.net.udp import listen as udp_listen
@@ -398,15 +397,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     dispatcher.on_press_event = lambda payload: hub.broadcast("press", payload)
 
-    def on_spoken(cid: str, t: float) -> None:
-        hub.spoken(cid, t)
-        dispatcher.metrics.note_spoken(cid, t)
-
-    speaker.on_spoken = on_spoken
-    if isinstance(speaker, PiperSpeaker):
-        speaker.on_audio = hub.audio
-        speaker.on_dropped = dispatcher.note_dropped
-        hub.streams_audio = True
+    wire_speaker(speaker, hub, dispatcher)
     engine = Engine(
         store,
         clock,

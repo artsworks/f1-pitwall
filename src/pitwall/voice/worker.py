@@ -70,7 +70,7 @@ class VoiceWorker:
         rec: StaRecognizer | None = None
         try:
             if self._com:
-                import pythoncom as com_module  # type: ignore[import-untyped]
+                import pythoncom as com_module
 
                 pythoncom = com_module
                 pythoncom.CoInitialize()

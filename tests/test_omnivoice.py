@@ -4,36 +4,30 @@ import asyncio
 import base64
 import io
 import json
-import socket
-import sys
 import threading
 import time
 import wave
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
 
-from pitwall.audio.dispatcher import Call
 from pitwall.audio.omnivoice_tts import (
     OmniVoiceError,
-    OmniVoiceSpeaker,
     fetch_model_id,
     make_omnivoice_speaker,
     make_omnivoice_synth,
     omnivoice_cache_key,
     register_voice,
 )
-from pitwall.audio.piper_tts import (
-    NullPlayer,
-    PiperSpeaker,
-    default_player,
-    to_wav,
-)
+from pitwall.audio.piper_tts import to_wav
+from pitwall.audio.wav_speaker import NullPlayer, WavSpeaker, default_player
 from pitwall.config.models import SpeechSettings
+from tests.audio_contract import FakePlayer, assert_pitwall_wav, make_call
 
 SMALL_WAV = to_wav(np.zeros(240, dtype=np.float32), 24_000)
 
@@ -117,7 +111,7 @@ def _settings(url: str, tmp_path: Path, **updates: object) -> SpeechSettings:
     return SpeechSettings(**values)
 
 
-def _wait_for(predicate: Any, timeout_s: float = 2.0) -> None:
+def _wait_for(predicate, timeout_s: float = 2.0) -> None:  # type: ignore[no-untyped-def]
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if predicate():
@@ -151,9 +145,7 @@ def test_synth_posts_exact_request_and_returns_wav(fake_server, tmp_path: Path) 
 
 def test_synth_prepends_radio_click(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     url, _ = fake_server
-    settings = _settings(url, tmp_path, radio_click=True)
-
-    wav, seconds = make_omnivoice_synth(settings)("Box this lap.")
+    wav, seconds = make_omnivoice_synth(_settings(url, tmp_path, radio_click=True))("Box this lap.")
 
     with wave.open(io.BytesIO(wav), "rb") as reader:
         assert reader.getframerate() == 24_000
@@ -187,7 +179,7 @@ def test_register_voice_posts_reference_and_returns_identity(fake_server, tmp_pa
     assert request[0] == "/v1/audio/voices"
     assert request[1]["name"] == "test-voice"
     assert request[1]["ref_text"] == "reference words"
-    assert base64.b64decode(request[1]["wav_b64"]) == SMALL_WAV
+    assert request[1]["wav_b64"] == base64.b64encode(SMALL_WAV).decode("ascii")
     assert identity
 
 
@@ -207,43 +199,63 @@ def test_fetch_model_id_reads_first_model(fake_server, tmp_path: Path) -> None: 
     assert fetch_model_id(_settings(url, tmp_path)) == "voice-model.gguf"
 
 
-def test_make_speaker_falls_back_to_null_when_omnivoice_and_piper_are_unavailable(
-    tmp_path: Path,
-) -> None:
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    url = f"http://127.0.0.1:{sock.getsockname()[1]}"
-    sock.close()
+def test_make_omnivoice_speaker_uses_fallback_without_piper(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
 
-    from pitwall.audio.speaker import NullSpeaker, make_speaker
-
-    speaker = make_speaker(
-        SpeechSettings(
-            engine="omnivoice",
-            omnivoice_url=url,
-            voices_dir=str(tmp_path),
-        )
+    url, _ = fake_server
+    monkeypatch.setattr(
+        omnivoice_module,
+        "make_piper_tone_synths",
+        lambda settings: (_ for _ in ()).throw(FileNotFoundError("no Piper model")),
     )
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path), FakePlayer())
+    try:
+        assert isinstance(speaker, WavSpeaker)
+        assert speaker._renderer.fallback_tones is None
+        if __import__("sys").platform != "win32":
+            assert isinstance(default_player(), NullPlayer)
+            assert speaker._fallback is not None
+    finally:
+        speaker.close()
 
-    assert isinstance(speaker, NullSpeaker)
-    speaker.close()
+
+def test_make_omnivoice_speaker_uses_piper_provisional_audio(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, _ = fake_server
+    tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
+    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path), FakePlayer())
+    try:
+        assert speaker._fallback is None
+        assert speaker._renderer.provisional("test", 2) == (SMALL_WAV, 0.01)
+    finally:
+        speaker.close()
 
 
-def test_make_speaker_falls_through_to_piper(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    import pitwall.audio.speaker as speaker_module
+def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
 
-    sentinel = PiperSpeaker(lambda text: (b"wav", 0.0), NullPlayer(), label="sentinel")
-    monkeypatch.setattr(speaker_module, "make_piper_speaker", lambda settings: sentinel)
-    speaker = speaker_module.make_speaker(
-        SpeechSettings(
-            engine="omnivoice",
-            omnivoice_url="http://127.0.0.1:1",
-            voices_dir=str(tmp_path),
-        )
+    url, _ = fake_server
+    tones = {priority: lambda _text: (SMALL_WAV, 0.01) for priority in (1, 2, 3)}
+    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path), FakePlayer())
+    events: list[str] = []
+    speaker.on_audio = lambda _call_id, _priority, wav: (
+        assert_pitwall_wav(wav),
+        events.append("audio"),
     )
-
-    assert speaker is sentinel
-    sentinel.close()
+    speaker.on_spoken = lambda _call_id, _time: events.append("spoken")
+    try:
+        speaker.speak(make_call("omnivoice-contract", text="Box this lap."))
+        _wait_for(lambda: events.count("spoken") == 1)
+        assert events == ["audio", "spoken"]
+    finally:
+        speaker.close()
 
 
 def test_omnivoice_cache_key_tracks_voice_configuration() -> None:
@@ -269,239 +281,8 @@ def test_omnivoice_cache_key_tracks_voice_configuration() -> None:
         assert omnivoice_cache_key(changed, model_id, ref_identity) != baseline
 
 
-class FakePlayer:
-    def play(self, wav: bytes) -> None:
-        pass
-
-    def stop(self) -> None:
-        pass
-
-
-def test_speaker_uses_fallback_then_background_cache_and_reuses_disk(
-    tmp_path: Path,
-) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-    omnivoice_calls: list[str] = []
-    fallback_calls: list[str] = []
-    omnivoice_wav = to_wav(np.zeros(480, dtype=np.float32), 24_000)
-
-    def omnivoice(text: str) -> tuple[bytes, float]:
-        omnivoice_calls.append(text)
-        entered.set()
-        assert release.wait(2)
-        return omnivoice_wav, 0.02
-
-    def fallback(text: str) -> tuple[bytes, float]:
-        fallback_calls.append(text)
-        return b"piper", 0.01
-
-    speaker = OmniVoiceSpeaker(
-        omnivoice,
-        {2: fallback},
-        FakePlayer(),
-        "omnivoice",
-        tmp_path / "phrases",
-        "key",
-    )
-    try:
-        assert speaker.render("first line") == (b"piper", 0.01)
-        assert entered.wait(1)
-        assert speaker.render("first line") == (b"piper", 0.01)
-        assert len(omnivoice_calls) == 1
-        release.set()
-        path = speaker._phrase_path((0, "first line"))
-        assert path is not None
-        _wait_for(path.is_file)
-        assert speaker.render("first line") == (omnivoice_wav, 0.02)
-    finally:
-        release.set()
-        speaker.close()
-
-    restarted_calls: list[str] = []
-
-    def should_not_render(text: str) -> tuple[bytes, float]:
-        restarted_calls.append(text)
-        return b"unexpected", 0.0
-
-    restarted = OmniVoiceSpeaker(
-        should_not_render,
-        {2: fallback},
-        FakePlayer(),
-        "omnivoice",
-        tmp_path / "phrases",
-        "key",
-    )
-    try:
-        assert restarted.render("first line") == (omnivoice_wav, 0.02)
-        assert restarted_calls == []
-        assert fallback_calls == ["first line", "first line"]
-    finally:
-        restarted.close()
-
-
-def test_speaker_without_fallback_renders_synchronously_and_caches(tmp_path: Path) -> None:
-    calls: list[str] = []
-
-    def synth(text: str) -> tuple[bytes, float]:
-        calls.append(text)
-        return b"omnivoice", 0.5
-
-    speaker = OmniVoiceSpeaker(synth, None, FakePlayer(), "omnivoice", tmp_path, "key")
-    try:
-        assert speaker.render("line") == (b"omnivoice", 0.5)
-        assert speaker.render("line", 1) == (b"omnivoice", 0.5)
-        assert calls == ["line"]
-    finally:
-        speaker.close()
-
-
-def test_synchronous_failure_uses_last_resort_with_original_call_and_callback(
-    tmp_path: Path,
-) -> None:
-    received: list[Call] = []
-    cancelled: list[str] = []
-    spoken = threading.Event()
-    spoken_ids: list[str] = []
-
-    class FakeLastResort:
-        name = "null"
-        speaks_audio = True
-        on_spoken = None
-        closed = False
-
-        def speak(self, call: Call) -> None:
-            received.append(call)
-            if self.on_spoken is not None:
-                self.on_spoken(call.id, time.time())
-
-        def cancel(self, call_id: str) -> None:
-            cancelled.append(call_id)
-
-        def close(self) -> None:
-            self.closed = True
-
-    def fail(text: str) -> tuple[bytes, float]:
-        raise OmniVoiceError("synthesis failed")
-
-    last_resort = FakeLastResort()
-    speaker = OmniVoiceSpeaker(
-        fail,
-        None,
-        FakePlayer(),
-        "omnivoice",
-        tmp_path,
-        "key",
-        last_resort=last_resort,
-    )
-
-    def on_spoken(call_id: str, _timestamp: float) -> None:
-        spoken_ids.append(call_id)
-        spoken.set()
-
-    speaker.on_spoken = on_spoken
-    call = Call(
-        id="original-id",
-        rule_id="test",
-        priority=2,
-        text="line",
-        tags=[],
-        deadline_ms=1000,
-        lap=0,
-        t=0.0,
-        trigger_t=0.0,
-    )
-    try:
-        speaker.speak(call)
-        assert spoken.wait(1.0)
-        assert received == [call]
-        assert received[0] is call
-        assert spoken_ids == ["original-id"]
-        speaker.cancel("cancel-id")
-    finally:
-        speaker.close()
-    assert cancelled == ["cancel-id"]
-    assert last_resort.closed
-
-
-def test_warm_deduplicates_and_uses_only_omnivoice(tmp_path: Path) -> None:
-    calls: list[str] = []
-    fallback_calls: list[str] = []
-
-    def omnivoice(text: str) -> tuple[bytes, float]:
-        calls.append(text)
-        return SMALL_WAV, 0.01
-
-    def fallback(text: str) -> tuple[bytes, float]:
-        fallback_calls.append(text)
-        return b"piper", 0.1
-
-    speaker = OmniVoiceSpeaker(omnivoice, {2: fallback}, FakePlayer(), "omnivoice", tmp_path, "key")
-    existing = speaker._phrase_path((0, "cached"))
-    assert existing is not None
-    existing.parent.mkdir(parents=True, exist_ok=True)
-    existing.write_bytes(SMALL_WAV)
-    try:
-        assert speaker.warm([("cached", 2), ("line", 1), ("line", 3)]) == 2
-        assert calls == ["line"]
-        assert fallback_calls == []
-        line_path = speaker._phrase_path((0, "line"))
-        assert line_path is not None and line_path.read_bytes() == SMALL_WAV
-    finally:
-        speaker.close()
-
-
-def test_make_omnivoice_speaker_is_piper_subclass_and_uses_null_player(
-    fake_server, tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
-    import pitwall.audio.omnivoice_tts as omnivoice_module
-
-    url, _ = fake_server
-
-    def no_piper(settings: SpeechSettings) -> dict[int, Any]:
-        raise FileNotFoundError("no local Piper model")
-
-    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", no_piper)
-    speaker = make_omnivoice_speaker(_settings(url, tmp_path))
-    try:
-        assert isinstance(speaker, PiperSpeaker)
-        assert isinstance(speaker._player, NullPlayer)
-        if sys.platform != "win32":
-            from pitwall.audio.speaker import NullSpeaker
-
-            assert isinstance(default_player(), NullPlayer)
-            assert isinstance(speaker._last_resort, NullSpeaker)
-    finally:
-        speaker.close()
-
-
-def test_make_omnivoice_speaker_with_piper_has_no_last_resort(
-    fake_server, tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
-    import pitwall.audio.omnivoice_tts as omnivoice_module
-
-    url, _ = fake_server
-
-    def fallback(text: str) -> tuple[bytes, float]:
-        return SMALL_WAV, 0.01
-
-    monkeypatch.setattr(
-        omnivoice_module,
-        "make_piper_tone_synths",
-        lambda settings: {1: fallback, 2: fallback, 3: fallback},
-    )
-    speaker = make_omnivoice_speaker(_settings(url, tmp_path))
-    try:
-        assert speaker._last_resort is None
-    finally:
-        speaker.close()
-
-
-def test_voice_warm_auto_uses_configured_engine_and_explicit_piper(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
-    from types import SimpleNamespace
-
-    import pitwall.audio.omnivoice_tts as omnivoice_module
-    import pitwall.audio.piper_tts as piper_module
+def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.speaker as speaker_module
     import pitwall.cli.voice as voice_module
     from pitwall.cli import main
 
@@ -520,29 +301,39 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_piper(monkeypatch, 
     settings = SpeechSettings(engine="omnivoice")
     store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
     monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
-    chosen: list[str] = []
+    seen: list[str] = []
     speakers: list[FakeSpeaker] = []
 
-    def make(name: str) -> FakeSpeaker:
-        chosen.append(name)
+    def make_speaker(speech: SpeechSettings) -> FakeSpeaker:
+        seen.append(speech.engine)
         speaker = FakeSpeaker()
         speakers.append(speaker)
         return speaker
 
-    monkeypatch.setattr(
-        omnivoice_module, "make_omnivoice_speaker", lambda speech: make("omnivoice")
-    )
-    monkeypatch.setattr(piper_module, "make_piper_speaker", lambda speech: make("piper"))
+    monkeypatch.setattr(speaker_module, "make_speaker", make_speaker)
     assert main(["voice", "warm"]) == 0
     assert main(["voice", "warm", "--engine", "piper"]) == 0
-    assert chosen == ["omnivoice", "piper"]
+    assert seen == ["omnivoice", "piper"]
     assert all(speaker.closed for speaker in speakers)
     assert "cached " in capsys.readouterr().out
 
 
-def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
-    from types import SimpleNamespace
+def test_voice_warm_rejects_non_warmable_engine(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.speaker as speaker_module
+    import pitwall.cli.voice as voice_module
+    from pitwall.audio.speaker import NullSpeaker
+    from pitwall.cli import main
 
+    settings = SpeechSettings(engine="null")
+    store = SimpleNamespace(current=lambda: SimpleNamespace(speech=settings))
+    monkeypatch.setattr(voice_module, "ConfigStore", lambda: store)
+    monkeypatch.setattr(speaker_module, "make_speaker", lambda _settings: NullSpeaker())
+
+    assert main(["voice", "warm"]) == 1
+    assert "does not support phrase warming" in capsys.readouterr().out
+
+
+def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.speaker as speaker_module
     import pitwall.cli.voice as voice_module
     from pitwall.audio.speaker import NullSpeaker
@@ -563,49 +354,6 @@ def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, cap
     assert "engine=omnivoice" in capsys.readouterr().out
     assert main(["voice", "say", "--engine", "omnivoice", "test"]) == 0
     assert seen[-1].engine == "omnivoice"
-
-
-def test_sync_render_regenerates_corrupt_cached_wav(tmp_path: Path) -> None:
-    calls: list[str] = []
-
-    def synth(text: str) -> tuple[bytes, float]:
-        calls.append(text)
-        return SMALL_WAV, 0.01
-
-    speaker = OmniVoiceSpeaker(synth, None, FakePlayer(), "omnivoice", tmp_path, "key")
-    path = speaker._phrase_path((0, "line"))
-    assert path is not None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(SMALL_WAV[:-8])
-    try:
-        assert speaker.render("line") == (SMALL_WAV, 0.01)
-        assert calls == ["line"]
-        assert path.read_bytes() == SMALL_WAV
-    finally:
-        speaker.close()
-
-
-def test_warm_regenerates_corrupt_cache_and_removes_temporary_files(
-    tmp_path: Path,
-) -> None:
-    calls: list[str] = []
-
-    def synth(text: str) -> tuple[bytes, float]:
-        calls.append(text)
-        return SMALL_WAV, 0.01
-
-    speaker = OmniVoiceSpeaker(synth, None, FakePlayer(), "omnivoice", tmp_path, "key")
-    path = speaker._phrase_path((0, "line"))
-    assert path is not None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(SMALL_WAV[:-8])
-    try:
-        assert speaker.warm([("line", 2)]) == 1
-        assert calls == ["line"]
-        assert path.read_bytes() == SMALL_WAV
-        assert not list(tmp_path.glob("*.tmp"))
-    finally:
-        speaker.close()
 
 
 def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
