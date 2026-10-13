@@ -80,3 +80,13 @@ needed for cool-down takeover. Explicitly leave unavailable states untested.
 Temporary capture tooling may use `uv run --with websocket-client` and
 `uv run --with pillow`; these are not application dependencies. Keep helpers,
 screenshots, and any approved generated packet fixtures outside the repository.
+
+## Speech audio checks
+
+Run these checks with a WebSocket client on the dashboard socket, or in the browser console.
+
+- Check that `hello.payload.audio` is `true` only when the selected engine streams audio. Piper and OmniVoice stream. SAPI and `null` do not.
+- After ENABLE SOUND, decode one `audio` frame payload from base64. Open it with Python `wave`. Check that it has 1 channel, a sample width of 2 and a frame rate above 0.
+- Check that each call in the radio log moves from `dispatched` to `started`. A cancelled call moves to `interrupted` if it had started, else to `dropped`. An engine drop also shows `dropped`.
+- Check that the `latency` block in the state payload has `tts_p99_ms`, `queue_count`, `queue_oldest_s`, `queue_wait_p99_ms` and `packet_to_ws_p99_ms`.
+- In replay with a streaming engine, seek, then check that `audio` frames continue. No frame may arrive for a call id from before the seek.

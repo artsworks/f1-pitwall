@@ -3,10 +3,13 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import time
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from pitwall.audio.dispatcher import Call
 from pitwall.clock import PausableClock, VirtualClock
 from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.metrics import Metrics
@@ -104,29 +107,33 @@ def test_review_api_grade(tmp_path: Path) -> None:
 def test_replay_serve_streams_speaker_audio(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.speaker as speaker_module
     import pitwall.cli.recordings as cli_module
-    from pitwall.audio.piper_tts import PiperSpeaker
     from pitwall.cli import main
 
-    class _Player:
-        def play(self, wav: bytes) -> None:
+    class _Speaker:
+        name = "fake-stream"
+        speaks_audio = True
+        supports_audio_stream = True
+        on_spoken = None
+        on_audio = None
+        on_dropped = None
+
+        def __init__(self) -> None:
+            self.flushes = 0
+            self.closed = False
+
+        def speak(self, call) -> None:  # type: ignore[no-untyped-def]
             pass
 
-        def stop(self) -> None:
+        def cancel(self, call_id: str) -> None:
             pass
-
-    class _Speaker(PiperSpeaker):
-        flushes = 0
-        closed = False
 
         def flush(self) -> None:
             self.flushes += 1
-            super().flush()
 
         def close(self) -> None:
             self.closed = True
-            super().close()
 
-    speaker = _Speaker(lambda text: (text.encode(), 0.0), _Player())
+    speaker = _Speaker()
     monkeypatch.setattr(speaker_module, "make_speaker", lambda _settings: speaker)
     seen: dict[str, object] = {}
 
@@ -135,10 +142,61 @@ def test_replay_serve_streams_speaker_audio(tmp_path: Path, monkeypatch) -> None
         seen["streams"] = hub.streams_audio
         seen["on_audio"] = speaker.on_audio == hub.audio
         seen["sinks"] = engine.dispatcher.sinks
+        seen["speaker_name"] = engine.speaker_name
+        first_call = Call(
+            id="review-spoken",
+            rule_id="test",
+            priority=2,
+            text="line",
+            tags=[],
+            deadline_ms=1000,
+            lap=0,
+            t=0.0,
+            trigger_t=0.0,
+        )
+        hub.speak(first_call)
+        handoff = time.time()
+        engine.dispatcher.metrics.note_handoff(first_call.id, handoff)
+        assert speaker.on_spoken is not None
+        assert speaker.on_dropped is not None
+        speaker.on_spoken(first_call.id, handoff + 0.1)
+        seen["first_tts_ms"] = engine.dispatcher.metrics.summary()["tts_ms"]["p99"]
+        drop_call = Call(
+            id="review-dropped",
+            rule_id="test",
+            priority=2,
+            text="drop",
+            tags=[],
+            deadline_ms=1000,
+            lap=0,
+            t=0.0,
+            trigger_t=0.0,
+        )
+        hub.speak(drop_call)
+        speaker.on_dropped(drop_call.id)
         flushes = speaker.flushes
         rebuilt = review._engine_factory(VirtualClock())  # noqa: SLF001 - seek path
         seen["rebuilt_sinks"] = rebuilt.dispatcher.sinks
         seen["flushed_on_rebuild"] = speaker.flushes == flushes + 1
+        rebuilt_call = Call(
+            id="review-rebuilt",
+            rule_id="test",
+            priority=2,
+            text="rebuilt",
+            tags=[],
+            deadline_ms=1000,
+            lap=0,
+            t=0.0,
+            trigger_t=0.0,
+        )
+        hub.speak(rebuilt_call)
+        rebuilt.dispatcher.metrics.note_handoff(rebuilt_call.id, handoff)
+        assert speaker.on_spoken is not None
+        speaker.on_spoken(rebuilt_call.id, handoff + 0.2)
+        seen["rebuilt_tts_ms"] = rebuilt.dispatcher.metrics.summary()["tts_ms"]["p99"]
+        seen["dropped_state"] = {row["id"]: row["audio"] for row in hub.recent_calls}[
+            "review-dropped"
+        ]
 
     monkeypatch.setattr(cli_module, "_serve", fake_serve)
     rec = _make_recording(tmp_path)
@@ -148,5 +206,9 @@ def test_replay_serve_streams_speaker_audio(tmp_path: Path, monkeypatch) -> None
     assert seen["on_audio"] is True
     assert speaker in seen["sinks"]  # type: ignore[operator]
     assert speaker in seen["rebuilt_sinks"]  # type: ignore[operator]
+    assert seen["speaker_name"] == speaker.name
     assert seen["flushed_on_rebuild"] is True
+    assert seen["first_tts_ms"] == pytest.approx(100.0)
+    assert seen["rebuilt_tts_ms"] == pytest.approx(200.0)
+    assert seen["dropped_state"] == "dropped"
     assert speaker.closed

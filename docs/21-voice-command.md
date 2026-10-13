@@ -91,8 +91,8 @@ request appears in the pill for 3 seconds. A cap expiry displays `NO REQUEST`.
 When the channel opens the dispatcher enters **hold** and stays there until the reply
 has finished speaking (or the channel closed with nothing to answer). While on hold:
 
-- Speech in progress at P2/P3 is cut at the end of the current sentence (Piper renders
-  one call as one WAV; it is stopped, and the call is re-queued as held).
+- Speech in progress at P2/P3 is cut at the end of the current sentence (the speaker
+  plays one call as one WAV. The speaker stops it, and the dispatcher re-queues the call as held).
 - New P2/P3 candidates are accepted by the rules and dispatcher as usual (cooldowns,
   dedupe and budget still book them) but go into the **held list** with their
   submission time, priority, `still_true` predicate and topic, instead of being spoken.
@@ -342,7 +342,7 @@ another machine. The architecture allows all three without backend code changes.
 | Close reaching the recogniser (tap: `BUTN` → backend → voice process on loopback) | 10–40 ms |
 | Recogniser finalise (small model, streaming already consumed the audio) | 100–300 ms |
 | Intent match + `menu.answer()` | < 5 ms |
-| Piper synthesis (cached common replies: 0; else ~40 ms measured) | 0–60 ms |
+| Render by the selected engine. Cached replies take 0 ms. Uncached Piper takes about 40 ms. Uncached OmniVoice plays Piper first, or waits up to `omnivoice_timeout_s` without Piper. | 0–60 ms with Piper |
 | Playback start (winsound / device) | ~50 ms |
 | **Total** | **~0.2–0.5 s after a closing tap; ~1.2–1.5 s after the last word on silence close** — the pause a real engineer takes before answering |
 

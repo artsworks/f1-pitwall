@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -13,7 +15,9 @@ from pitwall.config.loader import ConfigStore
 def cmd_voice(args: argparse.Namespace) -> int:
     """Piper voices, speech check and the voice-command channel (docs/21)."""
     action = args.voice_action or "list"
-    if action in ("list", "get", "warm"):
+    if action == "warm":
+        return _voice_warm(args)
+    if action in ("list", "get"):
         return _voice_piper(action, getattr(args, "names", []))
     if action == "say":
         return _voice_say(args)
@@ -22,11 +26,13 @@ def cmd_voice(args: argparse.Namespace) -> int:
 
 def _voice_say(args: argparse.Namespace) -> int:
     """Diagnose the audio path: speak TEXT and report when it was spoken."""
-    from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth
+    from pitwall.audio.piper_tts import make_piper_synth
     from pitwall.audio.speaker import make_speaker
 
     store = ConfigStore()
-    update: dict[str, object] = {"engine": args.engine}
+    update: dict[str, object] = {}
+    if args.engine is not None:
+        update["engine"] = args.engine
     if args.voice:
         update["piper_voice"] = args.voice
     if args.speed:
@@ -47,7 +53,8 @@ def _voice_say(args: argparse.Namespace) -> int:
         return 0
     speaker = make_speaker(speech)
     print(
-        f"speaker: {speaker.name} (engine={args.engine} rate={speech.rate} volume={speech.volume})"
+        f"speaker: {speaker.name} (engine={speech.engine} "
+        f"rate={speech.rate} volume={speech.volume})"
     )
     done = threading.Event()
     spoken_at: list[float] = []
@@ -73,8 +80,8 @@ def _voice_say(args: argparse.Namespace) -> int:
     )
     if done.wait(timeout=10.0):
         print(f"spoken after {(spoken_at[0] - t0) * 1000:.0f} ms")
-        if isinstance(speaker, PiperSpeaker):
-            time.sleep(max(0.0, speaker.busy_until - time.monotonic()))
+        busy_until = getattr(speaker, "busy_until", time.monotonic())
+        time.sleep(max(0.0, busy_until - time.monotonic()))
     else:
         print("TIMEOUT: nothing spoken in 10 s")
     speaker.close()
@@ -84,10 +91,8 @@ def _voice_say(args: argparse.Namespace) -> int:
 def _voice_piper(action: str, names: list[str]) -> int:
     from pitwall.audio.piper_tts import (
         SUGGESTED_VOICES,
-        common_phrases,
         download_voice,
         installed_voices,
-        make_piper_speaker,
     )
 
     speech = ConfigStore().current().speech
@@ -95,14 +100,6 @@ def _voice_piper(action: str, names: list[str]) -> int:
         for name in names or [speech.piper_voice]:
             path = download_voice(speech, name)
             print(f"downloaded {name} -> {path}")
-        return 0
-    if action == "warm":
-        speaker = make_piper_speaker(speech)
-        try:
-            count = speaker.warm(common_phrases(speech.warm_phrases))
-            print(f"cached {count} phrases for {speech.piper_voice}")
-        finally:
-            speaker.close()
         return 0
     have = installed_voices(speech)
     print(f"voices in {speech.voices_dir}/ (configured: {speech.piper_voice}):")
@@ -113,6 +110,62 @@ def _voice_piper(action: str, names: list[str]) -> int:
     print("suggested: " + ", ".join(SUGGESTED_VOICES))
     print("all voices: https://rhasspy.github.io/piper-samples/")
     return 0
+
+
+def _voice_warm(args: argparse.Namespace) -> int:
+    from pitwall.audio.piper_tts import common_phrases
+    from pitwall.audio.speaker import ENGINES, WarmableSpeaker
+
+    settings = ConfigStore().current()
+    speech = settings.speech
+    engine = args.engine if args.engine != "auto" else speech.engine
+    if engine == "auto":
+        engine = "piper"
+    if engine not in ENGINES:
+        print(f"unknown speech engine: {engine}")
+        return 1
+    try:
+        speaker = ENGINES[engine].factory(speech)
+    except Exception as exc:
+        print(f"{engine} unavailable: {exc}")
+        return 1
+    if not isinstance(speaker, WarmableSpeaker):
+        print(f"{speaker.name} does not support phrase warming")
+        speaker.close()
+        return 1
+
+    try:
+        if args.replay:
+            from pitwall.cli.common import RecordingNotFoundError, _resolve_recording
+            from pitwall.clock import VirtualClock
+            from pitwall.engine import build_engine, run_replay
+
+            try:
+                path = _resolve_recording(args.replay, settings)
+            except RecordingNotFoundError as exc:
+                print(f"voice warm: {exc}")
+                return 1
+            with tempfile.TemporaryDirectory(prefix="pitwall-voice-warm-") as directory:
+                engine = build_engine(
+                    clock=VirtualClock(),
+                    sinks=[],
+                    decision_log_path=Path(directory) / "decisions.jsonl",
+                )
+                try:
+                    _, calls = asyncio.run(run_replay(path, engine, None))
+                finally:
+                    engine.dispatcher.log.close()
+            phrases = sorted(
+                {(call.text, call.priority) for call in calls},
+                key=lambda phrase: (phrase[1], phrase[0]),
+            )
+        else:
+            phrases = common_phrases(speech.warm_phrases)
+        count = speaker.warm(phrases)
+        print(f"cached {count} phrases for {speaker.name}")
+        return 0
+    finally:
+        speaker.close()
 
 
 def _voice_channel(action: str, args: argparse.Namespace) -> int:

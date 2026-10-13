@@ -65,10 +65,18 @@ policy:
   p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
-  engine: "auto"          # auto = piper if its voice is downloaded, else sapi (Windows)
+  engine: "auto"          # auto selects the platform default; registered engines can use their id
   voice: null             # SAPI voice name filter
   piper_voice: "en_GB-northern_english_male-medium"
   piper_speed: 1.3        # >1 faster; 1.0 = voice natural pace
+  omnivoice_url: "http://127.0.0.1:8080" # OmniVoice server base URL
+  omnivoice_voice: ""     # registered server voice name
+  omnivoice_seed: 42      # fixed seed for repeatable audio
+  omnivoice_language: "English"
+  omnivoice_timeout_s: 2.5 # startup probe and synchronous render timeout
+  omnivoice_voice_version: "1" # bump after changing the reference voice
+  omnivoice_ref_wav: ""   # reference WAV path for automatic registration
+  omnivoice_ref_text: ""  # transcript text file path for automatic registration
   voices_dir: "voices"
   warm_phrases: 150       # phrases pre-rendered by 'pitwall voice warm'; lower it to save disk space
   rate: 0
