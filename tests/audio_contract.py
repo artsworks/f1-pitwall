@@ -91,12 +91,15 @@ class FakePlayer:
     def __init__(self) -> None:
         self.played: list[bytes] = []
         self.stops = 0
+        self.events: list[str] = []
 
     def play(self, wav: bytes) -> None:
         self.played.append(wav)
+        self.events.append("play")
 
     def stop(self) -> None:
         self.stops += 1
+        self.events.append("stop")
 
 
 def _wait_for(predicate, timeout: float = 2.0) -> None:  # type: ignore[no-untyped-def]
@@ -131,6 +134,43 @@ def check_speaker_contract(speaker, player=None) -> None:  # type: ignore[no-unt
         assert events.count(("audio", call_id)) == 1
         assert events.count(("spoken", call_id)) == 1
         assert events.index(("audio", call_id)) < events.index(("spoken", call_id))
+
+    renderer = getattr(speaker, "_renderer", None)
+    original_duration = getattr(renderer, "duration_s", None)
+    player_events = getattr(player, "events", None)
+    play_start = len(player_events) if isinstance(player_events, list) else 0
+    if original_duration is not None:
+        renderer.duration_s = max(original_duration, 5.0)
+    try:
+        speaker.speak(make_call("contract-long-p2", text="contract-long-p2"))
+        _wait_for(lambda: ("spoken", "contract-long-p2") in events)
+        long_p2_play = (
+            next(
+                (
+                    index
+                    for index in range(play_start, len(player_events))
+                    if player_events[index] == "play"
+                ),
+                None,
+            )
+            if isinstance(player_events, list)
+            else None
+        )
+        speaker.speak(make_call("contract-preempt-p1", priority=1, text="contract-preempt-p1"))
+        _wait_for(lambda: ("spoken", "contract-preempt-p1") in events, timeout=1.0)
+        if long_p2_play is not None:
+            p1_play = next(
+                index
+                for index in range(long_p2_play + 1, len(player_events))
+                if player_events[index] == "play"
+            )
+            assert any(event == "stop" for event in player_events[long_p2_play + 1 : p1_play])
+    finally:
+        if original_duration is not None:
+            renderer.duration_s = original_duration
+        flush = getattr(speaker, "flush", None)
+        if callable(flush):
+            flush()
 
     speaker.cancel("contract-cancelled")
     speaker.speak(make_call("contract-cancelled"))

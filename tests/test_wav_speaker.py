@@ -35,9 +35,10 @@ def _wait_for(predicate, timeout: float = 2.0) -> None:  # type: ignore[no-untyp
 
 
 def test_wav_speaker_contract() -> None:
-    speaker = WavSpeaker(FakeRenderer(), FakePlayer())
+    player = FakePlayer()
+    speaker = WavSpeaker(FakeRenderer(), player)
     try:
-        check_speaker_contract(speaker)
+        check_speaker_contract(speaker, player)
     finally:
         speaker.close()
 
@@ -56,6 +57,33 @@ def test_p1_preempts_and_jumps_queue() -> None:
         _wait_for(lambda: "urgent" in spoken)
         assert player.stops >= 1
         assert any(text == "urgent" for text, _, _ in renderer.calls)
+    finally:
+        speaker.close()
+
+
+def test_flush_wakes_worker_for_post_seek_call() -> None:
+    renderer = FakeRenderer(duration_s=10.0)
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    spoken: list[str] = []
+    old_spoken = threading.Event()
+    new_spoken = threading.Event()
+
+    def on_spoken(call_id: str, _time: float) -> None:
+        spoken.append(call_id)
+        if call_id == "old":
+            old_spoken.set()
+        if call_id == "after-seek":
+            new_spoken.set()
+
+    speaker.on_spoken = on_spoken
+    try:
+        speaker.speak(make_call("old", text="old"))
+        assert old_spoken.wait(1.0)
+        speaker.flush()
+        speaker.speak(make_call("after-seek", text="after-seek"))
+        assert new_spoken.wait(0.5)
+        assert spoken[-1] == "after-seek"
     finally:
         speaker.close()
 
@@ -92,22 +120,34 @@ def test_cancel_before_and_during_playback() -> None:
     speaker = WavSpeaker(FakeRenderer(), player)
     spoken: list[str] = []
     audio: list[str] = []
+    play_cancelled = threading.Event()
+    barrier_spoken = threading.Event()
     speaker.on_audio = lambda call_id, _priority, _wav: audio.append(call_id)
-    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+
+    def on_spoken(call_id: str, _time: float) -> None:
+        spoken.append(call_id)
+        if call_id == "barrier":
+            barrier_spoken.set()
+
+    speaker.on_spoken = on_spoken
 
     original_play = player.play
 
     def cancel_during_play(wav: bytes) -> None:
         original_play(wav)
         speaker.cancel("cancel-during-play")
+        play_cancelled.set()
 
     player.play = cancel_during_play
     try:
         speaker.cancel("cancelled-before-play")
         speaker.speak(make_call("cancelled-before-play"))
         speaker.speak(make_call("cancel-during-play"))
-        _wait_for(lambda: spoken == ["cancel-during-play"])
-        assert audio == []
+        assert play_cancelled.wait(1.0)
+        speaker.speak(make_call("barrier"))
+        assert barrier_spoken.wait(1.0)
+        assert spoken == ["barrier"]
+        assert audio == ["barrier"]
         assert player.played
     finally:
         speaker.close()
@@ -161,6 +201,63 @@ def test_non_priority_renderer_uses_one_cache_slot(tmp_path: Path) -> None:
     try:
         assert speaker.warm([("same", 1), ("same", 2)]) == 1
         assert len(renderer.calls) == 1
+    finally:
+        speaker.close()
+
+
+def test_live_cache_write_failure_does_not_block_audio(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    def fail_write(_path: Path, _wav: bytes) -> None:
+        raise PermissionError("cache is read-only")
+
+    monkeypatch.setattr(wav_speaker_module, "_write_cache", fail_write)
+    player = FakePlayer()
+    speaker = WavSpeaker(FakeRenderer(), player, cache_dir=tmp_path)
+    audio: list[str] = []
+    spoken: list[str] = []
+    speaker.on_audio = lambda call_id, _priority, _wav: audio.append(call_id)
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("live", text="live"))
+        _wait_for(lambda: spoken == ["live"])
+        assert audio == ["live"]
+        assert player.played
+        with pytest.raises(PermissionError, match="cache is read-only"):
+            speaker.warm([("warm", 2)])
+    finally:
+        speaker.close()
+
+
+def test_background_cache_write_failure_is_best_effort(monkeypatch, tmp_path: Path, caplog) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    class ProvisionalRenderer(FakeRenderer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.provisional_wav, self.provisional_seconds = super().render("provisional", 2)
+
+        def provisional(self, _text: str, _priority: int) -> tuple[bytes, float]:
+            return self.provisional_wav, self.provisional_seconds
+
+    def fail_write(_path: Path, _wav: bytes) -> None:
+        raise PermissionError("cache is read-only")
+
+    monkeypatch.setattr(wav_speaker_module, "_write_cache", fail_write)
+    renderer = ProvisionalRenderer()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player, cache_dir=tmp_path)
+    audio: list[str] = []
+    spoken: list[str] = []
+    speaker.on_audio = lambda call_id, _priority, _wav: audio.append(call_id)
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("provisional", text="live"))
+        _wait_for(lambda: spoken == ["provisional"] and not speaker._pending)
+        assert audio == ["provisional"]
+        assert player.played
+        assert "phrase cache write failed" in caplog.text
+        assert "background synthesis failed" not in caplog.text
     finally:
         speaker.close()
 
@@ -316,6 +413,87 @@ def test_fallback_speak_error_drops_call_once() -> None:
         speaker.close()
 
 
+def test_cancel_during_failed_render_does_not_forward_to_fallback() -> None:
+    renderer = FakeRenderer(fail_text="bad")
+    renderer.block_next()
+    fallback = _DeferredFallback()
+    speaker = WavSpeaker(renderer, FakePlayer(), fallback=fallback)
+    dropped: list[str] = []
+    barrier_spoken = threading.Event()
+    speaker.on_dropped = dropped.append
+
+    def on_spoken(call_id: str, _time: float) -> None:
+        if call_id == "barrier":
+            barrier_spoken.set()
+
+    speaker.on_spoken = on_spoken
+    try:
+        speaker.speak(make_call("cancelled", text="bad"))
+        assert renderer.entered.wait(1.0)
+        speaker.cancel("cancelled")
+        renderer.release.set()
+        speaker.speak(make_call("barrier", text="barrier"))
+
+        assert barrier_spoken.wait(1.0)
+        assert fallback.calls == []
+        assert dropped == []
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_failed_render_expiring_during_synthesis_is_dropped() -> None:
+    renderer = FakeRenderer(fail_text="bad")
+    renderer.block_next()
+    fallback = _DeferredFallback()
+    speaker = WavSpeaker(renderer, FakePlayer(), fallback=fallback)
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("expired", text="bad", max_age_s=0.01))
+        assert renderer.entered.wait(1.0)
+        time.sleep(0.03)
+        renderer.release.set()
+
+        _wait_for(lambda: dropped == ["expired"])
+        assert fallback.calls == []
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+@pytest.mark.parametrize("flushable", [False, True])
+def test_cancel_and_flush_reach_forwarded_fallback(flushable: bool) -> None:
+    class FlushableFallback(_DeferredFallback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.flushes = 0
+
+        def flush(self) -> None:
+            self.flushes += 1
+
+    fallback = FlushableFallback() if flushable else _DeferredFallback()
+    speaker = WavSpeaker(FakeRenderer(fail_text="bad"), FakePlayer(), fallback=fallback)
+    try:
+        speaker.speak(make_call("cancel-forwarded", text="bad"))
+        _wait_for(lambda: len(fallback.calls) == 1)
+        speaker.cancel("cancel-forwarded")
+        assert fallback.cancelled == ["cancel-forwarded"]
+        fallback.fire_dropped("cancel-forwarded")
+
+        speaker.speak(make_call("flush-forwarded", text="bad"))
+        _wait_for(lambda: len(fallback.calls) == 2)
+        speaker.flush()
+        if flushable:
+            assert fallback.flushes == 1
+            assert fallback.cancelled == ["cancel-forwarded"]
+        else:
+            assert fallback.cancelled == ["cancel-forwarded", "flush-forwarded"]
+        assert speaker._fallback_calls == {}
+    finally:
+        speaker.close()
+
+
 class _Fallback:
     name = "fallback"
 
@@ -324,6 +502,7 @@ class _Fallback:
         self.on_spoken = None
         self.on_dropped = None
         self.closed = False
+        self.cancelled: list[str] = []
 
     def speak(self, call: Call) -> None:
         self.calls.append(call)
@@ -331,7 +510,7 @@ class _Fallback:
             self.on_spoken(call.id, time.time())
 
     def cancel(self, call_id: str) -> None:
-        pass
+        self.cancelled.append(call_id)
 
     def close(self) -> None:
         self.closed = True

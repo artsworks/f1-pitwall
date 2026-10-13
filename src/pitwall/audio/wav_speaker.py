@@ -259,6 +259,7 @@ class WavSpeaker:
         self._cancelled: set[str] = set()
         self._gen = 0
         self._urgent = threading.Event()
+        self._wake = threading.Event()
         self._background_queue: queue.Queue[tuple[tuple[int, str], str, int] | None] = queue.Queue()
         self._pending: set[tuple[int, str]] = set()
         if fallback is not None:
@@ -287,7 +288,14 @@ class WavSpeaker:
         ).hexdigest()
         return self._cache_dir / f"{digest}.wav"
 
-    def _remember(self, key: tuple[int, str], result: tuple[bytes, float], *, disk: bool) -> None:
+    def _remember(
+        self,
+        key: tuple[int, str],
+        result: tuple[bytes, float],
+        *,
+        disk: bool,
+        disk_required: bool = True,
+    ) -> None:
         wav, _ = result
         seconds = wav_info(wav)
         result = wav, seconds
@@ -298,7 +306,12 @@ class WavSpeaker:
                 self._cache.popitem(last=False)
         path = self._phrase_path(key)
         if disk and path is not None:
-            _write_cache(path, wav)
+            try:
+                _write_cache(path, wav)
+            except OSError as exc:
+                if disk_required:
+                    raise
+                log.warning("%s phrase cache write failed for %s: %s", self.name, path, exc)
 
     def _cached(self, key: tuple[int, str]) -> tuple[bytes, float] | None:
         with self._cache_lock:
@@ -323,7 +336,7 @@ class WavSpeaker:
         result = self._renderer.render(text, priority, background=False)
         seconds = wav_info(result[0])
         result = result[0], seconds
-        self._remember(key, result, disk=True)
+        self._remember(key, result, disk=True, disk_required=False)
         return result
 
     def warm(self, phrases: list[tuple[str, int]]) -> int:
@@ -346,12 +359,23 @@ class WavSpeaker:
         with self._state_lock:
             if call.priority == 1:
                 self._urgent.set()
+                self._wake.set()
             self._received[call.id] = time.monotonic()
             self._q.put((call.priority, next(self._seq), call))
 
     def cancel(self, call_id: str) -> None:
         with self._state_lock:
             self._cancelled.add(call_id)
+            if call_id in self._fallback_calls and self._fallback is not None:
+                try:
+                    self._fallback.cancel(call_id)
+                except Exception as exc:
+                    log.warning(
+                        "%s fallback cancellation failed for %s: %s",
+                        self.name,
+                        call_id,
+                        exc,
+                    )
 
     def _current(self, generation: int) -> bool:
         return generation == self._gen
@@ -385,16 +409,25 @@ class WavSpeaker:
             try:
                 if self._cached(key) is None:
                     wav, _ = self._renderer.render(text, priority, background=True)
-                    self._remember(key, (wav, wav_info(wav)), disk=True)
+                    self._remember(key, (wav, wav_info(wav)), disk=True, disk_required=False)
             except Exception as exc:
                 log.warning("%s background synthesis failed for %r: %s", self.name, text, exc)
             finally:
                 with self._cache_lock:
                     self._pending.discard(key)
 
-    def _failed(self, call: Call, generation: int, exc: Exception) -> None:
+    def _failed(self, call: Call, generation: int, received: float, exc: Exception) -> None:
         with self._state_lock:
             if not self._current(generation):
+                return
+            if call.id in self._cancelled:
+                self._cancelled.discard(call.id)
+                return
+            if (
+                call.max_age_s is not None
+                and call.handoff_age_s + (time.monotonic() - received) > call.max_age_s
+            ):
+                self._drop(call.id, generation)
                 return
             fallback = self._fallback
             if fallback is not None:
@@ -421,6 +454,9 @@ class WavSpeaker:
             generation = self._fallback_calls.pop(call_id, None)
             if generation is None or not self._current(generation):
                 return
+            if call_id in self._cancelled:
+                self._cancelled.discard(call_id)
+                return
             callback = self.on_spoken
             if callback is not None:
                 try:
@@ -432,6 +468,9 @@ class WavSpeaker:
         with self._state_lock:
             generation = self._fallback_calls.pop(call_id, None)
             if generation is None or not self._current(generation):
+                return
+            if call_id in self._cancelled:
+                self._cancelled.discard(call_id)
                 return
         self._drop(call_id, generation)
 
@@ -468,7 +507,11 @@ class WavSpeaker:
                 except Exception:
                     log.exception("%s audio stream failed", self.name)
         with self._state_lock:
-            if self._current(generation) and self.on_spoken is not None:
+            if (
+                self._current(generation)
+                and call.id not in self._cancelled
+                and self.on_spoken is not None
+            ):
                 try:
                     self.on_spoken(call.id, time.time())
                 except Exception:
@@ -490,7 +533,7 @@ class WavSpeaker:
             try:
                 wav, seconds = self._get_for_call(call)
             except Exception as exc:
-                self._failed(call, generation, exc)
+                self._failed(call, generation, received, exc)
                 continue
             with self._state_lock:
                 if not self._current(generation) or call.id in self._cancelled:
@@ -503,14 +546,20 @@ class WavSpeaker:
                     drop = True
                 else:
                     drop = False
-                if call.priority == 1:
-                    self._urgent.clear()
             if drop:
                 self._drop(call.id, generation)
                 continue
+            with self._state_lock:
+                if call.priority == 1:
+                    self._urgent.clear()
+                self._wake.clear()
+                if self._urgent.is_set():
+                    self._wake.set()
             self._play(call, wav, seconds, generation)
-            if self._urgent.wait(seconds):
-                self._player.stop()
+            if self._wake.wait(seconds):
+                with self._state_lock:
+                    if self._current(generation) and self._urgent.is_set():
+                        self._player.stop()
 
     def flush(self) -> None:
         with self._state_lock:
@@ -522,9 +571,29 @@ class WavSpeaker:
                     break
             self._cancelled.clear()
             self._received.clear()
-            self._fallback_calls.clear()
             self._urgent.clear()
+            self._wake.set()
             self._player.stop()
+            if self._fallback is not None:
+                from pitwall.audio.speaker import FlushableSpeaker
+
+                if isinstance(self._fallback, FlushableSpeaker):
+                    try:
+                        self._fallback.flush()
+                    except Exception as exc:
+                        log.warning("%s fallback flush failed: %s", self.name, exc)
+                else:
+                    for call_id in tuple(self._fallback_calls):
+                        try:
+                            self._fallback.cancel(call_id)
+                        except Exception as exc:
+                            log.warning(
+                                "%s fallback cancellation failed for %s: %s",
+                                self.name,
+                                call_id,
+                                exc,
+                            )
+            self._fallback_calls.clear()
 
     def close(self) -> None:
         self._q.put((-1, next(self._seq), None))
