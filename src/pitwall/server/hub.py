@@ -3,8 +3,8 @@
 Envelope {"v":1,"type","seq","t","payload"}. A ring buffer of the last 12
 calls backs the reconnect `snapshot` frame; each entry carries its dispatch
 frame time `t` and `audio`: "dispatched" | "started" | "dropped" |
-"interrupted" (docs/15 §7). Opted-in clients receive rendered Piper WAVs as
-`audio` frames.
+"interrupted" (docs/15 §7). Opted-in clients receive WAVs from stream-capable
+speakers as `audio` frames.
 """
 
 from __future__ import annotations
@@ -96,6 +96,7 @@ class Hub:
         )
 
     def audio(self, call_id: str, priority: int, wav: bytes) -> None:
+        """Send a rendered WAV from a stream-capable speaker to audio clients."""
         if not self.audio_clients:
             return
         self._send(

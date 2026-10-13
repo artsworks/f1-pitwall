@@ -106,6 +106,47 @@ off the game PC.
 For an opt-in OmniVoice server on a Linux GPU box, setup, registration, caching, and fallback
 details are in [Natural voice (OmniVoice)](getting-started.md#natural-voice-omnivoice-opt-in).
 
+### Speech engine contract
+
+`src/pitwall/audio/speaker.py` defines the contract for every speech engine. An engine meets the contract directly, or an adapter in front of it does. `speech.engine` picks an engine id from the registry in the same file.
+
+The dispatcher calls `speak(call)` with the whole `Call`, not only the text. Engines must use these fields:
+
+- `id`: the key for every callback and web frame.
+- `priority`: lower numbers play first. A P1 call stops the call that is playing.
+- `handoff_age_s` and `max_age_s`: the engine drops the call if its age passes `max_age_s` before playback.
+
+Engines can read `deadline_ms`, `tags`, `lap`, `urgency` and `rank` for logs or extensions. The dispatcher owns `screen_only` and `still_true`. It does not send `screen_only` calls to an engine with `speaks_audio` set to true.
+
+| Protocol | Members | Caller |
+|---|---|---|
+| `Speaker` | `name`, `speaks_audio`, `supports_audio_stream`, `on_spoken`, `speak`, `cancel`, `close` | dispatcher |
+| `StreamableSpeaker` | `on_audio(call_id, priority, wav_bytes)` | engine, to the hub |
+| `OutcomeSpeaker` | `on_dropped(call_id)` | engine, to the dispatcher and hub |
+| `WarmableSpeaker` | `warm(phrases)` | `pitwall voice warm` |
+| `FlushableSpeaker` | `flush()` | replay seek and reset |
+| `QueueStatusSpeaker` | `queue_status()` | engine queue count and oldest age |
+
+For each call, a streaming engine calls back in this order:
+
+1. Local playback starts.
+2. `on_audio` sends the complete WAV.
+3. `on_spoken(call_id, wall_time)` reports the playback start. `Metrics.tts_ms` measures from dispatcher handoff to this time.
+
+Each callback fires at most once per call. A dropped call gets `on_dropped` and no `on_spoken`. After `cancel()`, the engine sends no `on_audio` for that call. After `flush()`, the engine sends no callback for a call it received before the flush.
+
+`wire_speaker()` connects the callbacks for `pitwall start` and `pitwall replay --serve`:
+
+- `on_spoken` goes to `hub.spoken` and `Metrics.note_spoken`.
+- `on_dropped` goes to `dispatcher.note_dropped` and `hub.cancel`.
+- `on_audio` goes to `hub.audio`, only if the engine streams.
+
+`hub.streams_audio` is true only when the engine sets `supports_audio_stream` and has `on_audio`. SAPI plays audio but produces no WAV bytes, so SAPI does not stream.
+
+Each `audio` frame carries one complete WAV in base64. The WAV is RIFF, mono, 16-bit PCM, with a sample rate above 0 and at least one frame.
+
+`WavSpeaker` in `wav_speaker.py` is the translation layer for WAV engines. It owns the queue, P1 preemption, cancellation, age drops, the phrase cache, the player and the callbacks. A vendor adapter is a `WavRenderer`. Its `render(text, priority)` returns `(wav_bytes, seconds)`. It also gives a `label`, a `cache_identity` and `per_priority`. If a vendor returns PCM or chunks, the adapter collects them in order and converts them with `pcm_to_wav()`. Convert MP3 or Opus to PCM first. If rendering fails, `WavSpeaker` plays the call on its fallback speaker, or calls `on_dropped`.
+
 **Mixing with game audio:** the radio shares the game headset. Give it a separate volume
 setting and play a short radio "click" before each call. Do not duck game audio. If calls
 are hard to hear, lower the in-game volume or send the radio to another device.
@@ -159,7 +200,7 @@ Show state changes with colour and text on the same frame.
 - Use a primary banner ≥ 72 px and secondary blocks ≥ 36 px. Use monospace and high contrast.
 - The radio log shows the last ~12 calls with their ACK / NEG outcome; `/radio` is a
   log-only page in large type for a narrow second screen.
-- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the Piper voice through the phone. The server sends each rendered WAV only to clients that tapped. With SAPI, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. Other devices need the dashboard PIN. See [getting started](getting-started.md).
+- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the backend voice through the phone. The server sends each rendered WAV only to clients that tapped. With an engine that does not stream, such as SAPI, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. Other devices need the dashboard PIN. See [getting started](getting-started.md).
 - Keep the mindset (AGGRESSIVE / BALANCED in the pilot) visible. Switch it with one press
   of its wheel/keyboard binding. It is the control most likely to be used mid-race.
 - Pair green for optimal, amber for warning, and red for act-now with a word. Never rely

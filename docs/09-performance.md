@@ -90,6 +90,16 @@ noise, stop paying for micro-optimisations.
   its cost in the frame-time A/B because it may cost more than the backend.
 - State at 5–10 Hz, not 60 Hz; deltas rather than full snapshots where it is easy.
 
+## Speech latency
+
+`tts_ms` measures the time from dispatcher handoff to the start of local playback. The dispatcher calls `Metrics.note_handoff()` when it hands a call to the speaker. The speaker calls `on_spoken` when playback starts, and `wire_speaker()` passes that time to `Metrics.note_spoken()`. On a phrase-cache miss, `tts_ms` includes the render time. Time in the dispatcher queue is a separate metric, `queue_wait_ms`. The dashboard `latency` block shows both, as `tts_p99_ms` and `queue_wait_p99_ms`.
+
+Engine adapters must keep this measurement:
+
+- Call `on_spoken` when playback starts, not when rendering ends.
+- Call `on_spoken` once per call, and never for a dropped call.
+- If an engine plays audio itself and cannot report the playback start, it is not a compliant speaker. Put a renderer in front of it that returns WAV bytes for `WavSpeaker`.
+
 ## Escape hatches, in order of cost
 
 1. Lower the game's UDP rate to 20 Hz and decimate Motion. (free)

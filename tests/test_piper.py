@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import io
-import threading
-import time
+import sys
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -8,149 +9,44 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pitwall.audio.dispatcher import Call
 from pitwall.audio.piper_tts import (
-    PiperSpeaker,
+    PiperRenderer,
     common_phrases,
     make_piper_synth,
     radio_blip,
     to_wav,
 )
 from pitwall.audio.speaker import NullSpeaker, make_speaker
+from pitwall.audio.wav_speaker import WavSpeaker
 from pitwall.config.models import SpeechSettings
+from tests.audio_contract import FakePlayer
 
 
-def _call(cid: str, priority: int = 2, text: str = "box box") -> Call:
-    t = time.monotonic()
-    return Call(
-        id=cid,
-        rule_id=cid,
-        priority=priority,
-        text=text,
-        tags=[],
-        deadline_ms=5000,
-        lap=1,
-        t=t,
-        trigger_t=t,
-    )
-
-
-class FakePlayer:
-    def __init__(self) -> None:
-        self.played: list[bytes] = []
-        self.stops = 0
-
-    def play(self, wav: bytes) -> None:
-        self.played.append(wav)
-
-    def stop(self) -> None:
-        self.stops += 1
-
-
-def _speaker(seconds: float) -> tuple[PiperSpeaker, FakePlayer, list[str], list[str]]:
-    player = FakePlayer()
-    synthed: list[str] = []
-
-    def synth(text: str) -> tuple[bytes, float]:
-        synthed.append(text)
-        return text.encode(), seconds
-
-    sp = PiperSpeaker(synth, player)
-    spoken: list[str] = []
-    sp.on_spoken = lambda cid, t: spoken.append(cid)
-    return sp, player, spoken, synthed
-
-
-def _wait_for(pred: Callable[[], bool], timeout: float = 2.0) -> None:
-    end = time.monotonic() + timeout
-    while time.monotonic() < end:
-        if pred():
-            return
-        time.sleep(0.01)
-    raise AssertionError("condition not met")
-
-
-def test_piper_speaker_plays_reports_and_caches() -> None:
-    sp, player, spoken, synthed = _speaker(0.0)
-    sp.speak(_call("a", text="front left cold"))
-    sp.speak(_call("b", text="front left cold"))
-    _wait_for(lambda: spoken == ["a", "b"])
-    assert player.played == [b"front left cold", b"front left cold"]
-    assert synthed == ["front left cold"]
-    sp.close()
-
-
-def test_piper_drops_calls_that_age_during_synthesis() -> None:
-    player = FakePlayer()
-    spoken: list[str] = []
-    dropped: list[str] = []
-
-    def slow_synth(text: str) -> tuple[bytes, float]:
-        time.sleep(0.3)
-        return text.encode(), 0.0
-
-    sp = PiperSpeaker(slow_synth, player)
-    sp.on_spoken = lambda cid, t: spoken.append(cid)
-    sp.on_dropped = dropped.append
-    call = _call("stale")
-    call.handoff_age_s = 9.9
-    call.max_age_s = 10.0
-    sp.speak(call)
-    _wait_for(lambda: dropped == ["stale"])
-
-    assert player.played == []
-    assert spoken == []
-    sp.close()
-
-
-def test_piper_plays_calls_without_an_age_cap() -> None:
-    player = FakePlayer()
-    spoken: list[str] = []
-
-    def slow_synth(text: str) -> tuple[bytes, float]:
-        time.sleep(0.3)
-        return text.encode(), 0.0
-
-    sp = PiperSpeaker(slow_synth, player)
-    sp.on_spoken = lambda cid, t: spoken.append(cid)
-    call = _call("reply")
-    call.handoff_age_s = 9.9
-    call.max_age_s = None
-    sp.speak(call)
-    _wait_for(lambda: spoken == ["reply"])
-
-    assert player.played == [b"box box"]
-    sp.close()
-
-
-def test_prerendered_phrases_survive_restart_and_keep_tone_separate(tmp_path: Path) -> None:
-    synthed: list[str] = []
+def test_prerendered_phrases_survive_restart_and_keep_tone_separate(
+    tmp_path: Path,
+) -> None:
+    rendered: list[str] = []
     wav = to_wav(np.zeros(160), 16_000)
 
     def synth(text: str) -> tuple[bytes, float]:
-        synthed.append(text)
+        rendered.append(text)
         return wav, 0.01
 
-    first = PiperSpeaker(
+    renderer = PiperRenderer(
+        {1: synth, 2: synth},
         synth,
-        FakePlayer(),
-        tones={1: synth, 2: synth},
-        cache_dir=tmp_path,
-        cache_key="configured-voice-tone",
+        "piper-test",
+        "configured-voice-tone",
     )
+    first = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
     assert first.warm([("Box this lap", 1), ("Box this lap", 2)]) == 2
-    assert synthed == ["Box this lap", "Box this lap"]
+    assert rendered == ["Box this lap", "Box this lap"]
     first.close()
-    restarted = PiperSpeaker(
-        synth,
-        FakePlayer(),
-        tones={1: synth, 2: synth},
-        cache_dir=tmp_path,
-        cache_key="configured-voice-tone",
-    )
+
+    restarted = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
     assert restarted.render("Box this lap", 1) == (wav, 0.01)
     assert restarted.render("Box this lap", 2) == (wav, 0.01)
-    assert len(synthed) == 2
+    assert len(rendered) == 2
     restarted.close()
     assert all("{" not in text for text, _ in common_phrases())
 
@@ -162,91 +58,15 @@ def test_common_phrases_limit() -> None:
     assert len(common_phrases(10)) == 10
 
 
-def test_piper_speaker_skips_cancelled() -> None:
-    sp, player, spoken, _ = _speaker(0.3)
-    audio: list[tuple[str, int, bytes]] = []
-    sp.on_audio = lambda cid, priority, wav: audio.append((cid, priority, wav))
-    sp.speak(_call("a"))
-    _wait_for(lambda: spoken == ["a"])
-    sp.speak(_call("b"))
-    sp.cancel("b")
-    sp.speak(_call("c", text="c"))
-    _wait_for(lambda: spoken == ["a", "c"])
-    assert audio == [("a", 2, b"box box"), ("c", 2, b"c")]
-    sp.close()
-
-
-def test_piper_audio_callback_skips_call_cancelled_during_playback() -> None:
-    sp, player, spoken, _ = _speaker(0.0)
-    call = _call("cancel-during-play")
-    audio: list[tuple[str, int, bytes]] = []
-    original_play = player.play
-
-    def play(wav: bytes) -> None:
-        original_play(wav)
-        sp.cancel(call.id)
-
-    player.play = play
-    sp.on_audio = lambda cid, priority, wav: audio.append((cid, priority, wav))
-    sp.speak(call)
-    _wait_for(lambda: spoken == [call.id])
-    assert player.played == [b"box box"]
-    assert audio == []
-    sp.close()
-
-
-def test_piper_audio_callback_follows_playback_and_isolates_errors() -> None:
-    sp, player, spoken, _ = _speaker(0.0)
-    order: list[tuple[str, str]] = []
-
-    def audio(cid: str, priority: int, wav: bytes) -> None:
-        order.append(("audio", cid))
-        if cid == "a":
-            raise RuntimeError("stream unavailable")
-
-    original_play = player.play
-
-    def play(wav: bytes) -> None:
-        original_play(wav)
-        order.append(("play", wav.decode()))
-
-    player.play = play
-    sp.on_audio = audio
-    sp.speak(_call("a", text="first"))
-    sp.speak(_call("b", text="second"))
-    _wait_for(lambda: spoken == ["a", "b"])
-    assert order == [
-        ("play", "first"),
-        ("audio", "a"),
-        ("play", "second"),
-        ("audio", "b"),
-    ]
-    assert player.played == [b"first", b"second"]
-    sp.close()
-
-
-def test_piper_p1_preempts_and_jumps_queue() -> None:
-    sp, player, spoken, _ = _speaker(5.0)
-    sp.speak(_call("long", priority=3, text="long"))
-    _wait_for(lambda: spoken == ["long"])
-    sp.speak(_call("p3", priority=3, text="p3"))
-    t0 = time.monotonic()
-    sp.speak(_call("urgent", priority=1, text="urgent"))
-    _wait_for(lambda: spoken[:2] == ["long", "urgent"])
-    assert time.monotonic() - t0 < 1.0
-    assert player.stops >= 1
-    sp.close()
-
-
 def test_to_wav_roundtrip() -> None:
     data = to_wav(np.zeros(2205), 22050)
-    with wave.open(io.BytesIO(data)) as w:
-        assert (w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()) == (
-            22050,
-            1,
-            2,
-            2205,
-        )
+    with wave.open(io.BytesIO(data)) as reader:
+        assert (
+            reader.getframerate(),
+            reader.getnchannels(),
+            reader.getsampwidth(),
+            reader.getnframes(),
+        ) == (22050, 1, 2, 2205)
 
 
 def test_radio_blip_shape() -> None:
@@ -274,10 +94,11 @@ def test_radio_blip_shape() -> None:
 
 
 def test_missing_voice_falls_back(tmp_path: Path) -> None:
-    s = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
+    settings = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="pitwall voice get"):
-        make_piper_synth(s)
-    assert isinstance(make_speaker(s), NullSpeaker)
+        make_piper_synth(settings)
+    if sys.platform != "win32":
+        assert isinstance(make_speaker(settings), NullSpeaker)
 
 
 def test_speech_disabled_makes_null_speaker() -> None:
@@ -292,12 +113,11 @@ def test_real_piper_synth_renders_speech() -> None:
     synth = make_piper_synth(SpeechSettings(voices_dir=str(VOICES)))
     wav, seconds = synth("Box this lap.")
     assert 0.5 < seconds < 5.0
-    with wave.open(io.BytesIO(wav)) as w:
-        assert w.getnframes() / w.getframerate() == pytest.approx(seconds)
+    with wave.open(io.BytesIO(wav)) as reader:
+        assert reader.getnframes() / reader.getframerate() == pytest.approx(seconds)
 
 
-def test_piper_speaker_renders_each_priority_with_its_tone() -> None:
-    player = FakePlayer()
+def test_piper_renderer_uses_priority_specific_tones() -> None:
     used: list[str] = []
 
     def tone(name: str) -> Callable[[str], tuple[bytes, float]]:
@@ -308,38 +128,7 @@ def test_piper_speaker_renders_each_priority_with_its_tone() -> None:
         return synth
 
     tones = {1: tone("urgent"), 2: tone("normal"), 3: tone("calm")}
-    sp = PiperSpeaker(tones[2], player, tones=tones)
-    spoken: list[str] = []
-    sp.on_spoken = lambda cid, t: spoken.append(cid)
-    sp.speak(_call("a", priority=3, text="x"))
-    _wait_for(lambda: spoken == ["a"])
-    sp.speak(_call("b", priority=1, text="x"))
-    _wait_for(lambda: spoken == ["a", "b"])
+    renderer = PiperRenderer(tones, tones[2], "piper-test", "test-key")
+    assert renderer.render("x", 3)[0] == b"calm:x"
+    assert renderer.render("x", 1)[0] == b"urgent:x"
     assert used == ["calm", "urgent"]
-    assert player.played == [b"calm:x", b"urgent:x"]
-    sp.close()
-
-
-def test_piper_flush_drops_queued_and_in_flight_calls() -> None:
-    sp, player, spoken, _ = _speaker(0.0)
-    audio: list[str] = []
-    sp.on_audio = lambda cid, priority, wav: audio.append(cid)
-    rendering = threading.Event()
-    release = threading.Event()
-
-    def synth(text: str) -> tuple[bytes, float]:
-        rendering.set()
-        release.wait(2.0)
-        return text.encode(), 0.0
-
-    sp._synth = synth  # noqa: SLF001
-    sp.speak(_call("c-1", text="old one"))
-    rendering.wait(2.0)
-    sp.speak(_call("c-2", text="old two"))
-    sp.flush()
-    release.set()
-    sp.speak(_call("c-1", text="new one"))
-    _wait_for(lambda: spoken == ["c-1"])
-    assert player.played == [b"new one"]
-    assert audio == ["c-1"]
-    sp.close()

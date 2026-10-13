@@ -35,6 +35,19 @@ uv run pitwall voice say             # you should hear a radio check
 uv run pitwall start                 # ingest + rules + speech + dashboard
 ```
 
+## Speech engines
+
+`speech.engine` in `settings.yaml` picks the engine. On Windows, the default `auto` uses Piper when its voice file exists, else SAPI. On other systems, `auto` uses `null`. Set `piper` or `omnivoice` to stream audio from a Linux PC.
+
+| `speech.engine` | Local speech | Browser audio stream |
+|---|---|---|
+| `piper` | yes | yes |
+| `omnivoice` | yes | yes |
+| `sapi` | yes, Windows only | no, the phone uses the browser voice |
+| `null` | no | no |
+
+Local speech plays only on Windows. On other systems, Piper and OmniVoice play nothing locally but still stream audio to the browser. If an engine fails to load, Pitwall prints a warning and tries its fallback. An unknown engine id prints a warning, and Pitwall uses `auto`. [Configuration](08-configuration.md) lists the fallbacks and the fields for each engine.
+
 ## Natural voice (Piper)
 
 The built-in Windows voices sound robotic. Download a Piper neural voice once

@@ -26,7 +26,7 @@ def cmd_voice(args: argparse.Namespace) -> int:
 
 def _voice_say(args: argparse.Namespace) -> int:
     """Diagnose the audio path: speak TEXT and report when it was spoken."""
-    from pitwall.audio.piper_tts import PiperSpeaker, make_piper_synth
+    from pitwall.audio.piper_tts import make_piper_synth
     from pitwall.audio.speaker import make_speaker
 
     store = ConfigStore()
@@ -80,8 +80,8 @@ def _voice_say(args: argparse.Namespace) -> int:
     )
     if done.wait(timeout=10.0):
         print(f"spoken after {(spoken_at[0] - t0) * 1000:.0f} ms")
-        if isinstance(speaker, PiperSpeaker):
-            time.sleep(max(0.0, speaker.busy_until - time.monotonic()))
+        busy_until = getattr(speaker, "busy_until", time.monotonic())
+        time.sleep(max(0.0, busy_until - time.monotonic()))
     else:
         print("TIMEOUT: nothing spoken in 10 s")
     speaker.close()
@@ -113,27 +113,26 @@ def _voice_piper(action: str, names: list[str]) -> int:
 
 
 def _voice_warm(args: argparse.Namespace) -> int:
-    from pitwall.audio.omnivoice_tts import (
-        OmniVoiceError,
-        OmniVoiceSpeaker,
-        make_omnivoice_speaker,
-    )
-    from pitwall.audio.piper_tts import PiperSpeaker, common_phrases, make_piper_speaker
+    from pitwall.audio.piper_tts import common_phrases
+    from pitwall.audio.speaker import ENGINES, WarmableSpeaker
 
     settings = ConfigStore().current()
     speech = settings.speech
-    engine = args.engine
+    engine = args.engine if args.engine != "auto" else speech.engine
     if engine == "auto":
-        engine = "omnivoice" if speech.engine == "omnivoice" else "piper"
-    speaker: PiperSpeaker | OmniVoiceSpeaker
-    if engine == "omnivoice":
-        try:
-            speaker = make_omnivoice_speaker(speech)
-        except OmniVoiceError as exc:
-            print(f"OmniVoice unavailable: {exc}")
-            return 1
-    else:
-        speaker = make_piper_speaker(speech)
+        engine = "piper"
+    if engine not in ENGINES:
+        print(f"unknown speech engine: {engine}")
+        return 1
+    try:
+        speaker = ENGINES[engine].factory(speech)
+    except Exception as exc:
+        print(f"{engine} unavailable: {exc}")
+        return 1
+    if not isinstance(speaker, WarmableSpeaker):
+        print(f"{speaker.name} does not support phrase warming")
+        speaker.close()
+        return 1
 
     try:
         if args.replay:
