@@ -6,6 +6,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.9.0 (2026-10-13)
+
+### Features
+
+- **radio**: Drop calls older than 10 s, split voice queue and TTS latency
+  ([#81](https://github.com/artsworks/f1-pitwall/pull/81),
+  [`ce1ea88`](https://github.com/artsworks/f1-pitwall/commit/ce1ea880f066bf8403ee17ae90afcf2680244329))
+
+### Testing
+
+- Drop Windows-only test tweaks unrelated to the age cap
+  ([#81](https://github.com/artsworks/f1-pitwall/pull/81),
+  [`ce1ea88`](https://github.com/artsworks/f1-pitwall/commit/ce1ea880f066bf8403ee17ae90afcf2680244329))
+
+
 ## v0.8.0 (2026-10-13)
 
 ### Documentation
