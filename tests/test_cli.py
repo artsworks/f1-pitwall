@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -11,6 +13,7 @@ import pytest
 
 from pitwall.cli import RecordingNotFoundError, main
 from pitwall.cli.common import _resolve_recording
+from pitwall.cli.parser import build_parser
 from pitwall.cli.serve import _handle_https_disconnect
 from pitwall.net.recording import compress_recording
 
@@ -182,3 +185,42 @@ def test_voice_defaults_to_list(capsys) -> None:  # type: ignore[no-untyped-def]
 def test_voice_grammar(capsys) -> None:  # type: ignore[no-untyped-def]
     assert main(["voice", "grammar"]) == 0
     assert "<grammar" in capsys.readouterr().out
+
+
+def _subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
+
+
+def _command_paths() -> list[tuple[str, ...]]:
+    paths: list[tuple[str, ...]] = []
+    for name, sp in _subparsers(build_parser()).items():
+        paths.append((name,))
+        paths.extend((name, child) for child in _subparsers(sp))
+    return paths
+
+
+def test_parse_args_smoke() -> None:
+    args = build_parser().parse_args(["start", "--record", "lite"])
+    assert args.command == "start"
+    assert args.record == "lite"
+
+
+@pytest.mark.parametrize("path", _command_paths(), ids=" ".join)
+def test_subcommand_help_exits_cleanly(path: tuple[str, ...], capsys) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args([*path, "-h"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    if path[0] in {"trim", "derive"}:
+        return
+    sp = build_parser()
+    for name in path:
+        sp = _subparsers(sp)[name]
+    assert sp.description and sp.description in out
+    assert sp.epilog and sp.epilog in out
+    example = shlex.split(sp.epilog.split("\n", 1)[1])
+    assert example[0] == "pitwall"
+    build_parser().parse_args(example[1:])
