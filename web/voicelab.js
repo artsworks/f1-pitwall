@@ -53,7 +53,7 @@
     meta.className = "meta";
     function refresh() {
       lbl.textContent = $("reveal").checked ? label + " (" + name + ")" : label;
-      meta.textContent = $("reveal").checked && ms != null ? ms + " ms" : "";
+      meta.textContent = $("reveal").checked && ms != null ? ms : "";
     }
     refresh();
     row._refresh = refresh;
@@ -99,7 +99,9 @@
     var names = ["stem", "slot", "spliced", "full"];
     var letters = "ABCD";
     shuffle(names).forEach(function (name, i) {
-      var ms = name === "spliced" ? combo.ms.splice : combo.ms[name];
+      var ms = name === "spliced"
+        ? combo.ms.stem + "+" + combo.ms.slot + " ms"
+        : combo.ms[name] + " ms";
       card.appendChild(gradeRow(combo.id, "Variant " + letters[i], name, combo.wavs[name], ms));
     });
     return card;
@@ -206,9 +208,10 @@
       segs.appendChild(b);
     });
     card.appendChild(segs);
+    var partsMs = data.segments.reduce(function (sum, s) { return sum + s.ms; }, 0);
     var variants = [
-      { name: "spliced", wav: data.spliced, ms: data.ms.splice },
-      { name: "full", wav: data.full, ms: data.ms.full },
+      { name: "spliced", wav: data.spliced, ms: partsMs + " ms (parts)" },
+      { name: "full", wav: data.full, ms: data.ms.full + " ms" },
     ];
     var letters = "AB";
     shuffle(variants).forEach(function (v, i) {

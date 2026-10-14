@@ -19,6 +19,7 @@
     button { padding: 5px 12px; cursor: pointer; }
     button:hover { border-color: #8ab4ff; }
     button:disabled { opacity: .4; cursor: default; }
+    [hidden] { display: none !important; }
     main { display: flex; gap: 16px; padding: 14px; flex-wrap: wrap; }
     .col { flex: 1 1 260px; min-width: 240px; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
@@ -29,7 +30,7 @@
     .card { background: #101016; border: 1px solid #26262e; border-radius: 6px; padding: 10px 12px; margin: 10px 14px; }
     .card .id { font-weight: 600; margin-bottom: 6px; }
     .variant { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid #1c1c22; }
-    .variant .lbl { width: 110px; }
+    .variant .lbl { min-width: 150px; white-space: nowrap; }
     .variant .meta { color: #777; font-size: 12px; }
     .variant select.score { min-height: 0; width: 48px; }
     .variant input.note { flex: 1; min-width: 80px; }

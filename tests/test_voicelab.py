@@ -10,7 +10,6 @@ from pitwall.config.loader import ConfigStore
 from pitwall.metrics import Metrics
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
-from tests.test_omnivoice import SMALL_WAV  # noqa: F401
 
 
 def _app(url: str, tmp_path: Path) -> TestClient:

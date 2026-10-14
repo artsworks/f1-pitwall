@@ -139,8 +139,8 @@ def template_stems() -> list[tuple[str, int]]:
     def add(text: str, priority: int) -> None:
         if "{" not in text:
             return
-        for fragment in re.split(r"\{[^{}]*\}", text):
-            stem = fragment.strip().lstrip(",;:").lstrip()
+        for fragment in re.split(r"[\w']*\{[^{}]*\}[\w']*", text):
+            stem = fragment.strip().lstrip(".,;:!?").lstrip()
             if sum(c.isalnum() for c in stem) < 2:
                 continue
             if stem not in best or priority < best[stem]:

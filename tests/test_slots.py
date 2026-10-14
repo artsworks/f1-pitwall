@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from pitwall.audio.slots import (
     POSITIONS,
     TEMPS,
@@ -33,6 +35,8 @@ def test_template_stems_are_fixed_fragments() -> None:
     assert all("{" not in text and "}" not in text for text, _ in stems)
     assert all(sum(c.isalnum() for c in text) >= 2 for text, _ in stems)
     assert all(priority in (1, 2, 3) for _, priority in stems)
+    assert all(not text.startswith(tuple(".,;:!?")) for text, _ in stems)
+    assert all(not re.search(r"\bP$", text) for text, _ in stems)
 
 
 def test_slot_vocabulary_keys() -> None:
