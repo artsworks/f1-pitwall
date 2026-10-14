@@ -76,13 +76,16 @@ database transaction:
 - It quarantines invalid active values with a reason.
 - It grades sessions that still need grading.
 - It refits pace, tyre wear, fuel, thermal and energy priors with the `pitwall calibrate` fit.
+- It writes the refit values into the per-track overlay files at `~/.pitwall/tracks/<id>.yaml`.
 - It refolds rule cooldowns with the `pitwall tune` fold. Auto-graded `good` and `wrong`
   outcomes count at `tune_auto_weight`, and a human grade replaces the automatic one.
 
 A session is also graded when it ends. The engine folds pit loss and pass or hold rates
 live during the session. The refit drops any value that the quarantine check rejects, so
 a quarantined value does not come back. Weights stay at or below `param_weight_cap`.
-Upkeep never writes threshold YAML. A watchdog restart during a session skips the refit
+Upkeep never writes rule threshold YAML. Track overlay thresholds such as
+`energy_over_tolerance_j` and tyre temperatures are written. A watchdog restart
+during a session skips the refit
 and cooldown steps, so priors do not move mid-race.
 
 Upkeep is idempotent. A second run with no new data changes nothing. Database errors are

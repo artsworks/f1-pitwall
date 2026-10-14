@@ -519,6 +519,7 @@ def write_overlays(
     report: Mapping[str, Any],
     settings: Settings,
     overlay_dir: Path | None = None,
+    accept: WriteFilter | None = None,
 ) -> list[Path]:
     def sorted_yaml(value: Any) -> Any:
         if isinstance(value, dict):
@@ -543,8 +544,10 @@ def write_overlays(
         changed = False
         fuel_n = int(track.get("fuel_burn_n", 0))
         if fuel_n >= int(track.get("need", 1)):
-            data["fuel_kg_per_lap"] = round(float(track["fuel_kg_per_lap"]), 4)
-            changed = True
+            fuel = round(float(track["fuel_kg_per_lap"]), 4)
+            if accept is None or accept(track_id, 0, "fuel_kg_per_lap", fuel):
+                data["fuel_kg_per_lap"] = fuel
+                changed = True
         raw_degs = data.get("deg_ms_per_lap", {})
         compound_degs = (
             {
@@ -565,12 +568,20 @@ def write_overlays(
                 and values.get("status") == "ready"
                 and not values.get("race_laps")
             ):
-                compound_degs[compound] = round(float(values["deg_ms_per_lap"]), 1)
-                changed = True
+                deg = round(float(values["deg_ms_per_lap"]), 1)
+                if accept is None or accept(track_id, compound, "deg_ms_per_lap", deg):
+                    compound_degs[compound] = deg
+                    changed = True
             thermal = values.get("thermal")
             if thermal is not None and int(thermal["n_laps"]) >= thermal_need:
-                thermal_cold[compound] = round(float(thermal["thermal_lo_c"]), 2)
-                thermal_hot[compound] = round(float(thermal["thermal_hi_c"]), 2)
+                lo = round(float(thermal["thermal_lo_c"]), 2)
+                hi = round(float(thermal["thermal_hi_c"]), 2)
+                if accept is None or (
+                    accept(track_id, compound, "thermal_lo_c", lo)
+                    and accept(track_id, compound, "thermal_hi_c", hi)
+                ):
+                    thermal_cold[compound] = lo
+                    thermal_hot[compound] = hi
         if compound_degs:
             data["deg_ms_per_lap"] = dict(
                 sorted(compound_degs.items(), key=lambda item: str(item[0]))
@@ -593,26 +604,36 @@ def write_overlays(
         if energy is not None and int(energy["n_laps"]) >= int(
             _th(thresholds, "prior_min_weight", 2)
         ):
-            energy_tol = (
-                round(
-                    (
-                        float(energy["energy_deployed_j_p75"])
-                        - float(energy["energy_deployed_j_p25"])
-                    )
-                    / 2
-                    / 10_000
+            energy_tol = int(
+                min(
+                    energy_max,
+                    max(
+                        energy_min,
+                        round(
+                            (
+                                float(energy["energy_deployed_j_p75"])
+                                - float(energy["energy_deployed_j_p25"])
+                            )
+                            / 2
+                            / 10_000
+                        )
+                        * 10_000,
+                    ),
                 )
-                * 10_000
             )
-            th = dict(data.get("thresholds", {}))
-            th["energy_over_tolerance_j"] = int(min(energy_max, max(energy_min, energy_tol)))
-            data["thresholds"] = th
-            changed = True
+            if accept is None or accept(track_id, 0, "energy_over_tolerance_j", energy_tol):
+                th = dict(data.get("thresholds", {}))
+                th["energy_over_tolerance_j"] = energy_tol
+                data["thresholds"] = th
+                changed = True
         if not changed:
             continue
-        root.mkdir(parents=True, exist_ok=True)
         ordered = sorted_yaml(data)
-        path.write_text(yaml.safe_dump(ordered, sort_keys=False), encoding="utf-8")
+        text = yaml.safe_dump(ordered, sort_keys=False)
+        if path.exists() and path.read_text(encoding="utf-8") == text:
+            continue
+        root.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
         paths.append(path)
     return paths
 

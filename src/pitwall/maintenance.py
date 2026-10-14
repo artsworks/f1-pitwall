@@ -10,9 +10,12 @@ session: nobody should need `pitwall digest` or SQLite to keep priors sane.
 - grade: sessions without hindsight outcomes are graded;
 - calibrate and tune (`learning.auto_calibrate`): track priors are refit from
   stored laps and rule cooldowns from human grades plus auto-graded outcomes.
-  Writes that would fail the quarantine check are dropped. Threshold YAML is
-  never written; `pitwall propose` stays review-only. A watchdog restart
-  mid-session passes `refit=False` so priors do not move during a race.
+  The refit fuel, deg, thermal and energy values also merge into
+  `~/.pitwall/tracks/<id>.yaml`, the same overlay files that
+  `pitwall calibrate --write-overlay` writes. Writes that would fail the
+  quarantine check are dropped. Rule threshold YAML is never written and
+  `pitwall propose` stays review-only. A watchdog restart mid-session passes
+  `refit=False` so priors do not move during a race.
 
 Deterministic and idempotent: a second run changes nothing."""
 
@@ -22,8 +25,9 @@ import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from pitwall.calibrate import calibrate
+from pitwall.calibrate import calibrate, write_overlays
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import grade_and_store
@@ -50,6 +54,7 @@ class MaintenanceReport:
     rebuilt: int = 0
     graded: int = 0
     calibrated: int = 0
+    overlays: int = 0
     tuned: int = 0
 
     def summary(self) -> str:
@@ -62,6 +67,8 @@ class MaintenanceReport:
             parts.append(f"{self.graded} sessions graded")
         if self.calibrated:
             parts.append(f"{self.calibrated} learned values refit")
+        if self.overlays:
+            parts.append(f"{self.overlays} track overlays updated")
         if self.tuned:
             parts.append(f"{self.tuned} rule cooldowns adjusted")
         return ", ".join(parts) if parts else "learned state clean"
@@ -196,9 +203,12 @@ def grade_ungraded(db: Database, th: Mapping[str, object]) -> int:
     return len(uids)
 
 
-def calibrate_learned(db: Database, settings: Settings) -> int:
-    """Refit track priors from stored laps. Returns the number of values that
-    changed. Values that would be quarantined are never written."""
+def calibrate_learned(
+    db: Database, settings: Settings, overlay_dir: Path | None = None
+) -> tuple[int, int]:
+    """Refit track priors from stored laps and merge the result into the
+    per-track overlay files. Returns (values changed, overlay files written).
+    Values that would be quarantined are never written."""
     th = settings.thresholds
 
     def accept(track_id: int, compound: int, name: str, value: float) -> bool:
@@ -206,11 +216,13 @@ def calibrate_learned(db: Database, settings: Settings) -> int:
 
     before = {(p.track_id, p.compound, p.name): (p.value, p.weight) for p in db.all_params()}
     report = calibrate(db, settings, accept=accept)
-    return sum(
+    overlays = write_overlays(report, settings, overlay_dir, accept=accept)
+    changed = sum(
         before.get((track["track_id"], w["compound"], w["name"])) != (w["value"], w["weight"])
         for track in report["tracks"]
         for w in track["writes"]
     )
+    return changed, len(overlays)
 
 
 def tune_learned(db: Database, th: Mapping[str, object]) -> int:
@@ -230,7 +242,13 @@ def mid_session(db: Database, settings: Settings, wall_now: float | None = None)
     return wall_now - hb.wall_t <= settings.engine.recovery_max_age_s
 
 
-def maintain(db: Database, settings: Settings, *, refit: bool = True) -> MaintenanceReport:
+def maintain(
+    db: Database,
+    settings: Settings,
+    *,
+    refit: bool = True,
+    overlay_dir: Path | None = None,
+) -> MaintenanceReport:
     th = settings.thresholds
     report = MaintenanceReport()
     with db.transaction():
@@ -240,6 +258,6 @@ def maintain(db: Database, settings: Settings, *, refit: bool = True) -> Mainten
         report.quarantined += quarantine_bad(db, th)
         report.graded = grade_ungraded(db, th)
         if refit and settings.learning.auto_calibrate:
-            report.calibrated = calibrate_learned(db, settings)
+            report.calibrated, report.overlays = calibrate_learned(db, settings, overlay_dir)
             report.tuned = tune_learned(db, th)
     return report
