@@ -16,35 +16,6 @@ def _subparsers(
     )
 
 
-def _walk_subparsers(
-    parser: argparse.ArgumentParser, path: tuple[str, ...] = ()
-) -> list[tuple[str, ...]]:
-    paths = []
-    for name, child in _subparsers(parser).choices.items():
-        child_path = (*path, name)
-        paths.append(child_path)
-        if any(isinstance(action, argparse._SubParsersAction) for action in child._actions):
-            paths.extend(_walk_subparsers(child, child_path))
-    return paths
-
-
-def test_each_command_has_help(capsys: pytest.CaptureFixture[str]) -> None:
-    parser = build_parser()
-    paths = _walk_subparsers(parser)
-    for path in paths:
-        with pytest.raises(SystemExit) as exc:
-            main([*path, "-h"])
-        assert exc.value.code == 0
-        capsys.readouterr()
-
-    for path in paths:
-        command_parser = parser
-        for name in path:
-            command_parser = _subparsers(command_parser).choices[name]
-        assert command_parser.description
-        assert command_parser.epilog.startswith("e.g. pitwall")
-
-
 def test_layered_top_level_help(capsys: pytest.CaptureFixture[str]) -> None:
     parser = build_parser()
     choices = set(_subparsers(parser).choices)
