@@ -6,6 +6,27 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.14.1 (2026-10-14)
+
+### Bug Fixes
+
+- **input**: Require a 2 s hold to toggle radio silence
+  ([#95](https://github.com/artsworks/f1-pitwall/pull/95),
+  [`16eae48`](https://github.com/artsworks/f1-pitwall/commit/16eae486ea154ef79901de1e99ab4c05b11d7acc))
+
+### Chores
+
+- **cli**: Write debriefs to debriefs/ instead of the repo root
+  ([#92](https://github.com/artsworks/f1-pitwall/pull/92),
+  [`092c274`](https://github.com/artsworks/f1-pitwall/commit/092c274ddcf17c8dadce4afcb758245806bca31c))
+
+### Documentation
+
+- **cli**: Add a benefit line and an example to every command's -h
+  ([#93](https://github.com/artsworks/f1-pitwall/pull/93),
+  [`783356d`](https://github.com/artsworks/f1-pitwall/commit/783356db4347d0f9dfeb067584add188ff98479a))
+
+
 ## v0.14.0 (2026-10-13)
 
 ### Chores
