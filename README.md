@@ -101,6 +101,7 @@ start. Optional review and learning commands are in
 
 Pitwall grades each session when it ends. On the next `pitwall start`, it refits pace,
 tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns from the grades.
+The refit values also go to the per-track files in `~/.pitwall/tracks/`.
 Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
 threshold YAML changes that `pitwall propose` writes. Your grades always override
 automatic ones. Rule thresholds never change without your review, and cooldown

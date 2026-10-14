@@ -88,6 +88,55 @@ def test_calibration_gate_prevents_low_weight_writes(tmp_path) -> None:
     assert not overlay_dir.exists()
 
 
+def test_write_overlays_accept_vetoes_and_unchanged_rerun(tmp_path) -> None:
+    report = {
+        "tracks": [
+            {
+                "track_id": 7,
+                "fuel_burn_n": 5,
+                "need": 2,
+                "fuel_kg_per_lap": 1.2345,
+                "compounds": {},
+            }
+        ]
+    }
+    settings = ConfigStore().current()
+    overlay_dir = tmp_path / "tracks"
+    assert write_overlays(report, settings, overlay_dir, accept=lambda *_: False) == []
+    assert not overlay_dir.exists()
+
+    assert write_overlays(report, settings, overlay_dir) == [overlay_dir / "7.yaml"]
+    assert write_overlays(report, settings, overlay_dir) == []
+
+
+def test_write_overlays_failed_replace_preserves_file(tmp_path, monkeypatch) -> None:
+    import os
+
+    report = {
+        "tracks": [
+            {
+                "track_id": 7,
+                "fuel_burn_n": 5,
+                "need": 2,
+                "fuel_kg_per_lap": 1.2345,
+                "compounds": {},
+            }
+        ]
+    }
+    settings = ConfigStore().current()
+    overlay_dir = tmp_path / "tracks"
+    write_overlays(report, settings, overlay_dir)
+    path = overlay_dir / "7.yaml"
+    original = path.read_text()
+
+    report["tracks"][0]["fuel_kg_per_lap"] = 9.9
+    monkeypatch.setattr(os, "replace", lambda *_: (_ for _ in ()).throw(OSError("no space")))
+    with pytest.raises(OSError):
+        write_overlays(report, settings, overlay_dir)
+    assert path.read_text() == original
+    assert [p.name for p in overlay_dir.iterdir()] == ["7.yaml"]
+
+
 def test_calibration_does_not_write_rank_deficient_pace() -> None:
     db = Database(":memory:")
     db.upsert_session(1, track_id=7, session_type=1)

@@ -10,7 +10,7 @@ The goal is one PR that updates `src/pitwall/config/defaults/tracks/<id>.yaml`.
 
 ## Sources
 
-- `~/.pitwall/tracks/<id>.yaml` is the output of `pitwall calibrate --write-overlay` (`calibrate.write_overlays`).
+- `~/.pitwall/tracks/<id>.yaml` is the output of `pitwall calibrate --write-overlay` or the startup upkeep (`maintenance.maintain`). Both go through `calibrate.write_overlays`.
   These files contain only the learned keys, without `track_id` or `name`.
 - The `track_overlays` block in `learning-latest.json` is a copy of those files, keyed by track id (`learnpack._overlays`).
 - If both are supplied, the uploaded YAML files are authoritative.

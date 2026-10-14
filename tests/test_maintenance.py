@@ -6,6 +6,7 @@ import io
 import sqlite3
 
 import pytest
+import yaml
 
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
@@ -260,6 +261,82 @@ def test_maintain_skips_calibrate_and_tune_when_disabled() -> None:
     assert (report.calibrated, report.tuned) == (0, 0)
     assert db.get_param(7, 17, "deg_ms_per_lap") is None
     assert load_cooldown_mults(db) == {}
+
+
+def test_maintain_writes_track_overlays(tmp_path) -> None:
+    db = _learning_db()
+    overlay_dir = tmp_path / "tracks"
+    first = maintain(db, SETTINGS, overlay_dir=overlay_dir)
+    assert first.overlays == 1
+    assert "track overlays updated" in first.summary()
+    path = overlay_dir / "7.yaml"
+    overlay = yaml.safe_load(path.read_text())
+    assert overlay["fuel_kg_per_lap"] > 0
+    assert overlay["deg_ms_per_lap"][17] == pytest.approx(120.0)
+
+    text = path.read_text()
+    again = maintain(db, SETTINGS, overlay_dir=overlay_dir)
+    assert again.overlays == 0
+    assert path.read_text() == text
+
+
+def test_maintain_overlay_skips_quarantined_values(tmp_path) -> None:
+    db = Database(":memory:")
+    _session(db, 1, track=7, stype=1, laps=0)
+    _laps(db, 1, compound=19, base=55_000, deg=900)
+    _session(db, 2, track=-1, stype=1, laps=0)
+    _laps(db, 2, compound=17, base=90_000, deg=120)
+
+    overlay_dir = tmp_path / "tracks"
+    maintain(db, SETTINGS, overlay_dir=overlay_dir)
+    assert not (overlay_dir / "-1.yaml").exists()
+    overlay = yaml.safe_load((overlay_dir / "7.yaml").read_text())
+    assert 19 not in overlay.get("deg_ms_per_lap", {})
+
+
+def test_maintain_writes_no_overlays_when_refit_disabled(tmp_path) -> None:
+    overlay_dir = tmp_path / "tracks"
+    maintain(_learning_db(), SETTINGS, refit=False, overlay_dir=overlay_dir)
+    off = SETTINGS.model_copy(update={"learning": LearningSettings(auto_calibrate=False)})
+    maintain(_learning_db(), off, overlay_dir=overlay_dir)
+    assert not overlay_dir.exists()
+
+
+def test_maintain_skips_unwritable_overlay_dir(tmp_path) -> None:
+    blocker = tmp_path / "afile"
+    blocker.write_text("not a directory")
+    overlay_dir = blocker / "tracks"
+    db = _learning_db()
+
+    report = maintain(db, SETTINGS, overlay_dir=overlay_dir)
+    assert report.overlays == 0
+    assert "track overlays skipped" in report.summary()
+    assert db.get_param(7, 17, "deg_ms_per_lap") is not None
+
+
+def test_maintain_skips_malformed_existing_overlay(tmp_path) -> None:
+    overlay_dir = tmp_path / "tracks"
+    overlay_dir.mkdir()
+    path = overlay_dir / "7.yaml"
+    path.write_text("fuel: [\n")
+    db = _learning_db()
+
+    report = maintain(db, SETTINGS, overlay_dir=overlay_dir)
+    assert "track overlays skipped" in report.summary()
+    assert path.read_text() == "fuel: [\n"
+
+
+def test_maintain_writes_no_overlay_when_tune_fails(tmp_path, monkeypatch) -> None:
+    import pitwall.maintenance
+
+    def fail_tune(db, th):
+        raise sqlite3.OperationalError("injected tune failure")
+
+    monkeypatch.setattr(pitwall.maintenance, "tune_learned", fail_tune)
+    overlay_dir = tmp_path / "tracks"
+    with pytest.raises(sqlite3.OperationalError):
+        maintain(_learning_db(), SETTINGS, overlay_dir=overlay_dir)
+    assert not overlay_dir.exists()
 
 
 def test_mid_session_restart_skips_refit() -> None:

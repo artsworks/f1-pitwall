@@ -10,20 +10,30 @@ session: nobody should need `pitwall digest` or SQLite to keep priors sane.
 - grade: sessions without hindsight outcomes are graded;
 - calibrate and tune (`learning.auto_calibrate`): track priors are refit from
   stored laps and rule cooldowns from human grades plus auto-graded outcomes.
-  Writes that would fail the quarantine check are dropped. Threshold YAML is
-  never written; `pitwall propose` stays review-only. A watchdog restart
+  Writes that would fail the quarantine check are dropped. Rule threshold YAML
+  is never written and `pitwall propose` stays review-only. A watchdog restart
   mid-session passes `refit=False` so priors do not move during a race.
+
+After the database transaction commits, the refit fuel, deg, thermal and
+energy values merge into `~/.pitwall/tracks/<id>.yaml`, the same overlay files
+that `pitwall calibrate --write-overlay` writes. A write failure is logged and
+skipped: the database refit still commits and the next start retries.
 
 Deterministic and idempotent: a second run changes nothing."""
 
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
-from pitwall.calibrate import calibrate
+import yaml
+
+from pitwall.calibrate import WriteFilter, calibrate, write_overlays
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import grade_and_store
@@ -40,6 +50,8 @@ from pitwall.tune import (
     tune_from_db,
 )
 
+log = logging.getLogger(__name__)
+
 LEARN_VERSION = 2
 STINT_PARAMS = ("deg_ms_per_lap", "base_ms", "fuel_ms_per_lap", DEG_FUEL_REF)
 
@@ -50,6 +62,8 @@ class MaintenanceReport:
     rebuilt: int = 0
     graded: int = 0
     calibrated: int = 0
+    overlays: int = 0
+    overlay_error: str = ""
     tuned: int = 0
 
     def summary(self) -> str:
@@ -62,6 +76,10 @@ class MaintenanceReport:
             parts.append(f"{self.graded} sessions graded")
         if self.calibrated:
             parts.append(f"{self.calibrated} learned values refit")
+        if self.overlays:
+            parts.append(f"{self.overlays} track overlays updated")
+        if self.overlay_error:
+            parts.append(f"track overlays skipped ({self.overlay_error})")
         if self.tuned:
             parts.append(f"{self.tuned} rule cooldowns adjusted")
         return ", ".join(parts) if parts else "learned state clean"
@@ -196,21 +214,26 @@ def grade_ungraded(db: Database, th: Mapping[str, object]) -> int:
     return len(uids)
 
 
-def calibrate_learned(db: Database, settings: Settings) -> int:
-    """Refit track priors from stored laps. Returns the number of values that
-    changed. Values that would be quarantined are never written."""
-    th = settings.thresholds
-
+def _quarantine_filter(th: Mapping[str, object]) -> WriteFilter:
     def accept(track_id: int, compound: int, name: str, value: float) -> bool:
         return not _bad_reason(ModelParam(track_id, compound, name, value, 0.0, 0.0), th)
 
+    return accept
+
+
+def calibrate_learned(db: Database, settings: Settings) -> tuple[int, dict[str, Any]]:
+    """Refit track priors from stored laps. Returns (values changed, the
+    calibrate report) so the caller can merge overlays after the database
+    transaction commits. Values that would be quarantined are never written."""
+    th = settings.thresholds
     before = {(p.track_id, p.compound, p.name): (p.value, p.weight) for p in db.all_params()}
-    report = calibrate(db, settings, accept=accept)
-    return sum(
+    report = calibrate(db, settings, accept=_quarantine_filter(th))
+    changed = sum(
         before.get((track["track_id"], w["compound"], w["name"])) != (w["value"], w["weight"])
         for track in report["tracks"]
         for w in track["writes"]
     )
+    return changed, report
 
 
 def tune_learned(db: Database, th: Mapping[str, object]) -> int:
@@ -230,9 +253,16 @@ def mid_session(db: Database, settings: Settings, wall_now: float | None = None)
     return wall_now - hb.wall_t <= settings.engine.recovery_max_age_s
 
 
-def maintain(db: Database, settings: Settings, *, refit: bool = True) -> MaintenanceReport:
+def maintain(
+    db: Database,
+    settings: Settings,
+    *,
+    refit: bool = True,
+    overlay_dir: Path | None = None,
+) -> MaintenanceReport:
     th = settings.thresholds
     report = MaintenanceReport()
+    cal_report: dict[str, Any] | None = None
     with db.transaction():
         if db.maintenance_version("learn_rebuild") < LEARN_VERSION:
             report.rebuilt, report.quarantined = rebuild_stint_params(db, th)
@@ -240,6 +270,14 @@ def maintain(db: Database, settings: Settings, *, refit: bool = True) -> Mainten
         report.quarantined += quarantine_bad(db, th)
         report.graded = grade_ungraded(db, th)
         if refit and settings.learning.auto_calibrate:
-            report.calibrated = calibrate_learned(db, settings)
+            report.calibrated, cal_report = calibrate_learned(db, settings)
             report.tuned = tune_learned(db, th)
+    if cal_report is not None:
+        try:
+            report.overlays = len(
+                write_overlays(cal_report, settings, overlay_dir, accept=_quarantine_filter(th))
+            )
+        except (OSError, yaml.YAMLError) as e:
+            log.warning("track overlay write skipped: %s", e)
+            report.overlay_error = str(e)
     return report
