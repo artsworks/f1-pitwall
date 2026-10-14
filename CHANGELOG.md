@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.15.0 (2026-10-14)
+
+### Features
+
+- **learning**: Write track overlays during startup upkeep
+  ([#96](https://github.com/artsworks/f1-pitwall/pull/96),
+  [`941a69e`](https://github.com/artsworks/f1-pitwall/commit/941a69e03dc705e09f3013b4871afadf1a850f2c))
+
+
 ## v0.14.1 (2026-10-14)
 
 ### Bug Fixes
