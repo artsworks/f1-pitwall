@@ -96,13 +96,50 @@ def test_learnable_recordings_only_selects_old_stable_sessions(tmp_path: Path) -
     rec = tmp_path / "rec"
     old_zst = _touch(rec / "session_00000000000000aa_1.f1bin.zst", 40)
     recent = _touch(rec / "session_00000000000000bb_1.f1bin", 0.01)
-    raw = _touch(rec / "session_00000000000000cc_1.f1bin", 40)
-    compressed = _touch(raw.with_name(raw.name + ".zst"), 40)
-    old_idx = _touch(rec / "session_00000000000000dd_1.f1idx", 40)
-    old_raw = _touch(rec / "session_00000000000000ee_1.f1bin", 40)
+    identical_uid = 0xCC
+    identical_raw = write_synthetic_recording(
+        rec / f"session_{identical_uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=identical_uid),
+        session_uid=identical_uid,
+    )
+    identical_zst = compress_recording(identical_raw)
 
-    assert learnable_recordings(rec, 5, now=NOW) == [old_zst, compressed, old_raw]
-    assert raw not in learnable_recordings(rec, 5, now=NOW)
+    changed_uid = 0xDD
+    changed_raw = write_synthetic_recording(
+        rec / f"session_{changed_uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=changed_uid),
+        session_uid=changed_uid,
+    )
+    changed_zst = compress_recording(changed_raw)
+    write_synthetic_recording(
+        changed_raw,
+        mixed_session_packets(20, session_uid=changed_uid),
+        session_uid=changed_uid,
+    )
+
+    corrupt_uid = 0xEE
+    corrupt_raw = write_synthetic_recording(
+        rec / f"session_{corrupt_uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=corrupt_uid),
+        session_uid=corrupt_uid,
+    )
+    corrupt_zst = corrupt_raw.with_name(corrupt_raw.name + ".zst")
+    corrupt_zst.write_bytes(b"not a zstandard stream")
+    old_idx = _touch(rec / "session_00000000000000ff_1.f1idx", 40)
+
+    old_mtime = NOW - 40 * DAY
+    for path in (identical_raw, identical_zst, changed_raw, changed_zst, corrupt_raw, corrupt_zst):
+        os.utime(path, (old_mtime, old_mtime))
+
+    selected = set(learnable_recordings(rec, 5, now=NOW))
+    assert selected == {
+        old_zst,
+        identical_zst,
+        changed_raw,
+        changed_zst,
+        corrupt_raw,
+        corrupt_zst,
+    }
     assert recent.exists()
     assert old_idx.exists()
 
@@ -539,6 +576,89 @@ def test_cleanup_keeps_other_recordings_with_the_same_uid(tmp_path: Path) -> Non
     assert {c.path for c in plan.delete} == {old}
     assert plan.kept_unlearned == 2
     assert other.exists() and changed.exists()
+
+
+def test_cleanup_credits_zst_import_only_to_zst_and_index(tmp_path: Path) -> None:
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    uid = 0xABCD
+    raw = write_synthetic_recording(
+        rec / f"session_{uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=uid),
+        session_uid=uid,
+    )
+    compressed = compress_recording(raw)
+    write_synthetic_recording(
+        raw,
+        mixed_session_packets(20, session_uid=uid),
+        session_uid=uid,
+    )
+    index = _touch(rec / f"session_{uid:016x}_1.f1idx", 40)
+    old_mtime = NOW - 40 * DAY
+    for path in (raw, compressed, index):
+        os.utime(path, (old_mtime, old_mtime))
+    imports = {compressed.resolve(): NOW - 30 * DAY}
+
+    plan = plan_cleanup(
+        rec,
+        tmp_path / "home",
+        tmp_path / "voices",
+        {uid},
+        5,
+        now=NOW,
+        recording_imports=imports,
+    )
+
+    candidates = {candidate.path: candidate.reason for candidate in plan.delete}
+    assert raw.absolute() not in candidates
+    assert candidates[compressed.absolute()] == "old recording, already learned"
+    assert candidates[index.absolute()] == "old recording, already learned"
+    assert plan.kept_unlearned == 1
+
+
+def test_cleanup_does_not_delete_raw_updated_after_compressed_import(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    uid = 0x123456789ABCDEF3
+    raw = write_synthetic_recording(
+        rec / f"session_{uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=uid),
+        session_uid=uid,
+    )
+    compressed = compress_recording(raw)
+    write_synthetic_recording(
+        raw,
+        mixed_session_packets(20, session_uid=uid),
+        session_uid=uid,
+    )
+    zst_mtime = time.time() - 10 * DAY
+    os.utime(compressed, (zst_mtime, zst_mtime))
+    recent_mtime = time.time()
+    os.utime(raw, (recent_mtime, recent_mtime))
+    args = [
+        "cleanup",
+        "--learn",
+        "--yes",
+        "--recordings",
+        str(rec),
+        "--db",
+        str(tmp_path / "pitwall.sqlite"),
+    ]
+
+    assert main(args) == 0
+    assert not compressed.exists()
+    assert raw.exists()
+
+    old_mtime = time.time() - 40 * DAY
+    os.utime(raw, (old_mtime, old_mtime))
+    assert main(args) == 0
+    assert raw.exists()
+    assert "keeping 1 old recording(s) not learned yet" in capsys.readouterr().out
 
 
 def test_cleanup_removes_identical_uncompressed_copy_regardless_of_learning(

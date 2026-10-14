@@ -79,8 +79,10 @@ def learnable_recordings(
             continue
         if path.stat().st_mtime > cutoff:
             continue
-        if match.group(2) == "bin" and path.with_name(path.name + ".zst").is_file():
-            continue
+        if match.group(2) == "bin":
+            sibling = path.with_name(path.name + ".zst")
+            if sibling.is_file() and _same_as_zst(path):
+                continue
         learnable.append(path)
     return learnable
 
@@ -168,8 +170,12 @@ def plan_cleanup(
                     kept_no_uid += 1
             continue
         if recording_imports is not None:
-            source = p.with_suffix(".f1bin") if m.group(2) == "idx" else p
-            sources = (source.resolve(), Path(str(source.resolve()) + ".zst"))
+            sources: tuple[Path, ...]
+            if m.group(2) == "idx":
+                source = p.with_suffix(".f1bin").resolve()
+                sources = (source, Path(str(source) + ".zst"))
+            else:
+                sources = (p.resolve(),)
             imported_at = max((recording_imports.get(path, 0.0) for path in sources), default=0.0)
             if imported_at < mtime:
                 if include_unlearned:
