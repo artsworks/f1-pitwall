@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +22,11 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
-from pitwall.net.profile import RecordFilter
+from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
     RecordingWriter,
+    compress_recording,
     ensure_index,
     index_path_for,
     list_recordings,
@@ -180,35 +183,79 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 def cmd_trim(args: argparse.Namespace) -> int:
     src = _resolve_recording(args.file, ConfigStore().current())
+    dest = Path(args.out)
+    write_path = dest.with_suffix("") if dest.suffix == ".zst" else dest
+    source_resolved = src.resolve()
+
+    def aliases_source(path: Path) -> bool:
+        if path.resolve() == source_resolved:
+            return True
+        if path.exists() and src.exists():
+            try:
+                return os.path.samefile(path, src)
+            except OSError:
+                return True
+        return False
+
+    if aliases_source(dest) or aliases_source(write_path):
+        print(f"trim: output path aliases source recording {src}")
+        return 2
+    if index_path_for(write_path).resolve() == index_path_for(src).resolve():
+        print(f"trim: output index would overwrite source index for {src}")
+        return 2
+
     from_us = args.from_us if args.from_us is not None else 0
     to_us = args.to_us
-    keep = RecordFilter(args.profile) if args.profile else None
-    with (
-        RecordingReader(src) as reader,
-        RecordingWriter(
-            Path(args.out),
-            packet_format=reader.header.packet_format,
-            session_uid=reader.header.session_uid,
-            config_hash=reader.header.config_hash,
-            game_version=reader.header.game_version,
-            metadata={
-                **reader.header.metadata,
-                "trimmed_from": str(src),
-                **({"profile": args.profile} if args.profile else {}),
-            },
-        ) as writer,
-    ):
-        kept = 0
-        for offset_us, payload in reader:
-            if offset_us < from_us:
-                continue
-            if to_us is not None and offset_us > to_us:
-                break
-            if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
-                continue
-            # Re-base so the trimmed file starts at 0.
-            writer.write_datagram((offset_us - from_us) / 1_000_000, payload)
-            kept += 1
+    kept = 0
+    with RecordingReader(src) as reader:
+        source_header = reader.header
+        source_profile = source_header.metadata.get("profile")
+        if source_profile not in PROFILES:
+            source_profile = "full"
+        if args.profile and PROFILES.index(args.profile) < PROFILES.index(source_profile):
+            print(f"trim: {src} is already {source_profile}, cannot write {args.profile}")
+            return 2
+
+        keep = RecordFilter(args.profile) if args.profile else None
+        metadata = {
+            **source_header.metadata,
+            "trimmed_from": str(src),
+            "profile": args.profile or source_profile,
+        }
+        with ExitStack() as stack:
+
+            def open_writer(wall_clock_start_us: int) -> RecordingWriter:
+                return stack.enter_context(
+                    RecordingWriter(
+                        write_path,
+                        packet_format=source_header.packet_format,
+                        session_uid=source_header.session_uid,
+                        config_hash=source_header.config_hash,
+                        game_version=source_header.game_version,
+                        wall_clock_start_us=wall_clock_start_us,
+                        metadata=metadata,
+                    )
+                )
+
+            writer: RecordingWriter | None = None
+            first_kept_offset_us = 0
+            for offset_us, payload in reader:
+                if offset_us < from_us:
+                    continue
+                if to_us is not None and offset_us > to_us:
+                    break
+                if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
+                    continue
+                if writer is None:
+                    first_kept_offset_us = offset_us
+                    writer = open_writer(source_header.wall_clock_start_us + offset_us)
+                writer.write_datagram((offset_us - first_kept_offset_us) / 1_000_000, payload)
+                kept += 1
+            if writer is None:
+                open_writer(source_header.wall_clock_start_us + from_us)
+
+    if write_path != dest:
+        compress_recording(write_path, remove=True)
     print(f"wrote {kept} records -> {args.out}")
     return 0
 
