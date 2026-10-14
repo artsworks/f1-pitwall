@@ -16,6 +16,7 @@ from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
 from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import linear_deg, stints, stop_laps
+from pitwall.learnpack import _atomic_write
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
 from pitwall.protocol.enums import session_kind
 from pitwall.store.db import Database, LapRow
@@ -632,8 +633,7 @@ def write_overlays(
         text = yaml.safe_dump(ordered, sort_keys=False)
         if path.exists() and path.read_text(encoding="utf-8") == text:
             continue
-        root.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        _atomic_write(path, text)
         paths.append(path)
     return paths
 

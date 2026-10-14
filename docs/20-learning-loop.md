@@ -76,9 +76,12 @@ database transaction:
 - It quarantines invalid active values with a reason.
 - It grades sessions that still need grading.
 - It refits pace, tyre wear, fuel, thermal and energy priors with the `pitwall calibrate` fit.
-- It writes the refit values into the per-track overlay files at `~/.pitwall/tracks/<id>.yaml`.
 - It refolds rule cooldowns with the `pitwall tune` fold. Auto-graded `good` and `wrong`
   outcomes count at `tune_auto_weight`, and a human grade replaces the automatic one.
+
+After the transaction commits, upkeep writes the refit values into the per-track overlay
+files at `~/.pitwall/tracks/<id>.yaml`. If writing fails it logs the error, keeps the
+refit, and retries on the next start.
 
 A session is also graded when it ends. The engine folds pit loss and pass or hold rates
 live during the session. The refit drops any value that the quarantine check rejects, so
