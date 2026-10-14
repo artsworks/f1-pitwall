@@ -191,11 +191,11 @@ and leftover `.tmp` files. It never removes `learning-latest.json` or `track_led
 
 ### Reclaim disk space
 
-Learn from old recordings first, then delete them:
+1. Run `uv run pitwall cleanup --days 1 --learn`. Cleanup learns each recording not learned yet, then lists what it can delete.
+2. If you also want to delete recordings that Pitwall cannot learn, run `uv run pitwall cleanup --days 1 --include-unlearned`.
 
-1. Run `uv run pitwall digest recordings/`. Digest learns each recording that has a session UID and records the import.
-2. Run `uv run pitwall cleanup --days 1`. Cleanup deletes the recordings that step 1 learned.
-3. If you also want to delete recordings that Pitwall cannot learn, run `uv run pitwall cleanup --days 1 --include-unlearned`.
+When cleanup keeps unlearned recordings, it prints `learn them` and `delete anyway` commands.
+Run `uv run pitwall digest recordings/` to learn recordings without planning a cleanup.
 
 Recordings named `session_0000000000000000_*` have no session UID. Digest reports
 `recording did not contain a session UID` for them and does not learn them. Cleanup
@@ -225,7 +225,7 @@ List recordings, newest first:
 uv run pitwall recordings
 ```
 
-Commands that take a recording (`replay`, `stats`, `trim`, `report`, `digest`, `tune`,
+Commands that take a recording (`replay`, `stats`, `report`, `digest`, `tune`,
 `calibrate` and `diff`) accept any of these:
 
 - nothing or `latest`, for the newest recording

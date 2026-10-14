@@ -12,6 +12,7 @@ from pitwall.cli.common import (
     _resolve_recording,
     db_from_args,
     emit_json_or,
+    ingest_paths,
     open_db,
 )
 from pitwall.cli.serve import _serve
@@ -19,10 +20,8 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
-from pitwall.net.profile import RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
-    RecordingWriter,
     ensure_index,
     index_path_for,
     list_recordings,
@@ -262,58 +261,6 @@ def _stats_census(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_trim(args: argparse.Namespace) -> int:
-    src = _resolve_recording(args.file, ConfigStore().current())
-    from_us = args.from_us if args.from_us is not None else 0
-    to_us = args.to_us
-    keep = RecordFilter(args.profile) if args.profile else None
-    with (
-        RecordingReader(src) as reader,
-        RecordingWriter(
-            Path(args.out),
-            packet_format=reader.header.packet_format,
-            session_uid=reader.header.session_uid,
-            config_hash=reader.header.config_hash,
-            game_version=reader.header.game_version,
-            metadata={
-                **reader.header.metadata,
-                "trimmed_from": str(src),
-                **({"profile": args.profile} if args.profile else {}),
-            },
-        ) as writer,
-    ):
-        kept = 0
-        for offset_us, payload in reader:
-            if offset_us < from_us:
-                continue
-            if to_us is not None and offset_us > to_us:
-                break
-            if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
-                continue
-            # Re-base so the trimmed file starts at 0.
-            writer.write_datagram((offset_us - from_us) / 1_000_000, payload)
-            kept += 1
-    print(f"wrote {kept} records -> {args.out}")
-    return 0
-
-
-def cmd_derive(args: argparse.Namespace) -> int:
-    from pitwall.derive import derive_recording, ops_from_options
-
-    settings = ConfigStore().current()
-    source = _resolve_recording(args.file, settings)
-    try:
-        ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
-        summary = derive_recording(source, Path(args.out), ops)
-    except ValueError as exc:
-        print(f"derive: {exc}")
-        return 1
-    print(f"derived session UID: 0x{summary.header.session_uid:016x}")
-    print(f"mutations: {', '.join(op.label for op in ops)}")
-    print(f"wrote {summary.record_count} records -> {args.out}")
-    return 0
-
-
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
     from pitwall.derive import is_synthetic_uid
@@ -401,6 +348,12 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     db = db_from_args(args, settings)
     if db is None:
         print("cleanup: persistence disabled, recordings are never deleted")
+    rec_dir = Path(args.recordings or settings.recording.directory)
+    if args.learn:
+        if db is None:
+            print("cleanup: persistence disabled, skipping --learn")
+        else:
+            ingest_paths(argparse.Namespace(paths=[str(rec_dir)]), db, settings)
     db_path = (
         Path(db.path).expanduser()
         if db is not None
@@ -408,7 +361,7 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     )
     try:
         plan = plan_cleanup(
-            Path(args.recordings or settings.recording.directory),
+            rec_dir,
             db_path.parent,
             Path(settings.speech.voices_dir),
             db.ingested_uids() if db is not None else set(),
@@ -422,6 +375,13 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         return 2
     if plan.kept_unlearned:
         print(f"keeping {plan.kept_unlearned} old recording(s) not learned yet")
+        print(f"  learn them: pitwall digest {rec_dir}")
+        print("  delete anyway: pitwall cleanup --include-unlearned")
+        if plan.kept_no_uid:
+            print(
+                f"  {plan.kept_no_uid} have no session UID "
+                "(session_0000000000000000_*), only --include-unlearned removes them"
+            )
     if not plan.delete:
         print("cleanup: nothing to delete")
         return 0

@@ -11,6 +11,8 @@ import zstandard
 from pitwall.cleanup import apply, plan_cleanup
 from pitwall.cli.parser import build_parser
 
+from .synth import mixed_session_packets, write_synthetic_recording
+
 NOW = 1_800_000_000.0
 DAY = 86400.0
 
@@ -61,6 +63,7 @@ def test_cleanup_days_defaults_to_five() -> None:
     args = build_parser().parse_args(["cleanup"])
     assert args.days == 5.0
     assert args.include_unlearned is False
+    assert args.learn is False
 
 
 def test_only_old_learned_recordings_and_caches_are_listed(tmp_path: Path) -> None:
@@ -126,6 +129,76 @@ def test_cleanup_cli_keeps_unlearned_recordings_unless_forced(tmp_path: Path, mo
     assert not file.exists()
 
 
+def test_cleanup_cli_guides_unlearned_recordings(tmp_path: Path, capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    file = _touch(rec / "session_00000000000000ab_1.f1bin", 40)
+    old_mtime = time.time() - 40 * DAY
+    os.utime(file, (old_mtime, old_mtime))
+
+    assert (
+        main(
+            [
+                "cleanup",
+                "--recordings",
+                str(rec),
+                "--db",
+                str(tmp_path / "pitwall.sqlite"),
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert f"learn them: pitwall digest {rec}" in output
+    assert "delete anyway: pitwall cleanup --include-unlearned" in output
+
+
+def test_cleanup_learns_recordings_before_planning(tmp_path: Path, capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    uid = 0x123456789ABCDEF0
+    learned_file = write_synthetic_recording(
+        rec / f"session_{uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=uid),
+        session_uid=uid,
+    )
+    no_uid_file = write_synthetic_recording(
+        rec / "session_0000000000000000_1.f1bin",
+        mixed_session_packets(10, session_uid=0),
+        session_uid=0,
+    )
+    old_mtime = time.time() - 40 * DAY
+    os.utime(learned_file, (old_mtime, old_mtime))
+    os.utime(no_uid_file, (old_mtime, old_mtime))
+
+    assert (
+        main(
+            [
+                "cleanup",
+                "--learn",
+                "--yes",
+                "--recordings",
+                str(rec),
+                "--db",
+                str(tmp_path / "pitwall.sqlite"),
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert not learned_file.exists()
+    assert no_uid_file.exists()
+    assert (
+        "1 have no session UID (session_0000000000000000_*), only --include-unlearned removes them"
+        in output
+    )
+
+
 def test_unlearned_recordings_kept_unless_forced(tmp_path: Path) -> None:
     rec, home, voices = tmp_path / "rec", tmp_path / "home", tmp_path / "voices"
     unlearned_uid = 0xAA
@@ -172,6 +245,30 @@ def test_unlearned_recordings_kept_unless_forced(tmp_path: Path) -> None:
     stale_candidates = {candidate.path: candidate.reason for candidate in stale_plan.delete}
     assert stale_candidates[stale_import.absolute()] == "old recording (unlearned, forced)"
     assert stale_plan.kept_unlearned == 0
+
+
+def test_cleanup_counts_old_recordings_without_session_uids(tmp_path: Path) -> None:
+    rec = tmp_path / "rec"
+    old = _touch(rec / "session_0000000000000000_1.f1bin", 40)
+    old_idx = _touch(rec / "session_0000000000000000_1.f1idx", 40)
+
+    plan = plan_cleanup(rec, tmp_path / "home", tmp_path / "voices", set(), 5, now=NOW)
+    assert plan.kept_unlearned == 1
+    assert plan.kept_no_uid == 1
+
+    forced = plan_cleanup(
+        rec,
+        tmp_path / "home",
+        tmp_path / "voices",
+        set(),
+        5,
+        now=NOW,
+        include_unlearned=True,
+    )
+    assert plan.delete == []
+    assert {candidate.path for candidate in forced.delete} == {old.absolute(), old_idx.absolute()}
+    assert forced.kept_unlearned == 0
+    assert forced.kept_no_uid == 0
 
 
 def test_learnings_prunes_dated_packs_and_temp_files(tmp_path: Path) -> None:

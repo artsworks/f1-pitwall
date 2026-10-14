@@ -39,6 +39,7 @@ class Candidate:
 class Plan:
     delete: list[Candidate]
     kept_unlearned: int  # old recordings kept because they are not in the database yet
+    kept_no_uid: int = 0
 
     @property
     def total_bytes(self) -> int:
@@ -96,6 +97,7 @@ def plan_cleanup(
     cutoff = min(now - older_than_days * 86400.0, recent)
     out: list[Candidate] = []
     kept = 0
+    kept_no_uid = 0
 
     def add(p: Path, reason: str) -> None:
         stat = p.stat()
@@ -133,12 +135,15 @@ def plan_cleanup(
                 continue
         if mtime > cutoff:
             continue
-        if int(m.group(1), 16) not in learned_uids:
+        uid = int(m.group(1), 16)
+        if uid == 0 or uid not in learned_uids:
             if include_unlearned:
                 add(p, "old recording (unlearned, forced)")
                 continue
             if m.group(2) != "idx":
                 kept += 1
+                if uid == 0:
+                    kept_no_uid += 1
             continue
         if recording_imports is not None:
             source = p.with_suffix(".f1bin") if m.group(2) == "idx" else p
@@ -173,7 +178,7 @@ def plan_cleanup(
     for p in _files(voices_dir / ".phrases", "*.wav"):
         if p.stat().st_mtime <= recent:
             add(p, "speech cache, rebuilt when needed")
-    return Plan(out, kept)
+    return Plan(out, kept, kept_no_uid)
 
 
 def apply(plan: Plan) -> tuple[int, int]:

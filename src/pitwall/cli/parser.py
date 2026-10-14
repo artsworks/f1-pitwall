@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 from pitwall.cli.common import (
     add_calls_mode_arg,
@@ -26,29 +27,102 @@ from pitwall.cli.learn import (
 )
 from pitwall.cli.recordings import (
     cmd_cleanup,
-    cmd_derive,
     cmd_recordings,
     cmd_replay,
     cmd_report,
     cmd_stats,
-    cmd_trim,
 )
 from pitwall.cli.serve import cmd_doctor, cmd_start
 from pitwall.cli.voice import cmd_voice
 from pitwall.net.profile import PROFILES
 
+EVERYDAY = (
+    "start",
+    "doctor",
+    "recordings",
+    "sessions",
+    "replay",
+    "stats",
+    "digest",
+    "debrief",
+    "setup",
+    "evaluate",
+    "calibrate",
+    "voice",
+    "cleanup",
+    "report",
+)
+ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore")
+
+
+def _cmd(
+    sub: argparse._SubParsersAction[argparse.ArgumentParser],
+    name: str,
+    help: str,
+    description: str,
+    example: str,
+) -> argparse.ArgumentParser:
+    return sub.add_parser(
+        name,
+        help=help,
+        description=description,
+        epilog=f"e.g. {example}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+
+def _command_lines(
+    sub: argparse._SubParsersAction[argparse.ArgumentParser], names: tuple[str, ...]
+) -> str:
+    help_by_name = {action.dest: action.help for action in sub._choices_actions}
+    width = max(map(len, names))
+    return "\n".join(f"  {name:<{width}}  {help_by_name[name]}" for name in names)
+
+
+class _HelpAllAction(argparse.Action):
+    def __init__(
+        self, option_strings: list[str], dest: str, nargs: int | str | None = None, **kwargs: Any
+    ) -> None:
+        self.parser: argparse.ArgumentParser = kwargs.pop("parser")
+        self.everyday_text: str = kwargs.pop("everyday_text")
+        self.full_text: str = kwargs.pop("full_text")
+        super().__init__(option_strings, dest, nargs=nargs, **kwargs)
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: str | None = None,
+    ) -> None:
+        self.parser.epilog = self.full_text
+        self.parser.print_help()
+        self.parser.exit()
+
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="pitwall")
+    p = argparse.ArgumentParser(
+        prog="pitwall",
+        usage="%(prog)s [-h] [--help-all] [--log-level LEVEL] <command> ...",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p.add_argument(
         "--log-level",
         choices=["debug", "info", "warning", "error"],
         default="warning",
         help="console log level (default warning)",
     )
-    sub = p.add_subparsers(dest="command", required=True)
+    sub = p.add_subparsers(
+        dest="command", required=True, metavar="<command>", help=argparse.SUPPRESS
+    )
 
-    rep = sub.add_parser("replay", help="replay a recording through the engine")
+    rep = _cmd(
+        sub,
+        "replay",
+        "replay a recording through the engine",
+        "Rerun a recording through the engine to see the calls it makes.",
+        "pitwall replay latest --speed 4 --serve",
+    )
     add_recording_arg(rep)
     rep.add_argument("--speed", default="max", help="1|N|max")
     rep.add_argument("--stats", action="store_true")
@@ -71,7 +145,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rep.set_defaults(func=cmd_replay)
 
-    dif = sub.add_parser("diff", help="compare two rules dirs over recording(s)")
+    dif = _cmd(
+        sub,
+        "diff",
+        "compare two rules dirs over recording(s)",
+        "Compare two rule sets on the same recordings, call by call.",
+        "pitwall diff latest --b my-rules/",
+    )
     add_recording_arg(dif, "recordings", multiple=True, required=True)
     dif.add_argument("--a", default=None, help="rules dir A (default: packaged defaults)")
     dif.add_argument("--b", required=True, help="rules dir B")
@@ -84,7 +164,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dif.set_defaults(func=cmd_diff)
 
-    tun = sub.add_parser("tune", help="fold review grades + A/B results into rule tuning")
+    tun = _cmd(
+        sub,
+        "tune",
+        "fold review grades + A/B results into rule tuning",
+        "Fold your call grades and A/B results into rule tuning.",
+        "pitwall tune",
+    )
     add_recording_arg(
         tun, "paths", multiple=True, help_prefix="recordings to ingest before tuning; "
     )
@@ -92,7 +178,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_db_arg(tun)
     tun.set_defaults(func=cmd_tune)
 
-    cu = sub.add_parser("cleanup", help="delete old recordings, packs and caches (asks first)")
+    cu = _cmd(
+        sub,
+        "cleanup",
+        "delete old recordings, packs and caches (asks first)",
+        "Reclaim disk space; keeps recordings not learned yet.",
+        "pitwall cleanup --learn",
+    )
     cu.add_argument(
         "--days", type=float, default=5.0, help="only files older than this (default: 5)"
     )
@@ -104,9 +196,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also delete old recordings not learned yet",
     )
+    cu.add_argument(
+        "--learn",
+        action="store_true",
+        help="learn recordings not learned yet, then plan the cleanup",
+    )
     cu.set_defaults(func=cmd_cleanup)
 
-    dg = sub.add_parser("digest", help="hindsight-grade a session and write its digest")
+    dg = _cmd(
+        sub,
+        "digest",
+        "hindsight-grade a session and write its digest",
+        "Learn from recordings: grades each session and writes its digest.",
+        "pitwall digest recordings/",
+    )
     add_recording_arg(dg, "paths", multiple=True, help_prefix="recordings to ingest; ")
     add_calls_mode_arg(dg)
     add_db_arg(dg)
@@ -115,13 +218,25 @@ def build_parser() -> argparse.ArgumentParser:
     add_json_arg(dg)
     dg.set_defaults(func=cmd_digest)
 
-    debrief = sub.add_parser("debrief", help="export a standalone session debrief")
+    debrief = _cmd(
+        sub,
+        "debrief",
+        "export a standalone session debrief",
+        "Export a session debrief as one HTML file you can open or share.",
+        "pitwall debrief",
+    )
     debrief.add_argument("--session", default="latest", help="session uid (default: latest)")
     add_db_arg(debrief)
     debrief.add_argument("--out", default=None, help="HTML output path")
     debrief.set_defaults(func=cmd_debrief)
 
-    setup = sub.add_parser("setup", help="recommend setup changes for a recorded run")
+    setup = _cmd(
+        sub,
+        "setup",
+        "recommend setup changes for a recorded run",
+        "Suggest car setup changes from how a recorded run went.",
+        "pitwall setup --mode garage",
+    )
     setup.add_argument("session", nargs="?", default=None, help="session uid (default: latest)")
     setup.add_argument(
         "--mode",
@@ -134,19 +249,37 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--store", action="store_true", help="store recommendations in SQLite")
     setup.set_defaults(func=cmd_setup)
 
-    ev = sub.add_parser("evaluate", help="compare recorded calls-on and calls-off outcomes")
+    ev = _cmd(
+        sub,
+        "evaluate",
+        "compare recorded calls-on and calls-off outcomes",
+        "Did the calls help? Compares calls-on vs calls-off outcomes.",
+        "pitwall evaluate",
+    )
     add_db_arg(ev)
     ev.add_argument("--track", type=int, default=None)
     add_json_arg(ev)
     ev.set_defaults(func=cmd_evaluate)
 
-    proposal = sub.add_parser("propose", help="review-only corpus threshold proposals")
+    proposal = _cmd(
+        sub,
+        "propose",
+        "review-only corpus threshold proposals",
+        "Suggest rule threshold changes from all sessions, for you to review.",
+        "pitwall propose",
+    )
     add_db_arg(proposal)
     proposal.add_argument("--candidate-rules", type=Path, default=None)
     proposal.add_argument("--out", default=None)
     proposal.set_defaults(func=cmd_propose)
 
-    cal = sub.add_parser("calibrate", help="fit track priors from recorded sessions")
+    cal = _cmd(
+        sub,
+        "calibrate",
+        "fit track priors from recorded sessions",
+        "Fit track priors for pace, tyre wear and fuel from your sessions.",
+        "pitwall calibrate --track 7 --dry-run",
+    )
     add_recording_arg(
         cal, "paths", multiple=True, help_prefix="recordings to ingest before calibration; "
     )
@@ -159,37 +292,42 @@ def build_parser() -> argparse.ArgumentParser:
     add_json_arg(cal)
     cal.set_defaults(func=cmd_calibrate)
 
-    rpt = sub.add_parser("report", help="bundle a recording + decisions for a bug report")
+    rpt = _cmd(
+        sub,
+        "report",
+        "bundle a recording + decisions for a bug report",
+        "Bundle a recording and its decision log into a zip for a bug report.",
+        "pitwall report latest -o report.zip",
+    )
     add_recording_arg(rpt, "recording")
     rpt.add_argument("--recording", dest="recording_opt", default=None, help=argparse.SUPPRESS)
     rpt.add_argument("-o", "--out", default=None, help="output zip path")
     rpt.set_defaults(func=cmd_report)
 
-    rc = sub.add_parser("rules", help="rule tooling")
+    rc = _cmd(
+        sub,
+        "rules",
+        "rule tooling",
+        "Tools for rule authors.",
+        "pitwall rules check",
+    )
     rsub = rc.add_subparsers(dest="rules_command", required=True)
-    rcheck = rsub.add_parser("check", help="validate rule expressions")
+    rcheck = _cmd(
+        rsub,
+        "check",
+        "validate rule expressions",
+        "Find broken rule expressions before a session.",
+        "pitwall rules check",
+    )
     rcheck.set_defaults(func=cmd_rules_check)
 
-    trim = sub.add_parser("trim", help="extract a time range from a recording")
-    add_recording_arg(trim)
-    trim.add_argument("--from-us", type=int, default=None)
-    trim.add_argument("--to-us", type=int, default=None)
-    trim.add_argument(
-        "--profile", choices=PROFILES, default=None, help="also downsample (e.g. full -> lite)"
+    bench = _cmd(
+        sub,
+        "bench",
+        "replay scenarios and compare scorecards",
+        "Replay scenario files and check the calls against a baseline scorecard.",
+        "pitwall bench --only brazil-sc-early",
     )
-    trim.add_argument("--out", required=True)
-    trim.set_defaults(func=cmd_trim)
-
-    derive = sub.add_parser("derive", help="derive a synthetic recording from a real session")
-    add_recording_arg(derive, required=True)
-    derive.add_argument("out", help="output .f1bin or .f1bin.zst path")
-    derive.add_argument("--wear-scale", type=float, default=None)
-    derive.add_argument("--inject-sc", metavar="START[-END]", default=None)
-    derive.add_argument("--vsc", action="store_true")
-    derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
-    derive.set_defaults(func=cmd_derive)
-
-    bench = sub.add_parser("bench", help="replay scenarios and compare scorecards")
     bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
     bench.add_argument(
         "--recordings",
@@ -215,7 +353,13 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--window", type=_positive_int, default=5)
     bench.set_defaults(func=cmd_bench)
 
-    st = sub.add_parser("stats", help="packet census of a recording")
+    st = _cmd(
+        sub,
+        "stats",
+        "packet census of a recording",
+        "Show what a recording holds, or what Pitwall has learned so far.",
+        "pitwall stats --learned",
+    )
     add_recording_arg(st)
     stats_modes = st.add_mutually_exclusive_group()
     stats_modes.add_argument("--learned", action="store_true")
@@ -226,22 +370,48 @@ def build_parser() -> argparse.ArgumentParser:
     add_json_arg(st)
     st.set_defaults(func=cmd_stats)
 
-    restore = sub.add_parser("restore", help="restore learned state from a learning pack")
+    restore = _cmd(
+        sub,
+        "restore",
+        "restore learned state from a learning pack",
+        "Restore learned state from a learning pack, for example on a new PC.",
+        "pitwall restore learnings/learning-latest.json",
+    )
     restore.add_argument("pack", type=Path)
     add_db_arg(restore)
     restore.add_argument("--overlay-dir", type=Path, default=None)
     restore.set_defaults(func=cmd_restore)
 
-    vc = sub.add_parser(
-        "voice", help="Piper and OmniVoice speech, voice checks, and voice-command channel"
+    vc = _cmd(
+        sub,
+        "voice",
+        "Piper and OmniVoice speech, voice checks, and voice-command channel",
+        "Manage speech: list and download voices, pre-render phrases, test audio.",
+        'pitwall voice say "Box this lap"',
     )
     vc.set_defaults(func=cmd_voice, voice_action=None)
     vsub = vc.add_subparsers(dest="voice_action")
-    vsub.add_parser("list", help="list installed and suggested Piper voices (default)")
-    vget = vsub.add_parser("get", help="download Piper voices")
+    _cmd(
+        vsub,
+        "list",
+        "list installed and suggested Piper voices (default)",
+        "Show installed Piper voices and suggested ones to download.",
+        "pitwall voice list",
+    )
+    vget = _cmd(
+        vsub,
+        "get",
+        "download Piper voices",
+        "Download Piper voices, by default the configured one.",
+        "pitwall voice get en_GB-alan-medium",
+    )
     vget.add_argument("names", nargs="*", help="voice names (default: configured)")
-    warm = vsub.add_parser(
-        "warm", help="pre-render fixed phrases with Piper or OmniVoice, optionally from a recording"
+    warm = _cmd(
+        vsub,
+        "warm",
+        "pre-render fixed phrases with Piper or OmniVoice, optionally from a recording",
+        "Pre-render common phrases so the first calls play without delay.",
+        "pitwall voice warm --engine omnivoice --replay latest",
     )
     warm.add_argument("--engine", choices=["auto", "piper", "omnivoice"], default="auto")
     warm.add_argument(
@@ -249,7 +419,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="recording: latest, an index, a name or a path",
     )
-    vsay = vsub.add_parser("say", help="audio check: speak a line through the speech backend")
+    vsay = _cmd(
+        vsub,
+        "say",
+        "audio check: speak a line through the speech backend",
+        "Speak a test line to check audio output and the voice.",
+        'pitwall voice say "Box this lap"',
+    )
     vsay.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
     vsay.add_argument(
         "--engine",
@@ -260,10 +436,28 @@ def build_parser() -> argparse.ArgumentParser:
     vsay.add_argument("--voice", help="Piper voice name, e.g. en_GB-alan-medium")
     vsay.add_argument("--speed", type=float, help="Piper pace multiplier (>1 faster)")
     vsay.add_argument("--save", metavar="WAV", help="render with Piper to a WAV file instead")
-    vsub.add_parser("devices", help="list SAPI recognisers and audio inputs")
-    vgram = vsub.add_parser("grammar", help="print the SRGS grammar")
+    _cmd(
+        vsub,
+        "devices",
+        "list SAPI recognisers and audio inputs",
+        "List speech recognisers and audio inputs for voice commands.",
+        "pitwall voice devices",
+    )
+    vgram = _cmd(
+        vsub,
+        "grammar",
+        "print the SRGS grammar",
+        "Print the voice-command grammar the recogniser listens for.",
+        "pitwall voice grammar --lang en-GB",
+    )
     vgram.add_argument("--lang", default="en-US", help="xml:lang of the grammar")
-    vspike = vsub.add_parser("spike", help="Phase 0 SAPI recogniser check")
+    vspike = _cmd(
+        vsub,
+        "spike",
+        "Phase 0 SAPI recogniser check",
+        "Test voice commands live with the SAPI recogniser.",
+        "pitwall voice spike --device 1 --say",
+    )
     vspike.add_argument("--device", type=int, default=None, help="audio input index")
     vspike.add_argument("--recognizer", default=None, help="recogniser description substring")
     vspike.add_argument("--confidence", type=float, default=None, help="confidence_min override")
@@ -271,21 +465,45 @@ def build_parser() -> argparse.ArgumentParser:
     vspike.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
     vspike.add_argument("--log", default=None, help="JSONL log path")
 
-    rl = sub.add_parser("recordings", help="list recordings with their # for other commands")
+    rl = _cmd(
+        sub,
+        "recordings",
+        "list recordings with their # for other commands",
+        "List recordings newest first, with the # that other commands accept.",
+        "pitwall recordings",
+    )
     rl.set_defaults(func=cmd_recordings)
 
-    ss = sub.add_parser("sessions", help="list stored sessions, newest first")
+    ss = _cmd(
+        sub,
+        "sessions",
+        "list stored sessions, newest first",
+        "List stored sessions newest first, to find a session uid.",
+        "pitwall sessions --limit 5",
+    )
     add_db_arg(ss)
     ss.add_argument("--limit", type=int, default=20)
     ss.set_defaults(func=cmd_sessions)
 
-    doc = sub.add_parser("doctor", help="bind-test the port and report observed telemetry")
+    doc = _cmd(
+        sub,
+        "doctor",
+        "bind-test the port and report observed telemetry",
+        "Check your setup: tests the UDP port and shows which telemetry arrives.",
+        "pitwall doctor --seconds 10",
+    )
     doc.add_argument("--host", default="0.0.0.0")
     doc.add_argument("--port", type=int, default=20777)
     doc.add_argument("--seconds", type=float, default=5.0)
     doc.set_defaults(func=cmd_doctor)
 
-    st2 = sub.add_parser("start", help="live: UDP ingest + rules + dashboard + speech")
+    st2 = _cmd(
+        sub,
+        "start",
+        "live: UDP ingest + rules + dashboard + speech",
+        "Run live: listens to game telemetry, makes calls, speaks them.",
+        "pitwall start",
+    )
     st2.add_argument(
         "--record",
         choices=[*PROFILES, "off"],
@@ -301,4 +519,28 @@ def build_parser() -> argparse.ArgumentParser:
     st2.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     st2.set_defaults(func=cmd_start)
 
+    everyday_epilog = (
+        "Everyday commands:\n"
+        f"{_command_lines(sub, EVERYDAY)}\n\n"
+        "Advanced commands for rule-engine work: diff, bench, rules, propose, tune, restore. "
+        "Run pitwall --help-all to list them.\n"
+        "Run pitwall <command> -h for an example."
+    )
+    full_epilog = (
+        "Everyday commands:\n"
+        f"{_command_lines(sub, EVERYDAY)}\n\n"
+        "Advanced commands:\n"
+        f"{_command_lines(sub, ADVANCED)}\n"
+        "Run pitwall <command> -h for an example."
+    )
+    p.epilog = everyday_epilog
+    p.add_argument(
+        "--help-all",
+        action=_HelpAllAction,
+        nargs=0,
+        parser=p,
+        everyday_text=everyday_epilog,
+        full_text=full_epilog,
+        help="list advanced commands too",
+    )
     return p

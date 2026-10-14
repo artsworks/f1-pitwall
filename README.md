@@ -143,6 +143,29 @@ uv run pitwall replay recordings\<file>.f1bin.zst --speed 10 --stats
 uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
 ```
 
+## Commands
+
+| Command | What it does |
+|---|---|
+| `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. |
+| `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. |
+| `pitwall recordings` | List recordings newest first, with the # that other commands accept. |
+| `pitwall sessions` | List stored sessions newest first, to find a session uid. |
+| `pitwall replay` | Rerun a recording through the engine to see the calls it makes. |
+| `pitwall stats` | Show what a recording holds, or what Pitwall has learned so far. |
+| `pitwall digest` | Learn from recordings: grades each session and writes its digest. |
+| `pitwall debrief` | Export a session debrief as one HTML file you can open or share. |
+| `pitwall setup` | Suggest car setup changes from how a recorded run went. |
+| `pitwall evaluate` | Did the calls help? Compares calls-on vs calls-off outcomes. |
+| `pitwall calibrate` | Fit track priors for pace, tyre wear and fuel from your sessions. |
+| `pitwall voice` | Manage speech: list and download voices, pre-render phrases, test audio. |
+| `pitwall cleanup` | Reclaim disk space and keep recordings not learned yet. |
+| `pitwall report` | Bundle a recording and its decision log into a zip for a bug report. |
+
+Run `pitwall <command> -h` for its options and an example. Run `pitwall --help-all` to list
+the advanced commands for rule-engine work: `diff`, `bench`, `rules check`, `propose`,
+`tune` and `restore`.
+
 ## Why it is not just another dashboard
 
 Gauges are a solved problem. The value here is judgement: knowing that the

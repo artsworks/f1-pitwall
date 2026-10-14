@@ -1,29 +1,34 @@
 # Synthetic recordings (spike)
 
-This spike tested whether f1-pitwall can derive synthetic recordings from real ones for
-the learning loop. The copies add rule-learning scenarios without changing physics priors.
-This is a proof of concept, not a finished feature.
+This spike tested how synthetic recordings from real sessions can add rule-learning
+scenarios without changing physics priors. Scenario mutations now run through
+`pitwall bench`. The mutation code remains in `src/pitwall/derive.py`.
 
 _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 
 ## What was built
 
-`pitwall derive` reads a `.f1bin` or `.f1bin.zst` recording and writes a mutated copy.
-The mutation code is in `src/pitwall/derive.py`. Each mutation rewrites bytes at known offsets, the same way `net/mask.py` does. Malformed and unrelated packets pass through unchanged.
+Scenario YAML files name mutations for `pitwall bench`. The bench reads a `.f1bin` or
+`.f1bin.zst` source and applies the mutations during replay.
 
-```
-pitwall derive <in> <out> [--wear-scale X] [--inject-sc START[-END]] [--vsc] [--penalty LAP]
+```yaml
+id: brazil-sc-early
+mutations:
+  inject_sc: "6-8"
 ```
 
-- `--wear-scale X` multiplies Car Damage `tyres_wear` and `tyres_damage` for every car. The values stay between 0 and 100.
-- `--inject-sc START[-END]` adds a safety car from lap START to lap END (default START+2). For those laps, `safety_car_status` in the Session packet is 1, or 2 with `--vsc`. The command adds three `SCAR` events: deployed, returning and returned. It also multiplies Lap Data `last_lap_time_ms` by 1.4 for laps that end inside the window.
-- `--penalty LAP` adds a 5 s `PENA` event for the player. It also adds 5 to the player's Lap Data `penalties` value from that lap on.
-- `--rival-pit` was not built. See [Breaking mutations](#breaking-mutations).
+- `wear_scale: X` multiplies Car Damage `tyres_wear` and `tyres_damage` for every car. Values stay between 0 and 100.
+- `inject_sc: "START[-END]"` adds a safety car for the selected laps. The default end is two laps after the start. The mutation adds `SCAR` events and increases lap time inside the window.
+- `vsc: true` changes the safety-car status to VSC.
+- `penalty: LAP` adds a 5 s `PENA` event for the player and increases the player's penalty total from that lap.
+- A rival-pit mutation is not built. See [Breaking mutations](#breaking-mutations).
+
+See [Scenario bench](24-scenario-bench.md) for the scenario format.
 
 ### Identity
 
-A derived session has a new session UID. The top 24 bits are the tag `0xF1DE57`. The low 40 bits are a hash of the source UID and the mutation list, so the same derive command always gives the same UID.
-`derive` writes the new UID to the file header and to every packet header, because the engine reads the UID from packet headers.
+A derived session has a new session UID. The top 24 bits are the tag `0xF1DE57`. The low 40 bits are a hash of the source UID and mutation list, so the same scenario and mutations always give the same UID.
+`src/pitwall/derive.py` writes the new UID to the file header and every packet header because the engine reads UIDs from packet headers.
 The spec asked for the top bit as the tag. That does not work, because game UIDs are random 64-bit values and about half of them have the top bit set.
 A real UID matches the 24-bit tag about once in 16 million sessions.
 
