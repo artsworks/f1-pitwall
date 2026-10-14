@@ -114,7 +114,7 @@ def cmd_debrief(args: argparse.Namespace) -> int:
     if uid is None or db.session_row(uid) is None:
         print("debrief: session not found")
         return 1
-    path = Path(args.out) if args.out else Path(f"debrief-{uid}.html")
+    path = Path(args.out) if args.out else Path("debriefs") / f"debrief-{uid}.html"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_debrief(db, uid, settings), encoding="utf-8")
     print(f"debrief: {path}")
