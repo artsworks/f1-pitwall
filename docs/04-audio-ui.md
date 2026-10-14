@@ -106,6 +106,14 @@ off the game PC.
 For an opt-in OmniVoice server on a Linux GPU box, setup, registration, caching, and fallback
 details are in [Natural voice (OmniVoice)](getting-started.md#natural-voice-omnivoice-opt-in).
 
+### Voice lab
+
+Open `/voicelab` on the dashboard to audition how rule text sounds before it ships.
+The page renders each stem, each slot, a splice of the two, and the full line through
+OmniVoice, then shuffles the variants so you can grade the seams blind. A chain mode
+splices multi-atom sequences such as spoken lap times. Grades append to
+`.voicelab-grades.jsonl` under `speech.voices_dir`.
+
 ### Speech engine contract
 
 `src/pitwall/audio/speaker.py` defines the contract for every speech engine. An engine meets the contract directly, or an adapter in front of it does. `speech.engine` picks an engine id from the registry in the same file.

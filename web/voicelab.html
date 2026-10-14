@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pitwall — voice lab</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #0a0a0c; color: #ddd; }
+    h1 { font-size: 18px; margin: 0; }
+    header { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #222; }
+    header .status { color: #8ab4ff; }
+    label { display: block; margin: 8px 0 3px; color: #999; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    select, textarea, input, button { font: inherit; background: #141419; color: #ddd; border: 1px solid #333; border-radius: 4px; }
+    select[multiple] { width: 100%; min-height: 140px; }
+    textarea { width: 100%; min-height: 60px; padding: 6px; }
+    input[type=text], input[type=number], select { padding: 4px 6px; }
+    button { padding: 5px 12px; cursor: pointer; }
+    button:hover { border-color: #8ab4ff; }
+    button:disabled { opacity: .4; cursor: default; }
+    main { display: flex; gap: 16px; padding: 14px; flex-wrap: wrap; }
+    .col { flex: 1 1 260px; min-width: 240px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .row > * { flex: 1; min-width: 90px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .chip { background: #1c2333; border: 1px solid #345; border-radius: 10px; padding: 1px 8px; font-size: 12px; cursor: pointer; }
+    .chip:hover { border-color: #d66; }
+    .card { background: #101016; border: 1px solid #26262e; border-radius: 6px; padding: 10px 12px; margin: 10px 14px; }
+    .card .id { font-weight: 600; margin-bottom: 6px; }
+    .variant { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid #1c1c22; }
+    .variant .lbl { width: 110px; }
+    .variant .meta { color: #777; font-size: 12px; }
+    .variant select.score { min-height: 0; width: 48px; }
+    .variant input.note { flex: 1; min-width: 80px; }
+    .saved { color: #7d7; font-size: 12px; }
+    .dim { color: #666; }
+    .err { color: #e77; }
+    .atoms button { margin: 2px; font-size: 12px; padding: 2px 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>voice lab</h1>
+    <button id="mode-stem">Stem + slot</button>
+    <button id="mode-chain">Chain</button>
+    <label style="margin:0"><input type="checkbox" id="reveal"> Reveal variants</label>
+    <span class="spacer" style="flex:1"></span>
+    <span id="status" class="status"></span>
+  </header>
+
+  <main id="stem-mode">
+    <div class="col">
+      <label>Stems <input type="text" id="stem-filter" placeholder="filter"></label>
+      <select id="stems" multiple></select>
+      <label>Custom stems (one per line)</label>
+      <textarea id="custom-stems"></textarea>
+    </div>
+    <div class="col">
+      <label>Slot category</label>
+      <select id="slot-cat"></select>
+      <label>Slots</label>
+      <select id="slots" multiple></select>
+      <div id="slot-chips" class="chips"></div>
+      <label>Custom slots (one per line)</label>
+      <textarea id="custom-slots"></textarea>
+    </div>
+    <div class="col">
+      <div class="row">
+        <div><label>Gap ms</label><input type="number" id="gap" value="0" min="0" max="2000"></div>
+        <div><label>Fade ms</label><input type="number" id="fade" value="10" min="0" max="500"></div>
+      </div>
+      <label>OmniVoice URL (blank = server default)</label>
+      <input type="text" id="url" style="width:100%">
+      <label>&nbsp;</label>
+      <button id="render">Render combos</button>
+    </div>
+  </main>
+
+  <main id="chain-mode" hidden>
+    <div class="col">
+      <label>Segments (one per line)</label>
+      <textarea id="segments" style="min-height:120px"></textarea>
+      <label>Presets</label>
+      <div id="presets" class="atoms"></div>
+    </div>
+    <div class="col">
+      <label>Lap time atoms (click to append)</label>
+      <div id="atom-list" class="atoms"></div>
+    </div>
+    <div class="col">
+      <div class="row">
+        <div><label>Gap ms</label><input type="number" id="gap2" value="0" min="0" max="2000"></div>
+        <div><label>Fade ms</label><input type="number" id="fade2" value="10" min="0" max="500"></div>
+      </div>
+      <label>OmniVoice URL (blank = server default)</label>
+      <input type="text" id="url2" style="width:100%">
+      <label>&nbsp;</label>
+      <button id="render-chain">Render chain</button>
+    </div>
+  </main>
+
+  <section id="results"></section>
+  <script src="/static/voicelab.js"></script>
+</body>
+</html>

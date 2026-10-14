@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import json
 import math
+import time
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -14,7 +16,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pitwall.config.loader import ConfigStore
 from pitwall.debrief import render_debrief, render_debrief_index
@@ -34,6 +36,45 @@ STALE_MS = 1000.0
 
 class PinRequest(BaseModel):
     pin: str
+
+
+class VoicelabRenderRequest(BaseModel):
+    stems: list[str] = Field(min_length=1)
+    slots: list[str] = Field(min_length=1)
+    gap_ms: int = Field(0, ge=0, le=2000)
+    fade_ms: int = Field(10, ge=0, le=500)
+    url: str | None = None
+
+
+class VoicelabMultiRequest(BaseModel):
+    segments: list[str] = Field(min_length=1)
+    gap_ms: int = Field(0, ge=0, le=2000)
+    fade_ms: int = Field(10, ge=0, le=500)
+    url: str | None = None
+
+
+class VoicelabGradeRequest(BaseModel):
+    combo: str
+    variant: str
+    score: int = Field(ge=1, le=5)
+    note: str = ""
+
+
+def _voicelab_render(endpoint: str, text: str) -> tuple[bytes, int]:
+    from pitwall.audio.omnivoice_tts import BACKGROUND_TIMEOUT_S, _post_json
+
+    start = time.monotonic()
+    wav = _post_json(endpoint, {"input": text, "response_format": "wav"}, BACKGROUND_TIMEOUT_S)
+    return wav, int(round((time.monotonic() - start) * 1000))
+
+
+def _voicelab_endpoint(url: str | None, settings_store: ConfigStore) -> str:
+    base = url or settings_store.current().speech.omnivoice_url
+    return base.rstrip("/") + "/v1/audio/speech"
+
+
+def _b64(wav: bytes) -> str:
+    return base64.b64encode(wav).decode("ascii")
 
 
 def tyre_status(inner: float, cold_c: float, hot_c: float) -> str:
@@ -786,6 +827,10 @@ def create_app(
     async def radio() -> FileResponse:
         return FileResponse(WEB_DIR / "radio.html")
 
+    @app.get("/voicelab")
+    async def voicelab() -> FileResponse:
+        return FileResponse(WEB_DIR / "voicelab.html")
+
     @app.get("/sw.js")
     async def service_worker() -> FileResponse:
         return FileResponse(WEB_DIR / "sw.js", media_type="text/javascript")
@@ -847,6 +892,124 @@ def create_app(
     @app.get("/api/voice/blip.wav")
     async def voice_blip() -> Response:
         return Response(_voice_blip_wav(), media_type="audio/wav")
+
+    @app.get("/api/voicelab/vocab")
+    def voicelab_vocab() -> JSONResponse:
+        from pitwall.audio.slots import lap_time_atoms, slot_vocabulary, template_stems
+
+        return JSONResponse(
+            {
+                "slots": slot_vocabulary(),
+                "stems": [
+                    {"text": text, "priority": priority} for text, priority in template_stems()
+                ],
+                "chains": {
+                    "lap_time": [
+                        lap_time_atoms(79_200),
+                        lap_time_atoms(92_400),
+                        lap_time_atoms(80_000),
+                    ]
+                },
+            }
+        )
+
+    @app.post("/api/voicelab/render")
+    def voicelab_render(req: VoicelabRenderRequest) -> JSONResponse:
+        from pitwall.audio.omnivoice_tts import OmniVoiceError
+        from pitwall.audio.splice import splice
+
+        endpoint = _voicelab_endpoint(req.url, settings_store)
+        cache: dict[str, tuple[bytes, int]] = {}
+
+        def render(text: str) -> tuple[bytes, int]:
+            if text not in cache:
+                cache[text] = _voicelab_render(endpoint, text)
+            return cache[text]
+
+        try:
+            combos = []
+            for stem in req.stems:
+                stem_wav, stem_ms = render(stem)
+                for slot in req.slots:
+                    slot_wav, slot_ms = render(slot)
+                    full_text = f"{stem} {slot}"
+                    full_wav, full_ms = render(full_text)
+                    splice_start = time.monotonic()
+                    spliced = splice([stem_wav, slot_wav], gap_ms=req.gap_ms, fade_ms=req.fade_ms)
+                    splice_ms = int(round((time.monotonic() - splice_start) * 1000))
+                    combos.append(
+                        {
+                            "id": f"{stem} | {slot}",
+                            "stem": stem,
+                            "slot": slot,
+                            "full_text": full_text,
+                            "wavs": {
+                                "stem": _b64(stem_wav),
+                                "slot": _b64(slot_wav),
+                                "spliced": _b64(spliced),
+                                "full": _b64(full_wav),
+                            },
+                            "ms": {
+                                "stem": stem_ms,
+                                "slot": slot_ms,
+                                "full": full_ms,
+                                "splice": splice_ms,
+                            },
+                        }
+                    )
+        except (OmniVoiceError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        return JSONResponse({"url": endpoint, "combos": combos})
+
+    @app.post("/api/voicelab/render_multi")
+    def voicelab_render_multi(req: VoicelabMultiRequest) -> JSONResponse:
+        from pitwall.audio.omnivoice_tts import OmniVoiceError
+        from pitwall.audio.splice import splice
+
+        endpoint = _voicelab_endpoint(req.url, settings_store)
+        cache: dict[str, tuple[bytes, int]] = {}
+
+        def render(text: str) -> tuple[bytes, int]:
+            if text not in cache:
+                cache[text] = _voicelab_render(endpoint, text)
+            return cache[text]
+
+        try:
+            segments = []
+            for text in req.segments:
+                wav, ms = render(text)
+                segments.append({"text": text, "wav": _b64(wav), "ms": ms})
+            full_text = " ".join(req.segments)
+            full_wav, full_ms = render(full_text)
+            splice_start = time.monotonic()
+            spliced = splice(
+                [cache[text][0] for text in req.segments],
+                gap_ms=req.gap_ms,
+                fade_ms=req.fade_ms,
+            )
+            splice_ms = int(round((time.monotonic() - splice_start) * 1000))
+        except (OmniVoiceError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        return JSONResponse(
+            {
+                "url": endpoint,
+                "id": " + ".join(req.segments),
+                "full_text": full_text,
+                "segments": segments,
+                "spliced": _b64(spliced),
+                "full": _b64(full_wav),
+                "ms": {"full": full_ms, "splice": splice_ms},
+            }
+        )
+
+    @app.post("/api/voicelab/grade")
+    def voicelab_grade(req: VoicelabGradeRequest) -> JSONResponse:
+        settings = settings_store.current()
+        path = Path(settings.speech.voices_dir) / ".voicelab-grades.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"t": time.time(), **req.model_dump()}) + "\n")
+        return JSONResponse({"ok": True})
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
