@@ -20,7 +20,7 @@ and an AI grid.
 | A10 | **"No Windows-only dependency"** claim broken by SAPI and the keyboard hook. | Low | Both behind interfaces; the move-to-second-machine escape hatch uses Piper and a small key forwarder. |
 | A11 | **Long-press bookmark overlapped the single/double-press detector**, and a held spacebar auto-repeats. | Medium | Detector classifies on press/release edges; auto-repeat ignored; long press ≥ 800 ms is a bookmark. |
 | A12 | **Roadmap "later" still listed league mode and a Streamdeck ack channel** as future work. | Low | League is the target (first league race in M3); acknowledgement is M2. |
-| A13 | **Public repository.** Risks: committing EA's spec, and committing recordings with friends' online IDs. | Medium | Spec is not committed (notes are re-expressed facts); `pitwall trim` redacts participant names; full recordings never in git. |
+| A13 | **Public repository.** Risks: committing EA's spec, and committing recordings with friends' online IDs. | Medium | Spec is not committed (notes are re-expressed facts); full recordings never in git. |
 
 ## Challenged and kept
 

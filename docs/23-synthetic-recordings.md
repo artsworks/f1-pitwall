@@ -8,22 +8,25 @@ _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 
 ## What was built
 
-`pitwall derive` reads a `.f1bin` or `.f1bin.zst` recording and writes a mutated copy.
-The mutation code is in `src/pitwall/derive.py`. Each mutation rewrites bytes at known offsets, the same way `net/mask.py` does. Malformed and unrelated packets pass through unchanged.
+`src/pitwall/derive.py` reads a `.f1bin` or `.f1bin.zst` recording and writes a mutated copy. The spike shipped it as a `pitwall derive` command, which was later removed. Synthetic recordings now come from the `mutations` list in a scenario YAML, which `pitwall bench` applies (see [Scenario bench](24-scenario-bench.md)). Each mutation rewrites bytes at known offsets, the same way `net/mask.py` does. Malformed and unrelated packets pass through unchanged.
 
 ```
-pitwall derive <in> <out> [--wear-scale X] [--inject-sc START[-END]] [--vsc] [--penalty LAP]
+mutations:
+  inject_sc: "6-8"
+  vsc: false
+  wear_scale: 1.5
+  penalty: 12
 ```
 
-- `--wear-scale X` multiplies Car Damage `tyres_wear` and `tyres_damage` for every car. The values stay between 0 and 100.
-- `--inject-sc START[-END]` adds a safety car from lap START to lap END (default START+2). For those laps, `safety_car_status` in the Session packet is 1, or 2 with `--vsc`. The command adds three `SCAR` events: deployed, returning and returned. It also multiplies Lap Data `last_lap_time_ms` by 1.4 for laps that end inside the window.
-- `--penalty LAP` adds a 5 s `PENA` event for the player. It also adds 5 to the player's Lap Data `penalties` value from that lap on.
-- `--rival-pit` was not built. See [Breaking mutations](#breaking-mutations).
+- `wear_scale: X` multiplies Car Damage `tyres_wear` and `tyres_damage` for every car. The values stay between 0 and 100.
+- `inject_sc: "START[-END]"` adds a safety car from lap START to lap END (default START+2). For those laps, `safety_car_status` in the Session packet is 1, or 2 with `vsc: true`. The mutation adds three `SCAR` events: deployed, returning and returned. It also multiplies Lap Data `last_lap_time_ms` by 1.4 for laps that end inside the window.
+- `penalty: LAP` adds a 5 s `PENA` event for the player. It also adds 5 to the player's Lap Data `penalties` value from that lap on.
+- A rival-pit mutation was not built. See [Breaking mutations](#breaking-mutations).
 
 ### Identity
 
-A derived session has a new session UID. The top 24 bits are the tag `0xF1DE57`. The low 40 bits are a hash of the source UID and the mutation list, so the same derive command always gives the same UID.
-`derive` writes the new UID to the file header and to every packet header, because the engine reads the UID from packet headers.
+A derived session has a new session UID. The top 24 bits are the tag `0xF1DE57`. The low 40 bits are a hash of the source UID and the mutation list, so the same mutation list always gives the same UID.
+`derive_recording` writes the new UID to the file header and to every packet header, because the engine reads the UID from packet headers.
 The spec asked for the top bit as the tag. That does not work, because game UIDs are random 64-bit values and about half of them have the top bit set.
 A real UID matches the 24-bit tag about once in 16 million sessions.
 
@@ -78,18 +81,18 @@ Each variant was ingested into its own empty database, so every run started from
 | Variant | Calls fired | Rules that did not fire in the source | Other changes |
 |---|---|---|---|
 | Source | 64 | | Window 7 to 13. Driver boxed on lap 11 |
-| `--inject-sc 6-8` | 63 | `sc_deployed` L6, `sc_ending` L8, `sc_restart` L9, `fuel_spare` L13 | Window opens on lap 10, not lap 9. Lap 9 `tyre_life` says 3 laps, not 5 |
-| `--inject-sc 10-11` | 65 | `sc_deployed` L10, `sc_ending` L11, `fuel_spare` L15 | The real stop on lap 11 now falls under the safety car |
-| `--wear-scale 1.6` | 64 | None | No call changed |
-| `--wear-scale 3` | 67 | `box_now` L8 and L16 | Window 6 to 11. Extra `tyre_life` and `menu:pit` lines |
+| `inject_sc=6-8` | 63 | `sc_deployed` L6, `sc_ending` L8, `sc_restart` L9, `fuel_spare` L13 | Window opens on lap 10, not lap 9. Lap 9 `tyre_life` says 3 laps, not 5 |
+| `inject_sc=10-11` | 65 | `sc_deployed` L10, `sc_ending` L11, `fuel_spare` L15 | The real stop on lap 11 now falls under the safety car |
+| `wear_scale=1.6` | 64 | None | No call changed |
+| `wear_scale=3` | 67 | `box_now` L8 and L16 | Window 6 to 11. Extra `tyre_life` and `menu:pit` lines |
 
 All four variants replayed and digested without errors.
 Calibration (dry run) on a database with all four sessions used 1 session and 14 laps by default and reported `synthetic_skipped: 3`. With `--include-synthetic` it used 4 sessions and 51 laps.
-Replaying the source alone folded fuel, degradation, base pace, setup baseline and battle values. Replaying `--inject-sc 6-8` alone folded no physics prior. The battle folds were the last gap and are now skipped as well.
+Replaying the source alone folded fuel, degradation, base pace, setup baseline and battle values. Replaying `inject_sc=6-8` alone folded no physics prior. The battle folds were the last gap and are now skipped as well.
 
 `pitwall tune` found nothing to tune in either the source or the variants. All hindsight outcomes in this race were `censored`, `n/a`, `ignored` or a plan outcome, and `tune` skips those. Unit tests check that `tune` reads synthetic sessions. This race does not show it.
 
-Ingest order changed the calls. When the variants went into the same database after the source, they planned with the source's learned degradation. In that run the window was 10 to 13, and `--inject-sc 6-8` called `box_now` on lap 9.
+Ingest order changed the calls. When the variants went into the same database after the source, they planned with the source's learned degradation. In that run the window was 10 to 13, and `inject_sc=6-8` called `box_now` on lap 9.
 The exclusion policy blocks the other direction: a synthetic session never changes the priors that a later real session uses.
 
 ## Consistency audit
@@ -99,7 +102,7 @@ The exclusion policy blocks the other direction: a synthetic session never chang
 - **Safety car status, events and lap times.** Session status, the three `SCAR` events and the longer lap times agree with each other. The lap rows for the window have `sc_status` 1 and are not valid laps, so green-lap fits skip them. The `sc_*` rules fired in order.
 - **Penalty.** The `PENA` event and the Lap Data `penalties` value agree. Only unit tests cover this. The real-data run did not use it.
 - **UID rewrite.** Every packet carries the new UID, so the engine, the database and the debrief see one session.
-- **Lap after the window.** `derive` sends a green Session packet before the first Lap Data packet of the next lap. With `--inject-sc 6-8`, lap 8 is a safety-car lap and lap 9 is valid and green.
+- **Lap after the window.** `derive_recording` sends a green Session packet before the first Lap Data packet of the next lap. With `inject_sc=6-8`, lap 8 is a safety-car lap and lap 9 is valid and green.
 
 ### Breaking mutations
 
@@ -114,14 +117,14 @@ Safety car injection leaves these fields at their green-flag values:
 Wear scaling has these problems:
 
 - `tyres_age_laps` and the lap times stay the same. Wear grows faster but pace does not drop, so wear and the degradation fit disagree.
-- Every value is scaled, including a new set. With `--wear-scale 3` the new tyres read 21% worn at age 0. In the source they read 7%. A better version would scale only the wear gained since the stint started.
+- Every value is scaled, including a new set. With `wear_scale=3` the new tyres read 21% worn at age 0. In the source they read 7%. A better version would scale only the wear gained since the stint started.
 - Session History tyre stints and Car Status tyre fields stay the same.
 - At 1.6 nothing changed, because pace-cliff life was shorter than wear life. Tyre life is the lower of the two.
 
 Some problems apply to every mutation:
 
-- The recorded driver does not react. Hindsight graded `box_now` as `ignored` for lap 8 and lap 16 with `--wear-scale 3`, and for lap 9 in the shared-database run. Those grades describe the source race, not a decision made in the new scenario.
-- `--rival-pit` was not built. One rival stop would need changes to Lap Data `pit_status`, the pit timers, positions and gaps for every car, the Session History stints, and the Car Status and Car Damage tyre fields, all kept in step over two laps. It would be the least consistent mutation.
+- The recorded driver does not react. Hindsight graded `box_now` as `ignored` for lap 8 and lap 16 with `wear_scale=3`, and for lap 9 in the shared-database run. Those grades describe the source race, not a decision made in the new scenario.
+- A rival-pit mutation was not built. One rival stop would need changes to Lap Data `pit_status`, the pit timers, positions and gaps for every car, the Session History stints, and the Car Status and Car Damage tyre fields, all kept in step over two laps. It would be the least consistent mutation.
 
 ## Should the exclusion become a down-weight?
 
@@ -135,7 +138,7 @@ the driver's actions, such as `stop_taken`, in synthetic sessions. `tune` curren
 
 ## Follow-up: a generator seeded from real priors
 
-This follow-up is worth a spike. `tests/race_synth.py` has four cars on track 7 with fixed pace. A generator that writes all the physics itself can keep the fields consistent, which `derive` cannot:
+This follow-up is worth a spike. `tests/race_synth.py` has four cars on track 7 with fixed pace. A generator that writes all the physics itself can keep the fields consistent, which derived recordings cannot:
 
 - 20 cars on a real `track_id`, with degradation and fuel values from `pitwall calibrate`.
 - A safety car that bunches the field and changes gaps.
@@ -143,7 +146,7 @@ This follow-up is worth a spike. `tests/race_synth.py` has four cars on track 7 
 - Pit loss that matches the timing of the stop.
 
 Its output would still be synthetic and would follow the same exclusion policy. The risk is that the generator encodes our own assumptions, so check its output against real recordings before trusting new calls from it.
-Keep `derive` for quick checks of "the same race, with an event at a different time".
+Keep derived scenarios for quick checks of "the same race, with an event at a different time".
 
 The race used here had no safety car and one stop. A longer real race with a safety car and two stops would test these results better. You may need to record one.
 

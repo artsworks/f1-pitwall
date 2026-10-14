@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from pitwall.cli import main
 from pitwall.net.profile import PROFILE_TABLE, RecordFilter
 from pitwall.net.recording import RecordingReader, RecordingRotator
 from pitwall.protocol.header import PacketId
@@ -69,21 +68,6 @@ def test_rotator_filters_compresses_and_stamps_profile(tmp_path: Path) -> None:
     assert rot.last_path is not None and rot.last_path.name.endswith(".f1bin.zst")
     assert not list(tmp_path.glob("*.f1bin"))
     with RecordingReader(rot.last_path) as r:
-        assert r.header.metadata["profile"] == "lite"
-        pids = Counter(p[6] for _, p in r)
-    assert pids[PacketId.MOTION] == 0
-    assert pids[PacketId.CAR_TELEMETRY] == 20
-
-
-def test_trim_profile_downsamples_full_recording(tmp_path: Path) -> None:
-    rot = RecordingRotator(tmp_path, profile="full")
-    for t, p in _stream():
-        rot.write_datagram(t, p)
-    rot.close()
-    assert rot.last_path is not None
-    out = tmp_path / "lite.f1bin"
-    assert main(["trim", str(rot.last_path), "--profile", "lite", "--out", str(out)]) == 0
-    with RecordingReader(out) as r:
         assert r.header.metadata["profile"] == "lite"
         pids = Counter(p[6] for _, p in r)
     assert pids[PacketId.MOTION] == 0

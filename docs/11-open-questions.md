@@ -8,8 +8,7 @@ only items under "Settled" are settled.
 **Repository.** `f1-pitwall`, **public**, **GPLv3** (copyleft: distributed improvements
 must stay open source; commercial use is permitted by the licence). Layout tables
 re-express field definitions rather than copy EA's document. The specification itself is
-not committed. No recordings containing friends' online IDs are committed; `pitwall trim`
-redacts them.
+not committed. No recordings containing friends' online IDs are committed.
 
 **Replay.** Yes, first. Record raw datagrams and use a replay tool that drives the same
 ingest path, with review mode and config A/B diffing. See `07-replay-and-debug.md`.

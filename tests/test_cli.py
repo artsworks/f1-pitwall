@@ -42,16 +42,12 @@ def test_stats_command(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyp
     assert sum(e["accepted"] for e in out["packets"].values()) == len(mixed_session_packets(10))
 
 
-def test_replay_and_trim(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_replay_stats_and_window(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     rec = write_synthetic_recording(tmp_path / "s.f1bin", mixed_session_packets(10))
     assert main(["replay", str(rec), "--speed", "max", "--stats"]) == 0
     capsys.readouterr()
 
-    trimmed = tmp_path / "t.f1bin"
-    assert (
-        main(["trim", str(rec), "--from-us", "0", "--to-us", "150000", "--out", str(trimmed)]) == 0
-    )
-    assert trimmed.exists()
+    assert main(["replay", str(rec), "--speed", "max", "--from-us", "0", "--to-us", "150000"]) == 0
 
 
 def test_replay_from_lap_rebuilds_missing_or_stale_index(  # type: ignore[no-untyped-def]

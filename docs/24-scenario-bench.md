@@ -7,7 +7,7 @@ without regressions.
 
 ## Terms
 
-- **Scenario.** A YAML file in `scenarios/`. It names a source recording, optional `pitwall derive` mutations and the calls that must or must not fire.
+- **Scenario.** A YAML file in `scenarios/`. It names a source recording, optional mutations from `pitwall.derive` and the calls that must or must not fire.
 - **Real scenario.** A scenario with no mutations. The bench replays the source as it was recorded.
 - **Guard.** A scenario that must pass. A failed guard fails the gate.
 - **Target.** A scenario that shows a known gap. Pitwall does not pass it yet. A change that makes a target pass is an improvement.
@@ -35,7 +35,7 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` takes the `pitwall derive` options: `inject_sc`, `vsc`, `wear_scale` and `penalty`.
+- `mutations` takes these keys: `inject_sc`, `vsc`, `wear_scale` and `penalty`.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its
@@ -131,7 +131,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
 
-Rival stops, weather changes and red flags need a real recording or a generator. `pitwall derive` cannot make them.
+Rival stops, weather changes and red flags need a real recording or a generator. Mutations cannot make them.
 
 ## Starter scenarios
 

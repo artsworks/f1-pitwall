@@ -26,12 +26,10 @@ from pitwall.cli.learn import (
 )
 from pitwall.cli.recordings import (
     cmd_cleanup,
-    cmd_derive,
     cmd_recordings,
     cmd_replay,
     cmd_report,
     cmd_stats,
-    cmd_trim,
 )
 from pitwall.cli.serve import cmd_doctor, cmd_start
 from pitwall.cli.voice import cmd_voice
@@ -169,25 +167,6 @@ def build_parser() -> argparse.ArgumentParser:
     rsub = rc.add_subparsers(dest="rules_command", required=True)
     rcheck = rsub.add_parser("check", help="validate rule expressions")
     rcheck.set_defaults(func=cmd_rules_check)
-
-    trim = sub.add_parser("trim", help="extract a time range from a recording")
-    add_recording_arg(trim)
-    trim.add_argument("--from-us", type=int, default=None)
-    trim.add_argument("--to-us", type=int, default=None)
-    trim.add_argument(
-        "--profile", choices=PROFILES, default=None, help="also downsample (e.g. full -> lite)"
-    )
-    trim.add_argument("--out", required=True)
-    trim.set_defaults(func=cmd_trim)
-
-    derive = sub.add_parser("derive", help="derive a synthetic recording from a real session")
-    add_recording_arg(derive, required=True)
-    derive.add_argument("out", help="output .f1bin or .f1bin.zst path")
-    derive.add_argument("--wear-scale", type=float, default=None)
-    derive.add_argument("--inject-sc", metavar="START[-END]", default=None)
-    derive.add_argument("--vsc", action="store_true")
-    derive.add_argument("--penalty", type=int, default=None, metavar="LAP")
-    derive.set_defaults(func=cmd_derive)
 
     bench = sub.add_parser("bench", help="replay scenarios and compare scorecards")
     bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
