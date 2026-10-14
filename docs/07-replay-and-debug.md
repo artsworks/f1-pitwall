@@ -118,6 +118,11 @@ particular weather crossover). Three options:
   scenario. Used only for cases real recordings do not cover, and always flagged as
   synthetic, because synthetic data quietly encodes your assumptions.
 
+## Trim a recording
+
+Use `pitwall trim <recording> --profile lite --out <file>` to write a smaller copy.
+Add `--from-us N --to-us N` to cut a time range.
+
 ## Debugging when it is live
 
 - Show the `--stats` equivalent on a live `/debug` page: packets/s per type, malformed count,

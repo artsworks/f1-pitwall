@@ -164,7 +164,7 @@ uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the da
 
 Run `pitwall <command> -h` for its options and an example. Run `pitwall --help-all` to list
 the advanced commands for rule-engine work: `diff`, `bench`, `rules check`, `propose`,
-`tune` and `restore`.
+`tune`, `restore` and `trim`.
 
 ## Why it is not just another dashboard
 

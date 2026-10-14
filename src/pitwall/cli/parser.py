@@ -31,6 +31,7 @@ from pitwall.cli.recordings import (
     cmd_replay,
     cmd_report,
     cmd_stats,
+    cmd_trim,
 )
 from pitwall.cli.serve import cmd_doctor, cmd_start
 from pitwall.cli.voice import cmd_voice
@@ -52,7 +53,7 @@ EVERYDAY = (
     "cleanup",
     "report",
 )
-ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore")
+ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore", "trim")
 
 
 def _cmd(
@@ -519,10 +520,26 @@ def build_parser() -> argparse.ArgumentParser:
     st2.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     st2.set_defaults(func=cmd_start)
 
+    trim = _cmd(
+        sub,
+        "trim",
+        "extract a time range from a recording",
+        "Cut a time range or downsample a recording, for example full to lite.",
+        "pitwall trim latest --profile lite --out lite.f1bin",
+    )
+    add_recording_arg(trim)
+    trim.add_argument("--from-us", type=int, default=None)
+    trim.add_argument("--to-us", type=int, default=None)
+    trim.add_argument(
+        "--profile", choices=PROFILES, default=None, help="also downsample (e.g. full -> lite)"
+    )
+    trim.add_argument("--out", required=True)
+    trim.set_defaults(func=cmd_trim)
+
     everyday_epilog = (
         "Everyday commands:\n"
         f"{_command_lines(sub, EVERYDAY)}\n\n"
-        "Advanced commands for rule-engine work: diff, bench, rules, propose, tune, restore. "
+        "Advanced commands for rule-engine work: diff, bench, rules, propose, tune, restore, trim. "
         "Run pitwall --help-all to list them.\n"
         "Run pitwall <command> -h for an example."
     )

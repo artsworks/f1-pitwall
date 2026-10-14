@@ -36,9 +36,11 @@ def test_layered_top_level_help(capsys: pytest.CaptureFixture[str]) -> None:
     full = capsys.readouterr().out
     assert "Advanced commands:" in full
     assert any(line.startswith("  bench") for line in full.splitlines())
+    assert any(line.startswith("  trim") for line in full.splitlines())
+    assert not any(line.startswith("  trim") for line in everyday.splitlines())
 
 
-@pytest.mark.parametrize("command", ["trim", "derive"])
+@pytest.mark.parametrize("command", ["derive"])
 def test_removed_commands_are_not_choices(command: str) -> None:
     with pytest.raises(SystemExit) as exc:
         main([command])
