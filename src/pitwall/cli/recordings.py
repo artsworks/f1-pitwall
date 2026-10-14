@@ -342,24 +342,29 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_cleanup(args: argparse.Namespace) -> int:
     """List old files that are safe to delete; delete them after confirmation."""
-    from pitwall.cleanup import apply, plan_cleanup
+    from pitwall.cleanup import apply, learnable_recordings, plan_cleanup
 
     settings = ConfigStore().current()
     db = db_from_args(args, settings)
     if db is None:
         print("cleanup: persistence disabled, recordings are never deleted")
     rec_dir = Path(args.recordings or settings.recording.directory)
-    if args.learn:
-        if db is None:
-            print("cleanup: persistence disabled, skipping --learn")
-        else:
-            ingest_paths(argparse.Namespace(paths=[str(rec_dir)]), db, settings)
     db_path = (
         Path(db.path).expanduser()
         if db is not None
         else Path(settings.persistence.path).expanduser()
     )
+    failures = 0
     try:
+        if args.learn:
+            if db is None:
+                print("cleanup: persistence disabled, skipping --learn")
+            else:
+                paths = learnable_recordings(rec_dir, args.days)
+                if paths:
+                    failures = ingest_paths(
+                        argparse.Namespace(paths=[str(path) for path in paths]), db, settings
+                    )
         plan = plan_cleanup(
             rec_dir,
             db_path.parent,
@@ -384,6 +389,9 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
             )
     if not plan.delete:
         print("cleanup: nothing to delete")
+        if failures:
+            print(f"cleanup: {failures} recording(s) could not be learned")
+            return 1
         return 0
     by_reason: dict[str, list[int]] = {}
     for c in plan.delete:
@@ -401,4 +409,7 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
             return 1
     n, freed = apply(plan)
     print(f"cleanup: deleted {n} file(s), freed {_mb(freed)}")
+    if failures:
+        print(f"cleanup: {failures} recording(s) could not be learned")
+        return 1
     return 0

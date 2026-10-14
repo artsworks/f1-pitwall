@@ -191,7 +191,8 @@ and leftover `.tmp` files. It never removes `learning-latest.json` or `track_led
 
 ### Reclaim disk space
 
-1. Run `uv run pitwall cleanup --days 1 --learn`. Cleanup learns each recording not learned yet, then lists what it can delete.
+1. Run `uv run pitwall cleanup --days 1 --learn`. Cleanup learns recordings older than
+   `--days` and at least an hour old. It skips live recordings, then lists what it can delete.
 2. If you also want to delete recordings that Pitwall cannot learn, run `uv run pitwall cleanup --days 1 --include-unlearned`.
 
 When cleanup keeps unlearned recordings, it prints `learn them` and `delete anyway` commands.

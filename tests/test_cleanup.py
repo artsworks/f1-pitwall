@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 import zstandard
 
-from pitwall.cleanup import apply, plan_cleanup
+from pitwall.cleanup import apply, learnable_recordings, plan_cleanup
 from pitwall.cli.parser import build_parser
+from pitwall.net.recording import compress_recording
 
 from .synth import mixed_session_packets, write_synthetic_recording
 
@@ -89,6 +90,21 @@ def test_only_old_learned_recordings_and_caches_are_listed(tmp_path: Path) -> No
     for kept in (unlearned, fresh, live, log, db, profile, model):
         assert kept.exists()
     assert not old.exists()
+
+
+def test_learnable_recordings_only_selects_old_stable_sessions(tmp_path: Path) -> None:
+    rec = tmp_path / "rec"
+    old_zst = _touch(rec / "session_00000000000000aa_1.f1bin.zst", 40)
+    recent = _touch(rec / "session_00000000000000bb_1.f1bin", 0.01)
+    raw = _touch(rec / "session_00000000000000cc_1.f1bin", 40)
+    compressed = _touch(raw.with_name(raw.name + ".zst"), 40)
+    old_idx = _touch(rec / "session_00000000000000dd_1.f1idx", 40)
+    old_raw = _touch(rec / "session_00000000000000ee_1.f1bin", 40)
+
+    assert learnable_recordings(rec, 5, now=NOW) == [old_zst, compressed, old_raw]
+    assert raw not in learnable_recordings(rec, 5, now=NOW)
+    assert recent.exists()
+    assert old_idx.exists()
 
 
 def test_cleanup_cli_needs_confirmation(tmp_path: Path, capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -188,7 +204,7 @@ def test_cleanup_learns_recordings_before_planning(tmp_path: Path, capsys, monke
                 str(tmp_path / "pitwall.sqlite"),
             ]
         )
-        == 0
+        == 1
     )
     output = capsys.readouterr().out
     assert not learned_file.exists()
@@ -197,6 +213,116 @@ def test_cleanup_learns_recordings_before_planning(tmp_path: Path, capsys, monke
         "1 have no session UID (session_0000000000000000_*), only --include-unlearned removes them"
         in output
     )
+
+
+def test_cleanup_learns_only_after_recording_is_stable(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+    from pitwall.store.db import Database
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    db_path = tmp_path / "pitwall.sqlite"
+    uid = 0x123456789ABCDEF1
+    recording = rec / f"session_{uid:016x}_1.f1bin"
+    write_synthetic_recording(
+        recording,
+        mixed_session_packets(10, session_uid=uid),
+        session_uid=uid,
+    )
+    args = ["cleanup", "--learn", "--yes", "--recordings", str(rec), "--db", str(db_path)]
+
+    assert main(args) == 0
+    assert recording.exists()
+    db = Database(str(db_path))
+    assert uid not in db.ingested_uids()
+    db.close()
+
+    write_synthetic_recording(
+        recording,
+        mixed_session_packets(20, session_uid=uid),
+        session_uid=uid,
+    )
+    old_mtime = time.time() - 40 * DAY
+    os.utime(recording, (old_mtime, old_mtime))
+    assert main(args) == 0
+    assert not recording.exists()
+    db = Database(str(db_path))
+    assert uid in db.ingested_uids()
+    db.close()
+
+
+def test_cleanup_learns_compressed_recording_and_deletes_raw_copy(
+    tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+    from pitwall.store.db import Database
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    uid = 0x123456789ABCDEF2
+    raw = write_synthetic_recording(
+        rec / f"session_{uid:016x}_1.f1bin",
+        mixed_session_packets(10, session_uid=uid),
+        session_uid=uid,
+    )
+    compressed = compress_recording(raw)
+    old_mtime = time.time() - 40 * DAY
+    os.utime(raw, (old_mtime, old_mtime))
+    os.utime(compressed, (old_mtime, old_mtime))
+    db_path = tmp_path / "pitwall.sqlite"
+
+    assert (
+        main(
+            [
+                "cleanup",
+                "--learn",
+                "--yes",
+                "--recordings",
+                str(rec),
+                "--db",
+                str(db_path),
+            ]
+        )
+        == 0
+    )
+    assert not raw.exists()
+    assert not compressed.exists()
+    db = Database(str(db_path))
+    assert compressed.resolve() in db.ingested_recordings()
+    db.close()
+
+
+def test_cleanup_reports_failed_learning_and_keeps_recording(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    rec = tmp_path / "rec"
+    recording = _touch(rec / "session_1234567890abcdef_1.f1bin", 40)
+    old_mtime = time.time() - 40 * DAY
+    os.utime(recording, (old_mtime, old_mtime))
+
+    assert (
+        main(
+            [
+                "cleanup",
+                "--learn",
+                "--yes",
+                "--recordings",
+                str(rec),
+                "--db",
+                str(tmp_path / "pitwall.sqlite"),
+            ]
+        )
+        == 1
+    )
+    output = capsys.readouterr().out
+    assert f"error {recording}" in output
+    assert "cleanup: 1 recording(s) could not be learned" in output
+    assert recording.exists()
 
 
 def test_unlearned_recordings_kept_unless_forced(tmp_path: Path) -> None:

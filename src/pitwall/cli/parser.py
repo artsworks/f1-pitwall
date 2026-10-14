@@ -199,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     cu.add_argument(
         "--learn",
         action="store_true",
-        help="learn recordings not learned yet, then plan the cleanup",
+        help="learn recordings old enough to delete, then plan the cleanup",
     )
     cu.set_defaults(func=cmd_cleanup)
 

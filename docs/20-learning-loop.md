@@ -126,8 +126,9 @@ The latest pack includes learned parameters, quarantined values, call grades, tr
 Run `pitwall restore learnings/learning-latest.json` to restore a pack.
 Restore keeps active priors and call-quality history for sessions in the ledger.
 Set `learning.pack_dir` to use another drive or synced folder.
-`pitwall cleanup --learn` learns recordings first, then plans the cleanup. Cleanup also
-deletes dated packs older than 5 days and leftover `.tmp` files. Use `--days` to change the age.
+`pitwall cleanup --learn` learns recordings older than `--days` and at least an hour old.
+It skips live recordings, then plans the cleanup. Cleanup also deletes dated packs older
+than 5 days and leftover `.tmp` files. Use `--days` to change the age.
 Cleanup never deletes `learning-latest.json` or `track_ledger.jsonl`, because restore and the track ledger need them.
 
 ### Contributing your learnings

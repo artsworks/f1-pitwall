@@ -61,6 +61,30 @@ def _files(root: Path, pattern: str) -> Iterable[Path]:
     )
 
 
+def _cutoff(now: float | None, older_than_days: float) -> float:
+    if not math.isfinite(older_than_days) or older_than_days < 0:
+        raise ValueError("--days must be a finite, non-negative number")
+    now = time.time() if now is None else now
+    return min(now - older_than_days * 86400.0, now - _RECENT_S)
+
+
+def learnable_recordings(
+    recordings_dir: Path, older_than_days: float, now: float | None = None
+) -> list[Path]:
+    cutoff = _cutoff(now, older_than_days)
+    learnable: list[Path] = []
+    for path in _files(recordings_dir, "session_*"):
+        match = _SESSION.match(path.name)
+        if match is None or match.group(2) not in {"bin", "bin.zst"}:
+            continue
+        if path.stat().st_mtime > cutoff:
+            continue
+        if match.group(2) == "bin" and path.with_name(path.name + ".zst").is_file():
+            continue
+        learnable.append(path)
+    return learnable
+
+
 def _same_as_zst(path: Path) -> bool:
     sibling = path.with_name(path.name + ".zst")
     try:
@@ -90,11 +114,9 @@ def plan_cleanup(
     learnings_dir: Path | None = None,
     include_unlearned: bool = False,
 ) -> Plan:
-    if not math.isfinite(older_than_days) or older_than_days < 0:
-        raise ValueError("--days must be a finite, non-negative number")
     now = time.time() if now is None else now
     recent = now - _RECENT_S
-    cutoff = min(now - older_than_days * 86400.0, recent)
+    cutoff = _cutoff(now, older_than_days)
     out: list[Candidate] = []
     kept = 0
     kept_no_uid = 0
