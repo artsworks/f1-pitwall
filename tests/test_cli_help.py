@@ -67,7 +67,7 @@ def test_layered_top_level_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert any(line.startswith("  bench") for line in full.splitlines())
 
 
-@pytest.mark.parametrize("command", ["tr" + "im", "der" + "ive"])
+@pytest.mark.parametrize("command", ["trim", "derive"])
 def test_removed_commands_are_not_choices(command: str) -> None:
     with pytest.raises(SystemExit) as exc:
         main([command])

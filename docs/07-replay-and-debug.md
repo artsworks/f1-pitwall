@@ -107,7 +107,7 @@ across recorded sessions. This lets the assistant improve without new races.
 ## Synthetic fixtures and replay windows
 
 Some situations are hard to produce on demand (red flag, a specific SC timing, a
-particular weather crossover). Two answers:
+particular weather crossover). Three options:
 
 - Replay a time range with `--from-us` and `--to-us`, or start at a lap with
   `--from-lap`. For example, run `pitwall replay <recording> --from-us N --to-us N`.

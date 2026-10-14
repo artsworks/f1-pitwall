@@ -80,13 +80,9 @@ def _command_lines(
 
 
 class _HelpAllAction(argparse.Action):
-    def __init__(
-        self, option_strings: list[str], dest: str, nargs: int | str | None = None, **kwargs: Any
-    ) -> None:
-        self.parser: argparse.ArgumentParser = kwargs.pop("parser")
-        self.everyday_text: str = kwargs.pop("everyday_text")
-        self.full_text: str = kwargs.pop("full_text")
-        super().__init__(option_strings, dest, nargs=nargs, **kwargs)
+    def __init__(self, option_strings: list[str], dest: str, **kwargs: Any) -> None:
+        self.full_epilog: str = kwargs.pop("full_epilog")
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
 
     def __call__(
         self,
@@ -95,9 +91,9 @@ class _HelpAllAction(argparse.Action):
         values: Any,
         option_string: str | None = None,
     ) -> None:
-        self.parser.epilog = self.full_text
-        self.parser.print_help()
-        self.parser.exit()
+        parser.epilog = self.full_epilog
+        parser.print_help()
+        parser.exit()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="console log level (default warning)",
     )
     sub = p.add_subparsers(
-        dest="command", required=True, metavar="<command>", help=argparse.SUPPRESS
+        dest="command",
+        required=True,
+        metavar="<command>",
+        help=argparse.SUPPRESS,
+        prog="pitwall",
     )
 
     rep = _cmd(
@@ -530,17 +530,14 @@ def build_parser() -> argparse.ArgumentParser:
         "Everyday commands:\n"
         f"{_command_lines(sub, EVERYDAY)}\n\n"
         "Advanced commands:\n"
-        f"{_command_lines(sub, ADVANCED)}\n"
+        f"{_command_lines(sub, ADVANCED)}\n\n"
         "Run pitwall <command> -h for an example."
     )
     p.epilog = everyday_epilog
     p.add_argument(
         "--help-all",
         action=_HelpAllAction,
-        nargs=0,
-        parser=p,
-        everyday_text=everyday_epilog,
-        full_text=full_epilog,
+        full_epilog=full_epilog,
         help="list advanced commands too",
     )
     return p
