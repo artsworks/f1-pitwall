@@ -115,7 +115,7 @@ class MenuOpenActions(BaseModel):
 
 class InputSettings(BaseModel):
     double_press_ms: int = 350
-    long_press_ms: int = 800
+    long_press_ms: int = 2000
     bounce_ms: int = 60
     response_window_s: float = 8.0
     say_again: bool = True  # late single press re-speaks the last call

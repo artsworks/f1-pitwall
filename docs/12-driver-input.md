@@ -9,7 +9,7 @@ Earlier plans missed a way for the driver to answer the radio. One control for "
 |---|---|---|---|
 | Single press | Fanatec wheel **button 2** → UDP Action 1 | **Spacebar** | Acknowledge a target or confirm the menu. With no target, add a contextual tap bookmark after quiet-off and say-again checks |
 | Double press (second press within 350 ms) | button 2 ×2 | Spacebar ×2 | Negative: "no / not now". Closes the menu while open |
-| Long press (held ≥ 800 ms) | button 2 held | Spacebar held | Toggle radio silence. Set `input.long_press: bookmark` to add a contextual hold bookmark |
+| Long press (held ≥ 2 s) | button 2 held | Spacebar held | Toggle radio silence. Set `input.long_press: bookmark` to add a contextual hold bookmark |
 | Menu up / down | UDP Action 2 / 3 (stick up / down) | `↑` / `↓` | Open the driver menu, then scroll it (see [Driver menu](#driver-menu-driver--pit-wall)) |
 | Dashboard page reset | UDP Action 4 (stick right) | `P` / click the page pill | resets to the race layout; all clients follow. **Confirm** while the menu is open. It is not a menu item. |
 | Mindset toggle | UDP Action 5 (stick left) | `M` / click the mindset pill | balanced ⇄ aggressive (live override), confirmed by voice; also a menu item. **Close** while the menu is open |
@@ -58,7 +58,7 @@ small Windows-only module.
 ## Press detection
 
 ```
-down ─┬─ held ≥ 800 ms ─────────────▶ BOOKMARK
+down ─┬─ held ≥ 2 s ────────────────▶ BOOKMARK
       └─ up ─▶ wait 350 ms ─┬─ down ─▶ NEGATIVE
                             └─ timeout ▶ ACKNOWLEDGE
 ```

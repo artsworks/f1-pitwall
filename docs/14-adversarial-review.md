@@ -18,7 +18,7 @@ and an AI grid.
 | A8 | **Strategy doc used old mindset parameter names** (`pit_gamble_margin_s`, `risk_of_position_loss`). | Low | Renamed to the new vector (`pit_gain_min_s`, `pit_confidence_min`, `position_loss_risk_max`). |
 | A9 | **Architecture and performance docs still said "dashboard on the phone"**, contradicting the second-monitor decision. | Medium | Second monitor is primary; the page budget (5 Hz, static text, no charts) is measured in the frame-time A/B. Phone becomes an optional client. |
 | A10 | **"No Windows-only dependency"** claim broken by SAPI and the keyboard hook. | Low | Both behind interfaces; the move-to-second-machine escape hatch uses Piper and a small key forwarder. |
-| A11 | **Long-press bookmark overlapped the single/double-press detector**, and a held spacebar auto-repeats. | Medium | Detector classifies on press/release edges; auto-repeat ignored; long press ≥ 800 ms is a bookmark. |
+| A11 | **Long-press bookmark overlapped the single/double-press detector**, and a held spacebar auto-repeats. | Medium | Detector classifies on press/release edges; auto-repeat ignored; long press ≥ 2 s is a bookmark. |
 | A12 | **Roadmap "later" still listed league mode and a Streamdeck ack channel** as future work. | Low | League is the target (first league race in M3); acknowledgement is M2. |
 | A13 | **Public repository.** Risks: committing EA's spec, and committing recordings with friends' online IDs. | Medium | Spec is not committed (notes are re-expressed facts); `pitwall trim` redacts participant names; full recordings never in git. |
 

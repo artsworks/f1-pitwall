@@ -29,7 +29,7 @@ _AWAITING = 3  # released; waiting for a second press or the timeout
 
 
 class PressDetector:
-    def __init__(self, double_ms: int = 350, long_ms: int = 800, bounce_ms: int = 60) -> None:
+    def __init__(self, double_ms: int = 350, long_ms: int = 2000, bounce_ms: int = 60) -> None:
         self.double_s = double_ms / 1000.0
         self.long_s = long_ms / 1000.0
         self.bounce_s = bounce_ms / 1000.0

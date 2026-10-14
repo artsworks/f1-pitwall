@@ -249,7 +249,7 @@ ui:
   auto_page_call_hold_s: 8       # never auto-switch while a call banner is up
 input:
   double_press_ms: 350
-  long_press_ms: 800
+  long_press_ms: 2000
   bounce_ms: 60
   response_window_s: 3.0   # seconds after a call finishes speaking
   say_again: false          # a late single press does nothing
