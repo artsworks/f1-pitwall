@@ -30,13 +30,14 @@ def test_double_press_neg() -> None:
 def test_long_press_bookmark_release_ignored() -> None:
     d = PressDetector()
     d.edge(0.0, True)
-    p = d.tick(0.85)
+    assert d.tick(1.99) is None
+    p = d.tick(2.05)
     assert p is not None and p.kind == "bookmark"
-    assert d.edge(0.9, False) is None
-    # next press starts clean
-    assert d.edge(2.0, True) is None
     assert d.edge(2.1, False) is None
-    p = d.tick(2.5)
+    # next press starts clean
+    assert d.edge(3.0, True) is None
+    assert d.edge(3.1, False) is None
+    p = d.tick(3.5)
     assert p is not None and p.kind == "ack"
 
 
@@ -105,9 +106,22 @@ def _recorded_presses(edges: list[tuple[float, bool]], tail_s: float = 0.4) -> l
             id="real double tap 224 ms",
         ),
         pytest.param(
-            "real hold 1144 ms",
+            "real hold 1144 ms acks under 2 s",
             [(173.488, True), (174.632, False)],
+            ["ack"],
+            id="real hold 1144 ms acks under 2 s",
+        ),
+        pytest.param(
+            "hold 2050 ms",
+            [(10.0, True), (12.05, False)],
             ["bookmark"],
+            id="hold 2050 ms",
+        ),
+        pytest.param(
+            "hold 1950 ms",
+            [(10.0, True), (11.95, False)],
+            ["ack"],
+            id="hold 1950 ms",
         ),
         pytest.param(
             "real tap 123 ms",

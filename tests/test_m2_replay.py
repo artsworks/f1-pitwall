@@ -440,8 +440,8 @@ def test_butn_ack_and_neg(tmp_path: Path) -> None:
 
 def test_long_press_and_udp3_toggle_radio_silent(tmp_path: Path) -> None:
     stream = _quali_stream(2500.0, 0.0, 6.0)
-    stream.append((1.0, _butn(True, 1.0)))  # UDP 1 held 1.2 s -> silent on
-    stream.append((2.2, _butn(False, 2.2)))
+    stream.append((1.0, _butn(True, 1.0)))  # UDP 1 held 2.2 s -> silent on
+    stream.append((3.2, _butn(False, 3.2)))
     stream.append((4.0, _butn(True, 4.0, bit=0x02000000)))  # UDP 6 tap -> silent off
     stream.append((4.1, _butn(False, 4.1, bit=0x02000000)))
     stream.sort(key=lambda p: p[0])

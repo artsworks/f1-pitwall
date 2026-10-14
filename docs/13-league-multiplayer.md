@@ -47,7 +47,7 @@ loop:
 
 1. **Record by default.** Keep every session, tagged with game mode, track, and config
    hash, so each report can be replayed exactly.
-2. **Mark a moment in the race.** Long-press button 2 or spacebar (≥ 800 ms) to add a
+2. **Mark a moment in the race.** Long-press button 2 or spacebar (≥ 2 s) to add a
    bookmark to the recording. This produces no speech and does not affect the race.
    Review the bookmarks afterwards and describe what was wrong.
 3. **Post-session feedback screen.** The dashboard lists bookmarks and graded calls next

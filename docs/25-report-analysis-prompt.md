@@ -7,7 +7,7 @@ regression test.
 See the bookmark and report workflow in
 [13-league-multiplayer.md](13-league-multiplayer.md), under *Test and feedback loop*:
 
-1. During the race, long-press wheel button 2 or spacebar (≥ 800 ms) to drop a bookmark.
+1. During the race, long-press wheel button 2 or spacebar (≥ 2 s) to drop a bookmark.
 2. After the race, add a note to each bookmark on the feedback screen.
 3. Run `pitwall recordings` to find the session's recording.
 4. Run `pitwall report <recording>` to build the zip. `<recording>` is a path, a file

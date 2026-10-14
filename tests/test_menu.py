@@ -436,7 +436,7 @@ def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
     assert engine.dispatcher.silent is False
 
     for start, expected in ((250.0, True), (253.0, False)):
-        hold_events = [("a1", start, True), ("a1", start + 1.144, False)]
+        hold_events = [("a1", start, True), ("a1", start + 2.144, False)]
         previous = hold_events[0][1]
         for _kind, t, down in hold_events:
             tick_t = previous + 0.01
