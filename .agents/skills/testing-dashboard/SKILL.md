@@ -85,7 +85,7 @@ screenshots, and any approved generated packet fixtures outside the repository.
 
 Run these checks with a WebSocket client on the dashboard socket, or in the browser console.
 
-- Check that `hello.payload.audio` is `true` only when the selected engine streams audio. Piper and OmniVoice stream. SAPI and `null` do not.
+- Check that `hello.payload.audio` is `true` only when the selected engine streams audio. Piper and OmniVoice stream. `null` does not.
 - After ENABLE SOUND, decode one `audio` frame payload from base64. Open it with Python `wave`. Check that it has 1 channel, a sample width of 2 and a frame rate above 0.
 - Check that each call in the radio log moves from `dispatched` to `started`. A cancelled call moves to `interrupted` if it had started, else to `dropped`. An engine drop also shows `dropped`.
 - Check that the `latency` block in the state payload has `tts_p99_ms`, `queue_count`, `queue_oldest_s`, `queue_wait_p99_ms` and `packet_to_ws_p99_ms`.

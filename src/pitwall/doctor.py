@@ -182,21 +182,6 @@ def run_doctor(
             f"uv run pitwall voice get",
         )
     if sys.platform == "win32":
-        try:
-            import pythoncom
-            import win32com.client
-
-            pythoncom.CoInitialize()
-            voices = win32com.client.Dispatch("SAPI.SpVoice").GetVoices()
-            names = [v.GetDescription() for v in voices]
-            _line(
-                out,
-                "PASS",
-                f"SAPI available ({len(names)} voices: "
-                f"{', '.join(names[:4])}{'…' if len(names) > 4 else ''})",
-            )
-        except Exception as e:
-            _line(out, "WARN", f"SAPI unavailable: {e}")
         _line(out, "INFO", "firewall hint:")
         _line(
             out,

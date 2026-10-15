@@ -13,7 +13,8 @@ from typing import IO, Any, cast
 
 from pitwall.audio.dispatcher import Call
 from pitwall.audio.speaker import make_speaker
-from pitwall.config.models import SpeechSettings, VoiceSettings
+from pitwall.config.loader import ConfigStore
+from pitwall.config.models import VoiceSettings
 
 from .channel import ChannelRecord, VoiceChannel
 from .grammar import VoiceGrammar
@@ -104,7 +105,7 @@ def run_spike(
 
     rec = cast(Any, worker.recognizer)
     rss1, _ = stats.rss_mb()
-    speaker = make_speaker(SpeechSettings(engine="sapi")) if say else None
+    speaker = make_speaker(ConfigStore().current().speech) if say else None
     inbox: queue.Queue[str] = queue.Queue()
     channel = VoiceChannel(
         worker,

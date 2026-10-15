@@ -110,7 +110,7 @@ See `09-performance.md`.
 | Storage | SQLite (stdlib) | zero-ops, queryable, portable |
 | Config | YAML + pydantic | validated, hot-reloadable |
 | Frontend | vanilla HTML/CSS/JS, vendored | no build, no CDN, works offline |
-| Speech | Piper, Windows SAPI, opt-in OmniVoice on the LAN | no internet, no browser gesture or focus problems |
+| Speech | Piper, opt-in OmniVoice on the LAN | no internet, no browser gesture or focus problems |
 | Input | UDP Action via `BUTN`; Windows keyboard hook | wheel and spacebar (`12-driver-input.md`) |
 | Tooling | uv, ruff, mypy, pytest | fast, standard |
 

@@ -360,7 +360,7 @@ function overview() {
     <h2>How it works</h2>
     <ol class="flow" aria-label="Pipeline">
       ${flow.map(([t, d], i) => `<li style="--i:${i}"><b>${t}</b>${d}</li>`).join("")}
-      <li class="out" style="--i:${flow.length}"><span><b>Speech</b>Piper or SAPI on your headset</span><span><b>Dashboard</b>WebSocket on port 8000</span></li>
+      <li class="out" style="--i:${flow.length}"><span><b>Speech</b>Piper or OmniVoice on your headset</span><span><b>Dashboard</b>WebSocket on port 8000</span></li>
     </ol>
     <p class="flow-note">Recordings replay through the same ingest, state and rules path.</p>
     <div class="pillars">

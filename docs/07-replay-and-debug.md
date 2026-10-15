@@ -88,7 +88,7 @@ Replay with `--serve` opens the normal dashboard with a transport bar added:
 
 `pitwall replay --serve` builds the speaker from `speech.engine`, the same as `pitwall start`. Each seek or reset rebuilds the engine. Before each rebuild, replay calls `flush()` on a speaker that has it. `flush()` drops queued audio and stops playback. A call from before the flush sends no `audio`, `spoken` or drop update after it, so a reused call id cannot change a later call. Replay then runs `wire_speaker()` for the new engine.
 
-The browser gets `audio` frames only when the engine streams audio. Piper and OmniVoice stream. SAPI and `null` do not.
+The browser gets `audio` frames only when the engine streams audio. Piper and OmniVoice stream. `null` does not.
 
 ## A/B diffing: the tuning loop
 

@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import logging
-import sys
 import threading
 import time
 import urllib.error
@@ -224,11 +223,9 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
         fallback_tones = None
     fallback = None
     if fallback_tones is None:
-        from pitwall.audio.speaker import make_speaker
+        from pitwall.audio.speaker import NullSpeaker
 
-        fallback = make_speaker(
-            settings.model_copy(update={"engine": "sapi" if sys.platform == "win32" else "null"})
-        )
+        fallback = NullSpeaker()
     renderer = OmniVoiceRenderer(settings, model_id, fallback_tones)
     return WavSpeaker(
         renderer,

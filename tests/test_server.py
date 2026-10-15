@@ -219,7 +219,7 @@ def test_null_speaker_on_spoken() -> None:
     speaker.cancel("n")  # no-op, must not raise
 
 
-def test_sapi_not_importable_on_linux() -> None:
+def test_win32com_not_imported_on_linux() -> None:
     import sys
 
     if sys.platform == "win32":
@@ -265,64 +265,6 @@ def test_cli_start_help(capsys: pytest.CaptureFixture[str]) -> None:
         main(["start", "--help"])
     assert e.value.code == 0
     assert "usage" in capsys.readouterr().out
-
-
-class _FakeVoice:
-    def __init__(self, done_after: int = 1) -> None:
-        self.calls: list[tuple[str, int]] = []
-        self._polls = 0
-        self._done_after = done_after
-
-    def Speak(self, text: str, flags: int) -> int:
-        self.calls.append((text, flags))
-        return 0
-
-    def WaitUntilDone(self, ms: int) -> bool:
-        self._polls += 1
-        return self._polls >= self._done_after
-
-
-def _urgent_event():
-    import threading
-
-    return threading.Event()
-
-
-def test_speak_one_p1_purge_and_on_spoken() -> None:
-    from pitwall.audio.speaker import SVSF_ASYNC, SVSF_PURGE_BEFORE_SPEAK, _speak_one
-
-    voice = _FakeVoice()
-    got: list[str] = []
-    urgent = _urgent_event()
-    urgent.set()
-    done = _speak_one(
-        voice, _call("p1", priority=1), urgent, lambda cid, t: got.append(cid), blip=None
-    )
-    assert voice.calls[0][1] == SVSF_ASYNC | SVSF_PURGE_BEFORE_SPEAK
-    assert got == ["p1"]
-    assert done is True
-    assert not urgent.is_set()  # cleared after the P1 call
-
-
-def test_speak_one_p2_async_only() -> None:
-    from pitwall.audio.speaker import SVSF_ASYNC, _speak_one
-    from pitwall.audio.speaker import SVSF_PURGE_BEFORE_SPEAK as PURGE
-
-    voice = _FakeVoice()
-    done = _speak_one(voice, _call("p2", priority=2), _urgent_event(), None, blip=None)
-    assert voice.calls[0][1] == SVSF_ASYNC
-    assert voice.calls[0][1] & PURGE == 0
-    assert done is True
-
-
-def test_speak_one_wait_breaks_on_urgent() -> None:
-    from pitwall.audio.speaker import _speak_one
-
-    voice = _FakeVoice(done_after=100)
-    urgent = _urgent_event()
-    urgent.set()
-    done = _speak_one(voice, _call("p2", priority=2), urgent, None, blip=None)
-    assert done is False
 
 
 def test_packet_age_uses_receive_clock_not_session_time() -> None:

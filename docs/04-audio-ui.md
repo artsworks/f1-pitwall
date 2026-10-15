@@ -88,9 +88,9 @@ with the freshest briefs. It drops overflow and skips digests during battles.
 
 The dashboard and speech run on the game PC. This determines the speech engine.
 
-**Primary (pilot): speech in the backend**, using Windows' built-in SAPI voices through a
-small `Speaker` interface. Speech plays on a configurable output device, usually the game
-headset. The browser is unsuitable because:
+**Primary (pilot): backend speech through Piper, with opt-in OmniVoice, via the `Speaker`
+interface.** Speech plays on a configurable output device, usually the game headset. The
+browser is unsuitable because:
 
 - Web Speech needs a click to arm, and **clicking the second monitor while the game is
   fullscreen takes focus from the game** (exclusive fullscreen minimises). The browser
@@ -99,9 +99,8 @@ headset. The browser is unsuitable because:
   latency measurement in one process.
 - No HTTPS or wake-lock question for the pilot.
 
-**Upgrade (M4): Piper** behind the same interface for a better voice. Pre-render the ~50
-most common phrases. **Optional:** use Web Speech on a phone client if the backend moves
-off the game PC.
+Piper and OmniVoice use the same interface and stream WAV audio to the browser. **Optional:**
+use Web Speech on a phone client if the backend moves off the game PC.
 
 For an opt-in OmniVoice server on a Linux GPU box, setup, registration, caching, and fallback
 details are in [Natural voice (OmniVoice)](getting-started.md#natural-voice-omnivoice-opt-in).
@@ -141,7 +140,7 @@ Each callback fires at most once per call. A dropped call gets `on_dropped` and 
 - `on_dropped` goes to `dispatcher.note_dropped` and `hub.cancel`.
 - `on_audio` goes to `hub.audio`, only if the engine streams.
 
-`hub.streams_audio` is true only when the engine sets `supports_audio_stream` and has `on_audio`. SAPI plays audio but produces no WAV bytes, so SAPI does not stream.
+`hub.streams_audio` is true only when the engine sets `supports_audio_stream` and has `on_audio`. The `null` speaker does not stream audio.
 
 Each `audio` frame carries one complete WAV in base64. The WAV is RIFF, mono, 16-bit PCM, with a sample rate above 0 and at least one frame.
 
@@ -202,7 +201,7 @@ Show state changes with colour and text on the same frame.
 - Use a primary banner ≥ 72 px and secondary blocks ≥ 36 px. Use monospace and high contrast.
 - The radio log shows the last ~12 calls with their ACK / NEG outcome; `/radio` is a
   log-only page in large type for a narrow second screen.
-- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the backend voice through the phone. The server sends each rendered WAV only to clients that tapped. With an engine that does not stream, such as SAPI, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. Other devices need the dashboard PIN. See [getting started](getting-started.md).
+- On a phone, tap ENABLE SOUND on the dashboard, or ARM PHONE RADIO on `/radio`, to hear the backend voice through the phone. The server sends each rendered WAV only to clients that tapped. With an engine that does not stream, such as `null`, the phone uses the browser voice instead. Add `?sound=1` to show the button on a desktop browser, or `?sound=0` to hide it on a phone. Other devices need the dashboard PIN. See [getting started](getting-started.md).
 - Keep the mindset (AGGRESSIVE / BALANCED in the pilot) visible. Switch it with one press
   of its wheel/keyboard binding. It is the control most likely to be used mid-race.
 - Pair green for optimal, amber for warning, and red for act-now with a word. Never rely
