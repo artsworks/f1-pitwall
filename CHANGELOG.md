@@ -6,6 +6,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.16.0 (2026-10-15)
+
+### Features
+
+- **learning**: Run upkeep at session end with progress lines
+  ([#97](https://github.com/artsworks/f1-pitwall/pull/97),
+  [`3ce3da6`](https://github.com/artsworks/f1-pitwall/commit/3ce3da6987fc9894b4b82a78c27707f59fdf8aa9))
+
+
 ## v0.15.0 (2026-10-14)
 
 ### Features
