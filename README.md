@@ -99,8 +99,8 @@ start. Optional review and learning commands are in
 
 ### Learning loop
 
-Pitwall grades each session when it ends. On the next `pitwall start`, it refits pace,
-tyre wear, fuel, thermal and energy priors and adjusts rule cooldowns from the grades.
+Pitwall grades each session when it ends, then refits pace, tyre wear, fuel, thermal
+and energy priors and adjusts rule cooldowns from the grades.
 The refit values also go to the per-track files in `~/.pitwall/tracks/`.
 Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
 threshold YAML changes that `pitwall propose` writes. Your grades always override

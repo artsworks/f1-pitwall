@@ -451,8 +451,6 @@ def cmd_start(args: argparse.Namespace) -> int:
         state,
         rule_engine,
         dispatcher,
-        learning_pack_dir=pack_dir,
-        learning_pack_keep_days=settings.learning.pack_keep_days,
     )
     voice_desc = engine.setup_voice()
     if voice_desc is not None:
@@ -462,6 +460,27 @@ def cmd_start(args: argparse.Namespace) -> int:
         hub.broadcast("voice", payload)
 
     engine.on_voice_event = on_voice_event
+
+    def on_session_end(uid: int) -> None:
+        assert db is not None
+        from pitwall.learnpack import write_pack
+        from pitwall.maintenance import maintain
+
+        print("learning: session ended, updating track learning…", flush=True)
+        try:
+            print(f"learning: {maintain(db, settings, refit=True).summary()}", flush=True)
+        except sqlite3.Error as e:
+            print(f"learning: upkeep skipped ({e})", flush=True)
+        try:
+            saved = write_pack(
+                db, pack_dir, keep_days=settings.learning.pack_keep_days, refresh_quality=[uid]
+            )
+            print(f"learning pack: saved {saved}", flush=True)
+        except (OSError, sqlite3.Error, ValueError) as e:
+            print(f"learning pack: skipped ({e})", flush=True)
+
+    if db is not None:
+        engine.on_session_end = on_session_end
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
     elif child:

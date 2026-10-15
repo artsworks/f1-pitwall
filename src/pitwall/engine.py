@@ -294,8 +294,6 @@ class Engine:
         state: SessionState,
         rule_engine: RuleEngine | None,
         dispatcher: Dispatcher,
-        learning_pack_dir: Path | None = None,
-        learning_pack_keep_days: int = 30,
         synthetic_source: bool = False,
     ) -> None:
         self.store = store
@@ -308,8 +306,6 @@ class Engine:
         self.rule_engine = rule_engine
         self.dispatcher = dispatcher
         self.dispatcher.on_response = self._on_dispatcher_response
-        self.learning_pack_dir = learning_pack_dir
-        self.learning_pack_keep_days = learning_pack_keep_days
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
@@ -317,6 +313,7 @@ class Engine:
         self._voice_worker: VoiceWorker | None = None
         self._voice_closed: list[ChannelRecord] = []
         self.on_voice_event: Callable[[dict[str, Any]], None] | None = None
+        self.on_session_end: Callable[[int], None] | None = None
         self._paused = False
         inp = store.current().input
         self.detector = PressDetector(
@@ -1897,18 +1894,8 @@ class Engine:
             and uid is not None
         ):
             self._end_session(uid, now)
-            if self.learning_pack_dir is not None:
-                from pitwall.learnpack import write_pack
-
-                try:
-                    write_pack(
-                        self.db,
-                        self.learning_pack_dir,
-                        keep_days=self.learning_pack_keep_days,
-                        refresh_quality=[uid],
-                    )
-                except (OSError, sqlite3.Error, ValueError) as e:
-                    log.warning("learning pack skipped at session end: %s", e)
+            if self.on_session_end is not None:
+                self.on_session_end(uid)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
@@ -2114,8 +2101,6 @@ def build_engine(
     record_to: Path | None = None,
     db: Any = None,
     session_started_at: float | None = None,
-    learning_pack_dir: Path | None = None,
-    learning_pack_keep_days: int = 30,
 ) -> Engine:
     """Assemble a full engine from the layered config. db=None disables
     SQLite mirroring (replays opt in via the CLI)."""
@@ -2174,8 +2159,6 @@ def build_engine(
         state,
         rule_engine,
         dispatcher,
-        learning_pack_dir=learning_pack_dir,
-        learning_pack_keep_days=learning_pack_keep_days,
         synthetic_source=synthetic,
     )
     engine.session_origin_started_at = session_started_at
