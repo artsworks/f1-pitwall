@@ -1,0 +1,4 @@
+track_id: 27
+name: imola
+fuel_kg_per_lap: 1.0385
+thresholds: {energy_over_tolerance_j: 340000, tyre_inner_cold_by_compound_c: {17: 85.0}, tyre_inner_hot_by_compound_c: {17: 90.0}}

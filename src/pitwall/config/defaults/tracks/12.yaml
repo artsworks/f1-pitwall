@@ -1,0 +1,3 @@
+track_id: 12
+name: singapore
+thresholds: {energy_over_tolerance_j: 300000}

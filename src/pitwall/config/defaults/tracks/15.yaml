@@ -1,0 +1,4 @@
+track_id: 15
+name: austin
+fuel_kg_per_lap: 1.2051
+thresholds: {energy_over_tolerance_j: 330000, tyre_inner_cold_by_compound_c: {20: 95.0}, tyre_inner_hot_by_compound_c: {20: 100.0}}
