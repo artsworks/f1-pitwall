@@ -10,6 +10,20 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.17.0 (2026-10-15)
+
+### Bug Fixes
+
+- **speech**: Drop failed OmniVoice calls when Piper is missing
+  ([#98](https://github.com/artsworks/f1-pitwall/pull/98),
+  [`db96ab1`](https://github.com/artsworks/f1-pitwall/commit/db96ab1535f70483ded852af34a35c2dd43cfbba))
+
+### Features
+
+- **speech**: Remove the SAPI speech engine ([#98](https://github.com/artsworks/f1-pitwall/pull/98),
+  [`db96ab1`](https://github.com/artsworks/f1-pitwall/commit/db96ab1535f70483ded852af34a35c2dd43cfbba))
+
+
 ## v0.16.0 (2026-10-15)
 
 ### Features
