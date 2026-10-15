@@ -12,8 +12,8 @@ lists each race length.
 ```
 session ──► SQLite laps, stints, calls and plan events
         ──► grade at session end
-        ──► maintain at next start: rebuild clean stint priors, quarantine bad values,
-            refit track priors, tune rule cooldowns
+        ──► maintain at session end and at each start: rebuild clean stint
+            priors, quarantine bad values, refit track priors, tune rule cooldowns
         ──► inspect learned state
         ──► optional debrief, evaluation and review-only proposals
 ```
@@ -81,7 +81,7 @@ database transaction:
 
 After the transaction commits, upkeep writes the refit values into the per-track overlay
 files at `~/.pitwall/tracks/<id>.yaml`. If writing fails it logs the error, keeps the
-refit, and retries on the next start.
+refit, and retries on the next upkeep.
 
 A session is also graded when it ends. The engine folds pit loss and pass or hold rates
 live during the session. The refit drops any value that the quarantine check rejects, so
@@ -144,9 +144,9 @@ Share only this file. Do not share the SQLite database, digests, profile or cert
 
 ## After a race
 
-No command is required. Pitwall grades the session when it ends. On the next start,
-upkeep refits pace, tyre wear, fuel, thermal, and energy priors, then adjusts rule
-cooldowns. Two steps remain manual: grade calls and apply threshold YAML changes from
+No command is required. When a session ends, Pitwall grades it, refits pace, tyre
+wear, fuel, thermal, and energy priors, then adjusts rule cooldowns. Two steps remain
+manual: grade calls and apply threshold YAML changes from
 `pitwall propose`. Open `/debrief` to choose a session (`/debrief/latest` for the newest)
 and grade its calls. `pitwall sessions` lists the same sessions in the terminal.
 Thresholds never change without your review. Use `pitwall stats --learned` to inspect learned

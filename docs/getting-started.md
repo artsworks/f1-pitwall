@@ -153,11 +153,12 @@ HTTPS when `connection.https_cert` is set. Do not forward port 8000 to the inter
 
 ## After a session
 
-No action is required after a live session. Pitwall grades it when it ends. Automatic
-upkeep runs on the next `pitwall start`. Upkeep grades remaining sessions and rebuilds
-stint priors once per learning version. It moves invalid learned values to SQLite
-quarantine with reasons such as `unknown_track` or `deg_clamped`. Upkeep also refits track
-priors and adjusts rule cooldowns. `pitwall doctor` reports the quarantine count.
+No action is required after a live session. When it ends, Pitwall grades it and runs
+automatic upkeep. Upkeep also runs on each `pitwall start`. Upkeep grades
+sessions and rebuilds stint priors once per learning version. It moves invalid
+learned values to SQLite quarantine with reasons such as `unknown_track` or
+`deg_clamped`. Upkeep also refits track priors and adjusts rule cooldowns.
+`pitwall doctor` reports the quarantine count.
 
 Open `http://localhost:8000/debrief` to list stored sessions. Each row links to its
 debrief, where you can grade calls. `/debrief/latest` opens the newest session.

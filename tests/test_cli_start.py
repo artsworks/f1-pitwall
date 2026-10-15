@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from collections.abc import Coroutine
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,6 +45,26 @@ def _fake_serve(uid: int):  # type: ignore[no-untyped-def]
         engine.db.upsert_session(uid, track_id=7, session_type=15, started_at=1.0)
         engine.state.session_uid = uid
         engine.db.write_heartbeat(uid, 1.0, 2.0, "", 1)
+        raise KeyboardInterrupt
+
+    return fake_serve
+
+
+def _fake_serve_session_end(uid: int):  # type: ignore[no-untyped-def]
+    async def fake_serve(
+        engine: Any,
+        hub: Any,
+        store: Any,
+        live: Coroutine[Any, Any, None],
+        **kwargs: Any,
+    ) -> None:
+        live.close()
+        engine.db.upsert_session(uid, track_id=7, session_type=15, started_at=1.0)
+        engine.state.session_uid = uid
+        engine.state.session_type = 15
+        engine.state.track_id = 7
+        engine.state.session_ended = True
+        engine.tick(engine.clock.now())
         raise KeyboardInterrupt
 
     return fake_serve
@@ -168,6 +189,66 @@ def test_start_shutdown_pack_refreshes_only_current_session(tmp_path: Path, monk
 
     assert cli.cmd_start(_start_args()) == 0
     assert captured["refresh_quality"] == [uid]
+
+
+def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    db_path = _make_profile(tmp_path, monkeypatch)
+    uid = 654
+    monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(uid))
+
+    import pitwall.maintenance
+
+    real_maintain = pitwall.maintenance.maintain
+    calls: list[tuple[bool | None, Any]] = []
+
+    def tracked_maintain(*args: Any, **kwargs: Any) -> Any:
+        report = real_maintain(*args, **kwargs)
+        calls.append((kwargs.get("refit"), report))
+        return report
+
+    monkeypatch.setattr(pitwall.maintenance, "maintain", tracked_maintain)
+
+    assert cli.cmd_start(_start_args()) == 0
+
+    assert len(calls) == 2
+    assert calls[1][0] is True
+    lines = capsys.readouterr().out.splitlines()
+    progress = "learning: session ended, updating track learning…"
+    progress_index = lines.index(progress)
+    second_report = calls[1][1]
+    assert lines[progress_index + 1] == f"learning: {second_report.summary()}"
+    assert lines[progress_index + 2].startswith("learning pack: saved ")
+
+    session = Database(db_path).session_row(uid)
+    assert session is not None and session["ended_at"] is not None
+    assert Database(db_path).maintenance_version(f"graded:{_uid_to_sql(uid)}") == 1
+
+
+def test_start_session_end_upkeep_failure_still_saves_pack(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    _make_profile(tmp_path, monkeypatch)
+    uid = 987
+    monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(uid))
+
+    import pitwall.maintenance
+
+    real_maintain = pitwall.maintenance.maintain
+    calls = 0
+
+    def fail_session_end_maintain(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise sqlite3.OperationalError("boom")
+        return real_maintain(*args, **kwargs)
+
+    monkeypatch.setattr(pitwall.maintenance, "maintain", fail_session_end_maintain)
+
+    assert cli.cmd_start(_start_args()) == 0
+    lines = capsys.readouterr().out.splitlines()
+    skipped_index = lines.index("learning: upkeep skipped (boom)")
+    assert lines[skipped_index + 1].startswith("learning pack: saved ")
 
 
 def test_start_second_ctrl_c_during_pack_write_exits_quietly(
