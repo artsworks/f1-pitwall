@@ -687,3 +687,1024 @@ batches:
         grade: {finish: now, life: drop, held: drop}
         order: [finish]
         notes: Yes, flush the queue at the flag.
+  - id: 4
+    title: Owner grading round 1 — race
+    scenarios:
+      - id: g001
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: life, rule: tyre_life, text: About eight laps in the tyres, age_s: 2.0}
+          - {id: fuel, rule: fuel_marginal, text: "Fuel is tight, lift and coast", age_s: 1.0}
+        grade: {fuel: now, life: next}
+        order: [fuel, life]
+        notes: ""
+      - id: g002
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        currently_speaking: {id: plan, rule: plan_status, text: "Plan is two stops, next on lap 28", age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box. Undercut is on"}
+        grade: {plan: drop, box: now}
+        order: [box]
+        notes: ""
+      - id: g003
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 2200.0, speed_kmh: 216.0}
+        currently_speaking: {id: plan, rule: plan_status, text: "Plan is two stops, next on lap 28", age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box. Undercut is on"}
+        grade: {plan: now, box: next}
+        order: [plan, box]
+        notes: ""
+      - id: g004
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4690.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {box: now, stay: drop}
+        order: [box]
+        notes: ""
+      - id: g005
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 1.0}
+          - {id: wear, rule: wear_fronts, text: Fronts at sixty percent}
+        grade: {boxn: now, wear: next}
+        order: [boxn, wear]
+        notes: ""
+      - id: g006
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 2.0}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {yellow: now, pen: next}
+        order: [yellow, pen]
+        notes: ""
+      - id: g007
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4550.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
+        grade: {sc: now, box: next}
+        order: [sc, box]
+        notes: ""
+      - id: g008
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 1500.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
+        grade: {sc: now, box: next}
+        order: [sc, box]
+        notes: ""
+      - id: g009
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 22}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {life: drop, sc: now}
+        order: [sc]
+        notes: ""
+      - id: g010
+        source: graded
+        session: race
+        scene: {phase: vsc, lap_num: 28}
+        queued:
+          - {id: vscend, rule: vsc_ending, text: VSC ending. Get ready, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: Six laps in the tyres, age_s: 4.0}
+          - {id: catch, rule: battle_catching, text: "Catching Leclerc, two tenths a lap", age_s: 1.0}
+        grade: {vscend: now, life: drop, catch: queue}
+        order: [vscend, catch]
+        notes: ""
+      - id: g011
+        source: graded
+        session: race
+        scene: {phase: vsc, lap_num: 28, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        queued:
+          - {id: vscend, rule: vsc_ending, text: VSC ending. Get ready, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {vscend: now, box: next}
+        order: [vscend, box]
+        notes: ""
+      - id: g012
+        source: graded
+        session: race
+        scene: {phase: red_flag, lap_num: 31}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: red, rule: red_flag, text: Red flag. Box this lap}
+        grade: {reply: drop, red: now}
+        order: [red]
+        notes: ""
+      - id: g013
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 27}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready}
+          - {id: plan, rule: plan_status, text: Plan is still one stop, age_s: 2.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS at the restart, age_s: 1.0}
+        grade: {restart: now, defend: next, plan: queue}
+        order: [restart, defend, plan]
+        notes: ""
+      - id: g014
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 27}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready, age_s: 1.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine}
+        grade: {restart: now, fuel: drop}
+        order: [restart]
+        notes: ""
+      - id: g015
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19, laps_remaining: 15, pit_plan_gain_s: 1.2, pit_plan_risk: 0.2, overcut_s: 0.5, laps_of_pace: 12.0}
+        queued:
+          - {id: ubox, rule: box_now, text: "Box, box. Undercut is on"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {ubox: now, stay: drop}
+        order: [ubox]
+        notes: Model gain favors undercut by 1.2s.
+      - id: g016
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19, laps_remaining: 15, pit_plan_gain_s: 0.2, pit_plan_risk: 0.6, overcut_s: 1.8, laps_of_pace: 12.0}
+        queued:
+          - {id: ubox, rule: box_now, text: "Box, box. Undercut is on"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {stay: now, ubox: drop}
+        order: [stay]
+        notes: Model favors overcut here.
+      - id: g017
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 45, laps_remaining: 5}
+        queued:
+          - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: hold, rule: finish_hold, hypothetical: true, kind: info, text: "Five laps left, hold this gap"}
+        grade: {box: now, life: drop, hold: drop}
+        order: [box]
+        notes: Pit entry is 3s away.
+      - id: g018
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12, gap_ahead_s: 0.8}
+        queued:
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it"}
+          - {id: orders, rule: team_orders_hold, hypothetical: true, kind: execution, text: Hold position behind your teammate, age_s: 1.0}
+        grade: {orders: now, attack: drop}
+        order: [orders]
+        notes: Teammate ahead.
+      - id: g019
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 33, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 2200.0, speed_kmh: 216.0}
+        queued:
+          - {id: punct, rule: puncture, text: "Puncture, front right. Box, box"}
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 2.0}
+        grade: {punct: now, pen: next}
+        order: [punct, pen]
+        notes: ""
+      - id: g020
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8, contact_phase: checking, contact_damage: rear wing, contact_damage_pct: 35.0, contact_damage_major: true}
+        queued:
+          - {id: check, rule: contact_check, text: Contact there. Checking the data}
+          - {id: manage, rule: battle_manage, text: Keep the gap, age_s: 1.0}
+        grade: {check: now, manage: queue}
+        order: [check, manage]
+        notes: ""
+      - id: g021
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        currently_speaking: {id: box, rule: box_now, text: "Box, box this lap", age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {box: drop, sc: now}
+        order: [sc]
+        notes: SC just deployed as the box call started.
+      - id: g022
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 40, laps_remaining: 2}
+        queued:
+          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain in sector three, age_s: 1.0}
+          - {id: boxi, rule: box_now, text: Box for inters this lap}
+          - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 3.0}
+        grade: {rain: now, boxi: next, life: drop}
+        order: [rain, boxi]
+        notes: "rain_falling is not a packaged rule. Encoded as hypothetical with the weather_to_inter urgency."
+      - id: g023
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, gap_ahead_s: 1.5}
+        queued:
+          - {id: gap1, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 3.0}
+          - {id: gap2, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 2.0}
+          - {id: gap3, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 1.0}
+          - {id: fuel, rule: fuel_marginal, text: "Fuel is short, we need lift and coast"}
+        grade: {fuel: now, gap3: next, gap1: drop, gap2: drop}
+        order: [fuel, gap3]
+        notes: ""
+      - id: g024
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 17, gap_ahead_s: 4.0, gap_behind_s: 5.0, laps_of_pace: 10.0}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 5.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 4.0}
+          - {id: pace, rule: battle_catching, text: Half a second off the cars ahead, age_s: 2.0}
+          - {id: ers, rule: ers_harvest, hypothetical: true, kind: info, text: "ERS low, harvesting", age_s: 1.0}
+        grade: {wear: merge, fuel: merge, pace: merge, ers: merge}
+        order: [digest]
+        notes: Quiet stretch — digest candidates?
+      - id: g025
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 17, gap_ahead_s: 0.7, gap_behind_s: 5.0}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 5.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 4.0}
+          - {id: pace, rule: battle_catching, text: Half a second off the cars ahead, age_s: 2.0}
+        grade: {pace: now, wear: drop, fuel: drop}
+        order: [pace]
+        notes: "Same queue, but in battle."
+      - id: g026
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: life2, rule: tyre_life, text: About twelve laps in the tyres}
+        grade: {life: now, life2: drop}
+        order: []
+        notes: ""
+      - id: g027
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 2.0}
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+        grade: {slow: now, saved: drop}
+        order: [slow]
+        notes: ""
+      - id: g028
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14}
+        queued:
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap to P4 is two point one}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {reply: now, attack: next}
+        order: [reply, attack]
+        notes: Driver just asked the gap.
+      - id: g029
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 30}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are done. Two laps left, age_s: 1.0}
+          - {id: blue, rule: blue_flag, text: Blue flags. Let Hamilton by}
+        grade: {blue: now, reply: next}
+        order: [blue, reply]
+        notes: Being lapped; driver just asked about tyres.
+      - id: g030
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 1.2}
+        queued:
+          - {id: defend, rule: battle_defend, text: Verstappen behind in DRS. Defend, age_s: 1.0}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {yellow: now, defend: next}
+        order: [yellow, defend]
+        notes: ""
+      - id: g031
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 38}
+        queued:
+          - {id: blue, rule: blue_flag, text: Blue flags. Let him by}
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 2.0}
+        grade: {blue: now, life: drop}
+        order: [blue]
+        notes: ""
+      - id: g032
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 38}
+        currently_speaking: {id: catch, rule: battle_catching, text: "Catching Norris, three tenths a lap", age_s: 0.5}
+        queued:
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {catch: drop, yellow: now}
+        order: [yellow]
+        notes: ""
+      - id: g033
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8}
+        queued:
+          - {id: rejoin, rule: spun_rejoin_traffic, text: Cars coming. Wait before you rejoin}
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 1.0}
+        grade: {rejoin: now, saved: drop}
+        order: [rejoin]
+        notes: ""
+      - id: g034
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8}
+        currently_speaking: {id: saved, rule: saved_moment, text: Nice save there, age_s: 0.5}
+        queued:
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+        grade: {saved: drop, slow: now}
+        order: [slow]
+        notes: ""
+      - id: g035
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19}
+        currently_speaking: {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 0.5}
+        queued:
+          - {id: exit, rule: pit_exit_traffic_race, text: Car coming at pit exit. Stay right}
+        grade: {wear: drop, exit: now}
+        order: [exit]
+        notes: ""
+      - id: g036
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14, gap_ahead_s: 3.0}
+        queued:
+          - {id: temp, rule: engine_temp_high, hypothetical: true, kind: safety, text: "Engine temps high, lift and coast"}
+          - {id: lockup, rule: lockup_front, text: Locking the fronts into Turn 4, age_s: 2.0}
+        grade: {temp: now, lockup: drop}
+        order: [temp]
+        notes: "Owner kind: warning, which is not an urgency. Encoded as safety, the only class that cuts tactical calls."
+      - id: g037
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14}
+        currently_speaking: {id: catch, rule: battle_catching, text: Catching Norris, age_s: 0.5}
+        queued:
+          - {id: temp, rule: engine_temp_high, hypothetical: true, kind: safety, text: "Engine temps critical, box this lap"}
+        grade: {catch: drop, temp: now}
+        order: [temp]
+        notes: "Owner kind: warning, which is not an urgency. Encoded as safety, the only class that cuts tactical calls."
+      - id: g038
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20, contact_phase: report, contact_damage: floor, contact_damage_pct: 22.0, contact_damage_major: true}
+        queued:
+          - {id: check, rule: contact_check, text: Contact there. Checking, age_s: 3.0, scene: {contact_phase: checking}}
+          - {id: report, rule: contact_damage_report, text: "Floor twenty-two percent. We're losing pace"}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {check: drop, report: now, box: next}
+        order: [report, box]
+        notes: ""
+      - id: g039
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 47, laps_remaining: 3}
+        thresholds: {pit_min_laps_left: 4}
+        queued:
+          - {id: wing, rule: front_wing_lost_box, text: Front wing gone. Box this lap}
+          - {id: nurse, rule: front_wing_lost_nurse, text: Front wing damage. Nurse it home, age_s: 1.0}
+        grade: {nurse: now, wing: drop}
+        order: [nurse]
+        notes: ""
+      - id: g040
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 5}
+        queued:
+          - {id: punct, rule: puncture, text: "Possible puncture, rear left", age_s: 1.0}
+          - {id: attack, rule: battle_attack, text: "You're in range"}
+        grade: {punct: now, attack: drop}
+        order: [punct]
+        notes: ""
+      - id: g041
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        queued:
+          - {id: drs, rule: drs_fault, text: "DRS fault. Don't rely on it"}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {drs: now, attack: next}
+        order: [drs, attack]
+        notes: ""
+      - id: g042
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 35}
+        currently_speaking: {id: lockup, rule: lockup_front, text: Locking the fronts into Turn 1, age_s: 0.5}
+        queued:
+          - {id: ers, rule: ers_fault, text: ERS fault. Hold position}
+        grade: {lockup: drop, ers: now}
+        order: [ers]
+        notes: ""
+      - id: g043
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful, age_s: 1.0}
+        grade: {yellow: now, reply: next}
+        order: [yellow, reply]
+        notes: ""
+      - id: g044
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: reply, kind: reply, menu_item: plan, rule: menu_reply, text: Plan is one stop}
+        grade: {life: now, reply: next}
+        order: [life, reply]
+        notes: Same info in flight as the reply.
+      - id: g045
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        queued:
+          - {id: reply, kind: reply, menu_item: weather, rule: menu_reply, text: Rain expected in ten minutes}
+          - {id: box, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {box: now, reply: next}
+        order: [box, reply]
+        notes: ""
+      - id: g046
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 40}
+        queued:
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap behind is one point two, age_s: 4.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, reply: drop}
+        order: [defend]
+        notes: Reply is stale — situation moved on.
+      - id: g047
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, laps_remaining: 20, battle_mode: attacking, battle_pass_prob: 0.2}
+        thresholds: {battle_patience_laps: 2, battle_attack_prob_min: 0.4}
+        queued:
+          - {id: patience, rule: battle_patience, text: Hard to pass. Save tyres}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {patience: now, attack: drop}
+        order: [patience]
+        notes: Low pass chance.
+      - id: g048
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, session_uid: 3}
+        queued:
+          - {id: lost, rule: overtake_lost, text: Overtake gone. Get it back, age_s: 1.0}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it"}
+        grade: {lost: now, attack: next}
+        order: [lost, attack]
+        rotate: [[lost, attack]]
+        notes: ""
+      - id: g049
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        currently_speaking: {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 0.5}
+        queued:
+          - {id: attack, rule: battle_attack, text: "You're in range ahead. Go for it"}
+        grade: {defend: now, attack: next}
+        order: [defend, attack]
+        notes: Fighting both sides.
+      - id: g050
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 49, laps_remaining: 1, gap_ahead_s: 0.5}
+        queued:
+          - {id: life, rule: tyre_life, text: One lap in the tyres, age_s: 3.0}
+          - {id: attack, rule: battle_attack, text: Last lap. Go for it}
+        grade: {attack: now, life: drop}
+        order: [attack]
+        notes: ""
+      - id: g051
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        queued:
+          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain in sector two, age_s: 1.0}
+          - {id: lockup, rule: lockup_rear, text: Rear locking into Turn 9, age_s: 2.0}
+        grade: {rain: now, lockup: drop}
+        order: [rain]
+        notes: "rain_falling is not a packaged rule. Encoded as hypothetical with the weather_to_inter urgency."
+      - id: g052
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        currently_speaking: {id: plan, rule: plan_status, text: Plan is one stop, age_s: 0.5}
+        queued:
+          - {id: rain, rule: rain_heavy, hypothetical: true, kind: execution, text: Heavy rain coming. Box for wets}
+        grade: {plan: drop, rain: now}
+        order: [rain]
+        notes: ""
+      - id: g053
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        queued:
+          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain easing, age_s: 2.0}
+          - {id: boxd, rule: box_now, text: Box for dries this lap}
+        grade: {boxd: now, rain: next}
+        order: [boxd, rain]
+        notes: "Track drying. rain_falling is not a packaged rule. Encoded as hypothetical with the weather_to_inter urgency."
+      - id: g054
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Five-second penalty. Serve at the stop, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres}
+        grade: {pen: now, life: next}
+        order: [pen, life]
+        notes: ""
+      - id: g055
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        currently_speaking: {id: wear, rule: wear_rears, text: Rears at thirty percent, age_s: 0.5}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap}
+        grade: {wear: drop, pen: now}
+        order: [pen]
+        notes: ""
+      - id: g056
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44, laps_remaining: 8}
+        queued:
+          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: You have a five-second penalty. We need a gap}
+          - {id: push, rule: battle_attack, text: Push now. Build the gap, age_s: 1.0}
+        grade: {pen: now, push: next}
+        order: [pen, push]
+        notes: ""
+      - id: g057
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 1}
+        queued:
+          - {id: lost1, rule: lap1_lost, hypothetical: true, text: Down two on lap one, age_s: 1.0}
+          - {id: gained, rule: lap1_gained, text: Up two on lap one}
+        grade: {lost1: drop, gained: drop}
+        order: []
+        notes: Net zero — should either speak?
+      - id: g058
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 2}
+        queued:
+          - {id: drsok, rule: drs_enabled, hypothetical: true, kind: info, text: DRS enabled}
+          - {id: gained, rule: lap1_gained, text: Up two on lap one, age_s: 1.0}
+        grade: {drsok: now, gained: next}
+        order: [drsok, gained]
+        notes: ""
+      - id: g059
+        source: graded
+        session: race
+        scene: {phase: finished, lap_num: 50}
+        queued:
+          - {id: finish, rule: finish_held, text: "P2, good job"}
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres were gone, age_s: 2.0}
+        grade: {finish: now, reply: next}
+        order: [finish, reply]
+        notes: Driver asked before the flag.
+      - id: g060
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 49, laps_remaining: 1}
+        queued:
+          - {id: hold, rule: battle_held, text: Hold this gap, age_s: 1.0}
+          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: Penalty applied. You finish P6}
+        grade: {pen: now, hold: drop}
+        order: [pen]
+        notes: ""
+      - id: g061
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 24}
+        queued:
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 8.0, scene: {phase: racing}}
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {sc: now, defend: drop}
+        order: [sc]
+        notes: Defend queued before SC.
+      - id: g062
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 24}
+        queued:
+          - {id: catch, rule: battle_catching, text: "Catching Norris, three tenths a lap", age_s: 10.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 1.0}
+        grade: {life: now, catch: drop}
+        order: [life]
+        notes: Catching call is old — gap may have changed.
+      - id: g063
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 24}
+        policy: {deadlines_s: {1: 5.0, 2: 3.0, 3: 1.5}}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 4.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, reply: drop}
+        order: [defend]
+        notes: Reply past its deadline.
+      - id: g064
+        source: graded
+        session: race
+        scene: {phase: out_lap, lap_num: 19}
+        queued:
+          - {id: exit, rule: pit_exit_traffic_race, text: Car coming at pit exit. Stay right}
+          - {id: gap, rule: gap_behind_closing, hypothetical: true, text: Undercut threat behind, age_s: 1.0}
+        grade: {exit: now, gap: queue}
+        order: [exit, gap]
+        notes: ""
+      - id: g065
+        source: graded
+        session: race
+        scene: {phase: out_lap, lap_num: 19}
+        queued:
+          - {id: temps, rule: out_lap_temps, hypothetical: true, kind: info, text: Tyres cold. Build temp}
+          - {id: traffic, rule: pit_exit_traffic_race, text: Car coming at pit exit, age_s: 1.0}
+        grade: {traffic: now, temps: next}
+        order: [traffic, temps]
+        notes: ""
+      - id: g066
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 21, laps_remaining: 20, pit_plan_gain_s: 1.0, pit_plan_risk: 0.2, overcut_s: 0.8, laps_of_pace: 12.0, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 2.0}
+        grade: {box: now, stay: drop, boxn: drop}
+        order: [box]
+        notes: Three-way contradiction.
+      - id: g067
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 2.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 1.0}
+        grade: {box: now, pen: next, sc: drop}
+        order: [box, pen]
+        notes: "Pit entry seconds away, penalty to serve."
+      - id: g068
+        source: graded
+        session: race
+        scene: {phase: red_flag, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box", age_s: 2.0}
+          - {id: red, rule: red_flag, text: Red flag. Box this lap}
+        grade: {red: now, box: drop}
+        order: [red]
+        notes: Red flag makes the earlier box call redundant.
+      - id: g069
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 1.0}
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you three tenths}
+        grade: {mistakes: now, saved: drop}
+        order: [mistakes]
+        notes: Praise then coaching for the same moment?
+      - id: g070
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12, gap_ahead_s: 0.9}
+        queued:
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you three tenths, age_s: 1.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, mistakes: drop}
+        order: [defend]
+        notes: ""
+      - id: g071
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: fuel, rule: fuel_marginal, text: Fuel is tight, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 3.0}
+        grade: {fuel: now, life: next}
+        order: [fuel, life]
+        notes: Which info goes first?
+      - id: g072
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
+          - {id: plan, rule: plan_status, text: "Plan is one stop, lap thirty", age_s: 2.0}
+        grade: {life: now, plan: drop}
+        order: [life]
+        notes: Bad tyre news vs plan.
+      - id: g073
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 1.0}
+          - {id: wear2, rule: wear_rears, text: Rears at thirty percent}
+        grade: {wear: merge, wear2: merge}
+        order: [digest]
+        notes: Two wear calls — one line or two?
+      - id: g074
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 26, gap_ahead_s: 4.0, gap_behind_s: 5.0}
+        queued:
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 6.0}
+          - {id: plan, rule: plan_status, text: Plan is one stop, age_s: 4.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 2.0}
+          - {id: pace, rule: battle_catching, text: Two tenths off the cars ahead, age_s: 1.0}
+        grade: {life: drop, plan: merge, fuel: merge, pace: merge}
+        order: [digest]
+        notes: Four infos on a quiet stretch.
+      - id: g075
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: box2, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {box: now, box2: drop}
+        order: [box]
+        notes: Duplicate box calls.
+      - id: g076
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 33}
+        queued:
+          - {id: blue, rule: blue_flag, text: Blue flags. Let him by, age_s: 1.0}
+          - {id: blue2, rule: blue_flag, text: Blue flags. Let him by}
+        grade: {blue2: now, blue: drop}
+        order: [blue2]
+        notes: ""
+      - id: g077
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 9}
+        currently_speaking: {id: fuel, rule: fuel_marginal, text: "Fuel is tight, lift and coast", age_s: 0.5}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save}
+        grade: {fuel: now, saved: drop}
+        order: [fuel]
+        notes: ""
+      - id: g078
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 9}
+        currently_speaking: {id: box, rule: box_now, text: "Box, box this lap", age_s: 0.5}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, stale: true}
+        grade: {box: now, boxn: drop}
+        order: []
+        notes: Stale box_in_n contradicts the box on air.
+      - id: g079
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 3000.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: ers, rule: ers_fault, text: "ERS fault. We're checking", age_s: 1.0}
+        grade: {ers: now, box: next}
+        order: [ers, box]
+        notes: Mid-distance to pit entry.
+      - id: g080
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 5}
+        queued:
+          - {id: contact, rule: contact_check, text: Contact there. Checking}
+          - {id: lap1, rule: lap1_gained, text: Up three on lap one. Nice, age_s: 1.0}
+        grade: {contact: now, lap1: drop}
+        order: [contact]
+        notes: ""
+      - id: g081
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 28}
+        queued:
+          - {id: vsc, rule: vsc_deployed, text: Virtual safety car}
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap to P3 is four seconds, age_s: 1.0}
+        grade: {vsc: now, reply: next}
+        order: [vsc, reply]
+        notes: ""
+      - id: g082
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 28, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        queued:
+          - {id: vsc, rule: vsc_deployed, text: Virtual safety car}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop", age_s: 1.0}
+        grade: {vsc: now, box: next}
+        order: [vsc, box]
+        notes: ""
+      - id: g083
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36}
+        queued:
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 1.0}
+        grade: {slow: now, reply: next}
+        order: [slow, reply]
+        notes: ""
+      - id: g084
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {reply: now, box: next}
+        order: [box]
+        notes: Pit entry far away.
+      - id: g085
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {reply: drop, box: now}
+        order: [box]
+        notes: Pit entry seconds away.
+      - id: g086
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 11}
+        queued:
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you two tenths, age_s: 1.0}
+          - {id: crawl, rule: slow_car_crawling, text: "Slow car ahead, crawling"}
+        grade: {crawl: now, mistakes: drop}
+        order: [crawl]
+        notes: ""
+      - id: g087
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 41}
+        queued:
+          - {id: manage, rule: battle_manage, text: Keep the gap}
+          - {id: fuel, rule: fuel_short, hypothetical: true, kind: safety, text: "Fuel critical, we may not finish", age_s: 1.0}
+        grade: {fuel: now, manage: drop}
+        order: [fuel]
+        notes: "Owner kind: warning, which is not an urgency. Encoded as safety, the only class that cuts tactical calls."
+      - id: g088
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 41}
+        currently_speaking: {id: manage, rule: battle_manage, text: Keep the gap, age_s: 0.5}
+        queued:
+          - {id: fuel, rule: fuel_short, hypothetical: true, kind: safety, text: "Fuel critical, lift and coast now"}
+        grade: {manage: drop, fuel: now}
+        order: [fuel]
+        notes: "Owner kind: warning, which is not an urgency. Encoded as safety, the only class that cuts tactical calls."
+      - id: g089
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 7}
+        queued:
+          - {id: boosted, rule: boost_left_on, text: Boost still on. Turn it off}
+          - {id: fuel, rule: fuel_marginal, text: Fuel is tight, age_s: 1.0}
+        grade: {boosted: now, fuel: next}
+        order: [boosted, fuel]
+        notes: Two lift-and-coast style calls.
+      - id: g090
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 50, laps_remaining: 0}
+        queued:
+          - {id: finish, rule: finish_held, text: "P5, held it. Good job"}
+          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: Five-second penalty. You finish P7, age_s: 1.0}
+        grade: {pen: now, finish: drop}
+        order: [pen]
+        notes: "Checkered flag, penalty changes the result."
+      - id: g091
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 40}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready}
+          - {id: drs, rule: drs_enabled, hypothetical: true, kind: info, text: DRS enabled at the restart, age_s: 1.0}
+        grade: {restart: now, drs: next}
+        order: [restart, drs]
+        notes: ""
+      - id: g092
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 13}
+        queued:
+          - {id: under, rule: undercut_threat, hypothetical: true, kind: tactical, text: "They're going for the undercut. Cover"}
+          - {id: box, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {under: now, box: next}
+        order: [under, box]
+        notes: Threat warning vs immediate box.
+      - id: g093
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 13}
+        queued:
+          - {id: under, rule: undercut_threat, hypothetical: true, kind: tactical, text: "They're going for the undercut"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {stay: now, under: drop}
+        order: [stay]
+        notes: ""
+      - id: g094
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 32}
+        queued:
+          - {id: traffic, rule: traffic_ahead, hypothetical: true, kind: info, text: "Traffic ahead, three cars"}
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 2.0}
+        grade: {traffic: now, life: next}
+        order: [traffic, life]
+        notes: ""
+      - id: g095
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 32}
+        queued:
+          - {id: traffic, rule: traffic_ahead, hypothetical: true, kind: info, text: "Traffic ahead, three cars"}
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 1.0}
+        grade: {traffic: now, boxn: next}
+        order: [traffic, boxn]
+        notes: Traffic is relevant to the stop decision.
+      - id: g096
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44}
+        queued:
+          - {id: charge, rule: charge_mode, hypothetical: true, kind: info, text: Switch to charge mode}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 1.0}
+        grade: {defend: now, charge: next}
+        order: [defend, charge]
+        notes: ""
+      - id: g097
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44}
+        currently_speaking: {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful, age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {yellow: drop, sc: now}
+        order: [sc]
+        notes: Yellow escalates to SC mid-call.
+      - id: g098
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 21}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 4.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {box: now, boxn: drop}
+        order: [box]
+        notes: box_in_n already told them — does it repeat?
+      - id: g099
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 46, laps_remaining: 6}
+        queued:
+          - {id: push, rule: final_push, hypothetical: true, kind: tactical, text: Six laps left. Push now}
+          - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 1.0}
+        grade: {push: now, life: drop}
+        order: [push]
+        notes: ""
+      - id: g100
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25, gap_ahead_s: 2.0, gap_behind_s: 2.5}
+        queued:
+          - {id: silence, rule: radio_check, hypothetical: true, kind: info, text: Radio check}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 1.0}
+        grade: {life: now, silence: drop}
+        order: [life]
+        notes: Is a radio check ever worth airtime mid-race?
