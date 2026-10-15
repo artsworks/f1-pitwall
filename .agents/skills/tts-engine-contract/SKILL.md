@@ -61,7 +61,7 @@ Every `on_audio` payload is one complete WAV file:
 | `flush()` | Replay seek and reset can drop queued audio. |
 | `queue_status()` | The engine reports its queued count and oldest age. |
 
-Do not set `supports_audio_stream` on an engine that cannot produce bytes. SAPI plays audio and reports playback, but it has no WAV, so it does not stream.
+Do not set `supports_audio_stream` on an engine that cannot produce bytes. Piper and OmniVoice produce WAV bytes. The `null` speaker does not stream.
 
 ## Translation layer
 

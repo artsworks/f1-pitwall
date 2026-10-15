@@ -15,6 +15,8 @@ from pitwall.audio.speaker import (
     ENGINES,
     EngineSpec,
     NullSpeaker,
+    auto_engine,
+    make_speaker,
     register_engine,
     streams_audio,
     wire_speaker,
@@ -110,14 +112,53 @@ def test_stream_capability_requires_callback(caplog: pytest.LogCaptureFixture) -
     class Noncompliant(FakeSpeaker):
         supports_audio_stream = True
 
-    class SapiLike(FakeSpeaker):
+    class NoStreamSpeaker(FakeSpeaker):
         supports_audio_stream = False
         on_audio = None
 
     with caplog.at_level(logging.WARNING):
         assert not streams_audio(Noncompliant())
     assert "has no on_audio callback" in caplog.text
-    assert not streams_audio(SapiLike())
+    assert not streams_audio(NoStreamSpeaker())
+
+
+def test_auto_engine_resolves_to_piper_or_null(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from pitwall.audio import piper_tts, speaker
+
+    voice_file = tmp_path / "voice.onnx"
+    monkeypatch.setattr(piper_tts, "voice_path", lambda _settings: voice_file)
+    monkeypatch.setattr(speaker.sys, "platform", "win32")
+    settings = SpeechSettings()
+    assert auto_engine(settings) == "null"
+
+    voice_file.touch()
+    assert auto_engine(settings) == "piper"
+
+    monkeypatch.setattr(speaker.sys, "platform", "linux")
+    assert auto_engine(settings) == "null"
+
+
+def test_unknown_sapi_engine_warns_and_uses_auto(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from pitwall.audio import speaker
+
+    monkeypatch.setattr(speaker.sys, "platform", "linux")
+    with caplog.at_level(logging.WARNING):
+        result = make_speaker(SpeechSettings(engine="sapi"))
+
+    assert isinstance(result, NullSpeaker)
+    assert "Unknown speech engine 'sapi'" in caplog.text
+
+
+def test_sapi_is_not_registered_as_an_output_engine() -> None:
+    assert "sapi" not in ENGINES
+
+
+def test_speech_settings_ignores_removed_sapi_voice() -> None:
+    assert SpeechSettings.model_validate({"voice": "x"}).engine == "auto"
 
 
 def test_wire_speaker_updates_hub_audio_metrics_and_drop_state() -> None:

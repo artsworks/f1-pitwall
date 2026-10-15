@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import sys
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -110,12 +109,11 @@ def test_missing_voice_falls_back(tmp_path: Path) -> None:
     settings = SpeechSettings(engine="piper", voices_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="pitwall voice get"):
         make_piper_synth(settings)
-    if sys.platform != "win32":
-        assert isinstance(make_speaker(settings), NullSpeaker)
+    assert isinstance(make_speaker(settings), NullSpeaker)
 
 
 def test_speech_disabled_makes_null_speaker() -> None:
-    assert isinstance(make_speaker(SpeechSettings(enabled=False, engine="sapi")), NullSpeaker)
+    assert isinstance(make_speaker(SpeechSettings(enabled=False, engine="piper")), NullSpeaker)
 
 
 VOICES = Path.home() / "voices"

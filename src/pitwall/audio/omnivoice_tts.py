@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import logging
-import sys
 import threading
 import time
 import urllib.error
@@ -222,17 +221,9 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
     except Exception as exc:
         log.warning("Piper tone fallback unavailable (%s)", exc)
         fallback_tones = None
-    fallback = None
-    if fallback_tones is None:
-        from pitwall.audio.speaker import make_speaker
-
-        fallback = make_speaker(
-            settings.model_copy(update={"engine": "sapi" if sys.platform == "win32" else "null"})
-        )
     renderer = OmniVoiceRenderer(settings, model_id, fallback_tones)
     return WavSpeaker(
         renderer,
         player or default_player(),
         cache_dir=Path(settings.voices_dir) / ".phrases",
-        fallback=fallback,
     )

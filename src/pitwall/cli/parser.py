@@ -372,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     vsay.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
     vsay.add_argument(
         "--engine",
-        choices=["auto", "piper", "sapi", "null", "omnivoice"],
+        choices=["auto", "piper", "null", "omnivoice"],
         default=None,
         help="speech backend (default: configured speech.engine)",
     )
@@ -401,7 +401,9 @@ def build_parser() -> argparse.ArgumentParser:
     vspike.add_argument("--recognizer", default=None, help="recogniser description substring")
     vspike.add_argument("--confidence", type=float, default=None, help="confidence_min override")
     vspike.add_argument("--affinity", default=None, help="CPU affinity mask, e.g. 0xF000")
-    vspike.add_argument("--say", action="store_true", help="speak 'Copy, <intent>' via SAPI")
+    vspike.add_argument(
+        "--say", action="store_true", help="speak 'Copy, <intent>' through speech.engine"
+    )
     vspike.add_argument("--log", default=None, help="JSONL log path")
 
     rl = sub.add_parser(

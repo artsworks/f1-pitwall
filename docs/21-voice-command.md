@@ -250,17 +250,16 @@ far cheaper than open transcription.
 | Option | Grammar-constrained | Est. RSS | CPU while decoding | Idle CPU | Notes |
 |---|---|---|---|---|---|
 | **Vosk** (Kaldi, `vosk-model-small-en-us-0.15`, ~40 MB on disk) | yes — `KaldiRecognizer(model, rate, grammar_json)` | ~150–300 MB | streaming, RTF ≈ 0.1–0.3 on one core | 0 | pip wheel bundles the runtime; MIT/Apache; British-accent handling to be verified in the spike |
-| Windows in-proc SAPI 5.4 recogniser (`SpInProcRecognizer`, SRGS grammar) via pywin32 | yes | ~50–100 MB (est.) | low | 0 | no new dependency (pywin32 is already there for SAPI speech); needs the language pack; accuracy with a headset mic and engine noise unknown; Windows-only; COM threading care |
+| Windows in-proc SAPI 5.4 recogniser (`SpInProcRecognizer`, SRGS grammar) via pywin32 | yes | ~50–100 MB (est.) | low | 0 | no new dependency (pywin32 is already a dependency); needs the language pack; accuracy with a headset mic and engine noise unknown; Windows-only; COM threading care |
 | sherpa-onnx (streaming zipformer / keyword spotter) | keyword spotting yes; grammar via hotwords, not hard constraint | ~200–400 MB | RTF ≈ 0.1–0.3 | 0 | ONNX Runtime dependency; more moving parts than Vosk for the same job |
 | Picovoice Rhino (speech-to-intent) + Porcupine | yes — purpose-built intent grammar | tens of MB | very low | very low | closest fit technically; requires an account and access key, licence terms to check; grammar compiled on their console, which cuts against "everything in YAML" |
 | faster-whisper `tiny.en` / `base.en` int8 | no (prompting only) | ~300–600 MB | non-streaming burst: ~0.3–1 s per 3 s utterance on 2–4 threads | 0 | best open-vocabulary accuracy, worst fit: bursty CPU, bigger, and we do not need open vocabulary |
 | Cloud (Azure / Google / Whisper API) | partly | — | — | — | rejected: network mid-race, ~1 s+ latency, cost, not replayable |
 
 **Recommendation: Vosk small English, grammar-constrained, with the Windows in-proc SAPI
-recogniser as the zero-dependency fallback** (same shape as Piper primary / SAPI fallback
-on the speaking side). Rhino stays on the list if the spike shows Vosk's accuracy on the
-driver's accent through a headset is not good enough. Rhino's intent model is likely the
-most robust. It costs a licence and uses an external grammar tool.
+recogniser as the zero-dependency fallback.** Rhino stays on the list if the spike shows
+Vosk's accuracy on the driver's accent through a headset is not good enough. Rhino's intent
+model is likely the most robust. It costs a licence and uses an external grammar tool.
 
 The RSS and RTF figures are estimates from the projects' own published small-model
 numbers and general experience, not measurements on the game PC; the spike (section 8)

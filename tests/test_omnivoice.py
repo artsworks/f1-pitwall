@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from pitwall.audio.dispatcher import Dispatcher
 from pitwall.audio.omnivoice_tts import (
     OmniVoiceError,
     OmniVoiceRenderer,
@@ -27,9 +28,11 @@ from pitwall.audio.omnivoice_tts import (
     render_stats_summary,
 )
 from pitwall.audio.piper_tts import to_wav
-from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
+from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, wire_speaker
 from pitwall.audio.wav_speaker import NullPlayer, WavSpeaker, default_player
-from pitwall.config.models import Settings, SpeechSettings
+from pitwall.clock import VirtualClock
+from pitwall.config.models import PolicySettings, Settings, SpeechSettings
+from pitwall.server.hub import Hub
 from tests.audio_contract import FakePlayer, assert_pitwall_wav, make_call
 
 SMALL_WAV = to_wav(np.zeros(240, dtype=np.float32), 24_000)
@@ -230,7 +233,7 @@ def test_fetch_model_id_reads_first_model(fake_server, tmp_path: Path) -> None: 
     assert fetch_model_id(_settings(url, tmp_path)) == "voice-model.gguf"
 
 
-def test_make_omnivoice_speaker_uses_fallback_without_piper(
+def test_make_omnivoice_speaker_has_no_fallback_without_piper(
     fake_server, tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.omnivoice_tts as omnivoice_module
@@ -245,9 +248,50 @@ def test_make_omnivoice_speaker_uses_fallback_without_piper(
     try:
         assert isinstance(speaker, WavSpeaker)
         assert speaker._renderer.fallback_tones is None
+        assert speaker._fallback is None
         if __import__("sys").platform != "win32":
             assert isinstance(default_player(), NullPlayer)
-            assert speaker._fallback is not None
+    finally:
+        speaker.close()
+
+
+def test_omnivoice_failure_without_piper_drops_through_hub(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, state = fake_server
+    state.speech_status = 500
+    monkeypatch.setattr(
+        omnivoice_module,
+        "make_piper_tone_synths",
+        lambda settings: (_ for _ in ()).throw(FileNotFoundError("no Piper model")),
+    )
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, omnivoice_wait_s=0.1), FakePlayer())
+    hub = Hub()
+    hub.audio_clients.add(object())
+    dispatcher = Dispatcher(PolicySettings(), VirtualClock(), sinks=[speaker])
+    wire_speaker(speaker, hub, dispatcher)
+    call = make_call("omnivoice-dropped", text="Box this lap.")
+    try:
+        hub.speak(call)
+        speaker.speak(call)
+        _wait_for(
+            lambda: (
+                call.id in dispatcher._dropped
+                and any(
+                    frame["type"] == "cancel" and frame["payload"]["id"] == call.id
+                    for frame in hub.outbox
+                )
+            )
+        )
+
+        assert list(dispatcher._dropped) == [call.id]
+        assert {row["id"]: row["audio"] for row in hub.recent_calls}[call.id] == "dropped"
+        assert not any(
+            frame["type"] in {"spoken", "audio"} and frame["payload"].get("id") == call.id
+            for frame in hub.outbox
+        )
     finally:
         speaker.close()
 

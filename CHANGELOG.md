@@ -4,6 +4,10 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org) with the 0.
 
 The release workflow writes entries after 0.1.0 from the Conventional Commit PR titles on `main`. The 0.1.0 entry was written by hand.
 
+## Unreleased
+
+- `speech.engine: "sapi"` is removed. Pitwall prints an unknown-engine warning and resolves the engine with `auto` (Piper if its voice is installed, else null). `auto` no longer picks SAPI on Windows, and `speech.voice` is gone.
+
 <!-- version list -->
 
 ## v0.16.0 (2026-10-15)

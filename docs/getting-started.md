@@ -37,22 +37,20 @@ uv run pitwall start                 # ingest + rules + speech + dashboard
 
 ## Speech engines
 
-`speech.engine` in `settings.yaml` picks the engine. On Windows, the default `auto` uses Piper when its voice file exists, else SAPI. On other systems, `auto` uses `null`. Set `piper` or `omnivoice` to stream audio from a Linux PC.
+`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. Set `piper` or `omnivoice` to stream audio from a Linux PC.
 
 | `speech.engine` | Local speech | Browser audio stream |
 |---|---|---|
 | `piper` | yes | yes |
 | `omnivoice` | yes | yes |
-| `sapi` | yes, Windows only | no, the phone uses the browser voice |
 | `null` | no | no |
 
 Local speech plays only on Windows. On other systems, Piper and OmniVoice play nothing locally but still stream audio to the browser. If an engine fails to load, Pitwall prints a warning and tries its fallback. An unknown engine id prints a warning, and Pitwall uses `auto`. [Configuration](08-configuration.md) lists the fallbacks and the fields for each engine.
 
 ## Natural voice (Piper)
 
-The built-in Windows voices sound robotic. Download a Piper neural voice once
-(~60 MB, into `voices/`, git-ignored); `pitwall start` then uses it automatically
-and falls back to SAPI if it cannot load:
+Download a Piper neural voice once (~60 MB, into `voices/`, git-ignored). Pitwall
+uses the voice automatically when available and plays nothing (`null`) if it cannot load:
 
 ```powershell
 uv run pitwall voice get                      # default: en_GB-northern_english_male-medium
@@ -60,7 +58,6 @@ uv run pitwall voice get en_US-ryan-high      # try others; samples: https://rha
 uv run pitwall voice warm                     # pre-render common fixed phrases (default 150)
 uv run pitwall voice                          # list installed voices
 uv run pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
-uv run pitwall voice say --engine sapi        # compare with the old voice
 ```
 
 `speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 150.
@@ -119,7 +116,7 @@ Add `--log-level` before the command to print more detail. `--log-level info` pr
 
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
-OmniVoice falls back to Piper, then SAPI on Windows or null on other systems.
+OmniVoice falls back to Piper, then `null`.
 
 Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
 You should hear "Pit wall online." at start.

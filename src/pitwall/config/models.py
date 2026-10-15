@@ -255,7 +255,6 @@ class LearningSettings(BaseModel):
 class SpeechSettings(BaseModel):
     enabled: bool = True
     engine: str = "auto"
-    voice: str | None = None
     piper_voice: str = "en_GB-northern_english_male-medium"
     piper_speed: float = 1.3
     omnivoice_url: str = "http://127.0.0.1:8080"
