@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.18.0 (2026-10-15)
+
+### Features
+
+- **tracks**: Promote learned overlays from the 2026-10-16 pack
+  ([#100](https://github.com/artsworks/f1-pitwall/pull/100),
+  [`4290e8e`](https://github.com/artsworks/f1-pitwall/commit/4290e8e4459b00d9bd1b05992a16e9dd9e5270a4))
+
+
 ## v0.17.0 (2026-10-15)
 
 ### Bug Fixes
