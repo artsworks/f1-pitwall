@@ -717,8 +717,8 @@ batches:
         currently_speaking: {id: plan, rule: plan_status, text: "Plan is two stops, next on lap 28", age_s: 0.5}
         queued:
           - {id: box, rule: box_now, text: "Box, box. Undercut is on"}
-        grade: {plan: now, box: next}
-        order: [plan, box]
+        grade: {plan: drop, box: now}
+        order: [box]
         notes: ""
       - id: g004
         source: graded
@@ -747,8 +747,8 @@ batches:
         queued:
           - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 2.0}
           - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
-        grade: {yellow: now, pen: next}
-        order: [yellow, pen]
+        grade: {yellow: now, pen: queue}
+        order: [yellow]
         notes: ""
       - id: g007
         source: graded

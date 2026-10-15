@@ -10,7 +10,6 @@ SCENARIOS = load_workbook(WORKBOOK)
 
 # Owner grades the dispatcher does not meet yet. Remove an id once policy changes make it pass.
 KNOWN_MISMATCHES: dict[str, str] = {
-    "g003": "preemption",
     "g004": "conflict resolution",
     "g006": "preemption",
     "g007": "preemption",
