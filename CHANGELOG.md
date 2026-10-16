@@ -10,6 +10,102 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.19.0 (2026-10-16)
+
+### Bug Fixes
+
+- **radio**: A duplicate of the line on air merges into it
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Add owner race grades and meet them in the dispatcher
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Battle focus drops every info call
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Battle focus drops P3 info only, keep P2 news such as lap one position
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Drop calls that reach the age cap or deadline exactly
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Keep driver replies when a finish or red flag call flushes the queue
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Keep P2 info in focus, let tactical calls drop coaching and battle info
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Replies never cut, execution cuts by priority or promotion, cut replies requeue only
+  after a hazard ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Safety leads and cuts promoted box calls, queue orders by priority inside a class
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: The newest decision wins an unscored conflict, drop decision_missed_s
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **rules**: Speak the contact check at once, the damage report or all clear supersedes it
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **rules**: Split the battle cooldown group by side and let box_now supersede box_in_n
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **rules**: The box call drops the tyre life line it carries
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **rules**: Weigh pit risk once, score the overcut by the optimiser minimum, let the corner cost
+  line supersede praise ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+### Features
+
+- **radio**: Tactical lines join a digest on a quiet stretch
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **rules**: Add the contradicts relation, puncture, fuel and contact checks drop the lines they
+  contradict ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+### Testing
+
+- Add owner race grading batch 4 to radio workbook
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- Apply owner regrade of g003 and g006 ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- Classify remaining batch 4 radio mismatches
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- Regrade batch 4 radio scenarios with the pit wall priority model
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Encode hypothetical rules on packaged rules and add the relations they need
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+- **radio**: Regrade the last five scenarios to the dispatcher output
+  ([#99](https://github.com/artsworks/f1-pitwall/pull/99),
+  [`86b17bf`](https://github.com/artsworks/f1-pitwall/commit/86b17bfb38f4a128bd4cbc255ea6c55beadbd7e8))
+
+
 ## v0.18.0 (2026-10-15)
 
 ### Features
