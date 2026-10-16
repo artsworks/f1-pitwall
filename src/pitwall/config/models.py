@@ -310,6 +310,9 @@ class RuleDefModel(BaseModel):
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     conflict_group: str = ""  # queued calls in one group: only the one still true is kept
     supersedes: list[str] = Field(default_factory=list)  # rule ids this call replaces in the queue
+    contradicts: list[str] = Field(
+        default_factory=list
+    )  # rule ids that never speak alongside this call
     decision_point: Literal["", "pit_entry", "line"] = ""
     outcome_score: str | None = None
     rotate_with: list[str] = Field(default_factory=list)
@@ -390,7 +393,13 @@ class Settings(BaseModel):
     def _known_supersedes(self) -> Settings:
         rule_ids = {rule.id for rule in self.rules}
         for rule in self.rules:
-            for field_name in ("supersedes", "rotate_with", "resolved_by", "escalates"):
+            for field_name in (
+                "supersedes",
+                "contradicts",
+                "rotate_with",
+                "resolved_by",
+                "escalates",
+            ):
                 for referenced_id in getattr(rule, field_name):
                     if referenced_id not in rule_ids:
                         raise ValueError(

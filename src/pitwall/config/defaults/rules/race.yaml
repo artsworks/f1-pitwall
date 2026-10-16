@@ -301,6 +301,7 @@ rules:
     clear_when: "fuel_margin_laps >= 0"
     cooldown_s: 120
     cooldown_group: fuel
+    contradicts: [battle_manage]
     requires: [car_status]
     say:
       - "Fuel {fuel_short_laps:.1f} laps short. Lift and coast"
@@ -1258,6 +1259,7 @@ rules:
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
     requires: [participants]
     say:
       - "Contact with {contact_name}. Checking the car"
@@ -1271,6 +1273,7 @@ rules:
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
     say:
       - "Contact there. Checking the car"
       - "Contact. Checking damage"

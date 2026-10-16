@@ -1018,6 +1018,25 @@ def test_conflict_scores() -> None:
     }
 
 
+def test_contradicts_keeps_priority_then_class_then_newest() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("attack", priority=3, urgency="tactical")], _snap(0.0))
+    d.submit([_cand("hazard", priority=1, urgency="safety", contradicts=["attack"])], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["hazard"]
+    assert ("attack", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("hold", priority=2, urgency="tactical", contradicts=["news"])], _snap(0.0))
+    d.submit([_cand("news", priority=2, urgency="info")], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["hold"]
+    assert ("news", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
+
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("first", priority=2, urgency="info", contradicts=["second"])], _snap(0.0))
+    d.submit([_cand("second", priority=2, urgency="info")], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["second"]
+
+
 def test_rotation_is_seeded_and_both_rules_can_win() -> None:
     winners = set()
     for seed in range(1, 21):

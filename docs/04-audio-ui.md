@@ -82,7 +82,7 @@ The dispatcher drops location-specific calls after recent safety or traffic call
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
 higher outcome score. Rotation pairs choose a seeded random winner, regardless of score.
-Other live conflicts keep the newest call. `resolved_by` rules suppress resolved calls in
+Other live conflicts keep the newest call. `contradicts` pairs keep the higher priority, then the higher urgency class, then the newest call. `resolved_by` rules suppress resolved calls in
 either submission order. Escalations remove lower-state calls. Flush events remove
 queued calls, except safety calls and replies the driver asked for.
 

@@ -79,6 +79,7 @@ rules:
     clear_when: "puncture_corner == ''"
     still_true: "puncture_corner != ''"
     cooldown_s: 60
+    contradicts: [battle_attack]
     requires: [car_damage]
     say:
       - "Puncture, {puncture_corner}. Box, box. Steady"

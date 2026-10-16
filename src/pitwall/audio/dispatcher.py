@@ -554,7 +554,10 @@ class Dispatcher:
             reverse_supersedes = (
                 rival_definition is not None and call.rule_id in rival_definition.supersedes
             )
-            if not (same_group or rotates or supersedes or reverse_supersedes):
+            contradicts = rival.rule_id in definition.contradicts or (
+                rival_definition is not None and call.rule_id in rival_definition.contradicts
+            )
+            if not (same_group or rotates or supersedes or reverse_supersedes or contradicts):
                 continue
             holds = True
             if rival.current is not None:
@@ -567,6 +570,13 @@ class Dispatcher:
                 continue
             if reverse_supersedes:
                 return "conflict"
+            if contradicts:
+                # Two lines that contradict each other: the higher priority speaks, then the
+                # higher urgency class, then the newest call.
+                if (call.priority, call.rank) <= (rival.priority, rival.rank):
+                    self._drop_queued(rival.id, "contradicted")
+                    continue
+                return "contradicted"
             if rotates:
                 if self._rng.choice((True, False)):
                     self._drop_queued(rival.id, "rotated")
