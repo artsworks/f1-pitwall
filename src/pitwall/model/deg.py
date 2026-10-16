@@ -29,6 +29,8 @@ class DegFit:
     confidence: float  # 0..1
     source: str  # 'fit' | 'prior' | 'blend'
     fuel_fitted: bool = False  # fuel slope estimated from this data, not the prior
+    deg2_ms_per_lap2: float = 0.0
+    deg_sd_ms_per_lap: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,15 +91,23 @@ def _solve(a: list[list[float]], b: list[float]) -> list[float] | None:
     return x
 
 
-def _ols(rows: list[list[float]], ys: list[float]) -> list[float] | None:
+def _normal_matrix(rows: list[list[float]]) -> list[list[float]]:
     n = len(rows[0])
     ata = [[0.0] * n for _ in range(n)]
+    for row in rows:
+        for i in range(n):
+            for j in range(n):
+                ata[i][j] += row[i] * row[j]
+    return ata
+
+
+def _ols(rows: list[list[float]], ys: list[float]) -> list[float] | None:
+    ata = _normal_matrix(rows)
+    n = len(rows[0])
     aty = [0.0] * n
     for row, y in zip(rows, ys, strict=True):
         for i in range(n):
             aty[i] += row[i] * y
-            for j in range(n):
-                ata[i][j] += row[i] * row[j]
     return _solve(ata, aty)
 
 
@@ -147,9 +157,21 @@ def fit_stint(
     fuel_coeff_fixed: float | None,
     deg_max_ms_per_lap: float = 600.0,
     deg_rmse_bad_ms: float = 800.0,
+    thermal_hi_c: float | None = None,
+    quadratic: bool = False,
+    quad_min_laps: int = 8,
+    quad_min_t: float = 2.0,
 ) -> DegFit:
     """OLS refit of a stint's valid laps; blend with the prior while short."""
-    usable = [lap for lap in laps if lap.valid == 1 and lap.sc_status == 0 and lap.lap_time_ms > 0]
+    usable = [
+        lap
+        for lap in laps
+        if lap.valid == 1
+        and lap.sc_status == 0
+        and lap.lap_time_ms > 0
+        and getattr(lap, "traffic", 0) != 1
+        and (thermal_hi_c is None or lap.tyre_inner_c == 0 or lap.tyre_inner_c <= thermal_hi_c)
+    ]
     n = len(usable)
     if n < min_laps:
         return DegFit(
@@ -205,6 +227,9 @@ def fit_stint(
         )
         / n
     )
+    mean_age = sum(ages) / n
+    age_ss = sum((age - mean_age) ** 2 for age in ages)
+    deg_sd = rmse / math.sqrt(age_ss) if age_ss > 0 else 0.0
     source = "fit"
     if n < 2 * min_laps:
         w = (n - min_laps + 1) / (min_laps + 1)
@@ -215,7 +240,56 @@ def fit_stint(
     confidence = min(max(n / (2 * min_laps), 0.0), 1.0) * min(
         max(1.0 - rmse / deg_rmse_bad_ms, 0.2), 1.0
     )
-    return DegFit(base, deg, fuel, n, rmse, confidence, source, fuel_fitted)
+    if quadratic and source == "fit" and n >= quad_min_laps and len(set(ages)) >= 4:
+        quad_rows = [[1.0, age, age**2] for age in ages]
+        quad_ys = [float(lap.lap_time_ms) + fuel * b for lap, b in zip(usable, burned, strict=True)]
+        quad_coeff = _ols(quad_rows, quad_ys)
+        if quad_coeff is not None:
+            quad_base, quad_deg, quad_deg2 = quad_coeff
+            quad_rmse = math.sqrt(
+                sum(
+                    (y - (quad_base + quad_deg * age + quad_deg2 * age**2)) ** 2
+                    for age, y in zip(ages, quad_ys, strict=True)
+                )
+                / n
+            )
+            inv_col = _solve(_normal_matrix(quad_rows), [0.0, 0.0, 1.0])
+            if inv_col is not None and inv_col[2] >= 0:
+                quad_se = quad_rmse * math.sqrt(inv_col[2])
+                if (
+                    quad_deg2 > 0
+                    and quad_deg >= 0
+                    and quad_deg + 2 * quad_deg2 * max(ages) <= deg_max_ms_per_lap
+                    and quad_deg2 >= quad_min_t * quad_se
+                ):
+                    quad_confidence = min(max(n / (2 * min_laps), 0.0), 1.0) * min(
+                        max(1.0 - quad_rmse / deg_rmse_bad_ms, 0.2), 1.0
+                    )
+                    return DegFit(
+                        quad_base,
+                        quad_deg,
+                        fuel,
+                        n,
+                        quad_rmse,
+                        quad_confidence,
+                        "fit",
+                        fuel_fitted,
+                        quad_deg2,
+                        deg_sd,
+                    )
+    return DegFit(base, deg, fuel, n, rmse, confidence, source, fuel_fitted, 0.0, deg_sd)
+
+
+def cliff_age(fit: DegFit, cliff_ms: float) -> float:
+    """Tyre age where linear and quadratic degradation reaches the cliff."""
+    if fit.deg2_ms_per_lap2 > 0:
+        return (
+            -fit.deg_ms_per_lap
+            + math.sqrt(fit.deg_ms_per_lap**2 + 4 * fit.deg2_ms_per_lap2 * cliff_ms)
+        ) / (2 * fit.deg2_ms_per_lap2)
+    if fit.deg_ms_per_lap > 0:
+        return cliff_ms / fit.deg_ms_per_lap
+    return math.inf
 
 
 def laps_of_pace(
@@ -229,7 +303,7 @@ def laps_of_pace(
 ) -> float:
     """Laps until the tyre is cliff_ms slower than at age 0 or wear crosses
     the wear cliff, whichever is sooner. >= 0; inf when the tyre never deg."""
-    pace_laps = math.inf if fit.deg_ms_per_lap <= 0 else cliff_ms / fit.deg_ms_per_lap - tyre_age
+    pace_laps = cliff_age(fit, cliff_ms) - tyre_age
     wear_laps = math.inf if wear_per_lap <= 0 else (wear_cliff_pct - wear_pct) / wear_per_lap
     return max(0.0, min(pace_laps, wear_laps))
 
@@ -265,7 +339,11 @@ def planning_fit(fit: DegFit, prior: DegFit, rmse_bad_ms: float) -> DegFit:
     if fit.source == "prior" or rmse_bad_ms <= 0:
         return fit
     w = min(max(1.0 - fit.rmse_ms / rmse_bad_ms, 0.0), 1.0)
-    return replace(fit, deg_ms_per_lap=w * fit.deg_ms_per_lap + (1 - w) * prior.deg_ms_per_lap)
+    return replace(
+        fit,
+        deg_ms_per_lap=w * fit.deg_ms_per_lap + (1 - w) * prior.deg_ms_per_lap,
+        deg2_ms_per_lap2=w * fit.deg2_ms_per_lap2,
+    )
 
 
 def fit_is_clean(

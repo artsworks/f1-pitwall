@@ -321,6 +321,14 @@ def test_insert_lap() -> None:
     rows = db._rows("SELECT * FROM laps WHERE session_uid=?", (7,))  # noqa: SLF001
     assert len(rows) == 1
     assert rows[0]["lap_time_ms"] == 91_234 and rows[0]["valid"] == 0
+    assert db.laps_for(7)[0].traffic == 0
+
+
+def test_lap_traffic_round_trip() -> None:
+    db = Database(":memory:")
+    db.insert_lap(8, 0, LapSummary(3, 91_234, 30_000, 31_000, 16, 2, 14.5, True, traffic=1))
+
+    assert db.laps_for(8)[0].traffic == 1
 
 
 def test_track_minutes_deduplicates_player_laps_and_preserves_uint64_uid() -> None:

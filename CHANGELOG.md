@@ -10,6 +10,29 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.21.0 (2026-10-16)
+
+### Documentation
+
+- **strategy**: Document Monte Carlo plan agreement and tyre degradation
+  ([#105](https://github.com/artsworks/f1-pitwall/pull/105),
+  [`218518d`](https://github.com/artsworks/f1-pitwall/commit/218518d7d1f38bdb04483149cc694f3303704daf))
+
+### Features
+
+- **deg**: Traffic and thermal lap exclusion, quadratic deg with cliff solve
+  ([#105](https://github.com/artsworks/f1-pitwall/pull/105),
+  [`218518d`](https://github.com/artsworks/f1-pitwall/commit/218518d7d1f38bdb04483149cc694f3303704daf))
+
+- **deg**: Traffic and thermal lap exclusion, quadratic deg, Monte Carlo plan confidence
+  ([#105](https://github.com/artsworks/f1-pitwall/pull/105),
+  [`218518d`](https://github.com/artsworks/f1-pitwall/commit/218518d7d1f38bdb04483149cc694f3303704daf))
+
+- **strategy**: Monte Carlo pit plan agreement scales plan confidence
+  ([#105](https://github.com/artsworks/f1-pitwall/pull/105),
+  [`218518d`](https://github.com/artsworks/f1-pitwall/commit/218518d7d1f38bdb04483149cc694f3303704daf))
+
+
 ## v0.20.1 (2026-10-16)
 
 ### Bug Fixes

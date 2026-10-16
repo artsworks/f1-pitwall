@@ -110,6 +110,54 @@ def test_reconcile_adds_columns_missing_from_edited_migration(tmp_path: Path) ->
     db.close()
 
 
+def test_previous_user_version_migrates_traffic_column(tmp_path: Path) -> None:
+    path = tmp_path / "previous-version.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS[:-1]:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS) - 1}")
+    conn.execute(
+        "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms, valid)"
+        " VALUES(101, 0, 1, 90000, 1)"
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+
+    assert db.laps_for(101)[0].traffic == 0
+    columns = {
+        row[1]
+        for row in db._conn.execute("PRAGMA table_info(laps)")  # noqa: SLF001
+    }
+    assert "traffic" in columns
+    db.close()
+
+
+def test_reconcile_adds_traffic_column_to_edited_latest_database(tmp_path: Path) -> None:
+    path = tmp_path / "edited-latest.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS[:-1]:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS)}")
+    conn.execute(
+        "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms, valid)"
+        " VALUES(102, 0, 1, 90000, 1)"
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+
+    assert db.laps_for(102)[0].traffic == 0
+    columns = {
+        row[1]
+        for row in db._conn.execute("PRAGMA table_info(laps)")  # noqa: SLF001
+    }
+    assert "traffic" in columns
+    db.close()
+
+
 def test_reconcile_creates_missing_table(tmp_path: Path) -> None:
     path = tmp_path / "missing-table.sqlite"
     conn = sqlite3.connect(path)

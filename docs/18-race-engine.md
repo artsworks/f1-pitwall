@@ -156,34 +156,51 @@ class DegFit:
     rmse_ms: float
     confidence: float        # 0..1: from n and rmse (see below)
     source: str              # 'fit' | 'prior' | 'blend'
+    deg2_ms_per_lap2: float = 0.0
+    deg_sd_ms_per_lap: float = 0.0
 
-def fit_stint(laps: Sequence[LapRow], prior: DegFit, *, min_laps: int, fuel_coeff_fixed: float | None) -> DegFit
+def fit_stint(
+    laps: Sequence[LapRow], prior: DegFit, *, min_laps: int,
+    fuel_coeff_fixed: float | None, thermal_hi_c: float | None = None,
+    quadratic: bool = False, quad_min_laps: int = 8, quad_min_t: float = 2.0,
+) -> DegFit
 ```
 
-Fit: ordinary least squares on valid laps only (`valid == 1`, plus `sc_status == 0`) of
-`lap_time_ms = base + deg * tyre_age_laps - fuel * laps_of_fuel_burned`, where laps of fuel burned
-come from the recorded `fuel_kg` drop since the stint's heaviest lap (the game's
-`fuel_remaining_laps` is its spare-at-flag margin, not a load, and is only a fallback).
-When fuel burn tracks tyre age too closely to separate, fuel is fixed to the prior and the fit
-stores that prior as `deg_fuel_ref_ms_per_lap`; learned deg is re-split with the current fuel
-prior (`deg + fuel_now - deg_fuel_ref`). Only fits that estimated fuel update `fuel_ms_per_lap`.
-With `n < min_laps` (default `th.deg_min_laps = 3`) return the prior with `source='prior'`.
-With `min_laps <= n < 2*min_laps` blend: `w = (n - min_laps + 1) / (min_laps + 1)`,
-`fit = w*ols + (1-w)*prior`, `source='blend'`. Fuel slope is fixed to `fuel_coeff_fixed`
-when given (from `model_params fuel_ms_per_lap`) so the 2-parameter fit is well-conditioned on
-short stints; slopes are clamped to `[0, th.deg_max_ms_per_lap]`.
-`confidence = clamp(n / (2*min_laps), 0, 1) * clamp(1 - rmse_ms / th.deg_rmse_bad_ms, 0.2, 1)`.
+Fit valid laps only when `valid == 1` and `sc_status == 0`. Exclude `traffic == 1` and laps above `thermal_hi_c`.
+Keep `tyre_inner_c == 0` because the temperature is unknown.
 
-`laps_of_pace` estimates laps to the pace cliff: when the fitted slope is positive,
-`tyre_cliff_ms / deg_ms_per_lap - tyre_age`, floored at zero. The engine's `laps_of_pace`
-snapshot is the minimum of that estimate and `corner_wear_life`: the earliest of the four
-corner wear limits. Each corner uses its own wear rate since the stint baseline. The default
-rate applies until a lap has run. The baseline resets on a compound change, tyre-age reset,
-or wear drop.
+The engine reads `thermal_hi_c` from `model_params` when its weight reaches `prior_min_weight`.
+Otherwise, it uses `thermal_window(settings.thresholds, compound)[1]`.
 
-`planning_fit(fit, prior, deg_rmse_bad_ms)` shrinks the fit's degradation slope toward the
-prior with weight `clamp(1 - rmse / deg_rmse_bad_ms, 0, 1)`. Clean fits are used as-is. The
-planner and pace-cliff estimate use this adjusted fit.
+The fit uses `lap_time_ms = base + deg * tyre_age_laps - fuel * laps_of_fuel_burned`.
+Fuel burn comes from the recorded `fuel_kg` drop since the stint's heaviest lap.
+The game's `fuel_remaining_laps` is a spare-at-flag margin, so the engine uses it only as a fallback.
+
+When fuel burn and tyre age correlate too closely, fix fuel to the prior.
+Store that value as `deg_fuel_ref_ms_per_lap`. Re-split learned degradation with `deg + fuel_now - deg_fuel_ref`.
+Only fits that estimate fuel update `fuel_ms_per_lap`.
+
+With `n < min_laps` (default `th.deg_min_laps = 3`), return the prior.
+Blend fits when `min_laps <= n < 2*min_laps` with `w = (n - min_laps + 1) / (min_laps + 1)`.
+Fix fuel to `fuel_coeff_fixed` when supplied. Clamp linear slopes to `[0, th.deg_max_ms_per_lap]`.
+Set confidence to `clamp(n / (2*min_laps), 0, 1) * clamp(1 - rmse_ms / th.deg_rmse_bad_ms, 0.2, 1)`.
+
+Fit a quadratic only for an unblended `source == 'fit'` result with at least `quad_min_laps` laps and four distinct tyre ages.
+Keep fuel fixed to the linear fit. Accept the quadratic only when `_solve` succeeds, `deg2 > 0`, and `deg >= 0`.
+The slope at the last age must not exceed `th.deg_max_ms_per_lap`.
+Require `deg2 >= quad_min_t * se(deg2)`, where `se(deg2) = rmse_quad * sqrt(inv(XᵀX)[2][2])`.
+Rejected quadratic fits keep the linear result. Real fits store `deg_sd_ms_per_lap = rmse / sqrt(sum((age - mean_age)²))`.
+
+`cliff_age(fit, cliff_ms)` solves `deg * age + deg2 * age² = cliff_ms`.
+It uses the positive quadratic root, `(-deg + sqrt(deg² + 4*deg2*cliff_ms)) / (2*deg2)`.
+For a positive linear slope, it returns `cliff_ms / deg`. Otherwise, it returns infinity.
+`laps_of_pace` is `max(0, cliff_age - tyre_age)`, capped by the earliest of four corner wear limits.
+Each corner uses its own wear rate since the stint baseline. The default rate applies until a lap has run.
+The baseline resets on a compound change, tyre-age reset, or wear drop.
+
+`planning_fit(fit, prior, deg_rmse_bad_ms)` scales both degradation terms by
+`clamp(1 - rmse / deg_rmse_bad_ms, 0, 1)`. Clean fits are used as-is.
+The live planner uses this adjusted fit.
 
 **Rival pace** (`rival_pace_ms(history: SessionHistoryPacket, window: int) -> int`): median of
 the last `window` (default `th.rival_pace_window = 3`) valid laps from Session History, 0 if none.
@@ -194,6 +211,7 @@ persists and `stints_for_track` can fit rival deg later.
 stint folds when the next stint starts or the session ends. The fold is deduplicated by
 session and the stint's first lap. Only clean fits on known tracks fold:
 
+- Live-tail planning may use a quadratic fit. Persist a linear fit in `stints` and learned priors.
 - `source == "fit"` and `rmse_ms <= deg_rmse_bad_ms`
 - `0 < deg_ms_per_lap < deg_max_ms_per_lap`
 - `0 <= fuel_ms_per_lap < deg_max_ms_per_lap`
@@ -223,6 +241,11 @@ CREATE TABLE maintenance (
     ran_at REAL
 );
 ```
+
+## SQLite migration 14
+
+Migration 14 adds `laps.traffic INTEGER DEFAULT 0`. The engine sets the flag when more than half of race-lap ticks meet `traffic_gap_s`.
+Tyre degradation fits exclude rows with `traffic = 1`.
 
 ## `pitwall.model.pitloss`
 
@@ -379,6 +402,16 @@ is lost whenever it is taken).
 class PitPlan:
     plan: str; lap: int; gain_s: float; confidence: float; risk: float; rival_idx: int; reason: str
     projections: tuple[tuple[int, float], ...]   # (candidate_lap, race_time_delta_s) for review
+    mc_lap: int = 0
+    mc_agree: float = 1.0
+
+@dataclass(frozen=True, slots=True)
+class McResult:
+    modal_lap: int
+    agree: float
+    sims: int
+
+def plan_agreement(...) -> McResult | None
 
 def optimise(
     *, lap_num, laps_remaining, tyre_age, wear_mean, fit: DegFit, wear_per_lap, pit_loss_s,
@@ -426,13 +459,41 @@ The optimiser sets `undercut_s` and `overcut_s` to zero when their remaining-lap
 When no stop is possible, the optimiser returns `no_stop` with both values at zero.
 The snapshot therefore excludes tyre gains that cannot affect the finish.
 
-`confidence = fit.confidence * (restricted_factor if restricted else 1) * pit_loss_conf` where
+`deterministic_confidence = fit.confidence * (restricted_factor if restricted else 1) * pit_loss_conf` where
 `pit_loss_conf = 1.0 learned/this-session, 0.8 overlay, 0.6 default`.
 `risk` estimates position loss: `clamp((pit_loss_s − gap_behind_s) / pit_loss_s, 0, 1)`
 (0 when the car behind is further back than the pit loss). A `cover` plan sets risk to zero.
 Rules gate on
 `pit_plan_confidence >= mode.pit_confidence_min`, `pit_plan_gain_s >= mode.pit_gain_min_s`,
 `pit_plan_risk <= mode.position_loss_risk_max`.
+
+On green laps, the engine runs `plan_mc_sims` simulations over the same candidate range as `optimise`.
+Each simulation samples current linear degradation with `sigma = max(deg_sd_ms_per_lap, plan_mc_deg_sd_frac * deg_ms_per_lap)`.
+Clip sampled slopes at zero and keep quadratic degradation fixed. Fresh-tyre lap times stay deterministic.
+
+With three or more green pit events, sample `rng.choice(samples) - median(samples) + pit_loss_s`.
+Otherwise, sample `N(pit_loss_s, plan_mc_pit_loss_sd_s)` and clip the result to a positive value.
+For each candidate lap, sample a safety-car event with `plan_mc_sc_prob_per_lap`.
+Use the first event at `j0` for stops from `j0` through `j0 + 2`.
+
+Compute each stop delta against the no-stop time:
+
+```text
+delta[s,k] = (cumcur[s,k] + cumfresh[R-k] + (pit[s,k] + outlap_warmup_s) * 1000 - cumcur[s,R]) / 1000
+```
+
+Select the first minimum. Choose no stop when the best stop delta is nonnegative.
+`modal_lap` is the most common simulated choice. Break ties at the smallest lap.
+For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
+For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
+Plans outside the candidate range get agreement `1.0`.
+
+Multiply deterministic confidence by agreement and round to three decimals. Keep `plan.lap` unchanged.
+Skip Monte Carlo when `safety_car_status != 0`. Do not scale `cheap_stop`.
+Seed each run with `np.random.default_rng([uid & 0xFFFFFFFF, (uid >> 32) & 0xFFFFFFFF, lap_num])`.
+Use UID zero when the session UID is absent.
+Cache results once per lap with `(session_uid, lap_num, plan.lap, tyre_age)`.
+Defaults are `plan_mc_sims: 500`, `plan_mc_sc_prob_per_lap: 0.03`, `plan_mc_deg_sd_frac: 0.15`, and `plan_mc_pit_loss_sd_s: 1.5`.
 
 ## Named strategy plans (`pitwall.strategy.plans`)
 

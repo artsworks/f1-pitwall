@@ -64,12 +64,16 @@ The model lets the engine answer "box this lap or next". Thresholds cannot.
 ```
 lap_time_ms = base_ms
             + deg_ms_per_lap · tyre_age_laps
-            + fuel_ms_per_lap · fuel_laps_burned
+            + deg2_ms_per_lap2 · tyre_age_laps²
+            - fuel_ms_per_lap · fuel_laps_burned
 ```
 
-- The engine fits valid, non-neutralised laps in the current stint. Short fits use or blend
-  toward a prior. The planner shrinks the fitted slope toward the prior based on fit error.
-  It uses clean fits as-is.
+- The engine excludes majority-traffic laps and laps above `thermal_hi_c`. Unknown tyre temperatures remain eligible.
+- A race lap counts as traffic when over half its ticks fall within `traffic_gap_s` of the car ahead.
+- The quadratic fit needs eight clean laps and four distinct tyre ages. It keeps fuel fixed and accepts significant positive curvature.
+- The engine solves `deg * age + deg2 * age² = tyre_cliff_ms`. Quadratic fits use the positive root for `cliff_age`.
+- Short fits use or blend toward a prior. The planner shrinks both degradation terms by fit error.
+- The planner multiplies deterministic plan confidence by Monte Carlo agreement. It keeps `plan.lap` unchanged and does not scale `cheap_stop`.
 - Race priors are scoped by total race laps, so different race distances do not mix.
   Practice values are unscoped.
 - Rival pace comes from Session History lap times, filtered the same way.
