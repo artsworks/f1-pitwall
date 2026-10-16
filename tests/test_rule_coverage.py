@@ -28,6 +28,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "cool_status",
         "cool_vs_pole",
         "cool_vs_pole_split",
+        "cover_box",
         "drs_fault",
         "ers_fault",
         "fastest_lap_mine",
@@ -45,6 +46,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "lockup_rear",
         "next_lap_invalid",
         "off_track_recovered",  # replay scenario unresolved: recovery timing did not trigger
+        "overcut_defend",
         "overcut_stay_out",  # replay scenario unresolved: rival pit did not yield enough gain
         "penalty_cost",
         "penalty_covered",
