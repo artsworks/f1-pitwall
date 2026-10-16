@@ -7,13 +7,20 @@ History and Event packets. Flagged synthetic per docs/07."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import struct
 from dataclasses import dataclass, field
+from pathlib import Path
 from random import Random
 
+from pitwall.audio.dispatcher import Call
+from pitwall.clock import VirtualClock
+from pitwall.engine import build_engine, run_replay
 from pitwall.protocol.header import PacketId
+from pitwall.store.db import Database
 
-from .synth import pack_packet
+from .synth import pack_packet, write_packet_stream
 
 TRACK_M = 5000
 ACTIVE_AERO_LOOKAHEAD_M = 250
@@ -31,12 +38,21 @@ class RaceSpec:
     fuel_kg_per_lap: float = 1.7
     player_pit_lap: int | None = None
     rival_pit_lap: int | None = None
+    rival_behind_pit_lap: int | None = None  # Lap when the rival behind pits
     sc_laps: tuple[int, int] | None = None
     penalty_lap: int | None = None
+    penalty_type: int = 4  # Penalty type sent on penalty_lap
+    penalty_infringement: int = 7  # Infringement id sent on penalty_lap
+    warning_laps: tuple[tuple[int, int], ...] = ()  # (lap, infringement id) warnings
     blue_flag_lap: int | None = None
     rain_lap: int | None = None
+    rain_end_lap: int | None = None  # Lap when forecast rain clears
+    rain_percentages: tuple[int, int] = (70, 80)  # Near and far forecast rain
+    session_time_left_s: int = 0  # Time remaining for qualifying release tests
+    quali_garage: bool = False  # Keep the player in the garage
     gap_ahead_s: float = 1.5
     gap_behind_s: float = 3.0
+    gap_behind_from_lap: tuple[int, float] | None = None  # (lap, new gap behind)
     track_id: int = 7
     dt: float = 0.25
     hot_tyres_lap: int | None = None
@@ -72,8 +88,14 @@ class RaceSpec:
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
     gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
+    positions_by_lap: tuple[tuple[int, int, int, int], ...] = ()  # Positions per lap
+    off_track_lap: int | None = None  # player runs off track on this lap
+    off_track_position_changes: tuple[tuple[float, int], ...] = ()  # (lap fraction, position)
     ers_store_j: float = 3_000_000.0
     player_history: bool = False
+    qualifying_field_best_ms: tuple[int, ...] = ()  # Additional qualifying history times
+    traction_laps: tuple[int, ...] = ()  # Laps with rear-wheel spin early in the lap
+    setup_change_lap: int | None = None  # Change front wing by one click on this lap
 
 
 def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
@@ -184,6 +206,19 @@ def _crossed(previous_m: float, current_m: float, point_m: float) -> bool:
     return point_m > previous_m or point_m <= current_m
 
 
+def replay_race(tmp: Path, spec: RaceSpec) -> tuple[list[Call], list[dict]]:
+    stream = qualifying_stream(spec) if spec.session_type in (5, 6, 7) else race_stream(spec)
+    path = write_packet_stream(tmp / "race.f1bin", stream)
+    log = tmp / "decisions.jsonl"
+    engine = build_engine(
+        clock=VirtualClock(), sinks=[], db=Database(":memory:"), decision_log_path=log
+    )
+    _, calls = asyncio.run(run_replay(path, engine, None))
+    engine.dispatcher.log.flush()
+    rows = [json.loads(line) for line in log.read_text().splitlines() if line]
+    return calls, rows
+
+
 def _rival(
     spec: RaceSpec,
     lap: int,
@@ -194,6 +229,9 @@ def _rival(
     pos: int,
     pitting: bool,
 ) -> dict[str, object]:
+    gap_behind_s = spec.gap_behind_s
+    if spec.gap_behind_from_lap is not None and lap >= spec.gap_behind_from_lap[0]:
+        gap_behind_s = spec.gap_behind_from_lap[1]
     return {
         "current_lap_num": lap,
         "car_position": pos,
@@ -201,7 +239,7 @@ def _rival(
         "result_status": 2,
         "driver_status": 4,
         "pit_status": 1 if pitting else 0,
-        "delta_to_car_in_front_ms_part": int(spec.gap_behind_s * 1000) if i == 2 else 500,
+        "delta_to_car_in_front_ms_part": int(gap_behind_s * 1000) if i == 2 else 500,
         "sector": int(frac * 3),
     }
 
@@ -251,7 +289,24 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     frame = 1
     ct2_model = _Ct2Model(spec) if spec.ct2 else None
 
-    def emit(pid: int, data: dict[str, object]) -> None:
+    def emit(pid: int, data: dict[str, object], *, apply_extra: bool = True) -> None:
+        extra = spec.extra.get(PacketId(pid).name.lower())
+        if apply_extra and isinstance(extra, dict):
+            merged = dict(data)
+            for key, value in extra.items():
+                original_cars = merged.get("cars")
+                if key == "cars" and isinstance(original_cars, dict) and isinstance(value, dict):
+                    cars = dict(original_cars)
+                    for car_idx, car_fields in value.items():
+                        original = cars.get(car_idx)
+                        if isinstance(original, dict) and isinstance(car_fields, dict):
+                            cars[car_idx] = {**original, **car_fields}
+                        else:
+                            cars[car_idx] = car_fields
+                    merged[key] = cars
+                else:
+                    merged[key] = value
+            data = merged
         pkts.append(
             (
                 t,
@@ -282,11 +337,24 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             },
         )
 
-    emit(
-        PacketId.PARTICIPANTS,
-        {"num_active_cars": 4, "cars": {i: {"name": n} for i, n in NAMES.items()}},
-    )
+    if spec.qualifying_field_best_ms:
+        participant_count = 4 + len(spec.qualifying_field_best_ms)
+        participants = {
+            i: {"name": NAMES.get(i, f"RIVAL_{i}".encode())} for i in range(participant_count)
+        }
+        emit(
+            PacketId.PARTICIPANTS,
+            {"num_active_cars": participant_count, "cars": participants},
+        )
+    else:
+        emit(
+            PacketId.PARTICIPANTS,
+            {"num_active_cars": 4, "cars": {i: {"name": n} for i, n in NAMES.items()}},
+        )
     event(b"LGOT")
+    car_setups = spec.extra.get("car_setups")
+    if isinstance(car_setups, dict):
+        emit(PacketId.CAR_SETUPS, car_setups)
     history: dict[int, list[int]] = {1: [], 2: [], 3: []}
     player_lap_times: list[int] = []
     stint_start = 1
@@ -294,6 +362,11 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     player_last_ms = 0
     rng = Random(spec.seed)
     for lap in range(1, spec.laps + 1):
+        positions = (
+            spec.positions_by_lap[min(lap - 1, len(spec.positions_by_lap) - 1)]
+            if spec.positions_by_lap
+            else (3, 2, 4, 1)
+        )
         if spec.player_pit_lap is not None and lap == spec.player_pit_lap + 1:
             stint_start = lap
             player_wear0 = 0.0
@@ -338,6 +411,20 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             frame += 1
             frac = f / frames
             d = frac * TRACK_M
+            if f == 0 and spec.setup_change_lap == lap:
+                setup_packet = spec.extra.get("car_setups")
+                cars = setup_packet.get("cars") if isinstance(setup_packet, dict) else None
+                player_setup = cars.get(0) if isinstance(cars, dict) else None
+                front_wing = (
+                    int(player_setup.get("front_wing", 0)) + 1
+                    if isinstance(player_setup, dict)
+                    else 1
+                )
+                emit(
+                    PacketId.CAR_SETUPS,
+                    {"cars": {0: {"front_wing": front_wing}}},
+                    apply_extra=False,
+                )
             if spec.pit_box_after_line and spec.player_pit_lap == lap:
                 player_pit_status = 1 if frac > 0.85 else 0
             elif spec.pit_box_after_line and spec.player_pit_lap == lap - 1:
@@ -353,7 +440,9 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 player_pit_status = int(spec.player_pit_lap == lap and frac > 0.85)
             player_pitting = player_pit_status != 0
             rival_pitting = spec.rival_pit_lap == lap and frac > 0.85
-            player_driver_status = 3 if spec.player_pit_lap == lap - 1 else 4
+            player_driver_status = (
+                0 if spec.quali_garage else (3 if spec.player_pit_lap == lap - 1 else 4)
+            )
             if spec.pit_lane_loss_ms > 0 and spec.player_pit_lap == lap - 1:
                 player_driver_status = 2
             if spec.player_pit_lap is not None:
@@ -368,7 +457,14 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     player_driver_status = 3 if not spec.pit_box_after_line or f == 0 else 4
             if f % 5 == 0:
                 forecast: dict[str, object] = {}
-                if spec.rain_lap is not None and lap >= spec.rain_lap:
+                rain_active = (
+                    spec.rain_lap is not None
+                    and lap >= spec.rain_lap
+                    and (spec.rain_end_lap is None or lap < spec.rain_end_lap)
+                )
+                rain_drying = spec.rain_end_lap is not None and lap >= spec.rain_end_lap
+                if rain_active or rain_drying:
+                    near_rain, far_rain = spec.rain_percentages if rain_active else (10, 10)
                     forecast = {
                         "num_weather_forecast_samples": 3,
                         "weather_forecast_samples": {
@@ -380,32 +476,35 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                             1: {
                                 "session_type": spec.session_type,
                                 "time_offset": 10,
-                                "rain_percentage": 70,
+                                "rain_percentage": near_rain,
                             },
                             2: {
                                 "session_type": spec.session_type,
                                 "time_offset": 30,
-                                "rain_percentage": 80,
+                                "rain_percentage": far_rain,
                             },
                         },
                     }
+                session_fields: dict[str, object] = {
+                    "session_type": spec.session_type,
+                    "weekend_link_identifier": spec.weekend_link,
+                    "track_id": spec.track_id,
+                    "total_laps": spec.laps,
+                    "track_length": TRACK_M,
+                    "safety_car_status": sc,
+                    **forecast,
+                }
+                if spec.session_time_left_s > 0:
+                    session_fields["session_time_left"] = spec.session_time_left_s
                 emit(
                     PacketId.SESSION,
-                    {
-                        "session_type": spec.session_type,
-                        "weekend_link_identifier": spec.weekend_link,
-                        "track_id": spec.track_id,
-                        "total_laps": spec.laps,
-                        "track_length": TRACK_M,
-                        "safety_car_status": sc,
-                        **forecast,
-                    },
+                    session_fields,
                 )
 
             player_lap_data: dict[str, object] = {
                 "current_lap_num": lap,
                 "last_lap_time_ms": player_last_ms,
-                "car_position": 3,
+                "car_position": positions[0],
                 "grid_position": spec.grid_position,
                 "lap_distance": d,
                 "sector": int(frac * 3),
@@ -415,10 +514,32 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                 "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
+            if spec.off_track_lap == lap:
+                player_lap_data["car_position"] = next(
+                    (
+                        position
+                        for boundary, position in reversed(spec.off_track_position_changes)
+                        if frac >= boundary
+                    ),
+                    positions[0],
+                )
+            gap_behind_s = spec.gap_behind_s
+            if spec.gap_behind_from_lap is not None and lap >= spec.gap_behind_from_lap[0]:
+                gap_behind_s = spec.gap_behind_from_lap[1]
+            rival_behind_pitting = spec.rival_behind_pit_lap == lap and frac > 0.85
             rival_lap_data = {
-                1: _rival(spec, lap, d, frac, 1, gap_ahead_s, 2, rival_pitting),
-                2: _rival(spec, lap, d, frac, 2, -spec.gap_behind_s, 4, False),
-                3: _rival(spec, lap, d, frac, 3, 20.0, 1, False),
+                1: _rival(spec, lap, d, frac, 1, gap_ahead_s, positions[1], rival_pitting),
+                2: _rival(
+                    spec,
+                    lap,
+                    d,
+                    frac,
+                    2,
+                    -gap_behind_s,
+                    positions[2],
+                    rival_behind_pitting,
+                ),
+                3: _rival(spec, lap, d, frac, 3, 20.0, positions[3], False),
             }
             emit(PacketId.LAP_DATA, {"cars": {0: player_lap_data, **rival_lap_data}})
             emit_ct2(
@@ -473,19 +594,52 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "throttle": 1.0 if (frac * 3) % 1 < 0.6 else 0.4,
                 "steer": 0.0 if (frac * 3) % 1 < 0.6 else 0.3,
             }
+            if spec.off_track_lap == lap and 0.1 <= frac < 0.3:
+                telemetry_car["surface_type"] = (3, 3, 0, 0)
             if spec.tyre_surface_profile is not None:
                 telemetry_car["tyres_surface_temperature"] = (int(surface),) * 4
             emit(PacketId.CAR_TELEMETRY, {"cars": {0: telemetry_car}})
+            motion_ex = spec.extra.get("motion_ex")
+            if isinstance(motion_ex, dict):
+                motion_data = dict(motion_ex)
+                if spec.traction_laps:
+                    spinning = lap in spec.traction_laps and frac < 0.25
+                    motion_data["wheel_slip_ratio"] = (
+                        (0.2, 0.2, 0.0, 0.0) if spinning else (0.0, 0.0, 0.0, 0.0)
+                    )
+                emit(PacketId.MOTION_EX, motion_data)
             if f % int(2 / spec.dt) == 0:
                 if spec.player_history:
                     emit(PacketId.SESSION_HISTORY, _player_history(player_lap_times[-100:]))
                 for i in (1, 2, 3):
                     if history[i]:
                         emit(PacketId.SESSION_HISTORY, _history(i, history[i][-100:]))
+                if spec.player_history:
+                    for i, lap_ms in enumerate(spec.qualifying_field_best_ms, start=4):
+                        emit(PacketId.SESSION_HISTORY, _history(i, [lap_ms]))
             if spec.sc_laps is not None and lap == spec.sc_laps[1] and f == frames // 2:
                 event(b"SCAR", struct.pack("<BB", 2 if spec.vsc else 1, 1))  # returning
             if spec.penalty_lap == lap and f == frames // 2:
-                event(b"PENA", struct.pack("<BBBBBBB", 4, 7, 0, 255, 5, lap, 0))  # time penalty
+                event(
+                    b"PENA",
+                    struct.pack(
+                        "<BBBBBBB",
+                        spec.penalty_type,
+                        spec.penalty_infringement,
+                        0,
+                        255,
+                        5,
+                        lap,
+                        0,
+                    ),
+                )
+            if f == frames // 2:
+                for warning_lap, infringement in spec.warning_laps:
+                    if warning_lap == lap:
+                        event(
+                            b"PENA",
+                            struct.pack("<BBBBBBB", 5, infringement, 0, 255, 5, lap, 0),
+                        )
             t += spec.dt
         player_last_ms = lap_ms
         player_lap_times.append(lap_ms)
@@ -535,3 +689,7 @@ def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     if spec.send_session_end:
         event(b"SEND")
     return pkts
+
+
+def qualifying_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
+    return race_stream(spec)

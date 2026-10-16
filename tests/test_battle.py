@@ -33,7 +33,8 @@ from pitwall.strategy.battle import (
 )
 
 from .race_synth import RaceSpec
-from .test_race_replay import _ids, _replay
+from .race_synth import replay_race as _replay
+from .test_race_replay import _ids
 
 TH: dict[str, object] = {}
 
