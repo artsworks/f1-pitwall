@@ -218,7 +218,7 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
     model_id = fetch_model_id(settings)
     try:
         fallback_tones = make_piper_tone_synths(settings)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - log missing fallback tones and disable them
         log.warning("Piper tone fallback unavailable (%s)", exc)
         fallback_tones = None
     renderer = OmniVoiceRenderer(settings, model_id, fallback_tones)

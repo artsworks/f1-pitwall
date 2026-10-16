@@ -254,6 +254,6 @@ def ingest_recordings(
                     findings,
                 )
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - store the ingestion failure in its result
             results.append(IngestResult(path, uid, "error", [], str(exc)))
     return results

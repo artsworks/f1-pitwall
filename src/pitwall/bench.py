@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import tempfile
 from collections import defaultdict
@@ -20,6 +21,8 @@ from pitwall.derive import MutationOp, derive_recording, ops_from_options
 from pitwall.net.recording import RecordingReader
 from pitwall.store.db import Database
 from pitwall.tune import _AUTO_SKIP_METRICS
+
+log = logging.getLogger(__name__)
 
 CheckType = Literal["fire", "absent"]
 
@@ -242,7 +245,8 @@ def build_recording_index(directories: Sequence[Path]) -> dict[int, list[Path]]:
         try:
             with RecordingReader(path) as reader:
                 by_uid[reader.header.session_uid].append(path)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - unreadable recordings cannot be indexed
+            log.warning("skipping unreadable recording %s: %s", path, exc)
             continue
     return dict(by_uid)
 
@@ -363,7 +367,7 @@ def run_scenario(
                 return _scenario_row(scenario, result, checks=checks), outcomes
             finally:
                 db.close()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - return scenario failures to the caller
         return _scenario_row(scenario, "error", str(exc)), []
 
 

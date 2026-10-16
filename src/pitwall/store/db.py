@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -460,7 +460,7 @@ def _reference_schema() -> sqlite3.Connection:
     try:
         for migration in MIGRATIONS:
             conn.executescript(migration)
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - close the connection before propagating migration errors
         conn.close()
         raise
     return conn
@@ -631,7 +631,7 @@ class Database:
         self._conn.execute(f"SAVEPOINT {name}")
         try:
             yield
-        except BaseException:
+        except BaseException:  # noqa: BLE001 - roll back the savepoint before propagating errors
             self._conn.execute(f"ROLLBACK TO {name}")
             self._conn.execute(f"RELEASE {name}")
             raise
@@ -1878,6 +1878,3 @@ def open_configured(settings: Any) -> Database | None:
     if not settings.persistence.enabled:
         return None
     return Database(Path(settings.persistence.path).expanduser())
-
-
-SessionUidSource = Callable[[], int]

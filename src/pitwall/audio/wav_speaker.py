@@ -209,7 +209,7 @@ def _write_cache(path: Path, wav: bytes) -> None:
     try:
         Path(temporary).write_bytes(wav)
         os.replace(temporary, path)
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - remove the temporary file before propagating errors
         Path(temporary).unlink(missing_ok=True)
         raise
 
@@ -369,7 +369,7 @@ class WavSpeaker:
             if call_id in self._fallback_calls and self._fallback is not None:
                 try:
                     self._fallback.cancel(call_id)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - report fallback cancellation failures
                     log.warning(
                         "%s fallback cancellation failed for %s: %s",
                         self.name,
@@ -395,7 +395,7 @@ class WavSpeaker:
             result = wav, wav_info(wav)
             self._remember(key, result, disk=True, disk_required=False)
             return result
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - log render failures and use provisional audio
             fallback = provisional(call.text, call.priority)
             if fallback is None:
                 raise
@@ -432,7 +432,7 @@ class WavSpeaker:
                         elapsed,
                         text,
                     )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - report background synthesis failures
                 log.warning("%s background synthesis failed for %r: %s", self.name, text, exc)
             finally:
                 with self._cache_lock:
@@ -462,7 +462,7 @@ class WavSpeaker:
                 self._fallback_calls[call.id] = generation
                 try:
                     fallback.speak(call)
-                except Exception as fallback_exc:
+                except Exception as fallback_exc:  # noqa: BLE001 - report fallback playback failures
                     log.warning("%s fallback failed: %s", self.name, fallback_exc)
                     fallback_generation = self._fallback_calls.pop(call.id, None)
                     if fallback_generation is not None:
@@ -483,7 +483,7 @@ class WavSpeaker:
             if callback is not None:
                 try:
                     callback(call_id, spoken_at)
-                except Exception:
+                except Exception:  # noqa: BLE001 - report callback failures and finish cleanup
                     log.exception("%s fallback spoken callback failed", self.name)
 
     def _fallback_dropped(self, call_id: str) -> None:
@@ -504,7 +504,7 @@ class WavSpeaker:
             if callback is not None:
                 try:
                     callback(call_id)
-                except Exception:
+                except Exception:  # noqa: BLE001 - report callback failures and finish cleanup
                     log.exception("%s dropped callback failed", self.name)
 
     def _play(self, call: Call, wav: bytes, seconds: float, generation: int) -> None:
@@ -513,7 +513,7 @@ class WavSpeaker:
                 return
             try:
                 self._player.play(wav)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - report playback failure and drop the call
                 log.warning("%s playback failed: %s", self.name, exc)
                 self._drop(call.id, generation)
                 return
@@ -526,7 +526,7 @@ class WavSpeaker:
             ):
                 try:
                     self.on_audio(call.id, call.priority, wav)
-                except Exception:
+                except Exception:  # noqa: BLE001 - report stream callback failures and continue
                     log.exception("%s audio stream failed", self.name)
         with self._state_lock:
             if (
@@ -536,7 +536,7 @@ class WavSpeaker:
             ):
                 try:
                     self.on_spoken(call.id, time.time())
-                except Exception:
+                except Exception:  # noqa: BLE001 - report spoken callback failures and continue
                     log.exception("%s spoken callback failed", self.name)
 
     def _worker(self) -> None:
@@ -554,7 +554,7 @@ class WavSpeaker:
                 continue
             try:
                 wav, seconds = self._get_for_call(call)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - report render failures to the call handler
                 self._failed(call, generation, received, exc)
                 continue
             with self._state_lock:
@@ -602,13 +602,13 @@ class WavSpeaker:
                 if isinstance(self._fallback, FlushableSpeaker):
                     try:
                         self._fallback.flush()
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - report fallback flush failures
                         log.warning("%s fallback flush failed: %s", self.name, exc)
                 else:
                     for call_id in tuple(self._fallback_calls):
                         try:
                             self._fallback.cancel(call_id)
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 - report fallback cancellation failures
                             log.warning(
                                 "%s fallback cancellation failed for %s: %s",
                                 self.name,

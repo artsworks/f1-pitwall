@@ -180,7 +180,7 @@ def _voice_warm(args: argparse.Namespace) -> int:
         return 1
     try:
         speaker = ENGINES[engine].factory(speech)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - print the unavailable engine to the CLI
         print(f"{engine} unavailable: {exc}")
         return 1
     if not isinstance(speaker, WarmableSpeaker):
