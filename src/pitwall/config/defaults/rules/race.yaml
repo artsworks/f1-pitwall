@@ -155,7 +155,7 @@ rules:
     priority: 1
     urgency: execution
     decision_point: pit_entry
-    outcome_score: "pit_plan_gain_s - 5 * pit_plan_risk"
+    outcome_score: "pit_plan_gain_s - pit_plan_risk"
     conflict_group: pit_or_stay
     supersedes: [box_in_n]
     when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
@@ -209,7 +209,7 @@ rules:
   - id: overcut_stay_out
     sessions: [race]
     priority: 2
-    outcome_score: "overcut_s if laps_of_pace >= laps_remaining else -99"
+    outcome_score: "overcut_s if laps_of_pace >= th.overcut_laps else -99"
     conflict_group: pit_or_stay
     when: "phase == 'racing' and pit_plan == 'overcut' and pit_plan_confidence >= mode.pit_confidence_min"
     clear_when: "pit_plan != 'overcut'"

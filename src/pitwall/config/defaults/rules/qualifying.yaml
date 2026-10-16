@@ -318,6 +318,7 @@ rules:
     priority: 3
     urgency: coaching
     location_ref: true
+    supersedes: [saved_moment]
     when: "cool_lap and not cool_prep and sector >= 1 and last_hot_mistakes != ''"
     clear_when: "not cool_lap"
     still_true: "cool_lap and not cool_prep"
