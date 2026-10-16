@@ -475,9 +475,10 @@ Rules gate on
 
 On green laps, the engine runs `plan_mc_sims` simulations over the same candidate range as `optimise`.
 Each simulation samples current linear degradation with `sigma = max(deg_sd_ms_per_lap, plan_mc_deg_sd_frac * deg_ms_per_lap)`.
-When the fit has positive posterior spread and at least `max(deg_min_laps, 3)` laps, sample a Student-t value instead.
+When the fit is a blend with positive posterior spread and at least `max(deg_min_laps, 3)` laps, sample a Student-t value instead.
 Use `df = max(fit.n - 2, 3)` and scale `max(deg_posterior_sd_ms_per_lap, sigma)`.
-Otherwise, keep the normal draw. Clip sampled slopes at zero and keep quadratic degradation fixed.
+Full fits and other blends keep the normal draw.
+Clip sampled slopes at zero and keep quadratic degradation fixed.
 Fresh-tyre lap times stay deterministic.
 
 With three or more green pit events, sample `rng.choice(samples) - median(samples) + pit_loss_s`.

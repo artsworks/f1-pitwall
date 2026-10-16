@@ -234,7 +234,8 @@ or null. Backend only; UI rendering is a separate PR.
 Battle state (docs/18 "Battle state") adds `battle: {mode: 'free_air'|'catching'|
 'attacking'|'defending'|'under_threat'|'managing', mode_laps, catch_laps | null,
 threat_laps | null, closing_ahead_s, closing_behind_s, pass_prob, hold_prob,
-result: 'passed'|'failed'|'held'|'lost' | null}` (result only for ~20 s after an episode).
+catch_prob, chase_prob, result: 'passed'|'failed'|'held'|'lost' | null}`
+(result only for ~20 s after an episode).
 The `battle` object also carries `ahead2` and `behind2` (`{pos, name, gap_s,
 overtake}` or `null` when there is no second car) and `swaps` (place changes
 inside `battle_swap_window_s`). Backend only.

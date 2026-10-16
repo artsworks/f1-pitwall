@@ -802,6 +802,8 @@ def test_strategy_payload_battle_second_cars_swaps_and_wear() -> None:
         rival_behind2_name="HADJAR",
         rival_behind2_gap_s=math.inf,
         battle_swaps=3,
+        battle_catch_prob=0.64,
+        battle_chase_prob=0.38,
         wear_hot_corner="front left",
         wear_hot_rate=1.8,
     )
@@ -811,6 +813,7 @@ def test_strategy_payload_battle_second_cars_swaps_and_wear() -> None:
     assert b["ahead2"] == {"pos": 2, "name": "PIASTRI", "gap_s": 3.2, "overtake": True}
     assert b["behind2"]["gap_s"] is None and b["behind2"]["overtake"] is False
     assert b["swaps"] == 3
+    assert b["catch_prob"] == 0.64 and b["chase_prob"] == 0.38
     sc = strategy_payload(dataclasses.replace(snap, safety_car_status=1))
     assert sc is not None and sc["battle"]["ahead2"]["overtake"] is False
     legacy = strategy_payload(dataclasses.replace(snap, regulations_2026=False))

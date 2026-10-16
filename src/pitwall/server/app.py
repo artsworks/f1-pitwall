@@ -365,6 +365,8 @@ def strategy_payload(
             "closing_behind_s": snapshot.battle_closing_behind_s,
             "pass_prob": snapshot.battle_pass_prob,
             "hold_prob": snapshot.battle_hold_prob,
+            "catch_prob": snapshot.battle_catch_prob,
+            "chase_prob": snapshot.battle_chase_prob,
             "result": snapshot.battle_result or None,
             "ahead2": rival2(
                 snapshot.rival_ahead2_pos,
