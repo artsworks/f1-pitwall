@@ -231,7 +231,7 @@ def fit_stint(
     mean_age = sum(ages) / n
     age_ss = sum((age - mean_age) ** 2 for age in ages)
     deg_sd = rmse / math.sqrt(age_ss) if age_ss > 0 else 0.0
-    deg_posterior_sd = 0.0
+    deg_posterior_sd = deg_sd
     source = "fit"
     if n < 2 * min_laps:
         w = (n - min_laps + 1) / (min_laps + 1)
@@ -279,6 +279,7 @@ def fit_stint(
                         fuel_fitted,
                         quad_deg2,
                         deg_sd,
+                        deg_posterior_sd_ms_per_lap=deg_sd,
                     )
     return DegFit(
         base,

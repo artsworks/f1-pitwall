@@ -23,6 +23,10 @@ def _f(src: Mapping[str, object], name: str, default: float) -> float:
     return float(v) if isinstance(v, int | float) else default
 
 
+def risk_quantile(th: Mapping[str, object]) -> float:
+    return min(max(_f(th, "plan_mc_risk_quantile", 0.8), 0.001), 0.999)
+
+
 @dataclass(frozen=True, slots=True)
 class CompoundModel:
     visual: int
@@ -142,7 +146,7 @@ def _age_sum(age0: int, n: int) -> float:
 
 
 def p_faster(gap_s: float, sd_a: float, sd_b: float) -> float:
-    sigma = math.hypot(sd_a, sd_b)
+    sigma = abs(sd_a - sd_b)
     return NormalDist().cdf(gap_s / sigma) if sigma > 0 else (1.0 if gap_s > 0 else 0.0)
 
 
@@ -226,7 +230,7 @@ def evaluate(
     fresh_lengths = [boundaries[i + 1] - boundaries[i] for i in range(stops)]
     for compound, length in zip(seq[1:], fresh_lengths, strict=True):
         sd_terms.append(models[compound].deg_posterior_sd_ms_per_lap * _age_sum(0, length))
-    sd_ms = math.sqrt(sum(sd**2 for sd in sd_terms))
+    sd_ms = sum(sd_terms)
     return PlanEval(
         seq,
         tuple(lap + k for k in ks),
@@ -358,7 +362,7 @@ class PlanTracker:
         if not self.seqs:
             a = ranked[0]
             self._set("A", "primary", stops_done, a)
-            z = NormalDist().inv_cdf(_f(th, "plan_mc_risk_quantile", 0.8))
+            z = NormalDist().inv_cdf(risk_quantile(th))
             b = alternative(ranked, a, z)
             if b is not None:
                 self._set("B", "alternative", stops_done, b)
@@ -449,9 +453,7 @@ class PlanTracker:
                     race_time_s=round(e.race_time_s, 3),
                     delta_s=round(e.race_time_s - ref, 1),
                     delta_sd_s=(
-                        0.0
-                        if pid == self.active
-                        else round(math.hypot(e.race_time_sd_s, ref_sd), 1)
+                        0.0 if pid == self.active else round(abs(e.race_time_sd_s - ref_sd), 1)
                     ),
                     switch_prob=(
                         0.0
@@ -482,9 +484,7 @@ class PlanTracker:
                 else 0.0
             ),
             delta_sd_s=(
-                round(math.hypot(cur.race_time_sd_s, best.race_time_sd_s), 1)
-                if cur is not None
-                else 0.0
+                round(abs(cur.race_time_sd_s - best.race_time_sd_s), 1) if cur is not None else 0.0
             ),
         )
         return self.state

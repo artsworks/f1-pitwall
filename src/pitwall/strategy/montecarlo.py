@@ -18,6 +18,7 @@ from pitwall.strategy.pitwindow import (
     _fresh_fit,
     _lap_ms,
 )
+from pitwall.strategy.plans import risk_quantile
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +127,11 @@ def plan_agreement(
         fit.deg_sd_ms_per_lap,
         _f(th, "plan_mc_deg_sd_frac", 0.15) * fit.deg_ms_per_lap,
     )
-    if fit.deg_posterior_sd_ms_per_lap > 0 and fit.n >= max(int(_f(th, "deg_min_laps", 3)), 3):
+    if (
+        fit.source == "blend"
+        and fit.deg_posterior_sd_ms_per_lap > 0
+        and fit.n >= max(int(_f(th, "deg_min_laps", 3)), 3)
+    ):
         scale = max(fit.deg_posterior_sd_ms_per_lap, sigma)
         deg_samples = np.maximum(
             fit.deg_ms_per_lap + rng.standard_t(df=max(fit.n - 2, 3), size=sims) * scale,
@@ -160,7 +165,7 @@ def plan_agreement(
         last_k=last_k,
         th=th,
     )
-    q = np.quantile(deltas, _f(th, "plan_mc_risk_quantile", 0.8), axis=0)
+    q = np.quantile(deltas, risk_quantile(th), axis=0)
     k = int(np.argmin(q))
     q_modal_lap = lap_num + k if q[k] < 0 else 0
 

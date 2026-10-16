@@ -67,6 +67,7 @@ def test_same_seed_produces_the_same_result() -> None:
     fit = replace(
         _fit(150.0, sd=20.0),
         n=5,
+        source="blend",
         deg_posterior_sd_ms_per_lap=80.0,
     )
     args = dict(fit=fit, fresh=_fit(80.0), plan_lap=10)
@@ -75,7 +76,7 @@ def test_same_seed_produces_the_same_result() -> None:
 
 
 def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> None:
-    thin = replace(_fit(300.0), n=5, deg_posterior_sd_ms_per_lap=1000.0)
+    thin = replace(_fit(300.0), n=5, source="blend", deg_posterior_sd_ms_per_lap=1000.0)
     without_posterior = replace(thin, deg_posterior_sd_ms_per_lap=0.0)
     sampled = _agreement(fit=thin, fresh=_fit(0.0), plan_lap=11, laps_remaining=12, tyre_age=10)
     baseline = _agreement(
@@ -84,9 +85,9 @@ def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> 
     assert sampled is not None and baseline is not None
     assert (sampled.modal_lap, sampled.agree) != (baseline.modal_lap, baseline.agree)
 
-    high_n = _fit(150.0)
-    assert _agreement(fit=high_n, fresh=_fit(80.0), plan_lap=10) == _agreement(
-        fit=replace(high_n, deg_posterior_sd_ms_per_lap=0.0),
+    full_fit = replace(_fit(150.0, sd=20.0), n=8, deg_posterior_sd_ms_per_lap=80.0)
+    assert _agreement(fit=full_fit, fresh=_fit(80.0), plan_lap=10) == _agreement(
+        fit=replace(full_fit, deg_posterior_sd_ms_per_lap=0.0),
         fresh=_fit(80.0),
         plan_lap=10,
     )
@@ -118,6 +119,16 @@ def test_risk_quantile_picks_low_spread_negative_candidate(monkeypatch: pytest.M
     )
     no_stop = _agreement(**args)
     assert no_stop is not None and no_stop.q_modal_lap == 0
+
+
+def test_mc_risk_quantile_clamps_upper_endpoint() -> None:
+    result = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        th={**TH, "plan_mc_risk_quantile": 1.0},
+    )
+    assert result is not None
 
 
 def test_clear_stop_plan_has_high_agreement() -> None:

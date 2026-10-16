@@ -493,7 +493,7 @@ delta[s,k] = (cumcur[s,k] + cumfresh[R-k] + (pit[s,k] + outlap_warmup_s) * 1000 
 
 Select the first minimum. Choose no stop when the best stop delta is nonnegative.
 `modal_lap` is the most common simulated choice. Break ties at the smallest lap.
-`plan_mc_risk_quantile` defaults to `0.8`. The engine calculates this quantile for each candidate.
+`plan_mc_risk_quantile` defaults to `0.8`. The engine clamps it to `0.001`–`0.999` before calculating quantiles.
 `q_modal_lap` is the first minimum candidate lap when its quantile is negative, or zero otherwise.
 `PitPlan.mc_risk_lap` carries this downside stop lap. The modal lap and agreement keep their existing meanings.
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
@@ -519,10 +519,11 @@ the `Snapshot` (`active_plan`, `on_plan`, `plan_spoken`, `plan_target_lap`,
 `plan_b_switch_prob`, `plan_c_spoken`, ...). Thresholds: `plan_*` in `settings.yaml`.
 
 `PlanEval.race_time_sd_s` estimates uncertainty from degradation error. For each stint,
-multiply its degradation posterior SD by the sum of tyre ages in that stint. Add the
-squared stint values, take the square root, then convert milliseconds to seconds.
+multiply its degradation posterior SD by the sum of tyre ages in that stint.
+All stint terms share one slope error, so add them directly and convert milliseconds to seconds.
 Plan B ranks alternatives by `race_time_s + z * race_time_sd_s`, where `z` is the inverse
-normal CDF of `plan_mc_risk_quantile`. When either plan has a spread, switch only when
+normal CDF of `plan_mc_risk_quantile`, clamped to `0.001`–`0.999`.
+The difference spread is `abs(sd_active - sd_best)`. When either plan has a spread, switch only when
 `p_faster(active_time - best_time, active_sd, best_sd) > plan_switch_prob`.
 Without a spread, the existing `plan_switch_s` threshold applies.
 The active plan reports zero `switch_prob` and `delta_sd_s`. Other plans report their

@@ -212,6 +212,8 @@ includes each first-stop lap within `plan_window_s` of the best.
   When degradation spread is known, the engine switches after `plan_off_s` when the
   probability that the best plan is faster exceeds `plan_switch_prob`.
   With no spread, the engine uses the fixed `plan_switch_s` threshold.
+  Plan spread sums stint terms from one shared slope error. The difference spread is
+  `abs(sd_active - sd_best)`. The engine clamps the risk quantile to `0.001`–`0.999`.
   The off-plan hysteresis remains `plan_off_hysteresis_s`. A plan becomes *invalid* when
   its remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
 - A cheap-stop SC/VSC recommendation switches the active plan to C (reason `sc`).

@@ -18,7 +18,9 @@ from pitwall.strategy.plans import (
     derive,
     evaluate,
     feasible,
+    p_faster,
     reactive,
+    risk_quantile,
     spoken,
     view_fields,
 )
@@ -100,7 +102,7 @@ def test_derive_ranked_with_windows() -> None:
     assert ranked[0].compounds == (M, H)
 
 
-def test_evaluate_race_time_spread_uses_tyre_age_sums() -> None:
+def test_evaluate_race_time_spread_adds_shared_slope_age_sums() -> None:
     compound_models = tuple(
         dataclasses.replace(model, deg_posterior_sd_ms_per_lap=3.0) for model in models()
     )
@@ -116,7 +118,7 @@ def test_evaluate_race_time_spread_uses_tyre_age_sums() -> None:
     fresh_laps = inp.laps_remaining - current_laps
     current_sd_ms = 2.0 * (current_laps * inp.tyre_age + current_laps * (current_laps - 1) / 2)
     fresh_sd_ms = 3.0 * (fresh_laps * (fresh_laps - 1) / 2)
-    expected = (current_sd_ms**2 + fresh_sd_ms**2) ** 0.5 / 1000.0
+    expected = (current_sd_ms + fresh_sd_ms) / 1000.0
     assert result.race_time_sd_s == expected
     assert evaluate(inputs(), (M, H), TH).race_time_sd_s == 0.0  # type: ignore[union-attr]
 
@@ -132,14 +134,14 @@ def test_alternative_uses_downside_score_and_keeps_ranked_order_at_zero_spread()
 
 
 def _patch_tracker_evaluations(
-    monkeypatch: pytest.MonkeyPatch, *, best_time: float, sd: float
+    monkeypatch: pytest.MonkeyPatch, *, best_time: float, sd_a: float, sd_b: float
 ) -> None:
     seq_a = (M, H)
     seq_b = (M, S, H)
-    a_initial = PlanEval(seq_a, (20,), (20, 20), 100.0, sd)
-    b_initial = PlanEval(seq_b, (20, 30), (20, 20), 103.0, sd)
-    b_best = PlanEval(seq_b, (20, 30), (20, 20), best_time, sd)
-    a_current = PlanEval(seq_a, (20,), (20, 20), 100.0, sd)
+    a_initial = PlanEval(seq_a, (20,), (20, 20), 100.0, sd_a)
+    b_initial = PlanEval(seq_b, (20, 30), (20, 20), 103.0, sd_b)
+    b_best = PlanEval(seq_b, (20, 30), (20, 20), best_time, sd_b)
+    a_current = PlanEval(seq_a, (20,), (20, 20), 100.0, sd_a)
     stage = 0
 
     def fake_derive(*_args: object) -> list[PlanEval]:
@@ -162,7 +164,7 @@ def _patch_tracker_evaluations(
 def test_tracker_switches_on_probability_with_large_fixed_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_tracker_evaluations(monkeypatch, best_time=97.0, sd=1.0)
+    _patch_tracker_evaluations(monkeypatch, best_time=97.0, sd_a=1.0, sd_b=1.0)
     tracker = PlanTracker()
     tracker.update(
         inputs(),
@@ -184,7 +186,7 @@ def test_tracker_switches_on_probability_with_large_fixed_threshold(
 def test_tracker_does_not_switch_when_spread_makes_probability_low(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_tracker_evaluations(monkeypatch, best_time=90.0, sd=20.0)
+    _patch_tracker_evaluations(monkeypatch, best_time=90.0, sd_a=20.0, sd_b=1.0)
     tracker = PlanTracker()
     tracker.update(
         inputs(),
@@ -201,6 +203,70 @@ def test_tracker_does_not_switch_when_spread_makes_probability_low(
         cheap_stop=False,
     )
     assert state.active == "A" and state.off_s == 10.0
+
+
+def test_tracker_switches_when_shared_slope_exposure_cancels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inp = inputs(cur=dataclasses.replace(fit(100.0), deg_posterior_sd_ms_per_lap=2.0))
+    assert inp.cur.deg_posterior_sd_ms_per_lap > 0.0
+    assert all(model.deg_posterior_sd_ms_per_lap == 0.0 for model in inp.compounds)
+
+    seq_a = (M, H)
+    seq_b = (M, S)
+    stop_laps = (20,)
+    current_sd = (
+        inp.cur.deg_posterior_sd_ms_per_lap * (19 * inp.tyre_age + 19 * (19 - 1) / 2) / 1000.0
+    )
+    a_current = PlanEval(seq_a, stop_laps, (20, 20), 100.0, current_sd)
+    b_initial = PlanEval(seq_b, stop_laps, (20, 20), 104.0, current_sd)
+    b_best = PlanEval(seq_b, stop_laps, (20, 20), 96.0, current_sd)
+    stage = 0
+
+    def fake_derive(*_args: object) -> list[PlanEval]:
+        nonlocal stage
+        stage += 1
+        return [a_current, b_initial] if stage == 1 else [b_best, a_current]
+
+    def fake_evaluate(
+        _inp: object, seq: tuple[int, ...], *_args: object, **_kw: object
+    ) -> PlanEval:
+        return a_current if seq == seq_a else b_initial if stage == 1 else b_best
+
+    monkeypatch.setattr(plan_module, "derive", fake_derive)
+    monkeypatch.setattr(plan_module, "evaluate", fake_evaluate)
+    monkeypatch.setattr(plan_module, "feasible", lambda *_args: True)
+    monkeypatch.setattr(plan_module, "reactive", lambda *_args: None)
+
+    th = {**TH, "plan_off_s": 3.0, "plan_switch_s": 5.0, "plan_switch_prob": 0.9}
+    tracker = PlanTracker()
+    tracker.update(inp, th, stops_done=0, neutralised=False, cheap_stop=False)
+    state = tracker.update(
+        dataclasses.replace(inp, lap_num=2),
+        th,
+        stops_done=0,
+        neutralised=False,
+        cheap_stop=False,
+    )
+
+    assert len(a_current.compounds) - 1 == len(b_best.compounds) - 1 == 1
+    assert a_current.stop_laps == b_best.stop_laps == stop_laps
+    assert p_faster(4.0, current_sd, current_sd) == 1.0
+    assert state.active == "B" and state.switch_reason == "pace"
+
+
+def test_plan_tracker_clamps_risk_quantile_endpoints() -> None:
+    assert risk_quantile({**TH, "plan_mc_risk_quantile": 0.0}) == 0.001
+    assert risk_quantile({**TH, "plan_mc_risk_quantile": 1.0}) == 0.999
+
+    for quantile in (0.0, 1.0):
+        PlanTracker().update(
+            inputs(),
+            {**TH, "plan_mc_risk_quantile": quantile},
+            stops_done=0,
+            neutralised=False,
+            cheap_stop=False,
+        )
 
 
 def test_high_deg_prefers_two_stop() -> None:
