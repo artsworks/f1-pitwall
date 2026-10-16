@@ -226,10 +226,13 @@ def test_lap1_and_finish_report_against_grid(runs) -> None:
     assert not {"lap1_lost", "lap1_held", "finish_lost", "finish_held"} & ids
     text = next(c.text for c in calls if c.rule_id == "finish_gained")
     assert "P3" in text and ("3" in text)
-    calls, _ = runs["start_lost"]
+    calls, rows = runs["start_lost"]
     ids = _ids(calls)
-    assert {"lap1_lost", "last_lap_defend", "finish_lost"} <= ids
+    assert {"last_lap_defend", "finish_lost"} <= ids
     assert "last_lap" not in ids
+    # The rival behind is inside DRS range, so the battle call drops the lap one line.
+    assert "lap1_lost" not in ids
+    assert any(r.get("rule_id") == "lap1_lost" and r.get("suppressed_by") == "focus" for r in rows)
 
 
 def test_control_race_lap1_held(runs) -> None:

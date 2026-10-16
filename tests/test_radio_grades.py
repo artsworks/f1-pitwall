@@ -14,7 +14,6 @@ KNOWN_MISMATCHES: dict[str, str] = {
     "g018": "focus suppression",
     "g022": "preemption",
     "g024": "digest merging",
-    "g025": "focus suppression",
     "g038": "conflict resolution",
     "g040": "focus suppression",
     "g041": "preemption",

@@ -286,14 +286,16 @@ class Dispatcher:
 
     def _focus_drops(self, call: Call, now: float, snapshot: Snapshot) -> bool:
         """Focus after a hazard drops coaching and P3 info. A tactical call drops
-        coaching, and in a battle it drops P3 info too. P2 info always stays."""
+        coaching, and in a battle it drops every info call."""
         safety_focus = now < self._focus_until
         tactical_focus = now < self._tactical_focus_until
         if call.urgency == "coaching":
             return safety_focus or tactical_focus
-        if call.urgency != "info" or call.priority != 3:
+        if call.urgency != "info":
             return False
-        return safety_focus or (tactical_focus and self._battle_active(snapshot))
+        if safety_focus and call.priority == 3:
+            return True
+        return tactical_focus and self._battle_active(snapshot)
 
     def _suppression_reason(
         self, cand: Candidate, snapshot: Snapshot, now: float, allowed_p: set[int]
