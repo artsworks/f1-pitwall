@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import io
+import json
+
 import pytest
 from pydantic import ValidationError
 
 from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.models import PolicySettings, RuleDefModel, Settings
+from pitwall.engine import build_engine
 from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
@@ -200,6 +204,60 @@ def test_min_lap() -> None:
     eng = _engine([_rule(min_lap=3)])
     res = eng.evaluate(_snap(lap_num=1, tyre_inner_ema_fast=_corners(60.0)))
     assert res.suppressed[0].reason == "min_lap"
+
+
+def test_expression_errors_include_details_and_warn_once(caplog: pytest.LogCaptureFixture) -> None:
+    engine = _engine(
+        [
+            _rule(id="when_broken", when="missing_when", sessions=[]),
+            _rule(
+                id="clear_broken",
+                when="True",
+                clear_when="missing_clear",
+                say="plain text",
+                sessions=[],
+            ),
+        ]
+    )
+
+    first = engine.evaluate(_snap(now=0.0))
+    second = engine.evaluate(_snap(now=1.0))
+
+    for result in (first, second):
+        when_error = next(item for item in result.suppressed if item.reason == "expr_error")
+        clear_error = next(item for item in result.suppressed if item.reason == "clear_error")
+        assert when_error.rule.id == "when_broken"
+        assert "missing_when" in when_error.detail
+        assert clear_error.rule.id == "clear_broken"
+        assert "missing_clear" in clear_error.detail
+
+    warnings = [
+        record.getMessage() for record in caplog.records if record.name == "pitwall.rules.engine"
+    ]
+    assert sum("when_broken expr_error" in message for message in warnings) == 1
+    assert sum("clear_broken clear_error" in message for message in warnings) == 1
+
+
+def test_engine_logs_rule_errors_once_for_two_ticks() -> None:
+    decision_log = io.StringIO()
+    engine = build_engine(
+        clock=VirtualClock(),
+        decision_log_fp=decision_log,
+        sinks=[],
+    )
+    engine.rule_engine = _engine([_rule(id="broken_when", when="missing_when", sessions=[])])
+
+    engine.tick(0.0)
+    engine.tick(1.0)
+
+    records = [
+        json.loads(line)
+        for line in decision_log.getvalue().splitlines()
+        if line and json.loads(line).get("outcome") == "rule_error"
+    ]
+    assert len(records) == 1
+    assert records[0]["rule_id"] is None
+    assert records[0]["text"].startswith("broken_when expr_error:")
 
 
 def _default_rule_engine() -> RuleEngine:
