@@ -124,9 +124,9 @@ batches:
         currently_speaking: {id: slow1, rule: slow_car_ahead, text: "Slow car ahead. Careful", age_s: 0.5}
         queued:
           - {id: slow2, rule: slow_car_ahead, text: "Slow car ahead. Careful"}
-        grade: {slow1: now, slow2: drop}
+        grade: {slow1: now, slow2: merge}
         order: []
-        notes: Existing dedupe still drops a repeat of the line on air.
+        notes: Regraded to match batch 4. A repeat of the line on air merges into it.
       - id: q01
         source: reconstructed
         session: qualifying

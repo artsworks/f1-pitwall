@@ -452,7 +452,19 @@ class Dispatcher:
             None,
         )
         if queued is None:
-            return False
+            on_air = self._current
+            if (
+                on_air is None
+                or on_air.rule_id != call.rule_id
+                or not self._mid_sentence(on_air, now)
+            ):
+                return False
+            # A duplicate of the line on air folds into it: nothing new to say.
+            on_air.count += 1
+            on_air.merged_ids.append(call.id)
+            cand.inputs = {**cand.inputs, "merged_into": on_air.id}
+            self._log(cand, snapshot, now, "merged", None, call.id)
+            return True
         queued.count += 1
         queued.merged_ids.append(call.id)
         definition = self._defs.get(call.rule_id)
