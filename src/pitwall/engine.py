@@ -20,6 +20,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+import numpy as np
+
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
@@ -71,6 +73,7 @@ from pitwall.strategy.battle import (
     Episode,
     shrink,
 )
+from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
@@ -363,7 +366,9 @@ class Engine:
         self.pit_plan: PitPlan = NO_PLAN
         self._fresh_prior: DegFit | None = None
         self._green_pit_loss_s = 0.0
+        self._green_pit_samples_s: list[float] = []
         self._sc_pit_loss_s = 0.0
+        self._plan_mc_cache: dict[tuple[int | None, int, int, int], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
@@ -843,6 +848,7 @@ class Engine:
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
+        self._plan_mc_cache.clear()
         self.battle_tracker.reset()
         self._battle_rates = None
         self._stops_done = 0
@@ -1453,6 +1459,11 @@ class Engine:
                 self.db, state.session_uid, track_id, 0, overlay, settings.thresholds
             )
             self._green_pit_loss_s = green.value / 1000.0
+            self._green_pit_samples_s = (
+                [event.loss_ms / 1000.0 for event in self.db.pit_events_for_track(track_id, 0)]
+                if self.db is not None
+                else []
+            )
             sc = current_pit_loss(
                 self.db, state.session_uid, track_id, 1, overlay, settings.thresholds
             )
@@ -1619,6 +1630,7 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
+        mode = self.mode()
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -1636,9 +1648,33 @@ class Engine:
             gap_behind_s=snap.gap_behind_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
-            mode=self.mode(),
+            mode=mode,
             th=settings.thresholds,
         )
+        if snap.safety_car_status == 0:
+            session_uid = self.state.session_uid
+            key = (session_uid, snap.lap_num, plan.lap, snap.tyre_age_laps)
+            if key not in self._plan_mc_cache:
+                uid = session_uid if session_uid is not None else 0
+                rng = np.random.default_rng(
+                    [uid & 0xFFFFFFFF, (uid >> 32) & 0xFFFFFFFF, snap.lap_num]
+                )
+                self._plan_mc_cache[key] = plan_agreement(
+                    lap_num=snap.lap_num,
+                    laps_remaining=snap.laps_remaining,
+                    tyre_age=snap.tyre_age_laps,
+                    fit=fit,
+                    fresh=self._fresh_prior,
+                    cur_cliff_age=snap.tyre_age_laps + snap.laps_of_pace,
+                    pit_loss_s=snap.pit_loss_s,
+                    pit_loss_samples_s=self._green_pit_samples_s,
+                    sc_pit_loss_s=self._sc_pit_loss_s,
+                    plan_lap=plan.lap,
+                    mode=mode,
+                    th=settings.thresholds,
+                    rng=rng,
+                )
+            plan = scale_plan(plan, self._plan_mc_cache[key])
         self.pit_plan = plan
         self.state.set_model(
             dataclasses.replace(
