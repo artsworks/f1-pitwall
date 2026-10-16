@@ -62,7 +62,8 @@ its current predicate holds. A call waiting behind speech starts its deadline wh
 ends.
 
 The `max_call_age_s` cap measures from `trigger_t` and does not reset while a call waits or
-is held. Replies and menu prompts are exempt. The Piper worker drops calls that exceed the
+is held. A call that reaches the cap or its deadline is late and drops. Replies and menu
+prompts are exempt from the cap but keep their deadline. The Piper worker drops calls that exceed the
 cap before playback.
 
 Execution calls with a decision point calculate the time to pit entry or the finish line.

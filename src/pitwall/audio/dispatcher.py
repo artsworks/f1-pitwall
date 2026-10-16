@@ -576,7 +576,7 @@ class Dispatcher:
         return (
             "reply" not in call.tags
             and "menu" not in call.tags
-            and now - call.trigger_t > self.policy.max_call_age_s
+            and now - call.trigger_t >= self.policy.max_call_age_s
         )
 
     def note_dropped(self, call_id: str) -> None:
@@ -629,7 +629,7 @@ class Dispatcher:
             if waits_for_straight:
                 deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
             deadline_start = max(call.t, call.not_before, call.ready_t)
-            if (now - deadline_start) * 1000 > deadline_ms:
+            if (now - deadline_start) * 1000 >= deadline_ms:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
                 if snap is not None:
@@ -807,7 +807,7 @@ class Dispatcher:
         if call.priority == 3 and self.policy.p3_straight_only:
             deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
         deadline_start = max(call.t, call.not_before, call.ready_t)
-        if (now - deadline_start) * 1000 > deadline_ms:
+        if (now - deadline_start) * 1000 >= deadline_ms:
             return False
         if now < call.not_before:
             return False
