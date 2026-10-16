@@ -897,7 +897,7 @@ def test_urgency_order_and_preemption_matrix() -> None:
     ]
     assert d._preempts(calls["safety"], calls["execution"]) is True
     calls["execution"].promoted = True
-    assert d._preempts(calls["safety"], calls["execution"]) is False
+    assert d._preempts(calls["safety"], calls["execution"]) is True
     assert d._preempts(calls["execution"], calls["tactical"]) is True
     calls["execution"].promoted = False
     assert d._preempts(calls["execution"], calls["tactical"]) is False

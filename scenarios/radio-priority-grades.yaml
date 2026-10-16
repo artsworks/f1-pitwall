@@ -257,9 +257,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "About twelve laps in the tyres", age_s: 2.0}
           - {id: wear, rule: wear_fronts, text: "Fronts at forty percent", age_s: 1.0}
-        grade: {life: now, wear: next}
-        order: [life, wear]
-        notes: Battle within a second, so no digest. Each speaks.
+        grade: {wear: now, life: next}
+        order: [wear, life]
+        notes: Regraded to match batch 4. Inside one class the higher priority speaks first, so the P2 wear line leads.
       - id: s03
         source: reconstructed
         session: race
@@ -431,9 +431,9 @@ batches:
         queued:
           - {id: yellow, rule: yellow_ahead, text: "Yellow ahead. Careful", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {box: now, yellow: next}
-        order: [box, yellow]
-        notes: Pit entry five seconds away. The box call goes first.
+        grade: {yellow: now, box: next}
+        order: [yellow, box]
+        notes: Regraded to match batch 4. Safety speaks first even with pit entry five seconds away.
       - id: r14
         source: graded
         session: race
@@ -475,9 +475,9 @@ batches:
           - {id: defend, rule: battle_defend, hypothetical: true, text: "Car behind in DRS. Defend", age_s: 2.0, scene: {phase: racing}}
           - {id: sc, rule: sc_deployed, text: "Safety car. Safety car", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
-        grade: {box: now, sc: next, defend: drop}
-        order: [box, sc]
-        notes: Box call is decisive at the pit entry and goes first. The defend call goes stale once the safety car is out.
+        grade: {sc: now, box: next, defend: drop}
+        order: [sc, box]
+        notes: Regraded to match batch 4. Safety first, then the box call. The defend call goes stale once the safety car is out.
       - id: r18
         source: reconstructed
         session: race
@@ -557,9 +557,9 @@ batches:
         queued:
           - {id: pen, rule: serve_penalty, text: "Serve the penalty this lap", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {pen: now, box: next}
-        order: [pen, box]
-        notes: Both calls need the pit entry and are equally close, so the older call goes first.
+        grade: {box: now, pen: next}
+        order: [box, pen]
+        notes: Regraded to match batch 4. Equally close to the pit entry, the P1 box call goes before the P2 penalty call.
       - id: r26
         source: reconstructed
         session: race

@@ -20,15 +20,18 @@ The dispatcher cuts a call only before its estimated speech time ends.
 
 | Incoming class | Calls it can cut |
 |---|---|
-| Safety | Every call except promoted execution |
+| Safety | Every call |
 | Execution | Info and coaching of a lower priority. Promoted: reply, tactical, info and coaching |
 | Reply | None |
 | Tactical | Info and coaching |
 | Info or coaching | None |
 
-A safety call that cuts a reply re-queues it once with a fresh queue time, unless the
-safety call flushes the queue. A promoted execution call drops the reply it cuts. The
-dispatcher never re-queues menu prompts.
+A safety call that cuts a reply or a promoted execution call re-queues it once with a
+fresh queue time, unless the safety call flushes the queue. A promoted execution call drops
+the reply it cuts. The dispatcher never re-queues menu prompts.
+
+The queue orders by urgency class, then promoted execution calls by time to their decision
+point, then rule priority, then age. Safety always leads, even near pit entry.
 
 ## Staying quiet
 

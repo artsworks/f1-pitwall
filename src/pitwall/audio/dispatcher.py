@@ -106,7 +106,7 @@ class Call:
 
 @dataclass(order=True)
 class _Queued:
-    sort_key: tuple[int, int, float, float] = field(compare=True)
+    sort_key: tuple[int, int, float, int, float] = field(compare=True)
     call: Call = field(compare=False)
 
 
@@ -406,12 +406,12 @@ class Dispatcher:
         seconds = distance / speed
         return distance, seconds, seconds <= self.policy.decision_near_s
 
-    def _queue_key(self, call: Call) -> tuple[int, int, float, float]:
+    def _queue_key(self, call: Call) -> tuple[int, int, float, int, float]:
         promoted = call.urgency == "execution" and call.promoted
         decision_s = call.decision_s if promoted and call.decision_s is not None else 0.0
         # A call that flushed the queue is the headline: it speaks before the replies it spared.
         rank = min(call.rank, _URGENCY_RANK["execution"]) if call.flushes_queue else call.rank
-        return (-1 if promoted else rank, 0 if promoted else 1, decision_s, call.t)
+        return (rank, 0 if promoted else 1, decision_s, call.priority, call.t)
 
     def _queue_call(self, call: Call) -> None:
         heapq.heappush(self._queue, _Queued(self._queue_key(call), call))
@@ -702,9 +702,11 @@ class Dispatcher:
                 interrupted = self._current
                 for sink in self.sinks:
                     sink.cancel(interrupted.id)
+                keeps_place = ("reply" in interrupted.tags and "menu" not in interrupted.tags) or (
+                    interrupted.urgency == "execution" and interrupted.promoted
+                )
                 if (
-                    "reply" in interrupted.tags
-                    and "menu" not in interrupted.tags
+                    keeps_place
                     and self._effective_class(call) == "safety"
                     and not call.flushes_queue
                 ):
@@ -788,7 +790,7 @@ class Dispatcher:
         new_class = self._effective_class(incoming)
         current_class = self._effective_class(current)
         if new_class == "safety":
-            return not (current_class == "execution" and current.promoted)
+            return True
         if new_class == "execution":
             if incoming.promoted:
                 return current_class in ("reply", "tactical", "info", "coaching")
