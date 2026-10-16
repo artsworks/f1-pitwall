@@ -2752,7 +2752,15 @@ class SessionState:
         return int(max(0, pkt.num_laps - prev_end))
 
     def _stops_owed(self, i: int, car: CarLap) -> int:
+        if self._is_sprint():
+            return 0
         if not self._th("plan_two_compound_rule", 1.0):
+            return 0
+        if (
+            self.cars_status is not None
+            and 0 <= i < len(self.cars_status)
+            and int(self.cars_status[i].visual_tyre_compound) not in DRY
+        ):
             return 0
         history = self._histories.get(i)
         if history is None:
@@ -2978,18 +2986,23 @@ class SessionState:
         pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
         if 0 <= self._player_idx < len(cars):
             owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
+            stop_pit_s = pit_s
+            if self.safety_car_status != 0:
+                stop_pit_s = (
+                    model.sc_pit_loss_s
+                    if model.sc_pit_loss_s > 0
+                    else self._th("pit_loss_sc_default_s", 8.0)
+                )
             fresh = stop_adjusted_gaps(
-                cars, self._player_idx, self.track_length_m, ref_speed, owed, pit_s
+                cars, self._player_idx, self.track_length_m, ref_speed, owed, stop_pit_s
             )
             player = cars[self._player_idx]
             player_history = self._histories.get(self._player_idx)
             player_history_stale = player.num_pit_stops >= getattr(
                 player_history, "num_tyre_stints", 0
             )
-            frozen = (
-                self.safety_car_status != 0
-                or player.pit_status != 0
-                or (self.race_phase == "out_lap" and player_history_stale)
+            frozen = player.pit_status != 0 or (
+                self.race_phase == "out_lap" and player_history_stale
             )
             if not frozen:
                 held: dict[int, float] = {}

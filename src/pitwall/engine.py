@@ -1638,6 +1638,7 @@ class Engine:
                 pit_loss_source=(
                     self.pit_loss_prior.source if self.pit_loss_prior is not None else ""
                 ),
+                sc_pit_loss_s=self._sc_pit_loss_s,
                 fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
                 fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
                 fuel_source=fb.source if fb is not None else "",

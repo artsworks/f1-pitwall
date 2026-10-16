@@ -223,22 +223,54 @@ def test_lapped_car_is_not_a_true_rival() -> None:
     assert true_neighbours(rel, cars, 3) == (-1, 1)
 
 
-def test_safety_car_freezes_true_rival_and_flashback_clears_map() -> None:
+def test_safety_car_recomputes_true_rival_and_flashback_clears_map() -> None:
     state = _session()
-    initial = state.snapshot(811.0)
-    held = dict(state._true_rel)
-    assert initial.true_rival_behind_name == "PIASTRI"
+    state._histories[1] = _history(16)
+    state._histories[2] = _history(16, 17)
+    state._model = ModelView(pit_loss_s=22.0, sc_pit_loss_s=8.0)
+    cars = (
+        _car(1, 0.0),
+        _car(2, 10.0, front_gap_s=10.0),
+        _car(3, 22.0, front_gap_s=12.0),
+        _car(4, 40.0, front_gap_s=18.0),
+        _car(5, 60.0, front_gap_s=20.0),
+    )
+    state.cars_lap = cars
+    state.position = 3
+    green = state.snapshot(811.0)
+    assert green.true_rival_behind_idx == 1
+    assert green.true_rival_behind_gap_s == pytest.approx(10.0)
 
-    changed = list(state.cars_lap)
-    changed[3] = _car(5, 40.0, front_gap_s=22.0)
-    changed[4] = _car(4, 14.2, front_gap_s=1.5)
     state.safety_car_status = 1
-    frozen = _tick(state, tuple(changed))
-    assert state._true_rel == held
-    assert frozen.true_rival_behind_name == "PIASTRI"
+    under_sc = _tick(state, cars)
+    assert under_sc.true_rival_ahead_idx == 1
+    assert under_sc.true_rival_ahead_gap_s == pytest.approx(4.0)
 
     state._handle_rewind(800.0)
     assert state._true_rel == {}
+
+
+def test_inter_tyre_without_history_owes_no_stop() -> None:
+    state = _session()
+    state._histories.pop(3)
+    state.cars_status = (
+        SimpleNamespace(visual_tyre_compound=16),
+        SimpleNamespace(visual_tyre_compound=16),
+        SimpleNamespace(visual_tyre_compound=17),
+        SimpleNamespace(visual_tyre_compound=7),
+    )
+
+    assert state._stops_owed(3, state.cars_lap[3]) == 0
+
+
+def test_sprint_without_history_owes_no_stop() -> None:
+    state = _session()
+    state.weekend_structure = (15, 16)
+    state._histories.pop(3)
+    car = replace(state.cars_lap[3], num_pit_stops=0)
+
+    assert state._is_sprint()
+    assert state._stops_owed(3, car) == 0
 
 
 def test_true_rival_snapshot_defaults_and_payload_fields() -> None:
