@@ -78,7 +78,7 @@ Conflicts first remove stale and explicitly superseded calls. Scored conflicts k
 higher outcome score. Rotation pairs choose a seeded random winner, regardless of score.
 Other live conflicts keep the queued call. `resolved_by` rules suppress resolved calls in
 either submission order. Escalations remove lower-state calls. Flush events remove
-queued non-safety calls.
+queued calls, except safety calls and replies the driver asked for.
 
 Rules can suppress obvious calls and silence provisional checks until an urgent condition
 holds. Duplicate queued rules can merge into a count-aware `say_many` line. A queued call

@@ -395,7 +395,9 @@ class Dispatcher:
     def _queue_key(self, call: Call) -> tuple[int, int, float, float]:
         promoted = call.urgency == "execution" and call.promoted
         decision_s = call.decision_s if promoted and call.decision_s is not None else 0.0
-        return (-1 if promoted else call.rank, 0 if promoted else 1, decision_s, call.t)
+        # A call that flushed the queue is the headline: it speaks before the replies it spared.
+        rank = min(call.rank, _URGENCY_RANK["execution"]) if call.flushes_queue else call.rank
+        return (-1 if promoted else rank, 0 if promoted else 1, decision_s, call.t)
 
     def _queue_call(self, call: Call) -> None:
         heapq.heappush(self._queue, _Queued(self._queue_key(call), call))
@@ -506,7 +508,7 @@ class Dispatcher:
         for queued in list(self._queue):
             if (
                 queued.call.id != call.id
-                and queued.call.urgency != "safety"
+                and queued.call.urgency not in ("safety", "reply")
                 and not queued.call.flushes_queue
             ):
                 self._drop_queued(queued.call.id, "flushed")

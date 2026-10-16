@@ -35,7 +35,6 @@ KNOWN_MISMATCHES: dict[str, str] = {
     "g055": "preemption",
     "g056": "preemption",
     "g057": "conflict resolution",
-    "g059": "queue flush",
     "g060": "conflict resolution",
     "g064": "focus suppression",
     "g065": "focus suppression",

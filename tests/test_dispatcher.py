@@ -1070,7 +1070,7 @@ def test_escalation_and_flush_drop_queued_calls() -> None:
         [_cand("red", urgency="safety", flushes_queue=True, tags=["systems"])],
         _snap(1.0),
     )
-    assert {item.call.rule_id for item in d._queue} == {"red"}
+    assert {item.call.rule_id for item in d._queue} == {"red", "reply"}
     assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
