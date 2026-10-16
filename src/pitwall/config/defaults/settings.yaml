@@ -154,6 +154,9 @@ thresholds:
   undercut_max_gap_s: 3.0
   overcut_laps: 2
   overcut_min_laps: 3
+  cover_margin_s: 0.5          # cover when the pitted car behind's projected gain + this exceeds the gap
+  cover_max_gap_s: 3.0         # only cover a car behind closer than this
+  cover_defend_gain_s: 1.0     # stay out when the gap beats their projected gain by this much
   free_stop_margin_s: 1.0
   sc_stop_min_laps_left: 3
   box_in_max_laps: 3

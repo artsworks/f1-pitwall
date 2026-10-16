@@ -22,7 +22,9 @@ class RivalView:
 
 @dataclass(frozen=True, slots=True)
 class PitPlan:
-    plan: str  # box_now | box_in_n | cheap_stop | free_stop | undercut | overcut | stay | no_stop
+    # box_now | box_in_n | cheap_stop | free_stop | undercut | overcut
+    # cover | defend | stay | no_stop
+    plan: str
     lap: int
     gain_s: float
     confidence: float
@@ -114,6 +116,7 @@ def optimise(
     green_pit_loss_s: float,
     sc_status: int,
     rival_ahead: RivalView | None,
+    rival_behind: RivalView | None,
     gap_ahead_s: float,
     gap_behind_s: float,
     pit_exit_clean: bool,
@@ -151,7 +154,7 @@ def optimise(
     rival_conf = conf * (_f(th, "restricted_confidence_factor", 0.7) if restricted else 1.0)
     # A stop the tyres force anyway costs the place whenever it is taken.
     stop_forced = laps_of_pace < laps_remaining - _f(mode, "tyre_life_buffer_laps", 2.0)
-    risk = (
+    position_risk = (
         0.0
         if stop_forced or (not math.isfinite(gap_behind_s) and gap_behind_s > 0)
         else min(max((pit_loss_s - gap_behind_s) / pit_loss_s, 0.0), 1.0)
@@ -185,6 +188,21 @@ def optimise(
             ) / 1000.0
         overcut_s = round(_f(th, "outlap_warmup_s", 0.8) - lost, 2)
 
+    cover_s = 0.0
+    if (
+        projections
+        and rival_behind is not None
+        and rival_behind.pitted
+        and math.isfinite(gap_behind_s)
+    ):
+        their_gain = 0.0
+        for j in range(uc_laps):
+            their_gain += (
+                _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
+                - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
+            ) / 1000.0
+        cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - gap_behind_s, 2)
+
     if not projections:
         return PitPlan(
             "no_stop",
@@ -216,6 +234,7 @@ def optimise(
         idx: int = -1,
         who: str = "",
         confidence: float | None = None,
+        risk: float | None = None,
     ) -> PitPlan:
         if confidence is None:
             confidence = rival_conf if idx >= 0 else conf
@@ -224,7 +243,7 @@ def optimise(
             lap,
             round(gain, 2),
             round(confidence, 3),
-            round(risk, 3),
+            round(risk if risk is not None else position_risk, 3),
             idx,
             who,
             reason,
@@ -250,6 +269,22 @@ def optimise(
     # Staying out beats every stop inside the horizon and the tyre lasts.
     if best_delta >= 0 and laps_of_pace >= laps_remaining:
         return plan("no_stop", 0, -best_delta, "Tyres make the end")
+    behind_ok = (
+        rival_behind is not None
+        and rival_behind.pitted
+        and gap_behind_s < _f(th, "cover_max_gap_s", 3.0)
+    )
+    if behind_ok and cover_s + _f(th, "cover_margin_s", 0.5) > 0:
+        assert rival_behind is not None
+        return plan(
+            "cover",
+            lap_num,
+            cover_s,
+            f"Cover {rival_behind.name}",
+            rival_behind.idx,
+            rival_behind.name,
+            risk=0.0,
+        )
     if (
         rival_ahead is not None
         and gap_ahead_s < _f(th, "undercut_max_gap_s", 3.0)
@@ -274,6 +309,21 @@ def optimise(
             f"Overcut on {ahead_name}",
             ahead_idx,
             ahead_name,
+        )
+    if (
+        behind_ok
+        and -cover_s >= _f(th, "cover_defend_gain_s", 1.0)
+        and laps_of_pace >= _f(th, "overcut_min_laps", 3)
+        and best_k >= 1
+    ):
+        assert rival_behind is not None
+        return plan(
+            "defend",
+            lap_num + uc_laps,
+            -cover_s,
+            f"Defend from {rival_behind.name}",
+            rival_behind.idx,
+            rival_behind.name,
         )
     # Gain of the best lap over its neighbour: stopping one lap later, or now.
     later = projections[best_k + 1][1] if best_k + 1 < len(projections) else best_delta

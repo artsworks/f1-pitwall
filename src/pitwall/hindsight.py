@@ -16,7 +16,7 @@ from pitwall.store.db import Database, LapRow
 from pitwall.strategy.plans import LETTERS
 
 STOP_RULES = ("box_now", "plan_target_lap", "plan_sc_box")
-TACTICAL_PLANS = ("cheap_stop", "free_stop", "undercut")
+TACTICAL_PLANS = ("cheap_stop", "free_stop", "undercut", "cover")
 FUEL_RULES = ("fuel_short", "fuel_marginal", "fuel_spare")
 TYRE_RULES = ("tyre_life",)
 

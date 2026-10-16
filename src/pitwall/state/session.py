@@ -459,6 +459,7 @@ class Snapshot:
     rival_ahead_pitted: bool = False
     rival_ahead_in_pit_lane: bool = False
     rival_behind_pitted: bool = False
+    rival_behind_in_pit_lane: bool = False
     rival_ahead_pos: int = 0
     rival_behind_pos: int = 0
     rival_ahead_compound: int = 0
@@ -962,6 +963,7 @@ class SessionState:
         self._gap_now: dict[str, tuple[int, float]] = {}
         self._gap_lines: list[dict[str, tuple[int, float]]] = []
         self._ahead_latch: tuple[int, float] = (-1, math.inf)
+        self._behind_latch: tuple[int, float] = (-1, math.inf)
         self.cars_damage: Sequence[Any] | None = None
 
         # M2 packet state
@@ -1215,6 +1217,7 @@ class SessionState:
         self._gap_now = {}
         self._gap_lines = []
         self._ahead_latch = (-1, math.inf)
+        self._behind_latch = (-1, math.inf)
         self._straight_since = None
         for cb in self.rewind_listeners:
             cb(t)
@@ -2886,6 +2889,20 @@ class SessionState:
         if behind_i >= 0:
             d = cars[behind_i].delta_to_car_in_front_ms
             gap_behind = d / 1000.0 if d > 0 else math.inf
+        if behind_i >= 0 and math.isfinite(gap_behind):
+            self._behind_latch = (behind_i, gap_behind)
+        else:
+            latch_i, latch_gap = self._behind_latch
+            if (
+                0 <= latch_i < len(cars)
+                and cars[latch_i].pit_status != 0
+                and cars[latch_i].result_status == 2
+                and cars[latch_i].car_position > self.position
+            ):
+                behind_i, gap_behind = latch_i, latch_gap
+            else:
+                self._behind_latch = (-1, math.inf)
+                behind_i, gap_behind = -1, math.inf
         ahead2_i, behind2_i = second_rivals(cars, ahead_i, behind_i)
         # Second-car gaps chain deltas: ours to the rival plus the rival's to
         # the next car on that side.
@@ -3009,6 +3026,7 @@ class SessionState:
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
             rival_ahead_in_pit_lane=ahead_i >= 0 and cars[ahead_i].pit_status != 0,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
+            rival_behind_in_pit_lane=behind_i >= 0 and cars[behind_i].pit_status != 0,
             pit_exit_rival_gap_s=exit_gap,
             **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
             slick_gain_s=slick_gain,

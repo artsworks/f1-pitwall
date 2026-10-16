@@ -33,6 +33,7 @@ def run(**kw: object):
         green_pit_loss_s=21.0,
         sc_status=0,
         rival_ahead=None,
+        rival_behind=None,
         gap_ahead_s=math.inf,
         gap_behind_s=math.inf,
         pit_exit_clean=False,
@@ -234,6 +235,82 @@ def test_overcut_after_rival_pits() -> None:
         tyre_age=2,
     )
     assert balanced.plan != "overcut"
+
+
+def test_cover_when_pitted_rival_behind_would_jump_us() -> None:
+    behind = RivalView(2, "PIASTRI", 90_000, True)
+    p = run(rival_behind=behind, gap_behind_s=1.0)
+    their_gain = sum(
+        ((90_000 + 150 * (10 + j) + max(0, 10 + j - 15) * 1000) - (90_000 + 80 * j)) / 1000.0
+        for j in range(2)
+    )
+    cover_s = round(their_gain - 0.8 - 1.0, 2)
+    assert p.plan == "cover"
+    assert p.rival_idx == 2
+    assert p.rival_name == "PIASTRI"
+    assert p.lap == 10
+    assert p.gain_s == cover_s
+    assert p.risk == 0.0
+
+
+def test_defend_when_gap_beats_pitted_rival_gain() -> None:
+    behind = RivalView(2, "PIASTRI", 90_000, True)
+    p = run(
+        rival_behind=behind,
+        gap_behind_s=2.9,
+        laps_of_pace=8.0,
+        fit=fit(10),
+        fresh=fit(10),
+        tyre_age=2,
+    )
+    their_gain = sum(((90_000 + 10 * (2 + j)) - (90_000 + 10 * j)) / 1000.0 for j in range(2))
+    cover_s = round(their_gain - 0.8 - 2.9, 2)
+    assert p.plan == "defend"
+    assert p.rival_idx == 2
+    assert p.rival_name == "PIASTRI"
+    assert p.lap == 12
+    assert p.gain_s == -cover_s
+
+
+def test_cover_and_defend_threshold_gap_selects_neither() -> None:
+    behind = RivalView(2, "PIASTRI", 90_000, True)
+    current = fit(100)
+    fresh = fit(10)
+    p = run(
+        rival_behind=behind,
+        gap_behind_s=0.44,
+        laps_of_pace=8.0,
+        fit=current,
+        fresh=fresh,
+        tyre_age=2,
+    )
+    their_gain = sum(((90_000 + 100 * (2 + j)) - (90_000 + 10 * j)) / 1000.0 for j in range(2))
+    cover_s = round(their_gain - 0.8 - 0.44, 2)
+    assert cover_s == -0.75
+    assert p.plan not in {"cover", "defend"}
+
+
+@pytest.mark.parametrize(("laps_remaining", "expected"), [(2, "no_stop"), (3, "cover")])
+def test_cover_requires_time_for_fresh_laps_and_stop(laps_remaining: int, expected: str) -> None:
+    p = run(
+        laps_remaining=laps_remaining,
+        rival_behind=RivalView(2, "PIASTRI", 90_000, True),
+        gap_behind_s=1.0,
+        tyre_age=20,
+        laps_of_pace=0.0,
+        fit=fit(300),
+    )
+    assert p.plan == expected
+
+
+def test_cover_requires_behind_rival_within_max_gap() -> None:
+    p = run(rival_behind=RivalView(2, "PIASTRI", 90_000, True), gap_behind_s=3.0)
+    assert p.plan != "cover"
+
+
+def test_cover_requires_behind_rival_to_have_pitted() -> None:
+    p = run(rival_behind=RivalView(2, "PIASTRI", 90_000, False), gap_behind_s=1.0)
+    assert p.plan != "cover"
 
 
 @pytest.mark.parametrize("laps_remaining", [4, 5])
