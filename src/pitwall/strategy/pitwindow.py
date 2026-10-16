@@ -9,7 +9,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from pitwall.model.deg import DegFit
+from pitwall.model.deg import DegFit, cliff_age
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,8 @@ class PitPlan:
     undercut_s: float
     overcut_s: float
     projections: tuple[tuple[int, float], ...]
+    mc_lap: int = 0
+    mc_agree: float = 1.0
 
 
 NO_PLAN = PitPlan("", 0, 0.0, 0.0, 0.0, -1, "", "", (0, 0), 0.0, 0.0, ())
@@ -48,11 +50,29 @@ def _f(src: Mapping[str, object], name: str, default: float) -> float:
 
 def _lap_ms(fit: DegFit, age: int, cliff_age: float, cliff_ms_per_lap: float) -> float:
     over = max(0.0, age - cliff_age)
-    return fit.base_ms + fit.deg_ms_per_lap * age + cliff_ms_per_lap * over
+    return (
+        fit.base_ms
+        + fit.deg_ms_per_lap * age
+        + fit.deg2_ms_per_lap2 * age**2
+        + cliff_ms_per_lap * over
+    )
 
 
 def _cliff_age(fit: DegFit, cliff_ms: float) -> float:
-    return math.inf if fit.deg_ms_per_lap <= 0 else cliff_ms / fit.deg_ms_per_lap
+    return cliff_age(fit, cliff_ms)
+
+
+def _candidate_range(laps_remaining: int, th: Mapping[str, object]) -> tuple[int, int]:
+    horizon = int(_f(th, "pit_horizon_laps", 8))
+    min_left = int(_f(th, "pit_min_laps_left", 2))
+    last_k = max(0, min(horizon, laps_remaining - min_left))
+    return min_left, last_k
+
+
+def _fresh_fit(fit: DegFit, fresh: DegFit) -> DegFit:
+    return DegFit(
+        fit.base_ms, fresh.deg_ms_per_lap, fit.fuel_ms_per_lap, 0, 0.0, fresh.confidence, "prior"
+    )
 
 
 def race_time_s(
@@ -103,15 +123,11 @@ def optimise(
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
-    horizon = int(_f(th, "pit_horizon_laps", 8))
-    min_left = int(_f(th, "pit_min_laps_left", 2))
+    min_left, last_k = _candidate_range(laps_remaining, th)
     # The fresh stint uses the current fit's base (compound priors differ in
     # absolute pace from one car to the next) with the fresh prior's slope.
-    fresh_fit = DegFit(
-        fit.base_ms, fresh.deg_ms_per_lap, fit.fuel_ms_per_lap, 0, 0.0, fresh.confidence, "prior"
-    )
+    fresh_fit = _fresh_fit(fit, fresh)
     cur_cliff = tyre_age + laps_of_pace
-    last_k = max(0, min(horizon, laps_remaining - min_left))
 
     def total(k: int | None) -> float:
         return race_time_s(

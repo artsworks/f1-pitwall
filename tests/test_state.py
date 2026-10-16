@@ -40,6 +40,7 @@ def _lap_tick(
     *,
     pit_status: int = 0,
     driver_status: int = 4,
+    in_traffic: bool = False,
 ):
     return accumulator.update(
         current_lap_num=lap_num,
@@ -53,6 +54,7 @@ def _lap_tick(
         compound=17,
         tyre_age_laps=lap_num,
         fuel_remaining_laps=10.0,
+        in_traffic=in_traffic,
     )
 
 
@@ -97,6 +99,22 @@ def test_starting_in_pit_lane_does_not_mark_following_lap_after_in_lap() -> None
     assert first_completed is not None
     assert second_completed is not None and second_completed.lap_num == 2
     assert second_completed.valid
+
+
+def test_traffic_flag_uses_a_strict_tick_majority() -> None:
+    accumulator = LapAccumulator()
+    _lap_tick(accumulator, 1, in_traffic=True)
+    _lap_tick(accumulator, 1, in_traffic=True)
+    _lap_tick(accumulator, 1, in_traffic=False)
+    majority = _lap_tick(accumulator, 2)
+
+    _lap_tick(accumulator, 2, in_traffic=True)
+    _lap_tick(accumulator, 2, in_traffic=False)
+    _lap_tick(accumulator, 2, in_traffic=False)
+    minority = _lap_tick(accumulator, 3)
+
+    assert majority is not None and majority.traffic == 1
+    assert minority is not None and minority.traffic == 0
 
 
 def test_phase_mapping() -> None:

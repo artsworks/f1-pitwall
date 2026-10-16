@@ -69,6 +69,24 @@ def test_race_time_stop_costs_pit_loss_plus_warmup() -> None:
     assert stop - none == pytest.approx(20.0 + float(TH["outlap_warmup_s"]))
 
 
+def test_quadratic_degradation_increases_race_time() -> None:
+    linear = fit(100)
+    quadratic = DegFit(90_000.0, 100.0, 30.0, 10, 100.0, 0.9, "fit", deg2_ms_per_lap2=5.0)
+    kwargs = dict(
+        stop_after=None,
+        laps_remaining=5,
+        tyre_age=10,
+        cur_cliff_age=math.inf,
+        pit_loss_s=21.0,
+        th=TH,
+    )
+
+    linear_time = race_time_s(cur=linear, fresh=linear, **kwargs)
+    quadratic_time = race_time_s(cur=quadratic, fresh=linear, **kwargs)
+
+    assert quadratic_time > linear_time
+
+
 def test_no_stop_when_tyres_last() -> None:
     p = run(laps_remaining=5, laps_of_pace=12.0, fit=fit(40))
     assert p.plan == "no_stop"

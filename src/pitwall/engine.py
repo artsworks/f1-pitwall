@@ -20,6 +20,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+import numpy as np
+
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
@@ -37,6 +39,7 @@ from pitwall.model.deg import (
     DEG_FUEL_REF,
     DegFit,
     Prior,
+    cliff_age,
     corner_wear_life,
     fit_is_clean,
     fit_stint,
@@ -56,7 +59,7 @@ from pitwall.setup.advisor import SetupAdvisor
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import ErsLapTotals, SessionState, Snapshot
+from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window
 from pitwall.store.db import LapRow
 from pitwall.strategy.battle import (
     HOLD,
@@ -70,6 +73,7 @@ from pitwall.strategy.battle import (
     Episode,
     shrink,
 )
+from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
@@ -363,7 +367,9 @@ class Engine:
         self.pit_plan: PitPlan = NO_PLAN
         self._fresh_prior: DegFit | None = None
         self._green_pit_loss_s = 0.0
+        self._green_pit_samples_s: list[float] = []
         self._sc_pit_loss_s = 0.0
+        self._plan_mc_cache: dict[tuple[int | None, int, int, int], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
@@ -844,6 +850,7 @@ class Engine:
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
+        self._plan_mc_cache.clear()
         self.battle_tracker.reset()
         self._battle_rates = None
         self._stops_done = 0
@@ -1002,6 +1009,7 @@ class Engine:
                         fuel_coeff_fixed=None,
                         deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                         deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+                        thermal_hi_c=self._thermal_hi_c(track_id, prev[0].compound, settings),
                     )
                     self._fold_fit(track_id, prev[0].compound, fit)
                     self._weekend_prior_cache.pop((uid, prev[0].compound), None)
@@ -1018,6 +1026,7 @@ class Engine:
                 if fuel_param is not None and fuel_param.weight >= self._th("prior_min_weight", 2)
                 else None
             )
+            thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
             fit = fit_stint(
                 tail,
                 prior,
@@ -1025,15 +1034,30 @@ class Engine:
                 fuel_coeff_fixed=fuel_fixed,
                 deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                 deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+                thermal_hi_c=thermal_hi_c,
+                quadratic=True,
+                quad_min_laps=int(self._th("deg_quad_min_laps", 8)),
+                quad_min_t=self._th("deg_quad_min_t", 2.0),
             )
             self.deg_fit = fit
+            persist_fit = fit
+            if fit.deg2_ms_per_lap2 > 0:
+                persist_fit = fit_stint(
+                    tail,
+                    prior,
+                    min_laps=int(self._th("deg_min_laps", 3)),
+                    fuel_coeff_fixed=fuel_fixed,
+                    deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+                    deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+                    thermal_hi_c=thermal_hi_c,
+                )
             db.upsert_stint(
                 uid,
                 0,
                 compound,
                 tail[0].lap_num,
                 tail[-1].lap_num,
-                fit,
+                persist_fit,
                 setup_state_id=majority_state(tail),
             )
 
@@ -1320,6 +1344,7 @@ class Engine:
             fuel_coeff_fixed=None,
             deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
             deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+            thermal_hi_c=self._thermal_hi_c(self.state.track_id, stint[0].compound, settings),
         )
         self.db.upsert_stint(
             uid,
@@ -1375,6 +1400,14 @@ class Engine:
         p = self.db.get_param(track_id, compound, name_at)
         return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
 
+    def _thermal_hi_c(self, track_id: int, compound: int, settings: Any) -> float:
+        learned = (
+            self.db.get_param(track_id, compound, "thermal_hi_c") if self.db is not None else None
+        )
+        if learned is not None and learned.weight >= self._th("prior_min_weight", 2):
+            return float(learned.value)
+        return thermal_window(settings.thresholds, compound)[1]
+
     def _race_laps(self) -> int:
         """Race distance the stint-derived priors are scoped to; 0 outside races."""
         kind = session_kind(self.state.session_type)
@@ -1428,6 +1461,11 @@ class Engine:
                 self.db, state.session_uid, track_id, 0, overlay, settings.thresholds
             )
             self._green_pit_loss_s = green.value / 1000.0
+            self._green_pit_samples_s = (
+                [event.loss_ms / 1000.0 for event in self.db.pit_events_for_track(track_id, 0)]
+                if self.db is not None
+                else []
+            )
             sc = current_pit_loss(
                 self.db, state.session_uid, track_id, 1, overlay, settings.thresholds
             )
@@ -1536,6 +1574,7 @@ class Engine:
             predicted = int(
                 fit.base_ms
                 + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
+                + fit.deg2_ms_per_lap2 * (state.tyre_age_laps + 1) ** 2
                 - fit.fuel_ms_per_lap * (burned + 1)
             )
         eb = self.energy_budget
@@ -1593,6 +1632,7 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
+        mode = self.mode()
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -1610,9 +1650,33 @@ class Engine:
             gap_behind_s=snap.gap_behind_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
-            mode=self.mode(),
+            mode=mode,
             th=settings.thresholds,
         )
+        if snap.safety_car_status == 0:
+            session_uid = self.state.session_uid
+            key = (session_uid, snap.lap_num, plan.lap, snap.tyre_age_laps)
+            if key not in self._plan_mc_cache:
+                uid = session_uid if session_uid is not None else 0
+                rng = np.random.default_rng(
+                    [uid & 0xFFFFFFFF, (uid >> 32) & 0xFFFFFFFF, snap.lap_num]
+                )
+                self._plan_mc_cache[key] = plan_agreement(
+                    lap_num=snap.lap_num,
+                    laps_remaining=snap.laps_remaining,
+                    tyre_age=snap.tyre_age_laps,
+                    fit=fit,
+                    fresh=self._fresh_prior,
+                    cur_cliff_age=snap.tyre_age_laps + snap.laps_of_pace,
+                    pit_loss_s=snap.pit_loss_s,
+                    pit_loss_samples_s=self._green_pit_samples_s,
+                    sc_pit_loss_s=self._sc_pit_loss_s,
+                    plan_lap=plan.lap,
+                    mode=mode,
+                    th=settings.thresholds,
+                    rng=rng,
+                )
+            plan = scale_plan(plan, self._plan_mc_cache[key])
         self.pit_plan = plan
         self.state.set_model(
             dataclasses.replace(
@@ -1698,10 +1762,8 @@ class Engine:
                 self._plan_key = key
                 lop = snap.laps_of_pace
                 cliff = self._th("tyre_cliff_ms", 1500)
-                cliff_age = (
-                    snap.tyre_age_laps + lop
-                    if math.isfinite(lop)
-                    else (cliff / cur.deg_ms_per_lap if cur.deg_ms_per_lap > 0 else math.inf)
+                cur_cliff_age = (
+                    snap.tyre_age_laps + lop if math.isfinite(lop) else cliff_age(cur, cliff)
                 )
                 tracker.update(
                     PlanInputs(
@@ -1710,7 +1772,7 @@ class Engine:
                         tyre_age=snap.tyre_age_laps,
                         current=snap.tyre_visual,
                         cur=cur,
-                        cur_cliff_age=cliff_age,
+                        cur_cliff_age=cur_cliff_age,
                         compounds=self._compound_models(snap, cur),
                         used=frozenset(self._used_compounds),
                         green_loss_s=self._green_pit_loss_s or snap.pit_loss_s,

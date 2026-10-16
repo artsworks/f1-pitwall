@@ -6,6 +6,7 @@ from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_b
 from pitwall.model.deg import (
     DegFit,
     Prior,
+    cliff_age,
     fit_stint,
     laps_of_pace,
     resolve_prior,
@@ -20,6 +21,7 @@ __all__ = [
     "FuelBudget",
     "PitLoss",
     "Prior",
+    "cliff_age",
     "current_pit_loss",
     "energy_budget",
     "fit_stint",
