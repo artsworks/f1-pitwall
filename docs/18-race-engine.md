@@ -349,6 +349,11 @@ gap_ahead_s, gap_behind_s: float    # from delta_to_car_in_front (player) and th
 rival_ahead_idx, rival_behind_idx, rival_pit_exit_idx: int   # -1 = none
 rival_ahead_pace_ms, rival_behind_pace_ms, rival_pit_exit_pace_ms: int
 rival_ahead_name, rival_behind_name, rival_pit_exit_name: str
+true_rival_ahead_idx, true_rival_behind_idx: int # -1 = none, stop-adjusted order
+true_rival_ahead_name, true_rival_behind_name: str
+true_rival_ahead_gap_s, true_rival_behind_gap_s: float # stop-adjusted gaps
+true_rival_ahead_stops_owed, true_rival_behind_stops_owed: int
+true_rival_ahead_pitted, true_rival_behind_pitted: bool
 rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
 rival_ahead_in_pit_lane, rival_behind_in_pit_lane: bool  # validated rival is in the pit lane now
@@ -449,6 +454,7 @@ waiting gains). Decisions:
 - `defend` requires the same rival and gap gates, `-cover_s >= th.cover_defend_gain_s`,
   `laps_of_pace >= th.overcut_min_laps`, and `best_k >= 1`.
   The optimiser returns `defend` for `lap_num + th.undercut_laps`.
+  Cover and defend use the true rival behind and its stop-adjusted gap.
 - The engine holds a `cover` or `defend` plan for the same rival after the pit-lane latch clears.
   It keeps the plan through the current or next lap during green racing with enough laps left.
   A phase change, safety car, cheap stop, or later lap clears the held plan.

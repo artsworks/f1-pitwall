@@ -119,6 +119,7 @@ def optimise(
     rival_behind: RivalView | None,
     gap_ahead_s: float,
     gap_behind_s: float,
+    rival_behind_gap_s: float | None = None,
     pit_exit_clean: bool,
     restricted: bool,
     mode: Mapping[str, object],
@@ -126,6 +127,7 @@ def optimise(
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
+    cover_gap_s = gap_behind_s if rival_behind_gap_s is None else rival_behind_gap_s
     min_left, last_k = _candidate_range(laps_remaining, th)
     # The fresh stint uses the current fit's base (compound priors differ in
     # absolute pace from one car to the next) with the fresh prior's slope.
@@ -193,7 +195,7 @@ def optimise(
         projections
         and rival_behind is not None
         and rival_behind.pitted
-        and math.isfinite(gap_behind_s)
+        and math.isfinite(cover_gap_s)
     ):
         their_gain = 0.0
         for j in range(uc_laps):
@@ -201,7 +203,7 @@ def optimise(
                 _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
-        cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - gap_behind_s, 2)
+        cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s, 2)
 
     if not projections:
         return PitPlan(
@@ -272,7 +274,7 @@ def optimise(
     behind_ok = (
         rival_behind is not None
         and rival_behind.pitted
-        and gap_behind_s < _f(th, "cover_max_gap_s", 3.0)
+        and cover_gap_s < _f(th, "cover_max_gap_s", 3.0)
     )
     if behind_ok and cover_s + _f(th, "cover_margin_s", 0.5) > 0:
         assert rival_behind is not None

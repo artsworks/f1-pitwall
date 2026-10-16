@@ -106,6 +106,22 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
     }
 
 
+def _true_behind_view(snap: Snapshot) -> tuple[RivalView | None, float]:
+    idx = snap.true_rival_behind_idx
+    if idx < 0:
+        return None, math.inf
+    pace_ms = snap.rival_behind_pace_ms if idx == snap.rival_behind_idx else 0
+    return (
+        RivalView(
+            idx,
+            snap.true_rival_behind_name,
+            pace_ms,
+            snap.true_rival_behind_pitted,
+        ),
+        snap.true_rival_behind_gap_s,
+    )
+
+
 _MENU_CLIENT_OPS = {
     "up": "menu_up",
     "down": "menu_down",
@@ -1661,16 +1677,7 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
-        behind = (
-            RivalView(
-                snap.rival_behind_idx,
-                snap.rival_behind_name,
-                snap.rival_behind_pace_ms,
-                snap.rival_behind_pitted,
-            )
-            if snap.rival_behind_idx >= 0
-            else None
-        )
+        behind, behind_gap_s = _true_behind_view(snap)
         mode = self.mode()
         plan = optimise(
             lap_num=snap.lap_num,
@@ -1688,6 +1695,7 @@ class Engine:
             rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
             gap_behind_s=snap.gap_behind_s,
+            rival_behind_gap_s=behind_gap_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
             mode=mode,
