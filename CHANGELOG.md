@@ -10,6 +10,49 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.20.1 (2026-10-16)
+
+### Bug Fixes
+
+- Handle time rewinds and zero closing rates
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Log predicate evaluation failures ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Surface suppressed rule evaluation errors
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Surface swallowed rule and predicate errors, enforce BLE001, add rule replay coverage
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+### Chores
+
+- Enforce BLE001 and remove dead declarations
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+### Testing
+
+- Cache race_stream and precompile packet layouts
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Guard that every YAML rule has a replay test
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Replay coverage for rules without tests ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+- Shared Snapshot and SessionState factories
+  ([#102](https://github.com/artsworks/f1-pitwall/pull/102),
+  [`b47a564`](https://github.com/artsworks/f1-pitwall/commit/b47a564f3fd9084e7d3b07ccf0bf1199fffe0f93))
+
+
 ## v0.20.0 (2026-10-16)
 
 ### Bug Fixes

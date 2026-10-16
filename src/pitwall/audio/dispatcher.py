@@ -6,6 +6,7 @@ from __future__ import annotations
 import collections
 import heapq
 import itertools
+import logging
 import math
 import random
 import time
@@ -20,6 +21,8 @@ from pitwall.input.press import Press
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate
 from pitwall.state.session import Snapshot, snapshot_scalars
+
+log = logging.getLogger(__name__)
 
 _VERBOSITY_PRIORITIES = {
     "silent": set(),
@@ -143,6 +146,7 @@ class Dispatcher:
         self.metrics.queue_source = self.queue_status
         self.budget_override = budget_override
         self._queue: list[_Queued] = []
+        self._noted_predicate_errors: set[tuple[str, str]] = set()
         self._dropped: collections.deque[str] = collections.deque()
         self._counter = itertools.count()
         self._last_fired: dict[str, float] = {}  # rule_id -> t
@@ -182,6 +186,13 @@ class Dispatcher:
     @property
     def last_call_t(self) -> float | None:
         return self._last_call_t
+
+    def _note_predicate_error(self, rule_id: str, site: str, exc: Exception) -> None:
+        key = (rule_id, site)
+        if key in self._noted_predicate_errors:
+            return
+        self._noted_predicate_errors.add(key)
+        log.warning("call %s predicate failed at %s: %s", rule_id, site, exc)
 
     # -- submission ----------------------------------------------------------
 
@@ -564,8 +575,8 @@ class Dispatcher:
             if rival.current is not None:
                 try:
                     holds = bool(rival.current(snapshot))
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - failed rival checks keep the call
+                    self._note_predicate_error(rival.rule_id, "rival.current", exc)
             if supersedes or not holds:
                 self._drop_queued(rival.id, "superseded")
                 continue
@@ -669,8 +680,8 @@ class Dispatcher:
                         self._log_call(call, "suppressed", "revalidation")
                         self._booking_undo.pop(call.id, None)
                         continue
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - failed checks keep the queued call
+                    self._note_predicate_error(call.rule_id, "drain.still_true", exc)
             if call.location_ref and self._coherence_conflict(call, now):
                 self._log_call(call, "suppressed", "coherence")
                 self._booking_undo.pop(call.id, None)
@@ -848,8 +859,8 @@ class Dispatcher:
             try:
                 if not call.still_true(self.latest_snapshot):
                     return False
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - failed checks keep the digest call
+                self._note_predicate_error(call.rule_id, "digest.still_true", exc)
         return not (call.location_ref and self._coherence_conflict(call, now))
 
     def _quiet_stretch(self, snapshot: Snapshot | None) -> bool:

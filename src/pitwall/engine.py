@@ -372,6 +372,7 @@ class Engine:
         self.alive_path: Path | None = None  # touched each live loop for the supervisor
         self._alive_t = -math.inf
         self.tick_errors = 0
+        self._rule_errors_logged: set[tuple[str, str]] = set()
         self.db: Any = dispatcher.log.db
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
@@ -456,7 +457,7 @@ class Engine:
             if not worker.wait_ready(10.0):
                 raise worker.error or RuntimeError("recogniser did not become ready")
             self.enable_voice(worker)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - log voice startup failure and disable voice
             if worker is not None:
                 worker.close()
             log.warning("voice unavailable (%s); disabled", exc)
@@ -855,6 +856,7 @@ class Engine:
                     self._pending_pit_loss = None
         self.dispatcher.reset_session(uid)
         self._held_plan = None
+        self._rule_errors_logged.clear()
         self._reset_energy_lap_tracking()
         self.menu.close()
         self._voice_close(self.clock.now(), "session")
@@ -1980,6 +1982,21 @@ class Engine:
             return []
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
+            for suppressed in result.suppressed:
+                if suppressed.reason not in {"expr_error", "clear_error"}:
+                    continue
+                key = (suppressed.rule.id, suppressed.reason)
+                if key in self._rule_errors_logged:
+                    continue
+                self._rule_errors_logged.add(key)
+                self.dispatcher.log.write(
+                    {
+                        "t": now,
+                        "outcome": "rule_error",
+                        "rule_id": None,
+                        "text": f"{suppressed.rule.id} {suppressed.reason}: {suppressed.detail}",
+                    }
+                )
             self.dispatcher.submit(result.candidates, snapshot)
         return self.dispatcher.drain(now)
 

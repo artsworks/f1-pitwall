@@ -200,7 +200,7 @@ def main() -> int:
                 raise RuntimeError("child output does not contain an aligned dashboard URL")
             if "Traceback (most recent call last)" in captured:
                 raise RuntimeError("child output contains a traceback")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - record smoke failure and clean up child process
             failure = str(exc)
         finally:
             if proc is not None:

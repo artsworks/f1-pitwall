@@ -1033,7 +1033,6 @@ class SessionState:
         self._race = RacePhase()
         self.race_phase = "formation"
         self.sc_laps = 0
-        self._prev_lap_num = 0
         self._cars_pitted_this_lap: set[int] = set()
         self._pitted_lap_snapshot: set[int] = set()
         self._restricted_streak = 0

@@ -355,7 +355,7 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
     snap = SessionState().snapshot(0.0)
     try:
         result = engine.evaluate(snap)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - print the rules-check failure for the CLI
         print(f"rules check FAILED: {e}")
         return 1
     print(

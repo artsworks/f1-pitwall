@@ -304,7 +304,7 @@ class RecordingRotator:
     def _compress_file(self, path: Path) -> None:
         try:
             self.last_path = compress_recording(path, remove=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 - keep the uncompressed recording after compression fails
             log.exception("could not compress %s; kept the uncompressed recording", path)
             try:
                 path.with_name(path.name + ZSTD_SUFFIX).unlink(missing_ok=True)

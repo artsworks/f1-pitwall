@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from pitwall.ingest import Ingest
@@ -332,6 +334,14 @@ def test_ema_scalar() -> None:
     assert e.value == 100.0
     e.update(3.0, 0.0)  # dt == tau -> retains e^-1 of the old value
     assert e.value == pytest.approx(100.0 * 0.3678794411, abs=1.0)
+
+
+def test_ema_ignores_small_time_rewind_without_moving_timestamp() -> None:
+    e = Ema(3.0)
+    assert e.update(10.0, 0.0) == 0.0
+    assert e.update(9.0, 100.0) == 0.0
+    assert e.last_t == 10.0
+    assert e.update(13.0, 100.0) == pytest.approx(100.0 * (1.0 - math.exp(-1.0)))
 
 
 def test_car_damage_reaches_snapshot_and_payload() -> None:

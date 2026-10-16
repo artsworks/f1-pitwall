@@ -20,6 +20,7 @@ from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.input.menu import (
     DriverMenu,
     ReplyPicker,
+    _holds,
     answer,
     shortcut_warnings,
     validate,
@@ -28,9 +29,10 @@ from pitwall.input.menu import (
 )
 from pitwall.input.press import Press
 from pitwall.protocol.header import PacketId
-from pitwall.state.session import Damage, Snapshot
+from pitwall.state.session import Damage
 from pitwall.store.db import Database
 
+from .factories import make_snapshot
 from .race_synth import RaceSpec, race_stream
 from .synth import pack_packet, write_packet_stream
 
@@ -42,6 +44,18 @@ RIGHT = 0x00800000  # page cycle; confirms while the menu is open
 LEFT = 0x01000000  # mindset; closes while the menu is open
 SD6, SD7, SD8 = 0x02000000, 0x04000000, 0x08000000
 SD9, SD10, SD11, SD12 = 0x10000000, 0x20000000, 0x40000000, 0x80000000
+
+
+def test_predicate_error_warns_once_and_hides_item(caplog: pytest.LogCaptureFixture) -> None:
+    source = "missing_menu_name_for_warning_test"
+
+    with caplog.at_level("WARNING", logger="pitwall.input.menu"):
+        assert not _holds(source, {})
+        assert not _holds(source, {})
+
+    warnings = [record for record in caplog.records if record.name == "pitwall.input.menu"]
+    assert len(warnings) == 1
+    assert source in warnings[0].getMessage()
 
 
 def _butn(status: int, t: float) -> bytes:
@@ -209,7 +223,7 @@ def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
         overrides=overrides,
     )
     item = engine.store.current().menu.items[0]
-    snapshot = Snapshot(now=1.0, lap_num=3, fuel_remaining_laps=4.2)
+    snapshot = make_snapshot(now=1.0, lap_num=3, fuel_remaining_laps=4.2)
 
     engine._menu_answer(item, 1.0, snapshot, "test")
     engine.store.set_override(
@@ -288,25 +302,25 @@ def test_answers_and_reply_variants_rotate() -> None:
             "fuel_tight": ["Push, fuel's tight. Plus {margin} laps."],
         },
     )
-    snap = Snapshot(now=0.0, gap_ahead_s=0.8)
+    snap = make_snapshot(now=0.0, gap_ahead_s=0.8)
     case, values = answer(item, snap, "balanced")
     assert case == "attack"
     picker = ReplyPicker()
     assert picker.pick(item, case, values) == "Push. 0.8 to the car ahead."
     assert picker.pick(item, case, values) == "Attack at 0.8."
     assert picker.pick(item, case, values) == "Push. 0.8 to the car ahead."
-    assert answer(item, Snapshot(now=0.0, gap_ahead_s=math.inf), "balanced")[0] == "push"
+    assert answer(item, make_snapshot(now=0.0, gap_ahead_s=math.inf), "balanced")[0] == "push"
     case, values = answer(
-        item, Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.5), "balanced"
+        item, make_snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=-0.5), "balanced"
     )
     assert case == "save_fuel" and values["margin"] == "0.5"
     case, values = answer(
-        item, Snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=0.2), "balanced"
+        item, make_snapshot(now=0.0, fuel_source="measured", fuel_margin_laps=0.2), "balanced"
     )
     assert case == "fuel_tight" and values["margin"] == "0.2"
     assert picker.pick(item, case, values) == "Push, fuel's tight. Plus 0.2 laps."
     under = MenuItemModel(id="understeer", label="Understeer", kind="opinion", topic="balance")
-    assert answer(under, Snapshot(now=0.0, front_brake_bias=57), "b")[1]["bias_to"] == "56"
+    assert answer(under, make_snapshot(now=0.0, front_brake_bias=57), "b")[1]["bias_to"] == "56"
     pit = MenuItemModel(
         id="pit",
         label="Pit now?",
@@ -315,7 +329,7 @@ def test_answers_and_reply_variants_rotate() -> None:
             "no_stop": ["Stay out to the end. {laps_left} to go."],
         },
     )
-    soon = Snapshot(
+    soon = make_snapshot(
         now=0.0,
         pit_plan="box_in_n",
         pit_plan_lap=26,
@@ -327,7 +341,7 @@ def test_answers_and_reply_variants_rotate() -> None:
     case, values = answer(pit, soon, "balanced")
     assert case == "soon"
     assert ReplyPicker().pick(pit, case, values) == "Stay out, box lap 26. Window 24 to 28."
-    no_stop = Snapshot(now=0.0, pit_plan="no_stop", laps_remaining=5)
+    no_stop = make_snapshot(now=0.0, pit_plan="no_stop", laps_remaining=5)
     case, values = answer(pit, no_stop, "balanced")
     assert case == "no_stop"
     assert ReplyPicker().pick(pit, case, values) == "Stay out to the end. 5 to go."
@@ -522,11 +536,11 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
             "unknown": ["No timing yet.", "Still waiting on timing."],
         },
     )
-    clear = Snapshot(now=0.0, session_kind="race", position=4, laps_remaining=12)
+    clear = make_snapshot(now=0.0, session_kind="race", position=4, laps_remaining=12)
     case, values = answer(fight, clear, "b")
     assert case == "none" and values["pos"] == "4"
     assert ReplyPicker().pick(fight, case, values) == "P4, 12 to go. Clear air."
-    practice = Snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
+    practice = make_snapshot(now=0.0, session_kind="practice", position=4, laps_remaining=1)
     case, values = answer(fight, practice, "b")
     assert case == "no_time"
     assert ReplyPicker().pick(fight, case, values) == "No clean lap on the board yet."
@@ -537,7 +551,7 @@ def test_fight_answers_in_race_and_non_race_sessions() -> None:
         ReplyPicker().pick(fight, case, values)
         == "P4 on the times. Best lap 1 minute 21.3 seconds."
     )
-    snap = Snapshot(
+    snap = make_snapshot(
         now=0.0,
         session_kind="race",
         position=4,
@@ -566,7 +580,7 @@ def test_fight_reports_unknown_position_before_timing(session_kind: str) -> None
         label="Fight",
         replies={"unknown": ["No timing yet.", "Still waiting on timing."]},
     )
-    snapshot = Snapshot(
+    snapshot = make_snapshot(
         now=0.0,
         session_kind=session_kind,
         position=0,
@@ -633,7 +647,7 @@ def test_wet_tyre_and_rain_answers() -> None:
     tyres = MenuItemModel(id="tyres", label="Tyres")
     rain = MenuItemModel(id="rain", label="Rain")
     # Mean wear 55 would hide a front at 67: the worst corner decides.
-    worn = Snapshot(
+    worn = make_snapshot(
         now=0.0,
         tyre_compound=7,
         tyre_age_laps=10,
@@ -644,7 +658,9 @@ def test_wet_tyre_and_rain_answers() -> None:
     case, values = answer(tyres, worn, "b")
     assert case == "gone" and values["wear"] == "67"
     # Already on inters with an inter crossover forecast: stay out.
-    on_inters = Snapshot(now=0.0, tyre_compound=7, weather_crossover="to_inter", rain_pct_in_30=83)
+    on_inters = make_snapshot(
+        now=0.0, tyre_compound=7, weather_crossover="to_inter", rain_pct_in_30=83
+    )
     assert answer(rain, on_inters, "b")[0] == "right_tyre"
     # On slicks the forecast only warns; it never says box.
     on_slicks = dataclasses.replace(on_inters, tyre_compound=17)
@@ -659,30 +675,30 @@ def test_wet_tyre_and_rain_answers() -> None:
 def test_pit_answer_judges_tyres_to_the_end() -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
     base = dict(now=0.0, laps_remaining=10, wear_max_pct=40.0, tyre_age_laps=15, position=5)
-    short = Snapshot(**base, laps_of_pace=6.0)  # type: ignore[arg-type]
+    short = make_snapshot(**base, laps_of_pace=6.0)  # type: ignore[arg-type]
     assert answer(pit, short, "b")[0] == "tyres_short"
-    fight = Snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=200.0, pit_loss_s=20.0)  # type: ignore[arg-type]
+    fight = make_snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=200.0, pit_loss_s=20.0)  # type: ignore[arg-type]
     case, v = answer(pit, fight, "b")
     assert case == "box_fight" and v["gain"] == "30.0" and v["loss"] == "20"
-    hold = Snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=50.0, pit_loss_s=20.0)  # type: ignore[arg-type]
+    hold = make_snapshot(**base, laps_of_pace=12.0, deg_ms_per_lap=50.0, pit_loss_s=20.0)  # type: ignore[arg-type]
     case, v = answer(pit, hold, "b")
     assert case == "hold" and v["pos"] == "5"
-    planned = Snapshot(**base, laps_of_pace=6.0, pit_plan="box_now")  # type: ignore[arg-type]
+    planned = make_snapshot(**base, laps_of_pace=6.0, pit_plan="box_now")  # type: ignore[arg-type]
     assert answer(pit, planned, "b")[0] == "box_now"
-    assert answer(pit, Snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
+    assert answer(pit, make_snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
 
 
 def test_pit_answer_maps_cover_to_box_and_defend_to_stay_out() -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
-    cover = Snapshot(now=0.0, laps_remaining=8, pit_plan="cover")
-    defend = Snapshot(now=0.0, laps_remaining=0, pit_plan="defend")
+    cover = make_snapshot(laps_remaining=8, pit_plan="cover")
+    defend = make_snapshot(laps_remaining=0, pit_plan="defend")
     assert answer(pit, cover, "b")[0] == "box_now"
     assert answer(pit, defend, "b")[0] == "stay_out"
 
 
 def test_pit_answer_accounts_for_front_wing_repair() -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
-    snap = Snapshot(
+    snap = make_snapshot(
         now=0.0,
         laps_remaining=3,
         front_wing_pit_status="box",
