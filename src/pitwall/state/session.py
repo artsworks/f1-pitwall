@@ -63,9 +63,11 @@ from pitwall.state.race import (
     penalty_standing,
     relevant_rivals,
     second_rivals,
+    stop_adjusted_gaps,
+    true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
-from pitwall.strategy.plans import StrategyPlan
+from pitwall.strategy.plans import DRY, StrategyPlan
 
 if TYPE_CHECKING:
     from pitwall.setup.evaluate import Recommendation
@@ -448,6 +450,16 @@ class Snapshot:
     rival_ahead_idx: int = -1
     rival_behind_idx: int = -1
     rival_pit_exit_idx: int = -1
+    true_rival_ahead_idx: int = -1
+    true_rival_ahead_name: str = ""
+    true_rival_ahead_gap_s: float = math.inf
+    true_rival_ahead_stops_owed: int = 0
+    true_rival_ahead_pitted: bool = False
+    true_rival_behind_idx: int = -1
+    true_rival_behind_name: str = ""
+    true_rival_behind_gap_s: float = math.inf
+    true_rival_behind_stops_owed: int = 0
+    true_rival_behind_pitted: bool = False
     rival_ahead_pace_ms: int = 0
     rival_behind_pace_ms: int = 0
     rival_pit_exit_pace_ms: int = 0
@@ -964,6 +976,7 @@ class SessionState:
         self._gap_lines: list[dict[str, tuple[int, float]]] = []
         self._ahead_latch: tuple[int, float] = (-1, math.inf)
         self._behind_latch: tuple[int, float] = (-1, math.inf)
+        self._true_rel: dict[int, float] = {}
         self.cars_damage: Sequence[Any] | None = None
 
         # M2 packet state
@@ -1218,6 +1231,7 @@ class SessionState:
         self._gap_lines = []
         self._ahead_latch = (-1, math.inf)
         self._behind_latch = (-1, math.inf)
+        self._true_rel = {}
         self._straight_since = None
         for cb in self.rewind_listeners:
             cb(t)
@@ -2737,6 +2751,26 @@ class SessionState:
         prev_end = stints[-2].end_lap if len(stints) >= 2 else 0
         return int(max(0, pkt.num_laps - prev_end))
 
+    def _stops_owed(self, i: int, car: CarLap) -> int:
+        if self._is_sprint():
+            return 0
+        if not self._th("plan_two_compound_rule", 1.0):
+            return 0
+        if (
+            self.cars_status is not None
+            and 0 <= i < len(self.cars_status)
+            and int(self.cars_status[i].visual_tyre_compound) not in DRY
+        ):
+            return 0
+        history = self._histories.get(i)
+        if history is None:
+            return 1 if car.num_pit_stops == 0 else 0
+        stints = history.tyre_stints[: history.num_tyre_stints]
+        compounds = [int(stint.tyre_visual_compound) for stint in stints]
+        if any(compound not in DRY for compound in compounds):
+            return 0
+        return int(len({compound for compound in compounds if compound in DRY}) < 2)
+
     def _fastest_lap_view(self, st: float, field_best: tuple[int, ...]) -> dict[str, Any]:
         if self._fastest_lap is None:
             return {}
@@ -2950,6 +2984,40 @@ class SessionState:
             return self.participants[i].name if 0 <= i < len(self.participants) else ""
 
         pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
+        if 0 <= self._player_idx < len(cars):
+            owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
+            stop_pit_s = pit_s
+            if self.safety_car_status != 0:
+                stop_pit_s = (
+                    model.sc_pit_loss_s
+                    if model.sc_pit_loss_s > 0
+                    else self._th("pit_loss_sc_default_s", 8.0)
+                )
+            fresh = stop_adjusted_gaps(
+                cars, self._player_idx, self.track_length_m, ref_speed, owed, stop_pit_s
+            )
+            player = cars[self._player_idx]
+            player_history = self._histories.get(self._player_idx)
+            player_history_stale = player.num_pit_stops >= getattr(
+                player_history, "num_tyre_stints", 0
+            )
+            frozen = player.pit_status != 0 or (
+                self.race_phase == "out_lap" and player_history_stale
+            )
+            if not frozen:
+                held: dict[int, float] = {}
+                for i, gap in fresh.items():
+                    history = self._histories.get(i)
+                    history_stale = cars[i].num_pit_stops >= getattr(history, "num_tyre_stints", 0)
+                    keep = cars[i].pit_status != 0 or (i in pitted and history_stale)
+                    held[i] = self._true_rel.get(i, gap) if keep else gap
+                self._true_rel = held
+        else:
+            fresh = {}
+            self._true_rel = {}
+            owed = []
+        true_ahead_i, true_behind_i = true_neighbours(self._true_rel, cars, self.position)
+
         # Pit-exit clean air: reuse the quali release window with the pit
         # loss as the out-lap and the race clean-gap threshold.
         release = release_window(
@@ -3015,6 +3083,24 @@ class SessionState:
             rival_behind2_gap_s=gap_behind2,
             rival_behind2_overtake=self._rival_overtake_active(behind2_i),
             rival_pit_exit_idx=exit_i,
+            true_rival_ahead_idx=true_ahead_i,
+            true_rival_ahead_name=name_of(true_ahead_i),
+            true_rival_ahead_gap_s=(
+                -self._true_rel[true_ahead_i] if true_ahead_i >= 0 else math.inf
+            ),
+            true_rival_ahead_stops_owed=(
+                owed[true_ahead_i] if true_ahead_i >= 0 and true_ahead_i < len(owed) else 0
+            ),
+            true_rival_ahead_pitted=true_ahead_i in pitted if true_ahead_i >= 0 else False,
+            true_rival_behind_idx=true_behind_i,
+            true_rival_behind_name=name_of(true_behind_i),
+            true_rival_behind_gap_s=(
+                self._true_rel[true_behind_i] if true_behind_i >= 0 else math.inf
+            ),
+            true_rival_behind_stops_owed=(
+                owed[true_behind_i] if true_behind_i >= 0 and true_behind_i < len(owed) else 0
+            ),
+            true_rival_behind_pitted=true_behind_i in pitted if true_behind_i >= 0 else False,
             rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
             rival_pit_exit_pace_ms=pace_of(exit_i) if exit_i >= 0 else 0,

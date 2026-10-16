@@ -640,6 +640,20 @@ def state_payload(
                 "pitted": snapshot.rival_behind_pitted,
                 "in_pit_lane": snapshot.rival_behind_in_pit_lane,
             },
+            "true_rival_ahead": {
+                "idx": snapshot.true_rival_ahead_idx,
+                "name": snapshot.true_rival_ahead_name,
+                "gap_s": _finite(snapshot.true_rival_ahead_gap_s),
+                "stops_owed": snapshot.true_rival_ahead_stops_owed,
+                "pitted": snapshot.true_rival_ahead_pitted,
+            },
+            "true_rival_behind": {
+                "idx": snapshot.true_rival_behind_idx,
+                "name": snapshot.true_rival_behind_name,
+                "gap_s": _finite(snapshot.true_rival_behind_gap_s),
+                "stops_owed": snapshot.true_rival_behind_stops_owed,
+                "pitted": snapshot.true_rival_behind_pitted,
+            },
             "rival_pit_exit": {
                 "idx": snapshot.rival_pit_exit_idx,
                 "name": snapshot.rival_pit_exit_name,

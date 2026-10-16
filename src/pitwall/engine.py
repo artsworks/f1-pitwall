@@ -106,6 +106,22 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
     }
 
 
+def _true_behind_view(snap: Snapshot) -> tuple[RivalView | None, float]:
+    idx = snap.true_rival_behind_idx
+    if idx < 0:
+        return None, math.inf
+    pace_ms = snap.rival_behind_pace_ms if idx == snap.rival_behind_idx else 0
+    return (
+        RivalView(
+            idx,
+            snap.true_rival_behind_name,
+            pace_ms,
+            snap.true_rival_behind_pitted,
+        ),
+        snap.true_rival_behind_gap_s,
+    )
+
+
 _MENU_CLIENT_OPS = {
     "up": "menu_up",
     "down": "menu_down",
@@ -396,7 +412,7 @@ class Engine:
         self._green_pit_loss_s = 0.0
         self._green_pit_samples_s: list[float] = []
         self._sc_pit_loss_s = 0.0
-        self._plan_mc_cache: dict[tuple[int | None, int, int, int], McResult | None] = {}
+        self._plan_mc_cache: dict[tuple[int | None, int, int, int, str, int], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
@@ -1622,6 +1638,7 @@ class Engine:
                 pit_loss_source=(
                     self.pit_loss_prior.source if self.pit_loss_prior is not None else ""
                 ),
+                sc_pit_loss_s=self._sc_pit_loss_s,
                 fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
                 fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
                 fuel_source=fb.source if fb is not None else "",
@@ -1661,16 +1678,7 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
-        behind = (
-            RivalView(
-                snap.rival_behind_idx,
-                snap.rival_behind_name,
-                snap.rival_behind_pace_ms,
-                snap.rival_behind_pitted,
-            )
-            if snap.rival_behind_idx >= 0
-            else None
-        )
+        behind, behind_gap_s = _true_behind_view(snap)
         mode = self.mode()
         plan = optimise(
             lap_num=snap.lap_num,
@@ -1688,6 +1696,7 @@ class Engine:
             rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
             gap_behind_s=snap.gap_behind_s,
+            rival_behind_gap_s=behind_gap_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
             mode=mode,
@@ -1695,7 +1704,14 @@ class Engine:
         )
         if snap.safety_car_status == 0:
             session_uid = self.state.session_uid
-            key = (session_uid, snap.lap_num, plan.lap, snap.tyre_age_laps)
+            key = (
+                session_uid,
+                snap.lap_num,
+                plan.lap,
+                snap.tyre_age_laps,
+                plan.plan,
+                plan.rival_idx,
+            )
             if key not in self._plan_mc_cache:
                 uid = session_uid if session_uid is not None else 0
                 rng = np.random.default_rng(
@@ -1715,6 +1731,8 @@ class Engine:
                     mode=mode,
                     th=settings.thresholds,
                     rng=rng,
+                    plan_name=plan.plan,
+                    cover_gap_s=behind_gap_s,
                 )
             plan = scale_plan(plan, self._plan_mc_cache[key])
         plan, self._held_plan = _hold_cover_plan(

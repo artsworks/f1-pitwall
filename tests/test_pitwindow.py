@@ -253,6 +253,15 @@ def test_cover_when_pitted_rival_behind_would_jump_us() -> None:
     assert p.risk == 0.0
 
 
+def test_true_rival_gap_overrides_physical_gap_for_cover() -> None:
+    p = run(
+        rival_behind=RivalView(2, "PIASTRI", 90_000, True),
+        gap_behind_s=1.0,
+        rival_behind_gap_s=3.5,
+    )
+    assert p.plan not in {"cover", "defend"}
+
+
 def test_defend_when_gap_beats_pitted_rival_gain() -> None:
     behind = RivalView(2, "PIASTRI", 90_000, True)
     p = run(

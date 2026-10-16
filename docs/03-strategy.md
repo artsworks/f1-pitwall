@@ -74,6 +74,7 @@ lap_time_ms = base_ms
 - The engine solves `deg * age + deg2 * age² = tyre_cliff_ms`. Quadratic fits use the positive root for `cliff_age`.
 - Short fits use or blend toward a prior. The planner shrinks both degradation terms by fit error.
 - The planner multiplies deterministic plan confidence by Monte Carlo agreement. It keeps `plan.lap` unchanged and does not scale `cheap_stop`.
+- For `cover` and `defend`, agreement counts how often sampled cover math repeats the plan's decision.
 - Race priors are scoped by total race laps, so different race distances do not mix.
   Practice values are unscoped.
 - Rival pace comes from Session History lap times, filtered the same way.
@@ -141,7 +142,7 @@ These limits suppress values and plans when too few laps remain to exploit the t
 When `laps_remaining <= th.pit_min_laps_left`, the optimiser returns `no_stop` with both values at zero.
 The `rival_ahead_pitted` rule also stays silent at this limit.
 
-**Cover the undercut.** When the car behind pits, the optimiser compares its projected fresh-tyre gain with our gap. It calls us to box if the rival could jump us, or stay out when the gap is safe.
+**Cover the undercut.** When the car behind pits, the optimiser compares its projected fresh-tyre gain with our gap. It calls us to box if the rival could jump us, or stay out when the gap is safe. Cover and defend use the true rival behind in a stop-adjusted order. The order adds one pit loss per owed stop, using the two-dry-compound minimum. The system holds gaps for cars in the pit lane and recomputes the order under SC/VSC with the SC pit loss. Cars on inter or wet tyres and sprint races owe no stop. The order excludes lapped cars.
 
 **Free stop.** A position-neutral stop is available when the gap to the car behind exceeds
 measured pit loss.

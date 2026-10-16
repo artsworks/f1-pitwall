@@ -14,7 +14,7 @@ bounce the phase.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 GAP_TOLERANCE_S = 3.0
@@ -28,6 +28,72 @@ def gap_plausible(gap_ms: int, dist_m: float, speed_mps: float) -> bool:
         return True
     est = max(0.0, dist_m) / speed_mps
     return abs(gap_ms / 1000.0 - est) <= max(GAP_TOLERANCE_S, 0.5 * est)
+
+
+def _race_time_s(c: Any, leader: Any, speed_mps: float, is_leader: bool) -> float:
+    if is_leader:
+        return 0.0
+    dist = leader.total_distance - c.total_distance
+    if gap_plausible(c.delta_to_race_leader_ms, dist, speed_mps):
+        return float(c.delta_to_race_leader_ms) / 1000.0
+    if speed_mps > 0:
+        return float(max(0.0, dist)) / speed_mps
+    return float(max(0, c.delta_to_race_leader_ms)) / 1000.0
+
+
+def stop_adjusted_gaps(
+    cars: Sequence[Any],
+    player_idx: int,
+    track_m: float,
+    speed_mps: float,
+    owed: Sequence[int],
+    pit_loss_s: float,
+) -> dict[int, float]:
+    if not (0 <= player_idx < len(cars)):
+        return {}
+    me = cars[player_idx]
+    if getattr(me, "result_status", 0) != 2 or getattr(me, "car_position", 0) <= 0:
+        return {}
+    road = sorted(
+        (
+            (getattr(c, "car_position", 0), i)
+            for i, c in enumerate(cars)
+            if getattr(c, "car_position", 0) > 0 and getattr(c, "result_status", 0) in (2, 3)
+        )
+    )
+    leader = next((cars[i] for pos, i in road if pos == 1), me)
+    race_me = _race_time_s(me, leader, speed_mps, me.car_position == 1)
+    me_total = race_me + me.penalties
+    rel: dict[int, float] = {}
+    for i, c in enumerate(cars):
+        if (
+            i == player_idx
+            or getattr(c, "result_status", 0) != 2
+            or getattr(c, "car_position", 0) <= 0
+            or abs(me.total_distance - c.total_distance) >= track_m
+        ):
+            continue
+        race_i = _race_time_s(c, leader, speed_mps, c.car_position == 1)
+        rel[i] = race_i + c.penalties - me_total + (owed[i] - owed[player_idx]) * pit_loss_s
+    return rel
+
+
+def true_neighbours(
+    rel: Mapping[int, float], cars: Sequence[Any], player_pos: int
+) -> tuple[int, int]:
+    ahead = [
+        (gap, getattr(cars[i], "car_position", 0), i)
+        for i, gap in rel.items()
+        if gap < 0 or (gap == 0 and getattr(cars[i], "car_position", 0) < player_pos)
+    ]
+    behind = [
+        (gap, getattr(cars[i], "car_position", 0), i)
+        for i, gap in rel.items()
+        if gap > 0 or (gap == 0 and getattr(cars[i], "car_position", 0) > player_pos)
+    ]
+    ahead_idx = max(ahead)[2] if ahead else -1
+    behind_idx = min(behind)[2] if behind else -1
+    return ahead_idx, behind_idx
 
 
 class RacePhase:
@@ -276,16 +342,7 @@ def penalty_standing(
         c = cars[i]
         if p > pos and me.total_distance - c.total_distance >= track_m:
             continue
-        if p == 1:
-            race_time = 0.0
-        else:
-            dist = leader.total_distance - c.total_distance
-            if gap_plausible(c.delta_to_race_leader_ms, dist, speed_mps):
-                race_time = c.delta_to_race_leader_ms / 1000.0
-            elif speed_mps > 0:
-                race_time = max(0.0, dist) / speed_mps
-            else:
-                race_time = max(0, c.delta_to_race_leader_ms) / 1000.0
+        race_time = _race_time_s(c, leader, speed_mps, p == 1)
         total[i] = race_time + c.penalties
     if player_idx not in total or not any(cars[i].penalties for i in total):
         return pos, math.inf, -1
