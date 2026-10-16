@@ -257,6 +257,26 @@ def test_trim_preserves_source_profile_and_rejects_upgrades(tmp_path: Path) -> N
     )
 
 
+def test_trim_rejects_non_recording_output_name(tmp_path: Path) -> None:
+    source = _write_trim_recording(tmp_path / "race.f1bin")
+    index = index_path_for(source)
+    original_index = index.read_bytes()
+
+    assert main(["trim", str(source), "--out", str(tmp_path / "race.f1idx")]) == 2
+    assert index.read_bytes() == original_index
+    assert main(["trim", str(source), "--out", str(tmp_path / "copy.zip")]) == 2
+
+
+def test_trim_zst_output_does_not_remove_existing_raw(tmp_path: Path) -> None:
+    source = _write_trim_recording(tmp_path / "a.f1bin")
+    other = _write_trim_recording(tmp_path / "b.f1bin")
+    original = other.read_bytes()
+
+    assert main(["trim", str(source), "--out", str(tmp_path / "b.f1bin.zst")]) == 2
+    assert other.read_bytes() == original
+    assert not tmp_path.joinpath("b.f1bin.zst").exists()
+
+
 def test_start_parser_accepts_record_flag() -> None:
     from pitwall.cli import build_parser
 

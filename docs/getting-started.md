@@ -227,7 +227,7 @@ uv run pitwall recordings
 ```
 
 Commands that take a recording (`replay`, `stats`, `report`, `digest`, `tune`,
-`calibrate` and `diff`) accept any of these:
+`calibrate`, `diff` and `trim`) accept any of these:
 
 - nothing or `latest`, for the newest recording
 - the `#` from `pitwall recordings`, such as `1` for the one before the newest

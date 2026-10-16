@@ -184,7 +184,13 @@ def cmd_replay(args: argparse.Namespace) -> int:
 def cmd_trim(args: argparse.Namespace) -> int:
     src = _resolve_recording(args.file, ConfigStore().current())
     dest = Path(args.out)
+    if not dest.name.endswith((".f1bin", ".f1bin.zst")):
+        print("trim: --out must end in .f1bin or .f1bin.zst")
+        return 2
     write_path = dest.with_suffix("") if dest.suffix == ".zst" else dest
+    if write_path != dest and write_path.exists():
+        print(f"trim: {write_path} already exists; remove it or pick another --out")
+        return 2
     source_resolved = src.resolve()
 
     def aliases_source(path: Path) -> bool:
