@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+from functools import partial
 
 import pytest
 
@@ -16,6 +17,10 @@ from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
+
+from .factories import make_snapshot as _make_snapshot
+
+make_snapshot = partial(_make_snapshot, lap_num=1)
 
 
 class CollectSink:
@@ -67,10 +72,6 @@ def _cand(rule_id: str, priority: int = 2, text: str | None = None, **defn: obje
     )
 
 
-def _snap(now: float, lap: int = 1) -> Snapshot:
-    return Snapshot(now=now, lap_num=lap)
-
-
 def _log(buf: io.StringIO) -> list[dict]:
     buf.seek(0)
     return [json.loads(line) for line in buf if line.strip()]
@@ -78,45 +79,45 @@ def _log(buf: io.StringIO) -> list[dict]:
 
 def test_quiet_and_verbosity() -> None:
     d, sink, _ = _dispatcher(quiet=True)
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     assert d.drain(0.0) == []
     assert not sink.spoken
 
     d, sink, _ = _dispatcher(verbosity="critical")
-    d.submit([_cand("p2", priority=2), _cand("p1", priority=1)], _snap(0.0))
+    d.submit([_cand("p2", priority=2), _cand("p1", priority=1)], make_snapshot(0.0))
     calls = d.drain(0.0)
     assert [c.rule_id for c in calls] == ["p1"]
 
 
 def test_cooldown_and_dedupe() -> None:
     d, sink, _ = _dispatcher()
-    d.submit([_cand("a", cooldown_s=30, text="hi")], _snap(0.0))
+    d.submit([_cand("a", cooldown_s=30, text="hi")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("a", cooldown_s=30, text="hi")], _snap(10.0))
+    d.submit([_cand("a", cooldown_s=30, text="hi")], make_snapshot(10.0))
     assert d.drain(10.0) == []  # cooldown
-    d.submit([_cand("b", text="hi")], _snap(10.0))
+    d.submit([_cand("b", text="hi")], make_snapshot(10.0))
     assert d.drain(10.0) == []  # same text inside dedupe window
     fresh = _cand("a", cooldown_s=30, text="hi")
     fresh.trigger_t = 31.0
-    d.submit([fresh], _snap(31.0))
+    d.submit([fresh], make_snapshot(31.0))
     assert len(d.drain(31.0)) == 1
 
 
 def test_budget_and_p1_exempt() -> None:
     d, sink, _ = _dispatcher(calls_per_lap=1, min_gap_s=0.0)
-    d.submit([_cand("a"), _cand("b")], _snap(0.0))
-    d.submit([_cand("c", priority=1)], _snap(0.0))
+    d.submit([_cand("a"), _cand("b")], make_snapshot(0.0))
+    d.submit([_cand("c", priority=1)], make_snapshot(0.0))
     calls = d.drain(0.0)
     assert [c.rule_id for c in calls] == ["c", "a"]  # P1 preempts the budget
 
 
 def test_min_gap() -> None:
     d, sink, _ = _dispatcher(min_gap_s=5.0)
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("b")], _snap(1.0))
+    d.submit([_cand("b")], make_snapshot(1.0))
     assert d.drain(1.0) == []
-    d.submit([_cand("c")], _snap(6.0))
+    d.submit([_cand("c")], make_snapshot(6.0))
     assert len(d.drain(6.0)) == 1
 
 
@@ -129,7 +130,7 @@ def test_still_true_error_warns_once_and_keeps_call(caplog: pytest.LogCaptureFix
 
     candidate.still_true = broken
     with caplog.at_level(logging.WARNING, logger="pitwall.audio.dispatcher"):
-        d.submit([candidate], _snap(0.0))
+        d.submit([candidate], make_snapshot(0.0))
         calls = d.drain(0.0)
         assert len(calls) == 1
         assert sink.spoken == ["still_true_broken"]
@@ -143,7 +144,7 @@ def test_still_true_error_warns_once_and_keeps_call(caplog: pytest.LogCaptureFix
 
 def test_deadline_drop() -> None:
     d, sink, _ = _dispatcher(deadlines_s={1: 5.0, 2: 0.5, 3: 1.5})
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     assert d.drain(2.0) == []  # 2 s past a 0.5 s P2 deadline
     assert not sink.spoken
 
@@ -284,12 +285,12 @@ def test_revalidation() -> None:
     cand = _cand("a")
     cand.still_true = lambda snap: snap.lap_num > 0  # type: ignore[method-assign]
     d, sink, _ = _dispatcher()
-    d.submit([cand], _snap(0.0, lap=1))
+    d.submit([cand], make_snapshot(0.0, lap_num=1))
     assert len(d.drain(0.0)) == 1
 
     cand2 = _cand("b")
     cand2.still_true = lambda snap: False  # type: ignore[method-assign]
-    d.submit([cand2], _snap(1.0, lap=1))
+    d.submit([cand2], make_snapshot(1.0, lap_num=1))
     assert d.drain(1.0) == []
 
 
@@ -301,9 +302,9 @@ def test_stale_queued_call_in_group_is_superseded() -> None:
     new.current = lambda snap: True
     d, sink, buf = _dispatcher()
 
-    d.submit([old], _snap(0.0))
+    d.submit([old], make_snapshot(0.0))
     state["old_holds"] = False
-    d.submit([new], _snap(1.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert len(d._queue) == 1
     assert [call.rule_id for call in d.drain(1.0)] == ["new"]
@@ -320,8 +321,8 @@ def test_queued_conflict_that_still_holds_yields_to_the_newest_call() -> None:
     new = _cand("new", priority=1, conflict_group="slow_car")
     d, _, buf = _dispatcher()
 
-    d.submit([old], _snap(0.0))
-    d.submit([new], _snap(1.0))
+    d.submit([old], make_snapshot(0.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert [item.call.rule_id for item in d._queue] == ["new"]
     assert ("old", "suppressed", "conflict") in {
@@ -335,8 +336,8 @@ def test_supersedes_drops_queued_call_that_still_holds() -> None:
     new = _cand("new", priority=1, supersedes=["old"])
     d, _, buf = _dispatcher()
 
-    d.submit([old], _snap(0.0))
-    d.submit([new], _snap(1.0))
+    d.submit([old], make_snapshot(0.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert len(d._queue) == 1
     assert d._queue[0].call.rule_id == "new"
@@ -351,8 +352,8 @@ def test_stale_conflict_undoes_shared_cooldown_booking() -> None:
     new = _cand("new", priority=1, cooldown_s=30, cooldown_group="shared", conflict_group="g")
     d, _, buf = _dispatcher()
 
-    d.submit([old], _snap(0.0))
-    d.submit([new], _snap(1.0))
+    d.submit([old], make_snapshot(0.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert len(d._queue) == 1
     assert d._queue[0].call.rule_id == "new"
@@ -368,8 +369,8 @@ def test_conflict_removes_the_matching_call_when_queue_keys_tie() -> None:
     new = _cand("new", priority=1, conflict_group="slow_car")
     d, _, _ = _dispatcher()
 
-    d.submit([unrelated, old], _snap(0.0))
-    d.submit([new], _snap(1.0))
+    d.submit([unrelated, old], make_snapshot(0.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert {queued.call.rule_id for queued in d._queue} == {"unrelated", "new"}
 
@@ -388,8 +389,8 @@ def test_real_rule_pairs_drop_stale_queued_call(old_id: str, new_id: str, group:
     new = _cand(new_id, priority=1, conflict_group=group)
     d, _, _ = _dispatcher()
 
-    d.submit([old], _snap(0.0))
-    d.submit([new], _snap(1.0))
+    d.submit([old], make_snapshot(0.0))
+    d.submit([new], make_snapshot(1.0))
 
     assert len(d._queue) == 1
     assert d._queue[0].call.rule_id == new_id
@@ -397,7 +398,7 @@ def test_real_rule_pairs_drop_stale_queued_call(old_id: str, new_id: str, group:
 
 def test_log_records_outcomes() -> None:
     d, sink, buf = _dispatcher()
-    d.submit([_cand("a"), _cand("b", priority=1)], _snap(0.0))
+    d.submit([_cand("a"), _cand("b", priority=1)], make_snapshot(0.0))
     d.drain(0.0)
     records = _log(buf)
     outcomes = {(r["rule_id"], r["outcome"], r["suppressed_by"]) for r in records}
@@ -415,23 +416,23 @@ def _screen_sink() -> CollectSink:
 def test_verbosity_budget_presets() -> None:
     d, sink, _ = _dispatcher(verbosity="normal", min_gap_s=0.0)
     cands = [_cand(f"r{i}") for i in range(6)]
-    d.submit(cands, _snap(0.0))
+    d.submit(cands, make_snapshot(0.0))
     calls = d.drain(0.0)
     assert len(calls) == 4  # normal preset budget
 
     d, sink, _ = _dispatcher(verbosity="coach", min_gap_s=0.0)
-    d.submit([_cand(f"r{i}") for i in range(10)], _snap(0.0))
+    d.submit([_cand(f"r{i}") for i in range(10)], make_snapshot(0.0))
     assert len(d.drain(0.0)) == 8
 
     # explicit calls_per_lap overrides the preset
     d, sink, _ = _dispatcher(verbosity="coach", calls_per_lap=2, min_gap_s=0.0)
-    d.submit([_cand(f"r{i}") for i in range(6)], _snap(0.0))
+    d.submit([_cand(f"r{i}") for i in range(6)], make_snapshot(0.0))
     assert len(d.drain(0.0)) == 2
 
 
 def test_p3_held_until_on_straight() -> None:
     d, sink, _ = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.submit([_cand("p3", priority=3, text="info")], make_snapshot(0.0))
     d.drain(0.0)  # snapshot default on_straight=False
     assert not sink.spoken
     # flip on_straight via a new snapshot on the next submit tick
@@ -441,7 +442,7 @@ def test_p3_held_until_on_straight() -> None:
 
 def test_p3_dropped_at_deadline_off_straight() -> None:
     d, sink, _ = _dispatcher(deadlines_s={3: 1.0}, p3_straight_wait_s=0.0)
-    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.submit([_cand("p3", priority=3, text="info")], make_snapshot(0.0))
     d.drain(0.0)
     d.drain(2.0)  # past the 1 s P3 deadline while never on a straight
     assert not sink.spoken
@@ -449,14 +450,14 @@ def test_p3_dropped_at_deadline_off_straight() -> None:
 
 def test_p3_waits_for_straight_past_base_deadline() -> None:
     d, sink, _ = _dispatcher(deadlines_s={3: 1.5}, min_gap_s=0.0)
-    d.submit([_cand("p3", priority=3, text="lock-up")], _snap(0.0))
+    d.submit([_cand("p3", priority=3, text="lock-up")], make_snapshot(0.0))
     d.drain(0.0)
     d.drain(3.0)  # braking zone into the next corner: still off the straight
     assert not sink.spoken
     d.submit([], Snapshot(now=5.0, lap_num=1, on_straight=True))
     assert d.drain(5.0) and sink.spoken == ["lock-up"]
     d2, sink2, _ = _dispatcher(deadlines_s={3: 1.5}, min_gap_s=0.0)
-    d2.submit([_cand("p3", priority=3, text="late")], _snap(0.0))
+    d2.submit([_cand("p3", priority=3, text="late")], make_snapshot(0.0))
     d2.submit([], Snapshot(now=10.0, lap_num=1, on_straight=True))
     d2.drain(10.0)  # 1.5 s + 8 s straight wait exceeded
     assert not sink2.spoken
@@ -464,24 +465,24 @@ def test_p3_waits_for_straight_past_base_deadline() -> None:
 
 def test_p3_straight_only_disabled() -> None:
     d, sink, _ = _dispatcher(p3_straight_only=False)
-    d.submit([_cand("p3", priority=3, text="info")], _snap(0.0))
+    d.submit([_cand("p3", priority=3, text="info")], make_snapshot(0.0))
     d.drain(0.0)
     assert sink.spoken == ["info"]
 
 
 def test_ack_then_say_again() -> None:
     d, sink, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("a", text="box box")], _snap(0.0))
+    d.submit([_cand("a", text="box box")], make_snapshot(0.0))
     d.drain(0.0)
     original = next(r for r in _log(buf) if r["outcome"] == "fired")
     from pitwall.input.press import Press
 
     # ack with target -> logged, same-lap resubmission suppressed
-    d.on_press(Press("ack", 0.5), _snap(0.5))
-    d.submit([_cand("a", text="box box2")], _snap(1.0))
+    d.on_press(Press("ack", 0.5), make_snapshot(0.5))
+    d.submit([_cand("a", text="box box2")], make_snapshot(1.0))
     assert d.drain(1.0) == []
     # ack with no live target -> say again re-speaks the last call
-    d.on_press(Press("ack", 20.0), _snap(20.0))
+    d.on_press(Press("ack", 20.0), make_snapshot(20.0))
     calls = d.drain(20.0)
     assert len(calls) == 1 and "say_again" in calls[0].tags
     replay = [r for r in _log(buf) if r["outcome"] == "fired"][-1]
@@ -508,16 +509,16 @@ def test_replay_press_grades_original_call_and_quality_counts_it_once() -> None:
             spoken_replies=True,
         ),
     )
-    d.submit([_cand("a", text="box box")], _snap(0.0))
+    d.submit([_cand("a", text="box box")], make_snapshot(0.0))
     original, *_ = d.drain(0.0)
     assert original is not None
 
-    d.on_press(Press("ack", 20.0), _snap(20.0))
-    d.submit([], _snap(20.0))
+    d.on_press(Press("ack", 20.0), make_snapshot(20.0))
+    d.submit([], make_snapshot(20.0))
     (replay,) = d.drain(20.0)
     assert "say_again" in replay.tags
     assert sink.spoken == ["box box", "box box"]
-    d.on_press(Press("ack", 20.5), _snap(20.5))
+    d.on_press(Press("ack", 20.5), make_snapshot(20.5))
 
     grades = db.grades_for_session(uid)
     assert len(grades) == 1
@@ -534,10 +535,10 @@ def test_say_again_ignores_stale_calls() -> None:
     from pitwall.input.press import Press
 
     d, sink, _ = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("a", text="pressures")], _snap(0.0))
+    d.submit([_cand("a", text="pressures")], make_snapshot(0.0))
     d.drain(0.0)
     # a press long after the call (e.g. menu buttons in the garage) repeats nothing
-    d.on_press(Press("ack", 100.0), _snap(100.0))
+    d.on_press(Press("ack", 100.0), make_snapshot(100.0))
     assert d.drain(100.0) == []
 
 
@@ -546,9 +547,9 @@ def test_late_press_bookmarks_without_say_again() -> None:
 
     d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(say_again=False, spoken_replies=True)
-    d.submit([_cand("a", text="pit exit clear")], _snap(0.0))
+    d.submit([_cand("a", text="pit exit clear")], make_snapshot(0.0))
     d.drain(0.0)
-    d.on_press(Press("ack", 20.0), _snap(20.0))  # past the response window
+    d.on_press(Press("ack", 20.0), make_snapshot(20.0))  # past the response window
     assert [call.text for call in d.drain(20.0)] == ["Marked."]
     assert d.quiet_until is None
     bookmark = next(r for r in _log(buf) if r["outcome"] == "bookmark")
@@ -557,28 +558,28 @@ def test_late_press_bookmarks_without_say_again() -> None:
 
 def test_negative_backoff_mutes_not_p1() -> None:
     d, sink, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("a", text="call")], _snap(0.0, lap=1))
+    d.submit([_cand("a", text="call")], make_snapshot(0.0, lap_num=1))
     d.drain(0.0)
     from pitwall.input.press import Press
 
-    d.on_press(Press("neg", 1.0), _snap(1.0, lap=1))
+    d.on_press(Press("neg", 1.0), make_snapshot(1.0, lap_num=1))
     # muted for 3 laps
     for lap in (2, 3):
         now = 10.0 + lap
         candidate = _cand("a", text="again")
         candidate.trigger_t = now
-        d.submit([candidate], _snap(now, lap=lap))
+        d.submit([candidate], make_snapshot(now, lap_num=lap))
         assert d.drain(10.0 + lap) == []
     fresh = _cand("a", text="again")
     fresh.trigger_t = 20.0
-    d.submit([fresh], _snap(20.0, lap=4))
+    d.submit([fresh], make_snapshot(20.0, lap_num=4))
     assert len(d.drain(20.0)) == 1
     # P1 is never muted
     d2, _, _ = _dispatcher(min_gap_s=0.0)
-    d2.submit([_cand("crit", priority=1, text="danger")], _snap(0.0, lap=1))
+    d2.submit([_cand("crit", priority=1, text="danger")], make_snapshot(0.0, lap_num=1))
     d2.drain(0.0)
-    d2.on_press(Press("neg", 1.0), _snap(1.0, lap=1))
-    d2.submit([_cand("crit", priority=1, text="danger2")], _snap(2.0, lap=2))
+    d2.on_press(Press("neg", 1.0), make_snapshot(1.0, lap_num=1))
+    d2.submit([_cand("crit", priority=1, text="danger2")], make_snapshot(2.0, lap_num=2))
     assert len(d2.drain(2.0)) == 1
 
 
@@ -586,15 +587,15 @@ def test_neg_no_target_sets_quiet_until_p1_speaks() -> None:
     d, sink, _ = _dispatcher(min_gap_s=0.0)
     from pitwall.input.press import Press
 
-    d.on_press(Press("neg", 10.0), _snap(10.0))
+    d.on_press(Press("neg", 10.0), make_snapshot(10.0))
     assert d.quiet_until is not None
     info = _cand("a", text="info")
     info.trigger_t = 11.0
-    d.submit([info], _snap(11.0))
+    d.submit([info], make_snapshot(11.0))
     assert d.drain(11.0) == []
     danger = _cand("crit", priority=1, text="danger")
     danger.trigger_t = 11.0
-    d.submit([danger], _snap(11.0))
+    d.submit([danger], make_snapshot(11.0))
     assert len(d.drain(11.0)) == 1  # P1 still speaks
 
 
@@ -607,7 +608,7 @@ def test_screen_only_not_spoken() -> None:
         decision_log=DecisionLog(fp=buf),
         sinks=[sink],
     )
-    d.submit([_cand("a", text="screen only", screen_only=True)], _snap(0.0))
+    d.submit([_cand("a", text="screen only", screen_only=True)], make_snapshot(0.0))
     calls = d.drain(0.0)
     assert calls and calls[0].screen_only
     assert not sink.spoken  # audio sink skipped
@@ -627,14 +628,14 @@ def test_press_gets_spoken_reply() -> None:
 
     d, sink, buf = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(spoken_replies=True)
-    d.submit([_cand("a", text="box box")], _snap(0.0))
+    d.submit([_cand("a", text="box box")], make_snapshot(0.0))
     d.drain(0.0)
-    d.on_press(Press("ack", 1.0), _snap(1.0))
+    d.on_press(Press("ack", 1.0), make_snapshot(1.0))
     calls = d.drain(1.0)
     assert len(calls) == 1 and calls[0].rule_id == "reply" and calls[0].text == "Copy."
     ack = next(r for r in _log(buf) if r["outcome"] == "ack")
     assert ack["grade"] == "good" and ack["grade_source"] == "press"
-    d.on_press(Press("neg", 2.0), _snap(2.0))
+    d.on_press(Press("neg", 2.0), make_snapshot(2.0))
     assert [c.text for c in d.drain(2.0)] == ["Noted."]
     neg = next(r for r in _log(buf) if r["outcome"] == "neg")
     assert neg["grade"] == "noise" and neg["grade_source"] == "press"
@@ -659,10 +660,10 @@ def test_neg_without_target_announces_quiet_and_ack_ends_it() -> None:
 
     d, sink, _ = _dispatcher(min_gap_s=0.0)
     d.input = InputSettings(spoken_replies=True)
-    d.on_press(Press("neg", 0.0), _snap(0.0))
+    d.on_press(Press("neg", 0.0), make_snapshot(0.0))
     assert d.quiet_until is not None
     assert "going quiet" in d.drain(0.0)[0].text
-    d.on_press(Press("ack", 10.0), _snap(10.0))
+    d.on_press(Press("ack", 10.0), make_snapshot(10.0))
     assert d.quiet_until is None
     assert d.drain(10.0)[0].text == "Radio's back on."
 
@@ -675,9 +676,9 @@ def test_rule_reply_and_longer_response_window() -> None:
     cand = _cand(
         "through", text="no need to push", response_window_s=30, on_neg=["Your call, push on"]
     )
-    d.submit([cand], _snap(0.0))
+    d.submit([cand], make_snapshot(0.0))
     d.drain(0.0)
-    d.on_press(Press("neg", 16.0), _snap(16.0))  # past the default 8 s window
+    d.on_press(Press("neg", 16.0), make_snapshot(16.0))  # past the default 8 s window
     assert d.quiet_until is None
     assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]
 
@@ -696,12 +697,12 @@ def test_no_response_uses_configured_window_and_logs_assumed_answer() -> None:
                 no_response="ack",
             )
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     assert len(d.drain(0.0)) == 1
     end_t = d._spoken_calls[-1][1]
 
-    d.submit([], _snap(end_t + 5.1))
+    d.submit([], make_snapshot(end_t + 5.1))
     d.drain()
 
     assert responses == [("cool_push_check", "ack")]
@@ -718,15 +719,15 @@ def test_no_response_uses_input_window_when_rule_does_not_override_it() -> None:
     d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
     d.submit(
         [_cand("prompt", priority=1, text="Confirm?", no_response="neg")],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     d.drain(0.0)
     end_t = d._spoken_calls[-1][1]
 
-    d.submit([], _snap(end_t + 1.9))
+    d.submit([], make_snapshot(end_t + 1.9))
     d.drain()
     assert not responses
-    d.submit([], _snap(end_t + 2.1))
+    d.submit([], make_snapshot(end_t + 2.1))
     d.drain()
     assert responses == [("prompt", "neg")]
 
@@ -748,14 +749,14 @@ def test_press_answers_no_response_prompt_without_later_timeout(kind: str, answe
                 no_response="ack",
             )
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     d.drain(0.0)
     end_t = d._spoken_calls[-1][1]
     press_t = end_t + 1.0
 
-    d.on_press(Press(kind, press_t), _snap(press_t))
-    d.submit([], _snap(end_t + 5.1))
+    d.on_press(Press(kind, press_t), make_snapshot(press_t))
+    d.submit([], make_snapshot(end_t + 5.1))
     d.drain()
 
     assert responses == [("cool_push_check", answer)]
@@ -768,13 +769,13 @@ def test_reset_session_clears_awaiting_no_response_calls() -> None:
     d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
     d.submit(
         [_cand("prompt", priority=1, text="Confirm?", response_window_s=1, no_response="ack")],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     d.drain(0.0)
     assert d._awaiting_responses
 
     d.reset_session(2)
-    d.submit([], _snap(100.0))
+    d.submit([], make_snapshot(100.0))
     d.drain()
 
     assert not d._awaiting_responses
@@ -795,7 +796,7 @@ def test_deadline_drop_assumes_no_response() -> None:
                 no_response="ack",
             )
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
 
     assert d.drain(1.0) == []
@@ -807,9 +808,9 @@ def test_rule_without_no_response_does_not_timeout() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
     responses: list[tuple[str, str]] = []
     d.on_response = lambda rule_id, answer, _: responses.append((rule_id, answer))
-    d.submit([_cand("ordinary", priority=1, text="Hello")], _snap(0.0))
+    d.submit([_cand("ordinary", priority=1, text="Hello")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([], _snap(100.0))
+    d.submit([], make_snapshot(100.0))
     d.drain()
 
     assert not responses
@@ -827,17 +828,17 @@ def test_radio_silent_keeps_screen_mutes_headset() -> None:
     audio = AudioSink()
     d.sinks.append(audio)
     d.input = InputSettings(spoken_replies=True, long_press="silent")
-    d.on_press(Press("bookmark", 0.0), _snap(0.0))  # long press toggles
+    d.on_press(Press("bookmark", 0.0), make_snapshot(0.0))  # long press toggles
     assert d.silent is True
     d.drain(0.0)
     assert audio.spoken == ["Radio silent. Leave you to it."]
-    d.submit([_cand("info", priority=2, text="gap 1.2")], _snap(1.0))
-    d.submit([_cand("urgent", priority=1, text="car behind")], _snap(1.0))
+    d.submit([_cand("info", priority=2, text="gap 1.2")], make_snapshot(1.0))
+    d.submit([_cand("urgent", priority=1, text="car behind")], make_snapshot(1.0))
     d.drain(1.0)
     d.drain(4.0)
     assert "gap 1.2" in screen.spoken and "gap 1.2" not in audio.spoken
     assert "car behind" in audio.spoken  # P1 still speaks
-    d.on_press(Press("silent", 5.0), _snap(5.0))  # UDP 3 toggle
+    d.on_press(Press("silent", 5.0), make_snapshot(5.0))  # UDP 3 toggle
     d.drain(5.0)
     assert d.silent is False and audio.spoken[-1] == "Back with you. Feeding you info again."
     outcomes = [r["outcome"] for r in _log(buf)]
@@ -848,7 +849,7 @@ def test_long_press_still_bookmarks_by_default() -> None:
     from pitwall.input.press import Press
 
     d, _, buf = _dispatcher()
-    d.on_press(Press("bookmark", 0.0), _snap(0.0))
+    d.on_press(Press("bookmark", 0.0), make_snapshot(0.0))
     bookmark = _log(buf)[-1]
     assert d.silent is False and bookmark["outcome"] == "bookmark"
     assert bookmark["kind"] == "hold" and bookmark["context"]["lap_num"] == 1
@@ -856,9 +857,9 @@ def test_long_press_still_bookmarks_by_default() -> None:
 
 def test_min_gap_defers_instead_of_dropping() -> None:
     d, sink, buf = _dispatcher(min_gap_s=3.0)
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("wing", text="wing gone")], _snap(1.0))
+    d.submit([_cand("wing", text="wing gone")], make_snapshot(1.0))
     assert d.drain(1.0) == []  # held: radio still busy
     assert [c.rule_id for c in d.drain(3.0)] == ["wing"]
     assert not any(r.get("suppressed_by") == "budget" for r in _log(buf))
@@ -866,9 +867,9 @@ def test_min_gap_defers_instead_of_dropping() -> None:
 
 def test_min_gap_deferred_calls_are_spaced() -> None:
     d, sink, _ = _dispatcher(min_gap_s=3.0)
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("b"), _cand("c")], _snap(0.5))
+    d.submit([_cand("b"), _cand("c")], make_snapshot(0.5))
     assert [c.rule_id for c in d.drain(3.0)] == ["b"]
     assert d.drain(5.0) == []
     assert [c.rule_id for c in d.drain(6.0)] == ["c"]
@@ -876,9 +877,9 @@ def test_min_gap_deferred_calls_are_spaced() -> None:
 
 def test_min_gap_drops_past_defer_limit() -> None:
     d, sink, buf = _dispatcher(min_gap_s=3.0, min_gap_defer_s=4.0)
-    d.submit([_cand("a")], _snap(0.0))
+    d.submit([_cand("a")], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("b"), _cand("c")], _snap(0.5))  # c would wait until 6.0
+    d.submit([_cand("b"), _cand("c")], make_snapshot(0.5))  # c would wait until 6.0
     assert [r["rule_id"] for r in _log(buf) if r.get("suppressed_by") == "budget"] == ["c"]
 
 
@@ -904,9 +905,9 @@ def test_urgency_order_and_preemption_matrix() -> None:
                 ("safety", "safety"),
             )
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
-    d.menu_reply("Reply", "reply", _snap(0.0))
+    d.menu_reply("Reply", "reply", make_snapshot(0.0))
     d.drain(0.0)
     calls = {call.rule_id: call for call, _ in d._spoken_calls}
     # The tactical call starts a focus window that drops the coaching tip.
@@ -938,7 +939,7 @@ def test_preempting_call_holds_lower_urgency_calls_behind_it() -> None:
         calls_per_lap=20,
         deadlines_s={1: 60.0, 2: 60.0, 3: 60.0},
     )
-    d.submit([_cand("info", urgency="info", text="X" * 90)], _snap(0.0))
+    d.submit([_cand("info", urgency="info", text="X" * 90)], make_snapshot(0.0))
     assert [call.rule_id for call in d.drain(0.0)] == ["info"]
 
     d.submit(
@@ -946,7 +947,7 @@ def test_preempting_call_holds_lower_urgency_calls_behind_it() -> None:
             _cand("safety", urgency="safety", tags=["systems"], text="S"),
             _cand("tactical", urgency="tactical", text="T"),
         ],
-        _snap(0.2),
+        make_snapshot(0.2),
     )
     assert [call.rule_id for call in d.drain(0.2)] == ["safety"]
     safety_end = next(end_t for call, end_t in d._spoken_calls if call.rule_id == "safety")
@@ -1006,23 +1007,23 @@ def test_focus_and_systems_exemption() -> None:
             _cand("news", priority=2, urgency="info"),
             _cand("coach", priority=2, urgency="coaching"),
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     assert {item.call.rule_id for item in d._queue} == {"hazard", "news"}
     dropped = {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
     assert ("tip", "focus") in dropped
     assert ("coach", "focus") in dropped
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("systems", urgency="safety", tags=["systems"])], _snap(0.0))
-    d.submit([_cand("tip", urgency="info")], _snap(1.0))
+    d.submit([_cand("systems", urgency="safety", tags=["systems"])], make_snapshot(0.0))
+    d.submit([_cand("tip", urgency="info")], make_snapshot(1.0))
     assert {item.call.rule_id for item in d._queue} == {"systems", "tip"}
 
 
 def test_location_coherence_after_safety() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], _snap(0.0))
+    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], make_snapshot(0.0))
     d.drain(0.0)
-    d.submit([_cand("corner", urgency="coaching", location_ref=True)], _snap(1.0))
+    d.submit([_cand("corner", urgency="coaching", location_ref=True)], make_snapshot(1.0))
     assert d.drain(1.0) == []
     assert ("corner", "coherence") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
@@ -1032,8 +1033,8 @@ def test_conflict_scores() -> None:
     lower = _cand("lower", conflict_group="choice")
     higher = _cand("higher", conflict_group="choice")
     lower.outcome_score, higher.outcome_score = 0.2, 0.9
-    d.submit([lower], _snap(0.0))
-    d.submit([higher], _snap(1.0))
+    d.submit([lower], make_snapshot(0.0))
+    d.submit([higher], make_snapshot(1.0))
     assert [item.call.rule_id for item in d._queue] == ["higher"]
     assert ("lower", "conflict_loser") in {
         (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
@@ -1042,20 +1043,29 @@ def test_conflict_scores() -> None:
 
 def test_contradicts_keeps_priority_then_class_then_newest() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("attack", priority=3, urgency="tactical")], _snap(0.0))
-    d.submit([_cand("hazard", priority=1, urgency="safety", contradicts=["attack"])], _snap(1.0))
+    d.submit([_cand("attack", priority=3, urgency="tactical")], make_snapshot(0.0))
+    d.submit(
+        [_cand("hazard", priority=1, urgency="safety", contradicts=["attack"])],
+        make_snapshot(1.0),
+    )
     assert [item.call.rule_id for item in d._queue] == ["hazard"]
     assert ("attack", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
 
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("hold", priority=2, urgency="tactical", contradicts=["news"])], _snap(0.0))
-    d.submit([_cand("news", priority=2, urgency="info")], _snap(1.0))
+    d.submit(
+        [_cand("hold", priority=2, urgency="tactical", contradicts=["news"])],
+        make_snapshot(0.0),
+    )
+    d.submit([_cand("news", priority=2, urgency="info")], make_snapshot(1.0))
     assert [item.call.rule_id for item in d._queue] == ["hold"]
     assert ("news", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
 
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("first", priority=2, urgency="info", contradicts=["second"])], _snap(0.0))
-    d.submit([_cand("second", priority=2, urgency="info")], _snap(1.0))
+    d.submit(
+        [_cand("first", priority=2, urgency="info", contradicts=["second"])],
+        make_snapshot(0.0),
+    )
+    d.submit([_cand("second", priority=2, urgency="info")], make_snapshot(1.0))
     assert [item.call.rule_id for item in d._queue] == ["second"]
 
 
@@ -1066,7 +1076,10 @@ def test_rotation_is_seeded_and_both_rules_can_win() -> None:
         for _ in range(2):
             d, _, _ = _dispatcher(min_gap_s=0.0)
             d.reset_session(seed)
-            d.submit([_cand("a", rotate_with=["b"]), _cand("b", rotate_with=["a"])], _snap(0.0))
+            d.submit(
+                [_cand("a", rotate_with=["b"]), _cand("b", rotate_with=["a"])],
+                make_snapshot(0.0),
+            )
             same_seed.append(d._queue[0].call.rule_id)
         assert same_seed[0] == same_seed[1]
         winners.add(same_seed[0])
@@ -1095,25 +1108,25 @@ def test_resolved_by_works_in_both_orders(resolver_first: bool) -> None:
     target, resolver = _cand("target", resolved_by=["resolver"]), _cand("resolver")
     ordered = [resolver, target] if resolver_first else [target, resolver]
     for index, candidate in enumerate(ordered):
-        d.submit([candidate], _snap(float(index)))
+        d.submit([candidate], make_snapshot(float(index)))
     assert not any(item.call.rule_id == "target" for item in d._queue)
     assert ("target", "resolved") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
 def test_escalation_and_flush_drop_queued_calls() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("low", urgency="info")], _snap(0.0))
-    d.submit([_cand("high", urgency="safety", escalates=["low"])], _snap(1.0))
+    d.submit([_cand("low", urgency="info")], make_snapshot(0.0))
+    d.submit([_cand("high", urgency="safety", escalates=["low"])], make_snapshot(1.0))
     assert {item.call.rule_id for item in d._queue} == {"high"}
     assert ("low", "superseded_escalation") in {
         (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
     }
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("tip", urgency="info")], _snap(0.0))
-    d.menu_reply("Reply", "reply", _snap(0.0))
+    d.submit([_cand("tip", urgency="info")], make_snapshot(0.0))
+    d.menu_reply("Reply", "reply", make_snapshot(0.0))
     d.submit(
         [_cand("red", urgency="safety", flushes_queue=True, tags=["systems"])],
-        _snap(1.0),
+        make_snapshot(1.0),
     )
     assert {item.call.rule_id for item in d._queue} == {"red", "reply"}
     assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
@@ -1127,7 +1140,7 @@ def test_flush_calls_preserve_other_flush_calls_in_the_same_tick() -> None:
             _cand("finish_podium", urgency="info", flushes_queue=True),
             _cand("finish_gained", urgency="info", flushes_queue=True),
         ],
-        _snap(0.0),
+        make_snapshot(0.0),
     )
 
     assert {item.call.rule_id for item in d._queue} == {"finish_podium", "finish_gained"}
@@ -1139,23 +1152,23 @@ def test_obvious_and_provisional_suppression() -> None:
     obvious, provisional = _cand("obvious"), _cand("provisional")
     obvious.obvious = True
     provisional.provisional_silent = True
-    d.submit([obvious, provisional], _snap(0.0))
+    d.submit([obvious, provisional], make_snapshot(0.0))
     assert not d._queue
     assert {row["suppressed_by"] for row in _log(buf)} == {"obvious", "provisional"}
 
 
 def test_reply_absorption_is_topic_specific_and_reply_waits_for_execution() -> None:
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
-    d.submit([_cand("tyre_life", urgency="info")], _snap(1.0))
+    d.menu_reply("Tyres are fine", "menu:tyres", make_snapshot(0.0), ["tyre_life"])
+    d.submit([_cand("tyre_life", urgency="info")], make_snapshot(1.0))
     assert not any(item.call.rule_id == "menu:tyres" for item in d._queue)
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
-    d.submit([_cand("box_now", urgency="execution")], _snap(1.0))
+    d.menu_reply("Tyres are fine", "menu:tyres", make_snapshot(0.0), ["tyre_life"])
+    d.submit([_cand("box_now", urgency="execution")], make_snapshot(1.0))
     assert any(item.call.rule_id == "menu:tyres" for item in d._queue)
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.menu_reply("Tyres are fine", "menu:tyres", _snap(0.0), ["tyre_life"])
-    d.submit([_cand("box", urgency="execution")], _snap(1.0))
+    d.menu_reply("Tyres are fine", "menu:tyres", make_snapshot(0.0), ["tyre_life"])
+    d.submit([_cand("box", urgency="execution")], make_snapshot(1.0))
     assert [item.call.urgency for item in sorted(d._queue)] == ["execution", "reply"]
     assert {item.call.rule_id for item in d._queue} == {"box", "menu:tyres"}
 
@@ -1165,10 +1178,10 @@ def test_safety_cut_requeues_reply_once() -> None:
     d.menu_reply(
         "A long answer that keeps speaking while safety arrives",
         "menu:answer",
-        _snap(0.0),
+        make_snapshot(0.0),
     )
     assert [call.rule_id for call in d.drain(0.0)] == ["menu:answer"]
-    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], _snap(0.5))
+    d.submit([_cand("hazard", urgency="safety", tags=["systems"])], make_snapshot(0.5))
     assert [call.rule_id for call in d.drain(0.5)] == ["hazard"]
     reply = next(item.call for item in d._queue if item.call.rule_id == "menu:answer")
     assert reply.requeued
@@ -1183,8 +1196,8 @@ def test_safety_cut_requeues_reply_once() -> None:
 def test_coalescing_renders_count_word() -> None:
     template = ["{count_word} slow cars ahead. Careful"]
     d, _, _ = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("slow", say_many=template)], _snap(0.0))
-    d.submit([_cand("slow", say_many=template)], _snap(0.1))
+    d.submit([_cand("slow", say_many=template)], make_snapshot(0.0))
+    d.submit([_cand("slow", say_many=template)], make_snapshot(0.1))
     assert d.drain(0.1)[0].text == "two slow cars ahead. Careful"
 
 
@@ -1193,7 +1206,7 @@ def test_digest_uses_freshest_briefs_caps_items_and_skips_battle() -> None:
     for name, now in (("old", 0.0), ("newer", 1.0), ("newest", 2.0)):
         candidate = _cand(name, urgency="info")
         candidate.brief = name
-        d.submit([candidate], _snap(now))
+        d.submit([candidate], make_snapshot(now))
     emitted = d.drain(2.0)
     assert len(emitted) == 1 and emitted[0].rule_id == "digest"
     assert "newer" in emitted[0].text and "newest" in emitted[0].text
@@ -1210,12 +1223,12 @@ def test_digest_uses_freshest_briefs_caps_items_and_skips_battle() -> None:
 
 def test_digest_waits_until_current_speaker_finishes() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0, digest_max_items=2)
-    d.submit([_cand("tactical", urgency="tactical", text="T" * 90)], _snap(0.0))
+    d.submit([_cand("tactical", urgency="tactical", text="T" * 90)], make_snapshot(0.0))
     assert [call.rule_id for call in d.drain(0.0)] == ["tactical"]
     for name in ("brief one", "brief two"):
         candidate = _cand(name.replace(" ", "_"), urgency="info")
         candidate.brief = name
-        d.submit([candidate], _snap(0.2))
+        d.submit([candidate], make_snapshot(0.2))
 
     assert d.drain(0.3) == []
     assert not any(row["outcome"] == "digested" for row in _log(buf))
