@@ -82,6 +82,12 @@ def test_classify(kw: dict[str, object], mode: str) -> None:
     assert classify(_inp(**kw), TH) == mode
 
 
+def test_zero_closing_with_zero_minimum_rate_does_not_divide() -> None:
+    thresholds = {"battle_closing_min_s": 0}
+    assert classify(_inp(gap_ahead_s=3.0), thresholds) == MANAGING
+    assert classify(_inp(gap_behind_s=2.5), thresholds) == MANAGING
+
+
 def test_attack_hysteresis() -> None:
     inp = _inp(gap_ahead_s=1.2)
     assert classify(inp, TH) == MANAGING

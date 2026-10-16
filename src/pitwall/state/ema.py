@@ -20,6 +20,8 @@ class Ema:
         if self.value is None or self.last_t is None:
             self.value = x
         else:
+            if t < self.last_t:
+                return self.value
             w = 1.0 - math.exp(-(t - self.last_t) / self.tau)
             self.value += w * (x - self.value)
         self.last_t = t
