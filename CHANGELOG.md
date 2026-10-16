@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.25.0 (2026-10-16)
+
+### Features
+
+- **strategy**: Model degradation and plan uncertainty
+  ([#108](https://github.com/artsworks/f1-pitwall/pull/108),
+  [`5ab3724`](https://github.com/artsworks/f1-pitwall/commit/5ab37249705de64b64b68b8345a0e90b772ae7fc))
+
+
 ## v0.24.0 (2026-10-16)
 
 ### Bug Fixes
