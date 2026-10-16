@@ -266,6 +266,7 @@ def test_derive_rejects_source_and_output_path_collisions(tmp_path) -> None:
     assert source.read_bytes() == original
 
 
+@pytest.mark.replay
 def test_safety_car_ends_before_the_first_lap_after_its_window(tmp_path) -> None:
     source = write_packet_stream(
         tmp_path / "source.f1bin",
@@ -303,6 +304,7 @@ def test_safety_car_ends_before_the_first_lap_after_its_window(tmp_path) -> None
     db.close()
 
 
+@pytest.mark.replay
 def test_ingest_treats_metadata_only_synthetic_recordings_as_synthetic(tmp_path) -> None:
     recording = write_packet_stream(
         tmp_path / "metadata-only.f1bin",
@@ -452,6 +454,7 @@ def test_calibration_skips_synthetic_sessions_by_default_and_cli_can_include(
     assert all(track["synthetic_skipped"] == 0 for track in cli_report["tracks"])
 
 
+@pytest.mark.replay
 def test_engine_skips_physics_folds_for_tagged_session(tmp_path) -> None:
     param_names: dict[int, set[str]] = {}
     for uid in (SOURCE_UID, derived_uid(SOURCE_UID, ["wear_scale=1.5"])):
@@ -500,6 +503,7 @@ def test_persist_episode_skips_battle_param_folds_for_synthetic_session() -> Non
     db.close()
 
 
+@pytest.mark.replay
 def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
     tmp_path, capsys, monkeypatch
 ) -> None:

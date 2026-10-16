@@ -345,6 +345,7 @@ def battle_runs(tmp_path_factory: pytest.TempPathFactory):
     return {k: _replay(tmp_path_factory.mktemp(k), s) for k, s in specs.items()}
 
 
+@pytest.mark.replay
 def test_replay_attack_call(battle_runs) -> None:
     calls, rows = battle_runs["attack"]
     assert "battle_attack" in _ids(calls)
@@ -352,6 +353,7 @@ def test_replay_attack_call(battle_runs) -> None:
     assert row["inputs"]["battle_mode"] == "attacking"
 
 
+@pytest.mark.replay
 def test_replay_defend_call(battle_runs) -> None:
     calls, _ = battle_runs["defend"]
     assert "battle_defend" in _ids(calls)
@@ -391,6 +393,7 @@ def test_battle_defend_urgent_phrases_include_battery_and_tyre_info() -> None:
     assert "fresher tyres" in phrase_for_tyre_offset(-6)
 
 
+@pytest.mark.replay
 def test_replay_free_air_is_quiet(battle_runs) -> None:
     calls, _ = battle_runs["free"]
     assert not {i for i in _ids(calls) if i and i.startswith("battle_")}
@@ -469,6 +472,7 @@ def test_swaps_with_several_cars_are_a_scrap() -> None:
     assert tr.result == "scrap"
 
 
+@pytest.mark.replay
 def test_replay_ct2_attack_episode_logs_overtake(tmp_path: Path) -> None:
     spec = RaceSpec(
         laps=5,

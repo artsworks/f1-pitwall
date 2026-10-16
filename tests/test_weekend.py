@@ -45,6 +45,7 @@ def _prior_db(
     )
 
 
+@pytest.mark.replay
 def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
     db = Database(tmp_path / "weekend.sqlite")
     settings = ConfigStore().current()
@@ -175,6 +176,7 @@ def test_zero_weekend_link_falls_back_to_same_utc_date() -> None:
     assert stints[0].deg_ms_per_lap == 140.0
 
 
+@pytest.mark.replay
 def test_open_final_stint_folds_once_at_session_end(tmp_path) -> None:
     db = Database(tmp_path / "fold.sqlite")
     uid = 0xF1262003

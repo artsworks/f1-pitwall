@@ -268,6 +268,7 @@ def test_repeated_pit_lane_laps_do_not_persist_a_stop(tmp_path: Path) -> None:
     assert db.get_param(7, 0, "pit_loss_green_ms") is None
 
 
+@pytest.mark.replay
 def test_race_synth_pit_loss_and_compound_change_replay(tmp_path: Path) -> None:
     spec = RaceSpec(
         laps=14,
@@ -297,6 +298,7 @@ def test_race_synth_pit_loss_and_compound_change_replay(tmp_path: Path) -> None:
     assert [stint.compound for stint in db.stints_for_session(uid)] == [17, 18]
 
 
+@pytest.mark.replay
 def test_race_synth_after_line_stop_ignores_early_request(tmp_path: Path) -> None:
     spec = RaceSpec(
         laps=18,
@@ -317,6 +319,7 @@ def test_race_synth_after_line_stop_ignores_early_request(tmp_path: Path) -> Non
     assert all(row.valid for row in laps if 2 <= row.lap_num < 8)
 
 
+@pytest.mark.replay
 def test_race_synth_rejects_implausible_pit_loss(tmp_path: Path) -> None:
     spec = RaceSpec(laps=14, player_pit_lap=6, pit_lane_loss_ms=70_000)
     engine, db = _run_synth_spec(tmp_path, spec)
@@ -330,6 +333,7 @@ def test_race_synth_rejects_implausible_pit_loss(tmp_path: Path) -> None:
     assert db.get_param(7, 0, "pit_loss_green_ms") is None
 
 
+@pytest.mark.replay
 def test_race_synth_lap_noise_is_seeded() -> None:
     spec = RaceSpec(laps=8, lap_noise_ms=250.0, seed=17)
 
@@ -387,6 +391,7 @@ def test_session_end_calls_hook_after_grading() -> None:
     assert db.session_row(uid)["ended_at"] == 1.0
 
 
+@pytest.mark.replay
 def test_restart_mid_session_on_same_uid_folds_stints_once(tmp_path: Path) -> None:
     uid = 0xDEADBEEF
     packets = _race_stream()
