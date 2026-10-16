@@ -259,6 +259,12 @@ def fit_stint(
             inv_col = _solve(_normal_matrix(quad_rows), [0.0, 0.0, 1.0])
             if inv_col is not None and inv_col[2] >= 0:
                 quad_se = quad_rmse * math.sqrt(inv_col[2])
+                slope_col = _solve(_normal_matrix(quad_rows), [0.0, 1.0, 0.0])
+                quad_slope_sd = (
+                    quad_rmse * math.sqrt(slope_col[1])
+                    if slope_col is not None and slope_col[1] >= 0
+                    else deg_sd
+                )
                 if (
                     quad_deg2 > 0
                     and quad_deg >= 0
@@ -279,7 +285,7 @@ def fit_stint(
                         fuel_fitted,
                         quad_deg2,
                         deg_sd,
-                        deg_posterior_sd_ms_per_lap=deg_sd,
+                        deg_posterior_sd_ms_per_lap=quad_slope_sd,
                     )
     return DegFit(
         base,

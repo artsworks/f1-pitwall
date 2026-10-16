@@ -118,6 +118,33 @@ def test_quadratic_fit_captures_accelerating_degradation() -> None:
     )
 
 
+def test_quadratic_fit_reports_quadratic_slope_error() -> None:
+    laps = [_lap(age, 90_000 + 20 * age + 6 * age**2) for age in range(12)]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+
+    assert fit.source == "fit"
+    assert fit.deg2_ms_per_lap2 > 0
+    assert fit.deg_posterior_sd_ms_per_lap < 1e-6
+    assert fit.deg_sd_ms_per_lap > 1
+
+
+def test_quadratic_fit_slope_error_matches_normal_equations() -> None:
+    import numpy as np
+
+    noise = [0, 2, -2, 1, -1, 0, 1, -2, 2, -1, 0, 1]
+    ages = list(range(len(noise)))
+    laps = [_lap(age, 90_000 + 20 * age + 6 * age**2 + noise[age]) for age in ages]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+
+    assert fit.source == "fit"
+    assert fit.deg2_ms_per_lap2 > 0
+    x = np.array([[1.0, age, age**2] for age in ages])
+    expected = fit.rmse_ms * float(np.linalg.inv(x.T @ x)[1, 1]) ** 0.5
+    assert fit.deg_posterior_sd_ms_per_lap == pytest.approx(expected)
+
+
 def test_quadratic_fit_falls_back_for_linear_data_with_noise() -> None:
     noise = [0, 2, -2, 1, -1, 0, 1, -2, 2, -1, 0, 1]
     laps = [_lap(age, 90_000 + 100 * age + noise[age]) for age in range(len(noise))]

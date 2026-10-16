@@ -123,6 +123,16 @@ def test_evaluate_race_time_spread_adds_shared_slope_age_sums() -> None:
     assert evaluate(inputs(), (M, H), TH).race_time_sd_s == 0.0  # type: ignore[union-attr]
 
 
+def test_evaluate_race_time_spread_zero_when_fits_are_exact() -> None:
+    inp = inputs(
+        tyre_age=10,
+        cur=dataclasses.replace(fit(100.0), deg_posterior_sd_ms_per_lap=0.0),
+    )
+    result = evaluate(inp, (M, H), TH)
+    assert result is not None and len(result.stop_laps) == 1
+    assert result.race_time_sd_s == pytest.approx(0.0)
+
+
 def test_alternative_uses_downside_score_and_keeps_ranked_order_at_zero_spread() -> None:
     primary = PlanEval((M, H), (20,), (20, 20), 98.0)
     first = PlanEval((M, H, S), (20, 30), (20, 20), 99.0, 10.0)
