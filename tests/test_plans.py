@@ -149,13 +149,24 @@ def test_evaluate_race_time_spread_adds_shared_slope_age_sums() -> None:
 def test_evaluate_race_time_spread_zero_when_fits_are_exact() -> None:
     prior = DegFit(90_000.0, 80.0, 30.0, 0, 0.0, 0.3, "prior")
     laps = [_lap(age, 90_000 + 20 * age + 6 * age**2) for age in range(12)]
-    cur = fit_stint(laps, prior, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
-    assert cur.source == "fit" and cur.deg2_ms_per_lap2 > 0
+    curved = fit_stint(laps, prior, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+    assert curved.source == "fit" and curved.deg2_ms_per_lap2 > 0
+    assert curved.deg_posterior_sd_ms_per_lap < 1e-6
 
-    inp = inputs(tyre_age=10, cur=cur)
+    inp = inputs(tyre_age=10, cur=curved)
     result = evaluate(inp, (M, H), TH)
     assert result is not None and len(result.stop_laps) == 1
     assert result.race_time_sd_s == pytest.approx(0.0, abs=1e-6)
+
+    old = evaluate(
+        inputs(
+            tyre_age=10,
+            cur=dataclasses.replace(curved, deg_posterior_sd_ms_per_lap=curved.deg_sd_ms_per_lap),
+        ),
+        (M, H),
+        TH,
+    )
+    assert old is not None and old.race_time_sd_s > 1.0
 
 
 def test_alternative_uses_downside_score_and_keeps_ranked_order_at_zero_spread() -> None:
