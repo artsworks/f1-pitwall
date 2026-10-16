@@ -10,6 +10,44 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.20.0 (2026-10-16)
+
+### Bug Fixes
+
+- **cleanup**: Credit imports only to the exact recording file
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- **cli**: Learn only stable recordings in cleanup --learn
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- **cli**: Make trim safe for same-path, zst and profile outputs
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- **cli**: Show plain subcommand usage, simplify --help-all
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- **cli**: Trim rejects unsafe output names and existing raw siblings
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+### Features
+
+- Remove derive command, layer CLI help, add cleanup --learn
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- Simplify CLI help and cleanup learning ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+- **cli**: Restore trim as an advanced command
+  ([#94](https://github.com/artsworks/f1-pitwall/pull/94),
+  [`4bd4c08`](https://github.com/artsworks/f1-pitwall/commit/4bd4c081bcfc6d5837b482cecd340f22d5dc1b5e))
+
+
 ## v0.19.0 (2026-10-16)
 
 ### Bug Fixes
