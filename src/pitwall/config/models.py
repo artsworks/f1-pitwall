@@ -80,6 +80,9 @@ class PolicySettings(BaseModel):
     coherence_window_s: float = 15.0
     digest_battle_gap_s: float = 1.0
     digest_max_items: int = 3
+    digest_tactical_gap_s: float = (
+        2.0  # tactical lines join a digest only with every rival further than this
+    )
     digest_prefixes: list[str] = Field(
         default_factory=lambda: [
             "Also: ",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import collections
 import heapq
 import itertools
+import math
 import random
 import time
 from collections.abc import Callable
@@ -689,13 +690,13 @@ class Dispatcher:
                     q.call.ready_t = max(q.call.ready_t, speech_end)
                 held.append(q)
                 continue
-            if call.urgency == "info" and self._digest_allowed(call, now, on_straight):
+            if self._digest_member(call) and self._digest_allowed(call, now, on_straight):
                 due_info = [call]
                 due_info.extend(
                     item.call
                     for item in self._queue
                     if item.call.id != call.id
-                    and item.call.urgency == "info"
+                    and self._digest_member(item.call)
                     and self._digest_call_ready(item.call, now, on_straight)
                 )
                 if len(due_info) >= 2:
@@ -851,17 +852,33 @@ class Dispatcher:
                 pass
         return not (call.location_ref and self._coherence_conflict(call, now))
 
+    def _quiet_stretch(self, snapshot: Snapshot | None) -> bool:
+        if snapshot is None:
+            return False
+        return all(
+            math.isfinite(gap) and gap > self.policy.digest_tactical_gap_s
+            for gap in (snapshot.gap_ahead_s, snapshot.gap_behind_s)
+        )
+
+    def _digest_member(self, call: Call) -> bool:
+        """Info always joins a digest. A tactical line joins on a quiet stretch."""
+        if call.urgency == "info":
+            return True
+        return call.urgency == "tactical" and self._quiet_stretch(self.latest_snapshot)
+
     def _digest_allowed(self, call: Call, now: float, on_straight: bool) -> bool:
         if self._battle_active(self.latest_snapshot):
             return False
-        if any(item.call.rank <= 3 for item in self._queue):
+        if any(item.call.rank <= 3 and not self._digest_member(item.call) for item in self._queue):
             return False
         return self._digest_call_ready(call, now, on_straight)
 
     def _make_digest(self, calls: list[Call], now: float, snapshot: Snapshot | None) -> Call:
         all_calls = sorted(calls, key=lambda item: item.t, reverse=True)
-        maximum = self.policy.digest_max_items
-        selected = all_calls[:maximum]
+        # The cap counts info briefs. Tactical lines carry an action and always stay in.
+        info_calls = [item for item in all_calls if item.urgency == "info"]
+        kept_info = set(id(item) for item in info_calls[: self.policy.digest_max_items])
+        selected = [item for item in all_calls if item.urgency != "info" or id(item) in kept_info]
         selected_ids = {call.id for call in selected}
         grouped_ids = {call.id for call in all_calls}
         self._queue = [item for item in self._queue if item.call.id not in grouped_ids]

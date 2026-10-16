@@ -12,12 +12,9 @@ SCENARIOS = load_workbook(WORKBOOK)
 KNOWN_MISMATCHES: dict[str, str] = {
     "g017": "digest merging",
     "g022": "preemption",
-    "g024": "digest merging",
     "g038": "conflict resolution",
     "g041": "preemption",
     "g057": "conflict resolution",
-    "g071": "digest merging",
-    "g074": "digest merging",
     "g099": "conflict resolution",
     "g100": "digest merging",
 }

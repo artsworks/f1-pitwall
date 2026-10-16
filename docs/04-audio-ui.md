@@ -89,7 +89,9 @@ queued calls, except safety calls and replies the driver asked for.
 Rules can suppress obvious calls and silence provisional checks until an urgent condition
 holds. Duplicate queued rules can merge into a count-aware `say_many` line. A queued call
 absorbs a related menu reply. The dispatcher can combine due info calls into one digest
-with the freshest briefs. It drops overflow and skips digests during battles.
+with the freshest briefs. It keeps `digest_max_items` info briefs, drops the overflow and
+skips digests during battles. On a quiet stretch, every rival further than
+`digest_tactical_gap_s`, tactical lines join the digest too and never count as overflow.
 
 ## Speech
 

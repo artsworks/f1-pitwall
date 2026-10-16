@@ -697,9 +697,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: About eight laps in the tyres, age_s: 2.0}
           - {id: fuel, rule: fuel_marginal, text: "Fuel is tight, lift and coast", age_s: 1.0}
-        grade: {fuel: now, life: next}
-        order: [fuel, life]
-        notes: Lift and coast is an action for this lap, so it goes before the tyre life line.
+        grade: {fuel: merge, life: merge}
+        order: [digest]
+        notes: "Lift and coast is an action for this lap, so it goes before the tyre life line. Aligned with g071, the later id: on a quiet stretch the fuel and tyre lines merge into one digest."
       - id: g002
         source: graded
         session: race
