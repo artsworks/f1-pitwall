@@ -811,14 +811,134 @@ def test_compound_thermal_windows_match_dashboard_and_pressure_targets() -> None
 def test_tyre_switch_from_field_compound_gap() -> None:
     state = SessionState()
     state.tyre_compound = 7
-    assert state._tyre_switch(1.5, 0.0) == "slicks"
-    assert state._tyre_switch(0.4, 0.0) == ""
-    assert state._tyre_switch(0.0, -1.2) == "wets"
+    state.total_laps = 15
+    # wet -> slicks is a wet-to-dry direction: the net test must pass on
+    # wet_to_dry_confirm_laps fresh laps in a row, not just beat the floor.
+    # Lap 4: 1.5 s/lap * 10 after = 15 s < 22 + 3 needed, recorded as a miss.
+    state.lap_num = 4
+    assert state._tyre_switch(1.5, 0.0, fresh=True) == ("", 0.0)
+    # Lap 5: 3.0 s/lap * 9 after = 27 s > 25 s, a pass, but one is not enough.
+    state.lap_num = 5
+    assert state._tyre_switch(3.0, 0.0, fresh=True) == ("", 0.0)
+    # Lap 6: second pass in a row -> slicks.
+    state.lap_num = 6
+    to, net = state._tyre_switch(3.0, 0.0, fresh=True)
+    assert to == "slicks" and net > 0.0
+    # A non-fresh call records nothing.
+    state = SessionState()
+    state.tyre_compound = 7
+    state.total_laps = 15
+    state.lap_num = 4
+    assert state._tyre_switch(3.0, 0.0) == ("", 0.0)
+    assert state._wet_to_dry_passes == {}
+    # dry -> wet fires on a single fresh lap, no confirmation.
+    state.lap_num = 5
+    assert state._tyre_switch(0.0, -3.0, fresh=True)[0] == "wets"
+    # wet (8) -> inters needs two fresh passes too.
+    state = SessionState()
     state.tyre_compound = 8
-    assert state._tyre_switch(0.0, 1.2) == "inters"
+    state.total_laps = 15
+    state.lap_num = 4
+    state._tyre_switch(0.0, 3.0, fresh=True)
+    state.lap_num = 5
+    assert state._tyre_switch(0.0, 3.0, fresh=True)[0] == "inters"
     state.tyre_compound = 17
-    assert state._tyre_switch(-2.0, 0.0) == "inters"
-    assert state._tyre_switch(2.0, 0.0) == ""
+    assert state._tyre_switch(-3.0, 0.0)[0] == "inters"
+    assert state._tyre_switch(2.0, 0.0)[0] == ""
+
+
+def test_tyre_switch_net_gain_gates() -> None:
+    state = SessionState()
+    state.tyre_compound = 17
+    # A gain over the floor that cannot pay the green-flag stop back is no call:
+    # 1.5 s/lap over 5 laps after the in-lap = 7.5 s vs 22 + 3 s needed.
+    state.total_laps = 10
+    state.lap_num = 5
+    assert state._tyre_switch(-1.5, 0.0) == ("", 0.0)
+    # The same per-lap gain pays under the safety car prior (8 s) but not green.
+    state.total_laps = 10
+    state.lap_num = 5
+    state.safety_car_status = 1
+    assert state._tyre_switch(-3.0, 0.0)[0] == "inters"
+    state.safety_car_status = 0
+    assert state._tyre_switch(-3.0, 0.0) == ("", 0.0)
+    # Fewer than wet_crossover_min_laps left after the in-lap: no call.
+    state.total_laps = 10
+    state.lap_num = 8
+    assert state._tyre_switch(-3.0, 0.0) == ("", 0.0)
+
+
+def test_tyre_switch_uses_held_gains_under_sc() -> None:
+    state = SessionState()
+    state.tyre_compound = 17
+    state.total_laps = 20
+    state.lap_num = 5
+    state.safety_car_status = 1
+    state.race_phase = "sc"
+    # Lap times under SC read 0, so the snapshot feeds the last racing gains.
+    state._held_gains = (-3.0, 0.0)
+    slick_gain, inter_gain = state._held_gains
+    assert state._tyre_switch(slick_gain, inter_gain)[0] == "inters"
+
+
+def test_crossover_gains_ignore_neutralised_laps() -> None:
+    """SC lap times must not leak into gains or confirmation evidence."""
+    from types import SimpleNamespace
+
+    state = SessionState()
+    state.session_type = 15
+    state.track_length_m = 5000.0
+    state.total_laps = 20
+    state.lap_num = 5
+    state.tyre_compound = 17
+    state.race_phase = "racing"
+    compounds = (17, 16, 7, 7, 16)
+    state.cars_status = tuple(
+        SimpleNamespace(visual_tyre_compound=c, actual_tyre_compound=c, tyres_age_laps=2)
+        for c in compounds
+    )
+    last_laps = (120_000, 120_000, 121_000, 121_000, 120_000)
+
+    def set_cars(lap_num: int, last: tuple[int, ...] = last_laps) -> None:
+        state.cars_lap = tuple(
+            CarLap(
+                car_position=i + 1,
+                driver_status=4,
+                result_status=2,
+                pit_status=0,
+                current_lap_num=lap_num,
+                last_lap_time_ms=ms,
+            )
+            for i, ms in enumerate(last)
+        )
+
+    # Green sample: inters a second slower, slick_gain +1.0 becomes held.
+    state.lap_num = 4
+    set_cars(4)
+    snap = state.snapshot(0.0)
+    assert snap.slick_gain_s == 1.0
+    # SC deploys: held gains stand, _green_from_lap = 7 for every car.
+    state.lap_num = 5
+    state.safety_car_status = 1
+    state.race_phase = "sc"
+    snap = state.snapshot(1.0)
+    assert snap.slick_gain_s == 1.0
+    # Green mid-lap: every last lap is still an SC lap (inters now 112 s).
+    # The sample must hold, not flip to "inters" or record evidence.
+    state.safety_car_status = 0
+    state.race_phase = "racing"
+    set_cars(5, (120_000, 120_000, 112_000, 112_000, 120_000))
+    snap = state.snapshot(2.0)
+    assert snap.slick_gain_s == 1.0
+    assert snap.inter_gain_s == 0.0
+    assert snap.tyre_switch_to != "inters"
+    # Held ticks record no confirmation evidence.
+    assert set(state._wet_to_dry_passes) == {4}
+    # Lap 7: every car's last lap is fully green, gains go back to measured.
+    state.lap_num = 7
+    set_cars(7, (120_000, 120_000, 112_000, 112_000, 120_000))
+    snap = state.snapshot(3.0)
+    assert snap.slick_gain_s == -8.0
 
 
 def test_collision_event_starts_contact_check_and_reports() -> None:

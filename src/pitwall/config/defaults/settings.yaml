@@ -134,7 +134,11 @@ thresholds:
   tyre_graining_inter_c: 55
   tyre_graining_wet_c: 50
   compound_gain_min_cars: 2    # cars needed per compound group for a lap-time crossover
-  compound_crossover_s: 1.0    # drier compound this much a lap quicker = switch
+  compound_crossover_s: 1.0    # per-lap noise floor for a compound switch
+  wet_crossover_margin_s: 3.0  # switch only if gain over the laps left beats pit loss by this
+  wet_crossover_min_laps: 3    # laps needed after the in-lap for a compound switch
+  wet_to_dry_confirm_laps: 2   # measured laps in a row the slick gain must pass before slicks
+  wet_slip_trend_min: 2        # rise in slip events lap over lap that makes a wet call urgent
   drs_zone_lookahead_m: 300    # before 2026 only: zone start this close counts as "DRS ahead"
   drs_detection_gap_s: 1.0     # before 2026 only: gap for DRS availability
   aero_zone_lookahead_m: 250   # active aero countdown at or under this = aero zone ahead (2026)

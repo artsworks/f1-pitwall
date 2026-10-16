@@ -173,9 +173,15 @@ are always 0 and the `DRSE`/`DRSD` events never fire. DRS logic runs only on pre
 **Discipline.** Track `m_cornerCuttingWarnings` against the penalty threshold, blue flags,
 unserved penalties, and damage-driven pace loss.
 
-**Weather.** Filter forecast samples to the current session type and order them by
-`m_timeOffset`. Use `m_rainPercentage` to call the crossover lap for inters/wets and warn
-on the transition, not only on the change.
+**Weather.** Weather calls run in two stages.
+
+1. Warn from the forecast. Filter forecast samples to the current session type and order them by `m_timeOffset`. `m_rainPercentage` sets `weather_crossover` to `to_inter`, `to_wet` or `to_dry`, with `th.rain_hysteresis_pct` of hysteresis. The `weather_to_*` rules say that rain is coming or that the track is drying. They never call a stop.
+2. Call the stop from measured pace. `slick_gain_s` and `inter_gain_s` are the median last lap of running cars on the wetter compound minus the drier one, from at least `th.compound_gain_min_cars` cars in each group. A switch needs a per-lap gain of at least `th.compound_crossover_s`. It also needs `gain_s * laps_after > pit_loss_s + th.wet_crossover_margin_s`, where `laps_after` counts the laps after the in-lap and must be at least `th.wet_crossover_min_laps`. `pit_loss_s` is the measured loss for the current phase, so a safety car or VSC makes the stop cheaper. Lap times under a safety car say nothing about compounds, so the last green-flag gain holds until both compound groups complete a full green lap.
+
+The two directions use different tests:
+
+- Dry to wet is a grip risk. `tyre_switch` calls the stop when the net gain test passes. `weather_box_now` makes it a priority 1 call when `slip_trend` reaches `th.wet_slip_trend_min` while the rain forecast rises or rain is falling. `slip_trend` is the driver's traction and snap episodes on the last lap minus the lap before.
+- Wet to dry is a pace question. The net gain test must pass on `th.wet_to_dry_confirm_laps` measured laps in a row before `tyre_switch` calls slicks. If the projected rejoin is not clear (`pit_exit_clean` is false), `tyre_switch_slicks_traffic` warns about traffic on cold tyres. `out_lap_s3_tyres_cold` covers slick warm-up on the out-lap.
 
 ## Strategy plans (Plan A/B/C)
 
