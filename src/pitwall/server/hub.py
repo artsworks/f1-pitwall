@@ -12,12 +12,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import time
 from collections import deque
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.dispatcher import Call
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -73,7 +76,8 @@ class Hub:
     async def _send_ws(self, ws: WebSocket, data: str) -> None:
         try:
             await ws.send_text(data)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - remove clients that reject websocket frames
+            log.debug("dropping websocket client %r after send failure: %s", ws, exc)
             self.clients.discard(ws)
             self.audio_clients.discard(ws)
 

@@ -127,10 +127,10 @@ def classify(inp: BattleInputs, th: Mapping[str, object], prev: str = FREE) -> s
         return DEFENDING
     if ahead and inp.gap_ahead_s <= attack_gap:
         return ATTACKING
-    if behind and inp.gap_behind_s <= threat_gap and c_behind >= min_rate:
+    if behind and inp.gap_behind_s <= threat_gap and c_behind > 0 and c_behind >= min_rate:
         if (inp.gap_behind_s - defend_gap) / c_behind <= inp.laps_remaining:
             return THREAT
-    if ahead and inp.gap_ahead_s <= catch_gap and c_ahead >= min_rate:
+    if ahead and inp.gap_ahead_s <= catch_gap and c_ahead > 0 and c_ahead >= min_rate:
         if (inp.gap_ahead_s - attack_gap) / c_ahead <= inp.laps_remaining:
             return CATCHING
     if (ahead and inp.gap_ahead_s <= catch_gap) or (behind and inp.gap_behind_s <= threat_gap):

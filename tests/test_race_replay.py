@@ -3,35 +3,17 @@ M3 exit criterion on synthetic 25% / 100% races (docs/18)."""
 
 from __future__ import annotations
 
-import asyncio
 import collections
-import json
 from pathlib import Path
 
 import pytest
 
 from pitwall.audio.dispatcher import Call
-from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
-from pitwall.engine import build_engine, run_replay
-from pitwall.store.db import Database
 
-from .race_synth import RaceSpec, race_stream
-from .synth import write_packet_stream
+from .race_synth import RaceSpec, replay_race
 
 pytestmark = [pytest.mark.slow, pytest.mark.replay]
-
-
-def _replay(tmp: Path, spec: RaceSpec) -> tuple[list[Call], list[dict]]:
-    path = write_packet_stream(tmp / "race.f1bin", race_stream(spec))
-    log = tmp / "decisions.jsonl"
-    engine = build_engine(
-        clock=VirtualClock(), sinks=[], db=Database(":memory:"), decision_log_path=log
-    )
-    _, calls = asyncio.run(run_replay(path, engine, None))
-    engine.dispatcher.log.flush()
-    rows = [json.loads(line) for line in log.read_text().splitlines() if line]
-    return calls, rows
 
 
 def _ids(calls: list[Call]) -> set[str]:
@@ -61,7 +43,9 @@ SCENARIOS = {
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, tuple[list[Call], list[dict]]]:
-    return {name: _replay(tmp_path_factory.mktemp(name), spec) for name, spec in SCENARIOS.items()}
+    return {
+        name: replay_race(tmp_path_factory.mktemp(name), spec) for name, spec in SCENARIOS.items()
+    }
 
 
 EVENT_RULES = {
@@ -172,7 +156,7 @@ def test_exit_criterion_race(tmp_path: Path, fraction: float) -> None:
         wear_pct_per_lap=2.0,
         fuel_kg=laps * 1.7 + 3.0,
     )
-    calls, rows = _replay(tmp_path, spec)
+    calls, rows = replay_race(tmp_path, spec)
     _budget_ok(calls)
     box = [r for r in rows if r["rule_id"] == "box_now" and r["outcome"] == "fired"]
     assert box, "no pit call"

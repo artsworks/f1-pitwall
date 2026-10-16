@@ -197,7 +197,7 @@ def make_speaker(settings: SpeechSettings) -> Speaker:
         spec = ENGINES[engine]
         try:
             return spec.factory(settings)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - report engine failure and try its fallback
             fallback = _fallback_id(spec)
             _failure(spec, exc, fallback)
             if fallback is None:

@@ -17,7 +17,8 @@ from pitwall.config.loader import ConfigStore
 from pitwall.metrics import Metrics
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
-from pitwall.state.session import SessionState
+
+from .factories import make_state
 
 _now = 0.0
 
@@ -40,7 +41,7 @@ def _call(call_id: str = "c1", priority: int = 2) -> Call:
 def _app(store: ConfigStore | None = None) -> tuple[TestClient, Hub]:
     hub = Hub()
     metrics = Metrics()
-    state = SessionState()
+    state = make_state()
 
     client = TestClient(
         create_app(
@@ -183,7 +184,7 @@ def test_websocket_voice_control_reaches_engine_callback() -> None:
         called.set()
 
     hub = Hub()
-    state = SessionState()
+    state = make_state()
     client = TestClient(
         create_app(
             hub,
@@ -278,7 +279,7 @@ def test_packet_age_uses_receive_clock_not_session_time() -> None:
     store = ConfigStore()
     store.poll(0.0)
     settings = store.current()
-    state = SessionState()
+    state = make_state()
     payload = make_packet(PacketId.CAR_TELEMETRY, session_time=4879.5)
     recv = 1_000_000.0
     state.on_packet(parse_header(payload), payload, recv)
@@ -298,7 +299,7 @@ def test_health_includes_packet_age_and_live() -> None:
 
     hub = Hub()
     metrics = Metrics()
-    state = SessionState()
+    state = make_state()
     snap = state.snapshot(0.0)
     hub.health_source = lambda: {
         "packet_age_ms": packet_age_ms(snap),
@@ -314,7 +315,7 @@ def test_health_includes_packet_age_and_live() -> None:
 def test_packet_age_ms_helper() -> None:
     from pitwall.server.app import packet_age_ms
 
-    snap = SessionState().snapshot(2.0)
+    snap = make_state().snapshot(2.0)
     snap.last_packet_t = 1.5
     assert packet_age_ms(snap) == 500.0
     snap.last_packet_t = None
@@ -370,7 +371,7 @@ def test_state_payload_stale_after_gap() -> None:
     """Snapshot built long after the last packet is not live."""
     from pitwall.server.app import state_payload
 
-    snap = SessionState().snapshot(5.0)
+    snap = make_state().snapshot(5.0)
     payload = state_payload(snap, settings=ConfigStore().current(), metrics=Metrics(), quiet=False)
     assert payload["live"] is False
     assert payload["packet_age_ms"] is None
@@ -381,7 +382,7 @@ def test_state_payload_stale_after_gap() -> None:
 
     from .synth import pack_packet
 
-    state2 = SessionState()
+    state2 = make_state()
     ingest2 = Ingest()
     state2.register(ingest2)
     ingest2.on_datagram(pack_packet(PacketId.LAP_DATA), 0.0)

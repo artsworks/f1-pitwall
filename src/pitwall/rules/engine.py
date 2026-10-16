@@ -7,6 +7,7 @@ Per-rule hysteresis: fires on the `when` rising edge, re-arms on `clear_when`
 from __future__ import annotations
 
 import dataclasses
+import logging
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -22,6 +23,8 @@ from pitwall.rules.expr import (
 )
 from pitwall.rules.phrases import PhraseBook
 from pitwall.state.session import Snapshot
+
+log = logging.getLogger(__name__)
 
 STALENESS_DEFAULT_S = 1.0
 
@@ -83,6 +86,7 @@ class Candidate:
 class Suppressed:
     rule: Rule
     reason: str
+    detail: str = ""
 
 
 class Rule:
@@ -102,22 +106,19 @@ class Rule:
         self._worst_case = Predicate(defn.worst_case_when) if defn.worst_case_when else None
 
     def extras(self, ns: TrackedNamespace) -> tuple[float | None, bool, bool]:
-        try:
-            score = self._outcome_score(ns) if self._outcome_score is not None else None
-            if isinstance(score, bool) or not isinstance(score, int | float):
+        score = self._outcome_score(ns) if self._outcome_score is not None else None
+        if isinstance(score, bool) or not isinstance(score, int | float):
+            score = None
+        else:
+            score = float(score)
+            if not math.isfinite(score):
                 score = None
-            else:
-                score = float(score)
-                if not math.isfinite(score):
-                    score = None
-            obvious = bool(self._obvious(ns)) if self._obvious is not None else False
-            worst_case = bool(self._worst_case(ns)) if self._worst_case is not None else True
-            provisional_silent = self.defn.provisional and not (
-                self.defn.worst_case_urgent and worst_case
-            )
-            return score, obvious, provisional_silent
-        except Exception:
-            return None, False, False
+        obvious = bool(self._obvious(ns)) if self._obvious is not None else False
+        worst_case = bool(self._worst_case(ns)) if self._worst_case is not None else True
+        provisional_silent = self.defn.provisional and not (
+            self.defn.worst_case_urgent and worst_case
+        )
+        return score, obvious, provisional_silent
 
     def still_true(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         if self._still_true is None:
@@ -149,6 +150,14 @@ class RuleEngine:
         self.thresholds = dict(thresholds)
         self.mode = dict(mode)
         self.staleness_s = dict(staleness_s or {})
+        self._noted_errors: set[tuple[str, str]] = set()
+
+    def _note_error(self, rule: Rule, kind: str, exc: Exception) -> None:
+        key = (rule.id, kind)
+        if key in self._noted_errors:
+            return
+        self._noted_errors.add(key)
+        log.warning("rule %s %s: %s", rule.id, kind, exc)
 
     def _ns_kwargs(self) -> dict[str, Any]:
         return {
@@ -179,7 +188,8 @@ class RuleEngine:
                 if pred(ns):
                     severity = i
                     break
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - broken severity falls back to the prior tier
+                self._note_error(rule, "severity_error", exc)
                 continue
         tier_priority = rule.defn.severity[severity - 1].priority if severity else None
         priority = tier_priority or rule.defn.priority
@@ -189,9 +199,14 @@ class RuleEngine:
             template = pool[0] if pool else ""
         try:
             rendered = template.format_map(_WithRepeat(ns, 1))
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - broken templates use their source text
+            self._note_error(rule, "format_error", exc)
             rendered = template
-        outcome_score, obvious, provisional_silent = rule.extras(ns)
+        try:
+            outcome_score, obvious, provisional_silent = rule.extras(ns)
+        except Exception as exc:  # noqa: BLE001 - optional extras fall back to defaults
+            self._note_error(rule, "extras_error", exc)
+            outcome_score, obvious, provisional_silent = None, False, False
         snap_attrs = frozenset(public_names(snapshot))
         inputs = {
             name: _jsonable(ns.get(name))
@@ -219,7 +234,8 @@ class RuleEngine:
         if d.brief:
             try:
                 brief = d.brief.format_map(_WithRepeat(ns, 1))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - broken briefs use their source text
+                self._note_error(rule, "brief_error", exc)
                 brief = d.brief
         return Candidate(
             rule=rule,
@@ -256,20 +272,26 @@ class RuleEngine:
             ns = TrackedNamespace(data)
             try:
                 fired = bool(rule.when(ns))
-            except Exception:
-                result.suppressed.append(Suppressed(rule, "expr_error"))
+            except Exception as exc:  # noqa: BLE001 - failed predicates suppress this rule
+                self._note_error(rule, "expr_error", exc)
+                result.suppressed.append(Suppressed(rule, "expr_error", str(exc)))
                 continue
             if rule.clear_when is not None:
                 try:
                     if rule.clear_when(ns):
                         rule.armed = True
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - failed clear predicates keep the rule armed state
+                    self._note_error(rule, "clear_error", exc)
+                    result.suppressed.append(Suppressed(rule, "clear_error", str(exc)))
             elif not fired:
                 rule.armed = True
             if not (fired and rule.armed):
                 continue
-            outcome_score, obvious, provisional_silent = rule.extras(ns)
+            try:
+                outcome_score, obvious, provisional_silent = rule.extras(ns)
+            except Exception as exc:  # noqa: BLE001 - optional extras fall back to defaults
+                self._note_error(rule, "extras_error", exc)
+                outcome_score, obvious, provisional_silent = None, False, False
             if obvious:
                 if rule.obvious_noted:
                     continue
@@ -288,7 +310,8 @@ class RuleEngine:
                     if pred(ns):
                         severity = i
                         break
-                except Exception:
+                except Exception as exc:  # noqa: BLE001 - broken severity falls back to the prior tier
+                    self._note_error(rule, "severity_error", exc)
                     continue
             if obvious:
                 pool = rule.phrases.pool(repeat, severity)[1]
@@ -299,13 +322,15 @@ class RuleEngine:
             priority = tier_priority or d.priority
             try:
                 text = template.format_map(_WithRepeat(ns, repeat))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - broken templates use their source text
+                self._note_error(rule, "format_error", exc)
                 text = template
             brief = ""
             if d.brief:
                 try:
                     brief = d.brief.format_map(_WithRepeat(ns, repeat))
-                except Exception:
+                except Exception as exc:  # noqa: BLE001 - broken briefs use their source text
+                    self._note_error(rule, "brief_error", exc)
                     brief = d.brief
             inputs = {
                 name: _jsonable(ns.get(name))

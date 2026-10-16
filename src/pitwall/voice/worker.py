@@ -96,7 +96,7 @@ class VoiceWorker:
                 elif cmd == "close":
                     rec.stop()
                     listening = False
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - capture worker failures for the caller
             self.error = exc
             if not self.ready.is_set():
                 self.ready.set()
@@ -106,7 +106,7 @@ class VoiceWorker:
             if rec is not None:
                 try:
                     rec.close()
-                except BaseException as exc:
+                except BaseException as exc:  # noqa: BLE001 - report close failures while shutting down
                     log.exception("voice: recogniser close failed")
                     print(f"voice: recogniser close failed: {exc!r}", file=sys.stderr)
             if pythoncom is not None:

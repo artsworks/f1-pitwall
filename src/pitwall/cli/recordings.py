@@ -7,6 +7,7 @@ import os
 import sys
 import time
 from contextlib import ExitStack
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -58,10 +59,8 @@ def _mb(n: int) -> str:
 
 def _pitwall_version() -> str:
     try:
-        from importlib.metadata import version
-
         return version("pitwall")
-    except Exception:
+    except PackageNotFoundError:
         return "dev"
 
 
@@ -374,7 +373,7 @@ def cmd_recordings(args: argparse.Namespace) -> int:
             if header.wall_clock_start_us:
                 t = time.localtime(header.wall_clock_start_us / 1e6)
                 start = time.strftime("%Y-%m-%d %H:%M", t)
-        except Exception:
+        except Exception:  # noqa: BLE001 - unreadable headers display '?' in the listing
             pass
         marker = " synthetic" if synthetic else ""
         print(f"{i:>3}  {path.name:<44} {start:<16} {_mb(path.stat().st_size):>9}  {uid}{marker}")

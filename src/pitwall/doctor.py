@@ -38,13 +38,10 @@ class _FormatSnoop(Ingest):
         if len(payload) >= 7:
             self.sizes.setdefault(payload[6], set()).add(len(payload))
             self.versions.add((payload[2], payload[3], payload[4]))
-        try:
-            if len(payload) >= 33 and payload[6] == PacketId.EVENT:
-                code = payload[29:33].decode("ascii", errors="replace")
-                if code == "BUTN":
-                    self.butn_seen = True
-        except Exception:
-            pass
+        if len(payload) >= 33 and payload[6] == PacketId.EVENT:
+            code = payload[29:33].decode("ascii", errors="replace")
+            if code == "BUTN":
+                self.butn_seen = True
         super().on_datagram(payload, recv_time)
 
 

@@ -113,7 +113,7 @@ class SetupAdvisor:
         self._rules_source = copy.deepcopy(setup_rules)
         try:
             self.rules = parse_setup_rules(setup_rules)
-        except Exception:
+        except Exception:  # noqa: BLE001 - keep the last valid rules after reload errors
             log.exception("setup rules reload failed; keeping the last valid rules")
 
     def reset(self, uid: int) -> None:
@@ -252,7 +252,7 @@ class SetupAdvisor:
             else:
                 self._clear_call()
                 self._clear_stop_wing()
-        except Exception:
+        except Exception:  # noqa: BLE001 - clear failed live advice and report the error
             self.clear()
             log.exception("live setup advice failed; skipping this lap")
 
@@ -272,5 +272,5 @@ class SetupAdvisor:
             if advice is None:
                 return
             self.state.setup_advice = (*self.state.setup_advice, *advice.recommendations)
-        except Exception:
+        except Exception:  # noqa: BLE001 - report debrief advice failures and continue
             log.exception("debrief setup advice failed; skipping")

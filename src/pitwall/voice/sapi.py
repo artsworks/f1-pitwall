@@ -41,7 +41,7 @@ def _phrase(result: Any) -> tuple[str, float]:
     text = str(info.GetText())
     try:
         conf = float(info.Rule.EngineConfidence)
-    except Exception:
+    except Exception:  # noqa: BLE001 - use zero confidence when COM property access fails
         conf = 0.0
     return text, conf
 
@@ -61,7 +61,7 @@ class _Events:
     def OnFalseRecognition(self, stream: Any, pos: Any, result: Any) -> None:  # noqa: N802
         try:
             text, conf = _phrase(result)
-        except Exception:
+        except Exception:  # noqa: BLE001 - emit a false-recognition event on COM failure
             text, conf = "", 0.0
         self._emit("false", text, conf)
 
@@ -140,7 +140,7 @@ class SapiRecognizer:
         self.recognizer_desc = str(token.GetDescription())
         try:
             self.lang = lang_for_lcid(str(token.GetAttribute("Language")))
-        except Exception:
+        except Exception:  # noqa: BLE001 - use the default language when COM lookup fails
             self.lang = "en-US"
         ins = reco.GetAudioInputs()
         if ins.Count == 0:
@@ -156,7 +156,7 @@ class SapiRecognizer:
         ):
             try:
                 self.props[prop] = bool(reco.SetPropertyNumber(prop, value))
-            except Exception:
+            except Exception:  # noqa: BLE001 - report unsupported COM properties as false
                 self.props[prop] = False
         ctx: Any = reco.CreateRecoContext()
         events: Any = win32com.client.WithEvents(ctx, _Events)
@@ -178,7 +178,7 @@ class SapiRecognizer:
             try:
                 g.CmdLoadFromFile(str(path), SLO_STATIC)
                 return "srgs"
-            except Exception as exc:  # fall back to building the same rule in code
+            except Exception as exc:  # noqa: BLE001 - fall back to building the same rule in code
                 self.srgs_error = str(exc)
         rule = g.Rules.Add("request", SRA_TOP_LEVEL | SRA_DYNAMIC, 1)
         for phrase in grammar.phrases:

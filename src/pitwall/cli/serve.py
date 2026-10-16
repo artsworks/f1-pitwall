@@ -82,7 +82,7 @@ def _speak_startup(
         def warm_and_speak() -> None:
             try:
                 speaker.warm([(text, STARTUP_PRIORITY) for _, text in lines])
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - report warm-up failure and speak anyway
                 log.warning("startup lines not pre-rendered: %s", exc)
             speak_lines()
 
@@ -616,6 +616,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if db is not None:
             print(f"  database: {db.path}")
             print(f"  quarantined values: {len(db.quarantined_params())}")
-    except Exception:
+    except Exception:  # noqa: BLE001 - report learned-state output as unavailable
         print("learned state: unavailable")
     return result
