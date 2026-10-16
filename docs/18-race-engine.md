@@ -328,12 +328,12 @@ rival_ahead_pace_ms, rival_behind_pace_ms, rival_pit_exit_pace_ms: int
 rival_ahead_name, rival_behind_name, rival_pit_exit_name: str
 rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
-rival_ahead_in_pit_lane: bool                  # the validated car ahead is in the pit lane now
+rival_ahead_in_pit_lane, rival_behind_in_pit_lane: bool  # validated rival is in the pit lane now
 rival_ahead2_pos, rival_behind2_pos: int       # second car on each side (0 = none)
 rival_ahead2_name, rival_behind2_name: str
 rival_ahead2_gap_s, rival_behind2_gap_s: float # our gap to the rival plus its own delta to that car
 rival_ahead2_overtake, rival_behind2_overtake: bool
-# The latched car keeps its pre-pit gap while it stops.
+# Ahead and behind latches keep each validated rival's pre-pit gap while it stops.
 rival_data_restricted: bool         # rival Car Status/Damage fields all zero for >= th.restricted_detect_laps
 pit_exit_rival_gap_s: float         # projected gap to rival_pit_exit_idx at pit exit (positive = rival ahead)
 pit_exit_clean: bool                # release_window() at pit exit with the race gap threshold
@@ -352,7 +352,7 @@ penalty_recent: bool                # PENA event for the player inside th.penalt
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)
 weather_now: int; rain_pct_now: int; rain_pct_in_10: int; rain_pct_in_30: int
 weather_crossover: str              # '' | 'to_inter' | 'to_wet' | 'to_dry' from forecast + th.rain_inter_pct/th.rain_wet_pct/th.rain_dry_pct
-pit_plan: str                       # '' | 'stay' | 'box_now' | 'box_in_n' | 'undercut' | 'overcut' | 'free_stop' | 'cheap_stop'
+pit_plan: str                       # '' | 'stay' | 'box_now' | 'box_in_n' | 'undercut' | 'overcut' | 'cover' | 'defend' | 'free_stop' | 'cheap_stop'
 pit_plan_lap: int; pit_plan_gain_s: float; pit_plan_confidence: float; pit_plan_risk: float
 pit_plan_rival_idx: int; pit_plan_rival_name: str; pit_plan_reason: str
 predicted_lap_ms: int               # model prediction for the *next* lap, for grading
@@ -407,6 +407,18 @@ waiting gains). Decisions:
 - `overcut` requires `rival_ahead.pitted`, `laps_of_pace >= th.overcut_min_laps`, and a predicted gain of at least `mode.pit_gain_min_s`.
   It also requires `laps_remaining > th.overcut_laps` and a possible stop.
   The optimiser returns `plan='overcut', lap=lap_num + th.overcut_laps`.
+- `cover` requires a pitted rival behind, a finite gap below `th.cover_max_gap_s`, and a possible stop.
+  It compares our current-tyre pace with the shared fresh-tyre fit over `th.undercut_laps`.
+  `cover_s = round(sum(current_lap_ms - fresh_fit_lap_ms) / 1000 - outlap_warmup_s - gap_behind_s, 2)`.
+  A positive value means the rival could jump us. The optimiser returns `cover` when
+  `cover_s + th.cover_margin_s > 0`, with `risk = 0`.
+- Defaults are `cover_margin_s=0.5`, `cover_max_gap_s=3.0`, and `cover_defend_gain_s=1.0`.
+- `defend` requires the same rival and gap gates, `-cover_s >= th.cover_defend_gain_s`,
+  `laps_of_pace >= th.overcut_min_laps`, and `best_k >= 1`.
+  The optimiser returns `defend` for `lap_num + th.undercut_laps`.
+- The engine holds a `cover` or `defend` plan for the same rival after the pit-lane latch clears.
+  It keeps the plan through the current or next lap during green racing with enough laps left.
+  A phase change, safety car, cheap stop, or later lap clears the held plan.
 - otherwise `box_now` if `best_k == lap_num`, `box_in_n` if `best_k <= lap_num + th.box_in_max_laps`,
   else `stay`.
 
@@ -416,8 +428,9 @@ The snapshot therefore excludes tyre gains that cannot affect the finish.
 
 `confidence = fit.confidence * (restricted_factor if restricted else 1) * pit_loss_conf` where
 `pit_loss_conf = 1.0 learned/this-session, 0.8 overlay, 0.6 default`.
-`risk` = probability-ish of losing a position: `clamp((pit_loss_s − gap_behind_s) / pit_loss_s, 0, 1)`
-(0 when the car behind is further back than the pit loss). Rules gate on
+`risk` estimates position loss: `clamp((pit_loss_s − gap_behind_s) / pit_loss_s, 0, 1)`
+(0 when the car behind is further back than the pit loss). A `cover` plan sets risk to zero.
+Rules gate on
 `pit_plan_confidence >= mode.pit_confidence_min`, `pit_plan_gain_s >= mode.pit_gain_min_s`,
 `pit_plan_risk <= mode.position_loss_risk_max`.
 
@@ -485,6 +498,8 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `box_now` | 1 | `pit_plan in ('box_now','cheap_stop','free_stop','undercut') and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_risk <= mode.position_loss_risk_max` |
 | `box_in_n` | 2 | `pit_plan == 'box_in_n' and confidence gate` cooldown 60 |
 | `overcut_stay_out` | 2 | `pit_plan == 'overcut'` |
+| `cover_box` | 1 | `pit_plan == 'cover' and confidence and risk gates; laps remain above pit minimum` |
+| `overcut_defend` | 1 | `pit_plan == 'defend' and confidence gate; laps remain above pit minimum` |
 | `tyre_life` | 3 | every `mode.rival_info_every_n_laps` laps: "these tyres have about {laps_of_pace:.0f} laps of pace" |
 | `tyre_overheat` / `tyre_graining` | 2 | `overheat` / `graining` with cooldown 90 |
 | `tyre_blister` | 2 | `blister_max_pct >= th.blister_warn_pct` |
@@ -503,7 +518,7 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `corner_cut_warning` / `corner_cut_last_warning` | 2/1 | corner-cut warning (PENA 7), counted separately from running wide |
 | `penalty_corner_cut` | 1 | time penalty for a corner cut (infringement 7–9) |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
-| `rival_pitted` | 2 | `rival_ahead_in_pit_lane or rival_behind_pitted`; the behind call waits until our own tyres are 2 laps old, so it never announces cars that stopped alongside us |
+| `rival_ahead_pitted` / `rival_behind_pitted` | 2 | Ahead call uses `rival_ahead_in_pit_lane`; behind call uses `rival_behind_in_pit_lane`, tyre age ≥ 2, and the pit-minimum lap gate |
 | `weather_crossover` | 2 | `weather_crossover != ''` |
 | `sc_deployed` / `vsc_deployed` / `sc_ending` | 1 | phase transitions |
 | `lights_out` | 3 | LGOT: "laps_remaining, fuel margin, plan" |

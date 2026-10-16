@@ -672,6 +672,14 @@ def test_pit_answer_judges_tyres_to_the_end() -> None:
     assert answer(pit, Snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
 
 
+def test_pit_answer_maps_cover_to_box_and_defend_to_stay_out() -> None:
+    pit = MenuItemModel(id="pit", label="Pit now?")
+    cover = Snapshot(now=0.0, laps_remaining=8, pit_plan="cover")
+    defend = Snapshot(now=0.0, laps_remaining=0, pit_plan="defend")
+    assert answer(pit, cover, "b")[0] == "box_now"
+    assert answer(pit, defend, "b")[0] == "stay_out"
+
+
 def test_pit_answer_accounts_for_front_wing_repair() -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
     snap = Snapshot(

@@ -24,6 +24,7 @@ from pitwall.strategy.battle import (
     PASS_COMPOUND,
     PASS_OT,
     THREAT,
+    Battle,
     BattleInputs,
     BattleRates,
     BattleTracker,
@@ -394,6 +395,36 @@ def test_engine_battle_swaps_land_on_snapshot(tmp_path: Path) -> None:
     )
     snap = dataclasses.replace(Snapshot(now=10.0), session_kind="race", race_phase="racing")
     assert engine._battle(snap).battle_swaps == 1
+
+
+def test_engine_does_not_defend_against_rival_in_pit_lane(tmp_path: Path) -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=tmp_path / "d.jsonl")
+    received: list[BattleInputs] = []
+
+    class CaptureTracker:
+        def update(self, inp: BattleInputs, _th, _rates) -> Battle:
+            received.append(inp)
+            return Battle()
+
+        def drain(self) -> list[Episode]:
+            return []
+
+        def swap_count(self, _now: float, _th: object) -> int:
+            return 0
+
+    engine.battle_tracker = CaptureTracker()  # type: ignore[assignment]
+    snap = dataclasses.replace(
+        Snapshot(now=10.0),
+        session_kind="race",
+        race_phase="racing",
+        rival_behind_idx=2,
+        gap_behind_s=0.7,
+        rival_behind_in_pit_lane=True,
+    )
+    engine._battle(snap)
+
+    assert received[0].behind_idx == -1
+    assert received[0].gap_behind_s == math.inf
 
 
 def test_swaps_with_several_cars_are_a_scrap() -> None:

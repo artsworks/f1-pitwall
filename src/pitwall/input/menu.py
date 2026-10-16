@@ -170,7 +170,7 @@ def _pit(snap: Snapshot) -> Answer:
         return "box_now", v
     if snap.front_wing_pit_status == "nurse":
         return "damage_nurse", v
-    if plan in ("box_now", "cheap_stop", "free_stop"):
+    if plan in ("box_now", "cheap_stop", "free_stop", "cover"):
         return "box_now", v
     if plan == "box_in_n":
         return "soon", v
@@ -179,7 +179,7 @@ def _pit(snap: Snapshot) -> Answer:
             return "damage_review", v
         if plan == "no_stop":
             return "no_stop", v
-        if plan in ("stay", "overcut"):
+        if plan in ("stay", "overcut", "defend"):
             return "stay_out", v
         return "unknown", v
     if snap.laps_of_pace < left:

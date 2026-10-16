@@ -651,6 +651,7 @@ def test_strategy_payload_race_contract() -> None:
         rival_ahead_idx=3,
         rival_ahead_pos=4,
         rival_ahead_name="Norris",
+        rival_ahead_in_pit_lane=True,
         rival_ahead_compound=18,
         rival_ahead_pace_ms=91_200,
         predicted_lap_ms=91_000,
@@ -659,6 +660,7 @@ def test_strategy_payload_race_contract() -> None:
         rival_behind_idx=5,
         rival_behind_pos=6,
         rival_behind_name="Leclerc",
+        rival_behind_in_pit_lane=True,
         gap_behind_s=0.8,
         undercut_s=1.2,
         fuel_margin_laps=0.4,
@@ -670,10 +672,13 @@ def test_strategy_payload_race_contract() -> None:
     assert s["ahead"]["pos"] == 4 and s["ahead"]["compound"] == "HARD"
     assert s["ahead"]["pace_delta_s"] == 0.2 and s["ahead"]["gap_trend_s"] == 0.3
     assert s["behind"]["overtake"] is True and s["ahead"]["overtake"] is False
+    assert s["ahead"]["in_pit_lane"] and s["behind"]["in_pit_lane"]
     assert s["undercut_s"] == 1.2 and s["fuel_delta_laps"] == 0.4
     assert "L26–28" in s["stint_plan"]
     body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False, page="car")
     assert body["strategy"]["ahead"]["name"] == "Norris"
+    assert body["race"]["rival_ahead"]["in_pit_lane"]
+    assert body["race"]["rival_behind"]["in_pit_lane"]
     assert body["page"] == "car" and "car" in body["pages"]
     assert body["track_info"]["gap_ahead_s"] == 1.4
     assert body["setup"] is None

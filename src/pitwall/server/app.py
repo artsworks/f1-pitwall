@@ -236,6 +236,9 @@ def strategy_payload(
             "gap_trend_s": snapshot.gap_trend_ahead_s if ahead else snapshot.gap_trend_behind_s,
             "overtake": rival_overtake(ahead, gap_f),
             "pitted": snapshot.rival_ahead_pitted if ahead else snapshot.rival_behind_pitted,
+            "in_pit_lane": (
+                snapshot.rival_ahead_in_pit_lane if ahead else snapshot.rival_behind_in_pit_lane
+            ),
             "pace_words": (snapshot.battle_pace_ahead if ahead else snapshot.battle_pace_behind)
             or None,
             "last_lap_ms": car.last_lap_time_ms if car and car.last_lap_time_ms else None,
@@ -627,6 +630,7 @@ def state_payload(
                 "pace_ms": snapshot.rival_ahead_pace_ms,
                 "age": snapshot.rival_ahead_age,
                 "pitted": snapshot.rival_ahead_pitted,
+                "in_pit_lane": snapshot.rival_ahead_in_pit_lane,
             },
             "rival_behind": {
                 "idx": snapshot.rival_behind_idx,
@@ -634,6 +638,7 @@ def state_payload(
                 "pace_ms": snapshot.rival_behind_pace_ms,
                 "age": snapshot.rival_behind_age,
                 "pitted": snapshot.rival_behind_pitted,
+                "in_pit_lane": snapshot.rival_behind_in_pit_lane,
             },
             "rival_pit_exit": {
                 "idx": snapshot.rival_pit_exit_idx,

@@ -121,7 +121,33 @@ def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
 _NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
 # Pit plans that end in a stop. "stay" and "no_stop" are plans too, but the
 # wing change at the stop only makes sense when a stop is coming.
-_STOP_PLANS = frozenset({"box_now", "box_in_n", "cheap_stop", "free_stop", "undercut", "overcut"})
+_STOP_PLANS = frozenset(
+    {"box_now", "box_in_n", "cheap_stop", "free_stop", "undercut", "overcut", "cover"}
+)
+
+
+def _hold_cover_plan(
+    held: tuple[PitPlan, int] | None,
+    plan: PitPlan,
+    snap: Snapshot,
+    pit_min_laps_left: float,
+) -> tuple[PitPlan, tuple[PitPlan, int] | None]:
+    if plan.plan in ("cover", "defend"):
+        if held is None or held[0].rival_idx != plan.rival_idx:
+            held = (plan, snap.lap_num)
+        return plan, held
+    if held is None:
+        return plan, None
+    held_plan, start_lap = held
+    if (
+        snap.phase == "racing"
+        and snap.safety_car_status == 0
+        and snap.lap_num <= start_lap + 1
+        and snap.laps_remaining > pit_min_laps_left
+        and plan.plan != "cheap_stop"
+    ):
+        return held_plan, held
+    return plan, None
 
 
 def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
@@ -360,6 +386,7 @@ class Engine:
         self.deg_fit: DegFit | None = None
         self.pit_loss_prior: Prior | None = None
         self.pit_plan: PitPlan = NO_PLAN
+        self._held_plan: tuple[PitPlan, int] | None = None
         self._fresh_prior: DegFit | None = None
         self._green_pit_loss_s = 0.0
         self._sc_pit_loss_s = 0.0
@@ -396,6 +423,7 @@ class Engine:
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
             self._reset_energy_lap_tracking()
+            self._held_plan = None
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
@@ -826,6 +854,7 @@ class Engine:
                 except sqlite3.Error:
                     self._pending_pit_loss = None
         self.dispatcher.reset_session(uid)
+        self._held_plan = None
         self._reset_energy_lap_tracking()
         self.menu.close()
         self._voice_close(self.clock.now(), "session")
@@ -1591,6 +1620,16 @@ class Engine:
             if snap.rival_ahead_idx >= 0
             else None
         )
+        behind = (
+            RivalView(
+                snap.rival_behind_idx,
+                snap.rival_behind_name,
+                snap.rival_behind_pace_ms,
+                snap.rival_behind_pitted,
+            )
+            if snap.rival_behind_idx >= 0
+            else None
+        )
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -1604,12 +1643,16 @@ class Engine:
             green_pit_loss_s=self._green_pit_loss_s,
             sc_status=snap.safety_car_status,
             rival_ahead=ahead,
+            rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
             gap_behind_s=snap.gap_behind_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
             mode=self.mode(),
             th=settings.thresholds,
+        )
+        plan, self._held_plan = _hold_cover_plan(
+            self._held_plan, plan, snap, self._th("pit_min_laps_left", 2)
         )
         self.pit_plan = plan
         self.state.set_model(
@@ -1782,9 +1825,9 @@ class Engine:
             position=snap.position,
             laps_remaining=snap.laps_remaining,
             ahead_idx=snap.rival_ahead_idx,
-            behind_idx=snap.rival_behind_idx,
+            behind_idx=-1 if snap.rival_behind_in_pit_lane else snap.rival_behind_idx,
             gap_ahead_s=snap.gap_ahead_s,
-            gap_behind_s=snap.gap_behind_s,
+            gap_behind_s=math.inf if snap.rival_behind_in_pit_lane else snap.gap_behind_s,
             trend_ahead_s=snap.gap_trend_ahead_s,
             trend_behind_s=snap.gap_trend_behind_s,
             own_pace_ms=own,

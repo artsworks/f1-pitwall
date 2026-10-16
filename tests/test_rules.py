@@ -340,6 +340,54 @@ def test_rival_ahead_pitted_rule_requires_time_to_stop(laps_left_offset: int) ->
     assert ("rival_ahead_pitted" in ids) == (laps_left_offset > 0)
 
 
+def test_cover_box_rule_fires_and_respects_minimum_laps() -> None:
+    from pitwall.config.loader import ConfigStore
+
+    min_left = int(ConfigStore().current().thresholds["pit_min_laps_left"])
+    base = {
+        "phase": "racing",
+        "pit_plan": "cover",
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "_ages": {"lap_data": 0.1, "car_status": 0.1},
+    }
+    fired = _default_rule_engine().evaluate(_snap(**base, laps_remaining=min_left + 1))
+    assert "cover_box" in {candidate.rule.defn.id for candidate in fired.candidates}
+
+    suppressed = _default_rule_engine().evaluate(_snap(**base, laps_remaining=min_left))
+    assert "cover_box" not in {candidate.rule.defn.id for candidate in suppressed.candidates}
+
+
+def test_overcut_defend_rule_fires() -> None:
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            laps_remaining=10,
+            pit_plan="defend",
+            pit_plan_confidence=0.9,
+        )
+    )
+    assert "overcut_defend" in {candidate.rule.defn.id for candidate in result.candidates}
+
+
+@pytest.mark.parametrize(("tyre_age", "expected"), [(3, True), (1, False)])
+def test_rival_behind_pitted_rule_uses_pit_lane_flag(tyre_age: int, expected: bool) -> None:
+    from pitwall.config.loader import ConfigStore
+
+    min_left = int(ConfigStore().current().thresholds["pit_min_laps_left"])
+    result = _default_rule_engine().evaluate(
+        _snap(
+            phase="racing",
+            tyre_age_laps=tyre_age,
+            laps_remaining=min_left + 1,
+            rival_behind_in_pit_lane=True,
+            rival_behind_name="PIASTRI",
+        )
+    )
+    ids = {candidate.rule.defn.id for candidate in result.candidates}
+    assert ("rival_behind_pitted" in ids) is expected
+
+
 def test_front_wing_damage_rule_fires() -> None:
     from pitwall.state.session import Damage
 

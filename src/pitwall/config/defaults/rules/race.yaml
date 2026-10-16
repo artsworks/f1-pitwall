@@ -221,6 +221,45 @@ rules:
       - "{pit_plan_rival_name} has boxed. Stay out and push, overcut is on"
       - "{pit_plan_rival_name} pitted. Push now, we go long"
       - "{pit_plan_rival_name}'s in. Stay out, give me some quick laps"
+  - id: cover_box
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    outcome_score: "pit_plan_gain_s"
+    conflict_group: pit_or_stay
+    supersedes: [box_in_n]
+    when: "phase == 'racing' and pit_plan == 'cover' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_risk <= mode.position_loss_risk_max and laps_remaining > th.pit_min_laps_left"
+    clear_when: "phase != 'racing' or pit_plan != 'cover'"
+    still_true: "phase == 'racing' and pit_plan == 'cover'"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data, car_status]
+    say:
+      - "Cover the undercut. Box, box"
+      - "{pit_plan_rival_name} has boxed. Cover it, box this lap"
+      - "Box, box. Cover {pit_plan_rival_name}"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Copy, staying out. Push, {pit_plan_rival_name} is on fresh tyres"
+  - id: overcut_defend
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    outcome_score: "pit_plan_gain_s"
+    conflict_group: pit_or_stay
+    supersedes: [box_in_n]
+    when: "phase == 'racing' and pit_plan == 'defend' and pit_plan_confidence >= mode.pit_confidence_min and laps_remaining > th.pit_min_laps_left"
+    clear_when: "phase != 'racing' or pit_plan != 'defend'"
+    still_true: "phase == 'racing' and pit_plan == 'defend'"
+    cooldown_s: 60
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Stay out, extend. Their tyres need time, push now"
+      - "{pit_plan_rival_name}'s in. Stay out and push, we keep the place"
+      - "Stay out. {pit_plan_rival_name} needs a lap on those tyres, push now"
   - id: tyre_life
     sessions: [race]
     priority: 3
@@ -868,13 +907,14 @@ rules:
     sessions: [race]
     priority: 2
     brief: "Rival behind has pitted"
-    when: "phase == 'racing' and rival_behind_pitted and tyre_age_laps >= 2"
-    clear_when: "not rival_behind_pitted"
+    when: "phase == 'racing' and rival_behind_in_pit_lane and tyre_age_laps >= 2 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "not rival_behind_in_pit_lane"
     cooldown_s: 45
     cooldown_group: rival_pit
-    resolved_by: [box_now, overcut_stay_out]
+    resolved_by: [box_now, overcut_stay_out, cover_box, overcut_defend]
     requires: [lap_data]
     say:
+      - "{rival_behind_name} has boxed. Fresh tyres, expect the undercut"
       - "{rival_behind_name} behind has boxed. Watch the undercut"
       - "{rival_behind_name} pitted. Undercut threat, push"
       - "{rival_behind_name} boxed. Push, cover the undercut"

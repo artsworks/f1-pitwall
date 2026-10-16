@@ -93,6 +93,7 @@ def _session_rivals() -> tuple[SessionState, tuple[CarLap, ...]]:
             total_distance=58832.0,
             car_position=4,
             result_status=2,
+            delta_to_car_in_front_ms=1500,
         ),
     )
     state.cars_lap = cars
@@ -144,6 +145,55 @@ def test_session_ahead_pitted_requires_current_pit_status() -> None:
     assert snapshot.cars[1].pit_status == 0
     assert snapshot.rival_ahead_pitted
     assert not snapshot.rival_ahead_in_pit_lane
+
+
+def test_session_latches_validated_behind_through_pit_lane() -> None:
+    state, cars = _session_rivals()
+    before = state.snapshot(811.0)
+    assert before.rival_behind_idx == 2
+    assert before.rival_behind_name == "PIASTRI"
+    assert before.gap_behind_s == pytest.approx(1.5)
+
+    state._last_session_time = 812.0
+    state._last_update["lap_data"] = 812.0
+    state.cars_lap = (
+        cars[0],
+        cars[1],
+        CarLap(
+            lap_distance=2800.0,
+            total_distance=58832.0,
+            car_position=4,
+            pit_status=1,
+            result_status=2,
+            delta_to_car_in_front_ms=1500,
+        ),
+    )
+    state._cars_pitted_this_lap.add(2)
+    in_pits = state.snapshot(812.0)
+    assert in_pits.rival_behind_idx == 2
+    assert in_pits.rival_behind_name == "PIASTRI"
+    assert in_pits.gap_behind_s == pytest.approx(1.5)
+    assert in_pits.rival_behind_pitted
+    assert in_pits.rival_behind_in_pit_lane
+
+    state._last_session_time = 813.0
+    state._last_update["lap_data"] = 813.0
+    state.cars_lap = (
+        cars[0],
+        cars[1],
+        CarLap(
+            lap_distance=2800.0,
+            total_distance=58832.0,
+            car_position=4,
+            pit_status=0,
+            result_status=2,
+            delta_to_car_in_front_ms=1500,
+        ),
+    )
+    released = state.snapshot(813.0)
+    assert released.rival_behind_idx == 2
+    assert released.gap_behind_s == pytest.approx(1.5)
+    assert not released.rival_behind_in_pit_lane
 
 
 def _rule_engine() -> RuleEngine:
