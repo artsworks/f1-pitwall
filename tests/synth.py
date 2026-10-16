@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import struct
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from functools import cache
 from pathlib import Path
 
 from pitwall.net.recording import RecordingWriter
@@ -78,33 +79,86 @@ def write_synthetic_recording(
     return path
 
 
-def _field_values(item: Field, value: object) -> list[object]:
+_Flattener = Callable[[dict[str, object], list[object]], None]
+
+
+def _field_flattener(item: Field) -> _Flattener:
+    name = item.name
     if item.count == 1:
+        if item.fmt.endswith("s"):
+            size = struct.calcsize("<" + item.fmt)
+            zero = b"\0" * size
+
+            def flatten(data: dict[str, object], values: list[object]) -> None:
+                value = data.get(name)
+                if value is None:
+                    value = zero
+                elif isinstance(value, str):
+                    value = value.encode("utf-8")
+                if not isinstance(value, bytes):
+                    value = bytes(value)  # type: ignore[arg-type]
+                values.append(value)
+
+            return flatten
+
+        def flatten(data: dict[str, object], values: list[object]) -> None:
+            value = data.get(name)
+            if value is None:
+                value = 0
+            elif isinstance(value, str):
+                value = value.encode("utf-8")
+            values.append(value)
+
+        return flatten
+
+    count = item.count
+    zeros = (0,) * count
+
+    def flatten(data: dict[str, object], values: list[object]) -> None:
+        value = data.get(name)
         if value is None:
-            return [b"\0" * struct.calcsize("<" + item.fmt) if item.fmt.endswith("s") else 0]
-        if isinstance(value, str):
-            value = value.encode("utf-8")
-        if item.fmt.endswith("s") and not isinstance(value, bytes):
-            return [bytes(value)]  # type: ignore[arg-type]
-        return [value]
-    n = item.count
-    if value is None:
-        return [0] * n
-    seq = list(value)  # type: ignore[arg-type]
-    return (seq + [0] * n)[:n]
+            values.extend(zeros)
+            return
+        sequence = list(value)  # type: ignore[arg-type]
+        values.extend(sequence[:count])
+        if len(sequence) < count:
+            values.extend(zeros[: count - len(sequence)])
+
+    return flatten
 
 
-def _layout_values(layout: tuple[Item, ...], data: dict[str, object]) -> list[object]:
-    vals: list[object] = []
+def _layout_flatteners(layout: tuple[Item, ...]) -> tuple[_Flattener, ...]:
+    flatteners: list[_Flattener] = []
     for item in layout:
         if isinstance(item, Field):
-            vals.extend(_field_values(item, data.get(item.name)))
-        else:
-            cars = data.get(item.name, {})
-            for i in range(item.n):
-                sub = cars.get(i, {}) if isinstance(cars, dict) else {}
-                vals.extend(_layout_values(item.layout, sub))
-    return vals
+            flatteners.append(_field_flattener(item))
+            continue
+        child_flatteners = _layout_flatteners(item.layout)
+
+        def flatten_array(
+            data: dict[str, object],
+            values: list[object],
+            *,
+            name: str = item.name,
+            count: int = item.n,
+            children: tuple[_Flattener, ...] = child_flatteners,
+        ) -> None:
+            array = data.get(name, {})
+            if not isinstance(array, dict):
+                array = {}
+            for index in range(count):
+                child = array.get(index, {})
+                for flattener in children:
+                    flattener(child, values)
+
+        flatteners.append(flatten_array)
+    return tuple(flatteners)
+
+
+@cache
+def _packet_plan(packet_id: int) -> tuple[struct.Struct, tuple[_Flattener, ...]]:
+    _cls, layout = _PACKET_CLASSES[packet_id]
+    return _compiled(layout).struct, _layout_flatteners(layout)
 
 
 def pack_packet(
@@ -118,9 +172,12 @@ def pack_packet(
 ) -> bytes:
     """Pack a real packet from a layout table. `data` maps field names to
     values; `data['cars']` maps car index -> per-car field dict."""
-    _cls, layout = _PACKET_CLASSES[packet_id]
-    compiled = _compiled(layout)
-    body = compiled.struct.pack(*_layout_values(layout, data or {}))
+    packer, flatteners = _packet_plan(packet_id)
+    values: list[object] = []
+    packet_data = data or {}
+    for flattener in flatteners:
+        flattener(packet_data, values)
+    body = packer.pack(*values)
     header = HEADER_STRUCT.pack(
         2026, 26, 1, 0, 1, packet_id, session_uid, session_time, frame, frame, player, 255
     )

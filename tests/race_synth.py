@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import struct
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
@@ -26,6 +27,8 @@ TRACK_M = 5000
 ACTIVE_AERO_LOOKAHEAD_M = 250
 OVERTAKE_LOOKAHEAD_M = 300
 NAMES = {0: b"PLAYER", 1: b"NORRIS", 2: b"LECLERC", 3: b"VERSTAPPEN"}
+_RACE_STREAM_CACHE_MAXSIZE = 8
+_RACE_STREAM_CACHE: OrderedDict[str, list[tuple[float, bytes]]] = OrderedDict()
 
 
 @dataclass
@@ -284,6 +287,19 @@ def _player_history(lap_times: list[int]) -> dict[str, object]:
 
 
 def race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
+    key = repr(spec)
+    packets = _RACE_STREAM_CACHE.get(key)
+    if packets is None:
+        packets = _build_race_stream(spec)
+        _RACE_STREAM_CACHE[key] = packets
+        if len(_RACE_STREAM_CACHE) > _RACE_STREAM_CACHE_MAXSIZE:
+            _RACE_STREAM_CACHE.popitem(last=False)
+    else:
+        _RACE_STREAM_CACHE.move_to_end(key)
+    return list(packets)
+
+
+def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     pkts: list[tuple[float, bytes]] = []
     t = 0.0
     frame = 1
