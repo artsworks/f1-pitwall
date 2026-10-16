@@ -553,24 +553,6 @@ class Dispatcher:
                 continue
             if reverse_supersedes:
                 return "conflict"
-            call_missed = (
-                call.urgency == "execution"
-                and bool(call.decision_point)
-                and call.decision_s is not None
-                and call.decision_s < self.policy.decision_missed_s
-            )
-            rival_missed = (
-                rival.urgency == "execution"
-                and bool(rival.decision_point)
-                and rival.decision_s is not None
-                and rival.decision_s < self.policy.decision_missed_s
-            )
-            if rival_missed:
-                self._drop_queued(rival.id, "decision_missed")
-            if call_missed:
-                return "decision_missed"
-            if rival_missed:
-                continue
             if rotates:
                 if self._rng.choice((True, False)):
                     self._drop_queued(rival.id, "rotated")
@@ -583,7 +565,8 @@ class Dispatcher:
                         self._drop_queued(rival.id, "conflict_loser")
                         continue
                     return "conflict_loser"
-            return "conflict"
+            # No score separates them: the newest decision reflects the newest data.
+            self._drop_queued(rival.id, "conflict")
         return None
 
     # -- output --------------------------------------------------------------

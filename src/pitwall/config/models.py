@@ -74,7 +74,6 @@ class PolicySettings(BaseModel):
     p3_straight_only: bool = True
     p3_straight_wait_s: float = 8.0  # extra deadline while a P3 call waits for a straight
     decision_near_s: float = 12.0
-    decision_missed_s: float = 2.0
     outcome_tie_eps: float = 0.05
     resolved_window_s: float = 30.0
     focus_window_s: float = 10.0

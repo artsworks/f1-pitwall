@@ -71,8 +71,8 @@ prompts are exempt from the cap but keep their deadline. The Piper worker drops 
 cap before playback.
 
 Execution calls with a decision point calculate the time to pit entry or the finish line.
-The dispatcher promotes calls inside `decision_near_s` and logs distance and time.
-Calls inside `decision_missed_s` lose conflicts because their action window has closed.
+The dispatcher promotes calls inside `decision_near_s` and logs distance and time. A box
+call keeps its place in a conflict however close the pit entry is.
 
 An untagged safety call starts a focus window. Focus drops queued coaching and P3 info
 calls and suppresses new ones until the window ends. P2 info stays. An untagged tactical
@@ -82,7 +82,7 @@ The dispatcher drops location-specific calls after recent safety or traffic call
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
 higher outcome score. Rotation pairs choose a seeded random winner, regardless of score.
-Other live conflicts keep the queued call. `resolved_by` rules suppress resolved calls in
+Other live conflicts keep the newest call. `resolved_by` rules suppress resolved calls in
 either submission order. Escalations remove lower-state calls. Flush events remove
 queued calls, except safety calls and replies the driver asked for.
 

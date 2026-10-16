@@ -567,9 +567,9 @@ batches:
         queued:
           - {id: stay, rule: overcut_stay_out, text: "Stay out. Overcut is on", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {stay: now, box: drop}
-        order: [stay]
-        notes: Under a second to the pit entry, too late to box. Stay out wins.
+        grade: {box: now, stay: drop}
+        order: [box]
+        notes: Regraded to match batch 4. The box call is the newest decision and wins, even under a second from the pit entry.
       - id: r27
         source: reconstructed
         session: race

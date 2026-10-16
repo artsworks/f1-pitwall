@@ -291,7 +291,7 @@ def test_stale_queued_call_in_group_is_superseded() -> None:
     }
 
 
-def test_queued_conflict_that_still_holds_keeps_old_call() -> None:
+def test_queued_conflict_that_still_holds_yields_to_the_newest_call() -> None:
     state = {"old_holds": True}
     old = _cand("old", priority=1, conflict_group="slow_car")
     old.current = lambda snap: state["old_holds"]
@@ -301,8 +301,8 @@ def test_queued_conflict_that_still_holds_keeps_old_call() -> None:
     d.submit([old], _snap(0.0))
     d.submit([new], _snap(1.0))
 
-    assert len(d._queue) == 1
-    assert ("new", "suppressed", "conflict") in {
+    assert [item.call.rule_id for item in d._queue] == ["new"]
+    assert ("old", "suppressed", "conflict") in {
         (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
     }
 
@@ -1005,7 +1005,7 @@ def test_location_coherence_after_safety() -> None:
     assert ("corner", "coherence") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
-def test_conflict_scores_and_decision_missed() -> None:
+def test_conflict_scores() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
     lower = _cand("lower", conflict_group="choice")
     higher = _cand("higher", conflict_group="choice")
@@ -1014,17 +1014,6 @@ def test_conflict_scores_and_decision_missed() -> None:
     d.submit([higher], _snap(1.0))
     assert [item.call.rule_id for item in d._queue] == ["higher"]
     assert ("lower", "conflict_loser") in {
-        (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
-    }
-
-    d, _, buf = _dispatcher(min_gap_s=0.0, decision_missed_s=2.0)
-    live = _cand("live", conflict_group="choice")
-    missed = _cand("missed", urgency="execution", decision_point="line", conflict_group="choice")
-    live.outcome_score, missed.outcome_score = 0.1, 10.0
-    d.submit([live], Snapshot(now=0.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
-    d.submit([missed], Snapshot(now=1.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
-    assert [item.call.rule_id for item in d._queue] == ["live"]
-    assert ("missed", "decision_missed") in {
         (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
     }
 
