@@ -1077,9 +1077,9 @@ batches:
           - {id: check, rule: contact_check, text: Contact there. Checking, age_s: 3.0, scene: {contact_phase: checking}}
           - {id: report, rule: contact_damage_report, text: "Floor twenty-two percent. We're losing pace"}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {check: drop, report: now, box: next}
-        order: [report, box]
-        notes: The damage report replaces the check and explains the box call that follows.
+        grade: {check: drop, report: next, box: now}
+        order: [box, report]
+        notes: "The damage report replaces the check and explains the box call that follows. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
       - id: g039
         source: graded
         session: race
@@ -1108,9 +1108,9 @@ batches:
         queued:
           - {id: drs, rule: drs_fault, text: "DRS fault. Don't rely on it"}
           - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
-        grade: {drs: now, attack: next}
-        order: [drs, attack]
-        notes: The DRS fault changes how to attack, so it speaks first.
+        grade: {drs: next, attack: now}
+        order: [attack, drs]
+        notes: "The DRS fault changes how to attack, so it speaks first. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
       - id: g042
         source: graded
         session: race
@@ -1270,9 +1270,9 @@ batches:
         queued:
           - {id: lost1, rule: lap1_lost, text: Down two on lap one, age_s: 1.0}
           - {id: gained, rule: lap1_gained, text: Up two on lap one}
-        grade: {lost1: drop, gained: drop}
-        order: []
-        notes: The two lap one lines cancel out, so nothing speaks.
+        grade: {lost1: merge, gained: merge}
+        order: [digest]
+        notes: "The two lap one lines cancel out, so nothing speaks. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
       - id: g058
         source: graded
         session: race
@@ -1695,9 +1695,9 @@ batches:
         queued:
           - {id: push, rule: battle_attack, text: Six laps left. Push now}
           - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 1.0}
-        grade: {life: now, push: drop}
-        order: [life]
-        notes: Two laps of tyre life with six to go contradicts the push call. Encoded on battle_attack because final_push has no live telemetry field.
+        grade: {life: next, push: now}
+        order: [push, life]
+        notes: "Two laps of tyre life with six to go contradicts the push call. Encoded on battle_attack because final_push has no live telemetry field. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
       - id: g100
         source: graded
         session: race
@@ -1705,6 +1705,6 @@ batches:
         queued:
           - {id: silence, rule: radio_check, hypothetical: true, kind: info, text: Radio check}
           - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 1.0}
-        grade: {life: now, silence: drop}
-        order: [life]
-        notes: A radio check is not worth airtime mid race.
+        grade: {life: merge, silence: merge}
+        order: [digest]
+        notes: "A radio check is not worth airtime mid race. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."

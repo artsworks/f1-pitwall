@@ -9,13 +9,7 @@ WORKBOOK = Path(__file__).parents[1] / "scenarios" / "radio-priority-grades.yaml
 SCENARIOS = load_workbook(WORKBOOK)
 
 # Owner grades the dispatcher does not meet yet. Remove an id once policy changes make it pass.
-KNOWN_MISMATCHES: dict[str, str] = {
-    "g038": "conflict resolution",
-    "g041": "preemption",
-    "g057": "conflict resolution",
-    "g099": "conflict resolution",
-    "g100": "digest merging",
-}
+KNOWN_MISMATCHES: dict[str, str] = {}
 
 
 @pytest.mark.parametrize(
