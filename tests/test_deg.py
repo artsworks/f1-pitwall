@@ -16,6 +16,7 @@ from pitwall.model.deg import (
     fuel_adjusted_deg,
     fuel_burned_laps,
     laps_of_pace,
+    planning_fit,
     rival_pace_ms,
     session_base_ms,
 )
@@ -61,6 +62,96 @@ def test_fit_recovers_known_slope() -> None:
     assert abs(fit.base_ms - 90_000.0) < 1.0
     assert fit.rmse_ms < 1.0 and fit.n == 8
     assert fit.confidence == 1.0
+
+
+def test_traffic_laps_are_excluded() -> None:
+    laps = [_lap(a, 90_000 + 100 * a) for a in range(8)]
+    laps[3] = replace(laps[3], lap_time_ms=laps[3].lap_time_ms + 800, traffic=1)
+    laps[6] = replace(laps[6], lap_time_ms=laps[6].lap_time_ms + 800, traffic=1)
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
+
+    assert fit.n == 6
+    assert fit.deg_ms_per_lap == pytest.approx(100.0)
+
+
+def test_overheated_laps_are_excluded() -> None:
+    laps = [
+        replace(
+            _lap(age, 90_000 + 100 * age + (50 * (age - 5) ** 2 if age >= 6 else 0)),
+            tyre_inner_c=110.0 if age >= 6 else 95.0,
+        )
+        for age in range(10)
+    ]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, thermal_hi_c=100.0)
+    unfiltered = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
+
+    assert fit.n == 6
+    assert fit.deg_ms_per_lap == pytest.approx(100.0)
+    assert unfiltered.deg_ms_per_lap > fit.deg_ms_per_lap + 50.0
+
+
+def test_quadratic_fit_captures_accelerating_degradation() -> None:
+    laps = [_lap(age, 90_000 + 20 * age + 6 * age**2) for age in range(12)]
+
+    quadratic = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+    linear = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
+
+    assert quadratic.deg2_ms_per_lap2 == pytest.approx(6.0, abs=0.5)
+    assert quadratic.deg_ms_per_lap == pytest.approx(20.0, abs=0.5)
+    assert laps_of_pace(
+        quadratic,
+        0,
+        0.0,
+        cliff_ms=1500,
+        wear_cliff_pct=70.0,
+        wear_per_lap=0.0,
+    ) < laps_of_pace(
+        linear,
+        0,
+        0.0,
+        cliff_ms=1500,
+        wear_cliff_pct=70.0,
+        wear_per_lap=0.0,
+    )
+
+
+def test_quadratic_fit_falls_back_for_linear_data_with_noise() -> None:
+    noise = [0, 2, -2, 1, -1, 0, 1, -2, 2, -1, 0, 1]
+    laps = [_lap(age, 90_000 + 100 * age + noise[age]) for age in range(len(noise))]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+
+    assert fit.deg2_ms_per_lap2 == 0.0
+
+
+def test_real_fit_reports_slope_error_and_planning_scales_quadratic_term() -> None:
+    noise = [0, 2, -2, 1, -1, 0, 1, -2]
+    laps = [_lap(age, 90_000 + 100 * age + noise[age]) for age in range(len(noise))]
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
+    prior = replace(PRIOR, deg2_ms_per_lap2=4.0)
+
+    age_mean = sum(range(len(noise))) / len(noise)
+    age_ss = sum((age - age_mean) ** 2 for age in range(len(noise)))
+    planned = planning_fit(replace(fit, deg2_ms_per_lap2=4.0), prior, rmse_bad_ms=1000.0)
+
+    assert fit.deg_sd_ms_per_lap == pytest.approx(fit.rmse_ms / age_ss**0.5)
+    assert planned.deg2_ms_per_lap2 == pytest.approx(4.0 * (1.0 - fit.rmse_ms / 1000.0))
+
+
+def test_cliff_age_closed_form() -> None:
+    from pitwall.model.deg import cliff_age
+
+    quadratic = DegFit(90_000.0, 20.0, 30.0, 12, 0.0, 1.0, "fit", deg2_ms_per_lap2=6.0)
+    linear = DegFit(90_000.0, 100.0, 30.0, 12, 0.0, 1.0, "fit")
+    flat = DegFit(90_000.0, 0.0, 30.0, 12, 0.0, 1.0, "fit")
+
+    assert cliff_age(quadratic, 1500.0) == pytest.approx(
+        (-20.0 + (20.0**2 + 4 * 6.0 * 1500.0) ** 0.5) / 12.0
+    )
+    assert cliff_age(linear, 1500.0) == 15.0
+    assert cliff_age(flat, 1500.0) == float("inf")
 
 
 def test_fuel_slope_fitted_when_not_fixed() -> None:

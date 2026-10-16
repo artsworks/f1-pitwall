@@ -70,6 +70,9 @@ thresholds:
   rival_pit_gap_s: 5.0       # only announce the car ahead pitting when it was this close
   prep_gap_m: 800            # out-lap: talk about the gap this far before the line
   prep_traffic_s: 3          # slow car ahead within this (at push pace) = traffic
+  traffic_gap_s: 1.5         # race lap within this of the car ahead for most of the lap = traffic
+  deg_quad_min_laps: 8       # minimum clean laps for a quadratic degradation fit
+  deg_quad_min_t: 2.0        # minimum quadratic coefficient significance in standard errors
   tow_min_s: 0.7             # push-lap car ahead inside this = dirty air
   tow_max_s: 2.0             # ...between min and max = a tow
   prep_clear_s: 5            # nothing ahead within this = clear

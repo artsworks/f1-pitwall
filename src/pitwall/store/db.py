@@ -324,6 +324,10 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE sessions ADD COLUMN weekend_structure TEXT DEFAULT '';
     """,
+    # 14: dirty-air lap flag.
+    """
+    ALTER TABLE laps ADD COLUMN traffic INTEGER DEFAULT 0;
+    """,
 ]
 
 
@@ -361,6 +365,7 @@ class LapRow:
     lockups_rear: int = 0
     snaps_entry: int = 0
     snaps_exit: int = 0
+    traffic: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -711,8 +716,8 @@ class Database:
                 " sc_status, weather, tyre_inner_c, tyre_surface_c, visual,"
                 " setup_state_id, traction_exits, slip_balance_deg, slip_samples,"
                 " lockups_front, lockups_rear, snaps_entry, snaps_exit,"
-                " wear_front_pct, wear_rear_pct, tyre_inner_front_c, tyre_inner_rear_c)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " wear_front_pct, wear_rear_pct, tyre_inner_front_c, tyre_inner_rear_c, traffic)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -745,6 +750,7 @@ class Database:
                     getattr(lap, "wear_rear_pct", 0.0),
                     getattr(lap, "tyre_inner_front_c", 0.0),
                     getattr(lap, "tyre_inner_rear_c", 0.0),
+                    int(getattr(lap, "traffic", 0)),
                 ),
             )
 
@@ -1243,6 +1249,7 @@ class Database:
             lockups_rear=int(r["lockups_rear"] or 0),
             snaps_entry=int(r["snaps_entry"] or 0),
             snaps_exit=int(r["snaps_exit"] or 0),
+            traffic=int(r["traffic"] or 0),
         )
 
     def upsert_stint(

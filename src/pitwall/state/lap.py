@@ -41,6 +41,7 @@ class LapSummary:
     slip_balance_deg: float = 0.0
     slip_samples: int = 0
     setup_hash: str = ""
+    traffic: int = 0
 
 
 class LapAccumulator:
@@ -64,6 +65,8 @@ class LapAccumulator:
         self._tyre_inner_rear_sum = 0.0
         self._tyre_surface_sum = 0.0
         self._tyre_samples = 0
+        self._ticks = 0
+        self._traffic_ticks = 0
 
     def note_flashback(self) -> None:
         self._saw_flashback = True
@@ -109,11 +112,12 @@ class LapAccumulator:
         ers_deployed_this_lap: float = 0.0,
         weather: int = 0,
         visual: int = 0,
+        in_traffic: bool = False,
     ) -> LapSummary | None:
         """Feed one Lap Data tick for the player. Returns a summary when the
         lap counter increments."""
         if current_lap_num == self._cur_lap and current_lap_num != 0:
-            self._accumulate(pit_status, current_lap_invalid, safety_car_status)
+            self._accumulate(pit_status, current_lap_invalid, safety_car_status, in_traffic)
             self._last_driver_status = driver_status
             return None
 
@@ -137,14 +141,18 @@ class LapAccumulator:
         )
         inner_rear_c = self._tyre_inner_rear_sum / self._tyre_samples if self._tyre_samples else 0.0
         surface_c = self._tyre_surface_sum / self._tyre_samples if self._tyre_samples else 0.0
+        ticks = self._ticks
+        traffic_ticks = self._traffic_ticks
         self._tyre_inner_sum = 0.0
         self._tyre_inner_front_sum = 0.0
         self._tyre_inner_rear_sum = 0.0
         self._tyre_surface_sum = 0.0
         self._tyre_samples = 0
+        self._ticks = 0
+        self._traffic_ticks = 0
         self.reset_stint_flags()
         self._prev_was_in_lap = pit_entry
-        self._accumulate(pit_status, current_lap_invalid, safety_car_status)
+        self._accumulate(pit_status, current_lap_invalid, safety_car_status, in_traffic)
         self._last_driver_status = driver_status
 
         if finished == 0:
@@ -186,9 +194,12 @@ class LapAccumulator:
             tyre_inner_rear_c=inner_rear_c,
             tyre_surface_c=surface_c,
             visual=visual,
+            traffic=int(traffic_ticks * 2 > ticks),
         )
 
-    def _accumulate(self, pit_status: int, invalid: int, sc: int) -> None:
+    def _accumulate(self, pit_status: int, invalid: int, sc: int, in_traffic: bool) -> None:
+        self._ticks += 1
+        self._traffic_ticks += int(in_traffic)
         if self._last_pit_status == 0 and pit_status != 0:
             self._saw_pit_entry = True
         self._last_pit_status = pit_status

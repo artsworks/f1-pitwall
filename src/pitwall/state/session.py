@@ -1372,6 +1372,10 @@ class SessionState:
             ers_deployed_this_lap=self.ers_deployed_this_lap_j,
             weather=self.weather,
             visual=self.tyre_visual,
+            in_traffic=(
+                session_kind(self.session_type) == "race"
+                and 0 < self.delta_to_car_in_front_ms < self._th("traffic_gap_s", 1.5) * 1000
+            ),
         )
         if summary is not None:
             counts = {

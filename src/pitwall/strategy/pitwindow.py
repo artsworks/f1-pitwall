@@ -9,7 +9,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from pitwall.model.deg import DegFit
+from pitwall.model.deg import DegFit, cliff_age
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +48,16 @@ def _f(src: Mapping[str, object], name: str, default: float) -> float:
 
 def _lap_ms(fit: DegFit, age: int, cliff_age: float, cliff_ms_per_lap: float) -> float:
     over = max(0.0, age - cliff_age)
-    return fit.base_ms + fit.deg_ms_per_lap * age + cliff_ms_per_lap * over
+    return (
+        fit.base_ms
+        + fit.deg_ms_per_lap * age
+        + fit.deg2_ms_per_lap2 * age**2
+        + cliff_ms_per_lap * over
+    )
 
 
 def _cliff_age(fit: DegFit, cliff_ms: float) -> float:
-    return math.inf if fit.deg_ms_per_lap <= 0 else cliff_ms / fit.deg_ms_per_lap
+    return cliff_age(fit, cliff_ms)
 
 
 def race_time_s(
