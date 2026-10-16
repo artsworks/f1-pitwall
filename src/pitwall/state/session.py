@@ -8,7 +8,7 @@ import math
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from statistics import median
+from statistics import median, stdev
 from typing import TYPE_CHECKING, Any
 
 from pitwall.model.deg import rival_pace_ms
@@ -479,6 +479,7 @@ class Snapshot:
     # Gap change per lap (s, + = gap shrinking), measured line to line.
     gap_trend_ahead_s: float = 0.0
     gap_trend_behind_s: float = 0.0
+    gap_closing_sd_ahead_s: float = 0.0
     rival_data_restricted: bool = False
     pit_exit_rival_gap_s: float = math.inf
     pit_exit_clean: bool = False
@@ -586,6 +587,8 @@ class Snapshot:
     plan_window_open: bool = False
     plan_next_compound: str = ""
     plan_off_s: float = 0.0
+    plan_off_prob: float = 0.0
+    plan_delta_sd_s: float = 0.0
     plan_switch_count: int = 0
     plan_switched_from: str = ""
     plan_switch_reason: str = ""
@@ -593,6 +596,8 @@ class Snapshot:
     plan_target_shift: int = 0
     plan_b_spoken: str = ""
     plan_b_delta_s: float = 0.0
+    plan_b_delta_sd_s: float = 0.0
+    plan_b_switch_prob: float = 0.0
     plan_c_spoken: str = ""
     plan_c_delta_s: float = 0.0
     # Battle state (docs/18 Battle state, pitwall.strategy.battle), filled by the engine.
@@ -605,6 +610,8 @@ class Snapshot:
     battle_tyre_offset_ahead: int = 0
     battle_tyre_offset_behind: int = 0
     battle_pass_prob: float = 0.0
+    battle_catch_prob: float = 0.0
+    battle_chase_prob: float = 0.0
     battle_hold_prob: float = 0.0
     battle_result: str = ""
     battle_result_recent: bool = False
@@ -1416,7 +1423,9 @@ class SessionState:
                 setup_hash=self.setup_hash,
             )
             self.laps.append(summary)
-            self._gap_lines = [*self._gap_lines[-1:], dict(self._gap_now)]
+            gap_records = max(1, int(self._th("battle_closing_window_laps", 5)) + 1)
+            previous_lines = self._gap_lines[-(gap_records - 1) :] if gap_records > 1 else []
+            self._gap_lines = [*previous_lines, dict(self._gap_now)]
         if self._kind() == "qualifying":
             self.run.update(
                 t=self._last_session_time or 0.0,
@@ -2861,6 +2870,8 @@ class SessionState:
             plan_window_open=model.plan_window_open,
             plan_next_compound=model.plan_next_compound,
             plan_off_s=model.plan_off_s,
+            plan_off_prob=model.plan_off_prob,
+            plan_delta_sd_s=model.plan_delta_sd_s,
             plan_switch_count=model.plan_switch_count,
             plan_switched_from=model.plan_switched_from,
             plan_switch_reason=model.plan_switch_reason,
@@ -2868,6 +2879,8 @@ class SessionState:
             plan_target_shift=model.plan_target_shift,
             plan_b_spoken=model.plan_b_spoken,
             plan_b_delta_s=model.plan_b_delta_s,
+            plan_b_delta_sd_s=model.plan_b_delta_sd_s,
+            plan_b_switch_prob=model.plan_b_switch_prob,
             plan_c_spoken=model.plan_c_spoken,
             plan_c_delta_s=model.plan_c_delta_s,
             rival_data_restricted=self.rival_data_restricted,
@@ -3046,12 +3059,27 @@ class SessionState:
         def trend(side: str, idx: int) -> float:
             if len(self._gap_lines) < 2 or idx < 0:
                 return 0.0
-            a, b = self._gap_lines[0].get(side), self._gap_lines[1].get(side)
+            a, b = self._gap_lines[-2].get(side), self._gap_lines[-1].get(side)
             if a is None or b is None or a[0] != idx or b[0] != idx:
                 return 0.0
             if not (math.isfinite(a[1]) and math.isfinite(b[1])):
                 return 0.0
             return round(a[1] - b[1], 3)
+
+        closing_deltas: list[float] = []
+        if ahead_i >= 0:
+            trailing_gaps: list[float] = []
+            for line in reversed(self._gap_lines):
+                ahead = line.get("ahead")
+                if ahead is None or ahead[0] != ahead_i or not math.isfinite(ahead[1]):
+                    break
+                trailing_gaps.append(ahead[1])
+            trailing_gaps.reverse()
+            closing_deltas = [
+                prev - next_gap
+                for prev, next_gap in zip(trailing_gaps, trailing_gaps[1:], strict=False)
+            ]
+        gap_closing_sd = round(stdev(closing_deltas), 3) if len(closing_deltas) >= 2 else 0.0
 
         status = self.cars_status
 
@@ -3069,6 +3097,7 @@ class SessionState:
             rival_behind_compound=compound_of(behind_i),
             gap_trend_ahead_s=trend("ahead", ahead_i),
             gap_trend_behind_s=trend("behind", behind_i),
+            gap_closing_sd_ahead_s=gap_closing_sd,
             gap_behind_s=gap_behind,
             rival_ahead_idx=ahead_i,
             rival_behind_idx=behind_i,

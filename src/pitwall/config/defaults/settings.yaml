@@ -181,6 +181,7 @@ thresholds:
   plan_off_s: 3.0              # active plan this much slower than best = off plan
   plan_off_hysteresis_s: 1.0   # back on plan once inside plan_off_s minus this
   plan_switch_s: 5.0           # switch plans once the active one loses this much
+  plan_switch_prob: 0.9        # with plan time spreads, switch once the best plan is this likely faster
   plan_status_every_laps: 5    # "still on Plan A" cadence (sector 1, P3, budgeted)
   plan_deg_factor_soft: 1.6    # deg vs medium when a compound has no learned prior
   plan_deg_factor_medium: 1.0
@@ -199,6 +200,7 @@ thresholds:
   plan_announce_after_m: 300.0  # first plan call once the weekend format and grid order are known
   fuel_final_call_m: 1500.0     # no fuel calls on the last lap inside this distance to the flag
   battle_swap_window_s: 120.0   # place changes inside this window count towards a swap fight
+  battle_closing_window_laps: 5 # laps of gap change behind the catch probability spread
   battle_swap_count: 3          # this many with one rival: "trading places", not pass/lost calls
   battle_scrap_count: 4         # this many across 2+ rivals: multi-car scrap
   battle_prior_weight: 4.0      # pseudo-episodes behind the pass/hold priors

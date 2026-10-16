@@ -62,6 +62,7 @@ def test_fit_recovers_known_slope() -> None:
     assert abs(fit.base_ms - 90_000.0) < 1.0
     assert fit.rmse_ms < 1.0 and fit.n == 8
     assert fit.confidence == 1.0
+    assert fit.deg_posterior_sd_ms_per_lap == 0.0
 
 
 def test_traffic_laps_are_excluded() -> None:
@@ -137,6 +138,7 @@ def test_real_fit_reports_slope_error_and_planning_scales_quadratic_term() -> No
     planned = planning_fit(replace(fit, deg2_ms_per_lap2=4.0), prior, rmse_bad_ms=1000.0)
 
     assert fit.deg_sd_ms_per_lap == pytest.approx(fit.rmse_ms / age_ss**0.5)
+    assert planned.deg_posterior_sd_ms_per_lap == fit.deg_posterior_sd_ms_per_lap
     assert planned.deg2_ms_per_lap2 == pytest.approx(4.0 * (1.0 - fit.rmse_ms / 1000.0))
 
 
@@ -177,6 +179,7 @@ def test_blend_weights() -> None:
     fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
     assert fit.source == "blend"
     assert abs(fit.deg_ms_per_lap - 90.0) < 1.0
+    assert fit.deg_posterior_sd_ms_per_lap == pytest.approx(fit.deg_sd_ms_per_lap / 0.5)
 
 
 def test_invalid_and_sc_laps_excluded() -> None:

@@ -205,14 +205,15 @@ degradation model and pit loss. Fresh-set pace per compound uses a learned prior
 current slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`. The window
 includes each first-stop lap within `plan_window_s` of the best.
 
-- **Plan A** = fastest sequence at race start; **Plan B** = fastest with a different stop
-  count (else a different sequence); **Plan C** = reactive: box this lap at the SC/VSC pit
-  loss, re-derived every recompute until taken.
-- A and B are frozen as compound sequences; their timing is re-optimised every lap. If the
-  active plan falls more than `plan_off_s` behind the best legal strategy we're *off plan*
-  (hysteresis `plan_off_hysteresis_s`); beyond `plan_switch_s` the engine switches to the
-  plan that matches the best sequence (reason `pace`). A plan becomes *invalid* when its
-  remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
+- **Plan A** = fastest sequence at race start; **Plan B** = downside hedge, ranked by
+  race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
+  SC/VSC pit loss, re-derived every recompute until taken.
+- A and B are frozen as compound sequences; their timing is re-optimised every lap.
+  When degradation spread is known, the engine switches after `plan_off_s` when the
+  probability that the best plan is faster exceeds `plan_switch_prob`.
+  With no spread, the engine uses the fixed `plan_switch_s` threshold.
+  The off-plan hysteresis remains `plan_off_hysteresis_s`. A plan becomes *invalid* when
+  its remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
 - A cheap-stop SC/VSC recommendation switches the active plan to C (reason `sc`).
 - After a pit stop, the tracker counts the stop on entry to the out-lap and rebases the
   plan from the new compound, tyre age, laps left and stops completed.

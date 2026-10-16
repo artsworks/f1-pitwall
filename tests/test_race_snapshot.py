@@ -47,6 +47,17 @@ def test_gaps_and_laps_remaining() -> None:
     assert snap.laps_remaining == 16
 
 
+def test_gap_closing_spread_uses_trailing_ahead_gaps() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, delta_to_car_in_front_ms_part=800, delta_to_car_in_front_minutes_part=0)
+    state.snapshot(1.0)
+    state._gap_lines = [{"ahead": (1, gap)} for gap in (5.0, 4.0, 5.0, 3.0)]
+    snap = state.snapshot(1.1)
+
+    assert snap.gap_trend_ahead_s == 2.0
+    assert snap.gap_closing_sd_ahead_s == 1.528
+
+
 def test_player_pit_stop_count() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0, num_pit_stops=1)

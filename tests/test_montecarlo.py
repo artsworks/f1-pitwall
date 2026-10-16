@@ -64,9 +64,60 @@ def _agreement(
 
 
 def test_same_seed_produces_the_same_result() -> None:
-    args = dict(fit=_fit(150.0, sd=20.0), fresh=_fit(80.0), plan_lap=10)
+    fit = replace(
+        _fit(150.0, sd=20.0),
+        n=5,
+        deg_posterior_sd_ms_per_lap=80.0,
+    )
+    args = dict(fit=fit, fresh=_fit(80.0), plan_lap=10)
 
     assert _agreement(**args) == _agreement(**args)
+
+
+def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> None:
+    thin = replace(_fit(300.0), n=5, deg_posterior_sd_ms_per_lap=1000.0)
+    without_posterior = replace(thin, deg_posterior_sd_ms_per_lap=0.0)
+    sampled = _agreement(fit=thin, fresh=_fit(0.0), plan_lap=11, laps_remaining=12, tyre_age=10)
+    baseline = _agreement(
+        fit=without_posterior, fresh=_fit(0.0), plan_lap=11, laps_remaining=12, tyre_age=10
+    )
+    assert sampled is not None and baseline is not None
+    assert (sampled.modal_lap, sampled.agree) != (baseline.modal_lap, baseline.agree)
+
+    high_n = _fit(150.0)
+    assert _agreement(fit=high_n, fresh=_fit(80.0), plan_lap=10) == _agreement(
+        fit=replace(high_n, deg_posterior_sd_ms_per_lap=0.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+    )
+
+
+def test_risk_quantile_picks_low_spread_negative_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    def candidate_deltas(**kwargs: object) -> np.ndarray:
+        sims = len(kwargs["deg_samples"])  # type: ignore[arg-type]
+        last_k = int(kwargs["last_k"])
+        deltas = np.full((sims, last_k + 1), 50.0)
+        deltas[:, 0] = np.array([-10.0, -9.0, -11.0, -10.0])
+        deltas[:, 1] = np.array([-10.0, -10.1, -9.9, -10.0])
+        return deltas
+
+    monkeypatch.setattr(montecarlo, "_candidate_deltas_s", candidate_deltas)
+    args = dict(
+        fit=_fit(100.0),
+        fresh=_fit(50.0),
+        plan_lap=10,
+        th={**TH, "plan_mc_sims": 4},
+    )
+    result = _agreement(**args)
+    assert result is not None and result.q_modal_lap == 11
+
+    monkeypatch.setattr(
+        montecarlo,
+        "_candidate_deltas_s",
+        lambda **kwargs: np.ones((len(kwargs["deg_samples"]), int(kwargs["last_k"]) + 1)),
+    )
+    no_stop = _agreement(**args)
+    assert no_stop is not None and no_stop.q_modal_lap == 0
 
 
 def test_clear_stop_plan_has_high_agreement() -> None:
@@ -207,7 +258,7 @@ def test_zero_sims_and_short_horizon_skip_mc() -> None:
 
 def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     plan = PitPlan("box_now", 10, 3.0, 0.8, 0.2, -1, "", "", (10, 12), 0.0, 0.0, ())
-    mc = McResult(12, 0.5, 500)
+    mc = McResult(12, 0.5, 500, 13)
 
     scaled = scale_plan(plan, mc)
     cheap_stop = scale_plan(replace(plan, plan="cheap_stop"), mc)
@@ -215,6 +266,7 @@ def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     assert scaled.confidence == 0.4
     assert scaled.lap == plan.lap
     assert scaled.mc_lap == 12 and scaled.mc_agree == 0.5
+    assert scaled.mc_risk_lap == 13
     assert cheap_stop == replace(plan, plan="cheap_stop")
 
 

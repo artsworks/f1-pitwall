@@ -740,7 +740,17 @@ def test_strategy_payload_named_plans() -> None:
     assert s["plan_switch"] is None
     plans = (
         StrategyPlan("A", "primary", (17, 18), (27,), (26, 28), 5000.0, 0.0),
-        StrategyPlan("B", "alternative", (17, 18, 16), (18, 40), (17, 19), 5004.2, 4.2),
+        StrategyPlan(
+            "B",
+            "alternative",
+            (17, 18, 16),
+            (18, 40),
+            (17, 19),
+            5004.2,
+            4.2,
+            delta_sd_s=1.7,
+            switch_prob=0.96,
+        ),
         StrategyPlan("C", "reactive", (17, 18), (20,), (20, 20), 4990.0, -10.0),
     )
     snap = dataclasses.replace(
@@ -749,6 +759,7 @@ def test_strategy_payload_named_plans() -> None:
         active_plan="B",
         on_plan=False,
         plan_off_s=4.2,
+        plan_off_prob=0.97,
         plan_target_lap=18,
         plan_switch_count=1,
         plan_switched_from="A",
@@ -762,8 +773,10 @@ def test_strategy_payload_named_plans() -> None:
     assert a["label"] == "1-stop M-H" and a["stops"] == 1 and a["window"] == [26, 28]
     assert a["compounds"] == ["MEDIUM", "HARD"] and a["stop_laps"] == [27]
     assert b["active"] and not a["active"] and b["delta_s"] == 4.2 and b["stops"] == 2
+    assert b["delta_sd_s"] == 1.7 and b["switch_prob"] == 0.96
     assert c["kind"] == "reactive" and c["delta_s"] == -10.0
     assert s["active_plan"] == "B" and s["on_plan"] is False and s["plan_off_s"] == 4.2
+    assert s["plan_off_prob"] == 0.97
     assert s["plan_target_lap"] == 18
     assert s["plan_switch"] == {"from": "A", "reason": "pace", "lap": 15}
 

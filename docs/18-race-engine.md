@@ -475,7 +475,10 @@ Rules gate on
 
 On green laps, the engine runs `plan_mc_sims` simulations over the same candidate range as `optimise`.
 Each simulation samples current linear degradation with `sigma = max(deg_sd_ms_per_lap, plan_mc_deg_sd_frac * deg_ms_per_lap)`.
-Clip sampled slopes at zero and keep quadratic degradation fixed. Fresh-tyre lap times stay deterministic.
+When the fit has positive posterior spread and at least `max(deg_min_laps, 3)` laps, sample a Student-t value instead.
+Use `df = max(fit.n - 2, 3)` and scale `max(deg_posterior_sd_ms_per_lap, sigma)`.
+Otherwise, keep the normal draw. Clip sampled slopes at zero and keep quadratic degradation fixed.
+Fresh-tyre lap times stay deterministic.
 
 With three or more green pit events, sample `rng.choice(samples) - median(samples) + pit_loss_s`.
 Otherwise, sample `N(pit_loss_s, plan_mc_pit_loss_sd_s)` and clip the result to a positive value.
@@ -490,6 +493,9 @@ delta[s,k] = (cumcur[s,k] + cumfresh[R-k] + (pit[s,k] + outlap_warmup_s) * 1000 
 
 Select the first minimum. Choose no stop when the best stop delta is nonnegative.
 `modal_lap` is the most common simulated choice. Break ties at the smallest lap.
+`plan_mc_risk_quantile` defaults to `0.8`. The engine calculates this quantile for each candidate.
+`q_modal_lap` is the first minimum candidate lap when its quantile is negative, or zero otherwise.
+`PitPlan.mc_risk_lap` carries this downside stop lap. The modal lap and agreement keep their existing meanings.
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
 For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
 Plans outside the candidate range get agreement `1.0`.
@@ -500,7 +506,7 @@ Skip Monte Carlo when `safety_car_status != 0`. Do not scale `cheap_stop`.
 Seed each run with `np.random.default_rng([uid & 0xFFFFFFFF, (uid >> 32) & 0xFFFFFFFF, lap_num])`.
 Use UID zero when the session UID is absent.
 Cache results once per lap with `(session_uid, lap_num, plan.lap, tyre_age, plan.plan, plan.rival_idx)`.
-Defaults are `plan_mc_sims: 500`, `plan_mc_sc_prob_per_lap: 0.03`, `plan_mc_deg_sd_frac: 0.15`, and `plan_mc_pit_loss_sd_s: 1.5`.
+Defaults are `plan_mc_sims: 500`, `plan_mc_risk_quantile: 0.8`, `plan_mc_sc_prob_per_lap: 0.03`, `plan_mc_deg_sd_frac: 0.15`, and `plan_mc_pit_loss_sd_s: 1.5`.
 
 ## Named strategy plans (`pitwall.strategy.plans`)
 
@@ -509,7 +515,18 @@ Plan A/B/C portfolio on top of the tactical optimiser (model and calls in docs/0
 compound change, feeds `PlanTracker.update()` and folds `PlanFields` into `ModelView` and
 the `Snapshot` (`active_plan`, `on_plan`, `plan_spoken`, `plan_target_lap`,
 `plan_window_start/end`, `plan_window_open`, `plan_off_s`, `plan_switch_*`,
-`plan_b_spoken`, `plan_c_spoken`, ...). Thresholds: `plan_*` in `settings.yaml`.
+`plan_off_prob`, `plan_delta_sd_s`, `plan_b_spoken`, `plan_b_delta_sd_s`,
+`plan_b_switch_prob`, `plan_c_spoken`, ...). Thresholds: `plan_*` in `settings.yaml`.
+
+`PlanEval.race_time_sd_s` estimates uncertainty from degradation error. For each stint,
+multiply its degradation posterior SD by the sum of tyre ages in that stint. Add the
+squared stint values, take the square root, then convert milliseconds to seconds.
+Plan B ranks alternatives by `race_time_s + z * race_time_sd_s`, where `z` is the inverse
+normal CDF of `plan_mc_risk_quantile`. When either plan has a spread, switch only when
+`p_faster(active_time - best_time, active_sd, best_sd) > plan_switch_prob`.
+Without a spread, the existing `plan_switch_s` threshold applies.
+The active plan reports zero `switch_prob` and `delta_sd_s`. Other plans report their
+probability of beating the active plan and their combined time spread.
 
 Migration 3 (append-only): `calls.active_plan TEXT`, `calls.on_plan INT` and a
 `plan_events(session_uid, t, session_time, lap, kind, from_plan, to_plan, reason, delta_s,
@@ -536,6 +553,15 @@ defend ranges get `gap_hysteresis_s` once entered. Snapshot fields: `battle_mode
 `battle_tyre_offset_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
 `battle_result_recent`, `battle_result_name`, `battle_swaps` (place changes
 inside `battle_swap_window_s`).
+
+`gap_closing_sd_ahead_s` is the sample standard deviation of consecutive gap-closing
+changes over the trailing valid run for the current car ahead. The history keeps
+`battle_closing_window_laps + 1` records, with a default window of five laps.
+`catch_prob` estimates the chance of reaching the attack gap before the flag. It uses
+the closing-rate mean and `closing_sd_s * sqrt(laps_remaining)` when spread is known.
+Without spread, the catch result stays deterministic. `chase_prob` is `catch_prob`
+times the pass rate with overtake active. Snapshot fields include `battle_catch_prob`
+and `battle_chase_prob`.
 
 **Episodes and the pass model.** Each attacking / defending spell against one rival is an
 episode, closed when the mode or rival changes: attack → `passed` (position gained and the

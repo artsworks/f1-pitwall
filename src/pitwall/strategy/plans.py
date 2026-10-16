@@ -9,6 +9,7 @@ import itertools
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from statistics import NormalDist
 
 from pitwall.model.deg import DegFit
 
@@ -28,6 +29,7 @@ class CompoundModel:
     base_ms: float  # fresh-set lap time at age 0
     deg_ms_per_lap: float
     sets: int  # usable sets left, -1 = unknown (no Tyre Sets packet)
+    deg_posterior_sd_ms_per_lap: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +52,7 @@ class PlanEval:
     stop_laps: tuple[int, ...]
     window: tuple[int, int]  # first-stop window, (0, 0) when no stop
     race_time_s: float
+    race_time_sd_s: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +65,8 @@ class StrategyPlan:
     race_time_s: float
     delta_s: float  # vs the active plan's race time (negative = faster)
     feasible: bool = True
+    delta_sd_s: float = 0.0
+    switch_prob: float = 0.0
 
     @property
     def stops(self) -> int:
@@ -113,6 +118,8 @@ class PlanState:
     target_shift: int = 0  # target_lap now vs when the plan was set
     sequence: str = ""
     stops_left: int = 0
+    off_prob: float = 0.0
+    delta_sd_s: float = 0.0
 
     @property
     def active_plan(self) -> StrategyPlan | None:
@@ -128,6 +135,15 @@ def _cum(base: float, deg: float, age0: int, n: int, cliff_age: float, pen: floa
         age = age0 + i
         out[i + 1] = out[i] + base + deg * age + pen * max(0.0, age - cliff_age)
     return out
+
+
+def _age_sum(age0: int, n: int) -> float:
+    return n * age0 + n * (n - 1) / 2
+
+
+def p_faster(gap_s: float, sd_a: float, sd_b: float) -> float:
+    sigma = math.hypot(sd_a, sd_b)
+    return NormalDist().cdf(gap_s / sigma) if sigma > 0 else (1.0 if gap_s > 0 else 0.0)
 
 
 def feasible(inp: PlanInputs, seq: tuple[int, ...], th: Mapping[str, object]) -> bool:
@@ -170,7 +186,8 @@ def evaluate(
     first_ms = (first_loss_s + warm) * 1000.0 if first_loss_s is not None else loss_ms
     cur = _cum(inp.cur.base_ms, inp.cur.deg_ms_per_lap, inp.tyre_age, r, inp.cur_cliff_age, pen)
     if stops == 0:
-        return PlanEval(seq, (), (0, 0), cur[r] / 1000.0)
+        sd_ms = inp.cur.deg_posterior_sd_ms_per_lap * _age_sum(inp.tyre_age, r)
+        return PlanEval(seq, (), (0, 0), cur[r] / 1000.0, sd_ms / 1000.0)
     models = {c.visual: c for c in inp.compounds}
     fresh = []
     for c in seq[1:]:
@@ -203,7 +220,20 @@ def evaluate(
     while hi + 1 in per_k1 and per_k1[hi + 1][0] - t_best <= slack:
         hi += 1
     lap = inp.lap_num
-    return PlanEval(seq, tuple(lap + k for k in ks), (lap + lo, lap + hi), t_best / 1000.0)
+    k1 = ks[0]
+    sd_terms = [inp.cur.deg_posterior_sd_ms_per_lap * _age_sum(inp.tyre_age, k1)]
+    boundaries = (*ks, r)
+    fresh_lengths = [boundaries[i + 1] - boundaries[i] for i in range(stops)]
+    for compound, length in zip(seq[1:], fresh_lengths, strict=True):
+        sd_terms.append(models[compound].deg_posterior_sd_ms_per_lap * _age_sum(0, length))
+    sd_ms = math.sqrt(sum(sd**2 for sd in sd_terms))
+    return PlanEval(
+        seq,
+        tuple(lap + k for k in ks),
+        (lap + lo, lap + hi),
+        t_best / 1000.0,
+        sd_ms / 1000.0,
+    )
 
 
 def _sequences(inp: PlanInputs, th: Mapping[str, object]) -> list[tuple[int, ...]]:
@@ -236,12 +266,21 @@ def reactive(inp: PlanInputs, th: Mapping[str, object]) -> PlanEval | None:
     return best
 
 
-def alternative(ranked: list[PlanEval], primary: PlanEval) -> PlanEval | None:
+def alternative(ranked: list[PlanEval], primary: PlanEval, z: float = 0.0) -> PlanEval | None:
     """Plan B: best with a different stop count, else a different sequence."""
-    for e in ranked:
-        if len(e.compounds) != len(primary.compounds):
-            return e
-    return next((e for e in ranked if e.compounds != primary.compounds), None)
+    for different_stops in (True, False):
+        candidates = [
+            (e.race_time_s + z * e.race_time_sd_s, i, e)
+            for i, e in enumerate(ranked)
+            if (
+                len(e.compounds) != len(primary.compounds)
+                if different_stops
+                else e.compounds != primary.compounds
+            )
+        ]
+        if candidates:
+            return min(candidates, key=lambda candidate: (candidate[0], candidate[1]))[2]
+    return None
 
 
 @dataclass
@@ -319,7 +358,8 @@ class PlanTracker:
         if not self.seqs:
             a = ranked[0]
             self._set("A", "primary", stops_done, a)
-            b = alternative(ranked, a)
+            z = NormalDist().inv_cdf(_f(th, "plan_mc_risk_quantile", 0.8))
+            b = alternative(ranked, a, z)
             if b is not None:
                 self._set("B", "alternative", stops_done, b)
             self.active = "A"
@@ -362,7 +402,13 @@ class PlanTracker:
                     if e is not None and pid != self.active and e.compounds == best.compounds
                 ]
                 to = other[0] if other else ("B" if self.active != "B" else "A")
-                if gap > switch_s:
+                should_switch = (
+                    p_faster(gap, cur.race_time_sd_s, best.race_time_sd_s)
+                    > _f(th, "plan_switch_prob", 0.9)
+                    if cur.race_time_sd_s > 0 or best.race_time_sd_s > 0
+                    else gap > switch_s
+                )
+                if should_switch:
                     if not other:
                         self._set(to, "alternative", stops_done, best)
                         evals[to] = best
@@ -387,6 +433,7 @@ class PlanTracker:
             )
 
         ref = cur.race_time_s if cur is not None else best.race_time_s
+        ref_sd = cur.race_time_sd_s if cur is not None else best.race_time_sd_s
         plans: list[StrategyPlan] = []
         for pid in sorted({*self.seqs, "C"}):
             e = c_now if pid == "C" else evals.get(pid)
@@ -401,6 +448,16 @@ class PlanTracker:
                     window=e.window,
                     race_time_s=round(e.race_time_s, 3),
                     delta_s=round(e.race_time_s - ref, 1),
+                    delta_sd_s=(
+                        0.0
+                        if pid == self.active
+                        else round(math.hypot(e.race_time_sd_s, ref_sd), 1)
+                    ),
+                    switch_prob=(
+                        0.0
+                        if pid == self.active
+                        else round(p_faster(ref - e.race_time_s, e.race_time_sd_s, ref_sd), 3)
+                    ),
                 )
             )
         target = cur.stop_laps[0] if cur is not None and cur.stop_laps else 0
@@ -419,6 +476,16 @@ class PlanTracker:
             target_shift=target - self.target_ref if target and self.target_ref else 0,
             sequence=_seq_text(cur),
             stops_left=len(cur.compounds) - 1 if cur is not None else 0,
+            off_prob=(
+                round(p_faster(gap, cur.race_time_sd_s, best.race_time_sd_s), 3)
+                if cur is not None and cur.compounds != best.compounds
+                else 0.0
+            ),
+            delta_sd_s=(
+                round(math.hypot(cur.race_time_sd_s, best.race_time_sd_s), 1)
+                if cur is not None
+                else 0.0
+            ),
         )
         return self.state
 
@@ -457,6 +524,8 @@ class PlanFields:
     plan_window_open: bool
     plan_next_compound: str
     plan_off_s: float
+    plan_off_prob: float
+    plan_delta_sd_s: float
     plan_switch_count: int
     plan_switched_from: str
     plan_switch_reason: str
@@ -464,6 +533,8 @@ class PlanFields:
     plan_target_shift: int
     plan_b_spoken: str
     plan_b_delta_s: float
+    plan_b_delta_sd_s: float
+    plan_b_switch_prob: float
     plan_c_spoken: str
     plan_c_delta_s: float
 
@@ -491,6 +562,8 @@ def view_fields(st: PlanState, lap_num: int) -> PlanFields:
             WORDS.get(active.compounds[1], "") if active is not None and active.stops else ""
         ),
         plan_off_s=st.off_s,
+        plan_off_prob=st.off_prob,
+        plan_delta_sd_s=st.delta_sd_s,
         plan_switch_count=st.switch_count,
         plan_switched_from=st.switched_from,
         plan_switch_reason=st.switch_reason,
@@ -498,6 +571,8 @@ def view_fields(st: PlanState, lap_num: int) -> PlanFields:
         plan_target_shift=st.target_shift,
         plan_b_spoken=spoken(b),
         plan_b_delta_s=b.delta_s if b is not None else 0.0,
+        plan_b_delta_sd_s=b.delta_sd_s if b is not None else 0.0,
+        plan_b_switch_prob=b.switch_prob if b is not None else 0.0,
         plan_c_spoken=spoken(c),
         plan_c_delta_s=c.delta_s if c is not None else 0.0,
     )

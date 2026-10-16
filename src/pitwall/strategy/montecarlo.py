@@ -25,6 +25,7 @@ class McResult:
     modal_lap: int
     agree: float
     sims: int
+    q_modal_lap: int = 0
 
 
 def _sampled_current_laps_ms(
@@ -125,7 +126,14 @@ def plan_agreement(
         fit.deg_sd_ms_per_lap,
         _f(th, "plan_mc_deg_sd_frac", 0.15) * fit.deg_ms_per_lap,
     )
-    deg_samples = np.maximum(rng.normal(fit.deg_ms_per_lap, sigma, size=sims), 0.0)
+    if fit.deg_posterior_sd_ms_per_lap > 0 and fit.n >= max(int(_f(th, "deg_min_laps", 3)), 3):
+        scale = max(fit.deg_posterior_sd_ms_per_lap, sigma)
+        deg_samples = np.maximum(
+            fit.deg_ms_per_lap + rng.standard_t(df=max(fit.n - 2, 3), size=sims) * scale,
+            0.0,
+        )
+    else:
+        deg_samples = np.maximum(rng.normal(fit.deg_ms_per_lap, sigma, size=sims), 0.0)
     if len(pit_loss_samples_s) >= 3:
         samples = np.asarray(pit_loss_samples_s, dtype=float)
         pit_losses_s = rng.choice(samples, size=sims) - float(np.median(samples)) + pit_loss_s
@@ -152,6 +160,9 @@ def plan_agreement(
         last_k=last_k,
         th=th,
     )
+    q = np.quantile(deltas, _f(th, "plan_mc_risk_quantile", 0.8), axis=0)
+    k = int(np.argmin(q))
+    q_modal_lap = lap_num + k if q[k] < 0 else 0
 
     best_ks = np.argmin(deltas, axis=1)
     best_deltas = deltas[np.arange(sims), best_ks]
@@ -187,7 +198,7 @@ def plan_agreement(
             agree = float(np.mean(deltas[:, plan_k] - min_deltas <= gain_min))
         else:
             agree = 1.0
-    return McResult(modal_lap, agree, sims)
+    return McResult(modal_lap, agree, sims, q_modal_lap)
 
 
 def scale_plan(plan: PitPlan, mc: McResult | None) -> PitPlan:
@@ -198,4 +209,5 @@ def scale_plan(plan: PitPlan, mc: McResult | None) -> PitPlan:
         confidence=round(plan.confidence * mc.agree, 3),
         mc_lap=mc.modal_lap,
         mc_agree=round(mc.agree, 3),
+        mc_risk_lap=mc.q_modal_lap,
     )

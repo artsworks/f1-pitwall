@@ -336,6 +336,8 @@ def strategy_payload(
                 "stop_laps": list(p.stop_laps),
                 "window": list(p.window) if p.window[0] > 0 else None,
                 "delta_s": p.delta_s,
+                "delta_sd_s": p.delta_sd_s,
+                "switch_prob": p.switch_prob,
                 "active": p.id == snapshot.active_plan,
             }
             for p in snapshot.plans
@@ -343,6 +345,7 @@ def strategy_payload(
         "active_plan": snapshot.active_plan or None,
         "on_plan": snapshot.on_plan if snapshot.active_plan else None,
         "plan_off_s": snapshot.plan_off_s if snapshot.active_plan else None,
+        "plan_off_prob": snapshot.plan_off_prob if snapshot.active_plan else None,
         "plan_target_lap": snapshot.plan_target_lap or None,
         "plan_switch": (
             {

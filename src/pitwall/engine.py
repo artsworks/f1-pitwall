@@ -1787,6 +1787,10 @@ class Engine:
                 self._th(f"plan_deg_factor_{names[v]}", 1.0)
                 / self._th(f"plan_deg_factor_{names.get(current, 'medium')}", 1.0)
             )
+            deg_sd = cur.deg_posterior_sd_ms_per_lap * (
+                self._th(f"plan_deg_factor_{names[v]}", 1.0)
+                / self._th(f"plan_deg_factor_{names.get(current, 'medium')}", 1.0)
+            )
             if actual:
                 prior = self._compound_priors.get(actual)
                 if prior is None:
@@ -1794,6 +1798,7 @@ class Engine:
                     self._compound_priors[actual] = prior
                 if prior.source in ("learned", "overlay"):
                     deg = prior.deg_ms_per_lap
+                    deg_sd = 0.0
             off = self._th(f"plan_pace_{names[v]}_ms", 0.0)
             off_cur = self._th(f"plan_pace_{names[current]}_ms", 0.0) if current in names else 0.0
             sets = (
@@ -1801,7 +1806,15 @@ class Engine:
                 if snap.tyre_sets
                 else -1
             )
-            out.append(CompoundModel(v, cur.base_ms + off - off_cur, deg, sets))
+            out.append(
+                CompoundModel(
+                    v,
+                    cur.base_ms + off - off_cur,
+                    deg,
+                    sets,
+                    deg_posterior_sd_ms_per_lap=deg_sd,
+                )
+            )
         return tuple(out)
 
     def _plans(self, snap: Snapshot, cur: DegFit, pit: PitPlan) -> Snapshot:
@@ -1855,7 +1868,14 @@ class Engine:
 
     def _persist_plan_event(self, snap: Snapshot, ev: PlanEvent, st: PlanState) -> None:
         plans = [
-            {"id": p.id, "sequence": p.sequence, "window": list(p.window), "delta_s": p.delta_s}
+            {
+                "id": p.id,
+                "sequence": p.sequence,
+                "window": list(p.window),
+                "delta_s": p.delta_s,
+                "delta_sd_s": p.delta_sd_s,
+                "switch_prob": p.switch_prob,
+            }
             for p in st.plans
         ]
         record = {
@@ -1871,6 +1891,7 @@ class Engine:
             "delta_s": ev.delta_s,
             "sequence": ev.sequence,
             "plans": plans,
+            "off_prob": st.off_prob,
         }
         self.dispatcher.log.write(record)
         if self.db is not None and self.state.session_uid is not None:
@@ -1925,6 +1946,7 @@ class Engine:
             positions=tuple(c.car_position for c in snap.cars),
             pitting=frozenset(i for i, c in enumerate(snap.cars) if c.pit_status != 0),
             regulations_2026=snap.regulations_2026,
+            closing_sd_s=snap.gap_closing_sd_ahead_s,
         )
         tracker = self.battle_tracker
         th = self.store.current().thresholds
@@ -1945,6 +1967,8 @@ class Engine:
             battle_tyre_offset_ahead=b.tyre_offset_ahead,
             battle_tyre_offset_behind=b.tyre_offset_behind,
             battle_pass_prob=b.pass_prob,
+            battle_catch_prob=b.catch_prob,
+            battle_chase_prob=b.chase_prob,
             battle_hold_prob=b.hold_prob,
             battle_result=b.result,
             battle_result_recent=b.result_recent,

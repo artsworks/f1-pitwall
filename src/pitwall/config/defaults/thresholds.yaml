@@ -74,6 +74,7 @@ thresholds:
   deg_quad_min_laps: 8       # minimum clean laps for a quadratic degradation fit
   deg_quad_min_t: 2.0        # minimum quadratic coefficient significance in standard errors
   plan_mc_sims: 500          # simulations for pit plan agreement
+  plan_mc_risk_quantile: 0.8  # downside quantile for the risk-averse stop lap
   plan_mc_sc_prob_per_lap: 0.03  # safety-car chance per candidate lap
   plan_mc_deg_sd_frac: 0.15  # minimum degradation sampling spread
   plan_mc_pit_loss_sd_s: 1.5 # pit-loss sampling spread without history
