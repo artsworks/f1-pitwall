@@ -74,6 +74,7 @@ lap_time_ms = base_ms
 - The engine solves `deg * age + deg2 * age² = tyre_cliff_ms`. Quadratic fits use the positive root for `cliff_age`.
 - Short fits use or blend toward a prior. The planner shrinks both degradation terms by fit error.
 - The planner multiplies deterministic plan confidence by Monte Carlo agreement. It keeps `plan.lap` unchanged and does not scale `cheap_stop`.
+- For `cover` and `defend`, agreement counts how often sampled cover math repeats the plan's decision.
 - Race priors are scoped by total race laps, so different race distances do not mix.
   Practice values are unscoped.
 - Rival pace comes from Session History lap times, filtered the same way.

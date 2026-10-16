@@ -493,12 +493,13 @@ Select the first minimum. Choose no stop when the best stop delta is nonnegative
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
 For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
 Plans outside the candidate range get agreement `1.0`.
+For `cover` and `defend`, agreement counts how often sampled cover math repeats the plan's decision.
 
 Multiply deterministic confidence by agreement and round to three decimals. Keep `plan.lap` unchanged.
 Skip Monte Carlo when `safety_car_status != 0`. Do not scale `cheap_stop`.
 Seed each run with `np.random.default_rng([uid & 0xFFFFFFFF, (uid >> 32) & 0xFFFFFFFF, lap_num])`.
 Use UID zero when the session UID is absent.
-Cache results once per lap with `(session_uid, lap_num, plan.lap, tyre_age)`.
+Cache results once per lap with `(session_uid, lap_num, plan.lap, tyre_age, plan.plan, plan.rival_idx)`.
 Defaults are `plan_mc_sims: 500`, `plan_mc_sc_prob_per_lap: 0.03`, `plan_mc_deg_sd_frac: 0.15`, and `plan_mc_pit_loss_sd_s: 1.5`.
 
 ## Named strategy plans (`pitwall.strategy.plans`)

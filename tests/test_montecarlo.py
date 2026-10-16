@@ -39,6 +39,8 @@ def _agreement(
     pit_loss_s: float = 21.0,
     sc_pit_loss_s: float = 9.0,
     cur_cliff_age: float = 100.0,
+    plan_name: str = "",
+    cover_gap_s: float = float("inf"),
     mode: dict[str, float] | None = None,
     th: dict[str, float] | None = None,
 ) -> McResult | None:
@@ -56,6 +58,8 @@ def _agreement(
         mode=MODE if mode is None else mode,
         th=TH if th is None else th,
         rng=np.random.default_rng(seed),
+        plan_name=plan_name,
+        cover_gap_s=cover_gap_s,
     )
 
 
@@ -75,6 +79,84 @@ def test_clear_stop_plan_has_high_agreement() -> None:
     )
 
     assert result is not None and result.agree >= 0.95
+
+
+def test_clear_cover_uses_sampled_cover_decision() -> None:
+    fit = _fit(100.0)
+    fresh = _fit(300.0)
+    cover_gap_s = 0.2
+    their_gain = ((100.0 * 10) + (100.0 * 11 - 300.0)) / 1000.0
+    cover_s = their_gain - TH["outlap_warmup_s"] - cover_gap_s
+    assert cover_s == pytest.approx(0.8)
+
+    covered = _agreement(
+        fit=fit,
+        fresh=fresh,
+        plan_lap=10,
+        laps_remaining=12,
+        tyre_age=10,
+        cur_cliff_age=11.0,
+        plan_name="cover",
+        cover_gap_s=cover_gap_s,
+    )
+    old_scoring = _agreement(
+        fit=fit,
+        fresh=fresh,
+        plan_lap=10,
+        laps_remaining=12,
+        tyre_age=10,
+        cur_cliff_age=11.0,
+        cover_gap_s=cover_gap_s,
+    )
+
+    assert covered is not None and covered.modal_lap == 14 and covered.agree >= 0.9
+    assert old_scoring is not None and old_scoring.agree < 0.1
+
+    plan = PitPlan("cover", 10, cover_s, 0.9, 0.0, 2, "PIASTRI", "", (10, 14), 0, 0, ())
+    assert scale_plan(plan, covered).confidence >= 0.70
+
+
+def test_marginal_cover_agreement_uses_sampled_degradation() -> None:
+    fit = _fit(100.0, sd=30.0)
+    fresh = _fit(300.0)
+    their_gain = ((100.0 * 10) + (100.0 * 11 - 300.0)) / 1000.0
+    cover_s = their_gain - TH["outlap_warmup_s"] - 1.5
+
+    result = _agreement(
+        fit=fit,
+        fresh=fresh,
+        plan_lap=10,
+        laps_remaining=12,
+        tyre_age=10,
+        cur_cliff_age=11.0,
+        plan_name="cover",
+        cover_gap_s=1.5,
+    )
+
+    assert cover_s + 0.5 == pytest.approx(0.0)
+    assert result is not None and 0.0 < result.agree < 1.0
+
+
+def test_clear_defend_uses_sampled_cover_decision() -> None:
+    result = _agreement(
+        fit=_fit(20.0),
+        fresh=_fit(30.0),
+        plan_lap=12,
+        tyre_age=2,
+        plan_name="defend",
+        cover_gap_s=2.0,
+    )
+
+    assert result is not None and result.agree >= 0.9
+
+
+def test_box_plan_ignores_cover_agreement_arguments() -> None:
+    args = {"fit": _fit(150.0, sd=20.0), "fresh": _fit(80.0), "plan_lap": 10}
+
+    without_cover = _agreement(**args)
+    with_cover = _agreement(**args, plan_name="box_now", cover_gap_s=0.2)
+
+    assert with_cover == without_cover
 
 
 def test_near_equal_stop_options_reduce_agreement() -> None:

@@ -412,7 +412,7 @@ class Engine:
         self._green_pit_loss_s = 0.0
         self._green_pit_samples_s: list[float] = []
         self._sc_pit_loss_s = 0.0
-        self._plan_mc_cache: dict[tuple[int | None, int, int, int], McResult | None] = {}
+        self._plan_mc_cache: dict[tuple[int | None, int, int, int, str, int], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
@@ -1703,7 +1703,14 @@ class Engine:
         )
         if snap.safety_car_status == 0:
             session_uid = self.state.session_uid
-            key = (session_uid, snap.lap_num, plan.lap, snap.tyre_age_laps)
+            key = (
+                session_uid,
+                snap.lap_num,
+                plan.lap,
+                snap.tyre_age_laps,
+                plan.plan,
+                plan.rival_idx,
+            )
             if key not in self._plan_mc_cache:
                 uid = session_uid if session_uid is not None else 0
                 rng = np.random.default_rng(
@@ -1723,6 +1730,8 @@ class Engine:
                     mode=mode,
                     th=settings.thresholds,
                     rng=rng,
+                    plan_name=plan.plan,
+                    cover_gap_s=behind_gap_s,
                 )
             plan = scale_plan(plan, self._plan_mc_cache[key])
         plan, self._held_plan = _hold_cover_plan(
