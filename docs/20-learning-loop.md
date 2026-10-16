@@ -114,7 +114,7 @@ apply upkeep steps on demand. `pitwall tune` also folds A/B results from `pitwal
 Each candidate includes median snapshot signals at the ask and current rule thresholds.
 Review these candidates before changing a rule. Proposals never write YAML.
 
-Sessions from `pitwall derive` are synthetic. They feed `pitwall digest` and hindsight
+Sessions from bench scenario mutations (`pitwall bench`) are synthetic. They feed `pitwall digest` and hindsight
 grading. `pitwall tune` skips their auto outcomes and press grades, but keeps human grades.
 Calibration, upkeep and the replay folds leave them out of physics priors.
 `pitwall calibrate --include-synthetic` adds them to the fit. See
@@ -131,7 +131,9 @@ The latest pack includes learned parameters, quarantined values, call grades, tr
 Run `pitwall restore learnings/learning-latest.json` to restore a pack.
 Restore keeps active priors and call-quality history for sessions in the ledger.
 Set `learning.pack_dir` to use another drive or synced folder.
-`pitwall cleanup` deletes dated packs older than 5 days and leftover `.tmp` files. Use `--days` to change the age.
+`pitwall cleanup --learn` learns recordings older than `--days` and at least an hour old.
+It skips live recordings, then plans the cleanup. Cleanup also deletes dated packs older
+than 5 days and leftover `.tmp` files. Use `--days` to change the age.
 Cleanup never deletes `learning-latest.json` or `track_ledger.jsonl`, because restore and the track ledger need them.
 
 ### Contributing your learnings

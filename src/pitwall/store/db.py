@@ -315,7 +315,7 @@ MIGRATIONS: list[str] = [
     ALTER TABLE bookmarks ADD COLUMN kind TEXT NOT NULL DEFAULT 'hold';
     ALTER TABLE bookmarks ADD COLUMN context TEXT;
     """,
-    # 12: synthetic sessions from pitwall derive.
+    # 12: synthetic sessions from pitwall.derive.
     """
     ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
     ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';

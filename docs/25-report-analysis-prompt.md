@@ -22,8 +22,8 @@ See the bookmark and report workflow in
 | `calls.json`, `grades.json`, `bookmarks.json` | the database rows for the latest session in the database |
 | `config.yaml`, `system.json` | the resolved settings, config hash, session uid and pitwall version |
 
-`pitwall report` does not trim the recording. The prompt tells the agent to cut a segment
-around each bookmark with `pitwall trim`.
+The report keeps the full recording. Replay a bookmark window with
+`pitwall replay <recording> --from-us <start> --to-us <end> --seed-db :memory:`.
 
 ## How to use the prompt
 
@@ -72,14 +72,13 @@ For each bookmark (outcome "bookmark" in the decision log, or a row in bookmarks
 1. Note its lap, session_time, lap_distance, kind and context. The context is the
    snapshot at the press.
 2. Match the bookmark to its note in <notes> by order, lap or time.
-3. Cut a segment from about 60 s before to 15 s after the bookmark:
-   `uv run pitwall trim <recording> --from-us <start> --to-us <end> --out <scratch>/bm<N>.f1bin`.
-   Recording offsets are microseconds from the start of the recording.
-4. Replay the segment: `uv run pitwall replay <scratch>/bm<N>.f1bin --seed-db :memory:`.
-   If the session is online, also replay with --mask-restricted and compare the calls.
-5. List every decision-log record in the same window. Include fired, queued and
+3. Replay from about 60 s before to 15 s after the bookmark:
+   `uv run pitwall replay <recording> --from-us <start> --to-us <end> --seed-db :memory:`.
+   Recording offsets are microseconds from the start of the recording. If the session
+   is online, add `--mask-restricted` and compare the calls.
+4. List every decision-log record in the same window. Include fired, queued and
    suppressed records, their rule_id, priority, suppressed_by, inputs and text.
-6. Write down what the radio said and what it should have said.
+5. Write down what the radio said and what it should have said.
 
 Step 3. Classify each bookmark
 Use exactly one type per bookmark:
@@ -133,7 +132,7 @@ Step 6. Add a regression test
 1. Write a pytest test in tests/ that fails before the fix and passes after it. The
    test cannot read the recording, because recordings are not in git. Build the
    packet stream with the helpers in tests/synth.py from the values you read in the
-   trimmed segment. For restricted cases, apply pitwall.net.mask.mask_restricted.
+   replayed window. For restricted cases, apply pitwall.net.mask.mask_restricted.
 2. If the test replays packets through the engine, mark the module with
    `pytestmark = [pytest.mark.slow, pytest.mark.replay]`.
 3. Also draft a scenario that replays the real recording. Put it in

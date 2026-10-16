@@ -252,7 +252,7 @@ def test_malformed_short_and_unrelated_packets_pass_through(tmp_path) -> None:
         derive_recording(zero_source, tmp_path / "zero-derived.f1bin", [WearScale(1.5)])
 
 
-def test_derive_rejects_source_and_output_path_collisions(tmp_path, capsys) -> None:
+def test_derive_rejects_source_and_output_path_collisions(tmp_path) -> None:
     source = write_packet_stream(
         tmp_path / "source.f1bin",
         [(0.0, pack_packet(PacketId.SESSION, session_uid=SOURCE_UID))],
@@ -263,10 +263,6 @@ def test_derive_rejects_source_and_output_path_collisions(tmp_path, capsys) -> N
     for output in (source, source.with_suffix(".f1bin.zst")):
         with pytest.raises(ValueError, match="output path resolves to the source"):
             derive_recording(source, output, [WearScale(1.5)])
-    assert source.read_bytes() == original
-
-    assert main(["derive", str(source), str(source), "--wear-scale", "1.5"]) == 1
-    assert "derive: " in capsys.readouterr().out
     assert source.read_bytes() == original
 
 
@@ -566,9 +562,7 @@ def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
         metadata={"synthetic": False},
     )
     cli_output = tmp_path / "cli-derived.f1bin"
-    assert main(["derive", str(cli_source), str(cli_output), "--wear-scale", "1.5"]) == 0
-    cli_text = capsys.readouterr().out
-    assert "derived session UID:" in cli_text and "wear_scale=1.5" in cli_text
+    derive_recording(cli_source, cli_output, [WearScale(1.5)])
     with RecordingReader(cli_output) as reader:
         cli_uid = reader.header.session_uid
         assert is_synthetic_uid(cli_uid)

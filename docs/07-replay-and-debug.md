@@ -104,20 +104,24 @@ to 108 stop the chatter without missing the real event?" into a five-second ques
 Run `pitwall diff --corpus recordings/*.f1bin` to see a config change's aggregate effect
 across recorded sessions. This lets the assistant improve without new races.
 
-## Synthetic and trimmed fixtures
+## Synthetic fixtures and replay windows
 
 Some situations are hard to produce on demand (red flag, a specific SC timing, a
-particular weather crossover). Two answers:
+particular weather crossover). Three options:
 
-- **Trim tool**: `pitwall trim <recording> --from-us N --to-us N --out fixtures/sc.f1bin`
-  creates local replay slices. Keep recordings out of git (ADR 0005).
-- **Derive tool**: `pitwall derive <recording> <out> --inject-sc 6-8 --wear-scale 1.5`
-  writes a synthetic copy of a real recording with a tagged session UID. Use synthetic
-  sessions for grading and tuning, not physics priors. See
+- Replay a time range with `--from-us` and `--to-us`, or start at a lap with
+  `--from-lap`. For example, run `pitwall replay <recording> --from-us N --to-us N`.
+- Create synthetic variants with `pitwall bench` scenario `mutations`. See
+  [Scenario bench](24-scenario-bench.md) and
   [Synthetic recordings](23-synthetic-recordings.md).
 - **Synthetic generator**: build valid packets from the layout tables to script an exact
   scenario. Used only for cases real recordings do not cover, and always flagged as
   synthetic, because synthetic data quietly encodes your assumptions.
+
+## Trim a recording
+
+Use `pitwall trim <recording> --profile lite --out <file>` to write a smaller copy.
+Add `--from-us N --to-us N` to cut a time range.
 
 ## Debugging when it is live
 

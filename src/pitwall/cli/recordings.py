@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,7 @@ from pitwall.cli.common import (
     _resolve_recording,
     db_from_args,
     emit_json_or,
+    ingest_paths,
     open_db,
 )
 from pitwall.cli.serve import _serve
@@ -19,10 +22,11 @@ from pitwall.clock import Clock, ReplayClock, VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
-from pitwall.net.profile import RecordFilter
+from pitwall.net.profile import PROFILES, RecordFilter
 from pitwall.net.recording import (
     RecordingReader,
     RecordingWriter,
+    compress_recording,
     ensure_index,
     index_path_for,
     list_recordings,
@@ -177,6 +181,91 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trim(args: argparse.Namespace) -> int:
+    src = _resolve_recording(args.file, ConfigStore().current())
+    dest = Path(args.out)
+    if not dest.name.endswith((".f1bin", ".f1bin.zst")):
+        print("trim: --out must end in .f1bin or .f1bin.zst")
+        return 2
+    write_path = dest.with_suffix("") if dest.suffix == ".zst" else dest
+    if write_path != dest and write_path.exists():
+        print(f"trim: {write_path} already exists; remove it or pick another --out")
+        return 2
+    source_resolved = src.resolve()
+
+    def aliases_source(path: Path) -> bool:
+        if path.resolve() == source_resolved:
+            return True
+        if path.exists() and src.exists():
+            try:
+                return os.path.samefile(path, src)
+            except OSError:
+                return True
+        return False
+
+    if aliases_source(dest) or aliases_source(write_path):
+        print(f"trim: output path aliases source recording {src}")
+        return 2
+    if index_path_for(write_path).resolve() == index_path_for(src).resolve():
+        print(f"trim: output index would overwrite source index for {src}")
+        return 2
+
+    from_us = args.from_us if args.from_us is not None else 0
+    to_us = args.to_us
+    kept = 0
+    with RecordingReader(src) as reader:
+        source_header = reader.header
+        source_profile = source_header.metadata.get("profile")
+        if source_profile not in PROFILES:
+            source_profile = "full"
+        if args.profile and PROFILES.index(args.profile) < PROFILES.index(source_profile):
+            print(f"trim: {src} is already {source_profile}, cannot write {args.profile}")
+            return 2
+
+        keep = RecordFilter(args.profile) if args.profile else None
+        metadata = {
+            **source_header.metadata,
+            "trimmed_from": str(src),
+            "profile": args.profile or source_profile,
+        }
+        with ExitStack() as stack:
+
+            def open_writer(wall_clock_start_us: int) -> RecordingWriter:
+                return stack.enter_context(
+                    RecordingWriter(
+                        write_path,
+                        packet_format=source_header.packet_format,
+                        session_uid=source_header.session_uid,
+                        config_hash=source_header.config_hash,
+                        game_version=source_header.game_version,
+                        wall_clock_start_us=wall_clock_start_us,
+                        metadata=metadata,
+                    )
+                )
+
+            writer: RecordingWriter | None = None
+            first_kept_offset_us = 0
+            for offset_us, payload in reader:
+                if offset_us < from_us:
+                    continue
+                if to_us is not None and offset_us > to_us:
+                    break
+                if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
+                    continue
+                if writer is None:
+                    first_kept_offset_us = offset_us
+                    writer = open_writer(source_header.wall_clock_start_us + offset_us)
+                writer.write_datagram((offset_us - first_kept_offset_us) / 1_000_000, payload)
+                kept += 1
+            if writer is None:
+                open_writer(source_header.wall_clock_start_us + from_us)
+
+    if write_path != dest:
+        compress_recording(write_path, remove=True)
+    print(f"wrote {kept} records -> {args.out}")
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     if args.quality:
         return _stats_quality(args)
@@ -262,58 +351,6 @@ def _stats_census(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_trim(args: argparse.Namespace) -> int:
-    src = _resolve_recording(args.file, ConfigStore().current())
-    from_us = args.from_us if args.from_us is not None else 0
-    to_us = args.to_us
-    keep = RecordFilter(args.profile) if args.profile else None
-    with (
-        RecordingReader(src) as reader,
-        RecordingWriter(
-            Path(args.out),
-            packet_format=reader.header.packet_format,
-            session_uid=reader.header.session_uid,
-            config_hash=reader.header.config_hash,
-            game_version=reader.header.game_version,
-            metadata={
-                **reader.header.metadata,
-                "trimmed_from": str(src),
-                **({"profile": args.profile} if args.profile else {}),
-            },
-        ) as writer,
-    ):
-        kept = 0
-        for offset_us, payload in reader:
-            if offset_us < from_us:
-                continue
-            if to_us is not None and offset_us > to_us:
-                break
-            if keep is not None and not keep.keep(offset_us / 1_000_000, payload):
-                continue
-            # Re-base so the trimmed file starts at 0.
-            writer.write_datagram((offset_us - from_us) / 1_000_000, payload)
-            kept += 1
-    print(f"wrote {kept} records -> {args.out}")
-    return 0
-
-
-def cmd_derive(args: argparse.Namespace) -> int:
-    from pitwall.derive import derive_recording, ops_from_options
-
-    settings = ConfigStore().current()
-    source = _resolve_recording(args.file, settings)
-    try:
-        ops = ops_from_options(args.wear_scale, args.inject_sc, args.vsc, args.penalty)
-        summary = derive_recording(source, Path(args.out), ops)
-    except ValueError as exc:
-        print(f"derive: {exc}")
-        return 1
-    print(f"derived session UID: 0x{summary.header.session_uid:016x}")
-    print(f"mutations: {', '.join(op.label for op in ops)}")
-    print(f"wrote {summary.record_count} records -> {args.out}")
-    return 0
-
-
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
     from pitwall.derive import is_synthetic_uid
@@ -395,20 +432,31 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_cleanup(args: argparse.Namespace) -> int:
     """List old files that are safe to delete; delete them after confirmation."""
-    from pitwall.cleanup import apply, plan_cleanup
+    from pitwall.cleanup import apply, learnable_recordings, plan_cleanup
 
     settings = ConfigStore().current()
     db = db_from_args(args, settings)
     if db is None:
         print("cleanup: persistence disabled, recordings are never deleted")
+    rec_dir = Path(args.recordings or settings.recording.directory)
     db_path = (
         Path(db.path).expanduser()
         if db is not None
         else Path(settings.persistence.path).expanduser()
     )
+    failures = 0
     try:
+        if args.learn:
+            if db is None:
+                print("cleanup: persistence disabled, skipping --learn")
+            else:
+                paths = learnable_recordings(rec_dir, args.days)
+                if paths:
+                    failures = ingest_paths(
+                        argparse.Namespace(paths=[str(path) for path in paths]), db, settings
+                    )
         plan = plan_cleanup(
-            Path(args.recordings or settings.recording.directory),
+            rec_dir,
             db_path.parent,
             Path(settings.speech.voices_dir),
             db.ingested_uids() if db is not None else set(),
@@ -422,8 +470,18 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         return 2
     if plan.kept_unlearned:
         print(f"keeping {plan.kept_unlearned} old recording(s) not learned yet")
+        print(f"  learn them: pitwall digest {rec_dir}")
+        print("  delete anyway: pitwall cleanup --include-unlearned")
+        if plan.kept_no_uid:
+            print(
+                f"  {plan.kept_no_uid} have no session UID "
+                "(session_0000000000000000_*), only --include-unlearned removes them"
+            )
     if not plan.delete:
         print("cleanup: nothing to delete")
+        if failures:
+            print(f"cleanup: {failures} recording(s) could not be learned")
+            return 1
         return 0
     by_reason: dict[str, list[int]] = {}
     for c in plan.delete:
@@ -441,4 +499,7 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
             return 1
     n, freed = apply(plan)
     print(f"cleanup: deleted {n} file(s), freed {_mb(freed)}")
+    if failures:
+        print(f"cleanup: {failures} recording(s) could not be learned")
+        return 1
     return 0

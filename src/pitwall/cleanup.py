@@ -39,6 +39,7 @@ class Candidate:
 class Plan:
     delete: list[Candidate]
     kept_unlearned: int  # old recordings kept because they are not in the database yet
+    kept_no_uid: int = 0
 
     @property
     def total_bytes(self) -> int:
@@ -58,6 +59,32 @@ def _files(root: Path, pattern: str) -> Iterable[Path]:
         for p in root.glob(pattern)
         if p.is_file() and not _linked(p.absolute()) and p.resolve().parent == base
     )
+
+
+def _cutoff(now: float | None, older_than_days: float) -> float:
+    if not math.isfinite(older_than_days) or older_than_days < 0:
+        raise ValueError("--days must be a finite, non-negative number")
+    now = time.time() if now is None else now
+    return min(now - older_than_days * 86400.0, now - _RECENT_S)
+
+
+def learnable_recordings(
+    recordings_dir: Path, older_than_days: float, now: float | None = None
+) -> list[Path]:
+    cutoff = _cutoff(now, older_than_days)
+    learnable: list[Path] = []
+    for path in _files(recordings_dir, "session_*"):
+        match = _SESSION.match(path.name)
+        if match is None or match.group(2) not in {"bin", "bin.zst"}:
+            continue
+        if path.stat().st_mtime > cutoff:
+            continue
+        if match.group(2) == "bin":
+            sibling = path.with_name(path.name + ".zst")
+            if sibling.is_file() and _same_as_zst(path):
+                continue
+        learnable.append(path)
+    return learnable
 
 
 def _same_as_zst(path: Path) -> bool:
@@ -89,13 +116,12 @@ def plan_cleanup(
     learnings_dir: Path | None = None,
     include_unlearned: bool = False,
 ) -> Plan:
-    if not math.isfinite(older_than_days) or older_than_days < 0:
-        raise ValueError("--days must be a finite, non-negative number")
     now = time.time() if now is None else now
     recent = now - _RECENT_S
-    cutoff = min(now - older_than_days * 86400.0, recent)
+    cutoff = _cutoff(now, older_than_days)
     out: list[Candidate] = []
     kept = 0
+    kept_no_uid = 0
 
     def add(p: Path, reason: str) -> None:
         stat = p.stat()
@@ -133,16 +159,23 @@ def plan_cleanup(
                 continue
         if mtime > cutoff:
             continue
-        if int(m.group(1), 16) not in learned_uids:
+        uid = int(m.group(1), 16)
+        if uid == 0 or uid not in learned_uids:
             if include_unlearned:
                 add(p, "old recording (unlearned, forced)")
                 continue
             if m.group(2) != "idx":
                 kept += 1
+                if uid == 0:
+                    kept_no_uid += 1
             continue
         if recording_imports is not None:
-            source = p.with_suffix(".f1bin") if m.group(2) == "idx" else p
-            sources = (source.resolve(), Path(str(source.resolve()) + ".zst"))
+            sources: tuple[Path, ...]
+            if m.group(2) == "idx":
+                source = p.with_suffix(".f1bin").resolve()
+                sources = (source, Path(str(source) + ".zst"))
+            else:
+                sources = (p.resolve(),)
             imported_at = max((recording_imports.get(path, 0.0) for path in sources), default=0.0)
             if imported_at < mtime:
                 if include_unlearned:
@@ -173,7 +206,7 @@ def plan_cleanup(
     for p in _files(voices_dir / ".phrases", "*.wav"):
         if p.stat().st_mtime <= recent:
             add(p, "speech cache, rebuilt when needed")
-    return Plan(out, kept)
+    return Plan(out, kept, kept_no_uid)
 
 
 def apply(plan: Plan) -> tuple[int, int]:

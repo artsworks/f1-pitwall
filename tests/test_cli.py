@@ -45,16 +45,10 @@ def test_stats_command(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyp
     assert sum(e["accepted"] for e in out["packets"].values()) == len(mixed_session_packets(10))
 
 
-def test_replay_and_trim(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_replay_stats(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     rec = write_synthetic_recording(tmp_path / "s.f1bin", mixed_session_packets(10))
     assert main(["replay", str(rec), "--speed", "max", "--stats"]) == 0
     capsys.readouterr()
-
-    trimmed = tmp_path / "t.f1bin"
-    assert (
-        main(["trim", str(rec), "--from-us", "0", "--to-us", "150000", "--out", str(trimmed)]) == 0
-    )
-    assert trimmed.exists()
 
 
 def test_replay_from_lap_rebuilds_missing_or_stale_index(  # type: ignore[no-untyped-def]
@@ -214,13 +208,11 @@ def test_subcommand_help_exits_cleanly(path: tuple[str, ...], capsys) -> None:  
         build_parser().parse_args([*path, "-h"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    if path[0] in {"trim", "derive"}:
-        return
     sp = build_parser()
     for name in path:
         sp = _subparsers(sp)[name]
     assert sp.description and sp.description in out
     assert sp.epilog and sp.epilog in out
-    example = shlex.split(sp.epilog.split("\n", 1)[1])
+    example = shlex.split(sp.epilog.removeprefix("e.g. "))
     assert example[0] == "pitwall"
     build_parser().parse_args(example[1:])
