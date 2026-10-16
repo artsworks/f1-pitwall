@@ -6,6 +6,7 @@ no LLM); variants rotate per (item, case)."""
 
 from __future__ import annotations
 
+import logging
 import math
 import string
 from collections.abc import Callable, Mapping
@@ -18,6 +19,8 @@ Answer = tuple[str, dict[str, str]]  # (case, template values)
 
 
 _PREDICATES: dict[str, Predicate] = {}
+_NOTED_PREDICATE_ERRORS: set[str] = set()
+log = logging.getLogger(__name__)
 
 
 def _holds(source: str, ns: Mapping[str, object]) -> bool:
@@ -26,7 +29,10 @@ def _holds(source: str, ns: Mapping[str, object]) -> bool:
         pred = _PREDICATES[source] = Predicate(source)
     try:
         return bool(pred(ns))
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - invalid menu predicates hide the item
+        if source not in _NOTED_PREDICATE_ERRORS:
+            _NOTED_PREDICATE_ERRORS.add(source)
+            log.warning("menu predicate %r failed: %s", source, exc)
         return False
 
 

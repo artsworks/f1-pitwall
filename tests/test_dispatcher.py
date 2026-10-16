@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 
 import pytest
 
@@ -117,6 +118,27 @@ def test_min_gap() -> None:
     assert d.drain(1.0) == []
     d.submit([_cand("c")], _snap(6.0))
     assert len(d.drain(6.0)) == 1
+
+
+def test_still_true_error_warns_once_and_keeps_call(caplog: pytest.LogCaptureFixture) -> None:
+    d, sink, _ = _dispatcher()
+    candidate = _cand("still_true_broken")
+
+    def broken(_snapshot: Snapshot) -> bool:
+        raise RuntimeError("predicate failed")
+
+    candidate.still_true = broken
+    with caplog.at_level(logging.WARNING, logger="pitwall.audio.dispatcher"):
+        d.submit([candidate], _snap(0.0))
+        calls = d.drain(0.0)
+        assert len(calls) == 1
+        assert sink.spoken == ["still_true_broken"]
+        assert d._digest_call_ready(calls[0], 0.0, on_straight=True)
+        assert d._digest_call_ready(calls[0], 0.0, on_straight=True)
+
+    warnings = [record.getMessage() for record in caplog.records]
+    assert sum("drain.still_true" in message for message in warnings) == 1
+    assert sum("digest.still_true" in message for message in warnings) == 1
 
 
 def test_deadline_drop() -> None:

@@ -20,6 +20,7 @@ from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.input.menu import (
     DriverMenu,
     ReplyPicker,
+    _holds,
     answer,
     shortcut_warnings,
     validate,
@@ -42,6 +43,18 @@ RIGHT = 0x00800000  # page cycle; confirms while the menu is open
 LEFT = 0x01000000  # mindset; closes while the menu is open
 SD6, SD7, SD8 = 0x02000000, 0x04000000, 0x08000000
 SD9, SD10, SD11, SD12 = 0x10000000, 0x20000000, 0x40000000, 0x80000000
+
+
+def test_predicate_error_warns_once_and_hides_item(caplog: pytest.LogCaptureFixture) -> None:
+    source = "missing_menu_name_for_warning_test"
+
+    with caplog.at_level("WARNING", logger="pitwall.input.menu"):
+        assert not _holds(source, {})
+        assert not _holds(source, {})
+
+    warnings = [record for record in caplog.records if record.name == "pitwall.input.menu"]
+    assert len(warnings) == 1
+    assert source in warnings[0].getMessage()
 
 
 def _butn(status: int, t: float) -> bytes:
