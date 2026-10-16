@@ -21,13 +21,14 @@ The dispatcher cuts a call only before its estimated speech time ends.
 | Incoming class | Calls it can cut |
 |---|---|
 | Safety | Every call except promoted execution |
-| Execution | Info and coaching. Tactical only when promoted |
-| Reply | Info and coaching |
+| Execution | Info and coaching of a lower priority. Promoted: reply, tactical, info and coaching |
+| Reply | None |
 | Tactical | Info and coaching |
 | Info or coaching | None |
 
-The dispatcher re-queues a cut reply once with a fresh queue time. It never re-queues
-menu prompts.
+A safety call that cuts a reply re-queues it once with a fresh queue time, unless the
+safety call flushes the queue. A promoted execution call drops the reply it cuts. The
+dispatcher never re-queues menu prompts.
 
 ## Staying quiet
 

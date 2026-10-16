@@ -704,7 +704,12 @@ class Dispatcher:
                 interrupted = self._current
                 for sink in self.sinks:
                     sink.cancel(interrupted.id)
-                if "reply" in interrupted.tags and "menu" not in interrupted.tags:
+                if (
+                    "reply" in interrupted.tags
+                    and "menu" not in interrupted.tags
+                    and self._effective_class(call) == "safety"
+                    and not call.flushes_queue
+                ):
                     if not interrupted.requeued:
                         interrupted.requeued = True
                         interrupted.t = now
@@ -787,11 +792,11 @@ class Dispatcher:
         if new_class == "safety":
             return not (current_class == "execution" and current.promoted)
         if new_class == "execution":
-            if current_class in ("info", "coaching"):
-                return True
-            return current_class == "tactical" and incoming.promoted
+            if incoming.promoted:
+                return current_class in ("reply", "tactical", "info", "coaching")
+            return current_class in ("info", "coaching") and incoming.priority < current.priority
         if new_class == "reply":
-            return current_class in ("info", "coaching")
+            return False
         if new_class == "tactical":
             return current_class in ("info", "coaching")
         return False
