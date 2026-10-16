@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -27,6 +27,24 @@ class McResult:
     sims: int
 
 
+def _sampled_current_laps_ms(
+    *,
+    fit: DegFit,
+    tyre_age: int,
+    ages: NDArray[np.float64],
+    cur_cliff_age: float,
+    deg_samples: np.ndarray,
+    th: Mapping[str, object],
+) -> NDArray[np.float64]:
+    current_ages = tyre_age + ages[None, :]
+    return (
+        fit.base_ms
+        + deg_samples[:, None] * current_ages
+        + fit.deg2_ms_per_lap2 * current_ages**2
+        + _f(th, "cliff_ms_per_lap", 1000) * np.maximum(current_ages - cur_cliff_age, 0.0)
+    )
+
+
 def _candidate_deltas_s(
     *,
     fit: DegFit,
@@ -43,11 +61,13 @@ def _candidate_deltas_s(
 ) -> NDArray[np.float64]:
     ages = np.arange(laps_remaining, dtype=float)
     cliff_penalty = _f(th, "cliff_ms_per_lap", 1000)
-    current_laps_ms = (
-        fit.base_ms
-        + deg_samples[:, None] * (tyre_age + ages[None, :])
-        + fit.deg2_ms_per_lap2 * (tyre_age + ages[None, :]) ** 2
-        + cliff_penalty * np.maximum(tyre_age + ages[None, :] - cur_cliff_age, 0.0)
+    current_laps_ms = _sampled_current_laps_ms(
+        fit=fit,
+        tyre_age=tyre_age,
+        ages=ages,
+        cur_cliff_age=cur_cliff_age,
+        deg_samples=deg_samples,
+        th=th,
     )
     current_prefix_ms = np.concatenate(
         (np.zeros((len(deg_samples), 1)), np.cumsum(current_laps_ms, axis=1)), axis=1
@@ -73,7 +93,7 @@ def _candidate_deltas_s(
         + (pit_costs_s + _f(th, "outlap_warmup_s", 0.8)) * 1000.0
         - current_prefix_ms[:, laps_remaining, None]
     )
-    return cast(NDArray[np.float64], deltas_ms / 1000.0)
+    return deltas_ms / 1000.0
 
 
 def plan_agreement(
@@ -91,6 +111,8 @@ def plan_agreement(
     mode: Mapping[str, object],
     th: Mapping[str, object],
     rng: np.random.Generator,
+    plan_name: str = "",
+    cover_gap_s: float = math.inf,
 ) -> McResult | None:
     sims = int(_f(th, "plan_mc_sims", 500))
     min_left, last_k = _candidate_range(laps_remaining, th)
@@ -137,15 +159,34 @@ def plan_agreement(
     lap_values, counts = np.unique(chosen_laps, return_counts=True)
     modal_lap = int(lap_values[counts == counts.max()][0])
 
-    gain_min = _f(mode, "pit_gain_min_s", 1.0)
-    min_deltas = deltas.min(axis=1)
-    plan_k = plan_lap - lap_num
-    if plan_lap == 0:
-        agree = float(np.mean(min_deltas >= -gain_min))
-    elif 0 <= plan_k <= last_k:
-        agree = float(np.mean(deltas[:, plan_k] - min_deltas <= gain_min))
+    if plan_name in ("cover", "defend") and math.isfinite(cover_gap_s):
+        uc = int(_f(th, "undercut_laps", 2))
+        ages = np.arange(uc, dtype=float)
+        worn_ms = _sampled_current_laps_ms(
+            fit=fit,
+            tyre_age=tyre_age,
+            ages=ages,
+            cur_cliff_age=cur_cliff_age,
+            deg_samples=deg_samples,
+            th=th,
+        )
+        fresh_laps_ms = fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * ages
+        their_gain = np.sum(worn_ms - fresh_laps_ms[None, :], axis=1) / 1000.0
+        cover_samples = their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s
+        if plan_name == "cover":
+            agree = float(np.mean(cover_samples + _f(th, "cover_margin_s", 0.5) > 0))
+        else:
+            agree = float(np.mean(-cover_samples >= _f(th, "cover_defend_gain_s", 1.0)))
     else:
-        agree = 1.0
+        gain_min = _f(mode, "pit_gain_min_s", 1.0)
+        min_deltas = deltas.min(axis=1)
+        plan_k = plan_lap - lap_num
+        if plan_lap == 0:
+            agree = float(np.mean(min_deltas >= -gain_min))
+        elif 0 <= plan_k <= last_k:
+            agree = float(np.mean(deltas[:, plan_k] - min_deltas <= gain_min))
+        else:
+            agree = 1.0
     return McResult(modal_lap, agree, sims)
 
 

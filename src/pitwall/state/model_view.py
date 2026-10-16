@@ -20,6 +20,7 @@ class ModelView:
     wear_per_lap_pct: float = 0.0
     pit_loss_s: float = 0.0
     pit_loss_source: str = ""
+    sc_pit_loss_s: float = 0.0
     fuel_margin_laps: float = 0.0
     fuel_per_lap_kg: float = 0.0
     fuel_source: str = ""

@@ -10,6 +10,30 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.23.0 (2026-10-16)
+
+### Bug Fixes
+
+- **strategy**: Score cover and defend plans by cover decision
+  ([#106](https://github.com/artsworks/f1-pitwall/pull/106),
+  [`5e855c2`](https://github.com/artsworks/f1-pitwall/commit/5e855c2c4644bcbbd0500c39891cf86f27ea939c))
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#103](https://github.com/artsworks/f1-pitwall/pull/103),
+  [`8db1455`](https://github.com/artsworks/f1-pitwall/commit/8db145574278652a2fe917c34c690d85a09ecf97))
+
+### Features
+
+- **strategy**: Recompute true rival under SC and skip owed stops in wet races
+  ([#106](https://github.com/artsworks/f1-pitwall/pull/106),
+  [`5e855c2`](https://github.com/artsworks/f1-pitwall/commit/5e855c2c4644bcbbd0500c39891cf86f27ea939c))
+
+- **strategy**: Track the true rival across pit cycles
+  ([#106](https://github.com/artsworks/f1-pitwall/pull/106),
+  [`5e855c2`](https://github.com/artsworks/f1-pitwall/commit/5e855c2c4644bcbbd0500c39891cf86f27ea939c))
+
+
 ## v0.22.0 (2026-10-16)
 
 ### Bug Fixes
