@@ -859,20 +859,20 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-          - {id: hold, rule: finish_hold, hypothetical: true, kind: info, text: "Five laps left, hold this gap"}
+          - {id: hold, rule: battle_held, text: "Five laps left, hold this gap"}
         grade: {box: now, life: drop, hold: drop}
         order: [box]
-        notes: The box call carries the tyre news and contradicts the hold line, so both drop.
+        notes: The box call carries the tyre news and contradicts the hold line, so both drop. Encoded on battle_held because finish_hold has no live telemetry field.
       - id: g018
         source: graded
         session: race
         scene: {phase: racing, lap_num: 12, gap_ahead_s: 0.8}
         queued:
           - {id: attack, rule: battle_attack, text: "You're in range. Go for it"}
-          - {id: orders, rule: team_orders_hold, hypothetical: true, kind: execution, text: Hold position behind your teammate, age_s: 1.0}
+          - {id: orders, rule: teammate_fight, text: Hold position behind your teammate, age_s: 1.0}
         grade: {orders: now, attack: drop}
         order: [orders]
-        notes: Team orders contradict the attack call.
+        notes: Team orders contradict the attack call. Encoded on teammate_fight because team_orders_hold has no live telemetry field.
       - id: g019
         source: graded
         session: race
@@ -908,12 +908,12 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 40, laps_remaining: 2}
         queued:
-          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain in sector three, age_s: 1.0}
+          - {id: rain, rule: weather_to_inter, text: Rain in sector three, age_s: 1.0}
           - {id: boxi, rule: box_now, text: Box for inters this lap}
           - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 3.0}
-        grade: {rain: now, boxi: next, life: drop}
-        order: [rain, boxi]
-        notes: The rain warning covers the current lap, the stop follows, and the tyre life line is redundant with the stop.
+        grade: {boxi: now, rain: drop, life: drop}
+        order: [boxi]
+        notes: "The rain warning covers the current lap, the stop follows, and the tyre life line is redundant with the stop. Encoded on weather_to_inter because rain_falling has no live telemetry field. Aligned with g053: the stop for inters already carries the rain news, so the rain line drops."
       - id: g023
         source: graded
         session: race
@@ -934,10 +934,10 @@ batches:
           - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 5.0}
           - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 4.0}
           - {id: pace, rule: battle_catching, text: Half a second off the cars ahead, age_s: 2.0}
-          - {id: ers, rule: ers_harvest, hypothetical: true, kind: info, text: "ERS low, harvesting", age_s: 1.0}
+          - {id: ers, rule: energy_under, text: "ERS low, harvesting", age_s: 1.0}
         grade: {wear: merge, fuel: merge, pace: merge, ers: merge}
         order: [digest]
-        notes: Four low value lines on a quiet stretch merge into one digest.
+        notes: Four low value lines on a quiet stretch merge into one digest. Encoded on energy_under because ers_harvest has no live telemetry field.
       - id: g025
         source: graded
         session: race
@@ -1228,11 +1228,11 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 20}
         queued:
-          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain easing, age_s: 2.0}
+          - {id: rain, rule: weather_to_dry, text: Rain easing, age_s: 2.0}
           - {id: boxd, rule: box_now, text: Box for dries this lap}
         grade: {boxd: now, rain: drop}
         order: [boxd]
-        notes: The stop for dries already says the track is drying, so the rain line is redundant.
+        notes: The stop for dries already says the track is drying, so the rain line is redundant. Encoded on weather_to_dry because rain_falling has no live telemetry field.
       - id: g054
         source: graded
         session: race
@@ -1258,17 +1258,17 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 44, laps_remaining: 8}
         queued:
-          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: You have a five-second penalty. We need a gap}
+          - {id: pen, rule: penalty, text: You have a five-second penalty. We need a gap}
           - {id: push, rule: battle_attack, text: Push now. Build the gap, age_s: 1.0}
         grade: {pen: now, push: next}
         order: [pen, push]
-        notes: The penalty explains the push, so it speaks first.
+        notes: The penalty explains the push, so it speaks first. Encoded on penalty because penalty_gap has no live telemetry field.
       - id: g057
         source: graded
         session: race
         scene: {phase: racing, lap_num: 1}
         queued:
-          - {id: lost1, rule: lap1_lost, hypothetical: true, text: Down two on lap one, age_s: 1.0}
+          - {id: lost1, rule: lap1_lost, text: Down two on lap one, age_s: 1.0}
           - {id: gained, rule: lap1_gained, text: Up two on lap one}
         grade: {lost1: drop, gained: drop}
         order: []
@@ -1299,10 +1299,10 @@ batches:
         scene: {phase: racing, lap_num: 49, laps_remaining: 1}
         queued:
           - {id: hold, rule: battle_held, text: Hold this gap, age_s: 1.0}
-          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: Penalty applied. You finish P6}
+          - {id: pen, rule: finish_penalty, text: Penalty applied. You finish P6}
         grade: {pen: now, hold: drop}
         order: [pen]
-        notes: The penalty result contradicts the hold call on the last lap.
+        notes: The penalty result contradicts the hold call on the last lap. Encoded on finish_penalty because penalty_gap has no live telemetry field.
       - id: g061
         source: graded
         session: race
@@ -1423,9 +1423,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
           - {id: plan, rule: plan_status, text: "Plan is one stop, lap thirty", age_s: 2.0}
-        grade: {life: now, plan: drop}
-        order: [life]
-        notes: The tyre news contradicts the plan line.
+        grade: {life: merge, plan: merge}
+        order: [digest]
+        notes: "The tyre news contradicts the plan line. Aligned with g074: on a quiet stretch the two lines merge into one digest."
       - id: g073
         source: graded
         session: race
@@ -1604,10 +1604,10 @@ batches:
         scene: {phase: racing, lap_num: 50, laps_remaining: 0}
         queued:
           - {id: finish, rule: finish_held, text: "P5, held it. Good job"}
-          - {id: pen, rule: penalty_gap, hypothetical: true, kind: info, text: Five-second penalty. You finish P7, age_s: 1.0}
+          - {id: pen, rule: finish_penalty, text: Five-second penalty. You finish P7, age_s: 1.0}
         grade: {pen: now, finish: drop}
         order: [pen]
-        notes: The penalty changes the result, so the finish line is wrong and drops.
+        notes: The penalty changes the result, so the finish line is wrong and drops. Encoded on finish_penalty because penalty_gap has no live telemetry field.
       - id: g091
         source: graded
         session: race
@@ -1623,21 +1623,21 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 13}
         queued:
-          - {id: under, rule: undercut_threat, hypothetical: true, kind: tactical, text: "They're going for the undercut. Cover"}
+          - {id: under, rule: rival_behind_pitted, text: "They're going for the undercut. Cover"}
           - {id: box, rule: box_now, text: "Box, box", age_s: 1.0}
         grade: {box: now, under: drop}
         order: [box]
-        notes: The box call is the cover, so the threat line adds nothing.
+        notes: The box call is the cover, so the threat line adds nothing. Encoded on rival_behind_pitted because undercut_threat has no live telemetry field.
       - id: g093
         source: graded
         session: race
         scene: {phase: racing, lap_num: 13}
         queued:
-          - {id: under, rule: undercut_threat, hypothetical: true, kind: tactical, text: "They're going for the undercut"}
+          - {id: under, rule: rival_behind_pitted, text: "They're going for the undercut"}
           - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
         grade: {stay: now, under: drop}
         order: [stay]
-        notes: The stay out decision already weighs the threat.
+        notes: The stay out decision already weighs the threat. Encoded on rival_behind_pitted because undercut_threat has no live telemetry field.
       - id: g094
         source: graded
         session: race
@@ -1663,11 +1663,11 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 44}
         queued:
-          - {id: charge, rule: charge_mode, hypothetical: true, kind: info, text: Switch to charge mode}
+          - {id: charge, rule: energy_under, text: Switch to charge mode}
           - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 1.0}
         grade: {defend: now, charge: drop}
         order: [defend]
-        notes: Charge mode contradicts defending a car in DRS.
+        notes: Charge mode contradicts defending a car in DRS. Encoded on energy_under because charge_mode has no live telemetry field.
       - id: g097
         source: graded
         session: race
@@ -1693,11 +1693,11 @@ batches:
         session: race
         scene: {phase: racing, lap_num: 46, laps_remaining: 6}
         queued:
-          - {id: push, rule: final_push, hypothetical: true, kind: tactical, text: Six laps left. Push now}
+          - {id: push, rule: battle_attack, text: Six laps left. Push now}
           - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 1.0}
         grade: {life: now, push: drop}
         order: [life]
-        notes: Two laps of tyre life with six to go contradicts the push call.
+        notes: Two laps of tyre life with six to go contradicts the push call. Encoded on battle_attack because final_push has no live telemetry field.
       - id: g100
         source: graded
         session: race
