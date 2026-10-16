@@ -277,9 +277,9 @@ batches:
         queued:
           - {id: check, rule: contact_check, text: "Contact there. Checking the data", age_s: 1.0}
           - {id: wear, rule: wear_rears, text: "Rears at thirty percent"}
-        grade: {check: drop, wear: now}
-        order: [wear]
-        notes: Provisional contact check with minor worst case stays silent.
+        grade: {check: now, wear: next}
+        order: [check, wear]
+        notes: Regraded to match batch 4. The contact check speaks at once, the report or all clear replaces it later.
       - id: s05
         source: reconstructed
         session: race
