@@ -311,9 +311,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "About two laps in the tyres", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box. Tyres are done"}
-        grade: {box: now, life: next}
-        order: [box, life]
-        notes: Execution ahead of info.
+        grade: {box: now, life: drop}
+        order: [box]
+        notes: Regraded to match batch 4 (g017, g022). The box call carries the tyre news, so the tyre life line drops.
       - id: r02
         source: reconstructed
         session: race
