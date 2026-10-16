@@ -66,7 +66,7 @@ _CASES = [
     (
         "tyre_switch",
         RaceSpec(
-            laps=8,
+            laps=14,
             base_ms=90_000,
             compound=7,
             extra={
@@ -91,9 +91,94 @@ _CASES = [
                 },
                 "lap_data": {
                     "cars": {
-                        1: {"last_lap_time_ms": 88_000},
+                        1: {"last_lap_time_ms": 85_000},
                         2: {"last_lap_time_ms": 95_000},
-                        3: {"last_lap_time_ms": 88_000},
+                        3: {"last_lap_time_ms": 85_000},
+                    }
+                },
+            },
+        ),
+    ),
+    (
+        "tyre_switch_slicks_traffic",
+        RaceSpec(
+            laps=14,
+            base_ms=90_000,
+            compound=7,
+            gap_ahead_s=0.8,
+            extra={
+                "car_status": {
+                    "cars": {
+                        1: {
+                            "actual_tyre_compound": 16,
+                            "visual_tyre_compound": 16,
+                            "tyres_age_laps": 2,
+                        },
+                        2: {
+                            "actual_tyre_compound": 7,
+                            "visual_tyre_compound": 7,
+                            "tyres_age_laps": 2,
+                        },
+                        3: {
+                            "actual_tyre_compound": 16,
+                            "visual_tyre_compound": 16,
+                            "tyres_age_laps": 2,
+                        },
+                    }
+                },
+                "lap_data": {
+                    "cars": {
+                        1: {"last_lap_time_ms": 85_000},
+                        # Parked just short of the projected rejoin so the pit
+                        # exit is never clean (driver_status 1 = flying lap so
+                        # release_window counts it).
+                        2: {
+                            "last_lap_time_ms": 95_000,
+                            "lap_distance": 3_800,
+                            "driver_status": 1,
+                        },
+                        3: {"last_lap_time_ms": 85_000},
+                    }
+                },
+            },
+        ),
+    ),
+    (
+        "weather_box_now",
+        RaceSpec(
+            laps=15,
+            base_ms=90_000,
+            compound=17,
+            rain_lap=2,
+            rain_percentages=(100, 100),
+            traction_laps=(3,),
+            traction_bursts=3,
+            extra={
+                "motion_ex": {},
+                "car_status": {
+                    "cars": {
+                        1: {
+                            "actual_tyre_compound": 7,
+                            "visual_tyre_compound": 7,
+                            "tyres_age_laps": 2,
+                        },
+                        2: {
+                            "actual_tyre_compound": 16,
+                            "visual_tyre_compound": 16,
+                            "tyres_age_laps": 2,
+                        },
+                        3: {
+                            "actual_tyre_compound": 7,
+                            "visual_tyre_compound": 7,
+                            "tyres_age_laps": 2,
+                        },
+                    }
+                },
+                "lap_data": {
+                    "cars": {
+                        1: {"last_lap_time_ms": 86_000},
+                        2: {"last_lap_time_ms": 90_000},
+                        3: {"last_lap_time_ms": 86_000},
                     }
                 },
             },

@@ -98,6 +98,7 @@ class RaceSpec:
     player_history: bool = False
     qualifying_field_best_ms: tuple[int, ...] = ()  # Additional qualifying history times
     traction_laps: tuple[int, ...] = ()  # Laps with rear-wheel spin early in the lap
+    traction_bursts: int = 1  # Separate spin episodes inside each traction lap
     setup_change_lap: int | None = None  # Change front wing by one click on this lap
 
 
@@ -612,6 +613,10 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
             }
             if spec.off_track_lap == lap and 0.1 <= frac < 0.3:
                 telemetry_car["surface_type"] = (3, 3, 0, 0)
+            if spec.traction_bursts > 1 and lap in spec.traction_laps and frac < 0.25:
+                # TractionDetector only counts slip under throttle at speed.
+                telemetry_car["speed"] = 150
+                telemetry_car["throttle"] = 1.0
             if spec.tyre_surface_profile is not None:
                 telemetry_car["tyres_surface_temperature"] = (int(surface),) * 4
             emit(PacketId.CAR_TELEMETRY, {"cars": {0: telemetry_car}})
@@ -620,6 +625,12 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 motion_data = dict(motion_ex)
                 if spec.traction_laps:
                     spinning = lap in spec.traction_laps and frac < 0.25
+                    if spec.traction_bursts > 1:
+                        # Split the spin window into N episodes with one off
+                        # frame between them (dt > trac release, 0.1 s).
+                        window = max(1, frames // 4)
+                        segment = max(2, window // spec.traction_bursts)
+                        spinning = spinning and (f % segment) < segment - 1
                     motion_data["wheel_slip_ratio"] = (
                         (0.2, 0.2, 0.0, 0.0) if spinning else (0.0, 0.0, 0.0, 0.0)
                     )

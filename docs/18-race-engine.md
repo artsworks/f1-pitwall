@@ -375,6 +375,8 @@ penalty_recent: bool                # PENA event for the player inside th.penalt
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)
 weather_now: int; rain_pct_now: int; rain_pct_in_10: int; rain_pct_in_30: int
 weather_crossover: str              # '' | 'to_inter' | 'to_wet' | 'to_dry' from forecast + th.rain_inter_pct/th.rain_wet_pct/th.rain_dry_pct
+tyre_switch_net_s: float            # projected net gain of the tyre_switch_to call (s); 0 = no call
+slip_trend: int                     # player slip events last completed lap minus the lap before
 pit_plan: str                       # '' | 'stay' | 'box_now' | 'box_in_n' | 'undercut' | 'overcut' | 'cover' | 'defend' | 'free_stop' | 'cheap_stop'
 pit_plan_lap: int; pit_plan_gain_s: float; pit_plan_confidence: float; pit_plan_risk: float
 pit_plan_rival_idx: int; pit_plan_rival_name: str; pit_plan_reason: str

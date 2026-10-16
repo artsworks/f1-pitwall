@@ -420,7 +420,7 @@ class Engine:
         self._session_fuel_deltas: list[float] = []
         self._stint_fuel_ref = 0.0
         self._stint_laps: list[LapRow] = []
-        self._model_key: tuple[int | None, int, int] | None = None
+        self._model_key: tuple[int | None, int, int, int] | None = None
         self._fuel_prior = Prior(0.0, 0.0, "default")
         self._wear_per_lap = 0.0
         self._stint_wear0: tuple[float, ...] = ()
@@ -1462,7 +1462,12 @@ class Engine:
         )
         track_id = state.track_id
         overlay = settings.track
-        key = (state.session_uid, self._laps_written, state.lap_num)
+        key = (
+            state.session_uid,
+            self._laps_written,
+            state.lap_num,
+            state.safety_car_status,
+        )
         if key != self._model_key:
             self._model_key = key
             self.pit_loss_prior = current_pit_loss(

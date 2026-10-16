@@ -66,6 +66,7 @@ from pitwall.state.race import (
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.plans import StrategyPlan
+from pitwall.strategy.weather import default_pit_loss_s, switch_net_s
 
 if TYPE_CHECKING:
     from pitwall.setup.evaluate import Recommendation
@@ -483,6 +484,9 @@ class Snapshot:
     slick_gain_s: float = 0.0
     inter_gain_s: float = 0.0
     tyre_switch_to: str = ""  # 'slicks' | 'inters' | 'wets' when the field says switch
+    tyre_switch_net_s: float = 0.0  # projected net gain of the call (s)
+    # Player slip events on the last completed lap minus the lap before.
+    slip_trend: int = 0
     wear_per_lap_pct: float = 0.0
     blister_max_pct: int = 0
     wear_hot_corner: str = ""
@@ -1043,6 +1047,8 @@ class SessionState:
         self._weather_crossover = ""
         self._weather_crossover_pct = 0
         self._weather_crossover_min = 0
+        self._crossover_gains: dict[int, tuple[float, float]] = {}
+        self._held_gains: tuple[float, float] = (0.0, 0.0)
         self._overheat = False
         self._graining = False
         self._model = ModelView()
@@ -1214,6 +1220,8 @@ class SessionState:
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
+        self._crossover_gains.clear()
+        self._held_gains = (0.0, 0.0)
         self._gap_now = {}
         self._gap_lines = []
         self._ahead_latch = (-1, math.inf)
@@ -2994,6 +3002,26 @@ class SessionState:
 
         slick_gain = self._compound_gain(cars, (7,), (16, 17, 18))
         inter_gain = self._compound_gain(cars, (8,), (7,))
+        if self.race_phase == "racing":
+            self._held_gains = (slick_gain, inter_gain)
+            if slick_gain or inter_gain:
+                self._crossover_gains[self.lap_num] = (slick_gain, inter_gain)
+                while len(self._crossover_gains) > 10:
+                    del self._crossover_gains[min(self._crossover_gains)]
+        elif self.race_phase in ("sc", "vsc"):
+            # Lap times under neutralisation say nothing about compounds, so
+            # the last green-flag gains hold until the race goes green.
+            slick_gain, inter_gain = self._held_gains
+        switch_to, switch_net = self._tyre_switch(slick_gain, inter_gain)
+        slip_trend = 0
+        if len(self.laps) >= 2:
+            slip_trend = sum(
+                getattr(self.laps[-1], name)
+                for name in ("traction_exits", "snaps_entry", "snaps_exit")
+            ) - sum(
+                getattr(self.laps[-2], name)
+                for name in ("traction_exits", "snaps_entry", "snaps_exit")
+            )
         base.update(
             rival_ahead_pos=cars[ahead_i].car_position if ahead_i >= 0 else 0,
             rival_behind_pos=cars[behind_i].car_position if behind_i >= 0 else 0,
@@ -3031,7 +3059,9 @@ class SessionState:
             **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
             slick_gain_s=slick_gain,
             inter_gain_s=inter_gain,
-            tyre_switch_to=self._tyre_switch(slick_gain, inter_gain),
+            tyre_switch_to=switch_to,
+            tyre_switch_net_s=switch_net,
+            slip_trend=slip_trend,
             penalty_position=pen_pos,
             penalty_margin_s=pen_margin,
             penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
@@ -3096,19 +3126,49 @@ class SessionState:
             return 0.0
         return round((median(groups[False]) - median(groups[True])) / 1000.0, 2)
 
-    def _tyre_switch(self, slick_gain: float, inter_gain: float) -> str:
-        """Compound the field's lap times say to switch to, else ''."""
-        th = self._th("compound_crossover_s", 1.0)
+    def _tyre_switch(self, slick_gain: float, inter_gain: float) -> tuple[str, float]:
+        """(compound, net s) the field's lap times say to switch to, else ('', 0).
+
+        A direction only pays when its per-lap gain over the laps left after
+        the in-lap beats the pit loss plus the crossover margin. Wet to dry
+        directions also need the gain to hold for several measured laps.
+        """
         comp = self.tyre_compound
-        if comp == 7 and slick_gain >= th:
-            return "slicks"
-        if comp == 7 and inter_gain <= -th:
-            return "wets"
-        if comp == 8 and inter_gain >= th:
-            return "inters"
-        if comp in (16, 17, 18, 19, 20, 21, 22) and slick_gain <= -th:
-            return "inters"
-        return ""
+        laps_remaining = max(0, self.total_laps - self.lap_num + 1)
+        if self.total_laps <= 0 or laps_remaining <= 0:
+            return "", 0.0
+        model_loss = self.model.pit_loss_s
+        pit_loss = (
+            model_loss
+            if model_loss > 0
+            else default_pit_loss_s(self._thresholds, self.safety_car_status)
+        )
+        # (target, per-lap gain in the favourable direction, wet-to-dry)
+        candidates: list[tuple[str, float, bool]] = []
+        if comp == 7:
+            candidates = [("slicks", slick_gain, True), ("wets", -inter_gain, False)]
+        elif comp == 8:
+            candidates = [("inters", inter_gain, True)]
+        elif comp in (16, 17, 18, 19, 20, 21, 22):
+            candidates = [("inters", -slick_gain, False)]
+        for to, gain, wet_to_dry in candidates:
+            if wet_to_dry and not self._wet_to_dry_confirmed(to):
+                continue
+            net = switch_net_s(gain, laps_remaining - 1, pit_loss, self._thresholds)
+            if net is not None and net > 0:
+                return to, net
+        return "", 0.0
+
+    def _wet_to_dry_confirmed(self, to: str) -> bool:
+        """The direction's per-lap gain held for wet_to_dry_confirm_laps in a
+        row; SC laps simply aren't entries, so confirmation carries through."""
+        need = int(self._th("wet_to_dry_confirm_laps", 2.0))
+        floor = self._th("compound_crossover_s", 1.0)
+        idx = 0 if to == "slicks" else 1
+        entries = [
+            gains for lap, gains in sorted(self._crossover_gains.items()) if lap <= self.lap_num
+        ][-need:]
+        return len(entries) >= need and all(gains[idx] >= floor for gains in entries)
 
     def _drs_zone_ahead(self) -> bool:
         """A legacy DRS zone starts within the lookahead distance."""

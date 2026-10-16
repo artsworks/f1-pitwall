@@ -302,7 +302,7 @@ rules:
   - id: tyre_switch
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and tyre_switch_to != '' and laps_remaining > 1"
+    when: "phase in ('racing', 'sc', 'vsc') and tyre_switch_to != '' and laps_remaining > 1"
     clear_when: "tyre_switch_to == ''"
     cooldown_s: 60
     requires: [lap_data]
@@ -311,6 +311,31 @@ rules:
       - "Crossover. {tyre_switch_to} are the tyre, box this lap"
       - "Box this lap for {tyre_switch_to}. Confirm"
       - "Crossover. {tyre_switch_to} are quicker. Box, box"
+  - id: weather_box_now
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase in ('racing', 'sc', 'vsc') and laps_remaining > 1 and ((tyre_switch_to == 'inters' and tyre_compound != 8) or tyre_switch_to == 'wets') and slip_trend >= th.wet_slip_trend_min and (rain_pct_in_10 > rain_pct_now or weather_now >= 3)"
+    clear_when: "tyre_switch_to == ''"
+    cooldown_s: 30
+    cooldown_group: weather
+    supersedes: [tyre_switch, weather_to_inter, weather_to_wet]
+    requires: [lap_data]
+    say:
+      - "Box, box. Aquaplaning risk, {tyre_switch_to}"
+      - "Box, box. Grip's going, {tyre_switch_to} now"
+      - "Box this lap. Aquaplaning risk, {tyre_switch_to}"
+  - id: tyre_switch_slicks_traffic
+    sessions: [race]
+    priority: 2
+    when: "phase in ('racing', 'sc', 'vsc') and tyre_switch_to == 'slicks' and not pit_exit_clean and laps_remaining > 1"
+    clear_when: "tyre_switch_to != 'slicks' or pit_exit_clean"
+    cooldown_s: 60
+    supersedes: [tyre_switch]
+    requires: [lap_data]
+    say:
+      - "Box for slicks. Traffic at the exit, careful on cold tyres"
+      - "Slicks this lap. You rejoin in traffic, easy on cold tyres"
   - id: tyre_graining
     sessions: [race]
     priority: 2
@@ -927,7 +952,7 @@ rules:
     cooldown_group: weather
     requires: [session]
     say:
-      - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters"
+      - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters soon"
       - "Rain coming, {weather_crossover_pct} percent. Inters likely"
       - "{weather_crossover_pct} percent rain in {weather_crossover_min} minutes. Thinking inters"
   - id: weather_to_wet
