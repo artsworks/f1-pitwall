@@ -157,6 +157,7 @@ rules:
     decision_point: pit_entry
     outcome_score: "pit_plan_gain_s - 5 * pit_plan_risk"
     conflict_group: pit_or_stay
+    supersedes: [box_in_n]
     when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
     clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
     still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
@@ -464,7 +465,7 @@ rules:
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 90
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     requires: [lap_data]
     say:
       - "{rival_ahead_name} ahead, {battle_pace_ahead}. {gap_ahead_s:.1f} to him"
@@ -493,7 +494,7 @@ rules:
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     cooldown_s: 60
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     conflict_group: battle_call
     requires: [lap_data]
     say:
@@ -520,7 +521,7 @@ rules:
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
     cooldown_s: 180
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     conflict_group: battle_call
     requires: [lap_data]
     say:
@@ -537,7 +538,7 @@ rules:
     still_true: "phase == 'racing'"
     still_true: "phase == 'racing'"
     cooldown_s: 60
-    cooldown_group: battle
+    cooldown_group: battle_behind
     requires: [lap_data]
     say:
       - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}"
@@ -572,7 +573,7 @@ rules:
     when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 120
-    cooldown_group: battle
+    cooldown_group: battle_behind
     requires: [lap_data]
     say:
       - "{rival_behind_name} behind, {battle_pace_behind}. {gap_behind_s:.1f} gap"
@@ -596,7 +597,6 @@ rules:
     when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
     still_true: "phase == 'racing'"
     cooldown_s: 240
-    cooldown_group: battle
     requires: [lap_data]
     say:
       - "Gaps stable. Manage tyres"

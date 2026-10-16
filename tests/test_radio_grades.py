@@ -28,7 +28,6 @@ KNOWN_MISMATCHES: dict[str, str] = {
     "g040": "focus suppression",
     "g041": "preemption",
     "g044": "preemption",
-    "g049": "cooldown group",
     "g050": "focus suppression",
     "g051": "focus suppression",
     "g053": "conflict resolution",
@@ -38,7 +37,6 @@ KNOWN_MISMATCHES: dict[str, str] = {
     "g060": "conflict resolution",
     "g064": "focus suppression",
     "g065": "focus suppression",
-    "g066": "cooldown group",
     "g067": "preemption",
     "g069": "conflict resolution",
     "g070": "focus suppression",
@@ -55,7 +53,6 @@ KNOWN_MISMATCHES: dict[str, str] = {
     "g092": "preemption",
     "g093": "conflict resolution",
     "g096": "conflict resolution",
-    "g098": "cooldown group",
     "g099": "conflict resolution",
     "g100": "digest merging",
 }
