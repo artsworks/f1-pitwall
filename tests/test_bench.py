@@ -23,6 +23,8 @@ from pitwall.derive import ops_from_options
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
+pytestmark = pytest.mark.slow
+
 
 def _scenario_data(**overrides: Any) -> dict[str, Any]:
     data: dict[str, Any] = {

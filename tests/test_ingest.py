@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
 from pitwall.digest import DIGEST_VERSION
@@ -119,6 +121,7 @@ def test_header_calls_mode_distrusts_legacy_off() -> None:
     assert header_calls_mode({}) == ""
 
 
+@pytest.mark.replay
 def test_ingest_relabels_legacy_off_header(tmp_path: Path) -> None:
     db = Database(tmp_path / "learn.sqlite")
     uid = 0xF1261009
@@ -135,6 +138,7 @@ def test_ingest_relabels_legacy_off_header(tmp_path: Path) -> None:
     assert row is not None and row["calls_mode"] == "on"
 
 
+@pytest.mark.replay
 def test_ingest_is_idempotent_and_clears_heartbeat(tmp_path: Path) -> None:
     db = Database(tmp_path / "learn.sqlite")
     recording = _recording(tmp_path / "race.f1bin", 0xF1261001)
@@ -175,6 +179,7 @@ def test_mirrored_session_is_digest_only(tmp_path: Path) -> None:
     assert db.is_ingested(uid, DIGEST_VERSION)
 
 
+@pytest.mark.replay
 def test_ingest_isolates_file_errors_and_caps_findings(tmp_path: Path) -> None:
     db = Database(tmp_path / "learn.sqlite")
     bad = tmp_path / "broken.f1bin"
@@ -190,6 +195,7 @@ def test_ingest_isolates_file_errors_and_caps_findings(tmp_path: Path) -> None:
     assert db.read_heartbeat() is None
 
 
+@pytest.mark.replay
 def test_failed_ingest_rolls_back_learning_and_retries_complete_recording(tmp_path, monkeypatch):
     import pitwall.digest
 
@@ -212,6 +218,7 @@ def test_failed_ingest_rolls_back_learning_and_retries_complete_recording(tmp_pa
     assert [lap.lap_num for lap in db.laps_for(uid)] == [1, 2, 3, 4]
 
 
+@pytest.mark.replay
 def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     uid = 0xF1261004
@@ -233,6 +240,7 @@ def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch,
     assert f"{uid} skipped" in capsys.readouterr().out
 
 
+@pytest.mark.replay
 def test_ingest_relabels_already_ingested_legacy_session(tmp_path: Path) -> None:
     db = Database(tmp_path / "learn.sqlite")
     uid = 0xF126100A

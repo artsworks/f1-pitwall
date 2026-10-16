@@ -627,6 +627,7 @@ def test_voice_say_uses_configured_engine_and_accepts_omnivoice(monkeypatch, cap
     assert seen[-1].engine == "omnivoice"
 
 
+@pytest.mark.replay
 def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
     fake_server, tmp_path: Path, monkeypatch, capsys
 ) -> None:  # type: ignore[no-untyped-def]

@@ -132,6 +132,7 @@ def test_down_opens_on_first_item_and_scrolls() -> None:
     assert DriverMenu().step(MenuSettings(enabled=False, items=settings.items), 1, 0) is None
 
 
+@pytest.mark.replay
 def test_replay_navigation_and_timeout(tmp_path: Path) -> None:
     engine, calls, rows = _run(tmp_path, [(DOWN, 20.0), (DOWN, 21.0), (UP, 22.0)])
     outcomes = [r["outcome"] for r in rows if str(r["outcome"]).startswith("menu")]
@@ -142,6 +143,7 @@ def test_replay_navigation_and_timeout(tmp_path: Path) -> None:
     assert not [c for c in calls if "menu" in c.tags]  # prompts are audio only
 
 
+@pytest.mark.replay
 def test_confirm_answers_from_snapshot_and_skips_ack(tmp_path: Path) -> None:
     engine, calls, rows = _run(tmp_path, [(DOWN, 20.0), (DOWN, 21.0), (ACK, 22.0)])
     (rec,) = _inputs(rows)
@@ -158,6 +160,7 @@ def test_confirm_answers_from_snapshot_and_skips_ack(tmp_path: Path) -> None:
     assert not [r for r in rows if r["outcome"] in ("ack", "neg", "say_again", "quiet_until")]
 
 
+@pytest.mark.replay
 def test_double_press_and_close_button_cancel(tmp_path: Path) -> None:
     presses = [(DOWN, 20.0), (ACK, 21.0), (ACK, 21.2), (UP, 24.0), (CLOSE, 25.0)]
     close_bit: dict[str, object] = {"input": {"menu_close_bit": CLOSE, "shortcuts": []}}
@@ -167,6 +170,7 @@ def test_double_press_and_close_button_cancel(tmp_path: Path) -> None:
     assert not _inputs(rows) and engine.dispatcher.quiet_until is None
 
 
+@pytest.mark.replay
 def test_opinion_persisted_and_biases_snapshot(tmp_path: Path) -> None:
     db = Database(":memory:")
     presses = [(SD9, 20.0)]
@@ -185,6 +189,7 @@ def test_opinion_persisted_and_biases_snapshot(tmp_path: Path) -> None:
     assert any(c.rule_id == "menu:understeer" for c in calls)
 
 
+@pytest.mark.replay
 def test_action_items_run_their_action(tmp_path: Path) -> None:
     engine, _, rows = _run(tmp_path, [(SD12, 20.0)])
     (rec,) = _inputs(rows)
@@ -246,6 +251,7 @@ def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
     assert "fuel_remaining_laps" in signals[1] and "lap_num" not in signals[1]
 
 
+@pytest.mark.replay
 def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
     engine, calls, rows = _run(tmp_path, [(SD11, 20.0)])
     (rec,) = _inputs(rows)
@@ -258,6 +264,7 @@ def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
     assert engine.dispatcher.budget_override == 4  # menu choice beats the mindset
 
 
+@pytest.mark.replay
 def test_menu_bits_disableable(tmp_path: Path) -> None:
     overrides: dict[str, object] = {"input": {"menu_up_bit": 0, "menu_down_bit": 0}}
     engine, _, rows = _run(tmp_path, [(DOWN, 20.0), (ACK, 21.0)], overrides=overrides)
@@ -268,6 +275,7 @@ def test_menu_bits_disableable(tmp_path: Path) -> None:
     assert not [r for r in rows if r["outcome"] == "menu_open"]
 
 
+@pytest.mark.replay
 def test_replay_is_deterministic(tmp_path: Path) -> None:
     presses = [(DOWN, 20.0), (ACK, 21.0), (DOWN, 30.0), (DOWN, 30.5), (ACK, 31.0)]
     _, _, a = _run(tmp_path, presses, name="a")
@@ -467,6 +475,7 @@ def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
         assert engine.dispatcher.silent is expected
 
 
+@pytest.mark.replay
 def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None:
     presses = [(DOWN, 20.0), (DOWN, 20.5), (RIGHT, 21.0), (DOWN, 24.0), (LEFT, 24.5)]
     engine, _, rows = _run(tmp_path, presses)
@@ -477,6 +486,7 @@ def test_stick_right_confirms_and_left_closes_while_open(tmp_path: Path) -> None
     assert not [r for r in rows if r["outcome"] == "page" and r.get("manual")]
 
 
+@pytest.mark.replay
 def test_stick_right_left_keep_page_and_mindset_when_closed(tmp_path: Path) -> None:
     engine, _, rows = _run(tmp_path, [(RIGHT, 20.0), (LEFT, 21.0)], page="track")
     assert engine.page == "race"
@@ -485,6 +495,7 @@ def test_stick_right_left_keep_page_and_mindset_when_closed(tmp_path: Path) -> N
     assert not [r for r in rows if r["outcome"] == "menu_open"]
 
 
+@pytest.mark.replay
 def test_stream_deck_shortcuts_answer_directly(tmp_path: Path) -> None:
     db = Database(":memory:")
     engine, calls, rows = _run(
@@ -514,6 +525,7 @@ def test_stream_deck_shortcuts_answer_directly(tmp_path: Path) -> None:
     assert [r["item_id"] for r in db.driver_inputs_for_session(uid)] == item_ids
 
 
+@pytest.mark.replay
 def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
     _, _, rows = _run(tmp_path, [(DOWN, 20.0), (SD7, 21.0)])
     assert [r["text"] for r in rows if r["outcome"] == "menu_close"] == ["shortcut"]

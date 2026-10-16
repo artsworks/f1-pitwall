@@ -56,6 +56,7 @@ def test_timeline_prepass(tmp_path: Path) -> None:
     assert tl["laps"], "expected lap index entries"
 
 
+@pytest.mark.replay
 def test_seek_restarts_at_lap_boundary(tmp_path: Path) -> None:
     rec = _make_recording(tmp_path)
     ctl = ReviewController(rec, _factory, Hub(), speed=1e9)
@@ -104,6 +105,7 @@ def test_review_api_grade(tmp_path: Path) -> None:
     assert client.get("/api/review/grades").json()[0]["call_id"] == call_id
 
 
+@pytest.mark.replay
 def test_replay_serve_streams_speaker_audio(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.speaker as speaker_module
     import pitwall.cli.recordings as cli_module

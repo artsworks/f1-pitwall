@@ -46,12 +46,24 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - name: Fast tests
-        run: uv run pytest -m "not slow" -n auto --dist loadfile
+        run: uv run pytest -m "not slow and not replay" -n auto --dist loadfile
       - name: Replay determinism (max vs 10x)
         run: >-
           uv run pytest
           tests/test_engine_replay.py::test_deterministic_across_speeds
           tests/test_m2_replay.py::test_replay_deterministic_across_speeds
+
+  test-replay:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Replay tests
+        run: uv run pytest -m "replay and not slow" -n auto --dist loadfile
 
   test:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
