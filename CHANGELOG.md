@@ -10,6 +10,25 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.22.0 (2026-10-16)
+
+### Bug Fixes
+
+- **test**: Record pit rules without replay coverage
+  ([#104](https://github.com/artsworks/f1-pitwall/pull/104),
+  [`3c12031`](https://github.com/artsworks/f1-pitwall/commit/3c12031450c6e61e0a74bb49c91f6af24c5cc4d4))
+
+### Features
+
+- **strategy**: Cover or defend against an undercut from the car behind
+  ([#104](https://github.com/artsworks/f1-pitwall/pull/104),
+  [`3c12031`](https://github.com/artsworks/f1-pitwall/commit/3c12031450c6e61e0a74bb49c91f6af24c5cc4d4))
+
+- **strategy**: Defend against undercuts from behind
+  ([#104](https://github.com/artsworks/f1-pitwall/pull/104),
+  [`3c12031`](https://github.com/artsworks/f1-pitwall/commit/3c12031450c6e61e0a74bb49c91f6af24c5cc4d4))
+
+
 ## v0.21.0 (2026-10-16)
 
 ### Documentation
