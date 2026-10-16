@@ -73,8 +73,8 @@ Calls inside `decision_missed_s` lose conflicts because their action window has 
 
 An untagged safety call starts a focus window. Focus drops queued coaching and P3 info
 calls and suppresses new ones until the window ends. P2 info stays. An untagged tactical
-call starts its own window that drops coaching, and every info call while a rival is
-inside `digest_battle_gap_s`. Systems warnings do not start focus.
+call starts its own window that drops coaching, and P3 info while a rival is inside
+`digest_battle_gap_s`. Systems warnings do not start focus.
 The dispatcher drops location-specific calls after recent safety or traffic calls.
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
