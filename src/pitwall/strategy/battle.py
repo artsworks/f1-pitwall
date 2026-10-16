@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from statistics import NormalDist
 
 from pitwall.config.thresholds import threshold as _th
 
@@ -53,6 +54,7 @@ class BattleInputs:
     positions: tuple[int, ...] = ()  # car_position per car idx (0 = unknown)
     pitting: frozenset[int] = frozenset()  # car idxs in the pit lane
     regulations_2026: bool = False
+    closing_sd_s: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +81,8 @@ class Battle:
     result: str = ""  # last episode: passed | failed | held | lost
     result_recent: bool = False
     result_rival_idx: int = -1
+    catch_prob: float = 0.0
+    chase_prob: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +349,19 @@ class BattleTracker:
             and inp.gap_ahead_s <= _th(th, "drs_detection_gap_s", 1.0)
         )
         recent = inp.now - self.result_t <= _th(th, "battle_result_hold_s", 20.0)
+        need = inp.gap_ahead_s - inp.attack_gap_s
+        if inp.ahead_idx < 0 or not math.isfinite(inp.gap_ahead_s) or inp.laps_remaining <= 0:
+            catch_prob = 0.0
+        elif need <= 0:
+            catch_prob = 1.0
+        elif inp.closing_sd_s > 0:
+            catch_prob = NormalDist().cdf(
+                (c_ahead * inp.laps_remaining - need)
+                / (inp.closing_sd_s * math.sqrt(inp.laps_remaining))
+            )
+        else:
+            catch_prob = 1.0 if c_ahead > 0 and need / c_ahead <= inp.laps_remaining else 0.0
+        chase_prob = catch_prob * rates.pass_overtake
         return Battle(
             mode=mode,
             mode_laps=max(0, inp.lap_num - self.since_lap),
@@ -359,6 +376,8 @@ class BattleTracker:
             result=self.result if recent else "",
             result_recent=recent and bool(self.result),
             result_rival_idx=self.result_rival if recent else -1,
+            catch_prob=round(catch_prob, 2),
+            chase_prob=round(chase_prob, 2),
         )
 
 

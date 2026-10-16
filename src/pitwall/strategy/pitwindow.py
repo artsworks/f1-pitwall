@@ -38,6 +38,7 @@ class PitPlan:
     projections: tuple[tuple[int, float], ...]
     mc_lap: int = 0
     mc_agree: float = 1.0
+    mc_risk_lap: int = 0
 
 
 NO_PLAN = PitPlan("", 0, 0.0, 0.0, 0.0, -1, "", "", (0, 0), 0.0, 0.0, ())

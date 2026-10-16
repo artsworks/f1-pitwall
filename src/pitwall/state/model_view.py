@@ -56,6 +56,8 @@ class ModelView:
     plan_window_open: bool = False
     plan_next_compound: str = ""
     plan_off_s: float = 0.0
+    plan_off_prob: float = 0.0
+    plan_delta_sd_s: float = 0.0
     plan_switch_count: int = 0
     plan_switched_from: str = ""
     plan_switch_reason: str = ""
@@ -63,5 +65,7 @@ class ModelView:
     plan_target_shift: int = 0
     plan_b_spoken: str = ""
     plan_b_delta_s: float = 0.0
+    plan_b_delta_sd_s: float = 0.0
+    plan_b_switch_prob: float = 0.0
     plan_c_spoken: str = ""
     plan_c_delta_s: float = 0.0

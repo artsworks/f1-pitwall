@@ -107,6 +107,33 @@ def test_tracker_catch_laps_and_offsets() -> None:
     assert b.pass_prob == BattleRates().pass_no_overtake
 
 
+def test_catch_and_chase_probabilities_use_gap_spread() -> None:
+    rates = BattleRates(pass_overtake=0.73)
+    spread = BattleTracker().update(
+        _inp(gap_ahead_s=3.0, ahead_pace_ms=90_500, laps_remaining=10, closing_sd_s=0.2),
+        TH,
+        rates,
+    )
+    parity = BattleTracker().update(
+        _inp(gap_ahead_s=6.0, ahead_pace_ms=90_500, laps_remaining=10, closing_sd_s=0.2),
+        TH,
+        rates,
+    )
+    deterministic_catch = BattleTracker().update(
+        _inp(gap_ahead_s=3.0, ahead_pace_ms=90_500, laps_remaining=5), TH, rates
+    )
+    deterministic_miss = BattleTracker().update(
+        _inp(gap_ahead_s=8.0, ahead_pace_ms=90_500, laps_remaining=5), TH, rates
+    )
+
+    assert spread.catch_prob == 1.0
+    assert spread.chase_prob == 0.73
+    assert parity.catch_prob == pytest.approx(0.5, abs=0.01)
+    assert deterministic_catch.catch_prob == 1.0
+    assert deterministic_catch.chase_prob == 0.73
+    assert deterministic_miss.catch_prob == 0.0
+
+
 def test_overtake_now_uses_overtake_active_under_2026_regs() -> None:
     rates = BattleRates()
     close = _inp(gap_ahead_s=0.6, regulations_2026=True)

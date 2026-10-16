@@ -31,6 +31,7 @@ class DegFit:
     fuel_fitted: bool = False  # fuel slope estimated from this data, not the prior
     deg2_ms_per_lap2: float = 0.0
     deg_sd_ms_per_lap: float = 0.0
+    deg_posterior_sd_ms_per_lap: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,12 +231,14 @@ def fit_stint(
     mean_age = sum(ages) / n
     age_ss = sum((age - mean_age) ** 2 for age in ages)
     deg_sd = rmse / math.sqrt(age_ss) if age_ss > 0 else 0.0
+    deg_posterior_sd = deg_sd
     source = "fit"
     if n < 2 * min_laps:
         w = (n - min_laps + 1) / (min_laps + 1)
         base = w * base + (1 - w) * prior.base_ms
         deg = w * deg + (1 - w) * prior.deg_ms_per_lap
         fuel = w * fuel + (1 - w) * prior.fuel_ms_per_lap
+        deg_posterior_sd = deg_sd / max(w, 0.2)
         source = "blend"
     confidence = min(max(n / (2 * min_laps), 0.0), 1.0) * min(
         max(1.0 - rmse / deg_rmse_bad_ms, 0.2), 1.0
@@ -256,6 +259,12 @@ def fit_stint(
             inv_col = _solve(_normal_matrix(quad_rows), [0.0, 0.0, 1.0])
             if inv_col is not None and inv_col[2] >= 0:
                 quad_se = quad_rmse * math.sqrt(inv_col[2])
+                slope_col = _solve(_normal_matrix(quad_rows), [0.0, 1.0, 0.0])
+                quad_slope_sd = (
+                    quad_rmse * math.sqrt(slope_col[1])
+                    if slope_col is not None and slope_col[1] >= 0
+                    else deg_sd
+                )
                 if (
                     quad_deg2 > 0
                     and quad_deg >= 0
@@ -276,8 +285,21 @@ def fit_stint(
                         fuel_fitted,
                         quad_deg2,
                         deg_sd,
+                        deg_posterior_sd_ms_per_lap=quad_slope_sd,
                     )
-    return DegFit(base, deg, fuel, n, rmse, confidence, source, fuel_fitted, 0.0, deg_sd)
+    return DegFit(
+        base,
+        deg,
+        fuel,
+        n,
+        rmse,
+        confidence,
+        source,
+        fuel_fitted,
+        0.0,
+        deg_sd,
+        deg_posterior_sd_ms_per_lap=deg_posterior_sd,
+    )
 
 
 def cliff_age(fit: DegFit, cliff_ms: float) -> float:
