@@ -173,6 +173,7 @@ class Dispatcher:
         self._defs: dict[str, RuleDefModel] = {}
         self._reply_n: dict[str, int] = {}
         self._focus_until = 0.0
+        self._tactical_focus_until = 0.0
         self._rng = random.Random(0)
         self._rng_uid: int | None = None
         self._digest_prefix_index = 0
@@ -260,7 +261,7 @@ class Dispatcher:
             if suppressed is not None:
                 self._log(cand, snapshot, now, "suppressed", suppressed, call.id)
                 continue
-            if now < self._focus_until and call.urgency in ("info", "coaching"):
+            if self._focus_drops(call, now, snapshot):
                 self._log(cand, snapshot, now, "suppressed", "focus", call.id)
                 continue
             if call.urgency == "reply" and self._apply_reply_absorption(call):
@@ -270,9 +271,11 @@ class Dispatcher:
             self._book_call(call, cand, not_before)
             if call.urgency == "safety" and "systems" not in call.tags:
                 self._focus_until = now + self.policy.focus_window_s
-                for queued in list(self._queue):
-                    if queued.call.urgency in ("info", "coaching"):
-                        self._drop_queued(queued.call.id, "focus")
+            elif call.urgency == "tactical" and "systems" not in call.tags:
+                self._tactical_focus_until = now + self.policy.focus_window_s
+            for queued in list(self._queue):
+                if self._focus_drops(queued.call, now, snapshot):
+                    self._drop_queued(queued.call.id, "focus")
             self._drop_resolved_by(call)
             if call.urgency != "reply":
                 self._apply_reply_absorption(call)
@@ -280,6 +283,19 @@ class Dispatcher:
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
             if call.flushes_queue:
                 self._flush_for(call)
+
+    def _focus_drops(self, call: Call, now: float, snapshot: Snapshot) -> bool:
+        """Focus after a hazard drops coaching and P3 info. A tactical call drops
+        coaching, and in a battle it drops every info call."""
+        safety_focus = now < self._focus_until
+        tactical_focus = now < self._tactical_focus_until
+        if call.urgency == "coaching":
+            return safety_focus or tactical_focus
+        if call.urgency != "info":
+            return False
+        if safety_focus and call.priority == 3:
+            return True
+        return tactical_focus and self._battle_active(snapshot)
 
     def _suppression_reason(
         self, cand: Candidate, snapshot: Snapshot, now: float, allowed_p: set[int]
@@ -981,6 +997,7 @@ class Dispatcher:
         self._current = None
         self.quiet_until = None
         self._focus_until = 0.0
+        self._tactical_focus_until = 0.0
         self._rng = random.Random(session_uid)
         self._rng_uid = session_uid
         self._digest_prefix_index = 0

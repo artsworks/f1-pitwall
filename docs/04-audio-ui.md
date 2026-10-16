@@ -70,8 +70,10 @@ Execution calls with a decision point calculate the time to pit entry or the fin
 The dispatcher promotes calls inside `decision_near_s` and logs distance and time.
 Calls inside `decision_missed_s` lose conflicts because their action window has closed.
 
-An untagged safety call starts a focus window. Focus drops queued info and coaching calls
-and suppresses new ones until the window ends. Systems warnings do not start focus.
+An untagged safety call starts a focus window. Focus drops queued coaching and P3 info
+calls and suppresses new ones until the window ends. P2 info stays. An untagged tactical
+call starts its own window that drops coaching, and every info call while a rival is
+inside `digest_battle_gap_s`. Systems warnings do not start focus.
 The dispatcher drops location-specific calls after recent safety or traffic calls.
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the

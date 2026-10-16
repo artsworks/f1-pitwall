@@ -887,13 +887,13 @@ def test_urgency_order_and_preemption_matrix() -> None:
     d.menu_reply("Reply", "reply", _snap(0.0))
     d.drain(0.0)
     calls = {call.rule_id: call for call, _ in d._spoken_calls}
+    # The tactical call starts a focus window that drops the coaching tip.
     assert [call.rule_id for call, _ in d._spoken_calls] == [
         "safety",
         "execution",
         "reply",
         "tactical",
         "info",
-        "coach",
     ]
     assert d._preempts(calls["safety"], calls["execution"]) is True
     calls["execution"].promoted = True
@@ -972,9 +972,19 @@ def test_nearer_promoted_execution_precedes_older_call() -> None:
 
 def test_focus_and_systems_exemption() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("hazard", urgency="safety"), _cand("tip", urgency="info")], _snap(0.0))
-    assert {item.call.rule_id for item in d._queue} == {"hazard"}
-    assert ("tip", "focus") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+    d.submit(
+        [
+            _cand("hazard", urgency="safety"),
+            _cand("tip", priority=3, urgency="info"),
+            _cand("news", priority=2, urgency="info"),
+            _cand("coach", priority=2, urgency="coaching"),
+        ],
+        _snap(0.0),
+    )
+    assert {item.call.rule_id for item in d._queue} == {"hazard", "news"}
+    dropped = {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+    assert ("tip", "focus") in dropped
+    assert ("coach", "focus") in dropped
     d, _, _ = _dispatcher(min_gap_s=0.0)
     d.submit([_cand("systems", urgency="safety", tags=["systems"])], _snap(0.0))
     d.submit([_cand("tip", urgency="info")], _snap(1.0))
