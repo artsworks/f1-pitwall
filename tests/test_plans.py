@@ -7,7 +7,8 @@ import pytest
 
 import pitwall.strategy.plans as plan_module
 from pitwall.config.loader import ConfigStore
-from pitwall.model.deg import DegFit
+from pitwall.model.deg import DegFit, fit_stint
+from pitwall.store.db import LapRow
 from pitwall.strategy.plans import (
     CompoundModel,
     PlanEval,
@@ -31,6 +32,28 @@ S, M, H = 16, 17, 18
 
 def fit(deg: float) -> DegFit:
     return DegFit(90_000.0, deg, 30.0, 10, 100.0, 0.9, "fit")
+
+
+def _lap(age: int, time_ms: float) -> LapRow:
+    return LapRow(
+        id=age,
+        session_uid=1,
+        car_idx=0,
+        lap_num=age + 1,
+        lap_time_ms=int(time_ms),
+        s1_ms=0,
+        s2_ms=0,
+        compound=18,
+        tyre_age_laps=age,
+        fuel_remaining_laps=20.0,
+        valid=1,
+        invalid_reasons=(),
+        wear_pct=0.0,
+        fuel_kg=0.0,
+        ers_deployed_j=0.0,
+        sc_status=0,
+        weather=0,
+    )
 
 
 def models(
@@ -124,13 +147,15 @@ def test_evaluate_race_time_spread_adds_shared_slope_age_sums() -> None:
 
 
 def test_evaluate_race_time_spread_zero_when_fits_are_exact() -> None:
-    inp = inputs(
-        tyre_age=10,
-        cur=dataclasses.replace(fit(100.0), deg_posterior_sd_ms_per_lap=0.0),
-    )
+    prior = DegFit(90_000.0, 80.0, 30.0, 0, 0.0, 0.3, "prior")
+    laps = [_lap(age, 90_000 + 20 * age + 6 * age**2) for age in range(12)]
+    cur = fit_stint(laps, prior, min_laps=3, fuel_coeff_fixed=30.0, quadratic=True)
+    assert cur.source == "fit" and cur.deg2_ms_per_lap2 > 0
+
+    inp = inputs(tyre_age=10, cur=cur)
     result = evaluate(inp, (M, H), TH)
     assert result is not None and len(result.stop_laps) == 1
-    assert result.race_time_sd_s == pytest.approx(0.0)
+    assert result.race_time_sd_s == pytest.approx(0.0, abs=1e-6)
 
 
 def test_alternative_uses_downside_score_and_keeps_ranked_order_at_zero_spread() -> None:
