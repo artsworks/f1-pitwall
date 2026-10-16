@@ -10,6 +10,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.24.0 (2026-10-16)
+
+### Bug Fixes
+
+- **strategy**: Ignore neutralised laps and require net-positive confirmation laps
+  ([#107](https://github.com/artsworks/f1-pitwall/pull/107),
+  [`1db3c84`](https://github.com/artsworks/f1-pitwall/commit/1db3c8466e28537f9b64a3b5923a0fe1ea713ba4))
+
+### Features
+
+- **strategy**: Wet-weather pit calls from projected net time gain
+  ([#107](https://github.com/artsworks/f1-pitwall/pull/107),
+  [`1db3c84`](https://github.com/artsworks/f1-pitwall/commit/1db3c8466e28537f9b64a3b5923a0fe1ea713ba4))
+
+
 ## v0.23.0 (2026-10-16)
 
 ### Bug Fixes
