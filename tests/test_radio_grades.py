@@ -8,11 +8,31 @@ from pitwall.config.loader import ConfigStore
 WORKBOOK = Path(__file__).parents[1] / "scenarios" / "radio-priority-grades.yaml"
 SCENARIOS = load_workbook(WORKBOOK)
 
+# Owner grades the dispatcher does not meet yet. Remove an id once policy changes make it pass.
+KNOWN_MISMATCHES: dict[str, str] = {}
 
-@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.id)
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param(
+            scenario,
+            id=scenario.id,
+            marks=pytest.mark.xfail(strict=True, reason=KNOWN_MISMATCHES[scenario.id]),
+        )
+        if scenario.id in KNOWN_MISMATCHES
+        else pytest.param(scenario, id=scenario.id)
+        for scenario in SCENARIOS
+    ],
+)
 def test_radio_grade_scenario(scenario) -> None:
     result = replay(scenario, ConfigStore(isolated=True).current())
     assert not result.mismatches, result.mismatches
+
+
+def test_known_mismatch_ids_are_workbook_scenarios() -> None:
+    scenario_ids = {scenario.id for scenario in SCENARIOS}
+    assert set(KNOWN_MISMATCHES) <= scenario_ids
 
 
 def test_rotation_is_seeded_and_varies_for_r14() -> None:

@@ -20,14 +20,18 @@ The dispatcher cuts a call only before its estimated speech time ends.
 
 | Incoming class | Calls it can cut |
 |---|---|
-| Safety | Every call except promoted execution |
-| Execution | Info and coaching. Tactical only when promoted |
-| Reply | Info and coaching |
+| Safety | Every call |
+| Execution | Info and coaching of a lower priority. Promoted: reply, tactical, info and coaching |
+| Reply | None |
 | Tactical | Info and coaching |
 | Info or coaching | None |
 
-The dispatcher re-queues a cut reply once with a fresh queue time. It never re-queues
-menu prompts.
+A safety call that cuts a reply or a promoted execution call re-queues it once with a
+fresh queue time, unless the safety call flushes the queue. A promoted execution call drops
+the reply it cuts. The dispatcher never re-queues menu prompts.
+
+The queue orders by urgency class, then promoted execution calls by time to their decision
+point, then rule priority, then age. Safety always leads, even near pit entry.
 
 ## Staying quiet
 
@@ -62,27 +66,32 @@ its current predicate holds. A call waiting behind speech starts its deadline wh
 ends.
 
 The `max_call_age_s` cap measures from `trigger_t` and does not reset while a call waits or
-is held. Replies and menu prompts are exempt. The Piper worker drops calls that exceed the
+is held. A call that reaches the cap or its deadline is late and drops. Replies and menu
+prompts are exempt from the cap but keep their deadline. The Piper worker drops calls that exceed the
 cap before playback.
 
 Execution calls with a decision point calculate the time to pit entry or the finish line.
-The dispatcher promotes calls inside `decision_near_s` and logs distance and time.
-Calls inside `decision_missed_s` lose conflicts because their action window has closed.
+The dispatcher promotes calls inside `decision_near_s` and logs distance and time. A box
+call keeps its place in a conflict however close the pit entry is.
 
-An untagged safety call starts a focus window. Focus drops queued info and coaching calls
-and suppresses new ones until the window ends. Systems warnings do not start focus.
+An untagged safety call starts a focus window. Focus drops queued coaching and P3 info
+calls and suppresses new ones until the window ends. P2 info stays. An untagged tactical
+call starts its own window that drops coaching, and every info call while a rival is
+inside `digest_battle_gap_s`. Systems warnings do not start focus.
 The dispatcher drops location-specific calls after recent safety or traffic calls.
 
 Conflicts first remove stale and explicitly superseded calls. Scored conflicts keep the
 higher outcome score. Rotation pairs choose a seeded random winner, regardless of score.
-Other live conflicts keep the queued call. `resolved_by` rules suppress resolved calls in
+Other live conflicts keep the newest call. `contradicts` pairs keep the higher priority, then the higher urgency class, then the newest call. `resolved_by` rules suppress resolved calls in
 either submission order. Escalations remove lower-state calls. Flush events remove
-queued non-safety calls.
+queued calls, except safety calls and replies the driver asked for.
 
 Rules can suppress obvious calls and silence provisional checks until an urgent condition
 holds. Duplicate queued rules can merge into a count-aware `say_many` line. A queued call
 absorbs a related menu reply. The dispatcher can combine due info calls into one digest
-with the freshest briefs. It drops overflow and skips digests during battles.
+with the freshest briefs. It keeps `digest_max_items` info briefs, drops the overflow and
+skips digests during battles. On a quiet stretch, every rival further than
+`digest_tactical_gap_s`, tactical lines join the digest too and never count as overflow.
 
 ## Speech
 

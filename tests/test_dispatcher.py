@@ -291,7 +291,7 @@ def test_stale_queued_call_in_group_is_superseded() -> None:
     }
 
 
-def test_queued_conflict_that_still_holds_keeps_old_call() -> None:
+def test_queued_conflict_that_still_holds_yields_to_the_newest_call() -> None:
     state = {"old_holds": True}
     old = _cand("old", priority=1, conflict_group="slow_car")
     old.current = lambda snap: state["old_holds"]
@@ -301,8 +301,8 @@ def test_queued_conflict_that_still_holds_keeps_old_call() -> None:
     d.submit([old], _snap(0.0))
     d.submit([new], _snap(1.0))
 
-    assert len(d._queue) == 1
-    assert ("new", "suppressed", "conflict") in {
+    assert [item.call.rule_id for item in d._queue] == ["new"]
+    assert ("old", "suppressed", "conflict") in {
         (row["rule_id"], row["outcome"], row["suppressed_by"]) for row in _log(buf)
     }
 
@@ -887,22 +887,27 @@ def test_urgency_order_and_preemption_matrix() -> None:
     d.menu_reply("Reply", "reply", _snap(0.0))
     d.drain(0.0)
     calls = {call.rule_id: call for call, _ in d._spoken_calls}
+    # The tactical call starts a focus window that drops the coaching tip.
     assert [call.rule_id for call, _ in d._spoken_calls] == [
         "safety",
         "execution",
         "reply",
         "tactical",
         "info",
-        "coach",
     ]
     assert d._preempts(calls["safety"], calls["execution"]) is True
     calls["execution"].promoted = True
-    assert d._preempts(calls["safety"], calls["execution"]) is False
+    assert d._preempts(calls["safety"], calls["execution"]) is True
     assert d._preempts(calls["execution"], calls["tactical"]) is True
     calls["execution"].promoted = False
     assert d._preempts(calls["execution"], calls["tactical"]) is False
+    assert d._preempts(calls["execution"], calls["info"]) is False
+    calls["execution"].priority = 1
+    assert d._preempts(calls["execution"], calls["info"]) is True
+    calls["execution"].promoted = True
+    assert d._preempts(calls["execution"], calls["reply"]) is True
     assert d._preempts(calls["reply"], calls["tactical"]) is False
-    assert d._preempts(calls["reply"], calls["info"]) is True
+    assert d._preempts(calls["reply"], calls["info"]) is False
 
 
 def test_preempting_call_holds_lower_urgency_calls_behind_it() -> None:
@@ -972,9 +977,19 @@ def test_nearer_promoted_execution_precedes_older_call() -> None:
 
 def test_focus_and_systems_exemption() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
-    d.submit([_cand("hazard", urgency="safety"), _cand("tip", urgency="info")], _snap(0.0))
-    assert {item.call.rule_id for item in d._queue} == {"hazard"}
-    assert ("tip", "focus") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+    d.submit(
+        [
+            _cand("hazard", urgency="safety"),
+            _cand("tip", priority=3, urgency="info"),
+            _cand("news", priority=2, urgency="info"),
+            _cand("coach", priority=2, urgency="coaching"),
+        ],
+        _snap(0.0),
+    )
+    assert {item.call.rule_id for item in d._queue} == {"hazard", "news"}
+    dropped = {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
+    assert ("tip", "focus") in dropped
+    assert ("coach", "focus") in dropped
     d, _, _ = _dispatcher(min_gap_s=0.0)
     d.submit([_cand("systems", urgency="safety", tags=["systems"])], _snap(0.0))
     d.submit([_cand("tip", urgency="info")], _snap(1.0))
@@ -990,7 +1005,7 @@ def test_location_coherence_after_safety() -> None:
     assert ("corner", "coherence") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 
-def test_conflict_scores_and_decision_missed() -> None:
+def test_conflict_scores() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0)
     lower = _cand("lower", conflict_group="choice")
     higher = _cand("higher", conflict_group="choice")
@@ -1002,16 +1017,24 @@ def test_conflict_scores_and_decision_missed() -> None:
         (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
     }
 
-    d, _, buf = _dispatcher(min_gap_s=0.0, decision_missed_s=2.0)
-    live = _cand("live", conflict_group="choice")
-    missed = _cand("missed", urgency="execution", decision_point="line", conflict_group="choice")
-    live.outcome_score, missed.outcome_score = 0.1, 10.0
-    d.submit([live], Snapshot(now=0.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
-    d.submit([missed], Snapshot(now=1.0, track_length_m=5000, lap_distance=4990, speed_kmh=100))
-    assert [item.call.rule_id for item in d._queue] == ["live"]
-    assert ("missed", "decision_missed") in {
-        (row["rule_id"], row["suppressed_by"]) for row in _log(buf)
-    }
+
+def test_contradicts_keeps_priority_then_class_then_newest() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("attack", priority=3, urgency="tactical")], _snap(0.0))
+    d.submit([_cand("hazard", priority=1, urgency="safety", contradicts=["attack"])], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["hazard"]
+    assert ("attack", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
+
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("hold", priority=2, urgency="tactical", contradicts=["news"])], _snap(0.0))
+    d.submit([_cand("news", priority=2, urgency="info")], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["hold"]
+    assert ("news", "contradicted") in {(r["rule_id"], r["suppressed_by"]) for r in _log(buf)}
+
+    d, _, _ = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("first", priority=2, urgency="info", contradicts=["second"])], _snap(0.0))
+    d.submit([_cand("second", priority=2, urgency="info")], _snap(1.0))
+    assert [item.call.rule_id for item in d._queue] == ["second"]
 
 
 def test_rotation_is_seeded_and_both_rules_can_win() -> None:
@@ -1070,7 +1093,7 @@ def test_escalation_and_flush_drop_queued_calls() -> None:
         [_cand("red", urgency="safety", flushes_queue=True, tags=["systems"])],
         _snap(1.0),
     )
-    assert {item.call.rule_id for item in d._queue} == {"red"}
+    assert {item.call.rule_id for item in d._queue} == {"red", "reply"}
     assert ("tip", "flushed") in {(row["rule_id"], row["suppressed_by"]) for row in _log(buf)}
 
 

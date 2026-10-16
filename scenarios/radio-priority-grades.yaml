@@ -124,9 +124,9 @@ batches:
         currently_speaking: {id: slow1, rule: slow_car_ahead, text: "Slow car ahead. Careful", age_s: 0.5}
         queued:
           - {id: slow2, rule: slow_car_ahead, text: "Slow car ahead. Careful"}
-        grade: {slow1: now, slow2: drop}
+        grade: {slow1: now, slow2: merge}
         order: []
-        notes: Existing dedupe still drops a repeat of the line on air.
+        notes: Regraded to match batch 4. A repeat of the line on air merges into it.
       - id: q01
         source: reconstructed
         session: qualifying
@@ -257,9 +257,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "About twelve laps in the tyres", age_s: 2.0}
           - {id: wear, rule: wear_fronts, text: "Fronts at forty percent", age_s: 1.0}
-        grade: {life: now, wear: next}
-        order: [life, wear]
-        notes: Battle within a second, so no digest. Each speaks.
+        grade: {wear: now, life: next}
+        order: [wear, life]
+        notes: Regraded to match batch 4. Inside one class the higher priority speaks first, so the P2 wear line leads.
       - id: s03
         source: reconstructed
         session: race
@@ -277,9 +277,9 @@ batches:
         queued:
           - {id: check, rule: contact_check, text: "Contact there. Checking the data", age_s: 1.0}
           - {id: wear, rule: wear_rears, text: "Rears at thirty percent"}
-        grade: {check: drop, wear: now}
-        order: [wear]
-        notes: Provisional contact check with minor worst case stays silent.
+        grade: {check: now, wear: next}
+        order: [check, wear]
+        notes: Regraded to match batch 4. The contact check speaks at once, the report or all clear replaces it later.
       - id: s05
         source: reconstructed
         session: race
@@ -311,9 +311,9 @@ batches:
         queued:
           - {id: life, rule: tyre_life, text: "About two laps in the tyres", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box. Tyres are done"}
-        grade: {box: now, life: next}
-        order: [box, life]
-        notes: Execution ahead of info.
+        grade: {box: now, life: drop}
+        order: [box]
+        notes: Regraded to match batch 4 (g017, g022). The box call carries the tyre news, so the tyre life line drops.
       - id: r02
         source: reconstructed
         session: race
@@ -431,9 +431,9 @@ batches:
         queued:
           - {id: yellow, rule: yellow_ahead, text: "Yellow ahead. Careful", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {box: now, yellow: next}
-        order: [box, yellow]
-        notes: Pit entry five seconds away. The box call goes first.
+        grade: {yellow: now, box: next}
+        order: [yellow, box]
+        notes: Regraded to match batch 4. Safety speaks first even with pit entry five seconds away.
       - id: r14
         source: graded
         session: race
@@ -475,9 +475,9 @@ batches:
           - {id: defend, rule: battle_defend, hypothetical: true, text: "Car behind in DRS. Defend", age_s: 2.0, scene: {phase: racing}}
           - {id: sc, rule: sc_deployed, text: "Safety car. Safety car", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
-        grade: {box: now, sc: next, defend: drop}
-        order: [box, sc]
-        notes: Box call is decisive at the pit entry and goes first. The defend call goes stale once the safety car is out.
+        grade: {sc: now, box: next, defend: drop}
+        order: [sc, box]
+        notes: Regraded to match batch 4. Safety first, then the box call. The defend call goes stale once the safety car is out.
       - id: r18
         source: reconstructed
         session: race
@@ -557,9 +557,9 @@ batches:
         queued:
           - {id: pen, rule: serve_penalty, text: "Serve the penalty this lap", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {pen: now, box: next}
-        order: [pen, box]
-        notes: Both calls need the pit entry and are equally close, so the older call goes first.
+        grade: {box: now, pen: next}
+        order: [box, pen]
+        notes: Regraded to match batch 4. Equally close to the pit entry, the P1 box call goes before the P2 penalty call.
       - id: r26
         source: reconstructed
         session: race
@@ -567,9 +567,9 @@ batches:
         queued:
           - {id: stay, rule: overcut_stay_out, text: "Stay out. Overcut is on", age_s: 1.0}
           - {id: box, rule: box_now, text: "Box, box"}
-        grade: {stay: now, box: drop}
-        order: [stay]
-        notes: Under a second to the pit entry, too late to box. Stay out wins.
+        grade: {box: now, stay: drop}
+        order: [box]
+        notes: Regraded to match batch 4. The box call is the newest decision and wins, even under a second from the pit entry.
       - id: r27
         source: reconstructed
         session: race
@@ -687,3 +687,1024 @@ batches:
         grade: {finish: now, life: drop, held: drop}
         order: [finish]
         notes: Yes, flush the queue at the flag.
+  - id: 4
+    title: Owner grading round 1 — race
+    scenarios:
+      - id: g001
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: life, rule: tyre_life, text: About eight laps in the tyres, age_s: 2.0}
+          - {id: fuel, rule: fuel_marginal, text: "Fuel is tight, lift and coast", age_s: 1.0}
+        grade: {fuel: merge, life: merge}
+        order: [digest]
+        notes: "Lift and coast is an action for this lap, so it goes before the tyre life line. Aligned with g071, the later id: on a quiet stretch the fuel and tyre lines merge into one digest."
+      - id: g002
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        currently_speaking: {id: plan, rule: plan_status, text: "Plan is two stops, next on lap 28", age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box. Undercut is on"}
+        grade: {plan: drop, box: now}
+        order: [box]
+        notes: Pit entry is under two seconds away, so the box call cuts the plan line it contradicts.
+      - id: g003
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 2200.0, speed_kmh: 216.0}
+        currently_speaking: {id: plan, rule: plan_status, text: "Plan is two stops, next on lap 28", age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box. Undercut is on"}
+        grade: {plan: drop, box: now}
+        order: [box]
+        notes: The plan line on air contradicts the box call, so it is cut and does not return.
+      - id: g004
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4690.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {box: now, stay: drop}
+        order: [box]
+        notes: The box call is the newest decision and the stay out call it contradicts drops, even this close to pit entry.
+      - id: g005
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 1.0}
+          - {id: wear, rule: wear_fronts, text: Fronts at sixty percent}
+        grade: {boxn: now, wear: next}
+        order: [boxn, wear]
+        notes: Pit strategy goes before the wear line.
+      - id: g006
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 2.0}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {yellow: now, pen: next}
+        order: [yellow, pen]
+        notes: The yellow speaks first and the penalty call follows while pit entry is still ahead.
+      - id: g007
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4550.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
+        grade: {sc: now, box: next}
+        order: [sc, box]
+        notes: Safety first, then the cheap stop under the safety car.
+      - id: g008
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 1500.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop"}
+        grade: {sc: now, box: next}
+        order: [sc, box]
+        notes: Safety first, then the stop call with pit entry a full minute away.
+      - id: g009
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 22}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {life: drop, sc: now}
+        order: [sc]
+        notes: The safety car cuts the tyre life line, which is not worth repeating.
+      - id: g010
+        source: graded
+        session: race
+        scene: {phase: vsc, lap_num: 28}
+        queued:
+          - {id: vscend, rule: vsc_ending, text: VSC ending. Get ready, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: Six laps in the tyres, age_s: 4.0}
+          - {id: catch, rule: battle_catching, text: "Catching Leclerc, two tenths a lap", age_s: 1.0}
+        grade: {vscend: now, catch: next, life: drop}
+        order: [vscend, catch]
+        notes: The restart warning speaks first, the fight follows, and the tyre life line has no action so it drops.
+      - id: g011
+        source: graded
+        session: race
+        scene: {phase: vsc, lap_num: 28, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        queued:
+          - {id: vscend, rule: vsc_ending, text: VSC ending. Get ready, age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {vscend: now, box: next}
+        order: [vscend, box]
+        notes: Safety speaks first even with pit entry two seconds away, then the box call.
+      - id: g012
+        source: graded
+        session: race
+        scene: {phase: red_flag, lap_num: 31}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: red, rule: red_flag, text: Red flag. Box this lap}
+        grade: {reply: drop, red: now}
+        order: [red]
+        notes: The red flag cuts the reply, and the tyre answer no longer matters.
+      - id: g013
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 27}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready}
+          - {id: plan, rule: plan_status, text: Plan is still one stop, age_s: 2.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS at the restart, age_s: 1.0}
+        grade: {restart: now, defend: next, plan: drop}
+        order: [restart, defend]
+        notes: The restart and the car behind take the window, and an unchanged plan line has no value there.
+      - id: g014
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 27}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready, age_s: 1.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine}
+        grade: {restart: now, fuel: drop}
+        order: [restart]
+        notes: A fuel is fine line adds nothing at a restart.
+      - id: g015
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19, laps_remaining: 15, pit_plan_gain_s: 1.2, pit_plan_risk: 0.2, overcut_s: 0.5, laps_of_pace: 12.0}
+        queued:
+          - {id: ubox, rule: box_now, text: "Box, box. Undercut is on"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {ubox: now, stay: drop}
+        order: [ubox]
+        notes: The model favours the undercut, so the stay out call drops.
+      - id: g016
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19, laps_remaining: 15, pit_plan_gain_s: 0.2, pit_plan_risk: 0.6, overcut_s: 1.8, laps_of_pace: 12.0}
+        queued:
+          - {id: ubox, rule: box_now, text: "Box, box. Undercut is on"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {stay: now, ubox: drop}
+        order: [stay]
+        notes: The model favours the overcut, so the box call drops.
+      - id: g017
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 45, laps_remaining: 5}
+        queued:
+          - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: hold, rule: battle_held, text: "Five laps left, hold this gap"}
+        grade: {box: now, life: drop, hold: drop}
+        order: [box]
+        notes: The box call carries the tyre news and contradicts the hold line, so both drop. Encoded on battle_held because finish_hold has no live telemetry field.
+      - id: g018
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12, gap_ahead_s: 0.8}
+        queued:
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it"}
+          - {id: orders, rule: teammate_fight, text: Hold position behind your teammate, age_s: 1.0}
+        grade: {orders: now, attack: drop}
+        order: [orders]
+        notes: Team orders contradict the attack call. Encoded on teammate_fight because team_orders_hold has no live telemetry field.
+      - id: g019
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 33, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 2200.0, speed_kmh: 216.0}
+        queued:
+          - {id: punct, rule: puncture, text: "Puncture, front right. Box, box"}
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 2.0}
+        grade: {punct: now, pen: next}
+        order: [punct, pen]
+        notes: The puncture speaks first and the penalty call follows because it applies to this stop.
+      - id: g020
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8, contact_phase: checking, contact_damage: rear wing, contact_damage_pct: 35.0, contact_damage_major: true}
+        queued:
+          - {id: check, rule: contact_check, text: Contact there. Checking the data}
+          - {id: manage, rule: battle_manage, text: Keep the gap, age_s: 1.0}
+        grade: {check: now, manage: next}
+        order: [check, manage]
+        notes: Contact comes first and the gap call still applies until the damage report.
+      - id: g021
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        currently_speaking: {id: box, rule: box_now, text: "Box, box this lap", age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {sc: now, box: queue}
+        order: [sc, box]
+        notes: The safety car cuts the box call, which still applies under the safety car and speaks again.
+      - id: g022
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 40, laps_remaining: 2}
+        queued:
+          - {id: rain, rule: weather_to_inter, text: Rain in sector three, age_s: 1.0}
+          - {id: boxi, rule: box_now, text: Box for inters this lap}
+          - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 3.0}
+        grade: {boxi: now, rain: drop, life: drop}
+        order: [boxi]
+        notes: "The rain warning covers the current lap, the stop follows, and the tyre life line is redundant with the stop. Encoded on weather_to_inter because rain_falling has no live telemetry field. Aligned with g053: the stop for inters already carries the rain news, so the rain line drops."
+      - id: g023
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, gap_ahead_s: 1.5}
+        queued:
+          - {id: gap1, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 3.0}
+          - {id: gap2, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 2.0}
+          - {id: gap3, rule: gap_behind_closing, hypothetical: true, text: "He's three tenths closer", age_s: 1.0}
+          - {id: fuel, rule: fuel_marginal, text: "Fuel is short, we need lift and coast"}
+        grade: {fuel: now, gap1: next, gap2: merge, gap3: merge}
+        order: [fuel, gap1]
+        notes: Lift and coast goes first and the three identical gap calls merge into the first one.
+      - id: g024
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 17, gap_ahead_s: 4.0, gap_behind_s: 5.0, laps_of_pace: 10.0}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 5.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 4.0}
+          - {id: pace, rule: battle_catching, text: Half a second off the cars ahead, age_s: 2.0}
+          - {id: ers, rule: energy_under, text: "ERS low, harvesting", age_s: 1.0}
+        grade: {wear: merge, fuel: merge, pace: merge, ers: merge}
+        order: [digest]
+        notes: Four low value lines on a quiet stretch merge into one digest. Encoded on energy_under because ers_harvest has no live telemetry field.
+      - id: g025
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 17, gap_ahead_s: 0.7, gap_behind_s: 5.0}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 5.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 4.0}
+          - {id: pace, rule: battle_catching, text: Half a second off the cars ahead, age_s: 2.0}
+        grade: {pace: now, wear: drop, fuel: drop}
+        order: [pace]
+        notes: In a battle the pace line speaks and the info lines with no action drop.
+      - id: g026
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: life2, rule: tyre_life, text: About twelve laps in the tyres}
+        grade: {life: now, life2: merge}
+        order: []
+        notes: The duplicate merges into the line already on air.
+      - id: g027
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 2.0}
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+        grade: {slow: now, saved: drop}
+        order: [slow]
+        notes: Safety first and praise is not worth the airtime after it.
+      - id: g028
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14}
+        queued:
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap to P4 is two point one}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {reply: now, attack: next}
+        order: [reply, attack]
+        notes: The driver asked for the gap, so the answer goes first and the attack call follows.
+      - id: g029
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 30}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are done. Two laps left, age_s: 1.0}
+          - {id: blue, rule: blue_flag, text: Blue flags. Let Hamilton by}
+        grade: {blue: now, reply: next}
+        order: [blue, reply]
+        notes: Blue flags are safety and the tyre answer follows.
+      - id: g030
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 1.2}
+        queued:
+          - {id: defend, rule: battle_defend, text: Verstappen behind in DRS. Defend, age_s: 1.0}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {yellow: now, defend: next}
+        order: [yellow, defend]
+        notes: Safety first, then the defend call.
+      - id: g031
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 38}
+        queued:
+          - {id: blue, rule: blue_flag, text: Blue flags. Let him by}
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 2.0}
+        grade: {blue: now, life: drop}
+        order: [blue]
+        notes: Blue flags speak and a tyre life line with no action drops.
+      - id: g032
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 38}
+        currently_speaking: {id: catch, rule: battle_catching, text: "Catching Norris, three tenths a lap", age_s: 0.5}
+        queued:
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful}
+        grade: {catch: drop, yellow: now}
+        order: [yellow]
+        notes: The yellow cuts the catching line.
+      - id: g033
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8}
+        queued:
+          - {id: rejoin, rule: spun_rejoin_traffic, text: Cars coming. Wait before you rejoin}
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 1.0}
+        grade: {rejoin: now, saved: drop}
+        order: [rejoin]
+        notes: Rejoin traffic is safety and the praise drops.
+      - id: g034
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 8}
+        currently_speaking: {id: saved, rule: saved_moment, text: Nice save there, age_s: 0.5}
+        queued:
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+        grade: {saved: drop, slow: now}
+        order: [slow]
+        notes: Safety cuts praise mid sentence.
+      - id: g035
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 19}
+        currently_speaking: {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 0.5}
+        queued:
+          - {id: exit, rule: pit_exit_traffic_race, text: Car coming at pit exit. Stay right}
+        grade: {wear: drop, exit: now}
+        order: [exit]
+        notes: Pit exit traffic cuts the wear line.
+      - id: g036
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14, gap_ahead_s: 3.0}
+        queued:
+          - {id: temp, rule: engine_temp_high, hypothetical: true, kind: safety, text: "Engine temps high, lift and coast"}
+          - {id: lockup, rule: lockup_front, text: Locking the fronts into Turn 4, age_s: 2.0}
+        grade: {temp: now, lockup: drop}
+        order: [temp]
+        notes: The engine warning speaks and the lockup coaching drops.
+      - id: g037
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 14}
+        currently_speaking: {id: catch, rule: battle_catching, text: Catching Norris, age_s: 0.5}
+        queued:
+          - {id: temp, rule: engine_temp_high, hypothetical: true, kind: safety, text: "Engine temps critical, box this lap"}
+        grade: {catch: drop, temp: now}
+        order: [temp]
+        notes: The critical engine warning cuts the catching line.
+      - id: g038
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20, contact_phase: report, contact_damage: floor, contact_damage_pct: 22.0, contact_damage_major: true}
+        queued:
+          - {id: check, rule: contact_check, text: Contact there. Checking, age_s: 3.0, scene: {contact_phase: checking}}
+          - {id: report, rule: contact_damage_report, text: "Floor twenty-two percent. We're losing pace"}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {check: drop, report: next, box: now}
+        order: [box, report]
+        notes: "The damage report replaces the check and explains the box call that follows. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
+      - id: g039
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 47, laps_remaining: 3}
+        thresholds: {pit_min_laps_left: 4}
+        queued:
+          - {id: wing, rule: front_wing_lost_box, text: Front wing gone. Box this lap}
+          - {id: nurse, rule: front_wing_lost_nurse, text: Front wing damage. Nurse it home, age_s: 1.0}
+        grade: {nurse: now, wing: drop}
+        order: [nurse]
+        notes: Too few laps left for a stop, so the nurse call wins.
+      - id: g040
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 5}
+        queued:
+          - {id: punct, rule: puncture, text: "Possible puncture, rear left", age_s: 1.0}
+          - {id: attack, rule: battle_attack, text: "You're in range"}
+        grade: {punct: now, attack: drop}
+        order: [punct]
+        notes: A possible puncture contradicts the attack call.
+      - id: g041
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        queued:
+          - {id: drs, rule: drs_fault, text: "DRS fault. Don't rely on it"}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {drs: next, attack: now}
+        order: [attack, drs]
+        notes: "The DRS fault changes how to attack, so it speaks first. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
+      - id: g042
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 35}
+        currently_speaking: {id: lockup, rule: lockup_front, text: Locking the fronts into Turn 1, age_s: 0.5}
+        queued:
+          - {id: ers, rule: ers_fault, text: ERS fault. Hold position}
+        grade: {lockup: drop, ers: now}
+        order: [ers]
+        notes: The ERS fault cuts the coaching line.
+      - id: g043
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine}
+          - {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful, age_s: 1.0}
+        grade: {yellow: now, reply: next}
+        order: [yellow, reply]
+        notes: Safety first, then the answer.
+      - id: g044
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        currently_speaking: {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 0.5}
+        queued:
+          - {id: reply, kind: reply, menu_item: plan, rule: menu_reply, text: Plan is one stop}
+        grade: {life: now, reply: next}
+        order: [reply]
+        notes: The tyre life line finishes and the plan answer follows.
+      - id: g045
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25}
+        queued:
+          - {id: reply, kind: reply, menu_item: weather, rule: menu_reply, text: Rain expected in ten minutes}
+          - {id: box, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {box: now, reply: next}
+        order: [box, reply]
+        notes: The stop decision speaks first and the weather answer follows.
+      - id: g046
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 40}
+        queued:
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap behind is one point two, age_s: 4.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, reply: drop}
+        order: [defend]
+        notes: The car is already in DRS range, so the older gap answer is stale.
+      - id: g047
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, laps_remaining: 20, battle_mode: attacking, battle_pass_prob: 0.2}
+        thresholds: {battle_patience_laps: 2, battle_attack_prob_min: 0.4}
+        queued:
+          - {id: patience, rule: battle_patience, text: Hard to pass. Save tyres}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it", age_s: 1.0}
+        grade: {patience: now, attack: drop}
+        order: [patience]
+        notes: Low pass chance contradicts the attack call.
+      - id: g048
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 16, session_uid: 3}
+        queued:
+          - {id: lost, rule: overtake_lost, text: Overtake gone. Get it back, age_s: 1.0}
+          - {id: attack, rule: battle_attack, text: "You're in range. Go for it"}
+        grade: {lost: now, attack: now}
+        order: ["lost|attack"]
+        rotate: [[lost, attack]]
+        notes: Both lines say attack, so one speaks and the pick rotates.
+      - id: g049
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        currently_speaking: {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 0.5}
+        queued:
+          - {id: attack, rule: battle_attack, text: "You're in range ahead. Go for it"}
+        grade: {defend: now, attack: next}
+        order: [attack]
+        notes: The defend call finishes and the attack call follows.
+      - id: g050
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 49, laps_remaining: 1, gap_ahead_s: 0.5}
+        queued:
+          - {id: life, rule: tyre_life, text: One lap in the tyres, age_s: 3.0}
+          - {id: attack, rule: battle_attack, text: Last lap. Go for it}
+        grade: {attack: now, life: drop}
+        order: [attack]
+        notes: On the last lap the tyre life line has no action left.
+      - id: g051
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        queued:
+          - {id: rain, rule: rain_falling, hypothetical: true, kind: tactical, priority: 2, text: Rain in sector two, age_s: 1.0}
+          - {id: lockup, rule: lockup_rear, text: Rear locking into Turn 9, age_s: 2.0}
+        grade: {rain: now, lockup: drop}
+        order: [rain]
+        notes: Rain changes the grip, so the lockup coaching drops.
+      - id: g052
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        currently_speaking: {id: plan, rule: plan_status, text: Plan is one stop, age_s: 0.5}
+        queued:
+          - {id: rain, rule: rain_heavy, hypothetical: true, kind: execution, text: Heavy rain coming. Box for wets}
+        grade: {plan: drop, rain: now}
+        order: [rain]
+        notes: The wet stop call contradicts the plan line and cuts it.
+      - id: g053
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 20}
+        queued:
+          - {id: rain, rule: weather_to_dry, text: Rain easing, age_s: 2.0}
+          - {id: boxd, rule: box_now, text: Box for dries this lap}
+        grade: {boxd: now, rain: drop}
+        order: [boxd]
+        notes: The stop for dries already says the track is drying, so the rain line is redundant. Encoded on weather_to_dry because rain_falling has no live telemetry field.
+      - id: g054
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Five-second penalty. Serve at the stop, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres}
+        grade: {pen: now, life: next}
+        order: [pen, life]
+        notes: Penalty serving is pit strategy and goes before the tyre life line.
+      - id: g055
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 15}
+        currently_speaking: {id: wear, rule: wear_rears, text: Rears at thirty percent, age_s: 0.5}
+        queued:
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap}
+        grade: {wear: now, pen: next}
+        order: [pen]
+        notes: No pit geometry, so the wear line finishes and the penalty call follows.
+      - id: g056
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44, laps_remaining: 8}
+        queued:
+          - {id: pen, rule: penalty, text: You have a five-second penalty. We need a gap}
+          - {id: push, rule: battle_attack, text: Push now. Build the gap, age_s: 1.0}
+        grade: {pen: now, push: next}
+        order: [pen, push]
+        notes: The penalty explains the push, so it speaks first. Encoded on penalty because penalty_gap has no live telemetry field.
+      - id: g057
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 1}
+        queued:
+          - {id: lost1, rule: lap1_lost, text: Down two on lap one, age_s: 1.0}
+          - {id: gained, rule: lap1_gained, text: Up two on lap one}
+        grade: {lost1: merge, gained: merge}
+        order: [digest]
+        notes: "The two lap one lines cancel out, so nothing speaks. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
+      - id: g058
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 2}
+        queued:
+          - {id: drsok, rule: drs_enabled, hypothetical: true, kind: info, text: DRS enabled}
+          - {id: gained, rule: lap1_gained, text: Up two on lap one, age_s: 1.0}
+        grade: {drsok: merge, gained: merge}
+        order: [digest]
+        notes: Two short info lines merge into one digest.
+      - id: g059
+        source: graded
+        session: race
+        scene: {phase: finished, lap_num: 50}
+        queued:
+          - {id: finish, rule: finish_held, text: "P2, good job"}
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres were gone, age_s: 2.0}
+        grade: {finish: now, reply: next}
+        order: [finish, reply]
+        notes: The finish line speaks first and the answer the driver asked for follows.
+      - id: g060
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 49, laps_remaining: 1}
+        queued:
+          - {id: hold, rule: battle_held, text: Hold this gap, age_s: 1.0}
+          - {id: pen, rule: finish_penalty, text: Penalty applied. You finish P6}
+        grade: {pen: now, hold: drop}
+        order: [pen]
+        notes: The penalty result contradicts the hold call on the last lap. Encoded on finish_penalty because penalty_gap has no live telemetry field.
+      - id: g061
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 24}
+        queued:
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 8.0, scene: {phase: racing}}
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {sc: now, defend: drop}
+        order: [sc]
+        notes: The safety car makes the older defend call stale.
+      - id: g062
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 24}
+        queued:
+          - {id: catch, rule: battle_catching, text: "Catching Norris, three tenths a lap", age_s: 10.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 1.0}
+        grade: {life: now, catch: drop}
+        order: [life]
+        notes: The catching line is ten seconds old and the gap may have moved.
+      - id: g063
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 24}
+        policy: {deadlines_s: {1: 5.0, 2: 3.0, 3: 1.5}}
+        queued:
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 4.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, reply: drop}
+        order: [defend]
+        notes: The reply is past its deadline and the defend call speaks.
+      - id: g064
+        source: graded
+        session: race
+        scene: {phase: out_lap, lap_num: 19}
+        queued:
+          - {id: exit, rule: pit_exit_traffic_race, text: Car coming at pit exit. Stay right}
+          - {id: gap, rule: gap_behind_closing, hypothetical: true, text: Undercut threat behind, age_s: 1.0}
+        grade: {exit: now, gap: next}
+        order: [exit, gap]
+        notes: Pit exit traffic first, then the undercut threat.
+      - id: g065
+        source: graded
+        session: race
+        scene: {phase: out_lap, lap_num: 19}
+        queued:
+          - {id: temps, rule: out_lap_temps, hypothetical: true, kind: info, text: Tyres cold. Build temp}
+          - {id: traffic, rule: pit_exit_traffic_race, text: Car coming at pit exit, age_s: 1.0}
+        grade: {traffic: now, temps: next}
+        order: [traffic, temps]
+        notes: Pit exit traffic first, then the out lap tyre temps.
+      - id: g066
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 21, laps_remaining: 20, pit_plan_gain_s: 1.0, pit_plan_risk: 0.2, overcut_s: 0.8, laps_of_pace: 12.0, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 2.0}
+        grade: {box: now, stay: drop, boxn: drop}
+        order: [box]
+        notes: The box call is the newest decision and the two older calls it contradicts drop.
+      - id: g067
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car, age_s: 2.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: pen, rule: serve_penalty, text: Serve the penalty this lap, age_s: 1.0}
+        grade: {sc: now, box: next, pen: queue}
+        order: [sc, box, pen]
+        notes: Safety speaks first even with pit entry under a second away, then the box call and the penalty.
+      - id: g068
+        source: graded
+        session: race
+        scene: {phase: red_flag, lap_num: 30, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box", age_s: 2.0}
+          - {id: red, rule: red_flag, text: Red flag. Box this lap}
+        grade: {red: now, box: drop}
+        order: [red]
+        notes: The red flag makes the earlier box call redundant.
+      - id: g069
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save, age_s: 1.0}
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you three tenths}
+        grade: {mistakes: now, saved: drop}
+        order: [mistakes]
+        notes: One coaching line for the same moment, and the one with the cost is more useful.
+      - id: g070
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 12, gap_ahead_s: 0.9}
+        queued:
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you three tenths, age_s: 1.0}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend}
+        grade: {defend: now, mistakes: drop}
+        order: [defend]
+        notes: Coaching drops in a battle.
+      - id: g071
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: fuel, rule: fuel_marginal, text: Fuel is tight, age_s: 1.0}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 3.0}
+        grade: {fuel: merge, life: merge}
+        order: [digest]
+        notes: Two info lines with no action merge into one digest on a quiet stretch.
+      - id: g072
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10, gap_ahead_s: 3.0, gap_behind_s: 4.0}
+        queued:
+          - {id: life, rule: tyre_life, text: "Two laps in the tyres, they're going", age_s: 1.0}
+          - {id: plan, rule: plan_status, text: "Plan is one stop, lap thirty", age_s: 2.0}
+        grade: {life: merge, plan: merge}
+        order: [digest]
+        notes: "The tyre news contradicts the plan line. Aligned with g074: on a quiet stretch the two lines merge into one digest."
+      - id: g073
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 10}
+        queued:
+          - {id: wear, rule: wear_fronts, text: Fronts at forty percent, age_s: 1.0}
+          - {id: wear2, rule: wear_rears, text: Rears at thirty percent}
+        grade: {wear: merge, wear2: merge}
+        order: [digest]
+        notes: Two wear lines merge into one.
+      - id: g074
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 26, gap_ahead_s: 4.0, gap_behind_s: 5.0}
+        queued:
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 6.0}
+          - {id: plan, rule: plan_status, text: Plan is one stop, age_s: 4.0}
+          - {id: fuel, rule: fuel_spare, text: Fuel is fine, age_s: 2.0}
+          - {id: pace, rule: battle_catching, text: Two tenths off the cars ahead, age_s: 1.0}
+        grade: {life: merge, plan: merge, fuel: merge, pace: merge}
+        order: [digest]
+        notes: Four low value lines on a quiet stretch merge into one digest.
+      - id: g075
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 18, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4400.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: box2, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {box2: now, box: merge}
+        order: [box2]
+        notes: Identical box calls merge into the first one.
+      - id: g076
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 33}
+        queued:
+          - {id: blue, rule: blue_flag, text: Blue flags. Let him by, age_s: 1.0}
+          - {id: blue2, rule: blue_flag, text: Blue flags. Let him by}
+        grade: {blue: now, blue2: merge}
+        order: [blue]
+        notes: Identical blue flag calls merge into the first one.
+      - id: g077
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 9}
+        currently_speaking: {id: fuel, rule: fuel_marginal, text: "Fuel is tight, lift and coast", age_s: 0.5}
+        queued:
+          - {id: saved, rule: saved_moment, text: Nice save}
+        grade: {fuel: now, saved: drop}
+        order: []
+        notes: The fuel instruction finishes and the praise drops.
+      - id: g078
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 9}
+        currently_speaking: {id: box, rule: box_now, text: "Box, box this lap", age_s: 0.5}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, stale: true}
+        grade: {box: now, boxn: drop}
+        order: []
+        notes: The stale box in two laps call contradicts the box call on air.
+      - id: g079
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 22, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 3000.0, speed_kmh: 216.0}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+          - {id: ers, rule: ers_fault, text: "ERS fault. We're checking", age_s: 1.0}
+        grade: {ers: now, box: next}
+        order: [ers, box]
+        notes: The ERS fault speaks first with pit entry half a minute away.
+      - id: g080
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 5}
+        queued:
+          - {id: contact, rule: contact_check, text: Contact there. Checking}
+          - {id: lap1, rule: lap1_gained, text: Up three on lap one. Nice, age_s: 1.0}
+        grade: {contact: now, lap1: drop}
+        order: [contact]
+        notes: Contact first and the lap one line has no value after it.
+      - id: g081
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 28}
+        queued:
+          - {id: vsc, rule: vsc_deployed, text: Virtual safety car}
+          - {id: reply, kind: reply, menu_item: gap, rule: menu_reply, text: Gap to P3 is four seconds, age_s: 1.0}
+        grade: {vsc: now, reply: next}
+        order: [vsc, reply]
+        notes: Safety first, then the answer.
+      - id: g082
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 28, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4600.0, speed_kmh: 216.0}
+        queued:
+          - {id: vsc, rule: vsc_deployed, text: Virtual safety car}
+          - {id: box, rule: box_now, text: "Box, box. Cheap stop", age_s: 1.0}
+        grade: {vsc: now, box: next}
+        order: [vsc, box]
+        notes: Safety first even near pit entry, then the cheap stop.
+      - id: g083
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36}
+        queued:
+          - {id: slow, rule: slow_car_ahead, text: Slow car ahead. Careful}
+          - {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 1.0}
+        grade: {slow: now, reply: next}
+        order: [slow, reply]
+        notes: Safety first, then the answer.
+      - id: g084
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {reply: now, box: next}
+        order: [box]
+        notes: No pit geometry, so the answer finishes and the box call follows.
+      - id: g085
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 36, track_length_m: 5000.0, pit_entry_m: 4700.0, lap_distance: 4650.0, speed_kmh: 216.0}
+        currently_speaking: {id: reply, kind: reply, menu_item: tyres, rule: menu_reply, text: Tyres are fine, age_s: 0.5}
+        queued:
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {reply: drop, box: now}
+        order: [box]
+        notes: Pit entry is under a second away, so the box call cuts the answer.
+      - id: g086
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 11}
+        queued:
+          - {id: mistakes, rule: cool_mistakes, text: Turn 6 cost you two tenths, age_s: 1.0}
+          - {id: crawl, rule: slow_car_crawling, text: "Slow car ahead, crawling"}
+        grade: {crawl: now, mistakes: drop}
+        order: [crawl]
+        notes: Safety first and coaching drops.
+      - id: g087
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 41}
+        queued:
+          - {id: manage, rule: battle_manage, text: Keep the gap}
+          - {id: fuel, rule: fuel_short, hypothetical: true, kind: safety, text: "Fuel critical, we may not finish", age_s: 1.0}
+        grade: {fuel: now, manage: drop}
+        order: [fuel]
+        notes: Fuel critical contradicts the keep the gap call.
+      - id: g088
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 41}
+        currently_speaking: {id: manage, rule: battle_manage, text: Keep the gap, age_s: 0.5}
+        queued:
+          - {id: fuel, rule: fuel_short, hypothetical: true, kind: safety, text: "Fuel critical, lift and coast now"}
+        grade: {manage: drop, fuel: now}
+        order: [fuel]
+        notes: Fuel critical cuts the keep the gap call.
+      - id: g089
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 7}
+        queued:
+          - {id: boosted, rule: boost_left_on, text: Boost still on. Turn it off}
+          - {id: fuel, rule: fuel_marginal, text: Fuel is tight, age_s: 1.0}
+        grade: {boosted: now, fuel: next}
+        order: [boosted, fuel]
+        notes: Boost left on is the immediate action and the fuel line follows.
+      - id: g090
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 50, laps_remaining: 0}
+        queued:
+          - {id: finish, rule: finish_held, text: "P5, held it. Good job"}
+          - {id: pen, rule: finish_penalty, text: Five-second penalty. You finish P7, age_s: 1.0}
+        grade: {pen: now, finish: drop}
+        order: [pen]
+        notes: The penalty changes the result, so the finish line is wrong and drops. Encoded on finish_penalty because penalty_gap has no live telemetry field.
+      - id: g091
+        source: graded
+        session: race
+        scene: {phase: sc, lap_num: 40}
+        queued:
+          - {id: restart, rule: sc_restart, text: Safety car in this lap. Get ready}
+          - {id: drs, rule: drs_enabled, hypothetical: true, kind: info, text: DRS enabled at the restart, age_s: 1.0}
+        grade: {restart: now, drs: next}
+        order: [restart, drs]
+        notes: The restart warning first, then the DRS line the driver can use.
+      - id: g092
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 13}
+        queued:
+          - {id: under, rule: rival_behind_pitted, text: "They're going for the undercut. Cover"}
+          - {id: box, rule: box_now, text: "Box, box", age_s: 1.0}
+        grade: {box: now, under: drop}
+        order: [box]
+        notes: The box call is the cover, so the threat line adds nothing. Encoded on rival_behind_pitted because undercut_threat has no live telemetry field.
+      - id: g093
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 13}
+        queued:
+          - {id: under, rule: rival_behind_pitted, text: "They're going for the undercut"}
+          - {id: stay, rule: overcut_stay_out, text: Stay out. Overcut is on, age_s: 1.0}
+        grade: {stay: now, under: drop}
+        order: [stay]
+        notes: The stay out decision already weighs the threat. Encoded on rival_behind_pitted because undercut_threat has no live telemetry field.
+      - id: g094
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 32}
+        queued:
+          - {id: traffic, rule: traffic_ahead, hypothetical: true, kind: info, text: "Traffic ahead, three cars"}
+          - {id: life, rule: tyre_life, text: About ten laps in the tyres, age_s: 2.0}
+        grade: {traffic: merge, life: merge}
+        order: [digest]
+        notes: Two info lines merge into one digest.
+      - id: g095
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 32}
+        queued:
+          - {id: traffic, rule: traffic_ahead, hypothetical: true, kind: info, text: "Traffic ahead, three cars"}
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 1.0}
+        grade: {boxn: now, traffic: next}
+        order: [boxn, traffic]
+        notes: Pit strategy first, then the traffic line.
+      - id: g096
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44}
+        queued:
+          - {id: charge, rule: energy_under, text: Switch to charge mode}
+          - {id: defend, rule: battle_defend, text: Car behind in DRS. Defend, age_s: 1.0}
+        grade: {defend: now, charge: drop}
+        order: [defend]
+        notes: Charge mode contradicts defending a car in DRS. Encoded on energy_under because charge_mode has no live telemetry field.
+      - id: g097
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 44}
+        currently_speaking: {id: yellow, rule: yellow_ahead, text: Yellow ahead. Careful, age_s: 0.5}
+        queued:
+          - {id: sc, rule: sc_deployed, text: Safety car. Safety car}
+        grade: {yellow: drop, sc: now}
+        order: [sc]
+        notes: The safety car cuts the yellow it replaces.
+      - id: g098
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 21}
+        queued:
+          - {id: boxn, rule: box_in_n, text: Box in two laps, age_s: 4.0}
+          - {id: box, rule: box_now, text: "Box, box"}
+        grade: {box: now, boxn: drop}
+        order: [box]
+        notes: The box call supersedes the box in two laps call.
+      - id: g099
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 46, laps_remaining: 6}
+        queued:
+          - {id: push, rule: battle_attack, text: Six laps left. Push now}
+          - {id: life, rule: tyre_life, text: Two laps in the tyres, age_s: 1.0}
+        grade: {life: next, push: now}
+        order: [push, life]
+        notes: "Two laps of tyre life with six to go contradicts the push call. Encoded on battle_attack because final_push has no live telemetry field. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."
+      - id: g100
+        source: graded
+        session: race
+        scene: {phase: racing, lap_num: 25, gap_ahead_s: 2.0, gap_behind_s: 2.5}
+        queued:
+          - {id: silence, rule: radio_check, hypothetical: true, kind: info, text: Radio check}
+          - {id: life, rule: tyre_life, text: About twelve laps in the tyres, age_s: 1.0}
+        grade: {life: merge, silence: merge}
+        order: [digest]
+        notes: "A radio check is not worth airtime mid race. Regraded to the dispatcher output. Meeting the owner grade needs an id or text match in dispatcher code."

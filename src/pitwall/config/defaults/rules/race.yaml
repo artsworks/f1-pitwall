@@ -155,8 +155,10 @@ rules:
     priority: 1
     urgency: execution
     decision_point: pit_entry
-    outcome_score: "pit_plan_gain_s - 5 * pit_plan_risk"
+    outcome_score: "pit_plan_gain_s - pit_plan_risk"
     conflict_group: pit_or_stay
+    supersedes: [box_in_n]
+    contradicts: [weather_to_inter, weather_to_wet, weather_to_dry, battle_held, tyre_life]
     when: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut') and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
     clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
     still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
@@ -208,7 +210,7 @@ rules:
   - id: overcut_stay_out
     sessions: [race]
     priority: 2
-    outcome_score: "overcut_s if laps_of_pace >= laps_remaining else -99"
+    outcome_score: "overcut_s if laps_of_pace >= th.overcut_laps else -99"
     conflict_group: pit_or_stay
     when: "phase == 'racing' and pit_plan == 'overcut' and pit_plan_confidence >= mode.pit_confidence_min"
     clear_when: "pit_plan != 'overcut'"
@@ -300,6 +302,7 @@ rules:
     clear_when: "fuel_margin_laps >= 0"
     cooldown_s: 120
     cooldown_group: fuel
+    contradicts: [battle_manage]
     requires: [car_status]
     say:
       - "Fuel {fuel_short_laps:.1f} laps short. Lift and coast"
@@ -464,7 +467,7 @@ rules:
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 90
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     requires: [lap_data]
     say:
       - "{rival_ahead_name} ahead, {battle_pace_ahead}. {gap_ahead_s:.1f} to him"
@@ -493,7 +496,7 @@ rules:
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     cooldown_s: 60
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     conflict_group: battle_call
     requires: [lap_data]
     say:
@@ -520,7 +523,7 @@ rules:
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
     cooldown_s: 180
-    cooldown_group: battle
+    cooldown_group: battle_ahead
     conflict_group: battle_call
     requires: [lap_data]
     say:
@@ -537,7 +540,8 @@ rules:
     still_true: "phase == 'racing'"
     still_true: "phase == 'racing'"
     cooldown_s: 60
-    cooldown_group: battle
+    cooldown_group: battle_behind
+    contradicts: [energy_under]
     requires: [lap_data]
     say:
       - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}"
@@ -572,7 +576,7 @@ rules:
     when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 120
-    cooldown_group: battle
+    cooldown_group: battle_behind
     requires: [lap_data]
     say:
       - "{rival_behind_name} behind, {battle_pace_behind}. {gap_behind_s:.1f} gap"
@@ -596,7 +600,6 @@ rules:
     when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
     still_true: "phase == 'racing'"
     cooldown_s: 240
-    cooldown_group: battle
     requires: [lap_data]
     say:
       - "Gaps stable. Manage tyres"
@@ -869,6 +872,7 @@ rules:
     clear_when: "not rival_behind_pitted"
     cooldown_s: 45
     cooldown_group: rival_pit
+    resolved_by: [box_now, overcut_stay_out]
     requires: [lap_data]
     say:
       - "{rival_behind_name} behind has boxed. Watch the undercut"
@@ -1136,6 +1140,7 @@ rules:
     priority: 2
     urgency: info
     flushes_queue: true
+    supersedes: [finish_held, finish_gained, finish_lost]
     when: "phase == 'finished' and penalty_places > 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -1235,6 +1240,7 @@ rules:
     when: "phase == 'racing' and teammate_fight"
     clear_when: "not teammate_fight"
     cooldown_s: 300
+    supersedes: [battle_attack]
     requires: [lap_data, participants]
     say:
       - "It's {teammate_name}. You're free to race, but keep it clean"
@@ -1254,13 +1260,11 @@ rules:
     sessions: [race]
     priority: 1
     urgency: tactical
-    provisional: true
-    worst_case_urgent: true
-    worst_case_when: "contact_damage_major or puncture_corner != ''"
     when: "phase != 'garage' and contact_phase == 'checking' and contact_teammate"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
     requires: [participants]
     say:
       - "Contact with {contact_name}. Checking the car"
@@ -1270,13 +1274,11 @@ rules:
     sessions: [race]
     priority: 1
     urgency: tactical
-    provisional: true
-    worst_case_urgent: true
-    worst_case_when: "contact_damage_major or puncture_corner != ''"
     when: "phase != 'garage' and contact_phase == 'checking' and not contact_teammate"
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
     say:
       - "Contact there. Checking the car"
       - "Contact. Checking damage"
@@ -1297,6 +1299,7 @@ rules:
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_report
+    supersedes: [contact_check, contact_check_teammate]
     requires: [car_damage]
     say:
       - "{contact_damage} damage, {contact_damage_pct} percent. Nothing major"
@@ -1311,6 +1314,7 @@ rules:
     clear_when: "contact_phase == ''"
     cooldown_s: 20
     cooldown_group: contact_report
+    supersedes: [contact_check, contact_check_teammate]
     requires: [car_damage]
     say:
       - "No new damage from that contact"

@@ -6,6 +6,7 @@ from __future__ import annotations
 import collections
 import heapq
 import itertools
+import math
 import random
 import time
 from collections.abc import Callable
@@ -106,7 +107,7 @@ class Call:
 
 @dataclass(order=True)
 class _Queued:
-    sort_key: tuple[int, int, float, float] = field(compare=True)
+    sort_key: tuple[int, int, float, int, float] = field(compare=True)
     call: Call = field(compare=False)
 
 
@@ -173,6 +174,7 @@ class Dispatcher:
         self._defs: dict[str, RuleDefModel] = {}
         self._reply_n: dict[str, int] = {}
         self._focus_until = 0.0
+        self._tactical_focus_until = 0.0
         self._rng = random.Random(0)
         self._rng_uid: int | None = None
         self._digest_prefix_index = 0
@@ -260,7 +262,7 @@ class Dispatcher:
             if suppressed is not None:
                 self._log(cand, snapshot, now, "suppressed", suppressed, call.id)
                 continue
-            if now < self._focus_until and call.urgency in ("info", "coaching"):
+            if self._focus_drops(call, now, snapshot):
                 self._log(cand, snapshot, now, "suppressed", "focus", call.id)
                 continue
             if call.urgency == "reply" and self._apply_reply_absorption(call):
@@ -270,9 +272,11 @@ class Dispatcher:
             self._book_call(call, cand, not_before)
             if call.urgency == "safety" and "systems" not in call.tags:
                 self._focus_until = now + self.policy.focus_window_s
-                for queued in list(self._queue):
-                    if queued.call.urgency in ("info", "coaching"):
-                        self._drop_queued(queued.call.id, "focus")
+            elif call.urgency == "tactical" and "systems" not in call.tags:
+                self._tactical_focus_until = now + self.policy.focus_window_s
+            for queued in list(self._queue):
+                if self._focus_drops(queued.call, now, snapshot):
+                    self._drop_queued(queued.call.id, "focus")
             self._drop_resolved_by(call)
             if call.urgency != "reply":
                 self._apply_reply_absorption(call)
@@ -280,6 +284,19 @@ class Dispatcher:
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
             if call.flushes_queue:
                 self._flush_for(call)
+
+    def _focus_drops(self, call: Call, now: float, snapshot: Snapshot) -> bool:
+        """Focus after a hazard drops coaching and P3 info. A tactical call drops
+        coaching, and in a battle it drops every info call."""
+        safety_focus = now < self._focus_until
+        tactical_focus = now < self._tactical_focus_until
+        if call.urgency == "coaching":
+            return safety_focus or tactical_focus
+        if call.urgency != "info":
+            return False
+        if safety_focus and call.priority == 3:
+            return True
+        return tactical_focus and self._battle_active(snapshot)
 
     def _suppression_reason(
         self, cand: Candidate, snapshot: Snapshot, now: float, allowed_p: set[int]
@@ -392,10 +409,12 @@ class Dispatcher:
         seconds = distance / speed
         return distance, seconds, seconds <= self.policy.decision_near_s
 
-    def _queue_key(self, call: Call) -> tuple[int, int, float, float]:
+    def _queue_key(self, call: Call) -> tuple[int, int, float, int, float]:
         promoted = call.urgency == "execution" and call.promoted
         decision_s = call.decision_s if promoted and call.decision_s is not None else 0.0
-        return (-1 if promoted else call.rank, 0 if promoted else 1, decision_s, call.t)
+        # A call that flushed the queue is the headline: it speaks before the replies it spared.
+        rank = min(call.rank, _URGENCY_RANK["execution"]) if call.flushes_queue else call.rank
+        return (rank, 0 if promoted else 1, decision_s, call.priority, call.t)
 
     def _queue_call(self, call: Call) -> None:
         heapq.heappush(self._queue, _Queued(self._queue_key(call), call))
@@ -436,7 +455,19 @@ class Dispatcher:
             None,
         )
         if queued is None:
-            return False
+            on_air = self._current
+            if (
+                on_air is None
+                or on_air.rule_id != call.rule_id
+                or not self._mid_sentence(on_air, now)
+            ):
+                return False
+            # A duplicate of the line on air folds into it: nothing new to say.
+            on_air.count += 1
+            on_air.merged_ids.append(call.id)
+            cand.inputs = {**cand.inputs, "merged_into": on_air.id}
+            self._log(cand, snapshot, now, "merged", None, call.id)
+            return True
         queued.count += 1
         queued.merged_ids.append(call.id)
         definition = self._defs.get(call.rule_id)
@@ -506,7 +537,7 @@ class Dispatcher:
         for queued in list(self._queue):
             if (
                 queued.call.id != call.id
-                and queued.call.urgency != "safety"
+                and queued.call.urgency not in ("safety", "reply")
                 and not queued.call.flushes_queue
             ):
                 self._drop_queued(queued.call.id, "flushed")
@@ -524,7 +555,10 @@ class Dispatcher:
             reverse_supersedes = (
                 rival_definition is not None and call.rule_id in rival_definition.supersedes
             )
-            if not (same_group or rotates or supersedes or reverse_supersedes):
+            contradicts = rival.rule_id in definition.contradicts or (
+                rival_definition is not None and call.rule_id in rival_definition.contradicts
+            )
+            if not (same_group or rotates or supersedes or reverse_supersedes or contradicts):
                 continue
             holds = True
             if rival.current is not None:
@@ -537,24 +571,13 @@ class Dispatcher:
                 continue
             if reverse_supersedes:
                 return "conflict"
-            call_missed = (
-                call.urgency == "execution"
-                and bool(call.decision_point)
-                and call.decision_s is not None
-                and call.decision_s < self.policy.decision_missed_s
-            )
-            rival_missed = (
-                rival.urgency == "execution"
-                and bool(rival.decision_point)
-                and rival.decision_s is not None
-                and rival.decision_s < self.policy.decision_missed_s
-            )
-            if rival_missed:
-                self._drop_queued(rival.id, "decision_missed")
-            if call_missed:
-                return "decision_missed"
-            if rival_missed:
-                continue
+            if contradicts:
+                # Two lines that contradict each other: the higher priority speaks, then the
+                # higher urgency class, then the newest call.
+                if (call.priority, call.rank) <= (rival.priority, rival.rank):
+                    self._drop_queued(rival.id, "contradicted")
+                    continue
+                return "contradicted"
             if rotates:
                 if self._rng.choice((True, False)):
                     self._drop_queued(rival.id, "rotated")
@@ -567,7 +590,8 @@ class Dispatcher:
                         self._drop_queued(rival.id, "conflict_loser")
                         continue
                     return "conflict_loser"
-            return "conflict"
+            # No score separates them: the newest decision reflects the newest data.
+            self._drop_queued(rival.id, "conflict")
         return None
 
     # -- output --------------------------------------------------------------
@@ -576,7 +600,7 @@ class Dispatcher:
         return (
             "reply" not in call.tags
             and "menu" not in call.tags
-            and now - call.trigger_t > self.policy.max_call_age_s
+            and now - call.trigger_t >= self.policy.max_call_age_s
         )
 
     def note_dropped(self, call_id: str) -> None:
@@ -629,7 +653,7 @@ class Dispatcher:
             if waits_for_straight:
                 deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
             deadline_start = max(call.t, call.not_before, call.ready_t)
-            if (now - deadline_start) * 1000 > deadline_ms:
+            if (now - deadline_start) * 1000 >= deadline_ms:
                 if not prompt:
                     self._log_call(call, "suppressed", "deadline")
                 if snap is not None:
@@ -666,13 +690,13 @@ class Dispatcher:
                     q.call.ready_t = max(q.call.ready_t, speech_end)
                 held.append(q)
                 continue
-            if call.urgency == "info" and self._digest_allowed(call, now, on_straight):
+            if self._digest_member(call) and self._digest_allowed(call, now, on_straight):
                 due_info = [call]
                 due_info.extend(
                     item.call
                     for item in self._queue
                     if item.call.id != call.id
-                    and item.call.urgency == "info"
+                    and self._digest_member(item.call)
                     and self._digest_call_ready(item.call, now, on_straight)
                 )
                 if len(due_info) >= 2:
@@ -686,7 +710,14 @@ class Dispatcher:
                 interrupted = self._current
                 for sink in self.sinks:
                     sink.cancel(interrupted.id)
-                if "reply" in interrupted.tags and "menu" not in interrupted.tags:
+                keeps_place = ("reply" in interrupted.tags and "menu" not in interrupted.tags) or (
+                    interrupted.urgency == "execution" and interrupted.promoted
+                )
+                if (
+                    keeps_place
+                    and self._effective_class(call) == "safety"
+                    and not call.flushes_queue
+                ):
                     if not interrupted.requeued:
                         interrupted.requeued = True
                         interrupted.t = now
@@ -767,13 +798,13 @@ class Dispatcher:
         new_class = self._effective_class(incoming)
         current_class = self._effective_class(current)
         if new_class == "safety":
-            return not (current_class == "execution" and current.promoted)
+            return True
         if new_class == "execution":
-            if current_class in ("info", "coaching"):
-                return True
-            return current_class == "tactical" and incoming.promoted
+            if incoming.promoted:
+                return current_class in ("reply", "tactical", "info", "coaching")
+            return current_class in ("info", "coaching") and incoming.priority < current.priority
         if new_class == "reply":
-            return current_class in ("info", "coaching")
+            return False
         if new_class == "tactical":
             return current_class in ("info", "coaching")
         return False
@@ -807,7 +838,7 @@ class Dispatcher:
         if call.priority == 3 and self.policy.p3_straight_only:
             deadline_ms += int(self.policy.p3_straight_wait_s * 1000)
         deadline_start = max(call.t, call.not_before, call.ready_t)
-        if (now - deadline_start) * 1000 > deadline_ms:
+        if (now - deadline_start) * 1000 >= deadline_ms:
             return False
         if now < call.not_before:
             return False
@@ -821,17 +852,33 @@ class Dispatcher:
                 pass
         return not (call.location_ref and self._coherence_conflict(call, now))
 
+    def _quiet_stretch(self, snapshot: Snapshot | None) -> bool:
+        if snapshot is None:
+            return False
+        return all(
+            math.isfinite(gap) and gap > self.policy.digest_tactical_gap_s
+            for gap in (snapshot.gap_ahead_s, snapshot.gap_behind_s)
+        )
+
+    def _digest_member(self, call: Call) -> bool:
+        """Info always joins a digest. A tactical line joins on a quiet stretch."""
+        if call.urgency == "info":
+            return True
+        return call.urgency == "tactical" and self._quiet_stretch(self.latest_snapshot)
+
     def _digest_allowed(self, call: Call, now: float, on_straight: bool) -> bool:
         if self._battle_active(self.latest_snapshot):
             return False
-        if any(item.call.rank <= 3 for item in self._queue):
+        if any(item.call.rank <= 3 and not self._digest_member(item.call) for item in self._queue):
             return False
         return self._digest_call_ready(call, now, on_straight)
 
     def _make_digest(self, calls: list[Call], now: float, snapshot: Snapshot | None) -> Call:
         all_calls = sorted(calls, key=lambda item: item.t, reverse=True)
-        maximum = self.policy.digest_max_items
-        selected = all_calls[:maximum]
+        # The cap counts info briefs. Tactical lines carry an action and always stay in.
+        info_calls = [item for item in all_calls if item.urgency == "info"]
+        kept_info = set(id(item) for item in info_calls[: self.policy.digest_max_items])
+        selected = [item for item in all_calls if item.urgency != "info" or id(item) in kept_info]
         selected_ids = {call.id for call in selected}
         grouped_ids = {call.id for call in all_calls}
         self._queue = [item for item in self._queue if item.call.id not in grouped_ids]
@@ -979,6 +1026,7 @@ class Dispatcher:
         self._current = None
         self.quiet_until = None
         self._focus_until = 0.0
+        self._tactical_focus_until = 0.0
         self._rng = random.Random(session_uid)
         self._rng_uid = session_uid
         self._digest_prefix_index = 0

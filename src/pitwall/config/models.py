@@ -74,13 +74,15 @@ class PolicySettings(BaseModel):
     p3_straight_only: bool = True
     p3_straight_wait_s: float = 8.0  # extra deadline while a P3 call waits for a straight
     decision_near_s: float = 12.0
-    decision_missed_s: float = 2.0
     outcome_tie_eps: float = 0.05
     resolved_window_s: float = 30.0
     focus_window_s: float = 10.0
     coherence_window_s: float = 15.0
     digest_battle_gap_s: float = 1.0
     digest_max_items: int = 3
+    digest_tactical_gap_s: float = (
+        2.0  # tactical lines join a digest only with every rival further than this
+    )
     digest_prefixes: list[str] = Field(
         default_factory=lambda: [
             "Also: ",
@@ -310,6 +312,9 @@ class RuleDefModel(BaseModel):
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     conflict_group: str = ""  # queued calls in one group: only the one still true is kept
     supersedes: list[str] = Field(default_factory=list)  # rule ids this call replaces in the queue
+    contradicts: list[str] = Field(
+        default_factory=list
+    )  # rule ids that never speak alongside this call
     decision_point: Literal["", "pit_entry", "line"] = ""
     outcome_score: str | None = None
     rotate_with: list[str] = Field(default_factory=list)
@@ -390,7 +395,13 @@ class Settings(BaseModel):
     def _known_supersedes(self) -> Settings:
         rule_ids = {rule.id for rule in self.rules}
         for rule in self.rules:
-            for field_name in ("supersedes", "rotate_with", "resolved_by", "escalates"):
+            for field_name in (
+                "supersedes",
+                "contradicts",
+                "rotate_with",
+                "resolved_by",
+                "escalates",
+            ):
                 for referenced_id in getattr(rule, field_name):
                     if referenced_id not in rule_ids:
                         raise ValueError(
