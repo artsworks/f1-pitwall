@@ -143,6 +143,8 @@ article:has(.landing){max-width:none}
 .next a em{display:inline-block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-bottom:6px}
 .foot{font-size:13px;color:var(--muted);margin-top:30px}
 .shot .frame{position:relative;display:block}
+.video{max-width:900px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+.video iframe{display:block;width:100%;height:100%;border:0}
 .shot .open{display:block;padding:8px 14px;border-top:1px solid #222;color:#e6e8eb;font-size:13px;font-weight:600;text-align:right;transition:color .2s}
 .hero .shot:hover .open,.hero .shot:focus-visible .open{color:#ff5a4f}
 .shot .live{position:absolute;left:14px;bottom:14px;max-width:calc(100% - 28px);display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:rgba(10,10,10,.85);border:1px solid rgba(255,255,255,.14);color:#f2f2f2;font:13px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden}
@@ -239,6 +241,17 @@ article:has(.landing){max-width:none}
 </div>
 <script src="assets/marked.min.js"></script>
 <script>
+const DEMO = {
+  id: "QId9M1ToDiE",
+  title: "f1-pitwall demo: a full grand prix weekend",
+  description: "Practice, qualifying and race with f1-pitwall making the calls."
+};
+const DEMO_URL = `https://youtu.be/${DEMO.id}`, DEMO_EMBED = `https://www.youtube-nocookie.com/embed/${DEMO.id}`;
+document.head.insertAdjacentHTML("beforeend", `<script type="application/ld+json">${JSON.stringify({
+  "@context": "https://schema.org", "@type": "VideoObject", name: DEMO.title, description: DEMO.description,
+  thumbnailUrl: `https://i.ytimg.com/vi/${DEMO.id}/maxresdefault.jpg`, embedUrl: DEMO_EMBED, contentUrl: DEMO_URL
+})}<\/script>`);
+document.querySelector("#content .cta").insertAdjacentHTML("beforeend", `<a class="btn" href="${DEMO_URL}">Watch the demo ↗</a>`);
 const GROUPS = [
   ["Start here", [
     ["status", "Status", "M0–M4 progress, current features, calibration evidence and open gaps."],
@@ -383,6 +396,12 @@ function overview() {
   const tall = f => f.startsWith("phone-");
   $("#content").innerHTML = `<div class="landing">
     ${HERO}
+
+    <section class="reveal">
+    <h2>Watch it work</h2>
+    <p class="lede">A full grand prix weekend: practice, qualifying and race.</p>
+    <div class="video"><iframe src="${DEMO_EMBED}" title="${DEMO.title}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+    </section>
 
     <section class="reveal">
     <h2>Screens</h2>
