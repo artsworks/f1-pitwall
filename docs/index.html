@@ -3,8 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>f1-pitwall · docs and status</title>
-<meta name="description" content="Documentation and current build status for f1-pitwall, a race engineer for F1 26.">
+<title>f1-pitwall · a race engineer for F1 26</title>
+<meta name="description" content="A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.">
+<link rel="canonical" href="https://pitwall.arthurku.com/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="f1-pitwall">
+<meta property="og:title" content="f1-pitwall · a race engineer for F1 26">
+<meta property="og:description" content="A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.">
+<meta property="og:url" content="https://pitwall.arthurku.com/">
+<meta property="og:image" content="https://pitwall.arthurku.com/assets/screens/race-box-call.webp">
+<meta property="og:image:width" content="1920">
+<meta property="og:image:height" content="1080">
+<meta property="og:image:alt" content="The race dashboard during a box call">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="f1-pitwall · a race engineer for F1 26">
+<meta name="twitter:description" content="A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.">
+<meta name="twitter:image" content="https://pitwall.arthurku.com/assets/screens/race-box-call.webp">
+<meta name="twitter:image:alt" content="The race dashboard during a box call">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "f1-pitwall",
+  "description": "A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Windows",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "url": "https://pitwall.arthurku.com/",
+  "codeRepository": "https://github.com/artsworks/f1-pitwall",
+  "image": "https://pitwall.arthurku.com/assets/screens/race-box-call.webp"
+}
+</script>
+<script>if (matchMedia("(prefers-reduced-motion: no-preference)").matches) document.documentElement.classList.add("motion");</script>
 <style>
 :root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4;--ok:#17803d;--built:#b45309}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff;--ok:#4ade80;--built:#fbbf24}}
@@ -171,7 +202,7 @@ article:has(.landing){max-width:none}
 @media print{header,nav,.pager,.toc{display:none}.reveal,.reveal *{opacity:1!important;transform:none!important}.layout{display:block}main{padding:0}}
 </style>
 </head>
-<body>
+<body class="home">
 <header>
   <button id="menu" aria-label="Toggle document list" aria-expanded="false">☰</button>
   <a class="brand" href="#/">f1<span>-</span>pitwall</a>
@@ -183,7 +214,24 @@ article:has(.landing){max-width:none}
     <input id="filter" type="search" placeholder="Filter documents…" aria-label="Filter documents">
     <div id="navlist"></div>
   </nav>
-  <main><article id="content" aria-live="polite"></article></main>
+  <main>
+  <noscript><p>A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset. The docs need JavaScript. Read them on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p></noscript>
+  <article id="content" aria-live="polite"><div class="landing">
+    <section class="hero reveal">
+      <div>
+      <h1>f1<span>-</span>pitwall</h1>
+      <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
+      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard and on your phone.</p>
+      <div class="cta">
+        <a class="btn primary" href="#/getting-started">Getting started</a>
+        <a class="btn" href="mockups/dashboard-reimagined.html">Dashboard mockup</a>
+        <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
+      </div>
+      </div>
+      <a class="shot" href="mockups/dashboard-reimagined.html" aria-label="Open the interactive dashboard mockup"><span class="frame"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"><span class="live" aria-hidden="true"><span class="dot"></span><b>RADIO</b><span class="say"></span><span class="caret"></span></span></span><span class="open" aria-hidden="true">Open the interactive mockup ↗</span></a>
+    </section>
+  </div></article>
+  </main>
 </div>
 <script src="assets/marked.min.js"></script>
 <script>
@@ -250,8 +298,9 @@ const NAV = [
   ["Design", grp("Core design")],
   ["Reference", [...grp("In depth"), ...grp("Reference and provenance")]]
 ];
+const HERO = $("#content .hero").outerHTML;
+$("#content").replaceChildren();
 const motion = matchMedia("(prefers-reduced-motion: no-preference)").matches;
-if (motion) document.documentElement.classList.add("motion");
 const HUB_ONLY = new Set(["12-driver-input", "21-voice-command", "15-dashboard-design", "19-guest-tower", "22-setup-advisor", "16-debrief-design", "13-league-multiplayer",
   "06-direction-changes", "23-synthetic-recordings", "25-report-analysis-prompt", "10-angles-not-yet-considered", "11-open-questions", "14-adversarial-review", "00-review-of-v1"]);
 const ADRS = grp("Decisions (ADRs)").filter(d => d[0] !== "adr/README");
@@ -329,19 +378,7 @@ function overview() {
   ];
   const tall = f => f.startsWith("phone-");
   $("#content").innerHTML = `<div class="landing">
-    <section class="hero reveal">
-      <div>
-      <h1>f1<span>-</span>pitwall</h1>
-      <p class="pitch">A race engineer for F1 26. It reads telemetry, decides what's worth saying, and says it over your headset.</p>
-      <p class="lede">f1-pitwall runs on the game PC, keeps a model of the session, and shows the same calls on a second-monitor dashboard and on your phone.</p>
-      <div class="cta">
-        <a class="btn primary" href="#/getting-started">Getting started</a>
-        <a class="btn" href="mockups/dashboard-reimagined.html">Dashboard mockup</a>
-        <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
-      </div>
-      </div>
-      <a class="shot" href="mockups/dashboard-reimagined.html" aria-label="Open the interactive dashboard mockup"><span class="frame"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"><span class="live" aria-hidden="true"><span class="dot"></span><b>RADIO</b><span class="say"></span><span class="caret"></span></span></span><span class="open" aria-hidden="true">Open the interactive mockup ↗</span></a>
-    </section>
+    ${HERO}
 
     <section class="reveal">
     <h2>Screens</h2>
