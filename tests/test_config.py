@@ -173,3 +173,27 @@ def test_packaged_track_overlays_validate() -> None:
     for path in paths:
         overlay = TrackOverlay.model_validate(yaml.safe_load(path.read_text()))
         assert overlay.track_id == int(path.stem)
+
+
+def test_zero_pressure_size_large_override_keeps_last_good() -> None:
+    store = ConfigStore()
+    assert store.current().thresholds["pressure_size_large_c"] == 6
+    assert store.set_override(("thresholds", "pressure_size_large_c"), 0) is False
+    assert store.last_error is not None and "pressure_size_large_c" in store.last_error
+    assert store.current().thresholds["pressure_size_large_c"] == 6
+    assert store.reload() is False
+    assert store.last_error is None
+    assert store.current().thresholds["pressure_size_large_c"] == 6
+
+
+def test_pressure_size_medium_above_large_is_rejected() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="pressure_size_medium_c"):
+        Settings(thresholds={"pressure_size_medium_c": 7.0, "pressure_size_large_c": 6.0})
+    with pytest.raises(ValidationError, match="pressure_size_medium_c"):
+        Settings(thresholds={"pressure_size_medium_c": -1.0})
+    with pytest.raises(ValidationError, match="pressure_size_large_c"):
+        Settings(thresholds={"pressure_size_large_c": 2.0})
+    Settings(thresholds={"pressure_size_medium_c": 0.0, "pressure_size_large_c": 0.5})

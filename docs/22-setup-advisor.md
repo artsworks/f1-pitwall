@@ -2,7 +2,7 @@
 
 This proposal develops the "second product" identified in item 9 of
 `10-angles-not-yet-considered.md`: setup advice from stored tyre, wear, and pace history,
-in three phase-aware modes. **Status: A1 to A4 implemented (PR #37). A5 not started.**
+in three phase-aware modes. **Status: A1 to A5 implemented.**
 Numbered 22 because `17-quali-run-plan.md` uses 17.
 
 Current setup advice covers tyre pressure (`state/pressure.py`: core temperature versus a
@@ -55,8 +55,9 @@ claims may not transfer. Anything sourced only from F1 23–25 is capped at **me
 - **Low.** One source, conflicting sources, or plausible real-car physics without
   game-specific evidence.
 
-The advisor only *acts* (emits a delta) on high/medium rows. Low rows can appear in the
-debrief as "try this" experiments, flagged as such, and graduate via the learning loop (§6).
+The advisor emits high- and medium-confidence recommendations at their regular tiers.
+It emits low-confidence candidates as experiments in live modes. The dashboard marks them
+TRY, and the radio does not speak them. The learning loop can later promote an experiment (§6).
 
 ### 1.2 Parameter effects
 
@@ -117,6 +118,9 @@ always quoting the current value in calls.
 on-throttle high (R); front wing at the stop medium. The first practice → quali → race
 weekend recorded with the advisor should be used to confirm the matrix: any locked field
 that changes while `parc_ferme_rules = 1` after the first qualifying out-lap is a doc bug.
+
+Setup and pressure advice do not read mindset values yet. When wired in, aggressive mode
+must recommend larger setup changes than balanced mode.
 
 Session-type → allowed changes (`m_sessionType` mapping from `03-strategy.md`; sprint
 shootout 10–14 follows the qualifying column, as in the rules; 18 time trial is out of
@@ -231,8 +235,8 @@ tracks. Pace enters only at matched fuel and tyre age (§6.3).
 | Mode | When | Output | Change budget | Params in scope |
 |------|------|--------|---------------|-----------------|
 | **Debrief** | after a practice session (1–4), before the next; also after quali when parc fermé is off | ranked setup deltas in the debrief (§07 action rules of `16-debrief-design.md`) and `pitwall setup` CLI | one *primary* change per next run, up to two alternatives listed; linked pairs (e.g. front+rear springs) count as one | all with conf ≥ medium; low-confidence ones as "experiment" |
-| **Garage** | `driver_status == IN_GARAGE` in 1–9 (and 10–14) | one row in the pit board `SETUP` block + optional single radio line on entering the garage | exactly one parameter | practice: all ≥ medium; quali: parc fermé matrix only (front wing, on-throttle, bias, pressures) |
-| **Race** | on track, 15–17 | radio + dashboard calls through the existing dispatcher, P3 | one per call, rate-limited by rule cooldown and per-lap budget | brake bias, on-throttle diff; front wing only as a pit-stop request when a stop is already planned |
+| **Garage** | `driver_status == IN_GARAGE` in 1–9 (and 10–14) | pit-board `SETUP` rows, with low-confidence advice marked TRY; one optional radio line | exactly one parameter | practice: all ≥ medium; quali: parc fermé matrix only (front wing, on-throttle, bias, pressures) |
+| **Race** | on track, 15–17 | radio calls and dashboard BB/DIFF arrows; low-confidence advice is marked TRY | one per call, rate-limited by rule cooldown and per-lap budget | brake bias, on-throttle diff; front wing only as a pit-stop request when a stop is already planned |
 
 **Debrief.** Built from SQLite only, after the session, so it can use whole stints:
 long runs (≥ `setup_min_run_laps` green laps) are grouped by setup state (§5), `J` and each
@@ -252,24 +256,19 @@ says to increase pressure (S3, S7). The rules make the direction conditional, §
 One primary change per run follows the one-change-at-a-time method in S10 and is what
 makes the learning loop able to attribute the result.
 
-**Garage.** Same tables, evaluated on the last run of this session only, filtered by the
-matrix and by `parc_ferme_rules`. The card shows current value → proposed value, the
-triggering evidence, the expected trade-off, and "locked by parc fermé" for anything the
-rules would otherwise have suggested (so the driver knows why it's missing). Pressure
+**Garage.** The advisor evaluates the last run of this session and filters recommendations
+by the setup matrix and `parc_ferme_rules`. The pit board shows the current and proposed
+values, evidence, and the expected trade-off. It marks low-confidence advice as TRY.
+It also shows "locked by parc fermé" when a rule suggests a locked parameter. Pressure
 advice from `state/pressure.py` becomes one rule family here rather than a separate path.
 
-**Where it renders: the garage pit board, not its own screen.** The dashboard does not have a
-separate car-setup page; it was dropped while the dashboard was slimmed down (M4), because
-nothing yet produces full-setup advice to put on it. The pit board already
-shows the current setup in game-menu order in its `SETUP` block (`web/app.js`
-`SETUP_GROUPS`/`renderSetup`, `docs/15-dashboard-design.md` §10). Its rows already carry
-`todo`/`done`/`no change` states for the pressure target. Garage-mode cards reuse that
-block: the recommended parameter's row shows `current → proposed` plus a one-line reason, and
-parc-fermé-locked rows get a `locked` tag. The full evidence payload goes in the debrief,
-not on the board. The layout constraint is to fit into the existing pit-board grid (release
-light, per-corner pressure, next run, setup) without adding a page or pushing those zones
-off a 1080p/tablet screen. The ADR 0009 second opinion, when enabled, is a single labelled
-row in the same block.
+**Dashboard display.** Garage advice appears in the pit-board `SETUP` block
+(`web/app.js` `SETUP_GROUPS` and `renderSetup`, `docs/15-dashboard-design.md` §10).
+Experiment rows show a TRY badge. Race advice uses the existing BB/DIFF strip.
+The `setup_live` payload contains only parameters whose rules declare the current track
+context. Confirmed advice shows an up or down arrow with the target value.
+Experiment advice adds TRY before the target value. The full evidence payload stays in
+the debrief.
 
 **Race.** Extends the v1 sketches and the existing lock-up lines; nothing garage-only is
 ever spoken. Calls quote the live value (Car Status bias, Car Setups diff) and are
@@ -293,20 +292,20 @@ defaults:
   min_run_laps: 6          # green laps per run before any symptom is judged
   min_runs: 1              # runs showing the symptom (debrief); garage uses the last run
   max_changes_per_run: 1
-  confidence_floor: medium # below this → "experiment" tier, never race/garage mode
+  confidence_floor: medium # below this, use experiment tier. Show TRY and never speak it.
 
-params:                     # step = one click; ranges learned or configured
-  front_wing:        {step: 1,   modes: [debrief, garage, race_stop]}
-  rear_wing:         {step: 1,   modes: [debrief, garage]}
-  on_throttle:       {step: 5,   race_step: 10, modes: [debrief, garage, race]}
-  off_throttle:      {step: 5,   modes: [debrief, garage]}
-  brake_bias:        {step: 1,   modes: [debrief, garage, race]}
-  front_pressure:    {step: 0.2, modes: [debrief, garage]}   # both fronts
-  rear_pressure:     {step: 0.2, modes: [debrief, garage]}
-  rear_suspension:   {step: 2,   modes: [debrief, garage]}
-  rear_anti_roll_bar:{step: 1,   modes: [debrief, garage]}
-  front_toe:         {step: 0.05, modes: [debrief]}
-  rear_toe:          {step: 0.05, modes: [debrief]}
+params:                     # category controls the step scale
+  front_wing:          {step: 1, category: aero}
+  rear_wing:           {step: 1, category: aero}
+  on_throttle:         {step: 5, race_step: 10, category: differential}
+  off_throttle:        {step: 5, category: differential}
+  brake_bias:          {step: 1, category: brakes}
+  front_pressure:      {step: 0.2, category: tyres}
+  rear_pressure:       {step: 0.2, category: tyres}
+  rear_anti_roll_bar:  {step: 1, category: suspension}
+  front_anti_roll_bar: {step: 1, category: suspension}
+  rear_ride_height:    {step: 1, category: suspension}
+  rear_suspension:     {step: 1, category: suspension}
 
 symptoms:
   front_wear_limited:
@@ -383,6 +382,14 @@ bands:                       # thresholds in thresholds.yaml, names only here
   flash_band: setup_flash_c
 ```
 
+`suspension_geometry` is also a valid category for future camber and toe parameters.
+No camber or toe parameters are configured now.
+
+The evaluator reads each category's scale from `setup_scale_<category>` in
+`thresholds.yaml`. Race on-throttle advice uses `race_step` without category scaling.
+The tyre scale applies to setup pressure recommendations. Thermal pressure advice uses
+the `pressure_step_*_psi` values.
+
 Proposed additions to `thresholds.yaml` (starting values, all to be tuned from recordings):
 
 ```yaml
@@ -392,6 +399,23 @@ setup_z_band: 0.3
 setup_slip_us_deg: 0.5
 setup_slip_os_deg: 0.5
 setup_flash_c: 12
+setup_min_event_laps: 2
+setup_min_events: 2
+setup_trac_per10: 15
+setup_lockups_rear_per10: 2
+setup_snaps_per10: 1.2
+setup_scale_aero: 2
+setup_scale_differential: 2
+setup_scale_brakes: 1
+setup_scale_suspension_geometry: 2
+setup_scale_suspension: 2
+setup_scale_tyres: 1
+pressure_size_medium_c: 3
+pressure_size_large_c: 6
+pressure_step_small_psi: 0.5
+pressure_step_medium_psi: 1.0
+pressure_step_large_psi: 1.5
+pressure_step_cap_pct_of_range: 50
 trac_slip: 0.08            # values from the f1-26-udp-notes.md measurement
 trac_throttle: 0.7
 trac_min_s: 0.15
@@ -406,8 +430,12 @@ Semantics:
   locked is dropped *but kept in the evidence* as "would have suggested X (locked)".
 - **Contraindications** suppress the whole symptom, not only one candidate: if the car is
   both front-wear-limited and snapping, the advisor says so and makes no change.
-- **Magnitude** is in clicks; `by_z` mirrors the existing pressure step sizes; clamped to
-  the observed setup range, and "at the limit" is reported like `pressure.py` does.
+- **Magnitude** is in clicks. `by_z` uses the pressure step sizes. The evaluator clamps
+  targets to each parameter's configured minimum and maximum. It suppresses a recommendation
+  only when clamping leaves no change.
+- **Pressure steps** grow linearly at and above `pressure_size_large_c`. At 112 °C with an
+  88–102 °C window, the large step is 2.5 psi. The 50 percent range cap limits one call
+  to 3.5 psi on the front axle and 3.0 psi on the rear axle.
 - **Learned ordering.** When `model_params` holds a measured per-click effect for
   `(track, compound, rule, param)` with enough weight, candidates are re-ranked by it and a
   candidate measured `wrong` repeatedly is demoted (§6.4). Without history the YAML order

@@ -82,7 +82,8 @@ def pit_board_payload(
 ) -> dict[str, Any] | None:
     """Full-screen pit board while pitting / in the garage: pressure target per
     corner, car setup as the game reports it, and what the next run has."""
-    if snapshot.phase not in PIT_BOARD_PHASES:
+    in_race_pit_lane = snapshot.session_kind == "race" and snapshot.pit_status != 0
+    if snapshot.phase not in PIT_BOARD_PHASES and not in_race_pit_lane:
         return None
     th = thresholds or {}
     rules = setup_rules or {}
@@ -98,7 +99,11 @@ def pit_board_payload(
             "delta_psi": c.delta_psi if c else 0.0,
             "limited": c.limited if c else False,
             "edge": ("min" if c.wanted_psi < 0 else "max") if c and c.limited else None,
-            "avg_c": c.avg_c if c else None,
+            "avg_c": (
+                round(getattr(snapshot.run_tyre_inner_avg, name), 1)
+                if snapshot.run_flying_s > 0 and getattr(snapshot.run_tyre_inner_avg, name) > 0
+                else None
+            ),
             "applied": bool(
                 c
                 and not c.limited
@@ -111,7 +116,7 @@ def pit_board_payload(
         [
             rec
             for rec in snapshot.setup_advice
-            if rec.mode == "garage" and rec.tier in {"primary", "alternative"}
+            if rec.mode == "garage" and rec.tier in {"primary", "alternative", "experiment"}
         ]
         if "garage" in setup_modes(snapshot.session_type)
         else []
@@ -131,6 +136,8 @@ def pit_board_payload(
     ]
     locked_by_param: dict[str, dict[str, Any]] = {}
     for rec in garage_recs:
+        if rec.tier not in {"primary", "alternative"}:
+            continue
         for item in rec.suppressed:
             param = item.get("param", "")
             if item.get("reason") != "locked" or not param:
@@ -161,9 +168,40 @@ def pit_board_payload(
                 for field_name in locked_fields
             ]
     return {
+        "show_release": snapshot.session_kind != "race",
         "has_advice": bool(advice),
         "advice_text": snapshot.pressure_advice_text if advice else "",
         "tyres": tyres,
+        "tyre_window_c": list(pressure_window(th, snapshot.tyre_compound)),
+        "run_fuel_per_lap_kg": (
+            round(snapshot.run_fuel_per_lap_kg, 2) if snapshot.run_fuel_laps > 0 else None
+        ),
+        "run_fuel_laps": snapshot.run_fuel_laps,
+        "sectors": {
+            "mine_ms": [value or None for value in snapshot.best_sectors_ms],
+            "lap_ms": snapshot.player_best_lap_ms or None,
+            "player_leads": snapshot.player_leads,
+            "leader": (
+                {
+                    "driver": snapshot.pole_driver or None,
+                    "sectors_ms": [value or None for value in snapshot.pole_sectors_ms],
+                    "gaps_ms": [value or None for value in snapshot.pole_sector_gaps_ms],
+                    "gap_ms": snapshot.pole_gap_ms,
+                }
+                if snapshot.pole_gap_ms > 0
+                else None
+            ),
+            "teammate": (
+                {
+                    "driver": snapshot.teammate_driver or None,
+                    "sectors_ms": [value or None for value in snapshot.teammate_sectors_ms],
+                    "gaps_ms": [value or None for value in snapshot.teammate_sector_gaps_ms],
+                    "gap_ms": snapshot.teammate_gap_ms,
+                }
+                if any(snapshot.teammate_sectors_ms) or snapshot.teammate_gap_ms != 0
+                else None
+            ),
+        },
         "setup": dict(snapshot.setup) or None,
         "setup_advice": setup_advice,
         "setup_locked": list(locked_by_param.values()),
@@ -173,6 +211,60 @@ def pit_board_payload(
         "ers_pct": snapshot.ers_store_pct,
         "ers_need_pct": snapshot.ers_need_pct or th.get("cool_ers_min_pct", 40.0),
     }
+
+
+def setup_live_payload(
+    snapshot: Snapshot, setup_rules: Mapping[str, Any]
+) -> list[dict[str, Any]] | None:
+    """Setup recommendations for track-adjustable parameters."""
+    if snapshot.phase in PIT_BOARD_PHASES:
+        return None
+    kind = session_kind(snapshot.session_type)
+    if kind not in {"practice", "qualifying", "race"}:
+        return None
+
+    context = {
+        "practice": "practice_track",
+        "qualifying": "quali_track",
+        "race": "race_track",
+    }[kind]
+    mode = "race" if kind == "race" else "garage"
+    rule_data = setup_rules.get("setup_rules", setup_rules)
+    if not isinstance(rule_data, Mapping):
+        return []
+    params = rule_data.get("params", {})
+    if not isinstance(params, Mapping):
+        return []
+
+    advice: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for rec in snapshot.setup_advice:
+        if rec.mode != mode or rec.tier not in {"primary", "alternative", "experiment"}:
+            continue
+        if rec.param in seen:
+            continue
+        spec = params.get(rec.param)
+        if not isinstance(spec, Mapping):
+            continue
+        contexts = spec.get("contexts", ())
+        if not isinstance(contexts, list | tuple) or context not in contexts:
+            continue
+        fields = setup_fields_for_param(rec.param, setup_rules)
+        if not fields:
+            continue
+        seen.add(rec.param)
+        advice.append(
+            {
+                "param": rec.param,
+                "fields": list(fields),
+                "from": rec.from_value,
+                "to": rec.to_value,
+                "delta": rec.delta,
+                "tier": rec.tier,
+                "reason": reason_for_symptom(rec.rule_id),
+            }
+        )
+    return advice
 
 
 _COMPOUND_WORDS = {16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET"}
@@ -703,6 +795,7 @@ def state_payload(
         "strategy": strategy_payload(snapshot, settings.thresholds),
         "track_info": track_payload(snapshot),
         "setup": setup_payload(snapshot),
+        "setup_live": setup_live_payload(snapshot, settings.setup_rules),
         "latency": {
             "queue_count": int(lat["voice_queue"]["count"]),
             "queue_oldest_s": lat["voice_queue"]["oldest_s"],

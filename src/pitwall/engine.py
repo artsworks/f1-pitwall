@@ -441,7 +441,12 @@ class Engine:
         self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
         self._fuel_last_kg: float | None = None
         self._session_fuel_last_kg: float | None = None
-        self._session_fuel_deltas: list[float] = []
+        # (session time at the line, kg burned) per green lap this session.
+        self._session_fuel_deltas: list[tuple[float, float]] = []
+        self._run_fuel_seq = state.run_seq
+        # (session time at the line, kg burned) per green lap of this run.
+        self._run_fuel_deltas: list[tuple[float, float]] = []
+        self._run_fuel_last_kg: float | None = None
         self._stint_fuel_ref = 0.0
         self._stint_laps: list[LapRow] = []
         self._model_key: tuple[int | None, int, int, int] | None = None
@@ -453,6 +458,13 @@ class Engine:
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
+            # state.lap_num still holds the pre-rewind lap here, so match on session time.
+            self._run_fuel_deltas = [entry for entry in self._run_fuel_deltas if entry[0] <= t]
+            self._run_fuel_last_kg = None
+            self._session_fuel_deltas = [
+                entry for entry in self._session_fuel_deltas if entry[0] <= t
+            ]
+            self._session_fuel_last_kg = None
             self._reset_energy_lap_tracking()
             self._held_plan = None
 
@@ -908,6 +920,9 @@ class Engine:
         self._fuel_last_kg = None
         self._session_fuel_last_kg = None
         self._session_fuel_deltas = []
+        self._run_fuel_seq = self.state.run_seq
+        self._run_fuel_deltas = []
+        self._run_fuel_last_kg = None
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
@@ -1245,21 +1260,41 @@ class Engine:
                 param_weight_cap=self._th("param_weight_cap", 50),
             )
 
+    def _sync_run_fuel(self) -> None:
+        if self._run_fuel_seq != self.state.run_seq:
+            self._run_fuel_seq = self.state.run_seq
+            self._run_fuel_deltas = []
+            self._run_fuel_last_kg = None
+
     def _note_session_fuel(self, lap: LapSummary) -> None:
         """Burn per lap measured this session; pit, SC and flashback laps break the chain."""
+        self._sync_run_fuel()
         if lap.fuel_kg <= 0:
             return
         last = self._session_fuel_last_kg
         green = lap.sc_status == 0 and not set(lap.invalid_reasons) & _NON_GREEN_REASONS
+        t = self.state.last_packet_t or 0.0
         if green and last is not None and 0.0 < last - lap.fuel_kg < 10.0:
-            self._session_fuel_deltas.append(last - lap.fuel_kg)
+            self._session_fuel_deltas.append((t, last - lap.fuel_kg))
         self._session_fuel_last_kg = lap.fuel_kg if green else None
+        # A run counts from the end of its out lap. When the out lap is not a counted
+        # lap, the hot lap carries its pit flags, so start it from the crossing fuel.
+        run_last, run_green = self._run_fuel_last_kg, green
+        hot_base = self.state.hot_lap_fuel_base
+        if hot_base is not None and hot_base[0] == lap.lap_num:
+            run_last = hot_base[1]
+            run_green = lap.sc_status == 0 and not set(lap.invalid_reasons) & (
+                _NON_GREEN_REASONS - {"first_lap", "pitted"}
+            )
+        if run_green and run_last is not None and 0.0 < run_last - lap.fuel_kg < 10.0:
+            self._run_fuel_deltas.append((t, run_last - lap.fuel_kg))
+        self._run_fuel_last_kg = lap.fuel_kg
 
     def _fuel_per_lap(self, laps_remaining: int) -> tuple[float, str]:
         """This session's measured burn, else the game's own MFD estimate, else the prior."""
         deltas = self._session_fuel_deltas
         if len(deltas) >= int(self._th("fuel_session_min_laps", 2)):
-            return median(deltas[-8:]), "session"
+            return median(delta for _, delta in deltas[-8:]), "session"
         state = self.state
         laps_in_tank = laps_remaining + state.fuel_remaining_laps
         if laps_remaining > 0 and state.fuel_in_tank > 0 and laps_in_tank > 0.5:
@@ -1662,6 +1697,12 @@ class Engine:
                 sc_pit_loss_s=self._sc_pit_loss_s,
                 fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
                 fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
+                run_fuel_per_lap_kg=(
+                    sum(delta for _, delta in self._run_fuel_deltas) / len(self._run_fuel_deltas)
+                    if self._run_fuel_deltas
+                    else 0.0
+                ),
+                run_fuel_laps=len(self._run_fuel_deltas),
                 fuel_source=fb.source if fb is not None else "",
                 energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
                 energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
@@ -2038,6 +2079,7 @@ class Engine:
         self.db.mark_graded(uid)
 
     def tick(self, now: float) -> list[Call]:
+        self._sync_run_fuel()
         self.store.poll(now)
         self.setup_advisor.refresh_rules(self.store.current().setup_rules)
         if self.state.track_id != self._track_loaded:

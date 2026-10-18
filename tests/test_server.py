@@ -18,7 +18,7 @@ from pitwall.metrics import Metrics
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
 
-from .factories import make_state
+from .factories import make_snapshot, make_state
 
 _now = 0.0
 
@@ -493,6 +493,72 @@ def test_state_payload_race_lap_times() -> None:
     assert default["race"]["recent_laps"] == []
 
 
+def test_setup_live_payload_filters_to_track_contexts_and_session_mode() -> None:
+    from pitwall.server.app import setup_live_payload, state_payload
+    from pitwall.setup.evaluate import Recommendation
+
+    def rec(param: str, mode: str, tier: str = "primary") -> Recommendation:
+        return Recommendation(
+            rec_id=f"setup:{mode}:{param}",
+            rule_id="traction_limited" if param != "brake_bias" else "entry_instability",
+            mode=mode,
+            tier=tier,
+            param=param,
+            from_value=50.0,
+            delta=-10.0 if param == "on_throttle" else 1.0,
+            to_value=40.0 if param == "on_throttle" else 51.0,
+            conf="low" if tier == "experiment" else "high",
+            expect="test",
+            tradeoff="test",
+            evidence={},
+            setup_state_id=None,
+            session_type=15 if mode == "race" else 1,
+            parc_ferme=0,
+        )
+
+    settings = ConfigStore().current()
+    race = make_snapshot(
+        session_kind="race",
+        session_type=15,
+        phase="flying",
+        setup_advice=(
+            rec("brake_bias", "race"),
+            rec("on_throttle", "race", "experiment"),
+            rec("front_wing", "race"),
+        ),
+    )
+    advice = setup_live_payload(race, settings.setup_rules)
+    assert advice is not None
+    assert [item["param"] for item in advice] == ["brake_bias", "on_throttle"]
+    payload = state_payload(race, settings=settings, metrics=Metrics(), quiet=False)
+    assert payload["setup_live"] == advice
+
+    practice = make_snapshot(
+        session_kind="practice",
+        session_type=1,
+        phase="flying",
+        setup_advice=(rec("on_throttle", "garage"), rec("on_throttle", "race")),
+    )
+    practice_advice = setup_live_payload(practice, settings.setup_rules)
+    assert practice_advice is not None
+    assert [item["param"] for item in practice_advice] == ["on_throttle"]
+
+    assert (
+        setup_live_payload(
+            make_snapshot(session_kind="practice", session_type=1, phase="garage"),
+            settings.setup_rules,
+        )
+        is None
+    )
+    assert (
+        setup_live_payload(
+            make_snapshot(session_kind="race", session_type=15, phase="pitting"),
+            settings.setup_rules,
+        )
+        is None
+    )
+
+
 def test_state_payload_quali_pole_available_outside_cool_lap() -> None:
     from pitwall.config.loader import ConfigStore
     from pitwall.metrics import Metrics
@@ -589,6 +655,23 @@ def test_pit_board_payload() -> None:
     from pitwall.state.session import Snapshot
 
     assert pit_board_payload(Snapshot(now=1.0, phase="flying")) is None
+    empty = pit_board_payload(Snapshot(now=1.0, phase="garage"))
+    assert empty is not None
+    assert empty["tyre_window_c"] == [88.0, 102.0]
+    assert empty["run_fuel_per_lap_kg"] is None and empty["run_fuel_laps"] == 0
+    assert [empty["tyres"][c]["avg_c"] for c in ("fl", "fr", "rl", "rr")] == [
+        None,
+        None,
+        None,
+        None,
+    ]
+    assert empty["sectors"] == {
+        "mine_ms": [None, None, None],
+        "lap_ms": None,
+        "player_leads": False,
+        "leader": None,
+        "teammate": None,
+    }
     calls = (
         PressureCall("fl", "front left", 85.0, "small", 0.0, 0.0, True, -0.2),
         PressureCall("rr", "rear right", 107.0, "medium", 0.4, 21.4),
@@ -599,19 +682,55 @@ def test_pit_board_payload() -> None:
             now=1.0,
             phase="garage",
             run_flying_s=90.0,
+            run_tyre_inner_avg=Corners(rl=91.26, rr=92.48, fl=86.75, fr=0.0),
+            run_fuel_per_lap_kg=1.624,
+            run_fuel_laps=4,
             pressure_advice=calls,
             pressure_advice_text="rears up 0.4",
             setup_tyre_pressure=Corners(rl=21.0, rr=21.4, fl=22.5, fr=23.0),
             setup={"front_wing": 12},
             fuel_remaining_laps=1.6,
+            player_best_lap_ms=85_000,
+            best_sectors_ms=(28_100, 28_200, 28_300),
+            pole_gap_ms=450,
+            pole_sectors_ms=(28_000, 28_100, 28_000),
+            pole_sector_gaps_ms=(100, 100, 300),
+            teammate_gap_ms=-200,
+            teammate_sectors_ms=(28_200, 0, 28_250),
+            teammate_sector_gaps_ms=(-100, 0, 50),
+            pole_driver="VERSTAPPEN",
         ),
-        {"fuel_push_need_laps": 0.9},
+        {
+            "fuel_push_need_laps": 0.9,
+            "pressure_window_low_c": 89.0,
+            "pressure_window_high_c": 101.0,
+        },
     )
     assert board is not None
     t = board["tyres"]
     assert t["fl"]["limited"] and t["fl"]["edge"] == "min" and t["fl"]["target_psi"] is None
     assert t["rl"]["target_psi"] == 21.4 and not t["rl"]["applied"]
     assert t["rr"]["applied"]  # already dialled in
+    assert [t[c]["avg_c"] for c in ("fl", "fr", "rl", "rr")] == [86.8, None, 91.3, 92.5]
+    assert board["tyre_window_c"] == [89.0, 101.0]
+    assert board["run_fuel_per_lap_kg"] == 1.62 and board["run_fuel_laps"] == 4
+    assert board["sectors"] == {
+        "mine_ms": [28_100, 28_200, 28_300],
+        "lap_ms": 85_000,
+        "player_leads": False,
+        "leader": {
+            "driver": "VERSTAPPEN",
+            "sectors_ms": [28_000, 28_100, 28_000],
+            "gaps_ms": [100, 100, 300],
+            "gap_ms": 450,
+        },
+        "teammate": {
+            "driver": None,
+            "sectors_ms": [28_200, None, 28_250],
+            "gaps_ms": [-100, None, 50],
+            "gap_ms": -200,
+        },
+    }
     assert t["fr"] == {
         "psi": 23.0,
         "target_psi": None,
@@ -889,3 +1008,39 @@ def test_state_payload_session_label_and_weekend() -> None:
         quiet=False,
     )
     assert race["session_label"] == "Race"
+
+
+def test_pit_board_shows_in_race_while_in_pit_lane() -> None:
+    from typing import Any
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import pit_board_payload, state_payload
+    from pitwall.state.session import Snapshot
+
+    race: dict[str, Any] = {
+        "now": 1.0,
+        "session_type": 15,
+        "session_kind": "race",
+        "phase": "in_lap",
+        "pole_gap_ms": 700,
+    }
+    assert pit_board_payload(Snapshot(**race)) is None
+    board = pit_board_payload(Snapshot(**race, pit_status=1, pole_driver="NORRIS"))
+    assert board is not None
+    assert board["show_release"] is False
+    assert board["sectors"]["leader"]["driver"] == "NORRIS"
+    assert {"tyres", "tyre_window_c", "setup", "setup_advice"} <= board.keys()
+    assert pit_board_payload(Snapshot(**race, pit_status=2)) is not None
+    assert pit_board_payload(Snapshot(**{**race, "phase": "out_lap"})) is None
+    garage = pit_board_payload(
+        Snapshot(now=1.0, session_type=5, session_kind="qualifying", phase="garage")
+    )
+    assert garage is not None and garage["show_release"] is True
+    payload = state_payload(
+        Snapshot(**race, pit_status=1),
+        settings=ConfigStore().current(),
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert payload["pit_board"] is not None

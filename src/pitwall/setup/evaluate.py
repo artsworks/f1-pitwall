@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields, replace
 from typing import Any
 
+from pitwall.config.thresholds import threshold
 from pitwall.protocol.enums import session_kind
 from pitwall.rules.expr import Predicate, TrackedNamespace
 from pitwall.setup.rules import Candidate, SetupRules, Symptom
@@ -277,15 +278,6 @@ def _evaluate(
                 suppressed.append({"rule_id": symptom.rule_id, **item})
                 continue
 
-            below_floor = (
-                CONFIDENCE_LEVEL[candidate.confidence] < CONFIDENCE_LEVEL[rules.confidence_floor]
-            )
-            if below_floor and mode != "debrief":
-                item = {"param": candidate.param, "reason": "below_floor"}
-                local_suppressed[symptom.rule_id].append(item)
-                suppressed.append({"rule_id": symptom.rule_id, **item})
-                continue
-
             if (
                 candidate.condition is not None
                 and not _predicate_result(candidate.condition, environment)[0]
@@ -295,16 +287,23 @@ def _evaluate(
             from_value = _field_value(candidate.param, spec.setup_field, setup)
             if from_value is None:
                 continue
-            step = (
-                spec.race_step
-                if mode == "race" and candidate.param == "on_throttle" and spec.race_step
-                else spec.step
+            race_step = (
+                spec.race_step if mode == "race" and candidate.param == "on_throttle" else None
             )
-            delta = candidate.direction * _magnitude_steps(candidate, rules, signals) * step
+            step = race_step if race_step is not None else spec.step
+            scale = (
+                threshold(thresholds, f"setup_scale_{spec.category}", 1.0)
+                if spec.category and race_step is None
+                else 1.0
+            )
+            delta = candidate.direction * _magnitude_steps(candidate, rules, signals) * step * scale
             to_value = round(from_value + delta, 6)
-            if (spec.min_value is not None and to_value < spec.min_value) or (
-                spec.max_value is not None and to_value > spec.max_value
-            ):
+            if spec.min_value is not None:
+                to_value = max(to_value, spec.min_value)
+            if spec.max_value is not None:
+                to_value = min(to_value, spec.max_value)
+            delta = round(to_value - from_value, 6)
+            if delta == 0:
                 item = {"param": candidate.param, "reason": "at_limit"}
                 local_suppressed[symptom.rule_id].append(item)
                 suppressed.append({"rule_id": symptom.rule_id, **item})

@@ -1083,7 +1083,7 @@ def test_flashback_restores_setup_hash_and_resets_slip_balance() -> None:
     assert len(state.setup_changes) == 1
 
 
-def test_cool_view_teammate_benchmark() -> None:
+def test_sector_view_teammate_benchmark() -> None:
     from pitwall.protocol.layouts import Corners
     from pitwall.state.session import Participant
 
@@ -1100,17 +1100,92 @@ def test_cool_view_teammate_benchmark() -> None:
     }
     inner = Corners(rl=90.0, rr=90.0, fl=90.0, fr=90.0)
     field_best = (91_420, 91_000, 91_570)
-    out = state._cool_view(0.0, "qualifying", "flying", 91_420, field_best, inner)
+    out = state._sector_view("qualifying", 91_420, field_best)
     assert out["pole_driver"] == "POLE" and out["pole_gap_ms"] == 420
     assert out["teammate_driver"] == "MATE"
     assert out["teammate_gap_ms"] == -150 and out["teammate_lap_gap_s"] == -0.1
     assert out["teammate_sector_gaps_ms"] == (-200, 80, -30)
     assert out["teammate_sectors_ms"] == (30_300, 40_270, 21_000)
     assert out["teammate_worst_sector"] == 2
+    assert "cool_lap" not in out
     snap = Snapshot(now=0.0, **out)
     assert snap.teammate_driver == "MATE" and snap.teammate_gap_s == float("inf")
 
-    no_lap = state._cool_view(0.0, "qualifying", "flying", 91_420, (91_420, 91_000, 0), inner)
+    no_lap = state._sector_view("qualifying", 91_420, (91_420, 91_000, 0))
     assert no_lap["teammate_driver"] == "" and no_lap["teammate_gap_ms"] == 0
     assert no_lap["teammate_sector_gaps_ms"] == (0, 0, 0)
     assert no_lap["teammate_worst_sector"] == 0
+    assert state._cool_view(0.0, "practice", "flying", 91_420, inner) == {}
+
+
+def test_race_snapshot_has_leader_sectors() -> None:
+    from pitwall.state.session import Participant
+
+    _, state = _state()
+    state.session_type = 15
+    state.participants = (
+        Participant(name="ME", team_id=4),
+        Participant(name="LEADER", team_id=7),
+        Participant(name="MATE", team_id=4),
+    )
+    state._best_laps = {0: 85_400, 1: 84_900, 2: 85_700}
+    state._best_lap_sectors = {
+        0: (28_100, 28_200, 28_300),
+        1: (28_000, 28_100, 27_800),
+        2: (28_200, 28_400, 28_600),
+    }
+
+    snapshot = state.snapshot(0.0)
+
+    assert snapshot.session_kind == "race"
+    assert snapshot.best_sectors_ms == (28_100, 28_200, 28_300)
+    assert snapshot.pole_driver == "LEADER" and snapshot.pole_gap_ms == 500
+    assert snapshot.pole_sectors_ms == (28_000, 28_100, 27_800)
+    assert snapshot.pole_sector_gaps_ms == (100, 100, 500)
+    assert snapshot.teammate_sector_gaps_ms == (-100, -200, -300)
+
+
+def test_practice_snapshot_has_leader_and_teammate_sectors() -> None:
+    from pitwall.state.session import Participant
+
+    _, state = _state()
+    state.session_type = 1
+    state.participants = (
+        Participant(name="ME", team_id=4),
+        Participant(name="LEADER", team_id=7),
+        Participant(name="MATE", team_id=4),
+    )
+    state._best_laps = {0: 85_400, 1: 84_900, 2: 85_700}
+    state._best_lap_sectors = {
+        0: (28_100, 28_200, 28_300),
+        1: (28_000, 28_100, 27_800),
+        2: (28_200, 0, 28_600),
+    }
+
+    snapshot = state.snapshot(0.0)
+
+    assert snapshot.session_kind == "practice"
+    assert not snapshot.player_leads
+    assert snapshot.player_best_lap_ms == 85_400
+    assert snapshot.best_sectors_ms == (28_100, 28_200, 28_300)
+    assert snapshot.pole_driver == "LEADER" and snapshot.pole_gap_ms == 500
+    assert snapshot.pole_sectors_ms == (28_000, 28_100, 27_800)
+    assert snapshot.pole_sector_gaps_ms == (100, 100, 500)
+    assert snapshot.teammate_driver == "MATE" and snapshot.teammate_gap_ms == -300
+    assert snapshot.teammate_sectors_ms == (28_200, 0, 28_600)
+    assert snapshot.teammate_sector_gaps_ms == (-100, 0, -300)
+
+    state._best_laps[0] = 84_500
+    leader_snapshot = state.snapshot(1.0)
+    assert leader_snapshot.player_leads
+    assert leader_snapshot.pole_gap_ms == 0
+
+
+def test_pressure_window_caps_the_inset_on_narrow_windows() -> None:
+    thresholds = {
+        "tyre_inner_cold_by_compound_c": {17: 90.0, 18: 80.0},
+        "tyre_inner_hot_by_compound_c": {17: 95.0, 18: 100.0},
+    }
+    assert thermal_window(thresholds, 17) == (90.0, 95.0)
+    assert pressure_window(thresholds, 17) == (91.25, 93.75)
+    assert pressure_window(thresholds, 18) == (85.0, 95.0)

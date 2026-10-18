@@ -70,6 +70,7 @@ def pressure_advice(
     steps_psi: tuple[float, float, float] = (0.2, 0.4, 0.8),
     front_range: tuple[float, float] | None = None,
     rear_range: tuple[float, float] | None = None,
+    cap_pct: float = 0.0,
 ) -> tuple[PressureCall, ...]:
     out: list[PressureCall] = []
     for key, name in _ORDER:
@@ -83,10 +84,16 @@ def pressure_advice(
         else:
             continue
         idx = 0 if off < medium_c else 1 if off < large_c else 2
-        delta = round((1.0 if sign > 0 else -1.0) * steps_psi[idx], 1)
+        step = steps_psi[idx]
+        rng = front_range if key.startswith("f") else rear_range
+        if off >= large_c:
+            step = steps_psi[2] * off / large_c
+        if cap_pct > 0 and rng is not None:
+            lo, hi = rng
+            step = min(step, cap_pct / 100 * (hi - lo))
+        delta = round((1.0 if sign > 0 else -1.0) * step, 1)
         wanted = delta
         cur = float(getattr(current_psi, key))
-        rng = front_range if key.startswith("f") else rear_range
         target = round(cur + delta, 1) if cur > 0 else 0.0
         limited = False
         if cur > 0 and rng is not None:

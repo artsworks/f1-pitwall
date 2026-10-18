@@ -345,7 +345,7 @@
     var q = p.quali || null, cool = q ? q.cool : null;
     document.body.classList.toggle("quali", !!q && p.session_kind === "qualifying");
     renderCool(cool, q);
-    renderPitBoard(p.pit_board, q, p.phase);
+    renderPitBoard(p.pit_board, q, p.phase, p.track_info || {});
     if (q) renderQZone(q, p);
     renderTyres(p, s);
     renderSetupStrip(p);
@@ -429,11 +429,10 @@
     });
   }
 
-  // BB / DIFF: live values from the setup packet. Arrows only when the pit board
-  // carries a setup-advice target for that field (garage sessions).
+  // BB / DIFF: live values from the setup packet and advice from the pit board or track payload.
   function renderSetupStrip(p) {
     var vals = p.setup ? p.setup.values || {} : {};
-    var advice = p.pit_board ? p.pit_board.setup_advice || [] : [];
+    var advice = p.pit_board ? (p.pit_board.setup_advice || []) : (p.setup_live || []);
     function one(id, field, sug) {
       var v = vals[field], rec = null;
       advice.forEach(function (r) { if (r.fields.indexOf(field) >= 0) rec = r; });
@@ -442,8 +441,9 @@
       setClass(id, "v" + (suited ? " suited" : ""));
       if (!sug) return;
       if (!rec) { setText(sug, ""); setClass(sug, "sug none"); return; }
-      setText(sug, suited ? "✓ suited" : (rec.to > v ? "▲ try " : "▼ try ") + fmt(rec.to, 0));
-      setClass(sug, "sug" + (suited ? " none" : ""));
+      setText(sug, suited ? "✓ suited" : (rec.to > v ? "▲ " : "▼ ") +
+        (rec.tier === "experiment" ? "TRY " : "") + fmt(rec.to, 0));
+      setClass(sug, "sug" + (suited ? " none" : rec.tier === "experiment" ? " try" : ""));
     }
     one("su-bb", "brake_bias", "su-bb-sug");
     one("su-on", "on_throttle", "su-on-sug");
@@ -899,11 +899,11 @@
     return { text: "◷ WAIT · TRAFFIC", cls: "crit", sub: "no gap in 60 s · " + sub.join(" · ") };
   }
 
-  function renderCorner(k, t) {
+  function renderCorner(k, t, win) {
     var node = el("pb-" + k);
     if (!node) return;
     var move = node.querySelector(".pb-move"), psi = node.querySelector(".pb-psi"),
-      det = node.querySelector(".pb-det");
+      temp = node.querySelector(".pb-temp");
     var now = t.psi !== null ? fmt(t.psi, 1) : "--", cls = "none", word = "--", psiTxt = now;
     if (t.limited) {
       cls = "limit"; word = t.edge === "min" ? "AT MIN" : "AT MAX";
@@ -917,7 +917,10 @@
     node.className = "pb-corner " + cls;
     move.textContent = word;
     psi.textContent = psiTxt;
-    det.textContent = t.avg_c !== null ? "run avg " + Math.round(t.avg_c) + "°" : "no run data";
+    var avg = t.avg_c;
+    temp.textContent = avg !== null && avg !== undefined ? Math.round(avg) + "°" : "--";
+    temp.className = "pb-temp" + (avg === null || avg === undefined || !win ? "" :
+      avg > win[1] ? " hot" : avg < win[0] ? " cold" : " ok");
   }
 
   function setupFormat(field) {
@@ -930,12 +933,14 @@
   function setupValue(f, v) {
     return v === undefined || v === null ? "--" : fmt(v, f ? f[2] : 0) + (f ? f[3] || "" : "");
   }
-  function changeRow(list, done, name, from, to, why) {
+  function changeRow(list, done, name, from, to, why, tier) {
     var li = document.createElement("li");
-    li.className = done ? "done" : "todo";
-    [span(done ? "☑" : "☐", "box"), span(name, "nm"),
-      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why")]
-      .forEach(function (n) { li.appendChild(n); });
+    li.className = (done ? "done" : "todo") + (tier === "experiment" ? " try" : "");
+    var parts = [span(done ? "☑" : "☐", "box")];
+    parts.push(tier === "experiment" ? span("TRY", "tag try") : span("", "tag spacer"));
+    parts.push(span(name, "nm"),
+      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why"));
+    parts.forEach(function (n) { li.appendChild(n); });
     list.appendChild(li);
   }
 
@@ -953,6 +958,7 @@
       return setupLocked.some(function (rec) { return rec.fields.indexOf(field) >= 0; });
     }
     function why(rec) {
+      if (rec.tier === "experiment") return rec.reason;
       return (rec.tier === "alternative" ? "alt · " : "") + rec.reason;
     }
     function matchesTarget(rec, current) {
@@ -971,7 +977,7 @@
         if (axle.some(function (k) { return b.tyres[k].target_psi !== null; })) return;
         var done = rec.fields.every(function (f) { return matchesTarget(rec, setup[f]); });
         changeRow(change, done, rec.param === "front_pressure" ? "F psi" : "R psi",
-          fmt(rec.from, 1), fmt(rec.to, 1), why(rec));
+          fmt(rec.from, 1), fmt(rec.to, 1), why(rec), rec.tier);
         return;
       }
       var f = setupFormat(rec.fields[0]);
@@ -980,7 +986,7 @@
         return ff ? ff[1] : field.replace(/_/g, " ");
       }).join(" + ");
       changeRow(change, matchesTarget(rec, setup[rec.fields[0]]), name,
-        setupValue(f, rec.from), setupValue(f, rec.to), why(rec));
+        setupValue(f, rec.from), setupValue(f, rec.to), why(rec), rec.tier);
     });
     if (!change.children.length) {
       var none = document.createElement("li");
@@ -1001,7 +1007,8 @@
         fields.forEach(function (f) {
           var v = g[1] ? setup[f[0]] : f[4];
           var rec = g[1] ? adviceFor(f[0]) : null;
-          var c = span("", "c" + (rec && !matchesTarget(rec, v) ? " todo" : "") +
+          var c = span("", "c" + (rec && !matchesTarget(rec, v) ?
+            (rec.tier === "experiment" ? " try" : " todo") : "") +
             (g[1] && isLocked(f[0]) ? " lk" : ""));
           c.appendChild(span(f[1] + " ", "k"));
           var val = document.createElement("b");
@@ -1039,27 +1046,33 @@
     n.querySelector(".s").textContent = s || "";
   }
 
-  function renderPitBoard(b, q, phase) {
+  function renderPitBoard(b, q, phase, t) {
     var box = el("pitboard");
     if (!box) return;
     box.hidden = !b;
     document.body.classList.toggle("pit", !!b);
     if (!b) return;
+    box.querySelector(".pb-head").hidden = !b.show_release;
     var rel = releaseState(q, phase);
     setText("pb-release", rel.text);
     setClass("pb-release", "pb-release " + rel.cls);
     setText("pb-release-sub", rel.sub || (b.has_advice ? "" : "no run data yet"));
-    setText("pb-press-note", b.has_advice ? "" : "· no flying laps this run");
-    CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k]); });
+    var win = b.tyre_window_c;
+    setText("pb-press-note", b.has_advice || b.tyres.fl.avg_c !== null ? "· avg on flying laps" +
+      (win ? " · target " + fmt(win[0], 0) + "–" + fmt(win[1], 0) + "°" : "") : "· no flying laps this run");
+    CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k], win); });
+    var runKg = b.run_fuel_per_lap_kg;
+    pbTile("pb-runfuel", true, "", runKg !== null && runKg !== undefined ? fmt(runKg, 2) + " kg" : "--",
+      b.run_fuel_laps ? "avg of " + b.run_fuel_laps + " lap" + (b.run_fuel_laps === 1 ? "" : "s") : "no green laps yet");
     var plan = q && q.plan && q.plan.plan;
     pbTile("pb-plan", !!plan, plan === "box" || plan === "cool" ? "warn" : "ok",
       PLAN_TEXT[plan] || String(plan).toUpperCase(), plan ? PLAN_WHY[q.plan.reason] || q.plan.reason : "");
     var hasFuel = b.fuel_laps !== null && b.fuel_laps !== undefined;
-    pbTile("pb-fuel", hasFuel, b.fuel_laps >= b.fuel_need_laps ? "ok" : "crit",
-      fmt(b.fuel_laps, 1) + " laps", "push lap needs " + fmt(b.fuel_need_laps, 1));
+    pbTile("pb-fuel", true, !hasFuel ? "" : b.fuel_laps >= b.fuel_need_laps ? "ok" : "crit",
+      hasFuel ? fmt(b.fuel_laps, 1) + " laps" : "--", "push lap needs " + fmt(b.fuel_need_laps, 1));
     var hasErs = b.ers_pct !== null && b.ers_pct !== undefined;
-    pbTile("pb-ers", hasErs, b.ers_pct >= b.ers_need_pct ? "ok" : "warn",
-      fmt(b.ers_pct, 0) + "%", "want " + fmt(b.ers_need_pct, 0) + "%");
+    pbTile("pb-ers", true, !hasErs ? "" : b.ers_pct >= b.ers_need_pct ? "ok" : "warn",
+      hasErs ? fmt(b.ers_pct, 0) + "%" : "--", "want " + fmt(b.ers_need_pct, 0) + "%");
     pbTile("pb-time", !!q, q && q.fresh_sets === 0 ? "warn" : "",
       q ? clock(q.session_time_left) : "", q ? q.fresh_sets + " fresh set" + (q.fresh_sets === 1 ? "" : "s") : "");
     var hasGap = !!q && q.margin_ms !== null && q.margin_ms !== undefined;
@@ -1069,7 +1082,77 @@
       hasGap ? signed(-q.margin_ms) : q ? lapTime(q.best_lap_ms) : "",
       hasGap ? "best " + lapTime(q.best_lap_ms) + (through ? " · through" : "") : through ? "through" : "",
       hasGap ? (q.margin_kind === "pole" ? "VS P2" : "VS CUT") : "BEST");
+    renderPbWeather(t);
+    renderPbSectors(b.sectors);
     renderSetup(b);
+  }
+
+  // Garage weather: one row per forecast slot, then the crossover line.
+  function renderPbWeather(t) {
+    var list = el("pb-wx");
+    if (!list) return;
+    list.innerHTML = "";
+    var wf = t.weather_forecast || [t.weather, -1, -1], r = t.rain_chance_pct || [null, null, null];
+    for (var i = 0; i < 3; i++) {
+      var w = wf[i], pct = r[i], known = w !== null && w !== undefined && w >= 0;
+      var li = document.createElement("li");
+      li.className = !known ? "" : w >= 4 ? "storm" : w >= 3 || pct >= 40 ? "wet" : "dry";
+      li.appendChild(span(i === 0 ? "NOW" : "+" + SLOT_MIN[i] + " min", "k"));
+      li.appendChild(span(known ? WEATHER_WORDS[w] || "--" : "--", "sky"));
+      li.appendChild(span(known && pct !== null && pct !== undefined ? "rain " + pct + "%" : "--", "pct"));
+      list.appendChild(li);
+    }
+    var x = el("pb-cross"), c = CROSS[t.weather_crossover] ? t.weather_crossover : null;
+    var cm = t.weather_crossover_min;
+    if (!x) return;
+    x.innerHTML = "";
+    if (!c) { x.className = "cross"; x.textContent = "✓ no tyre change due"; return; }
+    x.className = "cross " + CROSS[c][2];
+    x.appendChild(document.createTextNode("→ "));
+    x.appendChild(crossChip(c));
+    x.appendChild(document.createTextNode(cm !== null && cm !== undefined ? " in ~" + fmt(cm, 0) + " min" : " soon"));
+  }
+
+  // Garage sectors: your best lap, then the gap per sector to the leader and teammate.
+  function renderPbSectors(sec) {
+    sec = sec || {};
+    function secTime(ms) { return ms ? (ms / 1000).toFixed(3) : "--"; }
+    function secGap(ms) {
+      if (ms === null || ms === undefined) return "--";
+      return (ms > 0 ? "+" : ms < 0 ? "−" : "±") + (Math.abs(ms) / 1000).toFixed(3);
+    }
+    function fill(id, cells) {
+      var row = el(id);
+      if (!row) return;
+      var tds = row.querySelectorAll("td");
+      cells.forEach(function (c, i) { tds[i].textContent = c[0]; tds[i].className = c[1] || ""; });
+    }
+    function gapRow(id, who) {
+      var gaps = who ? who.gaps_ms || [] : [];
+      var worst = gaps.reduce(function (w, g, i) { return g > 0 && (w < 0 || g > gaps[w]) ? i : w; }, -1);
+      var cells = [0, 1, 2].map(function (i) {
+        var g = gaps[i];
+        return [secGap(g), g === null || g === undefined ? "" :
+          (g > 0 ? "warn" : g < 0 ? "ok" : "") + (i === worst ? " worst" : "")];
+      });
+      var lap = who ? who.gap_ms : null;
+      cells.push([secGap(lap), lap > 0 ? "warn" : lap < 0 ? "ok" : ""]);
+      fill(id, cells);
+    }
+    function benchName(id, who) {
+      var n = el(id);
+      if (!n) return;
+      n.textContent = (who && who.driver) || "";
+      n.title = n.textContent;
+      n.hidden = !n.textContent;
+    }
+    benchName("pb-sec-lead-who", sec.leader);
+    benchName("pb-sec-mate-who", sec.teammate);
+    var mine = sec.mine_ms || [null, null, null];
+    fill("pb-sec-me", [[secTime(mine[0])], [secTime(mine[1])], [secTime(mine[2])], [lapTime(sec.lap_ms)]]);
+    if (sec.player_leads) fill("pb-sec-lead", [["you lead", "ok"], [""], [""], ["±0.000", "ok"]]);
+    else gapRow("pb-sec-lead", sec.leader);
+    gapRow("pb-sec-mate", sec.teammate);
   }
 
   // Cool-down lap (docs/17): shown only while the payload carries `cool`; the

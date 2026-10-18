@@ -76,14 +76,14 @@ def _setup() -> dict[str, float]:
     ("signals", "param", "delta"),
     [
         ({"lockups_rear_per10": 3.0, "lockups_rear": 2}, "brake_bias", 1.0),
-        ({"traction_exits_per10": 30.0, "traction_exits": 24}, "on_throttle", -5.0),
+        ({"traction_exits_per10": 30.0, "traction_exits": 24}, "on_throttle", -10.0),
         (
             {"wear_axle_ratio": 1.2, "z_rear": 0.8},
             "rear_pressure",
             0.4,
         ),
-        ({"slip_balance": 1.0}, "front_wing", 1.0),
-        ({"slip_balance": -1.0}, "front_wing", -1.0),
+        ({"slip_balance": 1.0}, "front_wing", 2.0),
+        ({"slip_balance": -1.0}, "front_wing", -2.0),
     ],
     ids=[
         "entry-instability",
@@ -211,11 +211,10 @@ def test_rate_symptoms_require_two_raw_events(
     assert all(rec.rule_id != "understeer_balance" for rec in two_exit_understeer)
 
 
-def test_race_mode_filters_parameters_and_uses_race_step(
+def test_race_mode_filters_parameters_and_uses_unscaled_race_step(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
     rules, thresholds = setup_config
-    rules = replace(rules, confidence_floor="low")
     recommendations = evaluate(
         _signals(
             session_type=15,
@@ -224,7 +223,7 @@ def test_race_mode_filters_parameters_and_uses_race_step(
             lockups_rear=2,
             traction_exits=24,
         ),
-        _setup(),
+        _setup() | {"on_throttle": 50.0},
         mode="race",
         parc_ferme=1,
         rules=rules,
@@ -232,7 +231,8 @@ def test_race_mode_filters_parameters_and_uses_race_step(
     )
     assert {rec.param for rec in recommendations} <= {"brake_bias", "on_throttle"}
     throttle = next(rec for rec in recommendations if rec.param == "on_throttle")
-    assert throttle.delta == -10.0
+    assert throttle.from_value == 50.0 and throttle.to_value == 40.0
+    assert throttle.delta == -10.0 and throttle.tier == "experiment"
 
 
 def test_quali_garage_parc_ferme_and_next_visit_contexts(
@@ -337,20 +337,11 @@ def test_race_debrief_uses_next_visit_tier(
     assert all(rec.tier == "next_visit" for rec in recs)
 
 
-def test_low_confidence_is_an_experiment_only_in_debrief(
+def test_low_confidence_is_an_experiment_in_all_advice_modes(
     setup_config: tuple[SetupRules, dict[str, Any]],
 ) -> None:
     rules, thresholds = setup_config
     signals = _signals(traction_exits_per10=30.0, traction_exits=24)
-    debrief = evaluate(
-        signals,
-        _setup(),
-        mode="debrief",
-        parc_ferme=1,
-        rules=rules,
-        thresholds=thresholds,
-    )
-    assert any(rec.param == "on_throttle" and rec.tier == "experiment" for rec in debrief)
     garage = evaluate(
         signals,
         _setup(),
@@ -367,7 +358,61 @@ def test_low_confidence_is_an_experiment_only_in_debrief(
         rules=rules,
         thresholds=thresholds,
     )
-    assert all(rec.param != "on_throttle" for rec in garage + race)
+    assert any(rec.param == "on_throttle" and rec.tier == "experiment" for rec in garage)
+    assert any(rec.param == "on_throttle" and rec.tier == "experiment" for rec in race)
+
+
+def test_category_scaling_and_early_traction_gate(
+    setup_config: tuple[SetupRules, dict[str, Any]],
+) -> None:
+    rules, thresholds = setup_config
+    signals = _signals(
+        traction_exits_per10=15.0,
+        traction_exits=2,
+        event_laps=2,
+    )
+    recs = evaluate(
+        signals,
+        _setup() | {"on_throttle": 50.0, "rear_anti_roll_bar": 7.0},
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+    )
+    rear_bar = next(rec for rec in recs if rec.param == "rear_anti_roll_bar")
+    throttle = next(rec for rec in recs if rec.param == "on_throttle")
+    assert rear_bar.from_value == 7.0 and rear_bar.to_value == 5.0
+    assert rear_bar.tier in {"primary", "alternative"}
+    assert throttle.from_value == 50.0 and throttle.to_value == 40.0
+    assert throttle.tier == "experiment"
+
+
+def test_setup_advice_clamps_targets_and_suppresses_only_zero_delta(
+    setup_config: tuple[SetupRules, dict[str, Any]],
+) -> None:
+    rules, thresholds = setup_config
+    signals = _signals(traction_exits_per10=15.0, traction_exits=2, event_laps=2)
+    recs = evaluate(
+        signals,
+        _setup() | {"on_throttle": 15.0},
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+    )
+    throttle = next(rec for rec in recs if rec.param == "on_throttle")
+    assert throttle.from_value == 15.0 and throttle.to_value == 10.0
+    assert throttle.delta == -5.0 and throttle.tier == "experiment"
+
+    at_limit = explain(
+        signals,
+        _setup() | {"on_throttle": 10.0},
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+    )
+    assert any(item["param"] == "on_throttle" and item["reason"] == "at_limit" for item in at_limit)
 
 
 def test_at_limit_falls_through_and_suppression_is_attached(
@@ -568,6 +613,12 @@ def test_unknown_parameter_and_context_raise_clear_errors(
     changed = yaml.safe_load(yaml.safe_dump(settings.setup_rules))
     changed["params"]["front_wing"]["contexts"] = ["garage"]
     with pytest.raises(ValueError, match="unknown context"):
+        parse_setup_rules(changed)
+    changed["params"]["front_wing"]["contexts"] = ["practice_garage"]
+    changed["params"]["front_wing"]["category"] = "suspension_geometry"
+    assert parse_setup_rules(changed).params["front_wing"].category == "suspension_geometry"
+    changed["params"]["front_wing"]["category"] = "bodywork"
+    with pytest.raises(ValueError, match="category must be one of"):
         parse_setup_rules(changed)
 
 

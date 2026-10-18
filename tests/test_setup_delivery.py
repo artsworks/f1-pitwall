@@ -200,6 +200,24 @@ def test_race_on_throttle_call_uses_race_step() -> None:
     assert engine.setup_advisor.call_to == 45.0
 
 
+def test_race_setup_call_ignores_experiment_recommendations() -> None:
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=Database(":memory:"),
+        decision_log_fp=io.StringIO(),
+    )
+    rec = _recommendation(
+        mode="race",
+        param="on_throttle",
+        tier="experiment",
+        from_value=50.0,
+        to_value=40.0,
+    )
+    engine.setup_advisor._update_call((rec,), lap=3, cooldown_laps=5)
+    assert engine.setup_advisor.call_param == ""
+
+
 def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
     db = Database(":memory:")
     engine = build_engine(
@@ -237,6 +255,28 @@ def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
     engine.pit_plan = replace(NO_PLAN, plan="box_in_n")
     engine._update_setup_stop_wing()
     assert engine.setup_advisor.stop_wing_to == 11.0
+
+
+def test_race_stop_wing_ignores_experiment_tier() -> None:
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=Database(":memory:"),
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.setup_advice = (
+        _recommendation(
+            mode="race_stop",
+            param="front_wing",
+            rule_id="understeer_balance",
+            from_value=10.0,
+            to_value=11.0,
+            tier="experiment",
+        ),
+    )
+    engine.state.next_front_wing_value = 10.0
+    engine.setup_advisor.update_stop_wing(stop_planned=True)
+    assert engine.setup_advisor.stop_wing_to == 0.0
 
 
 def test_session_signals_keep_events_inside_the_selected_run() -> None:
@@ -347,13 +387,24 @@ def test_pit_board_payload_includes_advice_locked_fields_and_checklist() -> None
 
     settings = ConfigStore().current()
     rec = _recommendation(suppressed=({"param": "rear_anti_roll_bar", "reason": "locked"},))
+    experiment = replace(
+        rec,
+        param="on_throttle",
+        rule_id="traction_limited",
+        from_value=50.0,
+        to_value=40.0,
+        delta=-10.0,
+        conf="low",
+        tier="experiment",
+        suppressed=({"param": "front_anti_roll_bar", "reason": "locked"},),
+    )
     snapshot = Snapshot(
         now=1.0,
         session_kind="practice",
         session_type=1,
         phase="garage",
         setup={"brake_bias": 56.0, "rear_anti_roll_bar": 5.0, "rear_wing": 8.0},
-        setup_advice=(rec,),
+        setup_advice=(rec, experiment),
         parc_ferme=1,
         weekend_structure=(1, 5),
     )
@@ -369,7 +420,17 @@ def test_pit_board_payload_includes_advice_locked_fields_and_checklist() -> None
             "conf": "high",
             "tier": "primary",
             "reason": "rears locking on entry",
-        }
+        },
+        {
+            "param": "on_throttle",
+            "fields": ["on_throttle"],
+            "from": 50.0,
+            "to": 40.0,
+            "delta": -10.0,
+            "conf": "low",
+            "tier": "experiment",
+            "reason": "wheelspin on exits",
+        },
     ]
     assert board["setup_locked"] == [
         {
@@ -465,8 +526,8 @@ def test_session_signals_choose_longest_run_and_later_tie() -> None:
     assert latest is not None and longest is not None
     assert latest.setup_state_id == state_b
     assert latest.run_laps == 2
-    assert latest.lockups_rear is None
-    assert latest.lockups_rear_per10 is None
+    assert latest.lockups_rear == 0
+    assert latest.lockups_rear_per10 == 0
     assert longest.setup_state_id == state_a
     assert longest.run_laps == longest.event_laps == 9
     assert longest.lockups_rear == 9

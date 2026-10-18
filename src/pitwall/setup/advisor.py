@@ -164,7 +164,11 @@ class SetupAdvisor:
             (
                 rec
                 for rec in sorted(
-                    (item for item in recommendations if item.mode == "race"),
+                    (
+                        item
+                        for item in recommendations
+                        if item.mode == "race" and item.tier in {"primary", "alternative"}
+                    ),
                     key=lambda item: item.tier != "primary",
                 )
                 if rec.param in {"brake_bias", "on_throttle"}
@@ -208,7 +212,9 @@ class SetupAdvisor:
             (
                 item
                 for item in self.state.setup_advice
-                if item.mode == "race_stop" and item.param == "front_wing"
+                if item.mode == "race_stop"
+                and item.param == "front_wing"
+                and item.tier in {"primary", "alternative"}
             ),
             None,
         )

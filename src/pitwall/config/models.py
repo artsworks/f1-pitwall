@@ -436,6 +436,19 @@ class Settings(BaseModel):
                         )
         return self
 
+    @model_validator(mode="after")
+    def _pressure_sizes(self) -> Settings:
+        medium = self.thresholds.get("pressure_size_medium_c", 3.0)
+        large = self.thresholds.get("pressure_size_large_c", 6.0)
+        if not isinstance(large, int | float) or large <= 0:
+            raise ValueError(f"thresholds.pressure_size_large_c must be > 0, got {large!r}")
+        if not isinstance(medium, int | float) or not 0 <= medium <= large:
+            raise ValueError(
+                "thresholds.pressure_size_medium_c must be between 0 and "
+                f"pressure_size_large_c ({large}), got {medium!r}"
+            )
+        return self
+
     def resolved_mindset(self) -> dict[str, Any]:
         """Active mindset vector with `inherits` resolution."""
         return resolve_mindset(self.mindsets, self.mindset.active)
