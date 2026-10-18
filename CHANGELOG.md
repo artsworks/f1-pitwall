@@ -10,6 +10,35 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.28.0 (2026-10-18)
+
+### Bug Fixes
+
+- **battle**: Treat unknown rival tyre age as unknown, not fresh
+  ([#115](https://github.com/artsworks/f1-pitwall/pull/115),
+  [`262d0f6`](https://github.com/artsworks/f1-pitwall/commit/262d0f616a8a0756b7b547e720a25c9da804ede1))
+
+- **rules**: Guard battle_let_by on rival change without a generic bind
+  ([#115](https://github.com/artsworks/f1-pitwall/pull/115),
+  [`262d0f6`](https://github.com/artsworks/f1-pitwall/commit/262d0f616a8a0756b7b547e720a25c9da804ede1))
+
+- **rules**: Re-arm and revalidate battle_let_by, bind it to the rival
+  ([#115](https://github.com/artsworks/f1-pitwall/pull/115),
+  [`262d0f6`](https://github.com/artsworks/f1-pitwall/commit/262d0f616a8a0756b7b547e720a25c9da804ede1))
+
+### Features
+
+- **rules**: Add battle_let_by call when defending is hopeless
+  ([#115](https://github.com/artsworks/f1-pitwall/pull/115),
+  [`262d0f6`](https://github.com/artsworks/f1-pitwall/commit/262d0f616a8a0756b7b547e720a25c9da804ede1))
+
+### Testing
+
+- **dispatcher**: Mark battle tyre data as known
+  ([#115](https://github.com/artsworks/f1-pitwall/pull/115),
+  [`262d0f6`](https://github.com/artsworks/f1-pitwall/commit/262d0f616a8a0756b7b547e720a25c9da804ede1))
+
+
 ## v0.27.0 (2026-10-18)
 
 ### Bug Fixes
