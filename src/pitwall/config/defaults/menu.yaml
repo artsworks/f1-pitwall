@@ -97,7 +97,7 @@ menu:
         - battle_scrap
         - teammate_fight
       replies:
-        both: ["{ahead} {behind}", "{ahead} Car behind as well."]
+        both: ["{ahead} {behind}", "{behind} {ahead}"]
         ahead: ["{ahead} Clear behind.", "{ahead} Nobody behind.", "{ahead} Clear air behind.", "{ahead} No car behind."]
         behind: ["Clear ahead. {behind}", "Nobody ahead. {behind}", "Nothing ahead. {behind}", "Clear in front. {behind}"]
         none: ["P{pos}, {laps_left} to go. Clear air.", "P{pos}, clear air with {laps_left} laps left."]

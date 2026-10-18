@@ -300,7 +300,7 @@ rules:
       - "Recovered the places, P{position}. Good work"
       - "Back where you were, P{position}. Nice recovery"
       - "P{position}, all positions recovered. Lovely job"
-      - "Slightly untidy, places back in a lap. Well fought, P{position}"
+      - "Places back in a lap. Well fought, P{position}"
   - id: battle_swap_ahead
     sessions: [race]
     priority: 3
