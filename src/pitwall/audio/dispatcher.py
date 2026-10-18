@@ -134,7 +134,7 @@ class Dispatcher:
         decision_log: DecisionLog | None = None,
         sinks: list[CallSink] | None = None,
         metrics: Metrics | None = None,
-        budget_override: int | None = None,
+        budget_override: float | None = None,
         input: InputSettings | None = None,
     ) -> None:
         self.policy = policy
@@ -144,7 +144,7 @@ class Dispatcher:
         self.sinks = [LogSink()] if sinks is None else sinks
         self.metrics = metrics or Metrics()
         self.metrics.queue_source = self.queue_status
-        self.budget_override = budget_override
+        self.budget_override = budget_override  # inf = no cap, 0 = P1 only
         self._queue: list[_Queued] = []
         self._noted_predicate_errors: set[tuple[str, str]] = set()
         self._dropped: collections.deque[str] = collections.deque()
@@ -500,6 +500,12 @@ class Dispatcher:
         cand.inputs = {**cand.inputs, "merged_into": queued.id}
         self._log(cand, snapshot, now, "merged", None, call.id)
         return True
+
+    def drop_budgeted(self) -> None:
+        """Budget 0: drop queued P2/P3 rule calls; P1 and replies stay."""
+        for q in list(self._queue):
+            if q.call.priority != 1 and "reply" not in q.call.tags and q.call.urgency != "reply":
+                self._drop_queued(q.call.id, "budget")
 
     def _drop_queued(self, call_id: str, reason: str) -> Call | None:
         kept: list[_Queued] = []

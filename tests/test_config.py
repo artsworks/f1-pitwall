@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
+import pytest
 import yaml
+from pydantic import ValidationError
 
 from pitwall.calibrate import write_overlays
 from pitwall.config.loader import ConfigStore
-from pitwall.config.models import Settings, TrackOverlay
+from pitwall.config.models import MenuSettings, Settings, TrackOverlay, call_budget, resolve_mindset
 
 
 def test_defaults_load() -> None:
@@ -25,6 +28,25 @@ def test_defaults_load() -> None:
     assert s.rules and s.rules[0].id == "out_lap_s3_tyres_cold"
     m = s.resolved_mindset()
     assert m["phrasing"] == "advisory"
+    assert resolve_mindset(s.mindsets, "balanced")["call_budget_per_lap"] == 15
+    assert resolve_mindset(s.mindsets, "aggressive")["call_budget_per_lap"] == "unlimited"
+    assert s.menu.budget_steps == [0, 15, "unlimited"]
+
+
+def test_call_budget_and_menu_steps() -> None:
+    assert call_budget("unlimited") == math.inf
+    assert call_budget(0) == 0
+    assert call_budget(None) is None
+    with pytest.raises(ValueError):
+        call_budget("lots")
+    with pytest.raises(ValueError):
+        call_budget(-1)
+    with pytest.raises(ValueError):
+        call_budget(-0.5)
+    with pytest.raises(ValidationError):
+        MenuSettings(budget_steps=[-1])
+    with pytest.raises(ValidationError):
+        MenuSettings(budget_steps=["lots"])
 
 
 def test_track_thresholds_apply_only_after_selecting_track() -> None:

@@ -26,7 +26,7 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.config.models import InputSettings, MenuItemModel, resolve_mindset
+from pitwall.config.models import InputSettings, MenuItemModel, call_budget, resolve_mindset
 from pitwall.config.thresholds import threshold
 from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import grade_and_store
@@ -331,6 +331,14 @@ class _EnergyLapTracker:
         return live_dep, live_harv, None, laps_remaining
 
 
+def budget_label(v: float) -> str:
+    if v == 0:
+        return "silence"
+    if math.isinf(v):
+        return "no limit"
+    return str(int(v))
+
+
 class Engine:
     def __init__(
         self,
@@ -373,7 +381,7 @@ class Engine:
         state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         # Live overrides owned by the backend and pushed to every client.
         self.mindset_override: str | None = None
-        self.budget_live: int | None = None  # driver-menu calls-per-lap override
+        self.budget_live: float | None = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
         self.last_snapshot: Snapshot | None = None  # latest processed tick snapshot
@@ -598,7 +606,7 @@ class Engine:
         budget = (
             self.budget_live if self.budget_live is not None else mode.get("call_budget_per_lap")
         )
-        self.dispatcher.budget_override = int(budget) if budget is not None else None
+        self.dispatcher.budget_override = call_budget(budget)
         self.dispatcher.log.mindset = self.mindset
 
     def set_mindset(self, name: str, now: float) -> bool:
@@ -610,13 +618,16 @@ class Engine:
         self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
 
-    def cycle_budget(self) -> int:
+    def cycle_budget(self) -> float:
         """Next driver-menu calls-per-lap step; overrides the mindset's budget."""
-        steps = self.store.current().menu.budget_steps or [4]
+        raw_steps = self.store.current().menu.budget_steps or [0, 15, "unlimited"]
+        steps = [budget for step in raw_steps if (budget := call_budget(step)) is not None]
         cur = self.dispatcher.budget_override
         nxt = next((s for s in steps if cur is None or s > cur), steps[0])
         self.budget_live = nxt
         self._apply_mode()
+        if nxt == 0:
+            self.dispatcher.drop_budgeted()
         return nxt
 
     def cycle_mindset(self, now: float) -> None:
@@ -840,7 +851,12 @@ class Engine:
         snap = dataclasses.replace(snapshot, now=t)
         case, values = answer(item, snap, self.mindset)
         if item.action == "budget":
-            values["budget"] = str(self.cycle_budget())
+            budget = self.cycle_budget()
+            values["budget"] = budget_label(budget)
+            if budget == 0:
+                case = "silence"
+            elif math.isinf(budget):
+                case = "unlimited"
         text = self._menu_replies.pick(item, case, values)
         inputs: dict[str, Any] = {"case": case, "via": via, **values}
         if item.kind == "question" and item.related_rules:
@@ -2318,7 +2334,7 @@ def build_engine(
         decision_log=dlog,
         sinks=sinks if sinks is not None else [LogSink()],
         metrics=Metrics(),
-        budget_override=mode.get("call_budget_per_lap"),
+        budget_override=call_budget(mode.get("call_budget_per_lap")),
         input=settings.input,
     )
     engine = Engine(

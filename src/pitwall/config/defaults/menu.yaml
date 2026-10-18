@@ -14,7 +14,7 @@ menu:
   speak_on_scroll: true
   wrap: true
   opinion_hold_laps: 5
-  budget_steps: [4, 8, 12, 20]  # "Radio calls" item cycles the calls-per-lap limit
+  budget_steps: [0, 15, unlimited]  # "Radio calls" cycles silence, 15 calls a lap, no cap
   items:
     - id: tyres
       label: "Tyres gone?"
@@ -143,6 +143,8 @@ menu:
       action: budget
       replies:
         default: ["Copy, up to {budget} calls a lap.", "Understood, {budget} calls a lap."]
+        silence: ["Copy, radio quiet.", "Understood, urgent calls only."]
+        unlimited: ["Copy, no cap on calls.", "Understood, no limit on calls."]
     - id: understeer
       label: "Understeer"
       shortcut_only: true
