@@ -655,6 +655,23 @@ def test_pit_board_payload() -> None:
     from pitwall.state.session import Snapshot
 
     assert pit_board_payload(Snapshot(now=1.0, phase="flying")) is None
+    empty = pit_board_payload(Snapshot(now=1.0, phase="garage"))
+    assert empty is not None
+    assert empty["tyre_window_c"] == [88.0, 102.0]
+    assert empty["run_fuel_per_lap_kg"] is None and empty["run_fuel_laps"] == 0
+    assert [empty["tyres"][c]["avg_c"] for c in ("fl", "fr", "rl", "rr")] == [
+        None,
+        None,
+        None,
+        None,
+    ]
+    assert empty["sectors"] == {
+        "mine_ms": [None, None, None],
+        "lap_ms": None,
+        "player_leads": False,
+        "leader": None,
+        "teammate": None,
+    }
     calls = (
         PressureCall("fl", "front left", 85.0, "small", 0.0, 0.0, True, -0.2),
         PressureCall("rr", "rear right", 107.0, "medium", 0.4, 21.4),
@@ -665,19 +682,52 @@ def test_pit_board_payload() -> None:
             now=1.0,
             phase="garage",
             run_flying_s=90.0,
+            run_tyre_inner_avg=Corners(rl=91.26, rr=92.48, fl=86.75, fr=0.0),
+            run_fuel_per_lap_kg=1.624,
+            run_fuel_laps=4,
             pressure_advice=calls,
             pressure_advice_text="rears up 0.4",
             setup_tyre_pressure=Corners(rl=21.0, rr=21.4, fl=22.5, fr=23.0),
             setup={"front_wing": 12},
             fuel_remaining_laps=1.6,
+            player_best_lap_ms=85_000,
+            best_sectors_ms=(28_100, 28_200, 28_300),
+            pole_gap_ms=450,
+            pole_sectors_ms=(28_000, 28_100, 28_000),
+            pole_sector_gaps_ms=(100, 100, 300),
+            teammate_gap_ms=-200,
+            teammate_sectors_ms=(28_200, 0, 28_250),
+            teammate_sector_gaps_ms=(-100, 0, 50),
         ),
-        {"fuel_push_need_laps": 0.9},
+        {
+            "fuel_push_need_laps": 0.9,
+            "pressure_window_low_c": 89.0,
+            "pressure_window_high_c": 101.0,
+        },
     )
     assert board is not None
     t = board["tyres"]
     assert t["fl"]["limited"] and t["fl"]["edge"] == "min" and t["fl"]["target_psi"] is None
     assert t["rl"]["target_psi"] == 21.4 and not t["rl"]["applied"]
     assert t["rr"]["applied"]  # already dialled in
+    assert [t[c]["avg_c"] for c in ("fl", "fr", "rl", "rr")] == [86.8, None, 91.3, 92.5]
+    assert board["tyre_window_c"] == [89.0, 101.0]
+    assert board["run_fuel_per_lap_kg"] == 1.62 and board["run_fuel_laps"] == 4
+    assert board["sectors"] == {
+        "mine_ms": [28_100, 28_200, 28_300],
+        "lap_ms": 85_000,
+        "player_leads": False,
+        "leader": {
+            "sectors_ms": [28_000, 28_100, 28_000],
+            "gaps_ms": [100, 100, 300],
+            "gap_ms": 450,
+        },
+        "teammate": {
+            "sectors_ms": [28_200, None, 28_250],
+            "gaps_ms": [-100, None, 50],
+            "gap_ms": -200,
+        },
+    }
     assert t["fr"] == {
         "psi": 23.0,
         "target_psi": None,

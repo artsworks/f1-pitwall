@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=29">
+  <link rel="stylesheet" href="/static/style.css?v=30">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -195,35 +195,54 @@
   </section>
 
   <section id="pitboard" class="zone pitboard" hidden>
-    <div id="pb-release" class="pb-release">--</div>
-    <div id="pb-release-sub" class="pb-release-sub dim">--</div>
-    <div class="pb-main">
-      <div>
-        <h2>PRESSURES <span id="pb-press-note"></span></h2>
-        <div class="pb-tyres">
-          <div class="pb-corner" id="pb-fl"><div class="lbl">FL</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
-          <div class="pb-corner" id="pb-fr"><div class="lbl">FR</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
-          <div class="pb-corner" id="pb-rl"><div class="lbl">RL</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
-          <div class="pb-corner" id="pb-rr"><div class="lbl">RR</div><div class="pb-move">--</div><div class="pb-psi">--</div><div class="pb-det">--</div></div>
-        </div>
-      </div>
-      <div class="pb-next">
-        <h2>NEXT RUN</h2>
-        <div class="pb-tiles">
-          <div id="pb-plan" class="pb-tile" hidden><div class="k">PLAN</div><div class="v">--</div><div class="s"></div></div>
-          <div id="pb-fuel" class="pb-tile"><div class="k">FUEL</div><div class="v">--</div><div class="s"></div></div>
-          <div id="pb-ers" class="pb-tile"><div class="k">⚡ BATTERY</div><div class="v">--</div><div class="s"></div></div>
-          <div id="pb-time" class="pb-tile" hidden><div class="k">TIME LEFT</div><div class="v">--</div><div class="s"></div></div>
-          <div id="pb-pole" class="pb-tile" hidden><div class="k">VS CUT</div><div class="v">--</div><div class="s"></div></div>
-        </div>
+    <div class="pb-head">
+      <div id="pb-release" class="pb-release">--</div>
+      <div id="pb-release-sub" class="pb-release-sub dim">--</div>
+    </div>
+    <div class="pb-box pb-tyrebox">
+      <h2>TYRES <span id="pb-press-note" class="dim"></span></h2>
+      <div class="pb-tyres">
+        <div class="pb-corner" id="pb-fl"><div class="lbl">FL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+        <div class="pb-corner" id="pb-fr"><div class="lbl">FR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+        <div class="pb-corner" id="pb-rl"><div class="lbl">RL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+        <div class="pb-corner" id="pb-rr"><div class="lbl">RR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
       </div>
     </div>
-    <div class="pb-setup">
+    <div class="pb-box pb-run">
+      <h2>LAST RUN</h2>
+      <div class="pb-tiles">
+        <div id="pb-runfuel" class="pb-tile"><div class="k">FUEL / LAP</div><div class="v">--</div><div class="s"></div></div>
+        <div id="pb-fuel" class="pb-tile"><div class="k">IN TANK</div><div class="v">--</div><div class="s"></div></div>
+        <div id="pb-ers" class="pb-tile"><div class="k">⚡ BATTERY</div><div class="v">--</div><div class="s"></div></div>
+        <div id="pb-plan" class="pb-tile" hidden><div class="k">PLAN</div><div class="v">--</div><div class="s"></div></div>
+        <div id="pb-time" class="pb-tile" hidden><div class="k">TIME LEFT</div><div class="v">--</div><div class="s"></div></div>
+        <div id="pb-pole" class="pb-tile" hidden><div class="k">VS CUT</div><div class="v">--</div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pb-box pb-wx">
+      <h2>WEATHER</h2>
+      <ol id="pb-wx" class="pb-wxl"></ol>
+      <div id="pb-cross" class="cross">--</div>
+    </div>
+    <div class="pb-box pb-sectors">
+      <h2>SECTORS · BEST LAP</h2>
+      <table id="pb-sec" class="pb-sec">
+        <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+        <tbody>
+          <tr id="pb-sec-me"><th>YOU</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+          <tr id="pb-sec-lead"><th>LEADER</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+          <tr id="pb-sec-mate"><th>TEAMMATE</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pb-box pb-setup">
       <h2>SETUP CHANGES</h2>
       <ol id="pb-change" class="pb-change"></ol>
+      <div id="pb-locked" class="pb-locked" hidden></div>
+    </div>
+    <div class="pb-box pb-cur">
       <h2>CURRENT SETUP</h2>
       <ol id="pb-setup" class="pb-ref"><li class="dim">no setup packet yet</li></ol>
-      <div id="pb-locked" class="pb-locked" hidden></div>
     </div>
   </section>
 
@@ -251,7 +270,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=31"></script>
+  <script src="/static/app.js?v=32"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

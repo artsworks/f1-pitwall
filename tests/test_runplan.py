@@ -288,7 +288,6 @@ def _push_suspect(
         "qualifying",
         "flying",
         92_000,
-        (),
         Corners(90.0, 90.0, 90.0, 90.0),
     )
     return bool(view["cool_push_suspect"])

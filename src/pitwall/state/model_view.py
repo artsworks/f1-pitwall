@@ -23,6 +23,8 @@ class ModelView:
     sc_pit_loss_s: float = 0.0
     fuel_margin_laps: float = 0.0
     fuel_per_lap_kg: float = 0.0
+    run_fuel_per_lap_kg: float = 0.0
+    run_fuel_laps: int = 0
     fuel_source: str = ""
     energy_per_lap_mj: float = 0.0
     energy_lap_delta_mj: float = 0.0
