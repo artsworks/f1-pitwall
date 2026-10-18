@@ -82,7 +82,8 @@ def pit_board_payload(
 ) -> dict[str, Any] | None:
     """Full-screen pit board while pitting / in the garage: pressure target per
     corner, car setup as the game reports it, and what the next run has."""
-    if snapshot.phase not in PIT_BOARD_PHASES:
+    in_race_pit_lane = snapshot.session_kind == "race" and snapshot.pit_status != 0
+    if snapshot.phase not in PIT_BOARD_PHASES and not in_race_pit_lane:
         return None
     th = thresholds or {}
     rules = setup_rules or {}
@@ -167,6 +168,7 @@ def pit_board_payload(
                 for field_name in locked_fields
             ]
     return {
+        "show_release": snapshot.session_kind != "race",
         "has_advice": bool(advice),
         "advice_text": snapshot.pressure_advice_text if advice else "",
         "tyres": tyres,

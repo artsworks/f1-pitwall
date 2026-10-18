@@ -1052,6 +1052,7 @@
     box.hidden = !b;
     document.body.classList.toggle("pit", !!b);
     if (!b) return;
+    box.querySelector(".pb-head").hidden = !b.show_release;
     var rel = releaseState(q, phase);
     setText("pb-release", rel.text);
     setClass("pb-release", "pb-release " + rel.cls);

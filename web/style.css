@@ -605,6 +605,7 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pitboard { display: none; overflow: auto; gap: .5rem .8rem; align-content: start;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-rows: auto auto auto minmax(0, 1fr); }
+.pb-head[hidden] { display: none; }
 .pb-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 1.2rem;
   border-radius: 6px; border: 2px solid var(--line); padding: .2rem .8rem; }
 .pb-head:has(.pb-release.ok) { background: var(--ok); border-color: var(--ok); color: #000; }

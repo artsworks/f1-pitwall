@@ -1008,3 +1008,39 @@ def test_state_payload_session_label_and_weekend() -> None:
         quiet=False,
     )
     assert race["session_label"] == "Race"
+
+
+def test_pit_board_shows_in_race_while_in_pit_lane() -> None:
+    from typing import Any
+
+    from pitwall.config.loader import ConfigStore
+    from pitwall.metrics import Metrics
+    from pitwall.server.app import pit_board_payload, state_payload
+    from pitwall.state.session import Snapshot
+
+    race: dict[str, Any] = {
+        "now": 1.0,
+        "session_type": 15,
+        "session_kind": "race",
+        "phase": "in_lap",
+        "pole_gap_ms": 700,
+    }
+    assert pit_board_payload(Snapshot(**race)) is None
+    board = pit_board_payload(Snapshot(**race, pit_status=1, pole_driver="NORRIS"))
+    assert board is not None
+    assert board["show_release"] is False
+    assert board["sectors"]["leader"]["driver"] == "NORRIS"
+    assert {"tyres", "tyre_window_c", "setup", "setup_advice"} <= board.keys()
+    assert pit_board_payload(Snapshot(**race, pit_status=2)) is not None
+    assert pit_board_payload(Snapshot(**{**race, "phase": "out_lap"})) is None
+    garage = pit_board_payload(
+        Snapshot(now=1.0, session_type=5, session_kind="qualifying", phase="garage")
+    )
+    assert garage is not None and garage["show_release"] is True
+    payload = state_payload(
+        Snapshot(**race, pit_status=1),
+        settings=ConfigStore().current(),
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert payload["pit_board"] is not None
