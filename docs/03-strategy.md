@@ -226,7 +226,7 @@ includes each first-stop lap within `plan_window_s` of the best.
 - After a pit stop, the tracker counts the stop on entry to the out-lap and rebases the
   plan from the new compound, tyre age, laps left and stops completed.
 
-**Calls** (`rules/race.yaml`, all through the dispatcher budget/cooldowns):
+**Calls** (`rules/race_*.yaml`, all through the dispatcher budget/cooldowns):
 
 | rule | P | example |
 | --- | --- | --- |

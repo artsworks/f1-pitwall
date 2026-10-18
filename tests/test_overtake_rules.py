@@ -210,7 +210,9 @@ def test_queued_energy_call_is_superseded_by_overtake_earned() -> None:
 
 
 def test_no_drs_left_in_race_rule_phrasing() -> None:
-    data = yaml.safe_load((DEFAULTS_DIR / "rules" / "race.yaml").read_text())
+    rules: list[dict] = []
+    for path in sorted((DEFAULTS_DIR / "rules").glob("race_*.yaml")):
+        rules.extend(yaml.safe_load(path.read_text())["rules"])
     texts: list[str] = []
 
     def collect(node: object) -> None:
@@ -226,6 +228,6 @@ def test_no_drs_left_in_race_rule_phrasing() -> None:
                 if isinstance(x, dict | list):
                     collect(x)
 
-    collect(data["rules"])
+    collect(rules)
     assert texts
     assert [t for t in texts if "DRS" in t.upper()] == []
