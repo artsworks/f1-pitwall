@@ -212,7 +212,9 @@ class SetupAdvisor:
             (
                 item
                 for item in self.state.setup_advice
-                if item.mode == "race_stop" and item.param == "front_wing"
+                if item.mode == "race_stop"
+                and item.param == "front_wing"
+                and item.tier in {"primary", "alternative"}
             ),
             None,
         )

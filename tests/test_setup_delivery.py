@@ -257,6 +257,28 @@ def test_race_stop_wing_requires_plan_and_clears_at_target() -> None:
     assert engine.setup_advisor.stop_wing_to == 11.0
 
 
+def test_race_stop_wing_ignores_experiment_tier() -> None:
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=Database(":memory:"),
+        decision_log_fp=io.StringIO(),
+    )
+    engine.state.setup_advice = (
+        _recommendation(
+            mode="race_stop",
+            param="front_wing",
+            rule_id="understeer_balance",
+            from_value=10.0,
+            to_value=11.0,
+            tier="experiment",
+        ),
+    )
+    engine.state.next_front_wing_value = 10.0
+    engine.setup_advisor.update_stop_wing(stop_planned=True)
+    assert engine.setup_advisor.stop_wing_to == 0.0
+
+
 def test_session_signals_keep_events_inside_the_selected_run() -> None:
     settings = ConfigStore().current()
     db = Database(":memory:")
