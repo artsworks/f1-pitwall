@@ -2604,8 +2604,11 @@ class SessionState:
         player_best: int,
         field_best: tuple[int, ...],
     ) -> dict[str, Any]:
-        """Best-lap sector benchmarks for practice and qualifying."""
-        if kind not in {"practice", "qualifying"}:
+        """Best-lap sector benchmarks for practice, qualifying and races.
+
+        The leader is the driver with the session's fastest lap.
+        """
+        if kind not in {"practice", "qualifying", "race"}:
             return {}
         pole_idx = min(
             (i for i, best in enumerate(field_best) if best > 0),
