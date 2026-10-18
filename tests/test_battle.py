@@ -59,6 +59,8 @@ def _inp(**kw: object) -> BattleInputs:
         "own_age": 10,
         "ahead_age": 10,
         "behind_age": 10,
+        "ahead_age_known": True,
+        "behind_age_known": True,
         "overtake_active": False,
         "attack_gap_s": 1.0,
     }
@@ -106,6 +108,22 @@ def test_tracker_catch_laps_and_offsets() -> None:
     assert b.catch_laps == 4.0
     assert b.tyre_offset_ahead == 8
     assert b.pass_prob == BattleRates().pass_no_overtake
+
+
+def test_tracker_unknown_behind_age_does_not_create_fresh_tyre_offset() -> None:
+    battle = BattleTracker().update(
+        _inp(own_age=8, behind_age=0, behind_age_known=False), TH, BattleRates()
+    )
+    assert battle.tyre_offset_behind == 0
+    assert not battle.tyre_known_behind
+
+
+def test_tracker_known_zero_behind_age_has_fresh_tyre_offset() -> None:
+    battle = BattleTracker().update(
+        _inp(own_age=8, behind_age=0, behind_age_known=True), TH, BattleRates()
+    )
+    assert battle.tyre_offset_behind == -8
+    assert battle.tyre_known_behind
 
 
 def test_catch_and_chase_probabilities_use_gap_spread() -> None:
@@ -379,6 +397,7 @@ def test_replay_let_by_call_with_learned_hold_rate(battle_runs) -> None:
     assert "battle_let_by" in _ids(calls)
     row = next(r for r in rows if r.get("rule_id") == "battle_let_by" and r["outcome"] == "fired")
     assert row["inputs"]["battle_hold_prob"] < 0.25
+    assert row["inputs"]["battle_tyre_known_behind"] is True
 
 
 @pytest.mark.replay

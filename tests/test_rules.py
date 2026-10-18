@@ -850,6 +850,7 @@ def test_battle_let_by_suppresses_defend() -> None:
             battle_mode="defending",
             sector=0,
             battle_hold_prob=0.15,
+            battle_tyre_known_behind=True,
             battle_tyre_offset_behind=-6,
             battle_threat_laps=0.0,
             rival_behind_name="NORRIS",
@@ -866,6 +867,7 @@ def test_battle_let_by_suppresses_defend() -> None:
     ("field", "value"),
     [
         ("battle_hold_prob", 0.5),
+        ("battle_tyre_known_behind", False),
         ("battle_tyre_offset_behind", -2),
         ("battle_threat_laps", float("inf")),
         ("laps_remaining", 3),
@@ -879,6 +881,7 @@ def test_battle_let_by_requires_hopeless_defense(field: str, value: object) -> N
         "battle_mode": "defending",
         "sector": 0,
         "battle_hold_prob": 0.15,
+        "battle_tyre_known_behind": True,
         "battle_tyre_offset_behind": -6,
         "battle_threat_laps": 0.0,
         "rival_behind_name": "NORRIS",

@@ -354,7 +354,8 @@ true_rival_ahead_name, true_rival_behind_name: str
 true_rival_ahead_gap_s, true_rival_behind_gap_s: float # stop-adjusted gaps
 true_rival_ahead_stops_owed, true_rival_behind_stops_owed: int
 true_rival_ahead_pitted, true_rival_behind_pitted: bool
-rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
+rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if unknown)
+rival_ahead_age_known, rival_behind_age_known: bool # False if masked or no Session History
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
 rival_ahead_in_pit_lane, rival_behind_in_pit_lane: bool  # validated rival is in the pit lane now
 rival_ahead2_pos, rival_behind2_pos: int       # second car on each side (0 = none)
@@ -554,7 +555,7 @@ the player (first match wins):
 Closing rate = measured gap trend when available, else the rival pace delta. Attack and
 defend ranges get `gap_hysteresis_s` once entered. Snapshot fields: `battle_mode`,
 `battle_mode_laps`, `battle_catch_laps`, `battle_threat_laps`, `battle_closing_*_s`,
-`battle_tyre_offset_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
+`battle_tyre_offset_*`, `battle_tyre_known_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
 `battle_result_recent`, `battle_result_name`, `battle_swaps` (place changes
 inside `battle_swap_window_s`).
 

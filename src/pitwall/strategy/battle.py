@@ -49,6 +49,8 @@ class BattleInputs:
     own_age: int
     ahead_age: int
     behind_age: int
+    ahead_age_known: bool
+    behind_age_known: bool
     overtake_active: bool
     attack_gap_s: float  # mindset attack_window_s
     positions: tuple[int, ...] = ()  # car_position per car idx (0 = unknown)
@@ -76,6 +78,8 @@ class Battle:
     closing_behind_s: float = 0.0  # + = the car behind gains on us per lap
     tyre_offset_ahead: int = 0  # + = rival ahead's tyres are older than ours
     tyre_offset_behind: int = 0  # + = rival behind's tyres are older than ours
+    tyre_known_ahead: bool = False
+    tyre_known_behind: bool = False
     pass_prob: float = 0.0
     hold_prob: float = 0.0
     result: str = ""  # last episode: passed | failed | held | lost
@@ -369,8 +373,14 @@ class BattleTracker:
             threat_laps=round(threat, 1),
             closing_ahead_s=round(c_ahead, 2),
             closing_behind_s=round(c_behind, 2),
-            tyre_offset_ahead=inp.ahead_age - inp.own_age if inp.ahead_idx >= 0 else 0,
-            tyre_offset_behind=inp.behind_age - inp.own_age if inp.behind_idx >= 0 else 0,
+            tyre_offset_ahead=(
+                inp.ahead_age - inp.own_age if inp.ahead_idx >= 0 and inp.ahead_age_known else 0
+            ),
+            tyre_offset_behind=(
+                inp.behind_age - inp.own_age if inp.behind_idx >= 0 and inp.behind_age_known else 0
+            ),
+            tyre_known_ahead=inp.ahead_idx >= 0 and inp.ahead_age_known,
+            tyre_known_behind=inp.behind_idx >= 0 and inp.behind_age_known,
             pass_prob=round(rates.pass_overtake if overtake_now else rates.pass_no_overtake, 2),
             hold_prob=round(rates.hold, 2),
             result=self.result if recent else "",

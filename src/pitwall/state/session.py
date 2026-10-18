@@ -469,6 +469,8 @@ class Snapshot:
     rival_pit_exit_name: str = ""
     rival_ahead_age: int = 0
     rival_behind_age: int = 0
+    rival_ahead_age_known: bool = False
+    rival_behind_age_known: bool = False
     rival_ahead_pitted: bool = False
     rival_ahead_in_pit_lane: bool = False
     rival_behind_pitted: bool = False
@@ -613,6 +615,8 @@ class Snapshot:
     battle_closing_behind_s: float = 0.0
     battle_tyre_offset_ahead: int = 0
     battle_tyre_offset_behind: int = 0
+    battle_tyre_known_ahead: bool = False
+    battle_tyre_known_behind: bool = False
     battle_pass_prob: float = 0.0
     battle_catch_prob: float = 0.0
     battle_chase_prob: float = 0.0
@@ -2762,13 +2766,13 @@ class SessionState:
             0,
         )
 
-    def _rival_age(self, car_idx: int) -> int:
+    def _rival_age(self, car_idx: int) -> int | None:
         """Tyre age of the rival's current stint from its Session History."""
         if self.rival_data_restricted:
-            return 0
+            return None
         pkt = self._histories.get(car_idx)
         if pkt is None or pkt.num_tyre_stints == 0:
-            return 0
+            return None
         stints = pkt.tyre_stints[: pkt.num_tyre_stints]
         prev_end = stints[-2].end_lap if len(stints) >= 2 else 0
         return int(max(0, pkt.num_laps - prev_end))
@@ -3135,6 +3139,8 @@ class SessionState:
                 getattr(self.laps[-2], name)
                 for name in ("traction_exits", "snaps_entry", "snaps_exit")
             )
+        ahead_age = self._rival_age(ahead_i) if ahead_i >= 0 else None
+        behind_age = self._rival_age(behind_i) if behind_i >= 0 else None
         base.update(
             rival_ahead_pos=cars[ahead_i].car_position if ahead_i >= 0 else 0,
             rival_behind_pos=cars[behind_i].car_position if behind_i >= 0 else 0,
@@ -3181,8 +3187,10 @@ class SessionState:
             rival_ahead_name=name_of(ahead_i),
             rival_behind_name=name_of(behind_i),
             rival_pit_exit_name=name_of(exit_i),
-            rival_ahead_age=self._rival_age(ahead_i) if ahead_i >= 0 else 0,
-            rival_behind_age=self._rival_age(behind_i) if behind_i >= 0 else 0,
+            rival_ahead_age=ahead_age if ahead_age is not None else 0,
+            rival_behind_age=behind_age if behind_age is not None else 0,
+            rival_ahead_age_known=ahead_age is not None,
+            rival_behind_age_known=behind_age is not None,
             rival_ahead_pitted=ahead_i in pitted if ahead_i >= 0 else False,
             rival_ahead_in_pit_lane=ahead_i >= 0 and cars[ahead_i].pit_status != 0,
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,

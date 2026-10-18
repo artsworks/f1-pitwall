@@ -1944,6 +1944,8 @@ class Engine:
             own_age=snap.tyre_age_laps,
             ahead_age=snap.rival_ahead_age,
             behind_age=snap.rival_behind_age,
+            ahead_age_known=snap.rival_ahead_age_known,
+            behind_age_known=snap.rival_behind_age_known,
             overtake_active=bool(snap.overtake_active)
             if snap.regulations_2026
             else snap.drs_available,
@@ -1971,6 +1973,8 @@ class Engine:
             battle_closing_behind_s=b.closing_behind_s,
             battle_tyre_offset_ahead=b.tyre_offset_ahead,
             battle_tyre_offset_behind=b.tyre_offset_behind,
+            battle_tyre_known_ahead=b.tyre_known_ahead,
+            battle_tyre_known_behind=b.tyre_known_behind,
             battle_pass_prob=b.pass_prob,
             battle_catch_prob=b.catch_prob,
             battle_chase_prob=b.chase_prob,
