@@ -98,7 +98,11 @@ def pit_board_payload(
             "delta_psi": c.delta_psi if c else 0.0,
             "limited": c.limited if c else False,
             "edge": ("min" if c.wanted_psi < 0 else "max") if c and c.limited else None,
-            "avg_c": c.avg_c if c else None,
+            "avg_c": (
+                round(getattr(snapshot.run_tyre_inner_avg, name), 1)
+                if snapshot.run_flying_s > 0 and getattr(snapshot.run_tyre_inner_avg, name) > 0
+                else None
+            ),
             "applied": bool(
                 c
                 and not c.limited
@@ -166,6 +170,34 @@ def pit_board_payload(
         "has_advice": bool(advice),
         "advice_text": snapshot.pressure_advice_text if advice else "",
         "tyres": tyres,
+        "tyre_window_c": list(pressure_window(th, snapshot.tyre_compound)),
+        "run_fuel_per_lap_kg": (
+            round(snapshot.run_fuel_per_lap_kg, 2) if snapshot.run_fuel_laps > 0 else None
+        ),
+        "run_fuel_laps": snapshot.run_fuel_laps,
+        "sectors": {
+            "mine_ms": [value or None for value in snapshot.best_sectors_ms],
+            "lap_ms": snapshot.player_best_lap_ms or None,
+            "player_leads": snapshot.player_leads,
+            "leader": (
+                {
+                    "sectors_ms": [value or None for value in snapshot.pole_sectors_ms],
+                    "gaps_ms": [value or None for value in snapshot.pole_sector_gaps_ms],
+                    "gap_ms": snapshot.pole_gap_ms,
+                }
+                if snapshot.pole_gap_ms > 0
+                else None
+            ),
+            "teammate": (
+                {
+                    "sectors_ms": [value or None for value in snapshot.teammate_sectors_ms],
+                    "gaps_ms": [value or None for value in snapshot.teammate_sector_gaps_ms],
+                    "gap_ms": snapshot.teammate_gap_ms,
+                }
+                if any(snapshot.teammate_sectors_ms) or snapshot.teammate_gap_ms != 0
+                else None
+            ),
+        },
         "setup": dict(snapshot.setup) or None,
         "setup_advice": setup_advice,
         "setup_locked": list(locked_by_param.values()),

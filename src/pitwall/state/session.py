@@ -684,6 +684,8 @@ class Snapshot:
     setup: Mapping[str, float] = field(default_factory=dict)
     run_tyre_inner_avg: Corners = _ZERO_CORNERS
     run_flying_s: float = 0.0
+    run_fuel_per_lap_kg: float = 0.0
+    run_fuel_laps: int = 0
     pressure_advice: tuple[PressureCall, ...] = ()
     pressure_advice_text: str = ""
     # Run plan / cool-down lap (docs/17)
@@ -710,6 +712,7 @@ class Snapshot:
     hottest_tyre: str = ""
     hottest_tyre_c: float = 0.0
     cool_tyre_hint: str = ""
+    player_leads: bool = False
     pole_driver: str = ""
     pole_gap_ms: int = 0  # player best - pole best; 0 when unknown or on pole
     pole_gap_s: float = 0.0
@@ -893,6 +896,7 @@ class SessionState:
         self.tyre_inner = _ZERO_CORNERS
         self.brake_temp = _ZERO_CORNERS
         self.run_temps = RunTemps()
+        self.run_seq = 0
         self.setup_tyre_pressure = _ZERO_CORNERS
         self.setup: dict[str, float] = {}
         self.setup_hash = ""
@@ -1336,6 +1340,7 @@ class SessionState:
         )
         if car.driver_status == DriverStatus.OUT_LAP and self.driver_status != DriverStatus.OUT_LAP:
             self.run_temps.reset()
+            self.run_seq += 1
             self._pressure_base = None
         self.driver_status = car.driver_status
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
@@ -2347,7 +2352,8 @@ class SessionState:
             rear_range=self._psi_range("rear"),
             cap_pct=self._th("pressure_step_cap_pct_of_range", 50.0),
         )
-        cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
+        cool = self._cool_view(st, kind, phase, player_best_lap, inner)
+        sectors = self._sector_view(kind, player_best_lap, field_best)
         race = self._race_view(st, kind, cars, field_best)
         laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps > 0 else 0
         history = self._histories.get(self._player_idx)
@@ -2576,6 +2582,7 @@ class SessionState:
             pressure_advice=pressures,
             pressure_advice_text=pressure_text(pressures),
             **cool,
+            **sectors,
             **race,
             **self._traffic(player_best_lap),
             dist_to_line_m=(
@@ -2591,13 +2598,81 @@ class SessionState:
             _ages={name: st - t for name, t in self._last_update.items()},
         )
 
+    def _sector_view(
+        self,
+        kind: str,
+        player_best: int,
+        field_best: tuple[int, ...],
+    ) -> dict[str, Any]:
+        """Best-lap sector benchmarks for practice and qualifying."""
+        if kind not in {"practice", "qualifying"}:
+            return {}
+        pole_idx = min(
+            (i for i, best in enumerate(field_best) if best > 0),
+            key=lambda i: field_best[i],
+            default=-1,
+        )
+        pole_gap = 0
+        gaps = (0, 0, 0)
+        name = ""
+        mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
+        theirs: tuple[int, int, int] = (0, 0, 0)
+        if pole_idx >= 0 and pole_idx != self._player_idx and player_best > 0:
+            pole_gap = player_best - field_best[pole_idx]
+            theirs = self._best_lap_sectors.get(pole_idx, (0, 0, 0))
+            gaps = (
+                mine[0] - theirs[0] if mine[0] and theirs[0] else 0,
+                mine[1] - theirs[1] if mine[1] and theirs[1] else 0,
+                mine[2] - theirs[2] if mine[2] and theirs[2] else 0,
+            )
+            if pole_idx < len(self.participants):
+                name = self.participants[pole_idx].name
+        worst = max(range(3), key=lambda i: gaps[i])
+        mate_idx = self._teammate()
+        mate_gap = 0
+        mate_gaps = (0, 0, 0)
+        mate_name = ""
+        mate_sectors: tuple[int, int, int] = (0, 0, 0)
+        if (
+            0 <= mate_idx < len(field_best)
+            and mate_idx != self._player_idx
+            and player_best > 0
+            and field_best[mate_idx] > 0
+        ):
+            mate_gap = player_best - field_best[mate_idx]
+            mate_sectors = self._best_lap_sectors.get(mate_idx, (0, 0, 0))
+            mate_gaps = (
+                mine[0] - mate_sectors[0] if mine[0] and mate_sectors[0] else 0,
+                mine[1] - mate_sectors[1] if mine[1] and mate_sectors[1] else 0,
+                mine[2] - mate_sectors[2] if mine[2] and mate_sectors[2] else 0,
+            )
+            if mate_idx < len(self.participants):
+                mate_name = self.participants[mate_idx].name
+        mate_worst = max(range(3), key=lambda i: mate_gaps[i])
+        return {
+            "player_leads": pole_idx == self._player_idx and player_best > 0,
+            "pole_driver": name,
+            "pole_gap_ms": pole_gap,
+            "pole_gap_s": round(pole_gap / 1000.0, 1),
+            "pole_sector_gaps_ms": gaps,
+            "best_sectors_ms": mine,
+            "pole_sectors_ms": theirs,
+            "pole_worst_sector": worst + 1 if gaps[worst] > 0 else 0,
+            "pole_worst_sector_s": round(max(0, gaps[worst]) / 1000.0, 1),
+            "teammate_driver": mate_name,
+            "teammate_gap_ms": mate_gap,
+            "teammate_lap_gap_s": round(mate_gap / 1000.0, 1),
+            "teammate_sector_gaps_ms": mate_gaps,
+            "teammate_sectors_ms": mate_sectors,
+            "teammate_worst_sector": mate_worst + 1 if mate_gaps[mate_worst] > 0 else 0,
+        }
+
     def _cool_view(
         self,
         st: float,
         kind: str,
         phase: str,
         player_best: int,
-        field_best: tuple[int, ...],
         inner: Corners,
     ) -> dict[str, Any]:
         """Run-plan and cool-down-lap fields of the snapshot."""
@@ -2655,46 +2730,6 @@ class SessionState:
             why = "Next lap's gone too, track limits"
         elif plan.reason == "safe":
             why = "You're safe"
-        pole_idx = min(
-            (i for i, b in enumerate(field_best) if b > 0), key=lambda i: field_best[i], default=-1
-        )
-        pole_gap = 0
-        gaps = (0, 0, 0)
-        name = ""
-        mine = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
-        theirs: tuple[int, int, int] = (0, 0, 0)
-        if pole_idx >= 0 and pole_idx != self._player_idx and player_best > 0:
-            pole_gap = player_best - field_best[pole_idx]
-            theirs = self._best_lap_sectors.get(pole_idx, (0, 0, 0))
-            gaps = (
-                mine[0] - theirs[0] if mine[0] and theirs[0] else 0,
-                mine[1] - theirs[1] if mine[1] and theirs[1] else 0,
-                mine[2] - theirs[2] if mine[2] and theirs[2] else 0,
-            )
-            if pole_idx < len(self.participants):
-                name = self.participants[pole_idx].name
-        worst = max(range(3), key=lambda i: gaps[i])
-        mate_idx = self._teammate()
-        mate_gap = 0
-        mate_gaps = (0, 0, 0)
-        mate_name = ""
-        mate_sectors: tuple[int, int, int] = (0, 0, 0)
-        if (
-            0 <= mate_idx < len(field_best)
-            and mate_idx != self._player_idx
-            and player_best > 0
-            and field_best[mate_idx] > 0
-        ):
-            mate_gap = player_best - field_best[mate_idx]
-            mate_sectors = self._best_lap_sectors.get(mate_idx, (0, 0, 0))
-            mate_gaps = (
-                mine[0] - mate_sectors[0] if mine[0] and mate_sectors[0] else 0,
-                mine[1] - mate_sectors[1] if mine[1] and mate_sectors[1] else 0,
-                mine[2] - mate_sectors[2] if mine[2] and mate_sectors[2] else 0,
-            )
-            if mate_idx < len(self.participants):
-                mate_name = self.participants[mate_idx].name
-        mate_worst = max(range(3), key=lambda i: mate_gaps[i])
         out.update(
             run_lap_kind=run.kind,
             line_crossings=run.crossings,
@@ -2720,20 +2755,6 @@ class SessionState:
             hottest_tyre=WHEEL_NAMES[hot_i],
             hottest_tyre_c=temps[hot_i],
             cool_tyre_hint=hint,
-            pole_driver=name,
-            pole_gap_ms=pole_gap,
-            pole_gap_s=round(pole_gap / 1000.0, 1),
-            pole_sector_gaps_ms=gaps,
-            best_sectors_ms=mine,
-            pole_sectors_ms=theirs,
-            pole_worst_sector=worst + 1 if gaps[worst] > 0 else 0,
-            pole_worst_sector_s=round(max(0, gaps[worst]) / 1000.0, 1),
-            teammate_driver=mate_name,
-            teammate_gap_ms=mate_gap,
-            teammate_lap_gap_s=round(mate_gap / 1000.0, 1),
-            teammate_sector_gaps_ms=mate_gaps,
-            teammate_sectors_ms=mate_sectors,
-            teammate_worst_sector=mate_worst + 1 if mate_gaps[mate_worst] > 0 else 0,
             hot_car_behind_s=(
                 self._hot_car_behind_s() if cool_lap or phase == "out_lap" else math.inf
             ),
@@ -2850,6 +2871,8 @@ class SessionState:
             pit_loss_source=model.pit_loss_source,
             fuel_margin_laps=model.fuel_margin_laps,
             fuel_per_lap_kg=model.fuel_per_lap_kg,
+            run_fuel_per_lap_kg=model.run_fuel_per_lap_kg,
+            run_fuel_laps=model.run_fuel_laps,
             fuel_source=model.fuel_source,
             energy_per_lap_mj=model.energy_per_lap_mj,
             energy_lap_delta_mj=model.energy_lap_delta_mj,
