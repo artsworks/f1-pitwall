@@ -13,6 +13,9 @@ rules:
       - "Great start. P{position}, up {positions_gained}"
       - "Lap one, P{position}. {positions_gained} gained"
       - "Mega start! P{position}, {positions_gained} up"
+      - "Lovely start, P{position}. {positions_gained} places gained"
+      - "Nice one, P{position}. Up {positions_gained}"
+      - "Lap one done. P{position}, gained {positions_gained}"
   - id: lap1_lost
     sessions: [race]
     priority: 2
@@ -25,6 +28,8 @@ rules:
     say:
       - "Lap one, P{position}. Lost {positions_lost}, long race"
       - "P{position}, {positions_lost} down. Stay calm"
+      - "P{position} after lap one. Down {positions_lost}, long race"
+      - "Lost {positions_lost} on lap one, P{position}. Patient now"
   - id: lap1_held
     sessions: [race]
     priority: 2
@@ -37,6 +42,8 @@ rules:
     say:
       - "Lap one, holding P{position}. {laps_remaining} to go"
       - "Clean first lap, P{position}. Settle in"
+      - "P{position} after lap one. {laps_remaining} laps left"
+      - "Held P{position} through lap one. Settle in"
   - id: three_to_go
     sessions: [race]
     priority: 2
@@ -49,6 +56,8 @@ rules:
     say:
       - "Three laps to go. P{position}, keep it tidy"
       - "Three to go, P{position}. No mistakes now"
+      - "P{position}, three laps left. Keep it clean"
+      - "Three remaining. P{position}, no mistakes"
   - id: last_lap_defend
     sessions: [race]
     cooldown_s: 120
@@ -61,6 +70,7 @@ rules:
     requires: [lap_data]
     say:
       - "Final lap, {rival_behind_name} {gap_behind_s:.1f} back. Hold him off"
+      - "Last lap. Defend from {rival_behind_name}, {gap_behind_s:.1f} behind. Bring her home"
   - id: last_lap_attack
     sessions: [race]
     cooldown_s: 120
@@ -74,6 +84,8 @@ rules:
     say:
       - "Last lap. {rival_ahead_name}, {gap_ahead_s:.1f}. Everything"
       - "Final lap, {gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
+      - "Final lap. {rival_ahead_name} {gap_ahead_s:.1f} ahead. Push"
+      - "{gap_ahead_s:.1f} to {rival_ahead_name}. Last lap, make the move"
   - id: last_lap
     sessions: [race]
     cooldown_s: 120
@@ -88,11 +100,15 @@ rules:
     say:
       - "Last lap. P{position}, bring it home"
       - "Final lap, P{position}. Nice and clean to the flag"
+      - "P{position}, final lap. Bring her home"
+      - "Last lap now, P{position}. Keep it tidy to the flag"
     severity:
       - when: "penalty_places > 0"
         say:
           - "Last lap. P{position} on the road, P{penalty_position} with the penalty. {penalty_need_s:.1f} on {penalty_threat_name}"
           - "Final lap. Penalty puts us P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "P{position} on track, P{penalty_position} after penalty. Need {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "Final lap, penalty position P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
   # Fastest lap (FTLP event). The player's is always worth a word; a rival's
   # only late on, when the player's best is close enough to take it back.
   - id: fastest_lap_mine
@@ -109,6 +125,9 @@ rules:
       - "Fastest lap! {fastest_lap_spoken}, that's purple."
       - "Purple lap. {fastest_lap_spoken}, fastest of anyone."
       - "Fastest lap of the race, {fastest_lap_spoken}."
+      - "That's fastest lap, {fastest_lap_spoken}. Purple"
+      - "Fastest of the race. {fastest_lap_spoken}, purple"
+      - "Purple, fastest lap. {fastest_lap_spoken}"
   - id: fastest_lap_taken
     sessions: [race]
     priority: 3
@@ -121,11 +140,15 @@ rules:
     say:
       - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're {fastest_lap_gap_s:.1f} off."
       - "Fastest lap, {fastest_lap_name}. {fastest_lap_gap_s:.1f} to find."
+      - "{fastest_lap_name} has fastest lap, {fastest_lap_spoken}. {fastest_lap_gap_s:.1f} to find"
+      - "Rival fastest lap, {fastest_lap_name}. You're {fastest_lap_gap_s:.1f} off"
     severity:
       - when: "fastest_lap_gap_s < 0.05"
         say:
           - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're level on time."
           - "Fastest lap, {fastest_lap_name}. You're level, a tenth takes it."
+          - "{fastest_lap_name} has fastest lap. You're level on time, {fastest_lap_spoken}"
+          - "Fastest lap to {fastest_lap_name}. Level on time, a tenth takes it"
   # Time penalties decide the classified result: say where we really are.
   - id: penalty_cost
     sessions: [race]
@@ -138,11 +161,16 @@ rules:
       - "With penalty, P{penalty_position}. Need {penalty_need_s:.1f} on {penalty_threat_name}"
       - "Penalty makes it P{penalty_position}. {penalty_need_s:.1f} more on {penalty_threat_name}"
       - "{penalty_s} second penalty, P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
+      - "Penalty leaves us P{penalty_position}. Need {penalty_need_s:.1f} on {penalty_threat_name}"
+      - "P{penalty_position} after the penalty. Find {penalty_need_s:.1f} on {penalty_threat_name}"
+      - "{penalty_s} seconds on the car. P{penalty_position}, {penalty_need_s:.1f} to {penalty_threat_name}"
     severity:
       - when: "penalty_places >= 3"
         say:
           - "Penalty drops us to P{penalty_position}. {penalty_need_s:.1f} on {penalty_threat_name}"
           - "Penalty costs {penalty_places} places. {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "P{penalty_position} with the penalty. Need {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "Down {penalty_places} places for the penalty. Find {penalty_need_s:.1f} on {penalty_threat_name}"
   - id: penalty_covered
     sessions: [race]
     priority: 3
@@ -155,6 +183,9 @@ rules:
       - "Gap covers the penalty. P{position} safe"
       - "Penalty covered, {penalty_margin_s:.1f} in hand"
       - "P{position} with the penalty. {penalty_margin_s:.1f} margin"
+      - "Penalty is covered. P{position} remains safe"
+      - "{penalty_margin_s:.1f} clear of the penalty. P{position}"
+      - "P{position}, penalty covered by {penalty_margin_s:.1f}"
   - id: finish_penalty
     sessions: [race]
     priority: 2
@@ -168,6 +199,9 @@ rules:
       - "Flag. P{position} on the road, P{penalty_position} after penalty"
       - "Flag. P{penalty_position} with the penalty. Pace was there"
       - "Flag. Crossed P{position}, classified P{penalty_position}"
+      - "Chequered flag. P{position} on track, classified P{penalty_position}"
+      - "Finished P{position} on the road. Penalty makes it P{penalty_position}"
+      - "Flag. P{penalty_position} after the penalty, crossed in P{position}"
   - id: finish_gained
     sessions: [race]
     priority: 2
@@ -179,6 +213,8 @@ rules:
     say:
       - "Flag! P{classified_position}, up {classified_gained} from P{grid_position}"
       - "Flag. P{classified_position}, {classified_gained} gained. Brilliant"
+      - "Chequered flag, P{classified_position}. Up {classified_gained} from P{grid_position}"
+      - "Finished P{classified_position}, gained {classified_gained} from P{grid_position}. Lovely job"
   - id: finish_lost
     sessions: [race]
     priority: 2
@@ -190,6 +226,8 @@ rules:
     say:
       - "Flag. P{classified_position}, from P{grid_position}. Debrief later"
       - "Flag, P{classified_position}. Tough one"
+      - "Chequered flag, P{classified_position}. Started P{grid_position}, debrief later"
+      - "P{classified_position} at the flag. Tough one from P{grid_position}"
   - id: finish_held
     sessions: [race]
     priority: 2
@@ -201,6 +239,8 @@ rules:
     say:
       - "Chequered flag. P{classified_position}, same as the grid. Solid job"
       - "That's the flag, P{classified_position}. Held the grid slot, good work"
+      - "P{classified_position} at the flag, same as the grid. Well driven"
+      - "Finished P{classified_position}, held the grid place. Nice one"
   - id: finish_win
     sessions: [race]
     priority: 1
@@ -216,6 +256,12 @@ rules:
       - "Race winner! You beauty!"
       - "Flag, P1! What a job!"
       - "Get in there! P1!"
+      - "Get in there. Race winner."
+      - "P1 at the flag. That's the win!"
+      - "What a drive. You've won the race!"
+      - "Chequered flag, P1. Lovely job!"
+      - "Race win! Brilliant work!"
+      - "That's P1. Winner, what a result!"
   - id: finish_podium
     sessions: [race]
     priority: 1
@@ -229,6 +275,10 @@ rules:
       - "P{classified_position}! Podium! Get in there, brilliant job"
       - "Flag, P{classified_position}. Podium! Well driven"
       - "Yes! P{classified_position}, trophy time. Great stuff"
+      - "Chequered flag, P{classified_position}. That's a podium!"
+      - "P{classified_position} on the podium. Lovely work!"
+      - "Podium finish, P{classified_position}. What a drive!"
+      - "Podium, P{classified_position}. Brilliant job"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
@@ -244,15 +294,22 @@ rules:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
       - "Careful at the exit, {rival_pit_exit_name} is right there"
       - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
+      - "{rival_pit_exit_name} close to pit exit. Hold your line"
+      - "Traffic at the exit, {rival_pit_exit_name} is close. Hold the line"
+      - "Watch the pit exit. {rival_pit_exit_name} is right there"
     severity:
       - when: "traffic_behind_s <= th.pit_exit_traffic_s and traffic_behind_name != ''"
         say:
           - "{traffic_behind_name} right there at the pit exit. Hold the line"
           - "{traffic_behind_name} coming at the pit exit. Hold your line"
+          - "Car {traffic_behind_name} at pit exit. Hold the line"
+          - "{traffic_behind_name} approaching the exit. Keep your line"
       - when: "traffic_behind_s <= th.pit_exit_traffic_s"
         say:
           - "Car right there at the pit exit. Hold the line"
           - "Car coming at the pit exit, {traffic_behind_s:.1f} behind. Hold your line"
+          - "Traffic at pit exit. Hold your line"
+          - "Car {traffic_behind_s:.1f} behind at the exit. Hold the line"
   # Contact (COLL): check the car, then report once the damage data settles.
   # Repeat hits inside th.contact_merge_s are one contact.
   # No other shared damage or puncture rule is provisional because those rules report confirmed damage.
@@ -270,6 +327,9 @@ rules:
       - "Contact with {contact_name}. Checking the car"
       - "That's your team-mate! Checking the car, keep it clean"
       - "Touch with {contact_name}. Checking damage"
+      - "Contact there with {contact_name}. Checking the car"
+      - "Team-mate contact. Checking the car, keep it clean"
+      - "We've touched {contact_name}. Checking for damage"
   - id: contact_check
     sessions: [race]
     priority: 1
@@ -284,12 +344,19 @@ rules:
       - "Contact. Checking damage"
       - "Touch with {contact_name}. Checking the car"
       - "Contact. Checking the data"
+      - "Contact made. Checking the car"
+      - "We've had contact. Checking for damage"
+      - "Touch with {contact_name}. Car check underway"
+      - "Contact there, checking the data"
     escalate:
       - after: 2
         say:
           - "Another hit. Checking the car again"
           - "More contact. Stand by, checking"
           - "Again with the contact. Checking the car"
+          - "More contact. Checking the car again"
+          - "Another hit there. Rechecking the car"
+          - "Contact again. Checking the damage"
   - id: contact_damage_report
     sessions: [race]
     priority: 2
@@ -305,6 +372,9 @@ rules:
       - "{contact_damage} damage, {contact_damage_pct} percent. Nothing major"
       - "{contact_damage_pct} percent {contact_damage} damage. Carry on"
       - "Some {contact_damage} damage, {contact_damage_pct} percent. Driveable"
+      - "{contact_damage} damage at {contact_damage_pct} percent. Nothing major"
+      - "Damage is {contact_damage_pct} percent {contact_damage}. Carry on"
+      - "{contact_damage} damage, {contact_damage_pct} percent. Still driveable"
   - id: contact_ok
     sessions: [race]
     priority: 3
@@ -321,9 +391,16 @@ rules:
       - "Car checked. No new damage"
       - "No new damage from that hit"
       - "Damage unchanged"
+      - "No damage added by that contact"
+      - "Checked the car. Damage is unchanged"
+      - "That hit caused no new damage"
+      - "No change to the damage readings"
     escalate:
       - after: 2
         say:
           - "No further damage. Keep it clean"
           - "No additional damage this time"
           - "Readings unchanged. Careful with the contact"
+          - "No new damage. Keep the car clean"
+          - "Damage readings are unchanged"
+          - "Nothing further damaged. Avoid more contact"

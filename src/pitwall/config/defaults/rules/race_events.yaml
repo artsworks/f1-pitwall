@@ -13,6 +13,9 @@ rules:
       - "Box, box. Aquaplaning risk, {tyre_switch_to}"
       - "Box, box. Grip's going, {tyre_switch_to} now"
       - "Box this lap. Aquaplaning risk, {tyre_switch_to}"
+      - "Aquaplaning risk. Box this lap for {tyre_switch_to}"
+      - "Grip is going. Fit {tyre_switch_to}, pit now"
+      - "Box now, {tyre_switch_to}. Aquaplaning risk"
   - id: penalty
     sessions: [race]
     priority: 1
@@ -25,6 +28,9 @@ rules:
       - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
       - "We've been given {penalty_time_s} seconds. {penalty_s} total"
       - "{penalty_time_s} second penalty. {penalty_s} total now"
+      - "Penalty, {penalty_time_s} seconds. Total penalty is {penalty_s}"
+      - "{penalty_time_s} seconds added. {penalty_s} total penalty"
+      - "Race penalty, {penalty_time_s} seconds. {penalty_s} total"
   - id: penalty_pit
     sessions: [race]
     priority: 1
@@ -38,6 +44,9 @@ rules:
       - "We've got a {penalty_kind_text}. Serve it within three laps"
       - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
       - "{penalty_kind_text}. Three laps to serve it, we'll call it"
+      - "{penalty_kind_text} penalty. Serve it within three laps"
+      - "Penalty for {penalty_kind_text}. Three laps to serve it"
+      - "Serve the {penalty_kind_text} within three laps"
   - id: serve_penalty
     sessions: [race]
     priority: 2
@@ -51,6 +60,9 @@ rules:
       - "Unserved penalty on the car. We serve it at the stop"
       - "We'll take the penalty at the stop, it's still on the car"
       - "Reminder, penalty's unserved. It comes off at the stop"
+      - "Penalty still unserved. Serve it at the stop"
+      - "Penalty still to serve. Take it at the stop"
+      - "Penalty remains on the car. Serve it in the pits"
   - id: penalty_track_limits
     sessions: [race]
     priority: 1
@@ -63,7 +75,11 @@ rules:
       - "{penalty_time_s} seconds, track limits. {penalty_s} total"
       - "{penalty_time_s} second penalty, track limits. {penalty_s} total"
       - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
-      - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
+      - "Penalty, {penalty_time_s} seconds for track limits. {penalty_s} total"
+      - "Track limits, {penalty_time_s} seconds added. {penalty_s} total penalty"
+      - "{penalty_time_s} seconds for track limits. Total penalty {penalty_s}"
+      - "Track limits penalty, {penalty_time_s} seconds. Total now {penalty_s}"
+      - "{penalty_time_s} seconds added for track limits. {penalty_s} total"
   - id: penalty_corner_cut
     sessions: [race]
     priority: 1
@@ -75,6 +91,8 @@ rules:
     say:
       - "{penalty_time_s} seconds, corner cut. {penalty_s} total"
       - "{penalty_time_s} second penalty, cutting. {penalty_s} total"
+      - "Corner cut penalty, {penalty_time_s} seconds. {penalty_s} total"
+      - "Penalty for cutting, {penalty_time_s} seconds. Total {penalty_s}"
   - id: track_limit_warning
     sessions: [race]
     priority: 2
@@ -88,6 +106,10 @@ rules:
       - "Track limits warning. Stay inside the kerbs"
       - "Track limits warning. Lovely bit of grass you found there"
       - "Warning for track limits. Stewards noticed, so did we"
+      - "Track limits warning. Keep all four wheels inside"
+      - "Warning, track limits. Stay within the white lines"
+      - "Track limits. Keep it on the circuit"
+      - "Another track limits warning. Don't wander beyond the white lines"
   - id: track_limit_last_warning
     sessions: [race]
     priority: 1
@@ -100,6 +122,9 @@ rules:
       - "Track limits, {track_warning_count} now. Next one's a penalty"
       - "Track limits, {track_warning_count}. Next one costs time"
       - "{track_warning_count} track limits. One more is a penalty"
+      - "{track_warning_count} track limits now. Next one is a penalty"
+      - "Warning count {track_warning_count}. Another track limit costs time"
+      - "Track limits warning number {track_warning_count}. One more brings a penalty"
   - id: corner_cut_warning
     sessions: [race]
     priority: 2
@@ -111,6 +136,8 @@ rules:
     say:
       - "Corner cut warning. Give the time back"
       - "Warning, cutting the corner. Stay on track"
+      - "Corner cut. Return the time"
+      - "Corner cut warning. Don't wander off the track. Give the time back"
   - id: corner_cut_last_warning
     sessions: [race]
     priority: 1
@@ -122,6 +149,8 @@ rules:
     say:
       - "Corner cuts, {track_warning_count} now. Next one's a penalty"
       - "{track_warning_count} corner cuts. One more costs time"
+      - "Corner cut count {track_warning_count}. Next one is a penalty"
+      - "{track_warning_count} cuts now. One more costs time"
   - id: track_limit_overtake
     sessions: [race]
     priority: 2
@@ -133,6 +162,9 @@ rules:
       - "Warning for passing off track. Nice move, wrong postcode"
       - "That pass was off track. Warning"
       - "Warning, pass off track. Keep it on"
+      - "Off-track pass. Warning, keep it on the circuit"
+      - "Off-track pass. Warning. Stay on the circuit"
+      - "Warning for an off-track pass. Keep the car on track"
   - id: blue_flag
     sessions: [race]
     priority: 1
@@ -146,6 +178,9 @@ rules:
       - "Blue flag. Let him by"
       - "Blues, leader behind. Give him the room"
       - "Blue flags. Let him through, cleanly"
+      - "Blue flag. Yield to the car behind"
+      - "Leader approaching. Blue flag, let him through"
+      - "Blue flags. Let the leader pass"
   - id: rival_ahead_pitted
     sessions: [race]
     priority: 2
@@ -159,6 +194,9 @@ rules:
       - "{rival_ahead_name} ahead has boxed. Was {gap_ahead_s:.1f} up"
       - "{rival_ahead_name} pitted, {gap_ahead_s:.1f} ahead"
       - "Car ahead's boxing, {rival_ahead_name}. He was {gap_ahead_s:.1f} up"
+      - "{rival_ahead_name} has pitted. Gap was {gap_ahead_s:.1f}"
+      - "Car ahead boxed. {rival_ahead_name} {gap_ahead_s:.1f} in front"
+      - "{rival_ahead_name} into the pits. {gap_ahead_s:.1f} ahead"
   - id: rival_behind_pitted
     sessions: [race]
     priority: 2
@@ -174,6 +212,10 @@ rules:
       - "{rival_behind_name} behind has boxed. Watch the undercut"
       - "{rival_behind_name} pitted. Undercut threat, push"
       - "{rival_behind_name} boxed. Push, cover the undercut"
+      - "{rival_behind_name} has stopped. Fresh tyres, watch the undercut"
+      - "Car behind boxed, {rival_behind_name}. Cover the undercut"
+      - "{rival_behind_name} is in the pits. Push to cover the undercut"
+      - "Fresh tyres behind, {rival_behind_name} has boxed. Push now"
   - id: weather_to_inter
     sessions: [race]
     priority: 2
@@ -186,6 +228,9 @@ rules:
       - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters soon"
       - "Rain coming, {weather_crossover_pct} percent. Inters likely"
       - "{weather_crossover_pct} percent rain in {weather_crossover_min} minutes. Thinking inters"
+      - "Inters likely. Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes"
+      - "Rain expected in {weather_crossover_min} minutes, {weather_crossover_pct} percent. Prepare inters"
+      - "Crossover to inters, {weather_crossover_pct} percent in {weather_crossover_min} minutes"
   - id: weather_to_wet
     sessions: [race]
     priority: 2
@@ -198,6 +243,9 @@ rules:
       - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Full wets"
       - "Heavy rain, {weather_crossover_pct} percent. Full wets likely"
       - "Big rain coming, {weather_crossover_pct} percent. Ready for wets"
+      - "Full wets expected. Rain chance {weather_crossover_pct} percent in {weather_crossover_min} minutes"
+      - "Heavy rain due in {weather_crossover_min} minutes, {weather_crossover_pct} percent. Prepare wets"
+      - "Crossover to full wets, {weather_crossover_pct} percent chance"
   - id: weather_to_dry
     sessions: [race]
     priority: 2
@@ -210,6 +258,9 @@ rules:
       - "Track drying, rain {weather_crossover_pct} percent. Slicks soon"
       - "Drying, {weather_crossover_pct} percent rain. Slicks soon"
       - "Drying out. Slicks coming"
+      - "Track is drying. Rain chance {weather_crossover_pct} percent, slicks soon"
+      - "Drying conditions, {weather_crossover_pct} percent rain. Prepare slicks"
+      - "Rain easing. Slicks likely, {weather_crossover_pct} percent rain"
   - id: sc_deployed
     sessions: [race]
     priority: 1
@@ -222,6 +273,9 @@ rules:
       - "Safety car, safety car. Delta positive, stay above it"
       - "Safety car deployed. Keep the delta positive"
       - "Safety car, safety car. Watch the delta"
+      - "Safety car deployed. Keep your delta positive"
+      - "Safety car. Stay above the delta"
+      - "Safety car out. Maintain a positive delta"
   - id: vsc_deployed
     sessions: [race]
     priority: 1
@@ -233,6 +287,9 @@ rules:
       - "Virtual safety car. Stick to the delta"
       - "VSC, VSC. Stay on the delta"
       - "Virtual safety car deployed. Delta, keep it positive"
+      - "VSC deployed. Follow the delta"
+      - "Virtual safety car. Keep your delta positive"
+      - "VSC active. Stay on the delta"
   - id: sc_ending
     sessions: [race]
     priority: 1
@@ -244,6 +301,9 @@ rules:
       - "Safety car in this lap. Heat the tyres"
       - "Safety car in. Tyres warm, restart coming"
       - "SC in this lap, SC in this lap. Stay close, be ready to go"
+      - "Safety car comes in this lap. Warm the tyres"
+      - "SC in this lap. Get the tyres ready for the restart"
+      - "Safety car ending this lap. Stay close and be ready"
   - id: vsc_ending
     sessions: [race]
     priority: 1
@@ -254,6 +314,8 @@ rules:
     say:
       - "VSC ending, VSC ending. Be ready to go"
       - "VSC ending. Stay on the delta until it goes green"
+      - "VSC ending. Prepare to race when it goes green"
+      - "Virtual safety car ending. Hold the delta until green"
   - id: sc_restart
     sessions: [race]
     priority: 1
@@ -265,6 +327,9 @@ rules:
       - "Green flag, green flag. Racing again, push now"
       - "Green, green. We're racing, full attack"
       - "Safety car's in, green flag. Go"
+      - "Green flag. Racing again, push now"
+      - "Safety car in. Green flag, resume racing"
+      - "Green, green. Safety car in, race now"
   - id: vsc_restart
     sessions: [race]
     priority: 1
@@ -275,3 +340,5 @@ rules:
     say:
       - "Green, green. VSC's over, full power"
       - "VSC over, go, go, go"
+      - "Green flag. VSC is over, race at full pace"
+      - "VSC ended. Green flag, resume racing"
