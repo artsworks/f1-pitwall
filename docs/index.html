@@ -145,6 +145,10 @@ article:has(.landing){max-width:none}
 .shot .frame{position:relative;display:block}
 .video{max-width:900px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
 .video iframe{display:block;width:100%;height:100%;border:0}
+.video .facade{display:block;width:100%;height:100%;padding:0;border:0;background:#000;cursor:pointer;position:relative}
+.video .facade img{display:block;width:100%;height:100%;object-fit:cover}
+.video .facade .play{position:absolute;left:50%;top:50%;display:grid;width:68px;height:48px;place-items:center;transform:translate(-50%,-50%);border-radius:14px;background:#f00}
+.video .facade .play::after{content:"";margin-left:4px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:15px solid #fff}
 .shot .open{display:block;padding:8px 14px;border-top:1px solid #222;color:#e6e8eb;font-size:13px;font-weight:600;text-align:right;transition:color .2s}
 .hero .shot:hover .open,.hero .shot:focus-visible .open{color:#ff5a4f}
 .shot .live{position:absolute;left:14px;bottom:14px;max-width:calc(100% - 28px);display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:rgba(10,10,10,.85);border:1px solid rgba(255,255,255,.14);color:#f2f2f2;font:13px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden}
@@ -234,12 +238,11 @@ article:has(.landing){max-width:none}
         <a class="btn" href="https://github.com/artsworks/f1-pitwall">GitHub</a>
       </div>
       </div>
-      <a class="shot" href="mockups/dashboard-reimagined.html" aria-label="Open the interactive dashboard mockup"><span class="frame"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high"><span class="live" aria-hidden="true"><span class="dot"></span><b>RADIO</b><span class="say"></span><span class="caret"></span></span></span><span class="open" aria-hidden="true">Open the interactive mockup ↗</span></a>
+      <a class="shot" href="mockups/dashboard-reimagined.html" aria-label="Open the interactive dashboard mockup"><span class="frame"><img src="assets/screens/race-box-call.webp" alt="The race dashboard during a box call" width="1920" height="1080" loading="eager" fetchpriority="high" srcset="assets/screens/race-box-call-800.webp 800w, assets/screens/race-box-call-1200.webp 1200w, assets/screens/race-box-call.webp 1920w" sizes="(max-width: 860px) 100vw, 1920px"><span class="live" aria-hidden="true"><span class="dot"></span><b>RADIO</b><span class="say"></span><span class="caret"></span></span></span><span class="open" aria-hidden="true">Open the interactive mockup ↗</span></a>
     </section>
   </div></article>
   </main>
 </div>
-<script src="assets/marked.min.js"></script>
 <script>
 const DEMO = {
   id: "QId9M1ToDiE",
@@ -394,20 +397,21 @@ function overview() {
     ]]
   ];
   const tall = f => f.startsWith("phone-");
+  const mobile = matchMedia("(max-width: 860px), (pointer: coarse)").matches;
   $("#content").innerHTML = `<div class="landing">
     ${HERO}
 
     <section class="reveal">
     <h2>Watch it work</h2>
     <p class="lede">A full grand prix weekend: practice, qualifying and race.</p>
-    <div class="video"><iframe src="${DEMO_EMBED}" title="${DEMO.title}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+    ${mobile ? `<div class="video"><button type="button" class="facade" aria-label="Play: ${DEMO.title}"><img src="https://i.ytimg.com/vi/${DEMO.id}/hqdefault.jpg" alt="" loading="lazy" width="480" height="360"><span class="play" aria-hidden="true"></span></button></div>` : `<div class="video"><iframe src="${DEMO_EMBED}" title="${DEMO.title}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`}
     </section>
 
     <section class="reveal">
     <h2>Screens</h2>
     <p class="lede">Dashboard and phone shots come from synthetic replays. Select a screen to open it at full size.</p>
     <div class="gallery">${screens.map(([g, list]) => `<div class="group${list.some(([f]) => tall(f)) ? " phone" : ""}"><h3>${g}</h3><div class="shots">` + list.map(([f, t, d]) =>
-      `<figure${tall(f) ? ` class="tall"` : ""}><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" ${tall(f) ? `width="390" height="844"` : `width="1920" height="1080"`}></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div></div>`).join("")}</div>
+      `<figure${tall(f) ? ` class="tall"` : ""}><a href="assets/screens/${f}.webp"><img src="assets/screens/${f}.webp" alt="${t}: ${d}" loading="lazy" ${tall(f) ? `width="390" height="844"` : `width="1920" height="1080" srcset="assets/screens/${f}-800.webp 800w, assets/screens/${f}-1200.webp 1200w, assets/screens/${f}.webp 1920w" sizes="(max-width: 860px) 100vw, 1920px"`}></a><figcaption><b>${t}.</b> ${d}</figcaption></figure>`).join("") + `</div></div>`).join("")}</div>
     </section>
 
     <section class="reveal">
@@ -436,6 +440,10 @@ function overview() {
     <a class="devcard" href="#/developer"><span><b>Developer guide</b>Architecture, strategy design, decision records, build status and the roadmap.</span><i aria-hidden="true">→</i></a>
     </section>
   </div>`;
+  const facade = $(".facade");
+  if (facade) facade.addEventListener("click", () => {
+    facade.outerHTML = `<iframe src="${DEMO_EMBED}?autoplay=1" title="${DEMO.title}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+  });
   reveal();
   heroRadio($(".shot .say"), ["Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]);
 }
@@ -513,9 +521,19 @@ function linkify(root, baseDir) {
   });
 }
 
+let markedP;
+const loadMarked = () => markedP ||= window.marked ? Promise.resolve() : new Promise((ok, no) => {
+  const s = document.createElement("script");
+  s.src = "assets/marked.min.js";
+  s.onload = ok;
+  s.onerror = () => { markedP = null; no(new Error("marked.min.js failed to load")); };
+  document.head.append(s);
+});
+
 async function showDoc(id, frag) {
   const d = byId[id];
   if (!d) { $("#content").innerHTML = `<h1>Not found</h1><p>No document called <code>${id}</code>. <a href="#/">Back to the overview</a>.</p>`; return; }
+  const mk = loadMarked();
   document.title = d[1] + " · f1-pitwall";
   const el = $("#content");
   try {
@@ -524,6 +542,7 @@ async function showDoc(id, frag) {
       if (!r.ok) throw new Error(r.status + " " + r.statusText);
       cache[id] = await r.text();
     }
+    await mk;
   } catch (e) {
     el.innerHTML = `<p class="err">Could not load ${id}.md (${e.message}).</p>`; return;
   }
