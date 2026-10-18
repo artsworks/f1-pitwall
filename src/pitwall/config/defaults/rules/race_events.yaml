@@ -1,0 +1,277 @@
+rules:
+  - id: weather_box_now
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase in ('racing', 'sc', 'vsc') and laps_remaining > 1 and ((tyre_switch_to == 'inters' and tyre_compound != 8) or tyre_switch_to == 'wets') and slip_trend >= th.wet_slip_trend_min and (rain_pct_in_10 > rain_pct_now or weather_now >= 3)"
+    clear_when: "tyre_switch_to == ''"
+    cooldown_s: 30
+    cooldown_group: weather
+    supersedes: [tyre_switch, weather_to_inter, weather_to_wet]
+    requires: [lap_data]
+    say:
+      - "Box, box. Aquaplaning risk, {tyre_switch_to}"
+      - "Box, box. Grip's going, {tyre_switch_to} now"
+      - "Box this lap. Aquaplaning risk, {tyre_switch_to}"
+  - id: penalty
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement not in (7, 8, 9, 21)"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "Penalty, {penalty_time_s} seconds. {penalty_s} total on the car now"
+      - "We've been given {penalty_time_s} seconds. {penalty_s} total"
+      - "{penalty_time_s} second penalty. {penalty_s} total now"
+  - id: penalty_pit
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    when: "penalty_recent and penalty_kind in ('drive_through', 'stop_go')"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "We've got a {penalty_kind_text}. Serve it within three laps"
+      - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
+      - "{penalty_kind_text}. Three laps to serve it, we'll call it"
+  - id: serve_penalty
+    sessions: [race]
+    priority: 2
+    urgency: execution
+    decision_point: pit_entry
+    when: "unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now', 'box_in_n', 'cheap_stop')"
+    clear_when: "unserved_drive_through + unserved_stop_go == 0"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Unserved penalty on the car. We serve it at the stop"
+      - "We'll take the penalty at the stop, it's still on the car"
+      - "Reminder, penalty's unserved. It comes off at the stop"
+  - id: penalty_track_limits
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement == 21"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "{penalty_time_s} seconds, track limits. {penalty_s} total"
+      - "{penalty_time_s} second penalty, track limits. {penalty_s} total"
+      - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
+      - "Track limits penalty, {penalty_time_s} seconds. {penalty_s} total"
+  - id: penalty_corner_cut
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "penalty_recent and penalty_kind == 'time' and penalty_time_s > 0 and penalty_infringement in (7, 8, 9)"
+    clear_when: "not penalty_recent"
+    cooldown_s: 15
+    requires: [event]
+    say:
+      - "{penalty_time_s} seconds, corner cut. {penalty_s} total"
+      - "{penalty_time_s} second penalty, cutting. {penalty_s} total"
+  - id: track_limit_warning
+    sessions: [race]
+    priority: 2
+    urgency: coaching
+    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Track limits. The track's the grey bit, mate"
+      - "Track limits warning. Stay inside the kerbs"
+      - "Track limits warning. Lovely bit of grass you found there"
+      - "Warning for track limits. Stewards noticed, so did we"
+  - id: track_limit_last_warning
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Track limits, {track_warning_count} now. Next one's a penalty"
+      - "Track limits, {track_warning_count}. Next one costs time"
+      - "{track_warning_count} track limits. One more is a penalty"
+  - id: corner_cut_warning
+    sessions: [race]
+    priority: 2
+    urgency: coaching
+    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Corner cut warning. Give the time back"
+      - "Warning, cutting the corner. Stay on track"
+  - id: corner_cut_last_warning
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Corner cuts, {track_warning_count} now. Next one's a penalty"
+      - "{track_warning_count} corner cuts. One more costs time"
+  - id: track_limit_overtake
+    sessions: [race]
+    priority: 2
+    when: "track_warning_recent and track_warning_kind == 'overtake'"
+    clear_when: "not track_warning_recent"
+    cooldown_s: 10
+    requires: [event]
+    say:
+      - "Warning for passing off track. Nice move, wrong postcode"
+      - "That pass was off track. Warning"
+      - "Warning, pass off track. Keep it on"
+  - id: blue_flag
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    resolved_by: [box_now, plan_sc_box]
+    when: "blue_flag and phase not in ('red_flag', 'sc', 'vsc')"
+    clear_when: "not blue_flag or phase in ('red_flag', 'sc', 'vsc')"
+    cooldown_s: 20
+    requires: [car_status]
+    say:
+      - "Blue flag. Let him by"
+      - "Blues, leader behind. Give him the room"
+      - "Blue flags. Let him through, cleanly"
+  - id: rival_ahead_pitted
+    sessions: [race]
+    priority: 2
+    brief: "Rival ahead has pitted"
+    when: "phase == 'racing' and rival_ahead_in_pit_lane and pit_plan != 'overcut' and gap_ahead_s <= th.rival_pit_gap_s and laps_remaining > th.pit_min_laps_left"
+    clear_when: "not rival_ahead_in_pit_lane"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    requires: [lap_data]
+    say:
+      - "{rival_ahead_name} ahead has boxed. Was {gap_ahead_s:.1f} up"
+      - "{rival_ahead_name} pitted, {gap_ahead_s:.1f} ahead"
+      - "Car ahead's boxing, {rival_ahead_name}. He was {gap_ahead_s:.1f} up"
+  - id: rival_behind_pitted
+    sessions: [race]
+    priority: 2
+    brief: "Rival behind has pitted"
+    when: "phase == 'racing' and rival_behind_in_pit_lane and tyre_age_laps >= 2 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "not rival_behind_in_pit_lane"
+    cooldown_s: 45
+    cooldown_group: rival_pit
+    resolved_by: [box_now, overcut_stay_out, cover_box, overcut_defend]
+    requires: [lap_data]
+    say:
+      - "{rival_behind_name} has boxed. Fresh tyres, expect the undercut"
+      - "{rival_behind_name} behind has boxed. Watch the undercut"
+      - "{rival_behind_name} pitted. Undercut threat, push"
+      - "{rival_behind_name} boxed. Push, cover the undercut"
+  - id: weather_to_inter
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_inter' and tyre_compound not in (0, 7)"
+    clear_when: "weather_crossover != 'to_inter'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Inters soon"
+      - "Rain coming, {weather_crossover_pct} percent. Inters likely"
+      - "{weather_crossover_pct} percent rain in {weather_crossover_min} minutes. Thinking inters"
+  - id: weather_to_wet
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_wet' and tyre_compound not in (0, 8)"
+    clear_when: "weather_crossover != 'to_wet'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Rain {weather_crossover_pct} percent in {weather_crossover_min} minutes. Full wets"
+      - "Heavy rain, {weather_crossover_pct} percent. Full wets likely"
+      - "Big rain coming, {weather_crossover_pct} percent. Ready for wets"
+  - id: weather_to_dry
+    sessions: [race]
+    priority: 2
+    when: "weather_crossover == 'to_dry'"
+    clear_when: "weather_crossover != 'to_dry'"
+    cooldown_s: 120
+    cooldown_group: weather
+    requires: [session]
+    say:
+      - "Track drying, rain {weather_crossover_pct} percent. Slicks soon"
+      - "Drying, {weather_crossover_pct} percent rain. Slicks soon"
+      - "Drying out. Slicks coming"
+  - id: sc_deployed
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    escalates: [vsc_deployed, vsc_ending, vsc_restart]
+    when: "phase == 'sc'"
+    clear_when: "phase != 'sc'"
+    requires: [session]
+    say:
+      - "Safety car, safety car. Delta positive, stay above it"
+      - "Safety car deployed. Keep the delta positive"
+      - "Safety car, safety car. Watch the delta"
+  - id: vsc_deployed
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase == 'vsc'"
+    clear_when: "phase != 'vsc'"
+    requires: [session]
+    say:
+      - "Virtual safety car. Stick to the delta"
+      - "VSC, VSC. Stay on the delta"
+      - "Virtual safety car deployed. Delta, keep it positive"
+  - id: sc_ending
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase == 'sc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "Safety car in this lap. Heat the tyres"
+      - "Safety car in. Tyres warm, restart coming"
+      - "SC in this lap, SC in this lap. Stay close, be ready to go"
+  - id: vsc_ending
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase == 'vsc' and sc_ending"
+    clear_when: "not sc_ending"
+    requires: [lap_data]
+    say:
+      - "VSC ending, VSC ending. Be ready to go"
+      - "VSC ending. Stay on the delta until it goes green"
+  - id: sc_restart
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase == 'racing' and neutral_ended_kind == 'sc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green flag, green flag. Racing again, push now"
+      - "Green, green. We're racing, full attack"
+      - "Safety car's in, green flag. Go"
+  - id: vsc_restart
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase == 'racing' and neutral_ended_kind == 'vsc' and neutral_ended_s < th.neutral_green_s"
+    clear_when: "neutral_ended_s >= th.neutral_green_s"
+    requires: [lap_data]
+    say:
+      - "Green, green. VSC's over, full power"
+      - "VSC over, go, go, go"

@@ -588,7 +588,7 @@ tyres"), `battle_defend` (P2), `battle_under_threat`, `battle_manage` (every
 hold rate is low, the chaser has fresher tyres, and enough laps remain. Its thresholds
 are `battle_letby_hold_max`, `battle_letby_tyre_laps`, and `battle_letby_min_laps`.
 
-## Rules (`config/defaults/rules/race.yaml`)
+## Rules (`config/defaults/rules/race_*.yaml`)
 
 All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.call_budget_per_lap`
 (dispatcher `budget_override` follows the mindset), predictions in `inputs` because rules
@@ -710,6 +710,6 @@ synthetic race stream (`race_stream(laps=N, ...)`) with Session, Lap Data (playe
 Car Status, Car Damage, Car Telemetry, Session History and Event packets on a 5 km track at 5 Hz
 with configurable deg slope, fuel, SC window, rival gaps, penalty and weather forecast.
 `scripts/make_m3_fixture.py` writes it to `~/m3-race-25.f1bin` / `~/m3-race-100.f1bin` for
-`pitwall replay` / review. Every rule in `race.yaml` has a replay test asserting it fires (and
+`pitwall replay` / review. Every race rule has a replay test asserting it fires (and
 does not fire on the control stream), and `test_race_budget.py` asserts calls per lap never
 exceeds `mode.call_budget_per_lap` on the 100% stream.

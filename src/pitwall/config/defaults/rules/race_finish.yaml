@@ -1,0 +1,329 @@
+rules:
+  # End of lap 1: report against the grid slot.
+  - id: lap1_gained
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Gained places on lap one"
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained > 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Great start. P{position}, up {positions_gained}"
+      - "Lap one, P{position}. {positions_gained} gained"
+      - "Mega start! P{position}, {positions_gained} up"
+  - id: lap1_lost
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Lost places on lap one"
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_lost > 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one, P{position}. Lost {positions_lost}, long race"
+      - "P{position}, {positions_lost} down. Stay calm"
+  - id: lap1_held
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Held position after lap one"
+    when: "phase == 'racing' and lap_num == 2 and sector == 0 and grid_position > 0 and positions_gained == 0"
+    clear_when: "lap_num != 2"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Lap one, holding P{position}. {laps_remaining} to go"
+      - "Clean first lap, P{position}. Settle in"
+  - id: three_to_go
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Three laps left in race"
+    when: "phase == 'racing' and total_laps >= 6 and laps_remaining == 3 and sector == 0"
+    clear_when: "laps_remaining != 3"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Three laps to go. P{position}, keep it tidy"
+      - "Three to go, P{position}. No mistakes now"
+  - id: last_lap_defend
+    sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
+    priority: 1
+    urgency: execution
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Final lap, {rival_behind_name} {gap_behind_s:.1f} back. Hold him off"
+  - id: last_lap_attack
+    sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
+    priority: 1
+    urgency: execution
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and gap_ahead_s < th.last_lap_fight_s and not gap_behind_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. {rival_ahead_name}, {gap_ahead_s:.1f}. Everything"
+      - "Final lap, {gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
+  - id: last_lap
+    sessions: [race]
+    cooldown_s: 120
+    cooldown_group: last_lap
+    priority: 2
+    urgency: info
+    brief: "Final lap, bring it home"
+    when: "phase == 'racing' and total_laps > 1 and laps_remaining == 1 and sector == 0 and not gap_behind_s < th.last_lap_fight_s and not gap_ahead_s < th.last_lap_fight_s"
+    clear_when: "laps_remaining != 1"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Last lap. P{position}, bring it home"
+      - "Final lap, P{position}. Nice and clean to the flag"
+    severity:
+      - when: "penalty_places > 0"
+        say:
+          - "Last lap. P{position} on the road, P{penalty_position} with the penalty. {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "Final lap. Penalty puts us P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
+  # Fastest lap (FTLP event). The player's is always worth a word; a rival's
+  # only late on, when the player's best is close enough to take it back.
+  - id: fastest_lap_mine
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Set the fastest lap"
+    when: "phase == 'racing' and fastest_lap_mine and fastest_lap_age_s < th.fastest_lap_fresh_s"
+    clear_when: "not fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "fastest_lap_mine"
+    cooldown_s: 30
+    requires: [lap_data]
+    say:
+      - "Fastest lap! {fastest_lap_spoken}, that's purple."
+      - "Purple lap. {fastest_lap_spoken}, fastest of anyone."
+      - "Fastest lap of the race, {fastest_lap_spoken}."
+  - id: fastest_lap_taken
+    sessions: [race]
+    priority: 3
+    brief: "Rival took fastest lap"
+    when: "phase == 'racing' and not fastest_lap_mine and fastest_lap_age_s >= th.fastest_lap_settle_s and fastest_lap_age_s < th.fastest_lap_fresh_s and laps_remaining <= th.fastest_lap_chase_laps and fastest_lap_gap_s <= th.fastest_lap_chase_s"
+    clear_when: "fastest_lap_mine or fastest_lap_age_s >= th.fastest_lap_fresh_s"
+    still_true: "not fastest_lap_mine"
+    cooldown_s: 60
+    requires: [lap_data]
+    say:
+      - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're {fastest_lap_gap_s:.1f} off."
+      - "Fastest lap, {fastest_lap_name}. {fastest_lap_gap_s:.1f} to find."
+    severity:
+      - when: "fastest_lap_gap_s < 0.05"
+        say:
+          - "{fastest_lap_name} fastest lap, {fastest_lap_spoken}. You're level on time."
+          - "Fastest lap, {fastest_lap_name}. You're level, a tenth takes it."
+  # Time penalties decide the classified result: say where we really are.
+  - id: penalty_cost
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and penalty_s > 0 and penalty_places > 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places == 0"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "With penalty, P{penalty_position}. Need {penalty_need_s:.1f} on {penalty_threat_name}"
+      - "Penalty makes it P{penalty_position}. {penalty_need_s:.1f} more on {penalty_threat_name}"
+      - "{penalty_s} second penalty, P{penalty_position}. Find {penalty_need_s:.1f} on {penalty_threat_name}"
+    severity:
+      - when: "penalty_places >= 3"
+        say:
+          - "Penalty drops us to P{penalty_position}. {penalty_need_s:.1f} on {penalty_threat_name}"
+          - "Penalty costs {penalty_places} places. {penalty_need_s:.1f} on {penalty_threat_name}"
+  - id: penalty_covered
+    sessions: [race]
+    priority: 3
+    when: "phase == 'racing' and penalty_s > 0 and penalty_position > 0 and penalty_places == 0 and laps_remaining <= th.penalty_standing_laps"
+    clear_when: "penalty_places > 0"
+    cooldown_s: 120
+    cooldown_group: penalty_standing
+    requires: [lap_data]
+    say:
+      - "Gap covers the penalty. P{position} safe"
+      - "Penalty covered, {penalty_margin_s:.1f} in hand"
+      - "P{position} with the penalty. {penalty_margin_s:.1f} margin"
+  - id: finish_penalty
+    sessions: [race]
+    priority: 2
+    urgency: info
+    flushes_queue: true
+    supersedes: [finish_held, finish_gained, finish_lost]
+    when: "phase == 'finished' and penalty_places > 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Flag. P{position} on the road, P{penalty_position} after penalty"
+      - "Flag. P{penalty_position} with the penalty. Pace was there"
+      - "Flag. Crossed P{position}, classified P{penalty_position}"
+  - id: finish_gained
+    sessions: [race]
+    priority: 2
+    urgency: info
+    flushes_queue: true
+    when: "phase == 'finished' and grid_position > 0 and classified_gained > 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Flag! P{classified_position}, up {classified_gained} from P{grid_position}"
+      - "Flag. P{classified_position}, {classified_gained} gained. Brilliant"
+  - id: finish_lost
+    sessions: [race]
+    priority: 2
+    urgency: info
+    flushes_queue: true
+    when: "phase == 'finished' and grid_position > 0 and classified_lost > 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Flag. P{classified_position}, from P{grid_position}. Debrief later"
+      - "Flag, P{classified_position}. Tough one"
+  - id: finish_held
+    sessions: [race]
+    priority: 2
+    urgency: info
+    flushes_queue: true
+    when: "phase == 'finished' and grid_position > 0 and classified_gained == 0 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Chequered flag. P{classified_position}, same as the grid. Solid job"
+      - "That's the flag, P{classified_position}. Held the grid slot, good work"
+  - id: finish_win
+    sessions: [race]
+    priority: 1
+    urgency: info
+    flushes_queue: true
+    when: "phase == 'finished' and classified_position == 1 and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "Yes! Yes! You've won the race!"
+      - "Get in there! P1! Winner!"
+      - "That's the win! Simply lovely. What a drive"
+      - "Race winner! You beauty!"
+      - "Flag, P1! What a job!"
+      - "Get in there! P1!"
+  - id: finish_podium
+    sessions: [race]
+    priority: 1
+    urgency: info
+    flushes_queue: true
+    when: "phase == 'finished' and classified_position in (2, 3) and penalty_places == 0"
+    max_per_stint: 1
+    requires: [lap_data]
+    say:
+      - "That's it, you've done it! P{classified_position}, on the podium!"
+      - "P{classified_position}! Podium! Get in there, brilliant job"
+      - "Flag, P{classified_position}. Podium! Well driven"
+      - "Yes! P{classified_position}, trophy time. Great stuff"
+  - id: pit_exit_traffic_race
+    sessions: [race]
+    priority: 2
+    urgency: safety
+    tags: [traffic]
+    # In a race the driver holds position at the exit. Giving way is for practice and quali.
+    when: "phase == 'out_lap' and pit_exit_s <= 3 and (traffic_behind_s <= th.pit_exit_traffic_s or (rival_pit_exit_name != '' and abs(pit_exit_rival_gap_s) < th.pit_exit_traffic_s))"
+    clear_when: "pit_exit_s > 10"
+    cooldown_s: 30
+    cooldown_group: car_behind
+    requires: [lap_data]
+    say:
+      - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
+      - "Careful at the exit, {rival_pit_exit_name} is right there"
+      - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
+    severity:
+      - when: "traffic_behind_s <= th.pit_exit_traffic_s and traffic_behind_name != ''"
+        say:
+          - "{traffic_behind_name} right there at the pit exit. Hold the line"
+          - "{traffic_behind_name} coming at the pit exit. Hold your line"
+      - when: "traffic_behind_s <= th.pit_exit_traffic_s"
+        say:
+          - "Car right there at the pit exit. Hold the line"
+          - "Car coming at the pit exit, {traffic_behind_s:.1f} behind. Hold your line"
+  # Contact (COLL): check the car, then report once the damage data settles.
+  # Repeat hits inside th.contact_merge_s are one contact.
+  # No other shared damage or puncture rule is provisional because those rules report confirmed damage.
+  - id: contact_check_teammate
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "phase != 'garage' and contact_phase == 'checking' and contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
+    requires: [participants]
+    say:
+      - "Contact with {contact_name}. Checking the car"
+      - "That's your team-mate! Checking the car, keep it clean"
+      - "Touch with {contact_name}. Checking damage"
+  - id: contact_check
+    sessions: [race]
+    priority: 1
+    urgency: tactical
+    when: "phase != 'garage' and contact_phase == 'checking' and not contact_teammate"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_check
+    contradicts: [lap1_gained, lap1_lost, lap1_held]
+    say:
+      - "Contact there. Checking the car"
+      - "Contact. Checking damage"
+      - "Touch with {contact_name}. Checking the car"
+      - "Contact. Checking the data"
+    escalate:
+      - after: 2
+        say:
+          - "Another hit. Checking the car again"
+          - "More contact. Stand by, checking"
+          - "Again with the contact. Checking the car"
+  - id: contact_damage_report
+    sessions: [race]
+    priority: 2
+    urgency: info
+    brief: "Confirmed minor damage"
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage != '' and not contact_damage_major"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    supersedes: [contact_check, contact_check_teammate]
+    requires: [car_damage]
+    say:
+      - "{contact_damage} damage, {contact_damage_pct} percent. Nothing major"
+      - "{contact_damage_pct} percent {contact_damage} damage. Carry on"
+      - "Some {contact_damage} damage, {contact_damage_pct} percent. Driveable"
+  - id: contact_ok
+    sessions: [race]
+    priority: 3
+    urgency: info
+    brief: "No damage found after contact"
+    when: "phase != 'garage' and contact_phase == 'report' and contact_damage == ''"
+    clear_when: "contact_phase == ''"
+    cooldown_s: 20
+    cooldown_group: contact_report
+    supersedes: [contact_check, contact_check_teammate]
+    requires: [car_damage]
+    say:
+      - "No new damage from that contact"
+      - "Car checked. No new damage"
+      - "No new damage from that hit"
+      - "Damage unchanged"
+    escalate:
+      - after: 2
+        say:
+          - "No further damage. Keep it clean"
+          - "No additional damage this time"
+          - "Readings unchanged. Careful with the contact"
