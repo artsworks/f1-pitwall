@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,6 +22,91 @@ from pitwall.state.session import (
 
 from .race_synth import RaceSpec, race_stream
 from .synth import make_event_packet, pack_packet
+
+
+def _rival_age_snapshot(history: object | None, *, restricted: bool = False) -> Snapshot:
+    state = SessionState(thresholds={"plan_two_compound_rule": 0})
+    state._player_idx = 0
+    state.session_type = 15
+    state.race_phase = "racing"
+    state.position = 2
+    state.lap_distance = 3000.0
+    state.track_length_m = 5000.0
+    state.delta_to_car_in_front_ms = 500
+    state.cars_lap = (
+        CarLap(
+            lap_distance=3000.0,
+            total_distance=100_000.0,
+            car_position=2,
+            result_status=2,
+            delta_to_car_in_front_ms=500,
+        ),
+        CarLap(
+            lap_distance=3026.3,
+            total_distance=100_026.3,
+            car_position=1,
+            result_status=2,
+        ),
+        CarLap(
+            lap_distance=2973.7,
+            total_distance=99_973.7,
+            car_position=3,
+            result_status=2,
+            delta_to_car_in_front_ms=500,
+        ),
+    )
+    if history is not None:
+        state._histories[2] = history
+    state.rival_data_restricted = restricted
+    return state.snapshot(0.0)
+
+
+@pytest.mark.parametrize(
+    ("history", "restricted", "expected_age", "expected_known"),
+    [
+        (None, False, 0, False),
+        (
+            SimpleNamespace(
+                num_laps=6,
+                num_tyre_stints=1,
+                tyre_stints=(SimpleNamespace(end_lap=255),),
+                laps=(),
+            ),
+            True,
+            0,
+            False,
+        ),
+        (
+            SimpleNamespace(
+                num_laps=6,
+                num_tyre_stints=1,
+                tyre_stints=(SimpleNamespace(end_lap=255),),
+                laps=(),
+            ),
+            False,
+            6,
+            True,
+        ),
+        (
+            SimpleNamespace(
+                num_laps=6,
+                num_tyre_stints=2,
+                tyre_stints=(SimpleNamespace(end_lap=6), SimpleNamespace(end_lap=255)),
+                laps=(),
+            ),
+            False,
+            0,
+            True,
+        ),
+    ],
+)
+def test_rival_behind_age_knownness(
+    history: object | None, restricted: bool, expected_age: int, expected_known: bool
+) -> None:
+    snapshot = _rival_age_snapshot(history, restricted=restricted)
+
+    assert snapshot.rival_behind_age == expected_age
+    assert snapshot.rival_behind_age_known is expected_known
 
 
 def _state() -> tuple[Ingest, SessionState]:

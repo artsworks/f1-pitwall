@@ -81,6 +81,7 @@ menu:
         - battle_attack
         - battle_patience
         - battle_defend
+        - battle_let_by
         - battle_under_threat
         - battle_manage
         - battle_passed

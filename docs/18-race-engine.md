@@ -354,7 +354,8 @@ true_rival_ahead_name, true_rival_behind_name: str
 true_rival_ahead_gap_s, true_rival_behind_gap_s: float # stop-adjusted gaps
 true_rival_ahead_stops_owed, true_rival_behind_stops_owed: int
 true_rival_ahead_pitted, true_rival_behind_pitted: bool
-rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if masked/unknown)
+rival_ahead_age, rival_behind_age: int         # tyre age from Session History stints (0 if unknown)
+rival_ahead_age_known, rival_behind_age_known: bool # False if masked or no Session History
 rival_ahead_pitted, rival_behind_pitted: bool  # that rival's pit_status was non-zero during the current lap
 rival_ahead_in_pit_lane, rival_behind_in_pit_lane: bool  # validated rival is in the pit lane now
 rival_ahead2_pos, rival_behind2_pos: int       # second car on each side (0 = none)
@@ -554,7 +555,7 @@ the player (first match wins):
 Closing rate = measured gap trend when available, else the rival pace delta. Attack and
 defend ranges get `gap_hysteresis_s` once entered. Snapshot fields: `battle_mode`,
 `battle_mode_laps`, `battle_catch_laps`, `battle_threat_laps`, `battle_closing_*_s`,
-`battle_tyre_offset_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
+`battle_tyre_offset_*`, `battle_tyre_known_*`, `battle_pass_prob`, `battle_hold_prob`, `battle_result`,
 `battle_result_recent`, `battle_result_name`, `battle_swaps` (place changes
 inside `battle_swap_window_s`).
 
@@ -583,7 +584,9 @@ budget-suppressed call is retried): `battle_catching` ("Push now…, on him in 4
 `battle_patience` (stuck in range where passing is hard: "stay with him, look after the
 tyres"), `battle_defend` (P2), `battle_under_threat`, `battle_manage` (every
 `battle_manage_every_laps`), and encouragement `battle_passed` / `battle_held` /
-`battle_lost`.
+`battle_lost`. `battle_let_by` (P2) tells the driver to let a chaser pass when the
+hold rate is low, the chaser has fresher tyres, and enough laps remain. Its thresholds
+are `battle_letby_hold_max`, `battle_letby_tyre_laps`, and `battle_letby_min_laps`.
 
 ## Rules (`config/defaults/rules/race.yaml`)
 
@@ -608,6 +611,7 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `overtake_mode` | 2 | `energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s` |
 | `overtake_earned` / `overtake_lost` | 3/3 | `overtake_available and not overtake_active` / `overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s` |
 | `energy_charge_for_battle` | 3 | sector 1, `battle_mode == 'catching'`, `battle_catch_laps <= th.battle_charge_catch_laps`, `ers_store_pct < th.battle_charge_store_pct` |
+| `battle_let_by` | 2 | low hold rate, chaser on fresher tyres, and `battle_threat_laps <= laps_remaining * 0.5` |
 | `energy_burst` | 3 | sector 2, `battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct` |
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |

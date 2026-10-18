@@ -49,6 +49,8 @@ class BattleInputs:
     own_age: int
     ahead_age: int
     behind_age: int
+    ahead_age_known: bool
+    behind_age_known: bool
     overtake_active: bool
     attack_gap_s: float  # mindset attack_window_s
     positions: tuple[int, ...] = ()  # car_position per car idx (0 = unknown)
@@ -76,6 +78,9 @@ class Battle:
     closing_behind_s: float = 0.0  # + = the car behind gains on us per lap
     tyre_offset_ahead: int = 0  # + = rival ahead's tyres are older than ours
     tyre_offset_behind: int = 0  # + = rival behind's tyres are older than ours
+    tyre_known_ahead: bool = False
+    tyre_known_behind: bool = False
+    behind_changed: bool = False
     pass_prob: float = 0.0
     hold_prob: float = 0.0
     result: str = ""  # last episode: passed | failed | held | lost
@@ -179,6 +184,7 @@ class BattleTracker:
 
     mode: str = FREE
     since_lap: int = 0
+    prev_behind_idx: int = -1
     attack: _Open | None = None
     defend: _Open | None = None
     pending: list[_Pending] = field(default_factory=list)
@@ -192,6 +198,7 @@ class BattleTracker:
 
     def reset(self) -> None:
         self.mode, self.since_lap = FREE, 0
+        self.prev_behind_idx = -1
         self.attack = self.defend = None
         self.pending.clear()
         self.undone_t.clear()
@@ -312,6 +319,9 @@ class BattleTracker:
         return cur
 
     def update(self, inp: BattleInputs, th: Mapping[str, object], rates: BattleRates) -> Battle:
+        # Filtered index: pit-lane rivals read as -1.
+        behind_changed = inp.behind_idx >= 0 and inp.behind_idx != self.prev_behind_idx
+        self.prev_behind_idx = inp.behind_idx
         mode = classify(inp, th, self.mode)
         hyst = _th(th, "gap_hysteresis_s", 0.3)
         a_gap = inp.attack_gap_s + (hyst if self.attack is not None else 0.0)
@@ -369,8 +379,15 @@ class BattleTracker:
             threat_laps=round(threat, 1),
             closing_ahead_s=round(c_ahead, 2),
             closing_behind_s=round(c_behind, 2),
-            tyre_offset_ahead=inp.ahead_age - inp.own_age if inp.ahead_idx >= 0 else 0,
-            tyre_offset_behind=inp.behind_age - inp.own_age if inp.behind_idx >= 0 else 0,
+            tyre_offset_ahead=(
+                inp.ahead_age - inp.own_age if inp.ahead_idx >= 0 and inp.ahead_age_known else 0
+            ),
+            tyre_offset_behind=(
+                inp.behind_age - inp.own_age if inp.behind_idx >= 0 and inp.behind_age_known else 0
+            ),
+            tyre_known_ahead=inp.ahead_idx >= 0 and inp.ahead_age_known,
+            tyre_known_behind=inp.behind_idx >= 0 and inp.behind_age_known,
+            behind_changed=behind_changed,
             pass_prob=round(rates.pass_overtake if overtake_now else rates.pass_no_overtake, 2),
             hold_prob=round(rates.hold, 2),
             result=self.result if recent else "",

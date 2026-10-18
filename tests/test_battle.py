@@ -20,6 +20,7 @@ from pitwall.strategy.battle import (
     CATCHING,
     DEFENDING,
     FREE,
+    HOLD,
     MANAGING,
     PASS_COMPOUND,
     PASS_OT,
@@ -58,6 +59,8 @@ def _inp(**kw: object) -> BattleInputs:
         "own_age": 10,
         "ahead_age": 10,
         "behind_age": 10,
+        "ahead_age_known": True,
+        "behind_age_known": True,
         "overtake_active": False,
         "attack_gap_s": 1.0,
     }
@@ -84,6 +87,18 @@ def test_classify(kw: dict[str, object], mode: str) -> None:
     assert classify(_inp(**kw), TH) == mode
 
 
+def test_tracker_marks_behind_changes_and_reset() -> None:
+    tracker, rates = BattleTracker(), BattleRates()
+    changed = [
+        tracker.update(_inp(behind_idx=idx), TH, rates).behind_changed for idx in (4, 4, 5, 5, -1)
+    ]
+    assert changed == [True, False, True, False, False]
+
+    tracker.reset()
+    assert tracker.prev_behind_idx == -1
+    assert tracker.update(_inp(behind_idx=4), TH, rates).behind_changed
+
+
 def test_zero_closing_with_zero_minimum_rate_does_not_divide() -> None:
     thresholds = {"battle_closing_min_s": 0}
     assert classify(_inp(gap_ahead_s=3.0), thresholds) == MANAGING
@@ -105,6 +120,22 @@ def test_tracker_catch_laps_and_offsets() -> None:
     assert b.catch_laps == 4.0
     assert b.tyre_offset_ahead == 8
     assert b.pass_prob == BattleRates().pass_no_overtake
+
+
+def test_tracker_unknown_behind_age_does_not_create_fresh_tyre_offset() -> None:
+    battle = BattleTracker().update(
+        _inp(own_age=8, behind_age=0, behind_age_known=False), TH, BattleRates()
+    )
+    assert battle.tyre_offset_behind == 0
+    assert not battle.tyre_known_behind
+
+
+def test_tracker_known_zero_behind_age_has_fresh_tyre_offset() -> None:
+    battle = BattleTracker().update(
+        _inp(own_age=8, behind_age=0, behind_age_known=True), TH, BattleRates()
+    )
+    assert battle.tyre_offset_behind == -8
+    assert battle.tyre_known_behind
 
 
 def test_catch_and_chase_probabilities_use_gap_spread() -> None:
@@ -342,7 +373,19 @@ def battle_runs(tmp_path_factory: pytest.TempPathFactory):
         "defend": RaceSpec(laps=6, gap_behind_s=0.7),
         "free": RaceSpec(laps=6, gap_ahead_s=12.0, gap_behind_s=12.0),
     }
-    return {k: _replay(tmp_path_factory.mktemp(k), s) for k, s in specs.items()}
+    runs = {k: _replay(tmp_path_factory.mktemp(k), s) for k, s in specs.items()}
+    let_by_spec = RaceSpec(
+        laps=12,
+        base_ms=12_000,
+        gap_behind_s=0.9,
+        gap_behind_from_lap=(4, 0.5),
+        extra={"car_status": {"cars": {0: {"tyres_age_laps": 10}, 2: {"tyres_age_laps": 2}}}},
+    )
+    seeded_db = Database(":memory:")
+    seeded_db.set_param(7, PASS_COMPOUND, HOLD, 0.0, 12.0)
+    runs["let_by"] = _replay(tmp_path_factory.mktemp("let_by"), let_by_spec, db=seeded_db)
+    runs["let_by_prior"] = _replay(tmp_path_factory.mktemp("let_by_prior"), let_by_spec)
+    return runs
 
 
 @pytest.mark.replay
@@ -358,6 +401,23 @@ def test_replay_defend_call(battle_runs) -> None:
     calls, _ = battle_runs["defend"]
     assert "battle_defend" in _ids(calls)
     assert "battle_attack" not in _ids(calls)
+
+
+@pytest.mark.replay
+def test_replay_let_by_call_with_learned_hold_rate(battle_runs) -> None:
+    calls, rows = battle_runs["let_by"]
+    assert "battle_let_by" in _ids(calls)
+    row = next(r for r in rows if r.get("rule_id") == "battle_let_by" and r["outcome"] == "fired")
+    assert row["inputs"]["battle_hold_prob"] < 0.25
+    assert row["inputs"]["battle_tyre_known_behind"] is True
+
+
+@pytest.mark.replay
+def test_replay_let_by_requires_learned_hold_rate(battle_runs) -> None:
+    calls, _ = battle_runs["let_by_prior"]
+    ids = _ids(calls)
+    assert "battle_let_by" not in ids
+    assert "battle_defend" in ids
 
 
 def test_battle_defend_urgent_phrases_include_battery_and_tyre_info() -> None:

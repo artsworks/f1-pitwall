@@ -215,6 +215,9 @@ thresholds:
   battle_hold_prior: 0.7
   battle_attack_prob_min: 0.3   # below this, attacking is patience + tyres, not "go"
   battle_patience_laps: 2       # laps stuck in attack range before the patience call
+  battle_letby_hold_max: 0.25   # let by when hold probability is below this
+  battle_letby_tyre_laps: 4     # chaser tyre age lead required for let-by
+  battle_letby_min_laps: 3      # keep defending within the final laps
   battle_manage_every_laps: 5   # "gaps stable" cadence
   battle_charge_catch_laps: 2   # on the car ahead within this many laps: harvest first
   battle_charge_store_pct: 60   # battery under this while catching: harvest call

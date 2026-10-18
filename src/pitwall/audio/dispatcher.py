@@ -24,6 +24,8 @@ from pitwall.state.session import Snapshot, snapshot_scalars
 
 log = logging.getLogger(__name__)
 
+_LET_BY = "battle_let_by"
+
 _VERBOSITY_PRIORITIES = {
     "silent": set(),
     "critical": {1},
@@ -85,6 +87,7 @@ class Call:
     max_age_s: float | None = None
     still_true: Any = None
     current: Any = None
+    rival_idx: int = -1
     conflict_group: str = ""
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
@@ -248,6 +251,8 @@ class Dispatcher:
                 flushes_queue=definition.flushes_queue,
                 brief=cand.brief,
             )
+            if call.rule_id == _LET_BY:
+                call.rival_idx = snapshot.rival_behind_idx
             if cand.obvious:
                 self._log(cand, snapshot, now, "suppressed", "obvious", call.id)
                 continue
@@ -257,6 +262,10 @@ class Dispatcher:
             if self._resolved_before_queue(call, now):
                 self._log(cand, snapshot, now, "suppressed", "resolved", call.id)
                 continue
+            if call.rule_id == _LET_BY:
+                for queued in list(self._queue):
+                    if queued.call.rule_id == _LET_BY and queued.call.rival_idx != call.rival_idx:
+                        self._drop_queued(queued.call.id, "rebound")
             if self._coalesce(call, cand, snapshot, now):
                 continue
             self._drop_escalated(call)
@@ -462,7 +471,12 @@ class Dispatcher:
 
     def _coalesce(self, call: Call, cand: Candidate, snapshot: Snapshot, now: float) -> bool:
         queued = next(
-            (item.call for item in self._queue if item.call.rule_id == call.rule_id),
+            (
+                item.call
+                for item in self._queue
+                if item.call.rule_id == call.rule_id
+                and (call.rule_id != _LET_BY or item.call.rival_idx == call.rival_idx)
+            ),
             None,
         )
         if queued is None:
@@ -470,6 +484,7 @@ class Dispatcher:
             if (
                 on_air is None
                 or on_air.rule_id != call.rule_id
+                or (call.rule_id == _LET_BY and on_air.rival_idx != call.rival_idx)
                 or not self._mid_sentence(on_air, now)
             ):
                 return False
@@ -680,6 +695,14 @@ class Dispatcher:
             if now < call.not_before or (waits_for_straight and not on_straight):
                 held.append(q)
                 continue
+            if (
+                call.rule_id == _LET_BY
+                and self.latest_snapshot is not None
+                and call.rival_idx != self.latest_snapshot.rival_behind_idx
+            ):
+                self._undo_booking(call)
+                self._log_call(call, "suppressed", "rebound")
+                continue
             if call.still_true is not None and self.latest_snapshot is not None:
                 try:
                     if not call.still_true(self.latest_snapshot):
@@ -860,6 +883,12 @@ class Dispatcher:
         if now < call.not_before:
             return False
         if call.priority == 3 and self.policy.p3_straight_only and not on_straight:
+            return False
+        if (
+            call.rule_id == _LET_BY
+            and self.latest_snapshot is not None
+            and call.rival_idx != self.latest_snapshot.rival_behind_idx
+        ):
             return False
         if call.still_true is not None and self.latest_snapshot is not None:
             try:

@@ -599,7 +599,7 @@ rules:
     min_lap: 2
     priority: 2
     urgency: tactical
-    when: "phase == 'racing' and battle_mode == 'defending' and sector != 2"
+    when: "phase == 'racing' and battle_mode == 'defending' and sector != 2 and not (battle_hold_prob < th.battle_letby_hold_max and battle_tyre_known_behind and battle_tyre_offset_behind <= -th.battle_letby_tyre_laps and battle_threat_laps <= laps_remaining * 0.5 and laps_remaining > th.battle_letby_min_laps)"
     clear_when: "sector == 2 or battle_mode != 'defending'"
     still_true: "phase == 'racing'"
     still_true: "phase == 'racing'"
@@ -632,6 +632,22 @@ rules:
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind"
           - "Car behind, {gap_behind_s:.1f}. Keep the battery for the straight"
+  - id: battle_let_by
+    sessions: [race]
+    min_lap: 2
+    priority: 2
+    urgency: tactical
+    when: "phase == 'racing' and battle_mode == 'defending' and sector != 2 and battle_hold_prob < th.battle_letby_hold_max and battle_tyre_known_behind and battle_tyre_offset_behind <= -th.battle_letby_tyre_laps and battle_threat_laps <= laps_remaining * 0.5 and laps_remaining > th.battle_letby_min_laps"
+    clear_when: "sector == 2 or battle_mode != 'defending' or not (battle_hold_prob < th.battle_letby_hold_max and battle_tyre_offset_behind <= -th.battle_letby_tyre_laps and battle_threat_laps <= laps_remaining * 0.5 and laps_remaining > th.battle_letby_min_laps) or battle_behind_changed"
+    still_true: "phase == 'racing' and battle_mode == 'defending' and battle_hold_prob < th.battle_letby_hold_max and battle_tyre_offset_behind <= -th.battle_letby_tyre_laps and battle_threat_laps <= laps_remaining * 0.5 and laps_remaining > th.battle_letby_min_laps"
+    cooldown_s: 120
+    cooldown_group: battle_behind
+    conflict_group: battle_call
+    contradicts: [battle_defend]
+    requires: [lap_data]
+    say:
+      - "He's on fresher tyres, not in our race. Let him go, save the tyres"
+      - "{rival_behind_name} will get through. Let him by, protect your stint"
   - id: battle_under_threat
     sessions: [race]
     min_lap: 2
