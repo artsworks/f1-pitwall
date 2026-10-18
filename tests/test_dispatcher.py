@@ -97,6 +97,7 @@ def _battle_snapshot(now: float = 0.0, **overrides: object) -> Snapshot:
         "laps_remaining": 10,
         "battle_mode": "defending",
         "battle_hold_prob": 0.15,
+        "battle_tyre_known_behind": True,
         "battle_tyre_offset_behind": -6,
         "battle_threat_laps": 0.0,
         "rival_behind_name": "NORRIS",
