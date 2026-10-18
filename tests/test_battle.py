@@ -20,6 +20,7 @@ from pitwall.strategy.battle import (
     CATCHING,
     DEFENDING,
     FREE,
+    HOLD,
     MANAGING,
     PASS_COMPOUND,
     PASS_OT,
@@ -342,7 +343,19 @@ def battle_runs(tmp_path_factory: pytest.TempPathFactory):
         "defend": RaceSpec(laps=6, gap_behind_s=0.7),
         "free": RaceSpec(laps=6, gap_ahead_s=12.0, gap_behind_s=12.0),
     }
-    return {k: _replay(tmp_path_factory.mktemp(k), s) for k, s in specs.items()}
+    runs = {k: _replay(tmp_path_factory.mktemp(k), s) for k, s in specs.items()}
+    let_by_spec = RaceSpec(
+        laps=12,
+        base_ms=12_000,
+        gap_behind_s=0.9,
+        gap_behind_from_lap=(4, 0.5),
+        extra={"car_status": {"cars": {0: {"tyres_age_laps": 10}, 2: {"tyres_age_laps": 2}}}},
+    )
+    seeded_db = Database(":memory:")
+    seeded_db.set_param(7, PASS_COMPOUND, HOLD, 0.0, 12.0)
+    runs["let_by"] = _replay(tmp_path_factory.mktemp("let_by"), let_by_spec, db=seeded_db)
+    runs["let_by_prior"] = _replay(tmp_path_factory.mktemp("let_by_prior"), let_by_spec)
+    return runs
 
 
 @pytest.mark.replay
@@ -358,6 +371,22 @@ def test_replay_defend_call(battle_runs) -> None:
     calls, _ = battle_runs["defend"]
     assert "battle_defend" in _ids(calls)
     assert "battle_attack" not in _ids(calls)
+
+
+@pytest.mark.replay
+def test_replay_let_by_call_with_learned_hold_rate(battle_runs) -> None:
+    calls, rows = battle_runs["let_by"]
+    assert "battle_let_by" in _ids(calls)
+    row = next(r for r in rows if r.get("rule_id") == "battle_let_by" and r["outcome"] == "fired")
+    assert row["inputs"]["battle_hold_prob"] < 0.25
+
+
+@pytest.mark.replay
+def test_replay_let_by_requires_learned_hold_rate(battle_runs) -> None:
+    calls, _ = battle_runs["let_by_prior"]
+    ids = _ids(calls)
+    assert "battle_let_by" not in ids
+    assert "battle_defend" in ids
 
 
 def test_battle_defend_urgent_phrases_include_battery_and_tyre_info() -> None:

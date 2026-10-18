@@ -841,6 +841,57 @@ def test_battle_behind_without_pace_words(mode: str, rule: str, extra: dict[str,
     assert ", ." not in text and not text.endswith(", ")
 
 
+def test_battle_let_by_suppresses_defend() -> None:
+    result = _default_rule_engine().evaluate(
+        _rule_snapshot(
+            phase="racing",
+            lap_num=5,
+            laps_remaining=10,
+            battle_mode="defending",
+            sector=0,
+            battle_hold_prob=0.15,
+            battle_tyre_offset_behind=-6,
+            battle_threat_laps=0.0,
+            rival_behind_name="NORRIS",
+            gap_behind_s=0.6,
+            battle_closing_behind_s=0.4,
+        )
+    )
+    ids = {candidate.rule.id for candidate in result.candidates}
+    assert "battle_let_by" in ids
+    assert "battle_defend" not in ids
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("battle_hold_prob", 0.5),
+        ("battle_tyre_offset_behind", -2),
+        ("battle_threat_laps", float("inf")),
+        ("laps_remaining", 3),
+    ],
+)
+def test_battle_let_by_requires_hopeless_defense(field: str, value: object) -> None:
+    snapshot = {
+        "phase": "racing",
+        "lap_num": 5,
+        "laps_remaining": 10,
+        "battle_mode": "defending",
+        "sector": 0,
+        "battle_hold_prob": 0.15,
+        "battle_tyre_offset_behind": -6,
+        "battle_threat_laps": 0.0,
+        "rival_behind_name": "NORRIS",
+        "gap_behind_s": 0.6,
+        "battle_closing_behind_s": 0.4,
+    }
+    snapshot[field] = value
+    result = _default_rule_engine().evaluate(_rule_snapshot(**snapshot))
+    ids = {candidate.rule.id for candidate in result.candidates}
+    assert "battle_let_by" not in ids
+    assert "battle_defend" in ids
+
+
 def test_release_calls_wait_for_the_garage_settle() -> None:
     """Silverstone Q1: the car went from flying (lap 4) to the garage at 495.9 s
     and release_hold fired at 496.2 s, 0.3 s after the return."""

@@ -583,7 +583,9 @@ budget-suppressed call is retried): `battle_catching` ("Push now…, on him in 4
 `battle_patience` (stuck in range where passing is hard: "stay with him, look after the
 tyres"), `battle_defend` (P2), `battle_under_threat`, `battle_manage` (every
 `battle_manage_every_laps`), and encouragement `battle_passed` / `battle_held` /
-`battle_lost`.
+`battle_lost`. `battle_let_by` (P2) tells the driver to let a chaser pass when the
+hold rate is low, the chaser has fresher tyres, and enough laps remain. Its thresholds
+are `battle_letby_hold_max`, `battle_letby_tyre_laps`, and `battle_letby_min_laps`.
 
 ## Rules (`config/defaults/rules/race.yaml`)
 
@@ -608,6 +610,7 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `overtake_mode` | 2 | `energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s` |
 | `overtake_earned` / `overtake_lost` | 3/3 | `overtake_available and not overtake_active` / `overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s` |
 | `energy_charge_for_battle` | 3 | sector 1, `battle_mode == 'catching'`, `battle_catch_laps <= th.battle_charge_catch_laps`, `ers_store_pct < th.battle_charge_store_pct` |
+| `battle_let_by` | 2 | low hold rate, chaser on fresher tyres, and `battle_threat_laps <= laps_remaining * 0.5` |
 | `energy_burst` | 3 | sector 2, `battle_mode == 'attacking' and energy_mode == 'on_budget' and ers_store_pct < th.energy_burst_store_pct` |
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |
