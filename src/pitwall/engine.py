@@ -626,6 +626,8 @@ class Engine:
         nxt = next((s for s in steps if cur is None or s > cur), steps[0])
         self.budget_live = nxt
         self._apply_mode()
+        if nxt == 0:
+            self.dispatcher.drop_budgeted()
         return nxt
 
     def cycle_mindset(self, now: float) -> None:

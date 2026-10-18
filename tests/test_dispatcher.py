@@ -127,6 +127,27 @@ def test_budget_override_zero_suppresses_p2_p3_but_not_p1() -> None:
     ]
 
 
+def test_drop_budgeted_drops_held_p3_but_keeps_held_p1() -> None:
+    d, sink, buf = _dispatcher(min_gap_s=0.0)
+    d.submit([_cand("p3", priority=3), _cand("p1", priority=1)], make_snapshot(0.0))
+    next(q.call for q in d._queue if q.call.rule_id == "p1").not_before = 5.0
+    assert d.drain(0.0) == []
+
+    d.budget_override = 0
+    d.drop_budgeted()
+
+    assert [q.call.rule_id for q in d._queue] == ["p1"]
+    d.submit([], make_snapshot(5.0, on_straight=True))
+    assert [call.rule_id for call in d.drain(5.0)] == ["p1"]
+    assert sink.spoken == ["p1"]
+    assert any(
+        row["rule_id"] == "p3"
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "budget"
+        for row in _log(buf)
+    )
+
+
 def test_budget_override_infinity_does_not_suppress_p2_p3() -> None:
     d, _, buf = _dispatcher(min_gap_s=0.0, p3_straight_only=False)
     d.budget_override = math.inf

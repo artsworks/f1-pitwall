@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
-from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings
+from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings, RuleDefModel
 from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.input.menu import (
     DriverMenu,
@@ -29,6 +29,7 @@ from pitwall.input.menu import (
 )
 from pitwall.input.press import Press
 from pitwall.protocol.header import PacketId
+from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Damage
 from pitwall.store.db import Database
 
@@ -263,6 +264,44 @@ def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
     assert any("15 calls a lap" in call.text for call in calls)
     engine.set_mindset("aggressive", 30.0)
     assert engine.dispatcher.budget_override == 15  # menu choice beats the mindset
+
+
+def test_budget_silence_drops_queued_p3_and_keeps_reply() -> None:
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        overrides={"mindset": {"active": "aggressive"}},
+    )
+    rd = RuleDefModel.model_validate(
+        {"id": "queued_p3", "priority": 3, "when": "True", "say": "Queued P3"}
+    )
+    candidate = Candidate(
+        rule=Rule(rd),
+        text="Queued P3",
+        priority=3,
+        tags=list(rd.tags),
+        still_true=None,
+        inputs={},
+        trigger_t=1.0,
+        screen_only=rd.screen_only,
+    )
+    snapshot = make_snapshot(now=1.0, lap_num=1)
+    engine.dispatcher.submit([candidate], snapshot)
+    assert engine.dispatcher.drain(1.0) == []
+
+    budget_item = next(
+        item for item in engine.store.current().menu.items if item.action == "budget"
+    )
+    engine._menu_answer(budget_item, 2.0, snapshot, "test")
+
+    assert engine.dispatcher.budget_override == 0
+    spoken = engine.dispatcher.drain(2.0)
+    assert not any(call.rule_id == "queued_p3" for call in spoken)
+    assert any(
+        call.rule_id == "menu:budget"
+        and ("radio quiet" in call.text or "urgent calls only" in call.text)
+        for call in spoken
+    )
 
 
 @pytest.mark.replay

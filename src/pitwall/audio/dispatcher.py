@@ -501,6 +501,12 @@ class Dispatcher:
         self._log(cand, snapshot, now, "merged", None, call.id)
         return True
 
+    def drop_budgeted(self) -> None:
+        """Budget 0: drop queued P2/P3 rule calls; P1 and replies stay."""
+        for q in list(self._queue):
+            if q.call.priority != 1 and "reply" not in q.call.tags and q.call.urgency != "reply":
+                self._drop_queued(q.call.id, "budget")
+
     def _drop_queued(self, call_id: str, reason: str) -> Call | None:
         kept: list[_Queued] = []
         dropped: Call | None = None
