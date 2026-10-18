@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import math
 from functools import partial
 
 import pytest
@@ -109,6 +110,36 @@ def test_budget_and_p1_exempt() -> None:
     d.submit([_cand("c", priority=1)], make_snapshot(0.0))
     calls = d.drain(0.0)
     assert [c.rule_id for c in calls] == ["c", "a"]  # P1 preempts the budget
+
+
+def test_budget_override_zero_suppresses_p2_p3_but_not_p1() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0)
+    d.budget_override = 0
+    d.submit(
+        [_cand("p2"), _cand("p3", priority=3), _cand("p1", priority=1)],
+        make_snapshot(0.0),
+    )
+
+    assert [call.rule_id for call in d.drain(0.0)] == ["p1"]
+    assert [row["rule_id"] for row in _log(buf) if row.get("suppressed_by") == "budget"] == [
+        "p2",
+        "p3",
+    ]
+
+
+def test_budget_override_infinity_does_not_suppress_p2_p3() -> None:
+    d, _, buf = _dispatcher(min_gap_s=0.0, p3_straight_only=False)
+    d.budget_override = math.inf
+    calls = []
+    for index in range(8):
+        now = float(index)
+        candidate = _cand(f"call_{index}", priority=2 if index % 2 == 0 else 3)
+        candidate.trigger_t = now
+        d.submit([candidate], make_snapshot(now))
+        calls.extend(d.drain(now))
+
+    assert len(calls) == 8
+    assert not any(row.get("suppressed_by") == "budget" for row in _log(buf))
 
 
 def test_min_gap() -> None:

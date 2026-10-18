@@ -253,15 +253,16 @@ def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
 
 @pytest.mark.replay
 def test_budget_action_cycles_calls_per_lap(tmp_path: Path) -> None:
-    engine, calls, rows = _run(tmp_path, [(SD11, 20.0)])
-    (rec,) = _inputs(rows)
-    assert rec["item_id"] == "budget"
-    assert engine.budget_live == 20 and engine.dispatcher.budget_override == 20
-    assert any(c.text == "Copy, up to 20 calls a lap." for c in calls)
-    engine.cycle_budget()
-    assert engine.dispatcher.budget_override == 4  # wraps
+    engine, calls, rows = _run(tmp_path, [(SD11, 20.0), (SD11, 22.0), (SD11, 24.0)])
+    records = _inputs(rows)
+    assert [rec["item_id"] for rec in records] == ["budget", "budget", "budget"]
+    assert [rec["inputs"]["case"] for rec in records] == ["unlimited", "silence", "default"]
+    assert engine.budget_live == 15 and engine.dispatcher.budget_override == 15
+    assert any("no cap" in call.text or "no limit" in call.text for call in calls)
+    assert any("radio quiet" in call.text or "urgent calls only" in call.text for call in calls)
+    assert any("15 calls a lap" in call.text for call in calls)
     engine.set_mindset("aggressive", 30.0)
-    assert engine.dispatcher.budget_override == 4  # menu choice beats the mindset
+    assert engine.dispatcher.budget_override == 15  # menu choice beats the mindset
 
 
 @pytest.mark.replay

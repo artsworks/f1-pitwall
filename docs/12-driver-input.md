@@ -210,7 +210,7 @@ open. Wheel-right (UDP Action 4) resets the page to the race layout.
 | Radio silent | shortcut-only action | — | Toggles radio silence |
 | Understeer | shortcut-only opinion (`balance`) | default / no_bias (`front_brake_bias`) | "Copy, understeer. Bias back one, to 56." |
 | Oversteer | shortcut-only opinion (`balance`) | default / no_bias | "Copy, oversteer. Bias forward one, to 58." |
-| Radio calls | shortcut-only action | default (`budget`) | Cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` |
+| Radio calls | shortcut-only action | default (`budget`) | Cycles the P2/P3 calls-per-lap limit through `menu.budget_steps` (default silence, 15, unlimited) |
 | Mindset | shortcut-only action | — | Changes mindset and confirms the choice |
 
 ### Opinions and records

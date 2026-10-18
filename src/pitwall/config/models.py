@@ -3,6 +3,7 @@ overrides, deep-merged, hash-stamped (docs/08)."""
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -192,6 +193,25 @@ class InputSettings(BaseModel):
 MenuAction = Literal["mindset", "silent", "page", "budget"]
 
 
+def call_budget(value: Any) -> float | None:
+    if value is None:
+        return None
+    if value == "unlimited":
+        return math.inf
+    if isinstance(value, int | float) and value < 0:
+        raise ValueError("call budget cannot be negative")
+    if value == math.inf:
+        return math.inf
+    budget = int(value)
+    if budget < 0:
+        raise ValueError("call budget cannot be negative")
+    return budget
+
+
+def _default_budget_steps() -> list[int | Literal["unlimited"]]:
+    return [0, 15, "unlimited"]
+
+
 class MenuItemModel(BaseModel):
     """One driver-menu entry (docs/12). `kind`:
     question -> answered from the snapshot by the `answer` handler (defaults to id);
@@ -221,8 +241,14 @@ class MenuSettings(BaseModel):
     wrap: bool = True
     opinion_hold_laps: int = 5  # a balance opinion biases advice this many laps
     # "budget" action cycles the P2/P3 calls-per-lap limit through these (overrides mindset)
-    budget_steps: list[int] = Field(default_factory=lambda: [4, 8, 12, 20])
+    budget_steps: list[int | Literal["unlimited"]] = Field(default_factory=_default_budget_steps)
     items: list[MenuItemModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _nonnegative_budget_steps(self) -> MenuSettings:
+        if any(isinstance(step, int) and step < 0 for step in self.budget_steps):
+            raise ValueError("menu.budget_steps cannot contain negative values")
+        return self
 
 
 class VoiceSettings(BaseModel):

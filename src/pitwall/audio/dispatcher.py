@@ -134,7 +134,7 @@ class Dispatcher:
         decision_log: DecisionLog | None = None,
         sinks: list[CallSink] | None = None,
         metrics: Metrics | None = None,
-        budget_override: int | None = None,
+        budget_override: float | None = None,
         input: InputSettings | None = None,
     ) -> None:
         self.policy = policy
@@ -144,7 +144,7 @@ class Dispatcher:
         self.sinks = [LogSink()] if sinks is None else sinks
         self.metrics = metrics or Metrics()
         self.metrics.queue_source = self.queue_status
-        self.budget_override = budget_override
+        self.budget_override = budget_override  # inf = no cap, 0 = P1 only
         self._queue: list[_Queued] = []
         self._noted_predicate_errors: set[tuple[str, str]] = set()
         self._dropped: collections.deque[str] = collections.deque()
