@@ -10,6 +10,27 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.29.0 (2026-10-18)
+
+### Bug Fixes
+
+- **rules**: Keep pit-exit and energy-over variants accurate
+  ([#119](https://github.com/artsworks/f1-pitwall/pull/119),
+  [`d7b5187`](https://github.com/artsworks/f1-pitwall/commit/d7b518769e8a2b6c9df0d4bf16f9a15d5a8c2eb7))
+
+### Continuous Integration
+
+- Add job timeouts, run fast tests on main, add manual full-suite job
+  ([#118](https://github.com/artsworks/f1-pitwall/pull/118),
+  [`cfa33e7`](https://github.com/artsworks/f1-pitwall/commit/cfa33e7a29dba59b3d05c9d507ec326fa96385a0))
+
+### Features
+
+- **rules**: Double radio phrasing variants
+  ([#119](https://github.com/artsworks/f1-pitwall/pull/119),
+  [`d7b5187`](https://github.com/artsworks/f1-pitwall/commit/d7b518769e8a2b6c9df0d4bf16f9a15d5a8c2eb7))
+
+
 ## v0.28.0 (2026-10-18)
 
 ### Bug Fixes
