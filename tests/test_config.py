@@ -159,6 +159,9 @@ def test_zero_pressure_size_large_override_keeps_last_good() -> None:
     assert store.set_override(("thresholds", "pressure_size_large_c"), 0) is False
     assert store.last_error is not None and "pressure_size_large_c" in store.last_error
     assert store.current().thresholds["pressure_size_large_c"] == 6
+    assert store.reload() is False
+    assert store.last_error is None
+    assert store.current().thresholds["pressure_size_large_c"] == 6
 
 
 def test_pressure_size_medium_above_large_is_rejected() -> None:

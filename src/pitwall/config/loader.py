@@ -4,6 +4,7 @@ the last good config on invalid input (docs/08)."""
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -142,7 +143,11 @@ class ConfigStore:
         return self.reload()
 
     def set_override(self, path: tuple[str, ...], value: object) -> bool:
-        """Set a nested key in the live-overrides layer and reload."""
+        """Set a nested key in the live-overrides layer and reload.
+
+        A value the reload rejects is rolled back, so later reloads still work.
+        """
+        previous = copy.deepcopy(self._overrides)
         node: dict[str, Any] = self._overrides
         for key in path[:-1]:
             nxt = node.get(key)
@@ -151,7 +156,11 @@ class ConfigStore:
                 node[key] = nxt
             node = nxt
         node[path[-1]] = value
-        return self.reload()
+        changed = self.reload()
+        if self.last_error is not None:
+            self._overrides = previous
+            return False
+        return changed
 
     def reload(self) -> bool:
         """Re-read all sources. Returns True if the config changed."""
