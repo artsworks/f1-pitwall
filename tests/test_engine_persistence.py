@@ -423,6 +423,30 @@ def test_run_fuel_drops_laps_a_flashback_erased() -> None:
     assert engine.last_snapshot.run_fuel_laps == 1
 
 
+def test_session_fuel_median_drops_laps_a_flashback_erased() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
+    state = engine.state
+
+    def lap(num: int, fuel_kg: float, at_s: float) -> None:
+        state.last_packet_t = at_s
+        engine._note_session_fuel(
+            LapSummary(num, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=fuel_kg)
+        )
+
+    lap(1, 20.0, 90.0)
+    lap(2, 18.5, 180.0)
+    lap(3, 16.8, 270.0)
+    assert engine._fuel_per_lap(10) == pytest.approx((1.6, "session"))
+
+    for listener in state.rewind_listeners:
+        listener(170.0)
+
+    lap(2, 18.6, 180.0)
+    lap(3, 16.6, 270.0)
+    lap(4, 14.6, 360.0)
+    assert engine._fuel_per_lap(10) == pytest.approx((2.0, "session"))
+
+
 def test_rival_laps_persisted(tmp_path: Path) -> None:
     engine, state, db = _run(tmp_path)
     uid = state.session_uid
