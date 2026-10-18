@@ -898,6 +898,7 @@ class SessionState:
         self.brake_temp = _ZERO_CORNERS
         self.run_temps = RunTemps()
         self.run_seq = 0
+        self.hot_lap_fuel_base: tuple[int, float] | None = None
         self.setup_tyre_pressure = _ZERO_CORNERS
         self.setup: dict[str, float] = {}
         self.setup_hash = ""
@@ -1343,6 +1344,20 @@ class SessionState:
             self.run_temps.reset()
             self.run_seq += 1
             self._pressure_base = None
+            self.hot_lap_fuel_base = None
+        if (
+            self.driver_status == DriverStatus.OUT_LAP
+            and car.driver_status == DriverStatus.FLYING_LAP
+        ):
+            self.hot_lap_fuel_base = (
+                (car.current_lap_num, self.fuel_in_tank) if self.fuel_in_tank > 0 else None
+            )
+        elif (
+            self.hot_lap_fuel_base is not None
+            and car.current_lap_num == self.hot_lap_fuel_base[0]
+            and car.driver_status != DriverStatus.FLYING_LAP
+        ):
+            self.hot_lap_fuel_base = None
         self.driver_status = car.driver_status
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
             self._pit_exit_t = self._last_session_time

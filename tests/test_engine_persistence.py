@@ -373,7 +373,7 @@ def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
             fuel_kg=16.0,
         )
     )
-    assert engine._run_fuel_deltas == []
+    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([2.0])
 
     engine._note_session_fuel(
         LapSummary(5, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=14.38)
@@ -381,7 +381,7 @@ def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
     engine._note_session_fuel(
         LapSummary(6, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=12.76)
     )
-    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([1.62])
+    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([2.0, 1.62, 1.62])
 
     engine._run_fuel_deltas[:] = [(1.0, 1.5), (2.0, 1.6)]
     engine.ingest.on_datagram(
@@ -539,3 +539,46 @@ def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:
     engine._fold_fit(7, 18, clean)
     p = db.get_param(7, 18, "deg_ms_per_lap")
     assert p is not None and p.value == 80.0
+
+
+def test_run_fuel_counts_hot_lap_that_began_at_the_out_lap_crossing() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
+    state = engine.state
+
+    def lap_data(lap: int, driver_status: int, pit_status: int = 0) -> None:
+        engine.ingest.on_datagram(
+            pack_packet(
+                PacketId.LAP_DATA,
+                {
+                    "cars": {
+                        0: {
+                            "current_lap_num": lap,
+                            "driver_status": driver_status,
+                            "pit_status": pit_status,
+                        }
+                    }
+                },
+            ),
+            1.0,
+        )
+
+    lap_data(1, 3)
+    state.fuel_in_tank = 4.966
+    lap_data(1, 1)
+    assert state.hot_lap_fuel_base == (1, pytest.approx(4.966))
+    engine._note_session_fuel(
+        LapSummary(
+            1, 71_498, 20_000, 25_000, 17, 1, 10.0, True, ["first_lap", "pitted"], fuel_kg=4.016
+        )
+    )
+    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([0.95])
+
+    lap_data(2, 3)
+    state.fuel_in_tank = 3.9
+    lap_data(2, 1)
+    lap_data(2, 2, pit_status=1)
+    assert state.hot_lap_fuel_base is None
+    engine._note_session_fuel(
+        LapSummary(2, 80_000, 20_000, 25_000, 17, 1, 10.0, False, ["pitted"], fuel_kg=3.0)
+    )
+    assert engine._run_fuel_deltas == []
