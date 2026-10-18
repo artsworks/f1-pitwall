@@ -429,11 +429,10 @@
     });
   }
 
-  // BB / DIFF: live values from the setup packet. Arrows only when the pit board
-  // carries a setup-advice target for that field (garage sessions).
+  // BB / DIFF: live values from the setup packet and advice from the pit board or track payload.
   function renderSetupStrip(p) {
     var vals = p.setup ? p.setup.values || {} : {};
-    var advice = p.pit_board ? p.pit_board.setup_advice || [] : [];
+    var advice = p.pit_board ? (p.pit_board.setup_advice || []) : (p.setup_live || []);
     function one(id, field, sug) {
       var v = vals[field], rec = null;
       advice.forEach(function (r) { if (r.fields.indexOf(field) >= 0) rec = r; });
@@ -442,8 +441,9 @@
       setClass(id, "v" + (suited ? " suited" : ""));
       if (!sug) return;
       if (!rec) { setText(sug, ""); setClass(sug, "sug none"); return; }
-      setText(sug, suited ? "✓ suited" : (rec.to > v ? "▲ try " : "▼ try ") + fmt(rec.to, 0));
-      setClass(sug, "sug" + (suited ? " none" : ""));
+      setText(sug, suited ? "✓ suited" : (rec.to > v ? "▲ " : "▼ ") +
+        (rec.tier === "experiment" ? "TRY " : "") + fmt(rec.to, 0));
+      setClass(sug, "sug" + (suited ? " none" : rec.tier === "experiment" ? " try" : ""));
     }
     one("su-bb", "brake_bias", "su-bb-sug");
     one("su-on", "on_throttle", "su-on-sug");
@@ -930,12 +930,14 @@
   function setupValue(f, v) {
     return v === undefined || v === null ? "--" : fmt(v, f ? f[2] : 0) + (f ? f[3] || "" : "");
   }
-  function changeRow(list, done, name, from, to, why) {
+  function changeRow(list, done, name, from, to, why, tier) {
     var li = document.createElement("li");
-    li.className = done ? "done" : "todo";
-    [span(done ? "☑" : "☐", "box"), span(name, "nm"),
-      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why")]
-      .forEach(function (n) { li.appendChild(n); });
+    li.className = (done ? "done" : "todo") + (tier === "experiment" ? " try" : "");
+    var parts = [span(done ? "☑" : "☐", "box")];
+    parts.push(tier === "experiment" ? span("TRY", "tag try") : span("", "tag spacer"));
+    parts.push(span(name, "nm"),
+      span(done ? to + " ✓" : from + " → " + to, "val"), span(why || "", "why"));
+    parts.forEach(function (n) { li.appendChild(n); });
     list.appendChild(li);
   }
 
@@ -953,6 +955,7 @@
       return setupLocked.some(function (rec) { return rec.fields.indexOf(field) >= 0; });
     }
     function why(rec) {
+      if (rec.tier === "experiment") return rec.reason;
       return (rec.tier === "alternative" ? "alt · " : "") + rec.reason;
     }
     function matchesTarget(rec, current) {
@@ -971,7 +974,7 @@
         if (axle.some(function (k) { return b.tyres[k].target_psi !== null; })) return;
         var done = rec.fields.every(function (f) { return matchesTarget(rec, setup[f]); });
         changeRow(change, done, rec.param === "front_pressure" ? "F psi" : "R psi",
-          fmt(rec.from, 1), fmt(rec.to, 1), why(rec));
+          fmt(rec.from, 1), fmt(rec.to, 1), why(rec), rec.tier);
         return;
       }
       var f = setupFormat(rec.fields[0]);
@@ -980,7 +983,7 @@
         return ff ? ff[1] : field.replace(/_/g, " ");
       }).join(" + ");
       changeRow(change, matchesTarget(rec, setup[rec.fields[0]]), name,
-        setupValue(f, rec.from), setupValue(f, rec.to), why(rec));
+        setupValue(f, rec.from), setupValue(f, rec.to), why(rec), rec.tier);
     });
     if (!change.children.length) {
       var none = document.createElement("li");
@@ -1001,7 +1004,8 @@
         fields.forEach(function (f) {
           var v = g[1] ? setup[f[0]] : f[4];
           var rec = g[1] ? adviceFor(f[0]) : null;
-          var c = span("", "c" + (rec && !matchesTarget(rec, v) ? " todo" : "") +
+          var c = span("", "c" + (rec && !matchesTarget(rec, v) ?
+            (rec.tier === "experiment" ? " try" : " todo") : "") +
             (g[1] && isLocked(f[0]) ? " lk" : ""));
           c.appendChild(span(f[1] + " ", "k"));
           var val = document.createElement("b");

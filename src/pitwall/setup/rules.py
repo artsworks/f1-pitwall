@@ -23,6 +23,9 @@ CONTEXTS = frozenset(
     }
 )
 CONFIDENCE = ("low", "medium", "high")
+CATEGORIES = frozenset(
+    {"aero", "differential", "brakes", "suspension_geometry", "suspension", "tyres"}
+)
 PARAMETERS = frozenset(
     {
         "front_wing",
@@ -49,6 +52,7 @@ class ParamSpec:
     race_step: float | None = None
     min_value: float | None = None
     max_value: float | None = None
+    category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,7 +202,7 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         spec = _mapping(raw_spec, f"params.{name}")
         _unknown_keys(
             spec,
-            {"setup_field", "step", "race_step", "min", "max", "contexts"},
+            {"setup_field", "step", "race_step", "min", "max", "contexts", "category"},
             f"params.{name}",
         )
         setup_field = str(spec.get("setup_field", ""))
@@ -224,6 +228,11 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
         max_value = float(spec["max"]) if "max" in spec else None
         if min_value is not None and max_value is not None and min_value > max_value:
             raise ValueError(f"setup_rules.params.{name}: min must not exceed max")
+        category = str(spec["category"]) if "category" in spec else None
+        if category is not None and category not in CATEGORIES:
+            raise ValueError(
+                f"setup_rules.params.{name}.category must be one of {', '.join(sorted(CATEGORIES))}"
+            )
         params[str(name)] = ParamSpec(
             setup_field=setup_field,
             step=step,
@@ -231,6 +240,7 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
             min_value=min_value,
             max_value=max_value,
             contexts=contexts,
+            category=category,
         )
 
     symptom_data = _mapping(data.get("symptoms", {}), "symptoms")

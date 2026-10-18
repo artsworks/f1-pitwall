@@ -111,7 +111,7 @@ def pit_board_payload(
         [
             rec
             for rec in snapshot.setup_advice
-            if rec.mode == "garage" and rec.tier in {"primary", "alternative"}
+            if rec.mode == "garage" and rec.tier in {"primary", "alternative", "experiment"}
         ]
         if "garage" in setup_modes(snapshot.session_type)
         else []
@@ -131,6 +131,8 @@ def pit_board_payload(
     ]
     locked_by_param: dict[str, dict[str, Any]] = {}
     for rec in garage_recs:
+        if rec.tier not in {"primary", "alternative"}:
+            continue
         for item in rec.suppressed:
             param = item.get("param", "")
             if item.get("reason") != "locked" or not param:
@@ -173,6 +175,60 @@ def pit_board_payload(
         "ers_pct": snapshot.ers_store_pct,
         "ers_need_pct": snapshot.ers_need_pct or th.get("cool_ers_min_pct", 40.0),
     }
+
+
+def setup_live_payload(
+    snapshot: Snapshot, setup_rules: Mapping[str, Any]
+) -> list[dict[str, Any]] | None:
+    """Setup recommendations for track-adjustable parameters."""
+    if snapshot.phase in PIT_BOARD_PHASES:
+        return None
+    kind = session_kind(snapshot.session_type)
+    if kind not in {"practice", "qualifying", "race"}:
+        return None
+
+    context = {
+        "practice": "practice_track",
+        "qualifying": "quali_track",
+        "race": "race_track",
+    }[kind]
+    mode = "race" if kind == "race" else "garage"
+    rule_data = setup_rules.get("setup_rules", setup_rules)
+    if not isinstance(rule_data, Mapping):
+        return []
+    params = rule_data.get("params", {})
+    if not isinstance(params, Mapping):
+        return []
+
+    advice: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for rec in snapshot.setup_advice:
+        if rec.mode != mode or rec.tier not in {"primary", "alternative", "experiment"}:
+            continue
+        if rec.param in seen:
+            continue
+        spec = params.get(rec.param)
+        if not isinstance(spec, Mapping):
+            continue
+        contexts = spec.get("contexts", ())
+        if not isinstance(contexts, list | tuple) or context not in contexts:
+            continue
+        fields = setup_fields_for_param(rec.param, setup_rules)
+        if not fields:
+            continue
+        seen.add(rec.param)
+        advice.append(
+            {
+                "param": rec.param,
+                "fields": list(fields),
+                "from": rec.from_value,
+                "to": rec.to_value,
+                "delta": rec.delta,
+                "tier": rec.tier,
+                "reason": reason_for_symptom(rec.rule_id),
+            }
+        )
+    return advice
 
 
 _COMPOUND_WORDS = {16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET"}
@@ -703,6 +759,7 @@ def state_payload(
         "strategy": strategy_payload(snapshot, settings.thresholds),
         "track_info": track_payload(snapshot),
         "setup": setup_payload(snapshot),
+        "setup_live": setup_live_payload(snapshot, settings.setup_rules),
         "latency": {
             "queue_count": int(lat["voice_queue"]["count"]),
             "queue_oldest_s": lat["voice_queue"]["oldest_s"],

@@ -208,6 +208,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
   text-decoration-thickness: 3px; text-underline-offset: .3rem; }
 .setup .sug { color: var(--warn); font-weight: bold; display: inline-block; min-width: 7ch; }
 .setup .sug.none { color: var(--faint); font-weight: normal; }
+.setup .sug.try { opacity: .6; }
 .setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
 
 /* ------------------------------------------------------- D fixed tiles --- */
@@ -635,9 +636,12 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pb-tile.crit .v { color: var(--crit); }
 .pb-setup ol { list-style: none; margin: 0; padding: 0; }
 .pb-change { margin-bottom: .6rem !important; display: flex; flex-direction: column; gap: .35rem; }
-.pb-change li { display: grid; grid-template-columns: 2.2rem 12rem auto 1fr; gap: .8rem;
+.pb-change li { display: grid; grid-template-columns: 2.2rem 4.5rem 12rem auto 1fr; gap: .8rem;
   align-items: baseline; font-size: 1.8rem; padding: .1rem .6rem; background: var(--panel);
   border-left: 6px solid var(--warn); }
+.pb-change li.try { opacity: .6; }
+.pb-change .tag.try { font-size: 1rem; }
+.pb-change .tag.spacer { visibility: hidden; }
 .pb-change .nm { font-weight: bold; }
 .pb-change .box, .pb-change .val { color: var(--warn); font-weight: bold; }
 .pb-change .why { color: var(--soft); font-size: 1.3rem; }
@@ -652,13 +656,14 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pb-ref .chips { display: flex; flex-wrap: wrap; gap: .2rem 1.6rem; }
 .pb-ref .c .k { color: var(--soft); }
 .pb-ref .c.todo b { color: var(--warn); }
+.pb-ref .c.try { opacity: .6; }
 .pb-ref .c.lk .k { color: var(--dim); }
 .pb-locked { color: var(--soft); font-size: 1.1rem; padding-top: .4rem; }
 @media (max-width: 800px) {
   .pb-main { grid-template-columns: 1fr; }
   .pb-release { font-size: 2.2rem; }
-  .pb-change li { grid-template-columns: 1.8rem auto 1fr; font-size: 1.6rem; }
-  .pb-change .why { grid-column: 2 / -1; }
+  .pb-change li { grid-template-columns: 1.8rem 4rem auto 1fr; font-size: 1.6rem; }
+  .pb-change .why { grid-column: 3 / -1; }
   .pb-ref { grid-template-columns: 1fr; }
   .pb-ref li { grid-template-columns: 1fr; gap: .1rem; }
 }

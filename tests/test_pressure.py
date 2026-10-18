@@ -27,11 +27,11 @@ def test_pressure_advice_sizes_and_direction() -> None:
     by = {c.corner: c for c in calls}
     assert "rl" not in by  # inside the window
     assert by["fl"].size == "small" and by["fl"].delta_psi == -0.2 and by["fl"].target_psi == 22.8
-    assert by["fr"].size == "large" and by["fr"].delta_psi == -0.8
+    assert by["fr"].size == "large" and by["fr"].delta_psi == -1.0
     assert by["rr"].size == "small" and by["rr"].delta_psi == 0.2
-    assert pressure_text(calls) == ("front left down 0.2, front right down 0.8, rear right up 0.2")
+    assert pressure_text(calls) == ("front left down 0.2, front right down 1.0, rear right up 0.2")
     flipped = pressure_advice(avg, Corners(0, 0, 0, 0), 88.0, 102.0, hot_sign=1.0)
-    assert {c.corner: c.delta_psi for c in flipped}["fr"] == 0.8
+    assert {c.corner: c.delta_psi for c in flipped}["fr"] == 1.0
     assert all(c.target_psi == 0.0 for c in flipped)
 
 
@@ -48,6 +48,70 @@ def test_pressure_text_groups_axles_and_clamps_to_setup_range() -> None:
     assert pressure_text(calls) == "rears down 0.4. Fronts are already at the minimum"
     same = pressure_advice(Corners(110.0, 110.0, 110.0, 110.0), psi, 88.0, 102.0, hot_sign=1.0)
     assert pressure_text(same) == "up 0.4 all round"
+
+
+def test_pressure_advice_scales_large_steps_and_caps_by_axle_range() -> None:
+    avg = Corners(rl=104.0, rr=106.0, fl=112.0, fr=122.0)
+    kwargs = {
+        "hot_sign": 1.0,
+        "medium_c": 3.0,
+        "large_c": 6.0,
+        "steps_psi": (0.5, 1.0, 1.5),
+        "front_range": (22.5, 29.5),
+        "rear_range": (20.5, 26.5),
+        "cap_pct": 50.0,
+    }
+    calls = pressure_advice(avg, Corners(0, 0, 0, 0), 88.0, 102.0, **kwargs)
+    by = {call.corner: call for call in calls}
+    assert by["rl"].wanted_psi == 0.5
+    assert by["rr"].wanted_psi == 1.0
+    assert by["fl"].wanted_psi == 2.5
+    assert by["fr"].wanted_psi == 3.5
+
+    rear_cap = pressure_advice(
+        Corners(rl=122.0, rr=0.0, fl=0.0, fr=0.0),
+        Corners(0, 0, 0, 0),
+        88.0,
+        102.0,
+        **kwargs,
+    )
+    assert rear_cap[0].wanted_psi == 3.0
+
+    uncapped = pressure_advice(
+        Corners(rl=0.0, rr=0.0, fl=0.0, fr=122.0),
+        Corners(0, 0, 0, 0),
+        88.0,
+        102.0,
+        **(kwargs | {"cap_pct": 0.0}),
+    )
+    assert uncapped[0].wanted_psi == 5.0
+
+
+def test_pressure_advice_caps_wanted_delta_before_setup_range_clamp() -> None:
+    avg = Corners(rl=0.0, rr=0.0, fl=112.0, fr=112.0)
+    kwargs = {
+        "hot_sign": 1.0,
+        "medium_c": 3.0,
+        "large_c": 6.0,
+        "steps_psi": (0.5, 1.0, 1.5),
+        "front_range": (22.5, 29.5),
+        "rear_range": (20.5, 26.5),
+        "cap_pct": 50.0,
+    }
+    at_target = pressure_advice(
+        avg,
+        Corners(rl=0.0, rr=0.0, fl=28.5, fr=29.5),
+        88.0,
+        102.0,
+        **kwargs,
+    )
+    by = {call.corner: call for call in at_target}
+    assert by["fl"].wanted_psi == 2.5
+    assert by["fl"].target_psi == 29.5 and by["fl"].delta_psi == 1.0
+    assert not by["fl"].limited
+    assert by["fr"].wanted_psi == 2.5 and by["fr"].limited
+    assert by["fr"].target_psi == 29.5 and by["fr"].delta_psi == 0.0
+    assert pressure_text(at_target) == "front left up 1.0. Front right is already at the maximum"
 
 
 def test_quali_margin_cut_and_pole() -> None:

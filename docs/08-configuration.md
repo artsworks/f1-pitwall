@@ -52,6 +52,20 @@ thermal windows by (actual compound, track), brake windows, wear and blister lim
 fuel margin, ERS floor, penalty-warning margin. Defaults shipped; the calibration tool
 fits per-driver values from recordings and writes them into the user profile.
 
+`pressure_size_medium_c` and `pressure_size_large_c` set the temperature offsets for
+medium and large pressure steps. Large steps grow with the offset. At 112 °C with a
+window of 88–102 °C, the default large step is 2.5 psi. `pressure_step_cap_pct_of_range`
+limits one call to half the axle's configured pressure range.
+
+`setup_scale_aero`, `setup_scale_differential`, `setup_scale_brakes`,
+`setup_scale_suspension_geometry`, `setup_scale_suspension`, and `setup_scale_tyres`
+scale setup advice by category. The tyre scale applies to setup pressure recommendations.
+Pressure advice uses the `pressure_step_*_psi` values instead.
+
+`setup_min_event_laps` and `setup_min_events` set the minimum evidence for an event.
+The traction, rear lock-up, and snap rate gates are `setup_trac_per10`,
+`setup_lockups_rear_per10`, and `setup_snaps_per10`.
+
 **Speech and display**
 voice, rate, pitch, volume, language, units (°C/°F, kg/lb), driver name used on radio,
 theme, font scale, layout (phone landscape / monitor), colour-blind-safe palette,
@@ -90,6 +104,9 @@ parameters; each mindset names a set of values.
 The pilot ships two tuned mindsets: **balanced** (default) and **aggressive**. Keep defend
 and survive in the design. Add them after replay proves the first two, rather than shipping
 four untested sets.
+
+Setup and pressure advice do not read mindset values yet. When wired in, aggressive mode
+must recommend larger setup changes than balanced mode.
 
 ### The vector
 

@@ -12,14 +12,14 @@ thresholds:
   snap_exit_throttle: 0.5
   setup_settle_s: 3
   setup_min_run_laps: 6
-  setup_min_event_laps: 3
+  setup_min_event_laps: 2
   setup_wear_axle_ratio: 1.06
   setup_z_band: 0.3
   setup_slip_us_deg: 0.5
   setup_slip_os_deg: 0.5
-  setup_trac_per10: 25
-  setup_snaps_per10: 2
-  setup_lockups_rear_per10: 3
+  setup_trac_per10: 15
+  setup_snaps_per10: 1.2
+  setup_lockups_rear_per10: 2
   setup_min_events: 2
   setup_rec_cooldown_laps: 5
   setup_base_min_weight: 1.0
@@ -59,11 +59,18 @@ thresholds:
   pressure_front_max_psi: 29.5
   pressure_rear_min_psi: 20.5
   pressure_rear_max_psi: 26.5
-  pressure_size_medium_c: 5  # degrees outside the window for a medium step
-  pressure_size_large_c: 10  # ...and for a large step
-  pressure_step_small_psi: 0.2
-  pressure_step_medium_psi: 0.4
-  pressure_step_large_psi: 0.8
+  pressure_size_medium_c: 3  # degrees outside the window for a medium step
+  pressure_size_large_c: 6  # ...and for a large step
+  pressure_step_small_psi: 0.5
+  pressure_step_medium_psi: 1.0
+  pressure_step_large_psi: 1.5
+  pressure_step_cap_pct_of_range: 50  # one call moves at most this % of the axle pressure range
+  setup_scale_aero: 2
+  setup_scale_differential: 2
+  setup_scale_brakes: 1
+  setup_scale_suspension_geometry: 2
+  setup_scale_suspension: 2
+  setup_scale_tyres: 1  # pressure advisor recs only; tyre size comes from pressure_* keys
   pressure_min_flying_s: 30  # flying time a run needs before advising
   rejoin_traffic_s: 6        # after a spin: car behind closing within this = hold
   pit_exit_traffic_s: 4      # just out of the pit lane: car behind closing within this

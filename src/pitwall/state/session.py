@@ -2336,15 +2336,16 @@ class SessionState:
             pressure_low,
             pressure_high,
             hot_sign=self._th("pressure_hot_sign", 1.0),
-            medium_c=self._th("pressure_size_medium_c", 5.0),
-            large_c=self._th("pressure_size_large_c", 10.0),
+            medium_c=self._th("pressure_size_medium_c", 3.0),
+            large_c=self._th("pressure_size_large_c", 6.0),
             steps_psi=(
-                self._th("pressure_step_small_psi", 0.2),
-                self._th("pressure_step_medium_psi", 0.4),
-                self._th("pressure_step_large_psi", 0.8),
+                self._th("pressure_step_small_psi", 0.5),
+                self._th("pressure_step_medium_psi", 1.0),
+                self._th("pressure_step_large_psi", 1.5),
             ),
             front_range=self._psi_range("front"),
             rear_range=self._psi_range("rear"),
+            cap_pct=self._th("pressure_step_cap_pct_of_range", 50.0),
         )
         cool = self._cool_view(st, kind, phase, player_best_lap, field_best, inner)
         race = self._race_view(st, kind, cars, field_best)

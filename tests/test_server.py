@@ -18,7 +18,7 @@ from pitwall.metrics import Metrics
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
 
-from .factories import make_state
+from .factories import make_snapshot, make_state
 
 _now = 0.0
 
@@ -491,6 +491,72 @@ def test_state_payload_race_lap_times() -> None:
         {"lap": 24, "time_ms": 92_104, "sectors_ms": [30_400, 31_000, 30_704]},
     ]
     assert default["race"]["recent_laps"] == []
+
+
+def test_setup_live_payload_filters_to_track_contexts_and_session_mode() -> None:
+    from pitwall.server.app import setup_live_payload, state_payload
+    from pitwall.setup.evaluate import Recommendation
+
+    def rec(param: str, mode: str, tier: str = "primary") -> Recommendation:
+        return Recommendation(
+            rec_id=f"setup:{mode}:{param}",
+            rule_id="traction_limited" if param != "brake_bias" else "entry_instability",
+            mode=mode,
+            tier=tier,
+            param=param,
+            from_value=50.0,
+            delta=-10.0 if param == "on_throttle" else 1.0,
+            to_value=40.0 if param == "on_throttle" else 51.0,
+            conf="low" if tier == "experiment" else "high",
+            expect="test",
+            tradeoff="test",
+            evidence={},
+            setup_state_id=None,
+            session_type=15 if mode == "race" else 1,
+            parc_ferme=0,
+        )
+
+    settings = ConfigStore().current()
+    race = make_snapshot(
+        session_kind="race",
+        session_type=15,
+        phase="flying",
+        setup_advice=(
+            rec("brake_bias", "race"),
+            rec("on_throttle", "race", "experiment"),
+            rec("front_wing", "race"),
+        ),
+    )
+    advice = setup_live_payload(race, settings.setup_rules)
+    assert advice is not None
+    assert [item["param"] for item in advice] == ["brake_bias", "on_throttle"]
+    payload = state_payload(race, settings=settings, metrics=Metrics(), quiet=False)
+    assert payload["setup_live"] == advice
+
+    practice = make_snapshot(
+        session_kind="practice",
+        session_type=1,
+        phase="flying",
+        setup_advice=(rec("on_throttle", "garage"), rec("on_throttle", "race")),
+    )
+    practice_advice = setup_live_payload(practice, settings.setup_rules)
+    assert practice_advice is not None
+    assert [item["param"] for item in practice_advice] == ["on_throttle"]
+
+    assert (
+        setup_live_payload(
+            make_snapshot(session_kind="practice", session_type=1, phase="garage"),
+            settings.setup_rules,
+        )
+        is None
+    )
+    assert (
+        setup_live_payload(
+            make_snapshot(session_kind="race", session_type=15, phase="pitting"),
+            settings.setup_rules,
+        )
+        is None
+    )
 
 
 def test_state_payload_quali_pole_available_outside_cool_lap() -> None:

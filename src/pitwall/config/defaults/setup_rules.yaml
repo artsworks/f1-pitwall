@@ -29,12 +29,14 @@ setup_rules:
     front_wing:
       setup_field: front_wing
       step: 1
+      category: aero
       min: 0
       max: 50
       contexts: [practice_garage, quali_garage, race_garage, race_stop, next_visit]
     rear_wing:
       setup_field: rear_wing
       step: 1
+      category: aero
       min: 0
       max: 50
       contexts: [practice_garage, next_visit]
@@ -42,6 +44,7 @@ setup_rules:
       setup_field: on_throttle
       step: 5
       race_step: 10
+      category: differential
       min: 10
       max: 100
       contexts:
@@ -57,12 +60,14 @@ setup_rules:
     off_throttle:
       setup_field: off_throttle
       step: 5
+      category: differential
       min: 10
       max: 100
       contexts: [practice_garage, quali_garage, next_visit]
     brake_bias:
       setup_field: brake_bias
       step: 1
+      category: brakes
       min: 50
       max: 70
       contexts:
@@ -78,26 +83,32 @@ setup_rules:
     front_pressure:
       setup_field: front_left_tyre_pressure
       step: 0.2
+      category: tyres
       contexts: [practice_garage, quali_garage, race_garage, next_visit]
     rear_pressure:
       setup_field: rear_left_tyre_pressure
       step: 0.2
+      category: tyres
       contexts: [practice_garage, quali_garage, race_garage, next_visit]
     rear_anti_roll_bar:
       setup_field: rear_anti_roll_bar
       step: 1
+      category: suspension
       contexts: [practice_garage, next_visit]
     front_anti_roll_bar:
       setup_field: front_anti_roll_bar
       step: 1
+      category: suspension
       contexts: [practice_garage, next_visit]
     rear_ride_height:
       setup_field: rear_suspension_height
       step: 1
+      category: suspension
       contexts: [practice_garage, next_visit]
     rear_suspension:
       setup_field: rear_suspension
       step: 1
+      category: suspension
       contexts: [practice_garage, next_visit]
   symptoms:
     entry_instability:
