@@ -294,7 +294,7 @@ rules:
       - "{rival_pit_exit_name} right there at the pit exit. Hold the line"
       - "Careful at the exit, {rival_pit_exit_name} is right there"
       - "{rival_pit_exit_name} coming at the pit exit. Hold your line"
-      - "{rival_pit_exit_name} alongside at pit exit. Hold your line"
+      - "{rival_pit_exit_name} close to pit exit. Hold your line"
       - "Traffic at the exit, {rival_pit_exit_name} is close. Hold the line"
       - "Watch the pit exit. {rival_pit_exit_name} is right there"
     severity:

@@ -191,7 +191,7 @@ rules:
       - "Energy {energy_lap_delta_mj:+.1f} MJ over. Harvest more"
       - "{energy_lap_delta_mj:+.1f} MJ over this lap. Harvest"
       - "Over energy budget, {energy_lap_delta_mj:+.1f} MJ. Harvest"
-      - "Energy surplus {energy_lap_delta_mj:+.1f} MJ. Harvest more"
+      - "Energy use {energy_lap_delta_mj:+.1f} MJ over budget. Harvest more"
       - "{energy_lap_delta_mj:+.1f} MJ over budget. Harvest"
       - "Over by {energy_lap_delta_mj:+.1f} MJ. Recover more energy"
   - id: energy_under
