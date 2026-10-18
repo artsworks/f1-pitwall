@@ -10,6 +10,68 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.27.0 (2026-10-18)
+
+### Bug Fixes
+
+- **config**: Reject zero pressure_size_large_c and medium above large
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **config**: Roll back a live override the reload rejects
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **engine**: Count run fuel from the end of the out lap
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **engine**: Drop run fuel deltas a flashback erased
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **engine**: Drop session fuel deltas a flashback erased
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **setup**: Ignore experiment-tier recs for the stop wing call
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **state**: Cap the tyre window inset on narrow windows
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **state**: Fill sector benchmarks in races
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **web**: Wrap setup legend so TRY note is not clipped
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+### Features
+
+- Retune setup and pressure advice ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- Retune setup and pressure advice, redesign the garage screen
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **web**: Name sector benchmarks on the pit board
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **web**: Redesign garage screen with run fuel, tyre temps and sector gaps
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+- **web**: Show the pit board in races while in the pit lane
+  ([#112](https://github.com/artsworks/f1-pitwall/pull/112),
+  [`535de7d`](https://github.com/artsworks/f1-pitwall/commit/535de7dab75165aa9e289cca35cd60e944ab9066))
+
+
 ## v0.26.0 (2026-10-18)
 
 ### Continuous Integration
