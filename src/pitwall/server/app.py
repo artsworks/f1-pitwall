@@ -181,6 +181,7 @@ def pit_board_payload(
             "player_leads": snapshot.player_leads,
             "leader": (
                 {
+                    "driver": snapshot.pole_driver or None,
                     "sectors_ms": [value or None for value in snapshot.pole_sectors_ms],
                     "gaps_ms": [value or None for value in snapshot.pole_sector_gaps_ms],
                     "gap_ms": snapshot.pole_gap_ms,
@@ -190,6 +191,7 @@ def pit_board_payload(
             ),
             "teammate": (
                 {
+                    "driver": snapshot.teammate_driver or None,
                     "sectors_ms": [value or None for value in snapshot.teammate_sectors_ms],
                     "gaps_ms": [value or None for value in snapshot.teammate_sector_gaps_ms],
                     "gap_ms": snapshot.teammate_gap_ms,

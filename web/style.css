@@ -662,6 +662,9 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pb-sec thead th { color: var(--dim); font-weight: normal; font-size: 1rem; letter-spacing: .1em; }
 .pb-sec tbody th { text-align: left; color: var(--soft); font-size: 1rem; letter-spacing: .06em; width: 9rem; }
 .pb-sec td { font-weight: bold; }
+.pb-sec .who { display: block; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dim); font-size: .85rem; letter-spacing: 0; }
+.pb-sec .who[hidden] { display: none; }
 .pb-sec td.ok { color: var(--ok); } .pb-sec td.warn { color: var(--warn); }
 .pb-sec td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
 .pb-setup ol, .pb-cur ol { list-style: none; margin: 0; padding: 0; }
@@ -712,6 +715,7 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
   .pb-sec { font-size: 1.05rem; }
   .pb-sec th, .pb-sec td { padding: 0 .25rem; }
   .pb-sec tbody th { width: auto; font-size: .85rem; }
+  .pb-sec .who { max-width: 6.5rem; font-size: .8rem; }
 }
 
 

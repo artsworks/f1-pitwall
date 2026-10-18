@@ -1138,6 +1138,15 @@
       cells.push([secGap(lap), lap > 0 ? "warn" : lap < 0 ? "ok" : ""]);
       fill(id, cells);
     }
+    function benchName(id, who) {
+      var n = el(id);
+      if (!n) return;
+      n.textContent = (who && who.driver) || "";
+      n.title = n.textContent;
+      n.hidden = !n.textContent;
+    }
+    benchName("pb-sec-lead-who", sec.leader);
+    benchName("pb-sec-mate-who", sec.teammate);
     var mine = sec.mine_ms || [null, null, null];
     fill("pb-sec-me", [[secTime(mine[0])], [secTime(mine[1])], [secTime(mine[2])], [lapTime(sec.lap_ms)]]);
     if (sec.player_leads) fill("pb-sec-lead", [["you lead", "ok"], [""], [""], ["±0.000", "ok"]]);

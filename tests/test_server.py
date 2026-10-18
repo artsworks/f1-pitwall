@@ -698,6 +698,7 @@ def test_pit_board_payload() -> None:
             teammate_gap_ms=-200,
             teammate_sectors_ms=(28_200, 0, 28_250),
             teammate_sector_gaps_ms=(-100, 0, 50),
+            pole_driver="VERSTAPPEN",
         ),
         {
             "fuel_push_need_laps": 0.9,
@@ -718,11 +719,13 @@ def test_pit_board_payload() -> None:
         "lap_ms": 85_000,
         "player_leads": False,
         "leader": {
+            "driver": "VERSTAPPEN",
             "sectors_ms": [28_000, 28_100, 28_000],
             "gaps_ms": [100, 100, 300],
             "gap_ms": 450,
         },
         "teammate": {
+            "driver": None,
             "sectors_ms": [28_200, None, 28_250],
             "gaps_ms": [-100, None, 50],
             "gap_ms": -200,

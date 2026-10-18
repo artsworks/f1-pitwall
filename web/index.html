@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=30">
+  <link rel="stylesheet" href="/static/style.css?v=31">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -230,8 +230,8 @@
         <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
         <tbody>
           <tr id="pb-sec-me"><th>YOU</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
-          <tr id="pb-sec-lead"><th>LEADER</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
-          <tr id="pb-sec-mate"><th>TEAMMATE</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+          <tr id="pb-sec-lead"><th>LEADER<span id="pb-sec-lead-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+          <tr id="pb-sec-mate"><th>TEAMMATE<span id="pb-sec-mate-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
         </tbody>
       </table>
     </div>
@@ -270,7 +270,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=32"></script>
+  <script src="/static/app.js?v=33"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>
