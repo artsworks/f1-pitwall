@@ -85,6 +85,7 @@ class Call:
     max_age_s: float | None = None
     still_true: Any = None
     current: Any = None
+    bound: dict[str, Any] = field(default_factory=dict)
     conflict_group: str = ""
     screen_only: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
@@ -233,6 +234,7 @@ class Dispatcher:
                 trigger_t=cand.trigger_t,
                 still_true=cand.still_true,
                 current=cand.current,
+                bound=dict(cand.bound),
                 conflict_group=definition.conflict_group,
                 inputs=dict(cand.inputs),
                 urgency=urgency,
@@ -624,6 +626,9 @@ class Dispatcher:
         oldest = max((now - call.trigger_t for call in queued), default=0.0)
         return len(queued), oldest
 
+    def _rebound(self, call: Call, snapshot: Snapshot) -> bool:
+        return any(getattr(snapshot, name, None) != value for name, value in call.bound.items())
+
     def drain(self, now: float | None = None) -> list[Call]:
         """Pop due calls in urgency order and return calls emitted."""
         if now is None:
@@ -673,6 +678,10 @@ class Dispatcher:
                 continue
             if now < call.not_before or (waits_for_straight and not on_straight):
                 held.append(q)
+                continue
+            if self.latest_snapshot is not None and self._rebound(call, self.latest_snapshot):
+                self._log_call(call, "suppressed", "rebound")
+                self._booking_undo.pop(call.id, None)
                 continue
             if call.still_true is not None and self.latest_snapshot is not None:
                 try:
@@ -854,6 +863,8 @@ class Dispatcher:
         if now < call.not_before:
             return False
         if call.priority == 3 and self.policy.p3_straight_only and not on_straight:
+            return False
+        if self.latest_snapshot is not None and self._rebound(call, self.latest_snapshot):
             return False
         if call.still_true is not None and self.latest_snapshot is not None:
             try:

@@ -74,6 +74,7 @@ class Candidate:
     still_true: Callable[[Snapshot], bool] | None
     inputs: dict[str, Any]
     trigger_t: float
+    bound: dict[str, Any] = field(default_factory=dict)
     screen_only: bool = False
     current: Callable[[Snapshot], bool] | None = None
     outcome_score: float | None = None
@@ -245,6 +246,7 @@ class RuleEngine:
             still_true=still_true,
             inputs=inputs,
             trigger_t=snapshot.now,
+            bound={name: getattr(snapshot, name, None) for name in d.bind},
             screen_only=d.screen_only,
             current=current,
             outcome_score=outcome_score,
@@ -362,6 +364,7 @@ class RuleEngine:
                     still_true=still_true,
                     inputs=inputs,
                     trigger_t=snapshot.now,
+                    bound={name: getattr(snapshot, name, None) for name in d.bind},
                     screen_only=d.screen_only,
                     current=current,
                     outcome_score=outcome_score,

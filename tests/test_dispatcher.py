@@ -8,13 +8,13 @@ from functools import partial
 import pytest
 
 from pitwall.audio.decision_log import DecisionLog
-from pitwall.audio.dispatcher import Dispatcher
+from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.digest import call_quality
 from pitwall.metrics import Metrics
-from pitwall.rules.engine import Candidate, Rule
+from pitwall.rules.engine import Candidate, Rule, RuleEngine
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
 
@@ -75,6 +75,53 @@ def _cand(rule_id: str, priority: int = 2, text: str | None = None, **defn: obje
 def _log(buf: io.StringIO) -> list[dict]:
     buf.seek(0)
     return [json.loads(line) for line in buf if line.strip()]
+
+
+def _battle_engine() -> RuleEngine:
+    store = ConfigStore()
+    settings = store.current()
+    return RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=store.current().resolved_mindset(),
+        staleness_s=settings.engine.staleness_s,
+    )
+
+
+def _battle_snapshot(now: float = 0.0, **overrides: object) -> Snapshot:
+    values: dict[str, object] = {
+        "session_kind": "race",
+        "session_type": 15,
+        "phase": "racing",
+        "lap_num": 5,
+        "laps_remaining": 10,
+        "battle_mode": "defending",
+        "battle_hold_prob": 0.15,
+        "battle_tyre_offset_behind": -6,
+        "battle_threat_laps": 0.0,
+        "rival_behind_name": "NORRIS",
+        "rival_behind_idx": 4,
+        "gap_behind_s": 0.6,
+        "battle_closing_behind_s": 0.4,
+        "sector": 0,
+        "_ages": {"car_telemetry": 0.1, "lap_data": 0.1},
+    }
+    values.update(overrides)
+    return make_snapshot(now, **values)
+
+
+def _battle_tick(
+    engine: RuleEngine, dispatcher: Dispatcher, now: float, **overrides: object
+) -> tuple[Snapshot, list[Candidate], list[Call]]:
+    snapshot = _battle_snapshot(now, **overrides)
+    result = engine.evaluate(snapshot)
+    candidates = [
+        candidate
+        for candidate in result.candidates
+        if candidate.rule.id in {"battle_defend", "battle_let_by"}
+    ]
+    dispatcher.submit(candidates, snapshot)
+    return snapshot, candidates, dispatcher.drain(now)
 
 
 def test_quiet_and_verbosity() -> None:
@@ -292,6 +339,94 @@ def test_revalidation() -> None:
     cand2.still_true = lambda snap: False  # type: ignore[method-assign]
     d.submit([cand2], make_snapshot(1.0, lap_num=1))
     assert d.drain(1.0) == []
+
+
+def test_battle_let_by_rearms_after_shared_battle_cooldown() -> None:
+    engine = _battle_engine()
+    dispatcher, sink, buf = _dispatcher(min_gap_s=0.0)
+
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 0.0, battle_hold_prob=0.5)
+    assert "battle_defend" in {candidate.rule.id for candidate in candidates}
+    assert any(call.rule_id == "battle_defend" for call in emitted)
+
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 1.0)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert not any(call.rule_id == "battle_let_by" for call in emitted)
+    assert any(
+        row["rule_id"] == "battle_let_by"
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "cooldown"
+        for row in _log(buf)
+    )
+
+    _, candidates, _ = _battle_tick(engine, dispatcher, 121.0, sector=2)
+    assert "battle_let_by" not in {candidate.rule.id for candidate in candidates}
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 122.0, sector=0)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert any(call.rule_id == "battle_let_by" for call in emitted)
+    let_by_call = next(call for call in emitted if call.rule_id == "battle_let_by")
+    assert let_by_call.text in sink.spoken
+
+
+def test_battle_let_by_rearms_when_eligibility_clears() -> None:
+    engine = _battle_engine()
+    dispatcher, _, _ = _dispatcher(min_gap_s=0.0)
+
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 0.0)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert any(call.rule_id == "battle_let_by" for call in emitted)
+
+    _, candidates, _ = _battle_tick(engine, dispatcher, 1.0, battle_hold_prob=0.5)
+    assert "battle_let_by" not in {candidate.rule.id for candidate in candidates}
+
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 121.0)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert any(call.rule_id == "battle_let_by" for call in emitted)
+
+
+@pytest.mark.parametrize(
+    ("changed", "reason"),
+    [
+        ({"rival_behind_idx": 5}, "rebound"),
+        ({"battle_hold_prob": 0.5}, "revalidation"),
+    ],
+)
+def test_queued_battle_let_by_is_dropped_for_changed_state(
+    changed: dict[str, object], reason: str
+) -> None:
+    dispatcher, _, buf = _dispatcher(min_gap_s=5.0)
+    dispatcher.submit([_cand("blocker")], make_snapshot(0.0))
+    dispatcher.drain(0.0)
+
+    engine = _battle_engine()
+    snapshot = _battle_snapshot(4.5)
+    result = engine.evaluate(snapshot)
+    candidate = next(item for item in result.candidates if item.rule.id == "battle_let_by")
+    assert candidate.bound == {"rival_behind_idx": 4}
+    dispatcher.submit([candidate], snapshot)
+    call = dispatcher._queue[0].call
+    assert call.bound == {"rival_behind_idx": 4}
+
+    latest = _battle_snapshot(4.6, **changed)
+    dispatcher.submit([], latest)
+    if reason == "rebound":
+        call.not_before = 0.0
+        assert not dispatcher._digest_call_ready(call, 4.6, on_straight=True)
+    assert dispatcher.drain(5.0) == []
+    assert any(
+        row["rule_id"] == "battle_let_by"
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == reason
+        for row in _log(buf)
+    )
+
+
+def test_rule_bind_defaults_to_empty_and_keeps_configured_fields() -> None:
+    base = {"id": "bind_test", "priority": 2, "when": "True", "say": "Call"}
+    assert RuleDefModel.model_validate(base).bind == []
+    assert RuleDefModel.model_validate({**base, "bind": ["rival_behind_idx"]}).bind == [
+        "rival_behind_idx"
+    ]
 
 
 def test_stale_queued_call_in_group_is_superseded() -> None:
