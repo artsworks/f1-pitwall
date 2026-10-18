@@ -1179,3 +1179,13 @@ def test_practice_snapshot_has_leader_and_teammate_sectors() -> None:
     leader_snapshot = state.snapshot(1.0)
     assert leader_snapshot.player_leads
     assert leader_snapshot.pole_gap_ms == 0
+
+
+def test_pressure_window_caps_the_inset_on_narrow_windows() -> None:
+    thresholds = {
+        "tyre_inner_cold_by_compound_c": {17: 90.0, 18: 80.0},
+        "tyre_inner_hot_by_compound_c": {17: 95.0, 18: 100.0},
+    }
+    assert thermal_window(thresholds, 17) == (90.0, 95.0)
+    assert pressure_window(thresholds, 17) == (91.25, 93.75)
+    assert pressure_window(thresholds, 18) == (85.0, 95.0)

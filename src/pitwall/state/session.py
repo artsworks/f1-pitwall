@@ -91,6 +91,7 @@ def pressure_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float
         )
     inset = float(thresholds.get("pressure_window_inset_c", 5.0))
     cold, hot = thermal_window(thresholds, compound)
+    inset = min(inset, max(0.0, (hot - cold) / 4))
     return cold + inset, hot - inset
 
 
