@@ -17,18 +17,26 @@ rules:
       - "{rival_ahead_name} ahead, {battle_pace_ahead}. {gap_ahead_s:.1f} to him"
       - "Car ahead is {battle_pace_ahead}. {gap_ahead_s:.1f}, keep pushing"
       - "{rival_ahead_name} is {battle_pace_ahead}. Reel him in"
+      - "{rival_ahead_name} in front, {battle_pace_ahead}. Gap {gap_ahead_s:.1f}"
+      - "Keep closing. {rival_ahead_name} {battle_pace_ahead}, {gap_ahead_s:.1f} ahead"
+      - "Car ahead, {battle_pace_ahead}. {rival_ahead_name} is {gap_ahead_s:.1f} away"
     severity:
       - when: "battle_catch_laps < 0.5"
         say:
           - "Closing fast on {rival_ahead_name}, {gap_ahead_s:.1f}. Overtake range soon"
+          - "Quickly closing on {rival_ahead_name}, {gap_ahead_s:.1f}. Overtake range soon"
       - when: "battle_pace_ahead == ''"
         say:
           - "{rival_ahead_name} ahead, {gap_ahead_s:.1f} to him"
           - "{gap_ahead_s:.1f} to {rival_ahead_name}. Keep pushing"
+          - "{rival_ahead_name} in front, gap {gap_ahead_s:.1f}"
+          - "Keep the pressure on. {rival_ahead_name} {gap_ahead_s:.1f} ahead"
       - when: "battle_catch_laps <= 2"
         say:
           - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"
           - "{gap_ahead_s:.1f} to {rival_ahead_name}, closing. Overtake range soon"
+          - "{rival_ahead_name} {battle_pace_ahead}. Catching him in {battle_catch_laps:.1f} laps"
+          - "Closing on {rival_ahead_name}, {gap_ahead_s:.1f}. Overtake range in {battle_catch_laps:.1f} laps"
   - id: battle_attack
     sessions: [race]
     min_lap: 2
@@ -47,16 +55,23 @@ rules:
       - "You're in range of {rival_ahead_name}. Hammer time"
       - "{gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
       - "{rival_ahead_name} is {battle_pace_ahead}. Have a look"
+      - "Attack range on {rival_ahead_name}. Make the move"
+      - "{rival_ahead_name} {gap_ahead_s:.1f} ahead. Go and take a look"
+      - "You have the pace on {rival_ahead_name}. Have a go"
     severity:
       - when: "laps_remaining <= 3"
         priority: 2
         say:
           - "{laps_remaining} to go. It's now or never on {rival_ahead_name}"
           - "Last chance at {rival_ahead_name}. Everything you've got"
+          - "{laps_remaining} laps left. Make the move on {rival_ahead_name} now"
+          - "Final chance on {rival_ahead_name}. Give it everything"
       - when: "battle_pace_ahead == ''"
         say:
           - "You're in range of {rival_ahead_name}. Hammer time"
           - "{gap_ahead_s:.1f} to {rival_ahead_name}. Go for it"
+          - "{rival_ahead_name} is within reach. Attack now"
+          - "Close enough to {rival_ahead_name}, {gap_ahead_s:.1f}. Make the move"
   - id: battle_patience
     sessions: [race]
     min_lap: 2
@@ -74,6 +89,9 @@ rules:
       - "Hard to pass. Stay with {rival_ahead_name}, save tyres"
       - "Patience with {rival_ahead_name}. Save the rears"
       - "No rush on {rival_ahead_name}. Keep him honest, pick your moment"
+      - "Difficult pass. Stay with {rival_ahead_name}, look after the tyres"
+      - "Patient now with {rival_ahead_name}. Save the rears"
+      - "Hold position behind {rival_ahead_name}. Wait for the right moment"
   - id: battle_defend
     sessions: [race]
     min_lap: 2
@@ -82,7 +100,6 @@ rules:
     when: "phase == 'racing' and battle_mode == 'defending' and sector != 2 and not (battle_hold_prob < th.battle_letby_hold_max and battle_tyre_known_behind and battle_tyre_offset_behind <= -th.battle_letby_tyre_laps and battle_threat_laps <= laps_remaining * 0.5 and laps_remaining > th.battle_letby_min_laps)"
     clear_when: "sector == 2 or battle_mode != 'defending'"
     still_true: "phase == 'racing'"
-    still_true: "phase == 'racing'"
     cooldown_s: 60
     cooldown_group: battle_behind
     contradicts: [energy_under]
@@ -90,28 +107,37 @@ rules:
     say:
       - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}"
       - "Car behind is {battle_pace_behind}. Keep the battery for the straight"
+      - "{rival_behind_name} is {gap_behind_s:.1f} back, {battle_pace_behind}"
+      - "Defend from {rival_behind_name}, {gap_behind_s:.1f}. Keep the battery for the straight"
     severity:
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_tyre_offset_behind >= 5"
         priority: 1
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind on older tyres. He'll fade"
+          - "Older tyres for {rival_behind_name}, {gap_behind_s:.1f} back. He'll fade"
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_tyre_offset_behind <= -5"
         priority: 1
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind on fresher tyres. Battery {ers_store_pct:.0f}"
+          - "Fresher tyres behind. {rival_behind_name} {gap_behind_s:.1f} back, battery {ers_store_pct:.0f}"
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_pace_behind == ''"
         priority: 1
         say:
           - "{rival_behind_name} right on you, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
+          - "{rival_behind_name} close behind, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5"
         priority: 1
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}. Battery {ers_store_pct:.0f}"
           - "{rival_behind_name} right on you, {gap_behind_s:.1f}. Battery {ers_store_pct:.0f}"
+          - "{rival_behind_name} closing, {gap_behind_s:.1f} back. {battle_pace_behind}, battery {ers_store_pct:.0f}"
+          - "Watch {rival_behind_name}, {gap_behind_s:.1f} behind. Battery {ers_store_pct:.0f}"
       - when: "battle_pace_behind == ''"
         say:
           - "{rival_behind_name} {gap_behind_s:.1f} behind"
           - "Car behind, {gap_behind_s:.1f}. Keep the battery for the straight"
+          - "{rival_behind_name} is {gap_behind_s:.1f} back"
+          - "Car behind at {gap_behind_s:.1f}. Save battery for the straight"
   - id: battle_let_by
     sessions: [race]
     min_lap: 2
@@ -128,6 +154,8 @@ rules:
     say:
       - "He's on fresher tyres, not in our race. Let him go, save the tyres"
       - "{rival_behind_name} will get through. Let him by, protect your stint"
+      - "Fresher tyres, but not our race. Let him through and save the tyres"
+      - "{rival_behind_name} will pass. Let him go, protect the stint"
   - id: battle_under_threat
     sessions: [race]
     min_lap: 2
@@ -142,16 +170,23 @@ rules:
       - "{rival_behind_name} behind, {battle_pace_behind}. {gap_behind_s:.1f} gap"
       - "Car behind is {battle_pace_behind}. Need a bit more pace"
       - "{rival_behind_name} coming, {battle_pace_behind}. Pick it up"
+      - "{rival_behind_name} closing, {battle_pace_behind}. Gap {gap_behind_s:.1f}"
+      - "Car behind, {battle_pace_behind}. Find a little more pace"
+      - "Pick it up, {rival_behind_name} is {battle_pace_behind}"
     severity:
       - when: "battle_threat_laps <= 2"
         priority: 2
         say:
           - "{rival_behind_name} in overtake range in {battle_threat_laps:.1f} laps. Push"
           - "Gap behind {gap_behind_s:.1f}, falling. Push"
+          - "{rival_behind_name} reaches overtake range in {battle_threat_laps:.1f} laps. Push"
+          - "Gap is coming down, {gap_behind_s:.1f}. Push now"
       - when: "battle_pace_behind == ''"
         say:
           - "{rival_behind_name} behind, {gap_behind_s:.1f} gap. Pick it up"
           - "Gap behind {gap_behind_s:.1f}. Need a bit more pace"
+          - "{rival_behind_name} is {gap_behind_s:.1f} behind. Find more pace"
+          - "More pace needed. Gap behind {gap_behind_s:.1f}"
   - id: battle_manage
     sessions: [race]
     min_lap: 3
@@ -165,6 +200,9 @@ rules:
       - "Gaps stable. Manage tyres"
       - "All under control. Save tyres"
       - "Gaps holding. Nice and tidy, save the tyres"
+      - "Gaps are steady. Look after the tyres"
+      - "Under control. Keep the tyres in good shape"
+      - "Gaps holding, keep it tidy and save the tyres"
   - id: battle_passed
     sessions: [race]
     priority: 3
@@ -176,15 +214,22 @@ rules:
       - "Great move on {battle_result_name}. P{position}, now build the gap"
       - "Past {battle_result_name}. P{position}, pull a second clear of his overtake"
       - "Past {battle_result_name}. P{position}, lovely"
+      - "Nice one, past {battle_result_name}. P{position}, build the gap"
+      - "Good pass on {battle_result_name}. P{position}, get clear of his overtake"
+      - "{battle_result_name} behind. P{position}, lovely move"
     severity:
       - when: "position == 1"
         say:
           - "Get in! Past {battle_result_name}, you're leading this race"
           - "That's the lead! P1, clean air"
+          - "Lovely job, past {battle_result_name}. You're leading the race"
+          - "P1 and in clean air. That's the lead"
       - when: "position <= 3"
         say:
           - "Great move! P{position}, podium place"
           - "Get in! Past {battle_result_name}, P{position}"
+          - "Lovely pass, P{position}. That's a podium place"
+          - "Past {battle_result_name}, P{position}. Nice one"
   - id: battle_held
     sessions: [race]
     priority: 3
@@ -196,6 +241,9 @@ rules:
       - "Good defending. Held off {battle_result_name}"
       - "Well held, {battle_result_name} dropped back"
       - "{battle_result_name} is out of overtake range. Nice work"
+      - "Held the place against {battle_result_name}. Good defending"
+      - "{battle_result_name} has fallen back. Well held"
+      - "No overtake threat from {battle_result_name} now. Nice work"
   - id: battle_lost
     sessions: [race]
     priority: 3
@@ -207,6 +255,9 @@ rules:
       - "{battle_result_name}'s through. Stay inside a second for overtake"
       - "Lost it to {battle_result_name}. Stay close"
       - "{battle_result_name} got you. Head down, go again"
+      - "{battle_result_name} is past. Keep within a second for overtake"
+      - "They've got through, {battle_result_name}. Stay close"
+      - "Lost the place to {battle_result_name}. Head down, try again"
   # Place changes going back and forth with one car (or several): one call
   # about the fight instead of a pass / lost call every time.
   # Off the track and lost places; then got them back on the same lap.
@@ -223,11 +274,16 @@ rules:
       - "Lost {off_track_lost}, P{position}. Still in reach"
       - "That cost {off_track_lost}, P{position}. Get them back"
       - "P{position}, {off_track_lost} lost. Clean laps now"
+      - "Off track cost {off_track_lost}. P{position}, still in reach"
+      - "P{position}, down {off_track_lost}. Take them back"
+      - "Lost {off_track_lost} places, P{position}. Keep it clean now"
     severity:
       - when: "off_track_lost >= 3"
         say:
           - "{off_track_lost} places gone, P{position}. Long race"
           - "{off_track_lost} lost, P{position}. One car at a time"
+          - "Down {off_track_lost} places to P{position}. Long race"
+          - "P{position}, {off_track_lost} places lost. One at a time"
   - id: off_track_recovered
     sessions: [race]
     priority: 3
@@ -241,6 +297,10 @@ rules:
       - "All back already, P{position}. Great response"
       - "That's the places back, P{position}. Lovely recovery"
       - "Undone in one lap. P{position}, well fought"
+      - "Recovered the places, P{position}. Good work"
+      - "Back where you were, P{position}. Nice recovery"
+      - "P{position}, all positions recovered. Lovely job"
+      - "Won those places back in a lap. Well fought, P{position}"
   - id: battle_swap_ahead
     sessions: [race]
     priority: 3
@@ -252,6 +312,7 @@ rules:
     requires: [lap_data]
     say:
       - "Ahead of {battle_result_name}. Nail the exit, keep him out of a second"
+      - "Past {battle_result_name}. Good exit, stay clear by a second"
   - id: battle_swap_behind
     sessions: [race]
     priority: 3
@@ -265,6 +326,9 @@ rules:
       - "{battle_result_name} back ahead. Set up one clean move"
       - "He's back ahead. Pass after the detection point, no overtake back"
       - "Swapping costs you both. Pick a pass that sticks"
+      - "{battle_result_name} has repassed. Set up one clean move"
+      - "He's back in front. Wait for the detection point, then pass once"
+      - "No more swapping. Make one pass that sticks"
   - id: battle_scrap
     sessions: [race]
     priority: 3
@@ -278,6 +342,9 @@ rules:
       - "Busy fight. P{position}, keep it clean"
       - "It's a scrap. P{position}. Pick your battles"
       - "Places changing. P{position}, stay out of trouble"
+      - "Close fight, P{position}. Keep it tidy"
+      - "A scrap for position. P{position}, choose your moment"
+      - "Positions moving. P{position}, keep clear of trouble"
   # Team fight: free to race, keep it clean.
   - id: teammate_fight
     sessions: [race]
@@ -292,9 +359,16 @@ rules:
       - "Team-mate {teammate_name}. Free to fight, give room"
       - "{teammate_name}, {teammate_gap_s:.1f}. Race him, no contact"
       - "Fighting your team-mate. Race hard, race clean"
+      - "That's {teammate_name}. Race freely, but keep it clean"
+      - "{teammate_name} is free to race. Give each other room"
+      - "Race {teammate_name}, {teammate_gap_s:.1f} away. No contact"
+      - "Team-mate fight. Race hard, keep it clean"
     escalate:
       - after: 2
         say:
           - "Still {teammate_name}. Race clean"
           - "{teammate_name} again. Careful, both cars home please"
           - "It's the team-mate. No risks"
+          - "{teammate_name} again. Keep the racing clean"
+          - "Still your team-mate. Bring both cars home safely"
+          - "No risks with {teammate_name}. Keep it clean"

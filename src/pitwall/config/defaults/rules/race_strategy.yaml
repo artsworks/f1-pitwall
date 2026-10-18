@@ -10,6 +10,8 @@ rules:
     say:
       - "Bias is on {setup_call_from:.0f}. Try {setup_call_to:.0f}, {setup_call_reason}."
       - "{setup_call_reason}. Bias from {setup_call_from:.0f} to {setup_call_to:.0f}."
+      - "Move bias {setup_call_from:.0f} to {setup_call_to:.0f}. {setup_call_reason}."
+      - "{setup_call_reason}. Set bias {setup_call_to:.0f}, from {setup_call_from:.0f}."
   - id: setup_on_throttle
     sessions: [race]
     priority: 3
@@ -21,6 +23,8 @@ rules:
     say:
       - "On-throttle diff is on {setup_call_from:.0f}. Try {setup_call_to:.0f}, {setup_call_reason}."
       - "{setup_call_reason}. On-throttle diff from {setup_call_from:.0f} to {setup_call_to:.0f}."
+      - "On-throttle diff {setup_call_from:.0f}. Set {setup_call_to:.0f}, {setup_call_reason}."
+      - "{setup_call_reason}. Change on-throttle diff from {setup_call_from:.0f} to {setup_call_to:.0f}."
   - id: setup_stop_wing
     sessions: [race]
     priority: 3
@@ -31,6 +35,7 @@ rules:
     requires: [lap_data, car_setups]
     say:
       - "Front wing {setup_stop_wing_to:.0f} at the stop, from {setup_stop_wing_from:.0f}. Set it in the pit menu."
+      - "Set front wing to {setup_stop_wing_to:.0f} at the stop, from {setup_stop_wing_from:.0f}. Use the pit menu."
   # Named strategy plans A/B/C (docs/03 "Strategy plans"). The engine's plan
   # tracker owns the plan state; these rules only phrase it. plan_sc_box sits
   # after box_now in the pit group: it speaks only when box_now is gated out.
@@ -46,6 +51,9 @@ rules:
       - "Plan {active_plan} now. {plan_spoken}, lap {plan_target_lap}"
       - "Going Plan {active_plan}. {plan_spoken}, lap {plan_target_lap}"
       - "New plan, {active_plan}. {plan_spoken}. Target lap {plan_target_lap}"
+      - "Switch to Plan {active_plan}. {plan_spoken}, lap {plan_target_lap}"
+      - "Plan change, {active_plan}. {plan_spoken}. Target lap {plan_target_lap}"
+      - "Plan {active_plan} from here. {plan_spoken}, lap {plan_target_lap}"
   - id: plan_switch_no_stop
     sessions: [race]
     priority: 2
@@ -58,6 +66,9 @@ rules:
       - "Plan {active_plan}, {plan_spoken}. No more stops, save tyres"
       - "Change of plan, we're not stopping. {plan_spoken}"
       - "Plan {active_plan} now, {plan_spoken}. Tyres go to the flag"
+      - "Plan {active_plan}, {plan_spoken}. No stop now, look after the tyres"
+      - "We're staying out. {plan_spoken}, tyres to the flag"
+      - "Plan {active_plan} from here, {plan_spoken}. No more stops"
   - id: plan_invalid
     sessions: [race]
     priority: 2
@@ -70,6 +81,9 @@ rules:
       - "We're off Plan {plan_switched_from}. Plan {active_plan}, {plan_spoken}"
       - "Now off Plan {plan_switched_from}. Plan {active_plan}, {plan_spoken}"
       - "Going off Plan {plan_switched_from}. Plan {active_plan}, {plan_spoken}"
+      - "Plan {plan_switched_from} is out. Now Plan {active_plan}, {plan_spoken}"
+      - "Switching from Plan {plan_switched_from} to Plan {active_plan}. {plan_spoken}"
+      - "New call, Plan {active_plan}. {plan_spoken}, leaving Plan {plan_switched_from}"
   - id: plan_off
     sessions: [race]
     priority: 2
@@ -82,6 +96,9 @@ rules:
       - "Off Plan {active_plan}, losing {plan_off_s:.0f} seconds. Reviewing"
       - "Plan {active_plan} costs {plan_off_s:.0f} seconds. New plan coming"
       - "Off Plan {active_plan} by {plan_off_s:.0f} seconds. Checking"
+      - "Plan {active_plan} is {plan_off_s:.0f} seconds off. Reviewing"
+      - "Losing {plan_off_s:.0f} seconds on Plan {active_plan}. Reworking it"
+      - "Plan {active_plan}, {plan_off_s:.0f} seconds lost. New plan coming"
   - id: plan_announce
     sessions: [race]
     priority: 2
@@ -94,6 +111,9 @@ rules:
       - "Plan A, {plan_spoken}. Window {plan_window_start} to {plan_window_end}. Plan B, {plan_b_spoken}"
       - "Plan A is {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
       - "Plan A, {plan_spoken}. Plan B, {plan_b_spoken}"
+      - "Plan A, {plan_spoken}, window {plan_window_start} to {plan_window_end}. Plan B, {plan_b_spoken}"
+      - "Plan A, {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
+      - "A plan, {plan_spoken}. Backup is Plan B, {plan_b_spoken}"
   - id: plan_announce_no_stop
     sessions: [race]
     priority: 2
@@ -106,6 +126,9 @@ rules:
       - "We're on Plan A, {plan_spoken}. We're going long"
       - "Plan A, {plan_spoken}. Look after the tyres"
       - "Plan A, {plan_spoken}. Tyres go the distance"
+      - "Plan A, {plan_spoken}. Long run, look after the tyres"
+      - "Plan A, {plan_spoken}. We're staying out to the end"
+      - "Plan A, {plan_spoken}. Make the tyres last"
   - id: plan_status
     sessions: [race]
     priority: 3
@@ -118,6 +141,9 @@ rules:
       - "Still on Plan {active_plan}, window laps {plan_window_start} to {plan_window_end}"
       - "We're on Plan {active_plan}. Target lap {plan_target_lap}"
       - "Plan {active_plan} still good, window {plan_window_start} to {plan_window_end}"
+      - "Plan {active_plan} remains. Window {plan_window_start} to {plan_window_end}"
+      - "Plan {active_plan} is unchanged. Target lap {plan_target_lap}"
+      - "No change, Plan {active_plan}. Window {plan_window_start} to {plan_window_end}"
   - id: plan_window_open
     sessions: [race]
     priority: 2
@@ -130,6 +156,9 @@ rules:
       - "Pit window is open. Plan {active_plan}, target lap {plan_target_lap}"
       - "Window open. We're targeting lap {plan_target_lap}, Plan {active_plan}"
       - "Window's open. Lap {plan_target_lap}, Plan {active_plan}"
+      - "Open window now. Plan {active_plan}, target lap {plan_target_lap}"
+      - "Pit window open, Plan {active_plan}. Aim for lap {plan_target_lap}"
+      - "Window's open for Plan {active_plan}. Target lap {plan_target_lap}"
   - id: plan_target_lap
     sessions: [race]
     priority: 1
@@ -144,10 +173,15 @@ rules:
       - "Target lap. Plan {active_plan}, box box, {plan_next_compound}s"
       - "Target lap. Box, {plan_next_compound}s, Plan {active_plan}"
       - "Box box, box box. Plan {active_plan}, {plan_next_compound}s"
+      - "This is the lap. Plan {active_plan}, box for {plan_next_compound}s"
+      - "Box this lap. Plan {active_plan}, fit {plan_next_compound}s"
+      - "Pit now for {plan_next_compound}s. Plan {active_plan}"
     on_ack:
       - "Copy, box this lap"
+      - "Understood, box this lap"
     on_neg:
       - "Understood, extend. We'll look again next lap"
+      - "Copy, extend one lap. We'll review next time round"
   # Pit calls read the optimiser's plan (docs/18). The gate fields sit in
   # `when` so the prediction and its confidence land in the decision log.
   - id: box_now
@@ -169,10 +203,15 @@ rules:
       - "Box, box. Plan {active_plan}. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds"
       - "Plan {active_plan}, box this lap. {pit_plan_reason}"
       - "Box this lap, box this lap. Plan {active_plan}, {pit_plan_reason}"
+      - "Box now. Plan {active_plan}, {pit_plan_reason}. Gain {pit_plan_gain_s:.1f} seconds"
+      - "Plan {active_plan}, stop this lap. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds"
+      - "Pit this lap, Plan {active_plan}. {pit_plan_reason}"
     on_ack:
       - "Copy, box this lap"
+      - "Understood, box this lap"
     on_neg:
       - "Copy, staying out. Window {pit_window_start} to {pit_window_end}"
+      - "Understood, stay out. Window {pit_window_start} to {pit_window_end}"
   - id: plan_sc_box
     sessions: [race]
     priority: 1
@@ -188,10 +227,15 @@ rules:
       - "Plan C, box box. {plan_next_compound}s, cheap stop"
       - "Plan C, Plan C. Box this lap for {plan_next_compound}s"
       - "Box box, Plan C. Cheap stop, {plan_next_compound}s"
+      - "Plan C stop. Box this lap for {plan_next_compound}s, cheap"
+      - "Cheap stop now. Plan C, fit {plan_next_compound}s"
+      - "Box this lap, Plan C. {plan_next_compound}s, low-cost stop"
     on_ack:
       - "Copy, Plan C, box this lap"
+      - "Understood, Plan C. Box this lap"
     on_neg:
       - "Understood, staying out. Plan {plan_switched_from} stays open"
+      - "Copy, stay out. Plan {plan_switched_from} remains open"
   - id: box_in_n
     sessions: [race]
     priority: 2
@@ -207,6 +251,9 @@ rules:
       - "Plan is box lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
       - "We're looking at lap {pit_plan_lap} for the stop"
       - "Stop lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
+      - "Pit stop planned for lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"
+      - "Box on lap {pit_plan_lap}. That's the current target"
+      - "Targeting lap {pit_plan_lap} for the stop. Window {pit_window_start} to {pit_window_end}"
   - id: overcut_stay_out
     sessions: [race]
     priority: 2
@@ -221,6 +268,9 @@ rules:
       - "{pit_plan_rival_name} has boxed. Stay out and push, overcut is on"
       - "{pit_plan_rival_name} pitted. Push now, we go long"
       - "{pit_plan_rival_name}'s in. Stay out, give me some quick laps"
+      - "{pit_plan_rival_name} is in. Stay out, push on, overcut available"
+      - "{pit_plan_rival_name} boxed. We stay out and push for the overcut"
+      - "{pit_plan_rival_name} has stopped. Quick laps now, we're going long"
   - id: cover_box
     sessions: [race]
     priority: 1
@@ -239,10 +289,15 @@ rules:
       - "Cover the undercut. Box, box"
       - "{pit_plan_rival_name} has boxed. Cover it, box this lap"
       - "Box, box. Cover {pit_plan_rival_name}"
+      - "Stop now, cover the undercut"
+      - "{pit_plan_rival_name} is in. Box this lap and cover the undercut"
+      - "Cover {pit_plan_rival_name}. Box this lap"
     on_ack:
       - "Copy, box this lap"
+      - "Understood, box this lap"
     on_neg:
       - "Copy, staying out. Push, {pit_plan_rival_name} is on fresh tyres"
+      - "Understood, stay out. Push on, {pit_plan_rival_name} has fresh tyres"
   - id: overcut_defend
     sessions: [race]
     priority: 1
@@ -260,3 +315,6 @@ rules:
       - "Stay out, extend. Their tyres need time, push now"
       - "{pit_plan_rival_name}'s in. Stay out and push, we keep the place"
       - "Stay out. {pit_plan_rival_name} needs a lap on those tyres, push now"
+      - "Extend the stint. Their tyres need to come in, push now"
+      - "{pit_plan_rival_name} has stopped. Stay out, push and hold the place"
+      - "Stay out and extend. {pit_plan_rival_name} needs a lap on those tyres"
