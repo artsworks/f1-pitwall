@@ -435,7 +435,8 @@ class Engine:
         self._session_fuel_last_kg: float | None = None
         self._session_fuel_deltas: list[float] = []
         self._run_fuel_seq = state.run_seq
-        self._run_fuel_deltas: list[float] = []
+        # (session time at the line, kg burned) per green lap of this run.
+        self._run_fuel_deltas: list[tuple[float, float]] = []
         self._stint_fuel_ref = 0.0
         self._stint_laps: list[LapRow] = []
         self._model_key: tuple[int | None, int, int, int] | None = None
@@ -447,6 +448,9 @@ class Engine:
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
+            # state.lap_num still holds the pre-rewind lap here, so match on session time.
+            self._run_fuel_deltas = [entry for entry in self._run_fuel_deltas if entry[0] <= t]
+            self._session_fuel_last_kg = None
             self._reset_energy_lap_tracking()
             self._held_plan = None
 
@@ -1248,7 +1252,7 @@ class Engine:
         if green and last is not None and 0.0 < last - lap.fuel_kg < 10.0:
             delta = last - lap.fuel_kg
             self._session_fuel_deltas.append(delta)
-            self._run_fuel_deltas.append(delta)
+            self._run_fuel_deltas.append((self.state.last_packet_t or 0.0, delta))
         self._session_fuel_last_kg = lap.fuel_kg if green else None
 
     def _fuel_per_lap(self, laps_remaining: int) -> tuple[float, str]:
@@ -1659,7 +1663,7 @@ class Engine:
                 fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
                 fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
                 run_fuel_per_lap_kg=(
-                    sum(self._run_fuel_deltas) / len(self._run_fuel_deltas)
+                    sum(delta for _, delta in self._run_fuel_deltas) / len(self._run_fuel_deltas)
                     if self._run_fuel_deltas
                     else 0.0
                 ),

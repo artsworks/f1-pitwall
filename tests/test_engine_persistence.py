@@ -381,9 +381,9 @@ def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
     engine._note_session_fuel(
         LapSummary(6, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=12.76)
     )
-    assert engine._run_fuel_deltas == pytest.approx([1.62])
+    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([1.62])
 
-    engine._run_fuel_deltas[:] = [1.5, 1.6]
+    engine._run_fuel_deltas[:] = [(1.0, 1.5), (2.0, 1.6)]
     engine.ingest.on_datagram(
         pack_packet(PacketId.LAP_DATA, {"cars": {0: {"driver_status": 3, "pit_status": 0}}}),
         1.0,
@@ -393,6 +393,34 @@ def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
     assert engine.last_snapshot is not None
     assert engine.last_snapshot.run_fuel_per_lap_kg == 0.0
     assert engine.last_snapshot.run_fuel_laps == 0
+
+
+def test_run_fuel_drops_laps_a_flashback_erased() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
+    state = engine.state
+
+    def lap(num: int, fuel_kg: float, at_s: float) -> None:
+        state.last_packet_t = at_s
+        engine._note_session_fuel(
+            LapSummary(num, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=fuel_kg)
+        )
+
+    lap(1, 20.0, 90.0)
+    lap(2, 18.5, 180.0)
+    lap(3, 16.8, 270.0)
+    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([1.5, 1.7])
+
+    for listener in state.rewind_listeners:
+        listener(170.0)
+    assert engine._run_fuel_deltas == []
+
+    lap(2, 18.6, 180.0)
+    lap(3, 16.6, 270.0)
+    engine.ingest.on_datagram(pack_packet(PacketId.LAP_DATA, {"cars": {0: {}}}), 1.0)
+    engine.tick(1.0)
+    assert engine.last_snapshot is not None
+    assert engine.last_snapshot.run_fuel_per_lap_kg == pytest.approx(2.0)
+    assert engine.last_snapshot.run_fuel_laps == 1
 
 
 def test_rival_laps_persisted(tmp_path: Path) -> None:
