@@ -863,6 +863,47 @@ def test_battle_let_by_suppresses_defend() -> None:
     assert "battle_defend" not in ids
 
 
+def test_battle_let_by_rearms_when_behind_changes() -> None:
+    engine = _default_rule_engine()
+    snapshot = _rule_snapshot(
+        phase="racing",
+        lap_num=5,
+        laps_remaining=10,
+        battle_mode="defending",
+        sector=0,
+        battle_hold_prob=0.15,
+        battle_tyre_known_behind=True,
+        battle_tyre_offset_behind=-6,
+        battle_threat_laps=0.0,
+        rival_behind_name="NORRIS",
+        gap_behind_s=0.6,
+        battle_closing_behind_s=0.4,
+    )
+    first = engine.evaluate(snapshot)
+    assert "battle_let_by" in {candidate.rule.id for candidate in first.candidates}
+
+    second = engine.evaluate(snapshot)
+    assert "battle_let_by" not in {candidate.rule.id for candidate in second.candidates}
+
+    changed = _rule_snapshot(
+        phase="racing",
+        lap_num=5,
+        laps_remaining=10,
+        battle_mode="defending",
+        sector=0,
+        battle_hold_prob=0.15,
+        battle_tyre_known_behind=True,
+        battle_tyre_offset_behind=-6,
+        battle_threat_laps=0.0,
+        rival_behind_name="NORRIS",
+        gap_behind_s=0.6,
+        battle_closing_behind_s=0.4,
+        battle_behind_changed=True,
+    )
+    third = engine.evaluate(changed)
+    assert "battle_let_by" in {candidate.rule.id for candidate in third.candidates}
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

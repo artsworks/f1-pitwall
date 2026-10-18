@@ -385,49 +385,115 @@ def test_battle_let_by_rearms_when_eligibility_clears() -> None:
     assert any(call.rule_id == "battle_let_by" for call in emitted)
 
 
-@pytest.mark.parametrize(
-    ("changed", "reason"),
-    [
-        ({"rival_behind_idx": 5}, "rebound"),
-        ({"battle_hold_prob": 0.5}, "revalidation"),
-    ],
-)
-def test_queued_battle_let_by_is_dropped_for_changed_state(
-    changed: dict[str, object], reason: str
-) -> None:
-    dispatcher, _, buf = _dispatcher(min_gap_s=5.0)
-    dispatcher.submit([_cand("blocker")], make_snapshot(0.0))
+def test_battle_let_by_rebounds_to_new_rival_and_speaks() -> None:
+    engine = _battle_engine()
+    dispatcher, sink, buf = _dispatcher(min_gap_s=5.0)
+    dispatcher.submit([_cand("blocker", priority=1)], make_snapshot(0.0, lap_num=5))
+    dispatcher.drain(0.0)
+
+    _, candidates, emitted = _battle_tick(engine, dispatcher, 4.5)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert not any(call.rule_id == "battle_let_by" for call in emitted)
+    old_call = next(item.call for item in dispatcher._queue if item.call.rule_id == "battle_let_by")
+    assert old_call.rival_idx == 4
+
+    _, candidates, emitted = _battle_tick(
+        engine,
+        dispatcher,
+        4.6,
+        rival_behind_idx=5,
+        rival_behind_name="VERSTAPPEN",
+        battle_behind_changed=True,
+    )
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    assert not any(call.rule_id == "battle_let_by" for call in emitted)
+    new_call = next(item.call for item in dispatcher._queue if item.call.rule_id == "battle_let_by")
+    assert new_call.rival_idx == 5
+    assert any(
+        row["call_id"] == old_call.id
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "rebound"
+        for row in _log(buf)
+    )
+    assert any(row["call_id"] == new_call.id and row["outcome"] == "queued" for row in _log(buf))
+
+    dispatcher.submit(
+        [],
+        _battle_snapshot(5.0, rival_behind_idx=5, rival_behind_name="VERSTAPPEN"),
+    )
+    emitted = dispatcher.drain(5.0)
+    let_by = next(call for call in emitted if call.rule_id == "battle_let_by")
+    assert let_by.rival_idx == 5
+    assert let_by.text in sink.spoken
+
+
+def test_battle_let_by_rebounds_after_eligibility_clears() -> None:
+    engine = _battle_engine()
+    dispatcher, sink, buf = _dispatcher(min_gap_s=5.0)
+    dispatcher.submit([_cand("blocker", priority=1)], make_snapshot(0.0, lap_num=5))
+    dispatcher.drain(0.0)
+
+    _, candidates, _ = _battle_tick(engine, dispatcher, 4.5)
+    assert "battle_let_by" in {candidate.rule.id for candidate in candidates}
+    old_call = next(item.call for item in dispatcher._queue if item.call.rule_id == "battle_let_by")
+
+    cleared = _battle_snapshot(4.6, battle_hold_prob=0.5)
+    engine.evaluate(cleared)
+    dispatcher.submit([], cleared)
+    changed = _battle_snapshot(
+        4.8,
+        rival_behind_idx=5,
+        rival_behind_name="VERSTAPPEN",
+        battle_behind_changed=True,
+    )
+    result = engine.evaluate(changed)
+    candidate = next(item for item in result.candidates if item.rule.id == "battle_let_by")
+    dispatcher.submit([candidate], changed)
+    assert not any(
+        row["rule_id"] == "battle_let_by" and row["outcome"] == "merged" and row["t"] == 4.8
+        for row in _log(buf)
+    )
+    assert any(
+        row["call_id"] == old_call.id
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "rebound"
+        for row in _log(buf)
+    )
+    new_call = next(item.call for item in dispatcher._queue if item.call.rule_id == "battle_let_by")
+    assert new_call.rival_idx == 5
+
+    dispatcher.submit([], _battle_snapshot(5.0, rival_behind_idx=5))
+    emitted = dispatcher.drain(5.0)
+    let_by = next(call for call in emitted if call.rule_id == "battle_let_by")
+    assert let_by.rival_idx == 5
+    assert let_by.text in sink.spoken
+
+
+def test_dropping_queued_let_by_undoes_cooldown_and_lap_budget() -> None:
+    dispatcher, _, buf = _dispatcher(min_gap_s=5.0, calls_per_lap=1)
+    dispatcher.submit([_cand("blocker", priority=1)], make_snapshot(0.0, lap_num=5))
     dispatcher.drain(0.0)
 
     engine = _battle_engine()
     snapshot = _battle_snapshot(4.5)
     result = engine.evaluate(snapshot)
     candidate = next(item for item in result.candidates if item.rule.id == "battle_let_by")
-    assert candidate.bound == {"rival_behind_idx": 4}
     dispatcher.submit([candidate], snapshot)
-    call = dispatcher._queue[0].call
-    assert call.bound == {"rival_behind_idx": 4}
+    old_call = next(item.call for item in dispatcher._queue if item.call.rule_id == "battle_let_by")
+    assert old_call.rival_idx == 4
 
-    latest = _battle_snapshot(4.6, **changed)
-    dispatcher.submit([], latest)
-    if reason == "rebound":
-        call.not_before = 0.0
-        assert not dispatcher._digest_call_ready(call, 4.6, on_straight=True)
+    dispatcher.submit([], _battle_snapshot(4.6, rival_behind_idx=5))
     assert dispatcher.drain(5.0) == []
     assert any(
-        row["rule_id"] == "battle_let_by"
+        row["call_id"] == old_call.id
         and row["outcome"] == "suppressed"
-        and row["suppressed_by"] == reason
+        and row["suppressed_by"] == "rebound"
         for row in _log(buf)
     )
 
-
-def test_rule_bind_defaults_to_empty_and_keeps_configured_fields() -> None:
-    base = {"id": "bind_test", "priority": 2, "when": "True", "say": "Call"}
-    assert RuleDefModel.model_validate(base).bind == []
-    assert RuleDefModel.model_validate({**base, "bind": ["rival_behind_idx"]}).bind == [
-        "rival_behind_idx"
-    ]
+    other = _cand("after_rebound", cooldown_s=120, cooldown_group="battle_behind")
+    dispatcher.submit([other], make_snapshot(5.1, lap_num=5))
+    assert [call.rule_id for call in dispatcher.drain(5.1)] == ["after_rebound"]
 
 
 def test_stale_queued_call_in_group_is_superseded() -> None:

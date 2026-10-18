@@ -617,6 +617,7 @@ class Snapshot:
     battle_tyre_offset_behind: int = 0
     battle_tyre_known_ahead: bool = False
     battle_tyre_known_behind: bool = False
+    battle_behind_changed: bool = False
     battle_pass_prob: float = 0.0
     battle_catch_prob: float = 0.0
     battle_chase_prob: float = 0.0

@@ -87,6 +87,18 @@ def test_classify(kw: dict[str, object], mode: str) -> None:
     assert classify(_inp(**kw), TH) == mode
 
 
+def test_tracker_marks_behind_changes_and_reset() -> None:
+    tracker, rates = BattleTracker(), BattleRates()
+    changed = [
+        tracker.update(_inp(behind_idx=idx), TH, rates).behind_changed for idx in (4, 4, 5, 5, -1)
+    ]
+    assert changed == [True, False, True, False, False]
+
+    tracker.reset()
+    assert tracker.prev_behind_idx == -1
+    assert tracker.update(_inp(behind_idx=4), TH, rates).behind_changed
+
+
 def test_zero_closing_with_zero_minimum_rate_does_not_divide() -> None:
     thresholds = {"battle_closing_min_s": 0}
     assert classify(_inp(gap_ahead_s=3.0), thresholds) == MANAGING

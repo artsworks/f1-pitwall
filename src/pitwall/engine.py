@@ -1975,6 +1975,7 @@ class Engine:
             battle_tyre_offset_behind=b.tyre_offset_behind,
             battle_tyre_known_ahead=b.tyre_known_ahead,
             battle_tyre_known_behind=b.tyre_known_behind,
+            battle_behind_changed=b.behind_changed,
             battle_pass_prob=b.pass_prob,
             battle_catch_prob=b.catch_prob,
             battle_chase_prob=b.chase_prob,
