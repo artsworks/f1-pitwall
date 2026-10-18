@@ -209,7 +209,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .setup .sug { color: var(--warn); font-weight: bold; display: inline-block; min-width: 7ch; }
 .setup .sug.none { color: var(--faint); font-weight: normal; }
 .setup .sug.try { opacity: .6; }
-.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
+.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; white-space: normal; }
 
 /* ------------------------------------------------------- D fixed tiles --- */
 .tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto;
