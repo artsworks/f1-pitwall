@@ -10,6 +10,35 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.26.0 (2026-10-18)
+
+### Continuous Integration
+
+- Split PR tests into fast and replay shards
+  ([#109](https://github.com/artsworks/f1-pitwall/pull/109),
+  [`19ff630`](https://github.com/artsworks/f1-pitwall/commit/19ff6305e4e1624ccc7b060969b04b614e5bb9aa))
+
+### Documentation
+
+- Add search and social metadata to the landing page
+  ([#110](https://github.com/artsworks/f1-pitwall/pull/110),
+  [`bc236d9`](https://github.com/artsworks/f1-pitwall/commit/bc236d9769e3122acde952019e153af916741aa4))
+
+- Embed the demo video on the landing page
+  ([#111](https://github.com/artsworks/f1-pitwall/pull/111),
+  [`be434b5`](https://github.com/artsworks/f1-pitwall/commit/be434b544f227dccd6f3b96d616839e7bc0e2797))
+
+- Use the owner's favicon set and add a web manifest
+  ([#110](https://github.com/artsworks/f1-pitwall/pull/110),
+  [`bc236d9`](https://github.com/artsworks/f1-pitwall/commit/bc236d9769e3122acde952019e153af916741aa4))
+
+### Features
+
+- **radio**: Budget steps silence, 15 and unlimited
+  ([#114](https://github.com/artsworks/f1-pitwall/pull/114),
+  [`9304ddf`](https://github.com/artsworks/f1-pitwall/commit/9304ddf1ab86d4e723bdf94fff22142873a198c9))
+
+
 ## v0.25.0 (2026-10-16)
 
 ### Features
