@@ -12,7 +12,7 @@ rules:
       - "Tyre check, roughly {laps_of_pace:.0f} laps of pace in them"
       - "About {laps_of_pace:.0f} laps of pace left in this set"
       - "Roughly {laps_of_pace:.0f} laps of pace left in the tyres"
-      - "This set has about {laps_of_pace:.0f} laps of pace"
+      - "About {laps_of_pace:.0f} laps of pace in this set"
       - "Tyres have around {laps_of_pace:.0f} laps of pace left"
     severity:
       - when: "laps_of_pace < 1.5"
@@ -20,7 +20,7 @@ rules:
           - "About a lap left in the tyres"
           - "Tyre check, roughly one lap of pace in them"
           - "One lap of pace left, roughly"
-          - "Tyres are nearly done, about one lap left"
+          - "Tyres nearly done. About one lap left"
   - id: tyre_overheat
     sessions: [race]
     priority: 2
@@ -32,7 +32,7 @@ rules:
       - "Tyres are running hot. Ease the slides"
       - "Temps are high, look after the rears"
       - "Tyre temps are climbing. Smooth on the throttle, fewer slides"
-      - "Tyres are hot. Keep the slides down"
+      - "Tyres hot. Keep the slides down"
       - "High temps, mind the rears"
       - "Tyre temperatures rising. Smooth throttle, fewer slides"
   - id: tyre_overheat_wet
@@ -61,8 +61,8 @@ rules:
       - "Crossover. {tyre_switch_to} are the tyre, box this lap"
       - "Box this lap for {tyre_switch_to}. Confirm"
       - "Crossover. {tyre_switch_to} are quicker. Box, box"
-      - "The field's faster on {tyre_switch_to}. Box this lap"
-      - "Crossover now. Fit {tyre_switch_to}, box box"
+      - "Field quicker on {tyre_switch_to}. Box this lap"
+      - "Crossover now. Fit {tyre_switch_to}, box this lap"
       - "Switch to {tyre_switch_to}. Pit this lap"
       - "{tyre_switch_to} are quicker now. Box, box"
   - id: tyre_switch_slicks_traffic
@@ -121,7 +121,7 @@ rules:
       - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
       - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast now"
       - "Fuel short by {fuel_short_laps:.1f} laps. Lift and coast now"
-      - "We need {fuel_short_laps:.1f} laps on fuel. Start lifting"
+      - "Short on fuel by {fuel_short_laps:.1f} laps. Lift and coast"
       - "Fuel {fuel_short_laps:.1f} laps short. Lift on the straights"
     severity:
       - when: "lap_num * 2 < total_laps"
@@ -192,7 +192,7 @@ rules:
       - "{energy_lap_delta_mj:+.1f} MJ over this lap. Harvest"
       - "Over energy budget, {energy_lap_delta_mj:+.1f} MJ. Harvest"
       - "Energy surplus {energy_lap_delta_mj:+.1f} MJ. Harvest more"
-      - "You used {energy_lap_delta_mj:+.1f} MJ over budget. Harvest"
+      - "{energy_lap_delta_mj:+.1f} MJ over budget. Harvest"
       - "Over by {energy_lap_delta_mj:+.1f} MJ. Recover more energy"
   - id: energy_under
     sessions: [race]
@@ -208,7 +208,7 @@ rules:
       - "{energy_prev_under_mj:.1f} MJ unused last lap. Deploy more"
       - "{energy_prev_under_mj:.1f} MJ left last lap. Use it"
       - "Battery spare last lap, {energy_prev_under_mj:.1f} MJ. Deploy"
-      - "You left {energy_prev_under_mj:.1f} MJ unused. Deploy more"
+      - "{energy_prev_under_mj:.1f} MJ unused. Deploy more"
       - "Last lap had {energy_prev_under_mj:.1f} MJ spare. Use it"
       - "{energy_prev_under_mj:.1f} MJ in hand from last lap. Deploy"
   - id: energy_charge_for_battle

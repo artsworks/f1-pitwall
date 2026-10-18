@@ -83,7 +83,7 @@ rules:
       - "Box this lap, it's not going to be enough"
       - "Lap's gone, {abort_deficit_s:.1f} off the cut. Back off"
       - "Abort this lap, {abort_deficit_s:.1f} off the cut. Save the tyres"
-      - "Box now. The lap won't be enough"
+      - "Abort the lap. Save the set"
       - "{abort_deficit_s:.1f} off the cut. Lap is gone, back off"
     on_ack:
       - "Copy, back it off. Recharge and go again"
@@ -197,7 +197,7 @@ rules:
     say:
       - "Go again. Battery {ers_store_pct:.0f}, tyres are fine"
       - "Keep pushing, battery {ers_store_pct:.0f}"
-      - "Tyres are good. Go again, battery {ers_store_pct:.0f}"
+      - "Tyres good. Go again, battery {ers_store_pct:.0f}"
       - "Continue pushing. Battery at {ers_store_pct:.0f}"
     on_ack:
       - "Copy. Go get it"
@@ -430,7 +430,7 @@ rules:
       - "Hot lap behind, {hot_car_behind_s:.1f} seconds. Off the line"
       - "Hot lap behind. Move over"
       - "Fast car behind, {hot_car_behind_s:.1f} seconds. Clear the line"
-      - "A car is on a hot lap behind. Move off the line"
+      - "Hot lap behind. Off the line"
   - id: cool_extend
     sessions: [qualifying]
     priority: 1
@@ -533,7 +533,7 @@ rules:
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Push from the line"
       - "Hot lap mode. Battery {ers_store_pct:.0f}. Go"
       - "Hot lap setting. Battery {ers_store_pct:.0f}, push from the line"
-      - "Battery at {ers_store_pct:.0f}. Hot lap mode, go"
+      - "Battery {ers_store_pct:.0f}. Right, let's push"
   # Grid drop picked up in quali or a sprint shootout: it moves the race start.
   - id: grid_penalty
     sessions: [practice, qualifying]
@@ -545,5 +545,5 @@ rules:
     say:
       - "Grid penalty. {grid_penalty_places} places back for the race"
       - "{grid_penalty_places} place grid penalty for the race"
-      - "You have a {grid_penalty_places} place penalty for the race"
+      - "{grid_penalty_places} place grid drop for the race"
       - "Grid penalty of {grid_penalty_places} places. That's for the race"

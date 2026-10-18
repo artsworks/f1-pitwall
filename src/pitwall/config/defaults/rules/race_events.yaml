@@ -61,7 +61,7 @@ rules:
       - "We'll take the penalty at the stop, it's still on the car"
       - "Reminder, penalty's unserved. It comes off at the stop"
       - "Penalty still unserved. Serve it at the stop"
-      - "We have an unserved penalty. Take it at the next stop"
+      - "Penalty still to serve. Take it at the stop"
       - "Penalty remains on the car. Serve it in the pits"
   - id: penalty_track_limits
     sessions: [race]
@@ -109,7 +109,7 @@ rules:
       - "Track limits warning. Keep all four wheels inside"
       - "Warning, track limits. Stay within the white lines"
       - "Track limits. Keep it on the circuit"
-      - "Another track limits warning. Stay inside the lines"
+      - "Another track limits warning. Don't wander beyond the white lines"
   - id: track_limit_last_warning
     sessions: [race]
     priority: 1
@@ -137,7 +137,7 @@ rules:
       - "Corner cut warning. Give the time back"
       - "Warning, cutting the corner. Stay on track"
       - "Corner cut. Return the time"
-      - "Warning for corner cutting. Give the time back"
+      - "Corner cut warning. Don't wander off the track. Give the time back"
   - id: corner_cut_last_warning
     sessions: [race]
     priority: 1
@@ -163,7 +163,7 @@ rules:
       - "That pass was off track. Warning"
       - "Warning, pass off track. Keep it on"
       - "Off-track pass. Warning, keep it on the circuit"
-      - "You passed off track. Warning. Stay on the circuit"
+      - "Off-track pass. Warning. Stay on the circuit"
       - "Warning for an off-track pass. Keep the car on track"
   - id: blue_flag
     sessions: [race]
@@ -195,7 +195,7 @@ rules:
       - "{rival_ahead_name} pitted, {gap_ahead_s:.1f} ahead"
       - "Car ahead's boxing, {rival_ahead_name}. He was {gap_ahead_s:.1f} up"
       - "{rival_ahead_name} has pitted. Gap was {gap_ahead_s:.1f}"
-      - "The car ahead boxed, {rival_ahead_name} {gap_ahead_s:.1f} in front"
+      - "Car ahead boxed. {rival_ahead_name} {gap_ahead_s:.1f} in front"
       - "{rival_ahead_name} into the pits. {gap_ahead_s:.1f} ahead"
   - id: rival_behind_pitted
     sessions: [race]
@@ -213,7 +213,7 @@ rules:
       - "{rival_behind_name} pitted. Undercut threat, push"
       - "{rival_behind_name} boxed. Push, cover the undercut"
       - "{rival_behind_name} has stopped. Fresh tyres, watch the undercut"
-      - "The car behind has boxed, {rival_behind_name}. Cover the undercut"
+      - "Car behind boxed, {rival_behind_name}. Cover the undercut"
       - "{rival_behind_name} is in the pits. Push to cover the undercut"
       - "Fresh tyres behind, {rival_behind_name} has boxed. Push now"
   - id: weather_to_inter

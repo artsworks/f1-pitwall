@@ -96,7 +96,7 @@ rules:
       - "Off Plan {active_plan}, losing {plan_off_s:.0f} seconds. Reviewing"
       - "Plan {active_plan} costs {plan_off_s:.0f} seconds. New plan coming"
       - "Off Plan {active_plan} by {plan_off_s:.0f} seconds. Checking"
-      - "Plan {active_plan} is {plan_off_s:.0f} seconds off. Reviewing"
+      - "Plan {active_plan}, {plan_off_s:.0f} seconds off. Not ideal, reviewing"
       - "Losing {plan_off_s:.0f} seconds on Plan {active_plan}. Reworking it"
       - "Plan {active_plan}, {plan_off_s:.0f} seconds lost. New plan coming"
   - id: plan_announce
@@ -113,7 +113,7 @@ rules:
       - "Plan A, {plan_spoken}. Plan B, {plan_b_spoken}"
       - "Plan A, {plan_spoken}, window {plan_window_start} to {plan_window_end}. Plan B, {plan_b_spoken}"
       - "Plan A, {plan_spoken}, target lap {plan_target_lap}. Plan B, {plan_b_spoken}"
-      - "A plan, {plan_spoken}. Backup is Plan B, {plan_b_spoken}"
+      - "Plan A, {plan_spoken}. Plan B backup, {plan_b_spoken}"
   - id: plan_announce_no_stop
     sessions: [race]
     priority: 2
@@ -127,7 +127,7 @@ rules:
       - "Plan A, {plan_spoken}. Look after the tyres"
       - "Plan A, {plan_spoken}. Tyres go the distance"
       - "Plan A, {plan_spoken}. Long run, look after the tyres"
-      - "Plan A, {plan_spoken}. We're staying out to the end"
+      - "Plan A, {plan_spoken}. Long race, bring her home"
       - "Plan A, {plan_spoken}. Make the tyres last"
   - id: plan_status
     sessions: [race]
@@ -173,7 +173,7 @@ rules:
       - "Target lap. Plan {active_plan}, box box, {plan_next_compound}s"
       - "Target lap. Box, {plan_next_compound}s, Plan {active_plan}"
       - "Box box, box box. Plan {active_plan}, {plan_next_compound}s"
-      - "This is the lap. Plan {active_plan}, box for {plan_next_compound}s"
+      - "Target lap. Plan {active_plan}, box for {plan_next_compound}s"
       - "Box this lap. Plan {active_plan}, fit {plan_next_compound}s"
       - "Pit now for {plan_next_compound}s. Plan {active_plan}"
     on_ack:
@@ -205,7 +205,7 @@ rules:
       - "Box this lap, box this lap. Plan {active_plan}, {pit_plan_reason}"
       - "Box now. Plan {active_plan}, {pit_plan_reason}. Gain {pit_plan_gain_s:.1f} seconds"
       - "Plan {active_plan}, stop this lap. {pit_plan_reason}, {pit_plan_gain_s:.1f} seconds"
-      - "Pit this lap, Plan {active_plan}. {pit_plan_reason}"
+      - "Box, box. Plan {active_plan}, {pit_plan_reason}"
     on_ack:
       - "Copy, box this lap"
       - "Understood, box this lap"

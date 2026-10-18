@@ -19,7 +19,7 @@ rules:
       - "{rival_ahead_name} is {battle_pace_ahead}. Reel him in"
       - "{rival_ahead_name} in front, {battle_pace_ahead}. Gap {gap_ahead_s:.1f}"
       - "Keep closing. {rival_ahead_name} {battle_pace_ahead}, {gap_ahead_s:.1f} ahead"
-      - "Car ahead, {battle_pace_ahead}. {rival_ahead_name} is {gap_ahead_s:.1f} away"
+      - "Car ahead, {battle_pace_ahead}. {rival_ahead_name}, {gap_ahead_s:.1f} away. Keep it tidy"
     severity:
       - when: "battle_catch_laps < 0.5"
         say:
@@ -30,7 +30,7 @@ rules:
           - "{rival_ahead_name} ahead, {gap_ahead_s:.1f} to him"
           - "{gap_ahead_s:.1f} to {rival_ahead_name}. Keep pushing"
           - "{rival_ahead_name} in front, gap {gap_ahead_s:.1f}"
-          - "Keep the pressure on. {rival_ahead_name} {gap_ahead_s:.1f} ahead"
+          - "Patient now. {rival_ahead_name} {gap_ahead_s:.1f} ahead. Keep pressing"
       - when: "battle_catch_laps <= 2"
         say:
           - "{rival_ahead_name}, {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps"
@@ -57,7 +57,7 @@ rules:
       - "{rival_ahead_name} is {battle_pace_ahead}. Have a look"
       - "Attack range on {rival_ahead_name}. Make the move"
       - "{rival_ahead_name} {gap_ahead_s:.1f} ahead. Go and take a look"
-      - "You have the pace on {rival_ahead_name}. Have a go"
+      - "Right, let's push. {rival_ahead_name} ahead, have a go"
     severity:
       - when: "laps_remaining <= 3"
         priority: 2
@@ -108,7 +108,7 @@ rules:
       - "{rival_behind_name} {gap_behind_s:.1f} behind, {battle_pace_behind}"
       - "Car behind is {battle_pace_behind}. Keep the battery for the straight"
       - "{rival_behind_name} is {gap_behind_s:.1f} back, {battle_pace_behind}"
-      - "Defend from {rival_behind_name}, {gap_behind_s:.1f}. Keep the battery for the straight"
+      - "Patient now. {rival_behind_name}, {gap_behind_s:.1f} back. Battery for the straight"
     severity:
       - when: "battle_closing_behind_s >= 0.3 and gap_behind_s <= 0.5 and battle_tyre_offset_behind >= 5"
         priority: 1
@@ -214,7 +214,7 @@ rules:
       - "Great move on {battle_result_name}. P{position}, now build the gap"
       - "Past {battle_result_name}. P{position}, pull a second clear of his overtake"
       - "Past {battle_result_name}. P{position}, lovely"
-      - "Nice one, past {battle_result_name}. P{position}, build the gap"
+      - "Good pass on {battle_result_name}. P{position}, build the gap"
       - "Good pass on {battle_result_name}. P{position}, get clear of his overtake"
       - "{battle_result_name} behind. P{position}, lovely move"
     severity:
@@ -243,7 +243,7 @@ rules:
       - "{battle_result_name} is out of overtake range. Nice work"
       - "Held the place against {battle_result_name}. Good defending"
       - "{battle_result_name} has fallen back. Well held"
-      - "No overtake threat from {battle_result_name} now. Nice work"
+      - "No overtake threat from {battle_result_name} now. Nice one"
   - id: battle_lost
     sessions: [race]
     priority: 3
@@ -257,7 +257,7 @@ rules:
       - "{battle_result_name} got you. Head down, go again"
       - "{battle_result_name} is past. Keep within a second for overtake"
       - "They've got through, {battle_result_name}. Stay close"
-      - "Lost the place to {battle_result_name}. Head down, try again"
+      - "Lost the place to {battle_result_name}. Not ideal. Head down, try again"
   # Place changes going back and forth with one car (or several): one call
   # about the fight instead of a pass / lost call every time.
   # Off the track and lost places; then got them back on the same lap.
@@ -275,8 +275,8 @@ rules:
       - "That cost {off_track_lost}, P{position}. Get them back"
       - "P{position}, {off_track_lost} lost. Clean laps now"
       - "Off track cost {off_track_lost}. P{position}, still in reach"
-      - "P{position}, down {off_track_lost}. Take them back"
-      - "Lost {off_track_lost} places, P{position}. Keep it clean now"
+      - "Off track, down {off_track_lost}. P{position}. Not ideal, take them back"
+      - "P{position}, down {off_track_lost}. Slightly untidy, take them back"
     severity:
       - when: "off_track_lost >= 3"
         say:
@@ -300,7 +300,7 @@ rules:
       - "Recovered the places, P{position}. Good work"
       - "Back where you were, P{position}. Nice recovery"
       - "P{position}, all positions recovered. Lovely job"
-      - "Won those places back in a lap. Well fought, P{position}"
+      - "Slightly untidy, places back in a lap. Well fought, P{position}"
   - id: battle_swap_ahead
     sessions: [race]
     priority: 3
@@ -343,7 +343,7 @@ rules:
       - "It's a scrap. P{position}. Pick your battles"
       - "Places changing. P{position}, stay out of trouble"
       - "Close fight, P{position}. Keep it tidy"
-      - "A scrap for position. P{position}, choose your moment"
+      - "Scrap for P{position}. Pick your moment"
       - "Positions moving. P{position}, keep clear of trouble"
   # Team fight: free to race, keep it clean.
   - id: teammate_fight

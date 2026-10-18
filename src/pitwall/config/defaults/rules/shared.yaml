@@ -27,7 +27,7 @@ rules:
       - "Tyres are in, {tyre_inner_front_c:.0f} and {tyre_inner_rear_c:.0f}. Push."
       - "Temps good. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Go."
       - "Tyres in the window. Push."
-      - "Tyres are ready. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Push."
+      - "Tyres in. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Push."
       - "Good temperatures. Fronts {tyre_inner_front_c:.0f}, rears {tyre_inner_rear_c:.0f}. Go."
       - "Tyres in range. Right, let's push."
   - id: front_wing_damage
@@ -85,7 +85,7 @@ rules:
       - "Wing's gone, too late to stop. Nurse it home"
       - "Wing damaged. No stop, brake early"
       - "Front wing lost. No time to stop, nurse the car home"
-      - "Wing damage, but too late for a stop. Brake early"
+      - "Wing damage. Too late for a stop, nurse it home"
   - id: puncture
     sessions: [practice, qualifying, race]
     priority: 1
@@ -249,7 +249,7 @@ rules:
       - "Locked there last time too. Softer pedal."
       - "Locked up in the same place again. Brake earlier there."
       - "{lockup_wheel} locked at that corner again. Brake earlier."
-      - "Same lock-up as last lap. Use a softer pedal."
+      - "Same lock-up again. Slightly untidy. Softer pedal."
     escalate:
       - after: 3
         say:
@@ -283,7 +283,7 @@ rules:
           - "Lock-up. Save these tyres."
           - "{repeat} lock-ups in ten minutes. Brake earlier."
           - "Front tyres locking again. Look after them."
-          - "Another lock-up. Protect the tyres."
+          - "Another lock-up. Slightly untidy. Protect the tyres."
       - after: 6
         say:
           - "Lock-up number {repeat}."
@@ -354,7 +354,7 @@ rules:
       - "Whoa, twitchy there. Good hands"
       - "Rear stepped out, you caught it. Keep going"
       - "Nearly lost it there. Nice save"
-      - "That was a moment. Well caught"
+      - "Slightly untidy, well caught"
       - "Big slide, but you saved it. Stay calm"
       - "Twitchy through there. Good reactions"
       - "Rear stepped out, caught it. Keep going"
@@ -506,8 +506,8 @@ rules:
       - "Slow car {traffic_ahead_s:.1f} ahead. Drop back."
       - "You'll catch the car ahead. Ease off."
       - "Car ahead is slow, {traffic_ahead_s:.1f} away. Create a gap."
-      - "Traffic ahead at {traffic_ahead_s:.1f}. Back off and make a gap."
-      - "You'll reach that car ahead. Ease off now."
+      - "Patient now. Traffic at {traffic_ahead_s:.1f}. Back off, make a gap."
+      - "Catching that car. Ease off, make a gap."
   - id: prep_dirty_air
     sessions: [practice, qualifying]
     priority: 2
@@ -555,7 +555,7 @@ rules:
       - "Track's clear ahead. Good spacing."
       - "Good gap ahead. Clear track for your lap."
       - "No traffic ahead. Clean air is yours."
-      - "You have clear track ahead. Good spacing."
+      - "Clear track ahead. Good spacing."
   # Red flag: all sessions; repeats on cooldown while the flag stays out.
   - id: red_flag
     priority: 1
@@ -587,7 +587,7 @@ rules:
       - "Watch the front left. Slow in, fast out, right-handers"
       - "Front left wear is {wear_hot_ratio:.1f} times higher. Brake earlier for right-handers"
       - "Front left wearing {wear_hot_ratio:.1f} times more. Avoid sliding in right-handers"
-      - "Save the front left. Slow entry, quick exit on right-handers"
+      - "Save the front left. Slow entry, quick exit. Don't wander wide on right-handers"
   - id: wear_front_right
     sessions: [practice, race]
     priority: 2
@@ -603,7 +603,7 @@ rules:
       - "Watch the front right. Slow in, fast out, left-handers"
       - "Front right wear is {wear_hot_ratio:.1f} times higher. Brake earlier for left-handers"
       - "Front right wearing {wear_hot_ratio:.1f} times more. Avoid sliding in left-handers"
-      - "Save the front right. Slow entry, quick exit on left-handers"
+      - "Save the front right. Slow entry, quick exit. Don't wander wide on left-handers"
   - id: wear_rear_left
     sessions: [practice, race]
     priority: 2

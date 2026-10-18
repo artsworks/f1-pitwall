@@ -14,7 +14,7 @@ rules:
       - "Lap one, P{position}. {positions_gained} gained"
       - "Mega start! P{position}, {positions_gained} up"
       - "Lovely start, P{position}. {positions_gained} places gained"
-      - "P{position} after lap one, {positions_gained} up"
+      - "Nice one, P{position}. Up {positions_gained}"
       - "Lap one done. P{position}, gained {positions_gained}"
   - id: lap1_lost
     sessions: [race]
@@ -29,7 +29,7 @@ rules:
       - "Lap one, P{position}. Lost {positions_lost}, long race"
       - "P{position}, {positions_lost} down. Stay calm"
       - "P{position} after lap one. Down {positions_lost}, long race"
-      - "Lost {positions_lost} on lap one, P{position}. Stay calm"
+      - "Lost {positions_lost} on lap one, P{position}. Patient now"
   - id: lap1_held
     sessions: [race]
     priority: 2
@@ -70,7 +70,7 @@ rules:
     requires: [lap_data]
     say:
       - "Final lap, {rival_behind_name} {gap_behind_s:.1f} back. Hold him off"
-      - "Last lap. {rival_behind_name} is {gap_behind_s:.1f} behind, defend"
+      - "Last lap. Defend from {rival_behind_name}, {gap_behind_s:.1f} behind. Bring her home"
   - id: last_lap_attack
     sessions: [race]
     cooldown_s: 120
@@ -240,7 +240,7 @@ rules:
       - "Chequered flag. P{classified_position}, same as the grid. Solid job"
       - "That's the flag, P{classified_position}. Held the grid slot, good work"
       - "P{classified_position} at the flag, same as the grid. Well driven"
-      - "Finished P{classified_position}, held the grid place. Nice work"
+      - "Finished P{classified_position}, held the grid place. Nice one"
   - id: finish_win
     sessions: [race]
     priority: 1
@@ -256,7 +256,7 @@ rules:
       - "Race winner! You beauty!"
       - "Flag, P1! What a job!"
       - "Get in there! P1!"
-      - "You did it! Race winner!"
+      - "Get in there. Race winner."
       - "P1 at the flag. That's the win!"
       - "What a drive. You've won the race!"
       - "Chequered flag, P1. Lovely job!"
@@ -278,7 +278,7 @@ rules:
       - "Chequered flag, P{classified_position}. That's a podium!"
       - "P{classified_position} on the podium. Lovely work!"
       - "Podium finish, P{classified_position}. What a drive!"
-      - "You made the podium, P{classified_position}. Brilliant job!"
+      - "Podium, P{classified_position}. Brilliant job"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2
