@@ -10,6 +10,39 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.31.0 (2026-10-19)
+
+### Bug Fixes
+
+- **driver**: Filter pit-lane passes and unknown SC laps
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+- **driver**: Preserve folds and backfill stored sessions
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+### Code Style
+
+- **web**: Dim driver rating source in DRV chip
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+### Features
+
+- **driver**: Overtake and infringement components
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+- **strategy**: Per-track driver rating scales pit advice
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+- **web,cli**: Show learned driver rating on dashboard and terminal
+  ([#120](https://github.com/artsworks/f1-pitwall/pull/120),
+  [`cd9e063`](https://github.com/artsworks/f1-pitwall/commit/cd9e0637114a7497ae3e9f50ffb78ae09225cb50))
+
+
 ## v0.30.0 (2026-10-19)
 
 ### Features
