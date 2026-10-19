@@ -364,10 +364,21 @@ def test_ingest_isolates_file_errors_and_caps_findings(tmp_path: Path) -> None:
     bad.write_bytes(b"broken recording")
     valid = _recording(tmp_path / "valid.f1bin", 0xF1261003)
     settings = ConfigStore().current()
+    starts: list[tuple[str, int, int]] = []
+    dones: list[tuple[str, int, int]] = []
 
-    results = ingest_recordings(db, [str(bad), str(valid)], settings, out_dir=tmp_path / "digests")
+    results = ingest_recordings(
+        db,
+        [str(bad), str(valid)],
+        settings,
+        out_dir=tmp_path / "digests",
+        on_start=lambda path, index, total: starts.append((path.name, index, total)),
+        on_done=lambda result, index, total: dones.append((result.status, index, total)),
+    )
 
     assert [result.status for result in results] == ["error", "ingested"]
+    assert starts == [("broken.f1bin", 1, 2), ("valid.f1bin", 2, 2)]
+    assert dones == [("error", 1, 2), ("ingested", 2, 2)]
     assert results[0].error
     assert len(results[1].findings) <= int(settings.thresholds["digest_max_findings"])
     assert db.read_heartbeat() is None
@@ -404,9 +415,13 @@ def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch,
     db_path = tmp_path / "cli.sqlite"
 
     assert main(["digest", str(recording), "--db", str(db_path), "--calls-mode", "off"]) == 0
-    digest_output = capsys.readouterr().out
+    digest_capture = capsys.readouterr()
+    digest_output = digest_capture.out
     assert f"session {uid}: ingested" in digest_output
     assert "digest: no sessions in the database" not in digest_output
+    assert "ingesting 1/1: cli.f1bin ..." in digest_capture.err
+    assert "digest: 1 ingested, 0 skipped, 0 errors" in digest_capture.err
+    assert "ingesting" not in digest_output
 
     db = Database(db_path)
     session = db.session_row(uid)
@@ -415,7 +430,9 @@ def test_digest_and_tune_cli_ingest_recording_paths(tmp_path: Path, monkeypatch,
     db.close()
 
     assert main(["tune", str(recording), "--db", str(db_path), "--calls-mode", "on"]) == 0
-    assert f"{uid} skipped" in capsys.readouterr().out
+    tune_capture = capsys.readouterr()
+    assert f"{uid} skipped" in tune_capture.out
+    assert "tune: 0 ingested, 1 skipped, 0 errors" in tune_capture.err
 
 
 @pytest.mark.replay

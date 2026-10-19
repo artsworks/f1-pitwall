@@ -233,104 +233,121 @@ def ingest_recordings(
     out_dir: Path | None = None,
     rules_dir: Path | None = None,
     isolated: bool = False,
+    on_start: Callable[[Path, int, int], None] | None = None,
+    on_done: Callable[[IngestResult, int, int], None] | None = None,
 ) -> list[IngestResult]:
     """Replay or digest a recording batch, isolating errors to each file."""
+    digest_dir = out_dir or (Path(settings.persistence.path).expanduser().parent / "digests")
+    digest_dir.mkdir(parents=True, exist_ok=True)
+    expanded_paths = expand_paths(paths)
+    total = len(expanded_paths)
+    results: list[IngestResult] = []
+    for index, path in enumerate(expanded_paths, 1):
+        if on_start is not None:
+            on_start(path, index, total)
+        result = _ingest_one(
+            db,
+            path,
+            settings,
+            digest_dir,
+            calls_mode=calls_mode,
+            rules_dir=rules_dir,
+            isolated=isolated,
+        )
+        results.append(result)
+        if on_done is not None:
+            on_done(result, index, total)
+    return results
+
+
+def _ingest_one(
+    db: Database,
+    path: Path,
+    settings: Settings,
+    digest_dir: Path,
+    *,
+    calls_mode: str | None,
+    rules_dir: Path | None,
+    isolated: bool,
+) -> IngestResult:
     from pitwall.digest import DIGEST_VERSION, build_digest
     from pitwall.engine import build_engine, run_replay
     from pitwall.net.recording import RecordingReader
 
-    digest_dir = out_dir or (Path(settings.persistence.path).expanduser().parent / "digests")
-    digest_dir.mkdir(parents=True, exist_ok=True)
-    results: list[IngestResult] = []
-    for path in expand_paths(paths):
-        uid = 0
-        try:
-            with RecordingReader(path) as reader:
-                header = reader.header
-            uid = header.session_uid
-            if uid and db.is_ingested(uid, DIGEST_VERSION):
-                _relabel_calls_mode(db, uid, path, header, calls_mode)
-                refolded = False
-                if _driver_refold_eligible(db, uid, path, header, settings):
-                    with db.transaction():
-                        _refold_driver(
-                            path,
-                            db,
-                            rules_dir=rules_dir,
-                            isolated=isolated,
-                            session_started_at=header.wall_clock_start_us / 1_000_000.0,
-                        )
-                    refolded = True
-                results.append(
-                    IngestResult(
-                        path,
-                        uid,
-                        "skipped",
-                        ["driver_refolded=True"] if refolded else [],
-                    )
-                )
-                continue
+    uid = 0
+    try:
+        with RecordingReader(path) as reader:
+            header = reader.header
+        uid = header.session_uid
+        if uid and db.is_ingested(uid, DIGEST_VERSION):
+            _relabel_calls_mode(db, uid, path, header, calls_mode)
+            if not _driver_refold_eligible(db, uid, path, header, settings):
+                return IngestResult(path, uid, "skipped", [])
             with db.transaction():
-                digest_only = bool(uid and db.session_has_laps(uid))
-                refolded = False
-                if not digest_only:
-                    engine = build_engine(
-                        clock=VirtualClock(),
-                        overrides={"engine": {"heartbeat_s": 0}},
-                        rules_dir=rules_dir,
-                        isolated=isolated,
-                        synthetic=bool(header.metadata.get("synthetic"))
-                        or is_synthetic_uid(header.session_uid),
-                        sinks=[],
-                        db=db,
-                        decision_log_fp=io.StringIO(),
-                        session_started_at=header.wall_clock_start_us / 1_000_000.0,
-                    )
-                    asyncio.run(run_replay(path, engine))
-                    engine.fold_session_end()
-                    uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
-                elif _driver_refold_eligible(db, uid, path, header, settings):
-                    _refold_driver(
-                        path,
-                        db,
-                        rules_dir=rules_dir,
-                        isolated=isolated,
-                        session_started_at=header.wall_clock_start_us / 1_000_000.0,
-                    )
-                    refolded = True
-                if not uid:
-                    raise ValueError("recording did not contain a session UID")
-                session = db.session_row(uid) or {}
-                origin_mode = calls_mode or header_calls_mode(header.metadata)
-                if not origin_mode:
-                    origin_mode = str(session.get("calls_mode") or "")
-                db.set_session_origin(
-                    uid,
-                    started_at=header.wall_clock_start_us / 1_000_000.0,
-                    recording_path=str(path),
-                    calls_mode=origin_mode,
-                    synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
-                    derived_from=str(header.metadata.get("derived_from") or ""),
-                )
-                digest = build_digest(
-                    db, uid, settings.thresholds, setup_rules=settings.setup_rules
-                )
-                (digest_dir / f"{uid}.json").write_text(
-                    json.dumps(digest, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                db.mark_ingested(uid, DIGEST_VERSION, str(path))
-            findings = [str(item) for item in digest.get("findings", [])]
-            if refolded:
-                findings.append("driver_refolded=True")
-            results.append(
-                IngestResult(
+                _refold_driver(
                     path,
-                    uid,
-                    "digest_only" if digest_only else "ingested",
-                    findings,
+                    db,
+                    rules_dir=rules_dir,
+                    isolated=isolated,
+                    session_started_at=header.wall_clock_start_us / 1_000_000.0,
                 )
+            return IngestResult(path, uid, "skipped", ["driver_refolded=True"])
+        with db.transaction():
+            digest_only = bool(uid and db.session_has_laps(uid))
+            refolded = False
+            if not digest_only:
+                engine = build_engine(
+                    clock=VirtualClock(),
+                    overrides={"engine": {"heartbeat_s": 0}},
+                    rules_dir=rules_dir,
+                    isolated=isolated,
+                    synthetic=bool(header.metadata.get("synthetic"))
+                    or is_synthetic_uid(header.session_uid),
+                    sinks=[],
+                    db=db,
+                    decision_log_fp=io.StringIO(),
+                    session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                )
+                asyncio.run(run_replay(path, engine))
+                engine.fold_session_end()
+                uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
+            elif _driver_refold_eligible(db, uid, path, header, settings):
+                _refold_driver(
+                    path,
+                    db,
+                    rules_dir=rules_dir,
+                    isolated=isolated,
+                    session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                )
+                refolded = True
+            if not uid:
+                raise ValueError("recording did not contain a session UID")
+            session = db.session_row(uid) or {}
+            origin_mode = calls_mode or header_calls_mode(header.metadata)
+            if not origin_mode:
+                origin_mode = str(session.get("calls_mode") or "")
+            db.set_session_origin(
+                uid,
+                started_at=header.wall_clock_start_us / 1_000_000.0,
+                recording_path=str(path),
+                calls_mode=origin_mode,
+                synthetic=bool(header.metadata.get("synthetic")) or is_synthetic_uid(uid),
+                derived_from=str(header.metadata.get("derived_from") or ""),
             )
-        except Exception as exc:  # noqa: BLE001 - store the ingestion failure in its result
-            results.append(IngestResult(path, uid, "error", [], str(exc)))
-    return results
+            digest = build_digest(db, uid, settings.thresholds, setup_rules=settings.setup_rules)
+            (digest_dir / f"{uid}.json").write_text(
+                json.dumps(digest, indent=2, default=str),
+                encoding="utf-8",
+            )
+            db.mark_ingested(uid, DIGEST_VERSION, str(path))
+        findings = [str(item) for item in digest.get("findings", [])]
+        if refolded:
+            findings.append("driver_refolded=True")
+        return IngestResult(
+            path,
+            uid,
+            "digest_only" if digest_only else "ingested",
+            findings,
+        )
+    except Exception as exc:  # noqa: BLE001 - store the ingestion failure in its result
+        return IngestResult(path, uid, "error", [], str(exc))
