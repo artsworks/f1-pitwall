@@ -9,7 +9,7 @@ The rating appears as the dashboard DRV chip, in the `pitwall start` banner, and
 
 The player pace uses valid green laps with positive lap times and no traffic.
 The field median uses one clean lap time per rival with at least three clean laps.
-Rival laps are filtered by SC/VSC, but not by traffic.
+The field median excludes rival laps under SC/VSC or with unknown SC status. It does not filter for traffic.
 
 | Component | Measurement | Score |
 | --- | --- | --- |

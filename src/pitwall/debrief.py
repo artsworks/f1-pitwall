@@ -232,7 +232,7 @@ _ACTUAL_COMPOUNDS = {
     20: "C1",
     21: "C0",
 }
-_SC_WORDS = {0: "green", 1: "SC", 2: "VSC", 3: "formation"}
+_SC_WORDS = {-1: "unknown", 0: "green", 1: "SC", 2: "VSC", 3: "formation"}
 _TRACK_NAMES = {
     0: "Melbourne",
     2: "Shanghai",
@@ -527,7 +527,7 @@ def _lap_chart(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) 
     for lap in timed:
         css_class, word = _compound(lap.visual, lap.compound)
         slow = lap.lap_time_ms > ymax
-        invalid = not lap.valid or lap.sc_status > 0 or slow
+        invalid = not lap.valid or lap.sc_status != 0 or slow
         cy = top if slow else min(height - bottom, max(top, y(lap.lap_time_ms)))
         reason = ", ".join(lap.invalid_reasons) or (
             _SC_WORDS.get(lap.sc_status, str(lap.sc_status))

@@ -560,7 +560,7 @@ class OffTrackTracker:
 
 
 class OvertakeTracker:
-    """On-track overtakes from OVTK events, filtered by the counterpart's LapData."""
+    """On-track overtakes from OVTK events, filtered by both cars' LapData."""
 
     def __init__(self) -> None:
         self.reset()
@@ -593,8 +593,11 @@ class OvertakeTracker:
             return
         counterpart = overtaken if player_idx == overtaker else overtaker
         car = cars[counterpart]
+        player = cars[player_idx]
         if (
-            car.result_status not in (2, 3)
+            player.pit_status != 0
+            or self._pitted_lap.get(player_idx) == player.current_lap_num
+            or car.result_status not in (2, 3)
             or car.pit_status != 0
             or self._pitted_lap.get(counterpart) == car.current_lap_num
             or counterpart in penalized

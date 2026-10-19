@@ -25,7 +25,7 @@ from pitwall.model.deg import DegFit
 from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
-from pitwall.state.lap import LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
 
 
@@ -316,8 +316,10 @@ def test_incidents_keep_unknown_sc_status_values() -> None:
     db = Database(":memory:")
     db.upsert_session(156, track_id=16, session_type=15)
     _insert_lap(db, 156, 1, sc_status=4)
+    _insert_lap(db, 156, 2, sc_status=SC_UNKNOWN)
 
     assert "<td>4</td>" in _incidents_section(db.laps_for(156))
+    assert "<td>unknown</td>" in _incidents_section(db.laps_for(156))
     db.close()
 
 

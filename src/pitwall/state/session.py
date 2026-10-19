@@ -47,7 +47,7 @@ from pitwall.state.driving import (
     YellowTracker,
 )
 from pitwall.state.ema import CornersEma
-from pitwall.state.lap import LapAccumulator, LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapAccumulator, LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.pressure import PressureCall, RunTemps, pressure_advice, pressure_text
 from pitwall.state.quali import (
@@ -1851,7 +1851,7 @@ class SessionState:
                         tyre_age_laps=max(0, lap_num - stint_start),
                         fuel_remaining_laps_at_end=0.0,
                         valid=valid,
-                        sc_status=self._car_lap_sc.get(pkt.car_idx, {}).get(lap_num, 0),
+                        sc_status=self._car_lap_sc.get(pkt.car_idx, {}).get(lap_num, SC_UNKNOWN),
                         invalid_reasons=[] if valid else ["invalid"],
                     ),
                 )

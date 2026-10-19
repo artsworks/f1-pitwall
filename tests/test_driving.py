@@ -58,7 +58,8 @@ def test_overtake_tracker_counts_made_and_lost() -> None:
 
 def test_overtake_tracker_ignores_counterpart_in_pit_or_not_active() -> None:
     tracker = OvertakeTracker()
-    cars = _overtake_cars(pit_status=1)
+    cars = _overtake_cars()
+    cars[1].pit_status = 1
     tracker.on_event(0, 0, 1, cars, set())
 
     cars[1].pit_status = 0
@@ -71,7 +72,8 @@ def test_overtake_tracker_ignores_counterpart_in_pit_or_not_active() -> None:
 
 def test_overtake_tracker_ignores_a_car_pitted_on_its_current_lap() -> None:
     tracker = OvertakeTracker()
-    cars = _overtake_cars(pit_status=1)
+    cars = _overtake_cars()
+    cars[1].pit_status = 1
     tracker.note_lap_data(cars)
 
     cars[1].pit_status = 0
@@ -80,6 +82,33 @@ def test_overtake_tracker_ignores_a_car_pitted_on_its_current_lap() -> None:
     tracker.on_event(0, 0, 1, cars, set())
 
     assert tracker.seen == 1
+
+
+def test_overtake_tracker_ignores_player_in_pits() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[0].pit_status = 1
+
+    tracker.on_event(0, 1, 0, cars, set())
+
+    assert tracker.lost == 0
+
+
+def test_overtake_tracker_ignores_player_pit_lap_then_counts_next_lap() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[0].pit_status = 1
+    tracker.note_lap_data(cars)
+
+    cars[0].pit_status = 0
+    tracker.on_event(0, 1, 0, cars, set())
+    assert tracker.lost == 0
+
+    cars[0].current_lap_num += 1
+    cars[1].current_lap_num += 1
+    tracker.on_event(0, 1, 0, cars, set())
+
+    assert tracker.lost == 1
 
 
 def test_overtake_tracker_ignores_penalized_counterpart() -> None:

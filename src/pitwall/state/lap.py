@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+SC_UNKNOWN = -1
+
 
 @dataclass(frozen=True, slots=True)
 class LapSummary:

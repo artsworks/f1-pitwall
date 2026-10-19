@@ -13,7 +13,7 @@ from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
 from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PacketId
-from pitwall.state.lap import LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
 
 from .race_synth import RaceSpec, race_stream
@@ -518,6 +518,53 @@ def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
     engine._fold_driver(uid)
 
     assert db.get_param(7, 0, "driver_pace_delta_ms").value == -5_000
+
+
+def test_rival_history_without_lap_data_uses_unknown_sc_and_is_excluded() -> None:
+    uid = 802
+    db = Database(":memory:")
+    db.upsert_session(uid, track_id=7, session_type=5)
+    engine = build_engine(
+        clock=VirtualClock(),
+        overrides={"thresholds": {"driver_min_laps": 2, "driver_field_min_cars": 1}},
+        sinks=[],
+        db=db,
+    )
+    session = pack_packet(
+        PacketId.SESSION,
+        {"session_type": 5, "track_id": 7},
+        session_uid=uid,
+    )
+    engine.ingest.on_datagram(session, 0.0)
+    history = pack_packet(
+        PacketId.SESSION_HISTORY,
+        {
+            "car_idx": 3,
+            "num_laps": 3,
+            "num_tyre_stints": 1,
+            "laps": {
+                lap_idx: {"lap_time_ms": 60_000, "lap_valid_bit_flags": 1} for lap_idx in range(3)
+            },
+            "tyre_stints": {
+                0: {"end_lap": 255, "tyre_actual_compound": 17, "tyre_visual_compound": 17}
+            },
+        },
+        session_uid=uid,
+        session_time=1.0,
+    )
+    engine.ingest.on_datagram(history, 1.0)
+
+    unknown = [lap for car_idx, lap in engine.state.rival_laps if car_idx == 3]
+    assert len(unknown) == 2
+    assert [lap.sc_status for lap in unknown] == [SC_UNKNOWN, SC_UNKNOWN]
+
+    for lap_num in range(1, 4):
+        db.insert_lap(uid, 0, LapSummary(lap_num, 90_000, 30_000, 30_000, 17, 1, 10, True))
+    engine._write_laps()
+    assert [lap.sc_status for lap in db.laps_for(uid, 3)] == [SC_UNKNOWN, SC_UNKNOWN]
+    engine._fold_driver(uid)
+
+    assert db.get_param(7, 0, "driver_pace_delta_ms") is None
 
 
 def test_rules_facing_snapshot_carries_model(tmp_path: Path) -> None:

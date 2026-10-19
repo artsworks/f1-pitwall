@@ -17,7 +17,7 @@ from pitwall.hindsight import (
     stop_cost_s,
     stop_laps,
 )
-from pitwall.state.lap import LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
 from pitwall.tune import tune_from_db
 
@@ -121,6 +121,29 @@ def test_neutralised_and_tactical_stops_not_graded_on_deg(tmp_path: Path) -> Non
     by = {o.call_id: o for o in grade_session(db, UID, {})}
     assert by["sc"].metric == by["cheap"].metric == "stop_cost_s"
     assert by["sc"].label == by["cheap"].label == "n/a"
+
+
+def test_unknown_sc_status_does_not_neutralise_a_stop(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    db.set_session_total_laps(UID, 20)
+    age = 0
+    compound = MEDIUM
+    for lap_num in range(1, 21):
+        base, deg = (90_000, 200) if compound == MEDIUM else (90_500, 50)
+        lap = _lap(lap_num, base + deg * age, compound, age, pitted=lap_num == 8)
+        if lap_num in (8, 9):
+            lap = replace(lap, sc_status=SC_UNKNOWN)
+        db.insert_lap(UID, 0, lap)
+        age += 1
+        if lap_num == 8:
+            compound, age = HARD, 0
+    _call(db, "unknown-sc", "box_now", 8, pit_plan="box_now")
+
+    (outcome,) = grade_session(db, UID, {})
+
+    assert outcome.label != "n/a"
+    assert "neutralised stop" not in outcome.detail
 
 
 def test_unfinished_session_censors_fuel(tmp_path: Path) -> None:
