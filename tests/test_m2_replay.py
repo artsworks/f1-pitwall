@@ -236,10 +236,20 @@ def _butn(down: bool, t: float, bit: int = 0x00100000) -> bytes:
 
 
 def _quali_stream(
-    rival_pos: float, t0: float, t1: float, lap: int = 1
+    rival_pos: float,
+    t0: float,
+    t1: float,
+    lap: int = 1,
+    *,
+    session_type: int = 5,
+    session_time_left: int = 720,
+    num_active_cars: int | None = None,
+    player_position: int = 0,
+    player_driver_status: int = 0,
+    player_sector: int = 0,
+    field_best_laps: tuple[int, ...] = (),
 ) -> list[tuple[float, bytes]]:
-    """Q1 garage frames at 5 Hz over [t0, t1): player in garage, rival flying
-    at `rival_pos` lap distance on a 5 km track."""
+    """Qualifying frames at 5 Hz over [t0, t1): rival flying at `rival_pos`."""
     out: list[tuple[float, bytes]] = []
     dt = 0.2
     n = int((t1 - t0) / dt)
@@ -251,14 +261,25 @@ def _quali_stream(
                 pack_packet(
                     PacketId.SESSION,
                     {
-                        "session_type": 5,
-                        "session_time_left": 720,
+                        "session_type": session_type,
+                        "session_time_left": session_time_left,
                         "track_length": 5000,
                     },
                     session_time=t,
                 ),
             )
         )
+        if num_active_cars is not None:
+            out.append(
+                (
+                    t,
+                    pack_packet(
+                        PacketId.PARTICIPANTS,
+                        {"num_active_cars": num_active_cars},
+                        session_time=t,
+                    ),
+                )
+            )
         out.append(
             (
                 t,
@@ -266,7 +287,13 @@ def _quali_stream(
                     PacketId.LAP_DATA,
                     {
                         "cars": {
-                            0: {"driver_status": 0, "pit_status": 0, "current_lap_num": lap},
+                            0: {
+                                "driver_status": player_driver_status,
+                                "pit_status": 0,
+                                "current_lap_num": lap,
+                                "car_position": player_position,
+                                "sector": player_sector,
+                            },
                             1: {
                                 "driver_status": 1,
                                 "pit_status": 0,
@@ -279,6 +306,11 @@ def _quali_stream(
                 ),
             )
         )
+        if i == 0:
+            out.extend(
+                (t, _history_pkt(car_idx, lap_ms, t))
+                for car_idx, lap_ms in enumerate(field_best_laps)
+            )
     return out
 
 
@@ -310,6 +342,41 @@ def _history_pkt(car_idx: int, lap_ms: int, t: float) -> bytes:
         },
         session_time=t,
     )
+
+
+def test_quali_through_waits_for_late_safe_margin(tmp_path: Path) -> None:
+    best_laps = (81_000, *(79_000 + i * 100 for i in range(8)), 81_600, *range(82_000, 82_600, 100))
+    for time_left, should_fire in ((600, False), (0, True)):
+        packets = _quali_stream(
+            2500.0,
+            0.0,
+            3.0,
+            session_type=6,
+            session_time_left=time_left,
+            num_active_cars=16,
+            player_position=9,
+            player_driver_status=1,
+            player_sector=2,
+            field_best_laps=best_laps,
+        )
+        recording = write_packet_stream(tmp_path / f"q2-{time_left}.f1bin", packets)
+        log_path = tmp_path / f"q2-{time_left}.jsonl"
+        engine = build_engine(
+            clock=VirtualClock(),
+            overrides={"policy": {"p3_straight_only": False}},
+            sinks=[],
+            decision_log_path=log_path,
+        )
+        asyncio.run(run_replay(recording, engine, None))
+        engine.dispatcher.log.flush()
+        through = [
+            row
+            for row in _read_log(log_path)
+            if row.get("rule_id") == "quali_through" and row.get("outcome") in {"queued", "fired"}
+        ]
+        assert bool(through) is should_fire
+        if should_fire:
+            assert any(row["outcome"] == "fired" for row in through)
 
 
 def test_abort_lap_fires_once(tmp_path: Path) -> None:

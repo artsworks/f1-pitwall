@@ -55,6 +55,7 @@ from pitwall.state.quali import (
     projected_lap_ms,
     quali_cutoff_ms,
     quali_margin_ms,
+    quali_through,
     release_window,
 )
 from pitwall.state.race import (
@@ -1508,9 +1509,8 @@ class SessionState:
         margin_ms, margin_kind = quali_margin_ms(
             field_best,
             self._player_idx,
-            self.num_active_cars,
             self.session_type,
-            self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+            self._th_map("quali_advance", {5: 15, 6: 10, 7: 0}),
         )
         best = self._best_laps.get(self._player_idx, 0)
         lap_s = best / 1000.0 if best > 0 else self._th("release_fallback_lap_s", 95.0)
@@ -2277,16 +2277,16 @@ class SessionState:
         )
         release = ReleaseWindow(math.inf, math.inf, False, 0.0, 0)
         cutoff_ms = proj_ms = deficit_ms = 0
-        quali_through = abort_advised = False
+        is_quali_through = abort_advised = False
         abort_reason = ""
         margin_ms, margin_kind = 0, ""
         if kind == "qualifying":
+            advance = self._th_map("quali_advance", {5: 15, 6: 10, 7: 0})
             margin_ms, margin_kind = quali_margin_ms(
                 field_best,
                 self._player_idx,
-                self.num_active_cars,
                 self.session_type,
-                self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+                advance,
             )
             clean_gap = self._th("release_clean_gap_s", 4.0)
             fallback_s = self._th("release_fallback_lap_s", 95.0)
@@ -2306,15 +2306,21 @@ class SessionState:
             if phase == "flying":
                 cutoff_ms = quali_cutoff_ms(
                     field_best,
-                    self.num_active_cars,
                     self.session_type,
-                    self._th_map("quali_eliminated", {5: 5, 6: 5, 7: 0}),
+                    advance,
                 )
                 safe_margin = int(self._th("abort_safe_margin_ms", 300.0))
-                quali_through = bool(
-                    player_best_lap > 0
-                    and cutoff_ms > 0
-                    and player_best_lap < cutoff_ms - safe_margin
+                is_quali_through = quali_through(
+                    field_best,
+                    self._player_idx,
+                    self.position,
+                    self.num_active_cars,
+                    self.session_type,
+                    self.session_time_left,
+                    advance=advance,
+                    safe_margin_ms=safe_margin,
+                    open_margin_ms=int(self._th("quali_through_open_margin_ms", 500.0)),
+                    open_window_s=self._th("quali_through_open_window_s", 300.0),
                 )
                 proj_ms = projected_lap_ms(
                     self.sector,
@@ -2520,7 +2526,7 @@ class SessionState:
             cars_on_track=release.cars_on_track,
             quali_cutoff_ms=cutoff_ms,
             projected_lap_ms=proj_ms,
-            quali_through=quali_through,
+            quali_through=is_quali_through,
             abort_deficit_ms=deficit_ms,
             abort_deficit_s=deficit_ms / 1000.0,
             abort_advised=abort_advised,

@@ -22,9 +22,10 @@ def test_defaults_load() -> None:
     assert s.thresholds["energy_over_tolerance_j"] == 400_000
     assert s.thresholds["battle_pass_overtake_prior"] == 0.6
     assert s.thresholds["battle_pass_no_overtake_prior"] == 0.6
-    quali_eliminated = s.thresholds["quali_eliminated"]
-    assert isinstance(quali_eliminated, dict)
-    assert all(type(value) is int for value in quali_eliminated.values())
+    advance = s.thresholds["quali_advance"]
+    assert isinstance(advance, dict)
+    assert advance == {5: 15, 6: 10, 7: 0}
+    assert all(type(value) is int for value in advance.values())
     assert s.rules and s.rules[0].id == "out_lap_s3_tyres_cold"
     m = s.resolved_mindset()
     assert m["phrasing"] == "advisory"

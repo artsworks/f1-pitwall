@@ -120,19 +120,22 @@ def projected_lap_ms(
     return completed + sum(needed) + overrun
 
 
+def quali_cutoff_pos(session_type: int, advance: Mapping[int, int]) -> int:
+    """Number of cars that advance from this qualifying session."""
+    st = _SHOOTOUT_TO_QUALI.get(session_type, session_type)
+    return advance.get(st, 0)
+
+
 def quali_cutoff_ms(
     field_best_laps: Sequence[int],
-    num_active_cars: int,
     session_type: int,
-    eliminated: Mapping[int, int],
+    advance: Mapping[int, int],
 ) -> int:
     """Lap time of the car currently on the elimination cut-off position;
     0 when the session does not eliminate or too few laps are set."""
-    st = _SHOOTOUT_TO_QUALI.get(session_type, session_type)
-    elim = eliminated.get(st, 0)
-    if elim <= 0:
+    cutoff_pos = quali_cutoff_pos(session_type, advance)
+    if cutoff_pos <= 0:
         return 0
-    cutoff_pos = num_active_cars - elim
     times = sorted(t for t in field_best_laps if t > 0)
     if cutoff_pos <= 0 or len(times) < cutoff_pos:
         return 0
@@ -142,9 +145,8 @@ def quali_cutoff_ms(
 def quali_margin_ms(
     field_best_laps: Sequence[int],
     player_idx: int,
-    num_active_cars: int,
     session_type: int,
-    eliminated: Mapping[int, int],
+    advance: Mapping[int, int],
 ) -> tuple[int, str]:
     """How much the rest of the field must find to take the player's spot.
 
@@ -155,15 +157,44 @@ def quali_margin_ms(
     if player <= 0:
         return 0, ""
     others = sorted(t for i, t in enumerate(field_best_laps) if i != player_idx and t > 0)
-    elim = eliminated.get(_SHOOTOUT_TO_QUALI.get(session_type, session_type), 0)
-    if elim > 0:
-        safe_pos = num_active_cars - elim
-        if safe_pos <= 0 or len(others) < safe_pos:
+    cutoff_pos = quali_cutoff_pos(session_type, advance)
+    if cutoff_pos > 0:
+        if len(others) < cutoff_pos:
             return 0, ""
-        return others[safe_pos - 1] - player, "cut"
+        return others[cutoff_pos - 1] - player, "cut"
     if not others:
         return 0, ""
     return others[0] - player, "pole"
+
+
+def quali_through(
+    field_best_laps: Sequence[int],
+    player_idx: int,
+    player_position: int,
+    num_active_cars: int,
+    session_type: int,
+    time_left_s: float,
+    *,
+    advance: Mapping[int, int],
+    safe_margin_ms: int,
+    open_margin_ms: int,
+    open_window_s: float,
+) -> bool:
+    """Return whether the player's best lap is safely inside the cut."""
+    player = field_best_laps[player_idx] if 0 <= player_idx < len(field_best_laps) else 0
+    if player <= 0:
+        return False
+    cutoff_pos = quali_cutoff_pos(session_type, advance)
+    if cutoff_pos <= 0 or (player_position > 0 and player_position > cutoff_pos):
+        return False
+    times = sorted(lap for lap in field_best_laps if lap > 0)
+    unset = max(0, num_active_cars - len(times))
+    cutoff_idx = cutoff_pos - 1 - unset
+    if cutoff_idx < 0 or cutoff_idx >= len(times):
+        return False
+    cutoff = times[cutoff_idx]
+    frac = min(1.0, max(0.0, time_left_s / open_window_s)) if open_window_s > 0 else 0.0
+    return player < cutoff - (safe_margin_ms + open_margin_ms * frac)
 
 
 @dataclass(frozen=True, slots=True)

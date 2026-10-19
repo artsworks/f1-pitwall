@@ -7,6 +7,8 @@ from pitwall.state.quali import (
     abort_advice,
     projected_lap_ms,
     quali_cutoff_ms,
+    quali_cutoff_pos,
+    quali_through,
     release_window,
 )
 
@@ -94,16 +96,118 @@ def test_projected_lap_ms() -> None:
 
 
 def test_quali_cutoff() -> None:
-    elim = {5: 5, 6: 5, 7: 0}
     field = [90_000 + i * 100 for i in range(20)]  # 90.0 .. 91.9 sorted
-    # Q1 with 20 cars: cut-off position 15 -> 15th best (index 14) = 91.400
-    assert quali_cutoff_ms(field, 20, 5, elim) == 91_400
+    # Q1 advances 15 cars, so the cut-off is the 15th best (index 14).
+    assert quali_cutoff_ms(field, 5, {5: 15, 6: 10, 7: 0}) == 91_400
     # Q3: nobody eliminated -> 0
-    assert quali_cutoff_ms(field, 10, 7, elim) == 0
+    assert quali_cutoff_ms(field, 7, {5: 15, 6: 10, 7: 0}) == 0
     # too few laps set -> everyone through so far
-    assert quali_cutoff_ms(field[:10], 20, 5, elim) == 0
+    assert quali_cutoff_ms(field[:10], 5, {5: 15, 6: 10, 7: 0}) == 0
     # sprint shootout 10 maps to Q1
-    assert quali_cutoff_ms(field, 20, 10, elim) == 91_400
+    assert quali_cutoff_ms(field, 10, {5: 15, 6: 10, 7: 0}) == 91_400
+
+
+def test_quali_cutoff_pos() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    assert quali_cutoff_pos(5, advance) == 15
+    assert quali_cutoff_pos(6, advance) == 10
+    assert quali_cutoff_pos(7, advance) == 0
+    assert quali_cutoff_pos(11, advance) == 10
+    assert quali_cutoff_pos(8, advance) == 0
+
+
+def test_quali_through_regression_for_incomplete_q2_field() -> None:
+    field = [
+        80_062,
+        80_261,
+        80_581,
+        80_837,
+        80_875,
+        80_972,
+        81_144,
+        81_148,
+        81_416,
+        81_813,
+        82_477,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    assert not quali_through(
+        field,
+        9,
+        10,
+        16,
+        6,
+        567,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_rejects_position_beyond_cut() -> None:
+    field = [79_400, 79_000, 79_100, 79_200, 79_300]
+    field.extend([79_500 + i * 100 for i in range(11)])
+    assert not quali_through(
+        field,
+        0,
+        11,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_treats_cars_without_times_as_ahead() -> None:
+    field = [79_000 + i * 100 for i in range(8)] + [80_000, 82_000, 83_000, 84_000]
+    field.extend([0] * 4)
+    assert not quali_through(
+        field,
+        8,
+        9,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+    complete_field = field.copy()
+    complete_field[12:] = [85_000, 86_000, 87_000, 88_000]
+    assert quali_through(
+        complete_field,
+        8,
+        9,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_margin_shrinks_near_flag() -> None:
+    field = [79_000 + i * 100 for i in range(8)] + [80_900, 81_500]
+    field.extend([82_000 + i * 100 for i in range(6)])
+    kwargs = {
+        "advance": {5: 15, 6: 10, 7: 0},
+        "safe_margin_ms": 300,
+        "open_margin_ms": 500,
+        "open_window_s": 300,
+    }
+    assert not quali_through(field, 8, 9, 16, 6, 600, **kwargs)
+    assert quali_through(field, 8, 9, 16, 6, 0, **kwargs)
 
 
 def test_abort_advice() -> None:

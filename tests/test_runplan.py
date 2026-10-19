@@ -624,6 +624,8 @@ def test_tyre_change_drops_other_compound_battery_use() -> None:
 
 
 WET_Q = Path(os.environ.get("PITWALL_WET_Q_RECORDING", "~/recordings/wet_q.f1bin.zst")).expanduser()
+Q2_THROUGH_RAW = os.environ.get("PITWALL_Q2_THROUGH_RECORDING")
+Q2_THROUGH = Path(Q2_THROUGH_RAW).expanduser() if Q2_THROUGH_RAW else None
 
 
 @pytest.mark.skipif(
@@ -647,6 +649,34 @@ def test_wet_q_recording_run_plan(tmp_path: Path) -> None:
     # Brazil wet quali on inters (2026-10-13): battery 37.5% and 34.5% at the
     # line, laps spent 9.9% and 3.0%
     assert fired[:2] == ["plan_push", "plan_push"]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    Q2_THROUGH is None or not Q2_THROUGH.exists(),
+    reason="set PITWALL_Q2_THROUGH_RECORDING to the Q2 recording",
+)
+def test_q2_recording_does_not_call_through_early(tmp_path: Path) -> None:
+    import asyncio
+    import json
+
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine, run_replay
+
+    assert Q2_THROUGH is not None
+    log = tmp_path / "q2-through.jsonl"
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        decision_log_path=log,
+    )
+    asyncio.run(run_replay(Q2_THROUGH, engine, None))
+    engine.dispatcher.log.flush()
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any(
+        row.get("rule_id") == "quali_through" and row.get("outcome") in {"queued", "fired"}
+        for row in rows
+    )
 
 
 def test_run_tracker_extends_cool_lap() -> None:
