@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print("diff: no recordings matched")
         return 0
     a_dir = Path(args.a) if args.a else None
+    print(f"diff: comparing {len(recordings)} recording(s) ...", file=sys.stderr)
     result = run_diff(
         recordings,
         a_dir,
@@ -62,7 +64,7 @@ def cmd_tune(args: argparse.Namespace) -> int:
     if db is None:
         return 1
     if args.paths:
-        ingest_paths(args, db, settings)
+        ingest_paths(args, db, settings, name="tune")
     print(format_tune(tune_from_db(db, settings.thresholds)))
     return 0
 
@@ -85,7 +87,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
             if result.error:
                 print(f"  error: {result.error}")
 
-        errors = ingest_paths(args, db, settings, out_dir, show=show_ingest_result)
+        errors = ingest_paths(args, db, settings, out_dir, name="digest", show=show_ingest_result)
         return 1 if errors else 0
     uid = db.latest_session_uid() if args.session in (None, "latest") else int(args.session)
     if uid is None:
@@ -195,6 +197,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     db = open_db(args, ConfigStore().current(), "evaluate")
     if db is None:
         return 1
+    print("evaluate: reading sessions ...", file=sys.stderr)
     result = evaluate_corpus(db, args.track)
 
     def format_evaluation(result: Any) -> None:
@@ -224,6 +227,7 @@ def cmd_propose(args: argparse.Namespace) -> int:
     db = open_db(args, settings, "propose")
     if db is None:
         return 1
+    print("propose: scanning sessions ...", file=sys.stderr)
     result = propose_thresholds(db, settings, args.candidate_rules)
     output = yaml.safe_dump(result, sort_keys=False)
     if args.out:
@@ -258,7 +262,8 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
             if result.status == "error":
                 print(f"ingest error {result.path}: {result.error}")
 
-        errors = ingest_paths(args, db, settings, show=show_ingest_error) > 0
+        errors = ingest_paths(args, db, settings, name="calibrate", show=show_ingest_error) > 0
+    print("calibrate: fitting models ...", file=sys.stderr)
     report = calibrate(
         db,
         settings,
@@ -403,8 +408,12 @@ def cmd_bench(args: argparse.Namespace) -> int:
         index = build_recording_index(recording_dirs)
         scenario_rows: dict[str, dict[str, Any]] = {}
         outcomes: list[dict[str, Any]] = []
-        for scenario in scenarios:
+        for i, scenario in enumerate(scenarios, 1):
             source, reason = find_source(scenario, index)
+            print(
+                f"bench {i}/{len(scenarios)}: {scenario.id} ...",
+                file=sys.stderr,
+            )
             row, scenario_outcomes = run_scenario(
                 scenario,
                 source,

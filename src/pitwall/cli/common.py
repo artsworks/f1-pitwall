@@ -82,9 +82,13 @@ def ingest_paths(
     settings: Settings,
     out_dir: Path | None = None,
     *,
+    name: str = "ingest",
     show: Callable[[IngestResult], None] = print_ingest_status,
 ) -> int:
     from pitwall.ingest import ingest_recordings
+
+    def on_start(path: Path, index: int, total: int) -> None:
+        print(f"ingesting {index}/{total}: {path.name} ...", file=sys.stderr)
 
     results = ingest_recordings(
         db,
@@ -92,10 +96,19 @@ def ingest_paths(
         settings,
         calls_mode=getattr(args, "calls_mode", None),
         out_dir=out_dir,
+        on_start=on_start,
+        on_done=lambda result, _i, _n: show(result),
     )
-    for result in results:
-        show(result)
-    return sum(result.status == "error" for result in results)
+    ingested = sum(result.status == "ingested" for result in results)
+    digest_only = sum(result.status == "digest_only" for result in results)
+    skipped = sum(result.status == "skipped" for result in results)
+    errors = sum(result.status == "error" for result in results)
+    summary = f"{name}: {ingested} ingested"
+    if digest_only:
+        summary += f", {digest_only} digest-only"
+    summary += f", {skipped} skipped, {errors} error{'s' if errors != 1 else ''}"
+    print(summary, file=sys.stderr)
+    return errors
 
 
 def emit_json_or(

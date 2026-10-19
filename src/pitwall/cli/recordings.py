@@ -172,6 +172,8 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if args.mask_restricted:
         engine.ingest.transform = mask_restricted
     replay_coro = run_replay(file, engine, speed, from_us=from_us, to_us=args.to_us)
+    label = "max speed" if speed is None else f"{args.speed}x"
+    print(f"replaying {file.name} at {label} ...", file=sys.stderr)
     delivered, calls = asyncio.run(replay_coro)
     persist_recording_origin(engine, db)
     print(f"replayed {delivered} datagrams from {file}; {len(calls)} calls")
@@ -212,6 +214,7 @@ def cmd_trim(args: argparse.Namespace) -> int:
     from_us = args.from_us if args.from_us is not None else 0
     to_us = args.to_us
     kept = 0
+    print(f"trimming {src.name} -> {args.out} ...", file=sys.stderr)
     with RecordingReader(src) as reader:
         source_header = reader.header
         source_profile = source_header.metadata.get("profile")
@@ -333,6 +336,7 @@ def _stats_census(args: argparse.Namespace) -> int:
     file = _resolve_recording(args.file, ConfigStore().current())
     ingest = Ingest()
     last_t = 0.0
+    print(f"reading {file.name} ...", file=sys.stderr)
     with RecordingReader(file) as reader:
         header = reader.header
         for offset_us, payload in reader:
@@ -452,7 +456,10 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
                 paths = learnable_recordings(rec_dir, args.days)
                 if paths:
                     failures = ingest_paths(
-                        argparse.Namespace(paths=[str(path) for path in paths]), db, settings
+                        argparse.Namespace(paths=[str(path) for path in paths]),
+                        db,
+                        settings,
+                        name="cleanup",
                     )
         plan = plan_cleanup(
             rec_dir,

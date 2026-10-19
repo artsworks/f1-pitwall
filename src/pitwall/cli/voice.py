@@ -206,6 +206,7 @@ def _voice_warm(args: argparse.Namespace) -> int:
                     decision_log_path=Path(directory) / "decisions.jsonl",
                 )
                 try:
+                    print(f"voice warm: replaying {path.name} ...", file=sys.stderr)
                     _, calls = asyncio.run(run_replay(path, replay_engine, None))
                 finally:
                     replay_engine.dispatcher.log.close()

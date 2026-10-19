@@ -40,7 +40,9 @@ def test_windows_https_disconnect_only_ignores_proactor_peer_resets() -> None:
 def test_stats_command(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     rec = write_synthetic_recording(tmp_path / "s.f1bin", mixed_session_packets(10))
     assert main(["stats", str(rec)]) == 0
-    out = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    out = json.loads(captured.out)
+    assert "reading s.f1bin ..." in captured.err
     assert out["session_uid"] == 0xDEADBEEF
     assert sum(e["accepted"] for e in out["packets"].values()) == len(mixed_session_packets(10))
 
