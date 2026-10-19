@@ -12,6 +12,9 @@ from pitwall.strategy.plans import StrategyPlan
 
 @dataclass(frozen=True, slots=True)
 class ModelView:
+    driver_rating: float = 0.5
+    driver_confidence: float = 0.0
+    driver_rating_source: str = ""
     deg_fit_source: str = ""
     deg_ms_per_lap: float = 0.0
     deg_confidence: float = 0.0

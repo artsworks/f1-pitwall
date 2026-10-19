@@ -1598,6 +1598,12 @@ class Database:
     def mark_graded(self, uid: int) -> None:
         self.set_maintenance_version(f"graded:{_uid_to_sql(uid)}", 1)
 
+    def driver_folded(self, uid: int) -> bool:
+        return self.maintenance_version(f"driver_folded:{_uid_to_sql(uid)}") == 1
+
+    def mark_driver_folded(self, uid: int) -> None:
+        self.set_maintenance_version(f"driver_folded:{_uid_to_sql(uid)}", 1)
+
     def learning_stints(self) -> list[dict[str, Any]]:
         """Player stints with their session's track, type and race distance,
         oldest first: the source every stint-derived prior is rebuilt from."""

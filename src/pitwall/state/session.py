@@ -487,6 +487,9 @@ class Snapshot:
     rival_data_restricted: bool = False
     pit_exit_rival_gap_s: float = math.inf
     pit_exit_clean: bool = False
+    driver_rating: float = 0.5
+    driver_confidence: float = 0.0
+    driver_rating_source: str = ""
     deg_fit_source: str = ""
     deg_ms_per_lap: float = 0.0
     deg_confidence: float = 0.0
@@ -2885,6 +2888,9 @@ class SessionState:
             neutral_ended_kind=self._race.neutral_end_kind,
             puncture_corner=self.puncture_corner,
             **self._contact_view(st),
+            driver_rating=model.driver_rating,
+            driver_confidence=model.driver_confidence,
+            driver_rating_source=model.driver_rating_source,
             deg_fit_source=model.deg_fit_source,
             deg_ms_per_lap=model.deg_ms_per_lap,
             deg_confidence=model.deg_confidence,

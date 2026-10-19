@@ -722,10 +722,13 @@ def test_off_track_places_lost_then_recovered_same_lap() -> None:
     t = _off_run(tr, t, 1.0, (0, 0, 7, 7))
     tr.update_position(9, 3, False)
     t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.count == 1
     assert tr.lost_recent(t) == 3 and not tr.recovered_recent(t)
     tr.update_position(6, 3, False)
     t = _off_run(tr, t, 0.5, (0, 0, 0, 0))
     assert tr.recovered_recent(t)
+    tr.reset()
+    assert tr.count == 0
 
 
 def test_off_track_no_call_without_place_loss_or_after_lap_ends() -> None:

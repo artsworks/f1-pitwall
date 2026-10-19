@@ -514,6 +514,7 @@ class OffTrackTracker:
         self._recovered_at: float | None = None
         self._position = 0
         self._cur_lap = 0
+        self.count = 0
 
     def update_position(self, position: int, lap: int, in_pit: bool) -> None:
         if in_pit or lap != self._lap:
@@ -533,6 +534,7 @@ class OffTrackTracker:
             went_off = t - self._off_since >= self.min_s
             self._off_since = None
             if went_off:
+                self.count += 1
                 self._back_at = t
             return
         if self._back_at is not None and t - self._back_at >= self.settle_s:

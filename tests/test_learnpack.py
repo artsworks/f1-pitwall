@@ -22,6 +22,7 @@ from pitwall.learnpack import (
     write_pack,
 )
 from pitwall.maintenance import LEARN_VERSION, maintain
+from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database, ModelParam
 from pitwall.tune import tune_from_db
@@ -65,12 +66,26 @@ def test_write_pack_creates_latest_dated_and_ledger_files_without_temps(tmp_path
     assert pack["pack_version"] == PACK_VERSION
     assert pack["db_user_version"] > 0
     assert pack["track_minutes"] == {"minutes": 1.5, "laps": 1, "sessions": 1}
-    assert pack["model_params"][0]["name"] == "deg_ms_per_lap"
+    assert any(row["name"] == "deg_ms_per_lap" for row in pack["model_params"])
     assert pack["call_grades"][0]["session_uid"] == uid
     assert pack["call_grades"][0]["source"] == "press"
     assert pack["maintenance"] == {}
     assert pack["track_overlays"] == {"7": {"track_id": 7, "track": {"base_pace_ms": 90_000}}}
     assert not [path for path in pack_dir.iterdir() if path.suffix == ".tmp"]
+
+
+def test_learn_pack_round_trips_global_driver_rating(tmp_path: Path) -> None:
+    db = Database(":memory:")
+    db.set_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING, 0.42, 12.0)
+    pack_path = write_pack(db, tmp_path / "learnings", now=datetime(2025, 4, 5, 12))
+    restored = Database(":memory:")
+
+    counts = restore_pack(restored, pack_path, tmp_path / "learnings")
+
+    param = restored.get_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING)
+    assert counts["model_params"] == 1
+    assert param is not None
+    assert (param.value, param.weight) == (0.42, 12.0)
 
 
 def test_write_pack_keeps_newest_dated_files(tmp_path: Path) -> None:

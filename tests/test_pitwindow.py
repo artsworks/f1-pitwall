@@ -4,6 +4,7 @@ import pytest
 
 from pitwall.config.loader import ConfigStore
 from pitwall.model.deg import DegFit
+from pitwall.model.driver import DriverScale
 from pitwall.strategy.pitwindow import RivalView, optimise, race_time_s
 
 SETTINGS = ConfigStore().current()
@@ -171,6 +172,65 @@ def test_undercut_on_slow_rival_ahead() -> None:
     assert p.plan == "undercut"
     assert p.rival_name == "NORRIS"
     assert p.undercut_s >= float(BALANCED["undercut_speak_threshold_s"])
+
+
+def test_driver_scale_changes_aggressive_plans_only() -> None:
+    rival = RivalView(1, "NORRIS", 92_500, False)
+    base = run(rival_ahead=rival, gap_ahead_s=1.0, laps_of_pace=6.0)
+    scaled = run(
+        rival_ahead=rival,
+        gap_ahead_s=1.0,
+        laps_of_pace=6.0,
+        driver=DriverScale(confidence_factor=0.5, risk_add=0.2, pace_cap_ms=100),
+    )
+    assert base.plan == scaled.plan == "undercut"
+    assert scaled.confidence == round(base.confidence * 0.5, 3)
+    assert scaled.risk == pytest.approx(min(1.0, base.risk + 0.2))
+    assert scaled.undercut_s < base.undercut_s
+
+    behind = RivalView(2, "PIASTRI", 90_000, True)
+    cover = run(rival_behind=behind, gap_behind_s=1.0)
+    scaled_cover = run(
+        rival_behind=behind,
+        gap_behind_s=1.0,
+        driver=DriverScale(confidence_factor=0.5, risk_add=0.2),
+    )
+    assert cover.plan == scaled_cover.plan == "cover"
+    assert scaled_cover.risk == 0.2
+    assert scaled_cover.confidence == round(cover.confidence * 0.5, 3)
+
+    base_stop = run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0)
+    scaled_stop = run(
+        sc_status=1,
+        wear_mean=50.0,
+        pit_loss_s=11.0,
+        driver=DriverScale(confidence_factor=0.5, risk_add=0.2, pace_cap_ms=100),
+    )
+    assert scaled_stop.plan == base_stop.plan == "cheap_stop"
+    assert scaled_stop.confidence == base_stop.confidence
+    assert scaled_stop.risk == base_stop.risk
+
+    base_box = run(tyre_age=20, laps_of_pace=0.0, fit=fit(300))
+    scaled_box = run(
+        tyre_age=20,
+        laps_of_pace=0.0,
+        fit=fit(300),
+        driver=DriverScale(confidence_factor=0.5, risk_add=0.2, pace_cap_ms=100),
+    )
+    assert scaled_box.plan == base_box.plan == "box_now"
+    assert scaled_box.confidence == base_box.confidence
+    assert scaled_box.risk == base_box.risk
+
+    base_stay = run(laps_remaining=5, laps_of_pace=12.0, fit=fit(40))
+    scaled_stay = run(
+        laps_remaining=5,
+        laps_of_pace=12.0,
+        fit=fit(40),
+        driver=DriverScale(confidence_factor=0.5, risk_add=0.2, pace_cap_ms=100),
+    )
+    assert scaled_stay.plan == base_stay.plan == "no_stop"
+    assert scaled_stay.confidence == base_stay.confidence
+    assert scaled_stay.risk == base_stay.risk
 
 
 @pytest.mark.parametrize("laps_left_offset", [-1, 0, 1])
