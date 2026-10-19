@@ -540,6 +540,8 @@ def test_summary_shows_track_and_global_driver_rating() -> None:
     assert "DRIVER RATING" in report
     assert "overall rating" in report
     assert "pace delta ms" in report
+    assert "overtakes per lap" in report
+    assert "infringements per lap" in report
     assert "track" in report and "global" in report
     assert "0.620" in report and "0.400" in report
 

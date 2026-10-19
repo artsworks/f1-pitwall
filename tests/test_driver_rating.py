@@ -10,9 +10,11 @@ from pitwall.maintenance import quarantine_bad, rebuild_stint_params
 from pitwall.model.driver import (
     DRIVER_COMPOUND,
     GLOBAL_TRACK_ID,
+    PARAM_NAMES,
     RATING,
     DriverInputs,
     advice_scale,
+    component_score,
     compute_profile,
     confidence,
     fold_weight,
@@ -63,6 +65,43 @@ def test_compute_profile_scores_available_components() -> None:
     assert profile.rating == pytest.approx(sum(scores.values()) / len(scores))
 
 
+@pytest.mark.parametrize(
+    ("component", "value", "expected"),
+    [
+        ("overtakes_per_lap", 1.0, 1.0),
+        ("overtakes_per_lap", -1.0, 0.0),
+        ("overtakes_per_lap", 0.0, 0.5),
+        ("infringements_per_lap", 0.0, 1.0),
+        ("infringements_per_lap", 0.5, 0.0),
+    ],
+)
+def test_overtake_and_infringement_component_scores(
+    component: str, value: float, expected: float
+) -> None:
+    assert component_score(component, value, TH) == expected
+
+
+def test_compute_profile_uses_overtakes_and_weighted_infringements() -> None:
+    profile = compute_profile(
+        inputs(
+            laps=8,
+            overtakes_made=8,
+            overtakes_lost=0,
+            warnings=1,
+            penalties=1,
+        ),
+        TH,
+    )
+
+    assert profile is not None
+    assert profile.overtakes_per_lap == 1.0
+    assert profile.infringements_per_lap == 0.5
+    scores = dict(profile.scores)
+    assert scores["overtakes_per_lap"] == 1.0
+    assert scores["infringements_per_lap"] == 0.0
+    assert profile.rating == pytest.approx(sum(scores.values()) / len(scores))
+
+
 def test_compute_profile_uses_base_when_field_is_small() -> None:
     profile = compute_profile(inputs(field_lap_times_ms=(90_000, 91_000), base_ms=90_500.0), TH)
 
@@ -91,11 +130,14 @@ def test_compute_profile_skips_missing_components() -> None:
     assert profile.pace_delta_ms is None
     assert profile.deg_delta_ms_per_lap is None
     assert profile.position_delta is None
+    assert profile.overtakes_per_lap is None
+    assert profile.infringements_per_lap is None
     assert {name for name, _ in profile.scores} == {
         "consistency_cv",
         "errors_per_lap",
         "contact_per_lap",
     }
+    assert profile.rating == pytest.approx(sum(score for _, score in profile.scores) / 3)
 
 
 @pytest.mark.parametrize("lap_times,laps", [((90_000, 91_000), 5), ((90_000, 91_000, 92_000), 0)])
@@ -148,6 +190,11 @@ def _finish_session(
     rival_times: tuple[int, ...] = (90_000, 90_000, 90_000),
     grid: int = 8,
     finish: int = 5,
+    event_telemetry_seen: bool = False,
+    overtakes: tuple[int, int] = (0, 0),
+    warnings: int = 0,
+    penalties: int = 0,
+    offs: int = 0,
 ) -> None:
     db.upsert_session(uid, track_id=track_id, session_type=session_type)
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
@@ -156,6 +203,11 @@ def _finish_session(
     engine.state.session_type = session_type
     engine.state.grid_position = grid
     engine.state.position = finish
+    engine.state.event_telemetry_seen = event_telemetry_seen
+    engine.state.overtakes.made, engine.state.overtakes.lost = overtakes
+    engine.state._warning_events = [(float(i), "cut") for i in range(warnings)]
+    engine.state._penalty_events = [(float(i), 4) for i in range(penalties)]
+    engine.state.off_track.count = offs
     for lap_num, lap_time in enumerate(lap_times, start=1):
         db.insert_lap(
             uid,
@@ -170,6 +222,51 @@ def _finish_session(
                 LapSummary(lap_num, lap_time, 30_000, 30_000, 17, lap_num, 10.0, True),
             )
     engine._end_session(uid, 1.0)  # noqa: SLF001
+
+
+def test_session_end_folds_overtake_and_infringement_components() -> None:
+    db = Database(":memory:")
+    _finish_session(
+        db,
+        190,
+        event_telemetry_seen=True,
+        overtakes=(4, 1),
+        warnings=1,
+        penalties=1,
+    )
+
+    overtakes = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["overtakes_per_lap"])
+    infringements = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["infringements_per_lap"])
+    assert overtakes is not None and overtakes.value == pytest.approx(1.0)
+    assert infringements is not None and infringements.value == pytest.approx(4 / 3)
+
+
+def test_session_end_omits_event_components_without_event_telemetry() -> None:
+    db = Database(":memory:")
+    _finish_session(db, 191)
+
+    assert db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["overtakes_per_lap"]) is None
+    assert db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["infringements_per_lap"]) is None
+
+
+def test_session_end_stores_zero_components_when_event_telemetry_has_no_events() -> None:
+    db = Database(":memory:")
+    _finish_session(db, 192, event_telemetry_seen=True)
+
+    overtakes = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["overtakes_per_lap"])
+    infringements = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["infringements_per_lap"])
+    assert overtakes is not None and overtakes.value == 0.0
+    assert infringements is not None and infringements.value == 0.0
+
+
+def test_off_track_excursions_remain_errors_not_infringements() -> None:
+    db = Database(":memory:")
+    _finish_session(db, 193, event_telemetry_seen=True, offs=2)
+
+    errors = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["errors_per_lap"])
+    infringements = db.get_param(7, DRIVER_COMPOUND, PARAM_NAMES["infringements_per_lap"])
+    assert errors is not None and errors.value == pytest.approx(2 / 3)
+    assert infringements is not None and infringements.value == 0.0
 
 
 @pytest.mark.parametrize(("session_type", "expected_weight"), [(1, None), (5, 1), (15, 5)])

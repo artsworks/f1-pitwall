@@ -2124,6 +2124,13 @@ class Engine:
         weight = fold_weight(self.state.session_type, th)
         if weight == 0:
             return
+        event_warnings = self.state.infringement_warnings
+        if self.state.cars_lap is not None and self.state.warnings < event_warnings:
+            log.debug(
+                "LapData total warnings %d below event infringement warnings %d",
+                self.state.warnings,
+                event_warnings,
+            )
         track_id = self.state.track_id
         player_laps = [
             lap
@@ -2175,6 +2182,18 @@ class Engine:
                 contacts=self.state.contacts.episodes,
                 grid_position=self.state.grid_position,
                 finish_position=self.state.position,
+                overtakes_made=(
+                    self.state.overtakes.made if self.state.event_telemetry_seen else None
+                ),
+                overtakes_lost=(
+                    self.state.overtakes.lost if self.state.event_telemetry_seen else None
+                ),
+                warnings=(
+                    self.state.infringement_warnings if self.state.event_telemetry_seen else None
+                ),
+                penalties=(
+                    self.state.infringement_penalties if self.state.event_telemetry_seen else None
+                ),
             ),
             th,
         )

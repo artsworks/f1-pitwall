@@ -1,6 +1,7 @@
 # Driver rating
 
-The driver rating summarizes clean laps, tyre management, errors, contact and race result.
+The driver rating summarizes clean laps, tyre management, errors, contact, overtakes,
+infringements and race result.
 The engine learns it after qualifying and race sessions. The rating ranges from 0 to 1.
 
 ## Components
@@ -16,6 +17,16 @@ median clean lap time for each rival with at least three clean laps.
 | Errors | Lock-ups, spins and off-track excursions per lap | `1 - errors / 0.5` |
 | Contact | Contact episodes per lap | `1 - contacts / 0.2` |
 | Position | Grid position minus classified position | `0.5 + places / (2 × 10)` |
+| Overtakes | On-track overtakes made minus lost per lap, from OVTK events | `0.5 + net / (2 × 0.5)` |
+| Infringements | Steward warnings plus weighted penalties per lap, from PENA events | `1 - (warnings + 3 × penalties) / 0.5` |
+
+An OVTK counts only when the other car's latest LapData shows it as active or finished.
+It must not be in the pit lane or have pitted on its current lap. The car must have had no
+drive-through, stop-go or time penalty in this session. Warnings count corner cuts and
+track-limit warnings (infringement types 7 and 27–29). Off-track overtake warnings (8 and 9)
+do not count. Penalties count PENA types 0, 1 and 4. LapData `penalties` holds seconds, so the
+rating does not use it. Off-track excursions stay under Errors. Sessions without event
+telemetry leave both components out.
 
 Each score is clamped to the range 0 to 1. The rating is the mean of available component
 scores. Missing measurements do not count as zero. A profile with no available scores uses
@@ -60,6 +71,9 @@ The defaults are in `src/pitwall/config/defaults/settings.yaml`.
 | `driver_errors_max` | 0.5 | Errors per lap for a zero score |
 | `driver_contact_max` | 0.2 | Contact episodes per lap for a zero score |
 | `driver_position_span` | 10 | Places gained spanning half the rating scale |
+| `driver_overtake_span` | 0.5 | Net on-track places per lap spanning half the rating scale |
+| `driver_infringements_max` | 0.5 | Weighted infringements per lap for a zero score |
+| `driver_penalty_weight` | 3 | Warnings counted for each penalty |
 | `driver_fold_weight_quali` | 1 | Qualifying profile weight |
 | `driver_fold_weight_race` | 5 | Race profile weight |
 | `driver_confidence_k` | 10 | Weight for half confidence |

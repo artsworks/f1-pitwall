@@ -39,6 +39,7 @@ from pitwall.state.driving import (
     ContactTracker,
     LockupDetector,
     OffTrackTracker,
+    OvertakeTracker,
     SaveDetector,
     SlipBalance,
     SpinDetector,
@@ -162,6 +163,7 @@ _TRACK_WARNING_KINDS = {
     28: "significant",
     29: "extreme",
 }
+_INFRINGEMENT_WARNING_KINDS = ("cut", "minor", "significant", "extreme")
 
 
 @dataclass(frozen=True, slots=True)
@@ -966,6 +968,7 @@ class SessionState:
         self.contacts = ContactTracker()
         self.saves = SaveDetector()
         self.off_track = OffTrackTracker()
+        self.overtakes = OvertakeTracker()
         self.boost = BoostTimer()
         self.yellows = YellowTracker()
 
@@ -1053,6 +1056,9 @@ class SessionState:
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
         self._warning_events: list[tuple[float, str]] = []
+        self.event_telemetry_seen = False
+        self._penalty_events: list[tuple[float, int]] = []
+        self._rival_penalty_events: list[tuple[float, int]] = []
         self._penalty_pending_s = 0
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st: float | None = None
@@ -1102,6 +1108,14 @@ class SessionState:
     def set_mode_offsets(self, *, thermal_warn_offset_c: float) -> None:
         """Mindset-dependent warning offsets (resolved in the Engine)."""
         self._thermal_warn_offset_c = thermal_warn_offset_c
+
+    @property
+    def infringement_warnings(self) -> int:
+        return sum(kind in _INFRINGEMENT_WARNING_KINDS for _, kind in self._warning_events)
+
+    @property
+    def infringement_penalties(self) -> int:
+        return len(self._penalty_events)
 
     # -- ingest entry point -----------------------------------------------
 
@@ -1232,8 +1246,13 @@ class SessionState:
         self._rewind_setup(t)
         self.contacts.reset()
         self.off_track.reset()
+        self.overtakes.reset()
         self.boost.reset()
         self._warning_events = [(when, kind) for when, kind in self._warning_events if when <= t]
+        self._penalty_events = [(when, ptype) for when, ptype in self._penalty_events if when <= t]
+        self._rival_penalty_events = [
+            (when, car_idx) for when, car_idx in self._rival_penalty_events if when <= t
+        ]
         self._track_warnings.clear()
         for _, kind in self._warning_events:
             family = _warning_family(kind)
@@ -1306,6 +1325,7 @@ class SessionState:
 
     def _on_lap_data(self, pkt: LapDataPacket) -> None:
         self.cars_lap = pkt.cars
+        self.overtakes.note_lap_data(pkt.cars)
         car = pkt.cars[self._player_idx]
         frame = pkt.header.overall_frame_identifier
         previous_lap_num = self.lap_num
@@ -1596,6 +1616,7 @@ class SessionState:
         return self.session_time_left > remaining_s + cool_s + lap_s * 0.2
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
+        self.event_telemetry_seen = True
         if pkt.code == "FLBK":
             self._handle_rewind(pkt.header.session_time)
         elif pkt.code == "RDFL":
@@ -1626,6 +1647,15 @@ class SessionState:
                         int(pkt.detail.get("severity", 0)),
                         self._damage_parts(),
                     )
+        elif pkt.code == "OVTK":
+            if isinstance(pkt.detail, dict):
+                self.overtakes.on_event(
+                    self._player_idx,
+                    int(pkt.detail.get("overtaking_vehicle_idx", 255)),
+                    int(pkt.detail.get("being_overtaken_vehicle_idx", 255)),
+                    self.cars_lap,
+                    {car_idx for _, car_idx in self._rival_penalty_events},
+                )
         elif pkt.code == "FTLP":
             if isinstance(pkt.detail, dict):
                 ms = round(float(pkt.detail.get("lap_time_s", 0.0)) * 1000)
@@ -1637,6 +1667,14 @@ class SessionState:
                 # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
                 self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2)
         elif pkt.code == "PENA":
+            if isinstance(pkt.detail, dict):
+                ptype = int(pkt.detail.get("penalty_type", 0))
+                vehicle_idx = int(pkt.detail.get("vehicle_idx", 255))
+                if ptype in _PENALTY_KINDS:
+                    if vehicle_idx == self._player_idx:
+                        self._penalty_events.append((pkt.header.session_time, ptype))
+                    else:
+                        self._rival_penalty_events.append((pkt.header.session_time, vehicle_idx))
             if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
                 ptype = int(pkt.detail.get("penalty_type", 0))
                 kind = _PENALTY_KINDS.get(ptype, "")

@@ -93,6 +93,9 @@ thresholds:
   driver_errors_max: 0.5              # errors per lap for zero score
   driver_contact_max: 0.2             # contacts per lap for zero score
   driver_position_span: 10            # places gained that span half the rating scale
+  driver_overtake_span: 0.5           # net on-track places per lap spanning half the rating scale
+  driver_infringements_max: 0.5       # weighted infringements per lap for zero score
+  driver_penalty_weight: 3            # one penalty counts as this many warnings
   driver_fold_weight_quali: 1         # qualifying profile weight
   driver_fold_weight_race: 5          # race profile weight
   driver_confidence_k: 10              # profile weight for half confidence

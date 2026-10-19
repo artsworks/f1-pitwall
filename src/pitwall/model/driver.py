@@ -23,6 +23,8 @@ PARAM_NAMES = {
     "errors_per_lap": "driver_errors_per_lap",
     "contact_per_lap": "driver_contact_per_lap",
     "position_delta": "driver_position_delta",
+    "overtakes_per_lap": "driver_overtakes_per_lap",
+    "infringements_per_lap": "driver_infringements_per_lap",
 }
 RATING = "driver_rating"
 
@@ -41,6 +43,10 @@ class DriverInputs:
     contacts: int
     grid_position: int
     finish_position: int
+    overtakes_made: int | None = None
+    overtakes_lost: int | None = None
+    warnings: int | None = None
+    penalties: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +57,8 @@ class DriverProfile:
     errors_per_lap: float | None
     contact_per_lap: float | None
     position_delta: float | None
+    overtakes_per_lap: float | None
+    infringements_per_lap: float | None
     scores: tuple[tuple[str, float], ...]
     rating: float
 
@@ -86,6 +94,10 @@ def component_score(component: str, value: float, th: Mapping[str, object]) -> f
         score = 1.0 - value / _positive_threshold(th, "driver_contact_max", 0.2)
     elif component == "position_delta":
         score = 0.5 + value / (2 * _positive_threshold(th, "driver_position_span", 10))
+    elif component == "overtakes_per_lap":
+        score = 0.5 + value / (2 * _positive_threshold(th, "driver_overtake_span", 0.5))
+    elif component == "infringements_per_lap":
+        score = 1.0 - value / _positive_threshold(th, "driver_infringements_max", 0.5)
     else:
         raise ValueError(f"unknown driver rating component {component!r}")
     return _clamp(score)
@@ -115,6 +127,16 @@ def compute_profile(inp: DriverInputs, th: Mapping[str, object]) -> DriverProfil
         if inp.grid_position > 0 and inp.finish_position > 0
         else None
     )
+    overtakes_per_lap = (
+        (inp.overtakes_made - inp.overtakes_lost) / inp.laps
+        if inp.overtakes_made is not None and inp.overtakes_lost is not None
+        else None
+    )
+    infringements_per_lap = (
+        (inp.warnings + threshold(th, "driver_penalty_weight", 3) * inp.penalties) / inp.laps
+        if inp.warnings is not None and inp.penalties is not None
+        else None
+    )
 
     components = (
         ("pace_delta_ms", pace_delta_ms),
@@ -123,6 +145,8 @@ def compute_profile(inp: DriverInputs, th: Mapping[str, object]) -> DriverProfil
         ("errors_per_lap", errors_per_lap),
         ("contact_per_lap", contact_per_lap),
         ("position_delta", position_delta),
+        ("overtakes_per_lap", overtakes_per_lap),
+        ("infringements_per_lap", infringements_per_lap),
     )
     scores = tuple(
         (component, component_score(component, value, th))
@@ -137,6 +161,8 @@ def compute_profile(inp: DriverInputs, th: Mapping[str, object]) -> DriverProfil
         errors_per_lap=errors_per_lap,
         contact_per_lap=contact_per_lap,
         position_delta=position_delta,
+        overtakes_per_lap=overtakes_per_lap,
+        infringements_per_lap=infringements_per_lap,
         scores=scores,
         rating=rating,
     )
