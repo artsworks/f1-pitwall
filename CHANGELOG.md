@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.30.0 (2026-10-19)
+
+### Features
+
+- **cli**: Print progress to stderr for recording commands
+  ([#122](https://github.com/artsworks/f1-pitwall/pull/122),
+  [`cbfeb20`](https://github.com/artsworks/f1-pitwall/commit/cbfeb2026442fe299222e116d8db5916147bf23c))
+
+
 ## v0.29.0 (2026-10-18)
 
 ### Bug Fixes

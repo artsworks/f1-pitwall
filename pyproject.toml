@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pitwall"
-version = "0.29.0"
+version = "0.30.0"
 description = "A race engineer for F1 26: UDP telemetry ingest, record, replay, strategy."
 readme = "README.md"
 requires-python = ">=3.12"
