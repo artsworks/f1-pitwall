@@ -456,6 +456,70 @@ def test_rival_laps_persisted(tmp_path: Path) -> None:
     assert rival[0].lap_time_ms == 91_500 and rival[0].compound == 17
 
 
+def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
+    uid = 801
+    db = Database(":memory:")
+    db.upsert_session(uid, track_id=7, session_type=5)
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    for lap_num in range(1, 7):
+        safety_car_status = int(lap_num > 3)
+        session = pack_packet(
+            PacketId.SESSION,
+            {
+                "session_type": 5,
+                "track_id": 7,
+                "safety_car_status": safety_car_status,
+            },
+            session_uid=uid,
+            session_time=float(lap_num),
+        )
+        engine.ingest.on_datagram(session, float(lap_num))
+        lap_data = pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {car_idx: {"current_lap_num": lap_num} for car_idx in range(4)}},
+            session_uid=uid,
+            session_time=lap_num + 0.1,
+        )
+        engine.ingest.on_datagram(lap_data, lap_num + 0.1)
+
+    history = pack_packet(
+        PacketId.SESSION_HISTORY,
+        {
+            "car_idx": 1,
+            "num_laps": 7,
+            "num_tyre_stints": 1,
+            "laps": {
+                lap_idx: {
+                    "lap_time_ms": 90_000 if lap_idx < 3 else 120_000,
+                    "lap_valid_bit_flags": 1,
+                }
+                for lap_idx in range(7)
+            },
+            "tyre_stints": {
+                0: {"end_lap": 255, "tyre_actual_compound": 17, "tyre_visual_compound": 17}
+            },
+        },
+        session_uid=uid,
+        session_time=7.0,
+    )
+    engine.ingest.on_datagram(history, 7.0)
+
+    assert [lap.sc_status for _, lap in engine.state.rival_laps] == [0, 0, 0, 1, 1, 1]
+    for lap_num, lap_time in enumerate((90_000, 90_000, 90_000), start=1):
+        db.insert_lap(uid, 0, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True))
+    for car_idx, lap_time in ((2, 95_000), (3, 105_000)):
+        for lap_num in range(1, 4):
+            db.insert_lap(
+                uid, car_idx, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True)
+            )
+
+    engine._write_laps()
+    assert [lap.sc_status for lap in db.laps_for(uid, 1)] == [0, 0, 0, 1, 1, 1]
+    engine._fold_driver(uid)
+
+    assert db.get_param(7, 0, "driver_pace_delta_ms").value == -5_000
+
+
 def test_rules_facing_snapshot_carries_model(tmp_path: Path) -> None:
     engine, state, db = _run(tmp_path)
     snap = engine.state.snapshot(engine.clock.now())

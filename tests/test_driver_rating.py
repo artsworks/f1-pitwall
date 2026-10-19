@@ -20,8 +20,11 @@ from pitwall.model.driver import (
     fold_weight,
     learned_rating,
 )
+from pitwall.protocol.header import PacketId
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
+
+from .synth import make_event_packet, pack_packet
 
 TH = ConfigStore().current().thresholds
 
@@ -207,7 +210,7 @@ def _finish_session(
     engine.state.overtakes.made, engine.state.overtakes.lost = overtakes
     engine.state._warning_events = [(float(i), "cut") for i in range(warnings)]
     engine.state._penalty_events = [(float(i), 4) for i in range(penalties)]
-    engine.state.off_track.count = offs
+    engine.state._incident_events = [(float(i), "off") for i in range(offs)]
     for lap_num, lap_time in enumerate(lap_times, start=1):
         db.insert_lap(
             uid,
@@ -222,6 +225,72 @@ def _finish_session(
                 LapSummary(lap_num, lap_time, 30_000, 30_000, 17, lap_num, 10.0, True),
             )
     engine._end_session(uid, 1.0)  # noqa: SLF001
+
+
+def _open_driver_session(db: Database, uid: int):
+    db.upsert_session(uid, track_id=7, session_type=5)
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine.state.session_uid = uid
+    engine.state.track_id = 7
+    engine.state.session_type = 5
+    engine.state.grid_position = 8
+    engine.state.position = 5
+    for lap_num, lap_time in enumerate((89_000, 90_000, 91_000), start=1):
+        db.insert_lap(
+            uid,
+            0,
+            LapSummary(lap_num, lap_time, 30_000, 30_000, 17, lap_num, 10.0, True),
+        )
+    for car_idx in range(1, 4):
+        for lap_num in range(1, 4):
+            db.insert_lap(
+                uid,
+                car_idx,
+                LapSummary(lap_num, 90_000, 30_000, 30_000, 17, lap_num, 10.0, True),
+            )
+    return engine
+
+
+def test_uid_change_without_send_folds_driver_rating() -> None:
+    db = Database(":memory:")
+    uid = 711
+    engine = _open_driver_session(db, uid)
+
+    engine.ingest.on_datagram(
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 5, "track_id": 7},
+            session_uid=uid + 1,
+            session_time=1.0,
+        ),
+        1.0,
+    )
+
+    assert db.driver_folded(uid)
+    assert db.get_param(7, DRIVER_COMPOUND, RATING).weight == 1
+    assert db.get_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING).weight == 1
+
+
+def test_send_then_uid_change_does_not_fold_driver_twice() -> None:
+    db = Database(":memory:")
+    uid = 712
+    engine = _open_driver_session(db, uid)
+
+    engine.ingest.on_datagram(make_event_packet(b"SEND", session_uid=uid), 1.0)
+    engine.tick(1.0)
+    engine.ingest.on_datagram(
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 5, "track_id": 7},
+            session_uid=uid + 1,
+            session_time=1.1,
+        ),
+        1.1,
+    )
+
+    assert db.driver_folded(uid)
+    assert db.get_param(7, DRIVER_COMPOUND, RATING).weight == 1
+    assert db.get_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING).weight == 1
 
 
 def test_session_end_folds_overtake_and_infringement_components() -> None:

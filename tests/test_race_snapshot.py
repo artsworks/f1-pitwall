@@ -281,6 +281,62 @@ def test_flashback_rewinds_overtakes_and_penalty_event_counts() -> None:
     assert state.event_telemetry_seen
 
 
+def test_flashback_prunes_future_incidents_and_keeps_prior_off() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.2, car_position=6)
+    for t, surfaces in ((1.5, (0, 0, 3, 3)), (1.9, (0, 0, 0, 0))):
+        ingest.on_datagram(
+            pack_packet(
+                PacketId.CAR_TELEMETRY,
+                {"cars": {0: {"surface_type": surfaces, "speed": 200, "brake": 0.9}}},
+                session_time=t,
+            ),
+            t,
+        )
+    assert state.incident_offs == 1
+
+    for i in range(16):
+        t = 2.6 + i / 30
+        ingest.on_datagram(
+            pack_packet(
+                PacketId.CAR_TELEMETRY,
+                {"cars": {0: {"speed": 200, "brake": 0.9}}},
+                session_time=t,
+            ),
+            t,
+        )
+        slip = (-0.8, -0.1, -0.1, -0.1) if i < 12 else (0.0, 0.0, 0.0, 0.0)
+        ingest.on_datagram(
+            pack_packet(PacketId.MOTION_EX, {"wheel_slip_ratio": slip}, session_time=t), t
+        )
+    collision = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"COLL",
+            "event_data": struct.pack("<BBB", 0, 1, 1).ljust(12, b"\0"),
+        },
+        session_time=3.2,
+    )
+    ingest.on_datagram(collision, 3.2)
+
+    assert state.incident_lockups == 1
+    assert state.incident_contacts == 1
+
+    flashback = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"FLBK",
+            "event_data": struct.pack("<If", 1234, 2.5).ljust(12, b"\0"),
+        },
+        session_time=2.5,
+    )
+    ingest.on_datagram(flashback, 2.5)
+
+    assert state.incident_lockups == 0
+    assert state.incident_contacts == 0
+    assert state.incident_offs == 1
+
+
 def test_any_event_marks_event_telemetry_seen() -> None:
     ingest, state = _state()
     assert not state.event_telemetry_seen

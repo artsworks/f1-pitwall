@@ -413,6 +413,7 @@ class Engine:
         self.tick_errors = 0
         self._rule_errors_logged: set[tuple[str, str]] = set()
         self.db: Any = dispatcher.log.db
+        self.driver_db: Any = self.db
         self._driver_rating = (0.5, 0.0, "")
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
@@ -482,7 +483,7 @@ class Engine:
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
-        state.session_end_listeners.append(self.fold_open_stint)
+        state.session_end_listeners.append(self.fold_session_end)
 
     def _on_dispatcher_response(self, rule_id: str, answer: str, _snapshot: Snapshot) -> None:
         if rule_id == "cool_push_check":
@@ -1466,6 +1467,13 @@ class Engine:
         self._weekend_prior_cache.pop((uid, stint[0].compound), None)
         self._fold_fit(self.state.track_id, stint[0].compound, fit)
 
+    def fold_session_end(self) -> None:
+        uid = self.state.session_uid
+        if self.db is None or uid is None:
+            return
+        self.fold_open_stint()
+        self._fold_driver(uid)
+
     def _fold_fit(self, track_id: int, compound: int, fit: DegFit) -> None:
         """Fold a stint fit into the learned priors when it is a clean fit on
         an identified track; noisy stints stay in `stints` only."""
@@ -1500,12 +1508,13 @@ class Engine:
                 param_weight_cap=self._th("param_weight_cap", 50),
             )
 
-    def _learned_name(self, track_id: int, compound: int, name: str) -> str:
+    def _learned_name(self, track_id: int, compound: int, name: str, *, db: Any = None) -> str:
         """The race-distance prior once it has weight, else the practice one."""
+        source_db = self.db if db is None else db
         name_at = scoped(name, self._race_laps())
-        if name_at == name or self.db is None:
+        if name_at == name or source_db is None:
             return name
-        p = self.db.get_param(track_id, compound, name_at)
+        p = source_db.get_param(track_id, compound, name_at)
         return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
 
     def _thermal_hi_c(self, track_id: int, compound: int, settings: Any) -> float:
@@ -1525,12 +1534,12 @@ class Engine:
         return threshold(self.store.current().thresholds, name, default)
 
     def _refresh_driver_rating(self, track_id: int) -> None:
-        if self.db is None:
+        if self.driver_db is None:
             self._driver_rating = (0.5, 0.0, "")
             return
         self._driver_rating = learned_rating(
-            self.db.params_for_track(track_id),
-            self.db.params_for_track(GLOBAL_TRACK_ID),
+            self.driver_db.params_for_track(track_id),
+            self.driver_db.params_for_track(GLOBAL_TRACK_ID),
             self.store.current().thresholds,
         )
 
@@ -2115,9 +2124,10 @@ class Engine:
     def _fold_driver(self, uid: int) -> None:
         if (
             self.db is None
+            or self.driver_db is None
             or self.state.track_id < 0
             or self._synthetic_session(uid)
-            or self.db.driver_folded(uid)
+            or self.driver_db.driver_folded(uid)
         ):
             return
         th = self.store.current().thresholds
@@ -2155,8 +2165,8 @@ class Engine:
             if player_laps
             else 0
         )
-        base_name = self._learned_name(track_id, compound, "base_ms")
-        base_param = self.db.get_param(track_id, compound, base_name)
+        base_name = self._learned_name(track_id, compound, "base_ms", db=self.driver_db)
+        base_param = self.driver_db.get_param(track_id, compound, base_name)
         base_ms = float(base_param.value) if base_param is not None else None
         stints = [stint for stint in self.db.stints_for_session(uid) if stint.n_valid_laps > 0]
         stint_laps = sum(stint.n_valid_laps for stint in stints)
@@ -2165,8 +2175,8 @@ class Engine:
             if stint_laps
             else None
         )
-        deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap")
-        deg_param = self.db.get_param(track_id, compound, deg_name)
+        deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap", db=self.driver_db)
+        deg_param = self.driver_db.get_param(track_id, compound, deg_name)
         deg_prior = float(deg_param.value) if deg_param is not None else None
         profile = compute_profile(
             DriverInputs(
@@ -2176,10 +2186,10 @@ class Engine:
                 deg_ms_per_lap=deg_ms_per_lap,
                 deg_prior_ms_per_lap=deg_prior,
                 laps=max((lap.lap_num for lap in self.db.laps_for(uid, 0)), default=0),
-                lockups=self.state.lockups.count,
-                spins=self.state.spins.count,
-                offs=self.state.off_track.count,
-                contacts=self.state.contacts.episodes,
+                lockups=self.state.incident_lockups,
+                spins=self.state.incident_spins,
+                offs=self.state.incident_offs,
+                contacts=self.state.incident_contacts,
                 grid_position=self.state.grid_position,
                 finish_position=self.state.position,
                 overtakes_made=(
@@ -2208,7 +2218,7 @@ class Engine:
         cap = self._th("param_weight_cap", 50)
         for target_track in (track_id, GLOBAL_TRACK_ID):
             for name, value in values:
-                self.db.fold_param(
+                self.driver_db.fold_param(
                     target_track,
                     DRIVER_COMPOUND,
                     name,
@@ -2216,7 +2226,7 @@ class Engine:
                     weight,
                     param_weight_cap=cap,
                 )
-        self.db.mark_driver_folded(uid)
+        self.driver_db.mark_driver_folded(uid)
         self._refresh_driver_rating(track_id)
 
     def tick(self, now: float) -> list[Call]:

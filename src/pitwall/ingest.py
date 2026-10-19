@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
 from pitwall.derive import is_synthetic_uid
+from pitwall.model.driver import fold_weight
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -167,6 +168,52 @@ def _relabel_calls_mode(
     )
 
 
+def _driver_refold_eligible(
+    db: Database, uid: int, path: Path, header: FileHeader, settings: Settings
+) -> bool:
+    session = db.session_row(uid)
+    return bool(
+        path.is_file()
+        and db.session_has_laps(uid)
+        and not db.driver_folded(uid)
+        and session is not None
+        and fold_weight(int(session.get("session_type") or 0), settings.thresholds) > 0
+        and not bool(session.get("synthetic"))
+        and not bool(header.metadata.get("synthetic"))
+        and not is_synthetic_uid(uid)
+    )
+
+
+def _refold_driver(
+    path: Path,
+    db: Database,
+    *,
+    rules_dir: Path | None,
+    isolated: bool,
+    session_started_at: float,
+) -> None:
+    from pitwall.engine import build_engine, run_replay
+
+    scratch_db = Database(":memory:")
+    try:
+        engine = build_engine(
+            clock=VirtualClock(),
+            overrides={"engine": {"heartbeat_s": 0}},
+            rules_dir=rules_dir,
+            isolated=isolated,
+            synthetic=False,
+            sinks=[],
+            db=scratch_db,
+            decision_log_fp=io.StringIO(),
+            session_started_at=session_started_at,
+        )
+        engine.driver_db = db
+        asyncio.run(run_replay(path, engine))
+        engine.fold_session_end()
+    finally:
+        scratch_db.close()
+
+
 def header_calls_mode(metadata: dict[str, Any]) -> str:
     """`calls_mode` from a recording header. Recorders before the
     `speech_enabled` field spoke every call regardless of `speech.enabled`, so
@@ -203,10 +250,29 @@ def ingest_recordings(
             uid = header.session_uid
             if uid and db.is_ingested(uid, DIGEST_VERSION):
                 _relabel_calls_mode(db, uid, path, header, calls_mode)
-                results.append(IngestResult(path, uid, "skipped", []))
+                refolded = False
+                if _driver_refold_eligible(db, uid, path, header, settings):
+                    with db.transaction():
+                        _refold_driver(
+                            path,
+                            db,
+                            rules_dir=rules_dir,
+                            isolated=isolated,
+                            session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                        )
+                    refolded = True
+                results.append(
+                    IngestResult(
+                        path,
+                        uid,
+                        "skipped",
+                        ["driver_refolded=True"] if refolded else [],
+                    )
+                )
                 continue
             with db.transaction():
                 digest_only = bool(uid and db.session_has_laps(uid))
+                refolded = False
                 if not digest_only:
                     engine = build_engine(
                         clock=VirtualClock(),
@@ -221,8 +287,17 @@ def ingest_recordings(
                         session_started_at=header.wall_clock_start_us / 1_000_000.0,
                     )
                     asyncio.run(run_replay(path, engine))
-                    engine.fold_open_stint()
+                    engine.fold_session_end()
                     uid = engine.state.session_uid or engine.ingest.last_session_uid or uid
+                elif _driver_refold_eligible(db, uid, path, header, settings):
+                    _refold_driver(
+                        path,
+                        db,
+                        rules_dir=rules_dir,
+                        isolated=isolated,
+                        session_started_at=header.wall_clock_start_us / 1_000_000.0,
+                    )
+                    refolded = True
                 if not uid:
                     raise ValueError("recording did not contain a session UID")
                 session = db.session_row(uid) or {}
@@ -246,6 +321,8 @@ def ingest_recordings(
                 )
                 db.mark_ingested(uid, DIGEST_VERSION, str(path))
             findings = [str(item) for item in digest.get("findings", [])]
+            if refolded:
+                findings.append("driver_refolded=True")
             results.append(
                 IngestResult(
                     path,

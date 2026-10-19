@@ -7,8 +7,9 @@ The rating appears as the dashboard DRV chip, in the `pitwall start` banner, and
 
 ## Components
 
-The engine uses valid green laps with positive lap times and no traffic. It calculates one
-median clean lap time for each rival with at least three clean laps.
+The player pace uses valid green laps with positive lap times and no traffic.
+The field median uses one clean lap time per rival with at least three clean laps.
+Rival laps are filtered by SC/VSC, but not by traffic.
 
 | Component | Measurement | Score |
 | --- | --- | --- |
@@ -42,6 +43,8 @@ It stores each component and the composite rating for the track and for the glob
 The global profile uses track ID `-2`. Track ID `-1` remains reserved for tune settings.
 The engine uses a track rating when its weight meets `driver_min_weight`. Otherwise it uses
 the global rating.
+`pitwall ingest` replays stored qualifying and race recordings once to learn a driver's rating.
+Sessions without a recording file do not count. The `driver_folded` marker prevents repeat folds.
 
 ## Confidence and advice
 
