@@ -12,6 +12,8 @@ import pitwall.learnpack
 from pitwall.audio.dispatcher import Call
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
 from pitwall.cli import serve as cli
+from pitwall.config.loader import ConfigStore
+from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
 from pitwall.store.db import Database, _uid_to_sql
 
 
@@ -59,6 +61,7 @@ def _fake_serve_session_end(uid: int):  # type: ignore[no-untyped-def]
         **kwargs: Any,
     ) -> None:
         live.close()
+        print(cli._banner(kwargs.get("banner", [])))
         engine.db.upsert_session(uid, track_id=7, session_type=15, started_at=1.0)
         engine.state.session_uid = uid
         engine.state.session_type = 15
@@ -72,6 +75,17 @@ def _fake_serve_session_end(uid: int):  # type: ignore[no-untyped-def]
 
 def _start_args() -> argparse.Namespace:
     return argparse.Namespace(child=False, no_watchdog=True, record=None, log_level="warning")
+
+
+def test_driver_rating_text_uses_global_and_track_learning() -> None:
+    db = Database(":memory:")
+    th = ConfigStore().current().thresholds
+
+    assert cli._driver_rating_text(db, th) == "not learned yet"
+    db.fold_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING, 0.62, 10)
+    assert cli._driver_rating_text(db, th) == "0.62 (confidence 0.50, global)"
+    db.fold_param(7, DRIVER_COMPOUND, RATING, 0.41, 1)
+    assert cli._driver_rating_text(db, th, 7) == "0.41 (confidence 0.09, track)"
 
 
 def test_speak_startup_warms_before_speaking_at_current_time() -> None:
@@ -213,6 +227,8 @@ def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, 
     assert len(calls) == 2
     assert calls[1][0] is True
     lines = capsys.readouterr().out.splitlines()
+    assert any("driver rating not learned yet" in line for line in lines)
+    assert any(line.startswith("driver rating:") for line in lines)
     progress = "learning: session ended, updating track learning…"
     progress_index = lines.index(progress)
     second_report = calls[1][1]

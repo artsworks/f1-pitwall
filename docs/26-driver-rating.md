@@ -3,6 +3,7 @@
 The driver rating summarizes clean laps, tyre management, errors, contact, overtakes,
 infringements and race result.
 The engine learns it after qualifying and race sessions. The rating ranges from 0 to 1.
+The rating appears as the dashboard DRV chip, in the `pitwall start` banner, and in session-end output.
 
 ## Components
 
