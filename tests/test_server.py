@@ -66,6 +66,7 @@ def test_websocket_hello_and_state_shape() -> None:
         ws.send_json({"type": "hello", "v": 1, "last_seq": 7})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
+        assert snap["payload"]["driver"] is None
         assert set(snap["payload"]["latency"]) == {
             "queue_count",
             "queue_oldest_s",
@@ -491,6 +492,33 @@ def test_state_payload_race_lap_times() -> None:
         {"lap": 24, "time_ms": 92_104, "sectors_ms": [30_400, 31_000, 30_704]},
     ]
     assert default["race"]["recent_laps"] == []
+
+
+def test_state_payload_driver_rating() -> None:
+    from pitwall.server.app import state_payload
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    payload = state_payload(
+        Snapshot(
+            now=1.0,
+            driver_rating=0.62,
+            driver_confidence=0.5,
+            driver_rating_source="global",
+        ),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    default = state_payload(Snapshot(now=1.0), settings=settings, metrics=Metrics(), quiet=False)
+
+    assert payload["driver"] == {
+        "rating": 0.62,
+        "confidence": 0.5,
+        "source": "global",
+        "neutral": 0.5,
+    }
+    assert default["driver"] is None
 
 
 def test_setup_live_payload_filters_to_track_contexts_and_session_mode() -> None:

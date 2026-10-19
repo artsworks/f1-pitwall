@@ -318,6 +318,22 @@
         String(p.mindset || "--").slice(0, 4).toUpperCase();
       mind.className = "pill" + (p.mindset === "aggressive" ? " aggr" : "");
     }
+    var drv = el("drv");
+    if (drv) {
+      if (!p.driver) {
+        drv.hidden = true;
+      } else {
+        drv.hidden = false;
+        var neutral = p.driver.neutral !== undefined && p.driver.neutral !== null ?
+          p.driver.neutral : 0.5;
+        drv.className = "chip drv " + (p.driver.rating >= neutral ? "ok" : "low");
+        drv.title = "driver rating " + p.driver.rating.toFixed(2) + " · confidence " +
+          Math.round(p.driver.confidence * 100) + "% · " + p.driver.source;
+        drv.innerHTML = "";
+        drv.appendChild(document.createTextNode("DRV " + Math.round(p.driver.rating * 100)));
+        drv.appendChild(span(" " + p.driver.source, "dim"));
+      }
+    }
     var v = el("verbosity");
     if (v) {
       v.innerHTML = "";
