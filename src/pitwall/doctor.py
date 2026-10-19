@@ -112,6 +112,10 @@ def run_doctor(
         elif status == "WARN":
             msg += " (increase the socket receive buffer)"
         _line(out, status, msg)
+        print(
+            f"doctor: listening on {host}:{port} for {seconds:.0f}s ...",
+            file=sys.stderr,
+        )
         await asyncio.sleep(seconds)
         transport.close()
 
