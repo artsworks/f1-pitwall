@@ -83,6 +83,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .chip.sm.on { border-color: var(--info); color: var(--info); }
 .chip.drv.ok { border-color: var(--ok); color: var(--ok); }
 .chip.drv.low { border-color: var(--warn); color: var(--warn); }
+.chip.drv .dim { color: var(--dim); font-weight: normal; }
 
 /* mindset pill (item 15): compact, far right */
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
