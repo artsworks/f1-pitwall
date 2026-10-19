@@ -8,7 +8,7 @@ import re
 import sqlite3
 import sys
 import threading
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +19,7 @@ from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits
 from pitwall.ingest import Ingest
+from pitwall.model.driver import GLOBAL_TRACK_ID, learned_rating
 from pitwall.net.recording import RecordingRotator
 from pitwall.protocol.header import PacketId
 from pitwall.rules.engine import RuleEngine
@@ -34,6 +35,7 @@ from pitwall.supervisor import (
 if TYPE_CHECKING:
     from pitwall.config.models import Settings
     from pitwall.server.hub import Hub
+    from pitwall.store.db import Database
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +53,17 @@ _BANNER_GROUPS = {
     "learning": 2,
     "pitwall": 2,
 }
+
+
+def _driver_rating_text(db: Database, th: Mapping[str, object], track_id: int | None = None) -> str:
+    rating, conf, source = learned_rating(
+        db.params_for_track(track_id) if track_id is not None and track_id >= 0 else (),
+        db.params_for_track(GLOBAL_TRACK_ID),
+        th,
+    )
+    if not source:
+        return "not learned yet"
+    return f"{rating:.2f} (confidence {conf:.2f}, {source})"
 
 
 def _speak_startup(
@@ -427,6 +440,12 @@ def cmd_start(args: argparse.Namespace) -> int:
             banner.append(("", startup_scorecard(db, pack_dir)))
         except sqlite3.Error as e:
             banner.append(("pitwall", f"scorecard skipped ({e})"))
+        try:
+            banner.append(
+                ("learning", f"driver rating {_driver_rating_text(db, settings.thresholds)}")
+            )
+        except sqlite3.Error as e:
+            banner.append(("learning", f"driver rating skipped ({e})"))
     dlog = DecisionLog(
         rec_dir / f"{settings.mindset.active}.decisions.jsonl",
         config_hash=store.hash,
@@ -478,6 +497,11 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"learning pack: saved {saved}", flush=True)
         except (OSError, sqlite3.Error, ValueError) as e:
             print(f"learning pack: skipped ({e})", flush=True)
+        try:
+            rating_text = _driver_rating_text(db, settings.thresholds, engine.state.track_id)
+            print(f"driver rating: {rating_text}", flush=True)
+        except sqlite3.Error as e:
+            print(f"driver rating: skipped ({e})", flush=True)
 
     if db is not None:
         engine.on_session_end = on_session_end

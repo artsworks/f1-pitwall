@@ -209,6 +209,151 @@ def _pena(ingest: Ingest, t: float, *fields: int) -> None:
     ingest.on_datagram(pena, t)
 
 
+def _overtake(ingest: Ingest, t: float, overtaker: int, overtaken: int) -> None:
+    event = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"OVTK",
+            "event_data": struct.pack("<BB", overtaker, overtaken).ljust(12, b"\0"),
+        },
+        session_time=t,
+    )
+    ingest.on_datagram(event, t)
+
+
+def test_driver_infringement_warning_counts_exclude_overtake_warnings() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    for t, infringement in enumerate((7, 27, 28, 29, 8, 9), start=2):
+        _pena(ingest, float(t), 5, infringement, 0, 255, 255, 5, 0)
+
+    assert state.event_telemetry_seen
+    assert state.infringement_warnings == 4
+
+
+def test_driver_infringement_penalties_count_only_types_0_1_and_4() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    for t, penalty_type in enumerate((0, 1, 4, 2, 5), start=2):
+        _pena(ingest, float(t), penalty_type, 0, 0, 255, 3, 5, 0)
+
+    assert state.infringement_penalties == 3
+
+
+def test_rival_penalty_blocks_overtake_credit() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 0, 0, 1, 255, 0, 5, 0)
+    _overtake(ingest, 3.0, 0, 1)
+
+    assert state.infringement_penalties == 0
+    assert state.overtakes.seen == 0
+
+
+def test_flashback_rewinds_overtakes_and_penalty_event_counts() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 4, 7, 0, 255, 5, 5, 0)
+    _overtake(ingest, 2.1, 0, 1)
+    _pena(ingest, 2.2, 0, 0, 1, 255, 0, 5, 0)
+    _pena(ingest, 3.0, 1, 7, 0, 255, 0, 5, 0)
+    _pena(ingest, 3.1, 4, 0, 2, 255, 5, 5, 0)
+    assert state.overtakes.seen == 1
+    assert state.infringement_penalties == 2
+
+    flashback = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"FLBK",
+            "event_data": struct.pack("<If", 1234, 2.5).ljust(12, b"\0"),
+        },
+        session_time=2.5,
+    )
+    ingest.on_datagram(flashback, 2.5)
+
+    assert state.overtakes.seen == 0
+    assert state.overtakes.made == 0
+    assert state.infringement_penalties == 1
+    assert state._penalty_events == [(2.0, 4)]
+    assert len(state._rival_penalty_events) == 1
+    assert round(state._rival_penalty_events[0][0], 5) == 2.2
+    assert state._rival_penalty_events[0][1] == 1
+    assert state.event_telemetry_seen
+
+
+def test_flashback_prunes_future_incidents_and_keeps_prior_off() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.2, car_position=6)
+    for t, surfaces in ((1.5, (0, 0, 3, 3)), (1.9, (0, 0, 0, 0))):
+        ingest.on_datagram(
+            pack_packet(
+                PacketId.CAR_TELEMETRY,
+                {"cars": {0: {"surface_type": surfaces, "speed": 200, "brake": 0.9}}},
+                session_time=t,
+            ),
+            t,
+        )
+    assert state.incident_offs == 1
+
+    for i in range(16):
+        t = 2.6 + i / 30
+        ingest.on_datagram(
+            pack_packet(
+                PacketId.CAR_TELEMETRY,
+                {"cars": {0: {"speed": 200, "brake": 0.9}}},
+                session_time=t,
+            ),
+            t,
+        )
+        slip = (-0.8, -0.1, -0.1, -0.1) if i < 12 else (0.0, 0.0, 0.0, 0.0)
+        ingest.on_datagram(
+            pack_packet(PacketId.MOTION_EX, {"wheel_slip_ratio": slip}, session_time=t), t
+        )
+    collision = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"COLL",
+            "event_data": struct.pack("<BBB", 0, 1, 1).ljust(12, b"\0"),
+        },
+        session_time=3.2,
+    )
+    ingest.on_datagram(collision, 3.2)
+
+    assert state.incident_lockups == 1
+    assert state.incident_contacts == 1
+
+    flashback = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"FLBK",
+            "event_data": struct.pack("<If", 1234, 2.5).ljust(12, b"\0"),
+        },
+        session_time=2.5,
+    )
+    ingest.on_datagram(flashback, 2.5)
+
+    assert state.incident_lockups == 0
+    assert state.incident_contacts == 0
+    assert state.incident_offs == 1
+
+
+def test_any_event_marks_event_telemetry_seen() -> None:
+    ingest, state = _state()
+    assert not state.event_telemetry_seen
+
+    event = pack_packet(
+        PacketId.EVENT,
+        {
+            "event_string_code": b"SSTA",
+            "event_data": bytes(12),
+        },
+        session_time=1.0,
+    )
+    ingest.on_datagram(event, 1.0)
+
+    assert state.event_telemetry_seen
+
+
 def test_corner_cut_and_track_limit_warnings_count_separately() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0)

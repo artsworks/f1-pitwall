@@ -268,7 +268,9 @@ def grade_session(
                 i = stops.index(taken)
                 in_lap = by_lap.get(taken)
                 out_lap = by_lap.get(taken + 1)
-                neutralised = any(x is not None and x.sc_status != 0 for x in (in_lap, out_lap))
+                neutralised = any(
+                    x is not None and x.sc_status in (1, 2) for x in (in_lap, out_lap)
+                )
                 tactical = rule == "plan_sc_box" or inputs.get("pit_plan") in TACTICAL_PLANS
                 if neutralised or tactical:
                     # Pit loss / track position was the point; deg alone can't judge it.

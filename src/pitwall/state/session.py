@@ -39,6 +39,7 @@ from pitwall.state.driving import (
     ContactTracker,
     LockupDetector,
     OffTrackTracker,
+    OvertakeTracker,
     SaveDetector,
     SlipBalance,
     SpinDetector,
@@ -46,7 +47,7 @@ from pitwall.state.driving import (
     YellowTracker,
 )
 from pitwall.state.ema import CornersEma
-from pitwall.state.lap import LapAccumulator, LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapAccumulator, LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.pressure import PressureCall, RunTemps, pressure_advice, pressure_text
 from pitwall.state.quali import (
@@ -162,6 +163,7 @@ _TRACK_WARNING_KINDS = {
     28: "significant",
     29: "extreme",
 }
+_INFRINGEMENT_WARNING_KINDS = ("cut", "minor", "significant", "extreme")
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,6 +489,9 @@ class Snapshot:
     rival_data_restricted: bool = False
     pit_exit_rival_gap_s: float = math.inf
     pit_exit_clean: bool = False
+    driver_rating: float = 0.5
+    driver_confidence: float = 0.0
+    driver_rating_source: str = ""
     deg_fit_source: str = ""
     deg_ms_per_lap: float = 0.0
     deg_confidence: float = 0.0
@@ -963,6 +968,7 @@ class SessionState:
         self.contacts = ContactTracker()
         self.saves = SaveDetector()
         self.off_track = OffTrackTracker()
+        self.overtakes = OvertakeTracker()
         self.boost = BoostTimer()
         self.yellows = YellowTracker()
 
@@ -988,6 +994,7 @@ class SessionState:
             "snaps_exit": 0,
         }
         self._rival_laps_emitted: dict[int, int] = {}
+        self._car_lap_sc: dict[int, dict[int, int]] = {}
 
         self.cars_lap: tuple[Any, ...] | None = None
         self.cars_telemetry: Sequence[Any] | None = None
@@ -1050,6 +1057,10 @@ class SessionState:
         self._last_track_warning_st: float | None = None
         self._track_warnings: dict[str, int] = {}
         self._warning_events: list[tuple[float, str]] = []
+        self._incident_events: list[tuple[float, str]] = []
+        self.event_telemetry_seen = False
+        self._penalty_events: list[tuple[float, int]] = []
+        self._rival_penalty_events: list[tuple[float, int]] = []
         self._penalty_pending_s = 0
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st: float | None = None
@@ -1099,6 +1110,30 @@ class SessionState:
     def set_mode_offsets(self, *, thermal_warn_offset_c: float) -> None:
         """Mindset-dependent warning offsets (resolved in the Engine)."""
         self._thermal_warn_offset_c = thermal_warn_offset_c
+
+    @property
+    def infringement_warnings(self) -> int:
+        return sum(kind in _INFRINGEMENT_WARNING_KINDS for _, kind in self._warning_events)
+
+    @property
+    def infringement_penalties(self) -> int:
+        return len(self._penalty_events)
+
+    @property
+    def incident_lockups(self) -> int:
+        return sum(kind == "lockup" for _, kind in self._incident_events)
+
+    @property
+    def incident_spins(self) -> int:
+        return sum(kind == "spin" for _, kind in self._incident_events)
+
+    @property
+    def incident_offs(self) -> int:
+        return sum(kind == "off" for _, kind in self._incident_events)
+
+    @property
+    def incident_contacts(self) -> int:
+        return sum(kind == "contact" for _, kind in self._incident_events)
 
     # -- ingest entry point -----------------------------------------------
 
@@ -1162,8 +1197,12 @@ class SessionState:
             dist = self.lap_distance
             if dist < 0 and self.yellows.track_m:
                 dist += self.yellows.track_m
+            lockups_before = self.lockups.count
             self.lockups.update(
                 st, pkt.wheel_slip_ratio, self.speed_kmh, self.brake, self.lap_num, dist
+            )
+            self._incident_events.extend(
+                (st, "lockup") for _ in range(self.lockups.count - lockups_before)
             )
             self.traction.update(st, pkt.wheel_slip_ratio, self.speed_kmh, self.throttle)
             self.slip_balance.update(
@@ -1178,6 +1217,9 @@ class SessionState:
             saves_before = self.saves.count
             self.spins.update(st, pkt.local_velocity, phase=corner_phase)
             self.saves.update(st, pkt.local_velocity, phase=corner_phase)
+            self._incident_events.extend(
+                (st, "spin") for _ in range(self.spins.count - spins_before)
+            )
             if self.spins.count != spins_before:
                 self.snap_phase = self.spins.last_phase
             if self.saves.count != saves_before:
@@ -1229,8 +1271,14 @@ class SessionState:
         self._rewind_setup(t)
         self.contacts.reset()
         self.off_track.reset()
+        self.overtakes.reset()
         self.boost.reset()
         self._warning_events = [(when, kind) for when, kind in self._warning_events if when <= t]
+        self._incident_events = [(when, kind) for when, kind in self._incident_events if when <= t]
+        self._penalty_events = [(when, ptype) for when, ptype in self._penalty_events if when <= t]
+        self._rival_penalty_events = [
+            (when, car_idx) for when, car_idx in self._rival_penalty_events if when <= t
+        ]
         self._track_warnings.clear()
         for _, kind in self._warning_events:
             family = _warning_family(kind)
@@ -1303,6 +1351,11 @@ class SessionState:
 
     def _on_lap_data(self, pkt: LapDataPacket) -> None:
         self.cars_lap = pkt.cars
+        for car_idx, car in enumerate(pkt.cars):
+            lap_num = car.current_lap_num
+            status_by_lap = self._car_lap_sc.setdefault(car_idx, {})
+            status_by_lap[lap_num] = max(status_by_lap.get(lap_num, 0), self.safety_car_status)
+        self.overtakes.note_lap_data(pkt.cars)
         car = pkt.cars[self._player_idx]
         frame = pkt.header.overall_frame_identifier
         previous_lap_num = self.lap_num
@@ -1593,6 +1646,7 @@ class SessionState:
         return self.session_time_left > remaining_s + cool_s + lap_s * 0.2
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
+        self.event_telemetry_seen = True
         if pkt.code == "FLBK":
             self._handle_rewind(pkt.header.session_time)
         elif pkt.code == "RDFL":
@@ -1617,12 +1671,26 @@ class SessionState:
                 b = int(pkt.detail.get("vehicle2_idx", 255))
                 if self._player_idx in (a, b):
                     self.contacts.merge_s = self._th("contact_merge_s", 8.0)
+                    contacts_before = self.contacts.episodes
                     self.contacts.hit(
                         pkt.header.session_time,
                         b if a == self._player_idx else a,
                         int(pkt.detail.get("severity", 0)),
                         self._damage_parts(),
                     )
+                    self._incident_events.extend(
+                        (pkt.header.session_time, "contact")
+                        for _ in range(self.contacts.episodes - contacts_before)
+                    )
+        elif pkt.code == "OVTK":
+            if isinstance(pkt.detail, dict):
+                self.overtakes.on_event(
+                    self._player_idx,
+                    int(pkt.detail.get("overtaking_vehicle_idx", 255)),
+                    int(pkt.detail.get("being_overtaken_vehicle_idx", 255)),
+                    self.cars_lap,
+                    {car_idx for _, car_idx in self._rival_penalty_events},
+                )
         elif pkt.code == "FTLP":
             if isinstance(pkt.detail, dict):
                 ms = round(float(pkt.detail.get("lap_time_s", 0.0)) * 1000)
@@ -1634,6 +1702,14 @@ class SessionState:
                 # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
                 self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2)
         elif pkt.code == "PENA":
+            if isinstance(pkt.detail, dict):
+                ptype = int(pkt.detail.get("penalty_type", 0))
+                vehicle_idx = int(pkt.detail.get("vehicle_idx", 255))
+                if ptype in _PENALTY_KINDS:
+                    if vehicle_idx == self._player_idx:
+                        self._penalty_events.append((pkt.header.session_time, ptype))
+                    else:
+                        self._rival_penalty_events.append((pkt.header.session_time, vehicle_idx))
             if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
                 ptype = int(pkt.detail.get("penalty_type", 0))
                 kind = _PENALTY_KINDS.get(ptype, "")
@@ -1775,6 +1851,7 @@ class SessionState:
                         tyre_age_laps=max(0, lap_num - stint_start),
                         fuel_remaining_laps_at_end=0.0,
                         valid=valid,
+                        sc_status=self._car_lap_sc.get(pkt.car_idx, {}).get(lap_num, SC_UNKNOWN),
                         invalid_reasons=[] if valid else ["invalid"],
                     ),
                 )
@@ -1972,7 +2049,9 @@ class SessionState:
         )
         self.brake_temp = car.brakes_temperature
         self.speed_kmh = float(car.speed)
+        offs_before = self.off_track.count
         self.off_track.update_surface(st, car.surface_type.as_tuple())
+        self._incident_events.extend((st, "off") for _ in range(self.off_track.count - offs_before))
         self.throttle = car.throttle
         self.brake = car.brake
         if car.throttle >= 0.95 and car.brake == 0:
@@ -2885,6 +2964,9 @@ class SessionState:
             neutral_ended_kind=self._race.neutral_end_kind,
             puncture_corner=self.puncture_corner,
             **self._contact_view(st),
+            driver_rating=model.driver_rating,
+            driver_confidence=model.driver_confidence,
+            driver_rating_source=model.driver_rating_source,
             deg_fit_source=model.deg_fit_source,
             deg_ms_per_lap=model.deg_ms_per_lap,
             deg_confidence=model.deg_confidence,

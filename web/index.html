@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=32">
+  <link rel="stylesheet" href="/static/style.css?v=33">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
      redflag, stale, phone. Every value updates in place; nothing reflows. -->
@@ -38,6 +38,7 @@
     </span>
     <span id="verbosity" class="dim"></span>
     <span id="voice" class="voice" hidden></span>
+    <span id="drv" class="chip drv" title="driver rating" hidden></span>
     <span id="mindset" class="pill" title="mindset (UDP Action 2 / M)">--</span>
     <button id="sound" class="sound" type="button" aria-pressed="false" hidden>ENABLE SOUND</button>
   </header>
@@ -270,7 +271,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=34"></script>
+  <script src="/static/app.js?v=35"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

@@ -50,6 +50,17 @@ from pitwall.model.deg import (
     scoped,
     session_base_ms,
 )
+from pitwall.model.driver import (
+    DRIVER_COMPOUND,
+    GLOBAL_TRACK_ID,
+    PARAM_NAMES,
+    RATING,
+    DriverInputs,
+    advice_scale,
+    compute_profile,
+    fold_weight,
+    learned_rating,
+)
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_after_ms, ref_pace_ms
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import session_kind
@@ -402,6 +413,8 @@ class Engine:
         self.tick_errors = 0
         self._rule_errors_logged: set[tuple[str, str]] = set()
         self.db: Any = dispatcher.log.db
+        self.driver_db: Any = self.db
+        self._driver_rating = (0.5, 0.0, "")
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
@@ -470,7 +483,7 @@ class Engine:
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
-        state.session_end_listeners.append(self.fold_open_stint)
+        state.session_end_listeners.append(self.fold_session_end)
 
     def _on_dispatcher_response(self, rule_id: str, answer: str, _snapshot: Snapshot) -> None:
         if rule_id == "cool_push_check":
@@ -1454,6 +1467,13 @@ class Engine:
         self._weekend_prior_cache.pop((uid, stint[0].compound), None)
         self._fold_fit(self.state.track_id, stint[0].compound, fit)
 
+    def fold_session_end(self) -> None:
+        uid = self.state.session_uid
+        if self.db is None or uid is None:
+            return
+        self.fold_open_stint()
+        self._fold_driver(uid)
+
     def _fold_fit(self, track_id: int, compound: int, fit: DegFit) -> None:
         """Fold a stint fit into the learned priors when it is a clean fit on
         an identified track; noisy stints stay in `stints` only."""
@@ -1488,12 +1508,13 @@ class Engine:
                 param_weight_cap=self._th("param_weight_cap", 50),
             )
 
-    def _learned_name(self, track_id: int, compound: int, name: str) -> str:
+    def _learned_name(self, track_id: int, compound: int, name: str, *, db: Any = None) -> str:
         """The race-distance prior once it has weight, else the practice one."""
+        source_db = self.db if db is None else db
         name_at = scoped(name, self._race_laps())
-        if name_at == name or self.db is None:
+        if name_at == name or source_db is None:
             return name
-        p = self.db.get_param(track_id, compound, name_at)
+        p = source_db.get_param(track_id, compound, name_at)
         return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
 
     def _thermal_hi_c(self, track_id: int, compound: int, settings: Any) -> float:
@@ -1511,6 +1532,16 @@ class Engine:
 
     def _th(self, name: str, default: float) -> float:
         return threshold(self.store.current().thresholds, name, default)
+
+    def _refresh_driver_rating(self, track_id: int) -> None:
+        if self.driver_db is None:
+            self._driver_rating = (0.5, 0.0, "")
+            return
+        self._driver_rating = learned_rating(
+            self.driver_db.params_for_track(track_id),
+            self.driver_db.params_for_track(GLOBAL_TRACK_ID),
+            self.store.current().thresholds,
+        )
 
     def _lap_fraction(self) -> float:
         state = self.state
@@ -1682,6 +1713,9 @@ class Engine:
         fb = self.fuel_budget
         state.set_model(
             ModelView(
+                driver_rating=self._driver_rating[0],
+                driver_confidence=self._driver_rating[1],
+                driver_rating_source=self._driver_rating[2],
                 deg_fit_source=fit.source if fit is not None else "",
                 deg_ms_per_lap=fit.deg_ms_per_lap if fit is not None else 0.0,
                 deg_confidence=fit.confidence if fit is not None else 0.0,
@@ -1761,6 +1795,9 @@ class Engine:
             rival_behind_gap_s=behind_gap_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
+            driver=advice_scale(
+                self._driver_rating[0], self._driver_rating[1], settings.thresholds
+            ),
             mode=mode,
             th=settings.thresholds,
         )
@@ -2077,11 +2114,120 @@ class Engine:
     def _end_session(self, uid: int, now: float) -> None:
         assert self.db is not None
         self.fold_open_stint()
+        self._fold_driver(uid)
         self._store_debrief_setup(uid)
         self._session_ended_written = True
         self.db.end_session(uid, now)
         grade_and_store(self.db, uid, self.store.current().thresholds)
         self.db.mark_graded(uid)
+
+    def _fold_driver(self, uid: int) -> None:
+        if (
+            self.db is None
+            or self.driver_db is None
+            or self.state.track_id < 0
+            or self._synthetic_session(uid)
+            or self.driver_db.driver_folded(uid)
+        ):
+            return
+        th = self.store.current().thresholds
+        weight = fold_weight(self.state.session_type, th)
+        if weight == 0:
+            return
+        event_warnings = self.state.infringement_warnings
+        if self.state.cars_lap is not None and self.state.warnings < event_warnings:
+            log.debug(
+                "LapData total warnings %d below event infringement warnings %d",
+                self.state.warnings,
+                event_warnings,
+            )
+        track_id = self.state.track_id
+        player_laps = [
+            lap
+            for lap in self.db.laps_for(uid, 0)
+            if lap.valid == 1 and lap.sc_status == 0 and lap.lap_time_ms > 0 and lap.traffic == 0
+        ]
+        field_lap_times = []
+        for car_idx in range(1, 22):
+            clean = [
+                lap.lap_time_ms
+                for lap in self.db.laps_for(uid, car_idx)
+                if lap.valid == 1
+                and lap.sc_status == 0
+                and lap.lap_time_ms > 0
+                and lap.traffic == 0
+            ]
+            if len(clean) >= self._th("driver_min_laps", 3):
+                field_lap_times.append(float(median(clean)))
+
+        compound = (
+            collections.Counter(lap.compound for lap in player_laps).most_common(1)[0][0]
+            if player_laps
+            else 0
+        )
+        base_name = self._learned_name(track_id, compound, "base_ms", db=self.driver_db)
+        base_param = self.driver_db.get_param(track_id, compound, base_name)
+        base_ms = float(base_param.value) if base_param is not None else None
+        stints = [stint for stint in self.db.stints_for_session(uid) if stint.n_valid_laps > 0]
+        stint_laps = sum(stint.n_valid_laps for stint in stints)
+        deg_ms_per_lap = (
+            sum(stint.deg_ms_per_lap * stint.n_valid_laps for stint in stints) / stint_laps
+            if stint_laps
+            else None
+        )
+        deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap", db=self.driver_db)
+        deg_param = self.driver_db.get_param(track_id, compound, deg_name)
+        deg_prior = float(deg_param.value) if deg_param is not None else None
+        profile = compute_profile(
+            DriverInputs(
+                lap_times_ms=tuple(lap.lap_time_ms for lap in player_laps),
+                field_lap_times_ms=tuple(int(value) for value in field_lap_times),
+                base_ms=base_ms,
+                deg_ms_per_lap=deg_ms_per_lap,
+                deg_prior_ms_per_lap=deg_prior,
+                laps=max((lap.lap_num for lap in self.db.laps_for(uid, 0)), default=0),
+                lockups=self.state.incident_lockups,
+                spins=self.state.incident_spins,
+                offs=self.state.incident_offs,
+                contacts=self.state.incident_contacts,
+                grid_position=self.state.grid_position,
+                finish_position=self.state.position,
+                overtakes_made=(
+                    self.state.overtakes.made if self.state.event_telemetry_seen else None
+                ),
+                overtakes_lost=(
+                    self.state.overtakes.lost if self.state.event_telemetry_seen else None
+                ),
+                warnings=(
+                    self.state.infringement_warnings if self.state.event_telemetry_seen else None
+                ),
+                penalties=(
+                    self.state.infringement_penalties if self.state.event_telemetry_seen else None
+                ),
+            ),
+            th,
+        )
+        if profile is None:
+            return
+        values = [
+            (PARAM_NAMES[name], value)
+            for name in PARAM_NAMES
+            if (value := getattr(profile, name)) is not None
+        ]
+        values.append((RATING, profile.rating))
+        cap = self._th("param_weight_cap", 50)
+        for target_track in (track_id, GLOBAL_TRACK_ID):
+            for name, value in values:
+                self.driver_db.fold_param(
+                    target_track,
+                    DRIVER_COMPOUND,
+                    name,
+                    value,
+                    weight,
+                    param_weight_cap=cap,
+                )
+        self.driver_db.mark_driver_folded(uid)
+        self._refresh_driver_rating(track_id)
 
     def tick(self, now: float) -> list[Call]:
         self._sync_run_fuel()
@@ -2090,6 +2236,7 @@ class Engine:
         if self.state.track_id != self._track_loaded:
             self._track_loaded = self.state.track_id
             self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
+            self._refresh_driver_rating(self.state.track_id)
         if (
             self.db is not None
             and self.state.session_uid is not None

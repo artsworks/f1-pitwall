@@ -147,6 +147,9 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .chip.ov.avail { border-color: var(--ok); color: var(--ok); }
 .chip.ov.active { border-color: var(--ok); background: var(--ok); color: #000; }
 .chip.sm.on { border-color: var(--info); color: var(--info); }
+.chip.drv.ok { border-color: var(--ok); color: var(--ok); }
+.chip.drv.low { border-color: var(--warn); color: var(--warn); }
+.chip.drv .dim { color: var(--dim); font-weight: normal; }
 
 /* mindset pill (item 15): compact, far right */
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
@@ -599,6 +602,8 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     <span id="sm" class="chip sm on">SM</span>             <!-- aero_mode===1 (Snapshot.active_aero_mode) -->
   </span>
   <span id="voice" class="voice" hidden>● LISTENING 2s</span> <!-- voice.listening, voice.left_s -->
+  <span id="drv" class="chip drv ok">DRV 62 <span class="dim">global</span></span>
+  <!-- driver.rating, driver.source; ALT: chip drv low when below driver.neutral; hidden when driver is null -->
   <!-- Balanced/aggressive engine is being reworked separately; the pill is display only. -->
   <span id="mindset" class="pill">BAL</span>               <!-- mindset='balanced' -->
   <!-- ALT: <span id="mindset" class="pill aggr">AGGR</span> -->

@@ -10,6 +10,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from pitwall.model.deg import DegFit, cliff_age
+from pitwall.model.driver import NEUTRAL, DriverScale
+
+AGGRESSIVE_PLANS = ("undercut", "overcut", "cover", "defend")
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +126,7 @@ def optimise(
     rival_behind_gap_s: float | None = None,
     pit_exit_clean: bool,
     restricted: bool,
+    driver: DriverScale = NEUTRAL,
     mode: Mapping[str, object],
     th: Mapping[str, object],
 ) -> PitPlan:
@@ -176,7 +180,7 @@ def optimise(
         gained = 0.0
         for j in range(uc_laps):
             theirs = rival_ahead.pace_ms + fit.deg_ms_per_lap * (j + 1)
-            ours = fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j
+            ours = fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j + driver.pace_cap_ms
             gained += (theirs - ours) / 1000.0
         undercut_s = round(gained - _f(th, "outlap_warmup_s", 0.8) - gap_ahead_s, 2)
     # Overcut: rival just pitted; our old laps vs their warm-up + fresh laps.
@@ -187,6 +191,7 @@ def optimise(
         for j in range(oc_laps):
             lost += (
                 _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
+                + driver.pace_cap_ms
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
         overcut_s = round(_f(th, "outlap_warmup_s", 0.8) - lost, 2)
@@ -241,12 +246,16 @@ def optimise(
     ) -> PitPlan:
         if confidence is None:
             confidence = rival_conf if idx >= 0 else conf
+        plan_risk = risk if risk is not None else position_risk
+        if name in AGGRESSIVE_PLANS:
+            confidence *= driver.confidence_factor
+            plan_risk = min(1.0, plan_risk + driver.risk_add)
         return PitPlan(
             name,
             lap,
             round(gain, 2),
             round(confidence, 3),
-            round(risk if risk is not None else position_risk, 3),
+            round(plan_risk, 3),
             idx,
             who,
             reason,

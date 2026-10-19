@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,7 @@ from pitwall.state.driving import (
     ContactTracker,
     LockupDetector,
     OffTrackTracker,
+    OvertakeTracker,
     SaveDetector,
     SlipBalance,
     SpinDetector,
@@ -25,6 +27,112 @@ from pitwall.state.session import SessionState, Snapshot
 from .synth import pack_packet
 
 FREE = Corners(-0.02, -0.02, -0.02, -0.02)
+
+
+def _overtake_cars(
+    *,
+    result_status: int = 2,
+    pit_status: int = 0,
+    current_lap_num: int = 3,
+) -> list[SimpleNamespace]:
+    return [
+        SimpleNamespace(
+            result_status=result_status,
+            pit_status=pit_status,
+            current_lap_num=current_lap_num,
+        )
+        for _ in range(3)
+    ]
+
+
+def test_overtake_tracker_counts_made_and_lost() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+
+    tracker.on_event(0, 0, 1, cars, set())
+    cars[1].result_status = 3
+    tracker.on_event(0, 1, 0, cars, set())
+
+    assert (tracker.seen, tracker.made, tracker.lost) == (2, 1, 1)
+
+
+def test_overtake_tracker_ignores_counterpart_in_pit_or_not_active() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[1].pit_status = 1
+    tracker.on_event(0, 0, 1, cars, set())
+
+    cars[1].pit_status = 0
+    for status in (0, 1, 7):
+        cars[1].result_status = status
+        tracker.on_event(0, 0, 1, cars, set())
+
+    assert tracker.seen == 0
+
+
+def test_overtake_tracker_ignores_a_car_pitted_on_its_current_lap() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[1].pit_status = 1
+    tracker.note_lap_data(cars)
+
+    cars[1].pit_status = 0
+    tracker.on_event(0, 0, 1, cars, set())
+    cars[1].current_lap_num += 1
+    tracker.on_event(0, 0, 1, cars, set())
+
+    assert tracker.seen == 1
+
+
+def test_overtake_tracker_ignores_player_in_pits() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[0].pit_status = 1
+
+    tracker.on_event(0, 1, 0, cars, set())
+
+    assert tracker.lost == 0
+
+
+def test_overtake_tracker_ignores_player_pit_lap_then_counts_next_lap() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    cars[0].pit_status = 1
+    tracker.note_lap_data(cars)
+
+    cars[0].pit_status = 0
+    tracker.on_event(0, 1, 0, cars, set())
+    assert tracker.lost == 0
+
+    cars[0].current_lap_num += 1
+    cars[1].current_lap_num += 1
+    tracker.on_event(0, 1, 0, cars, set())
+
+    assert tracker.lost == 1
+
+
+def test_overtake_tracker_ignores_penalized_counterpart() -> None:
+    tracker = OvertakeTracker()
+    tracker.on_event(0, 0, 1, _overtake_cars(), {1})
+
+    assert tracker.seen == 0
+
+
+def test_overtake_tracker_ignores_malformed_events_and_resets() -> None:
+    tracker = OvertakeTracker()
+    cars = _overtake_cars()
+    tracker.on_event(0, 0, 0, cars, set())
+    tracker.on_event(0, 0, 255, cars, set())
+    tracker.on_event(0, 1, 2, cars, set())
+    tracker.on_event(0, 0, 1, None, set())
+
+    assert tracker.seen == 0
+
+    tracker.on_event(0, 0, 1, cars, set())
+    tracker.note_lap_data(_overtake_cars(pit_status=1))
+    tracker.reset()
+    assert (tracker.seen, tracker.made, tracker.lost) == (0, 0, 0)
+    assert tracker._pitted_lap == {}
 
 
 def _slip(**kw: float) -> Corners:
@@ -722,10 +830,13 @@ def test_off_track_places_lost_then_recovered_same_lap() -> None:
     t = _off_run(tr, t, 1.0, (0, 0, 7, 7))
     tr.update_position(9, 3, False)
     t = _off_run(tr, t, 6.0, (0, 0, 0, 0))
+    assert tr.count == 1
     assert tr.lost_recent(t) == 3 and not tr.recovered_recent(t)
     tr.update_position(6, 3, False)
     t = _off_run(tr, t, 0.5, (0, 0, 0, 0))
     assert tr.recovered_recent(t)
+    tr.reset()
+    assert tr.count == 0
 
 
 def test_off_track_no_call_without_place_loss_or_after_lap_ends() -> None:

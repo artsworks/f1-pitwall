@@ -84,6 +84,26 @@ speech:
 mindset:
   active: balanced
 thresholds:
+  # driver rating (docs/26)
+  driver_min_laps: 3                  # clean laps required for a session profile
+  driver_field_min_cars: 3            # rivals required for field-relative pace
+  driver_pace_span_ms: 1500           # pace delta that spans half the rating scale
+  driver_cv_max: 0.02                 # lap-time coefficient of variation for zero score
+  driver_deg_span_ms: 60              # degradation delta that spans half the rating scale
+  driver_errors_max: 0.5              # errors per lap for zero score
+  driver_contact_max: 0.2             # contacts per lap for zero score
+  driver_position_span: 10            # places gained that span half the rating scale
+  driver_overtake_span: 0.5           # net on-track places per lap spanning half the rating scale
+  driver_infringements_max: 0.5       # weighted infringements per lap for zero score
+  driver_penalty_weight: 3            # one penalty counts as this many warnings
+  driver_fold_weight_quali: 1         # qualifying profile weight
+  driver_fold_weight_race: 5          # race profile weight
+  driver_confidence_k: 10              # profile weight for half confidence
+  driver_rating_neutral: 0.5           # ratings at or above this do not scale advice
+  driver_low_confidence_factor: 0.7    # confidence floor at full rating deficit
+  driver_risk_add: 0.2                 # risk added at full deficit and confidence
+  driver_pace_cap_ms: 300              # pace limit at full deficit and confidence
+  driver_min_weight: 1                 # learned rating weight needed for a source
   # M3 race engine (docs/18); per-track overlays may override these.
   prior_min_weight: 2          # model_params weight needed to count as a learned prior
   prior_full_weight: 12        # learned deg weight (laps) trusted in full; lighter blends toward the default

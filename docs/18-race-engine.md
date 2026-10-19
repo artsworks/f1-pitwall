@@ -403,6 +403,12 @@ neutralised pit loss decide it, not the deg fit). Position-loss `risk` is 0 when
 `laps_of_pace < laps_remaining − mode.tyre_life_buffer_laps` (the stop is forced, so the place
 is lost whenever it is taken).
 
+Driver rating uses the learned track profile or the global fallback described in
+[driver rating](26-driver-rating.md). The optimiser lowers confidence and adds risk for
+undercut, overcut, cover and defend. The pace cap changes our undercut laps and old-tyre
+overcut laps, but not cover math. Monte Carlo uses the resulting confidence without a
+separate driver input.
+
 ## `pitwall.strategy.pitwindow`
 
 ```python
@@ -424,7 +430,8 @@ def plan_agreement(...) -> McResult | None
 def optimise(
     *, lap_num, laps_remaining, tyre_age, wear_mean, fit: DegFit, wear_per_lap, pit_loss_s,
     laps_of_pace, sc_status, rival_ahead: RivalView | None, rival_behind: RivalView | None,
-    gap_ahead_s, gap_behind_s, pit_exit_clean, restricted, mode: Mapping[str, float|str], th: Mapping[str, float],
+    gap_ahead_s, gap_behind_s, pit_exit_clean, restricted, driver: DriverScale = NEUTRAL,
+    mode: Mapping[str, float|str], th: Mapping[str, float],
     horizon: int,
 ) -> PitPlan
 ```

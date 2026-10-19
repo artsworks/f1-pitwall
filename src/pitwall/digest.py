@@ -17,9 +17,16 @@ from typing import Any
 from pitwall.config.thresholds import threshold as _th
 from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
+from pitwall.model.driver import (
+    DRIVER_COMPOUND,
+    GLOBAL_TRACK_ID,
+    RATING,
+    confidence,
+    learned_rating,
+)
 from pitwall.store.db import Database
 
-DIGEST_VERSION = 3
+DIGEST_VERSION = 4
 
 
 def _record_inputs(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -350,6 +357,26 @@ def build_digest(
     stops = stop_laps(laps)
     parts = stints(laps, stops)
     session = db.session_row(uid) or {}
+    track_id = session.get("track_id")
+    track_params = db.params_for_track(track_id) if isinstance(track_id, int) else []
+    global_params = db.params_for_track(GLOBAL_TRACK_ID)
+    rating, driver_confidence, driver_source = learned_rating(track_params, global_params, th)
+    track_rating = next(
+        (
+            param
+            for param in track_params
+            if param.compound == DRIVER_COMPOUND and param.name == RATING
+        ),
+        None,
+    )
+    global_rating = next(
+        (
+            param
+            for param in global_params
+            if param.compound == DRIVER_COMPOUND and param.name == RATING
+        ),
+        None,
+    )
     green = [
         lap.lap_time_ms
         for lap in laps
@@ -441,6 +468,16 @@ def build_digest(
             "fuel_margin_error_mean": _mean(_errors(outcomes, "fuel_margin")),
             "pit_loss_green_s": _mean([p.loss_ms / 1000 for p in pits if not p.neutralised]),
         },
+        "driver": {
+            "rating": rating,
+            "confidence": driver_confidence,
+            "source": driver_source,
+            "track_weight": track_rating.weight if track_rating is not None else 0.0,
+            "global_rating": global_rating.value if global_rating is not None else 0.5,
+            "global_confidence": (
+                confidence(global_rating.weight, th) if global_rating is not None else 0.0
+            ),
+        },
         "outcomes": dict(sorted(labels.items())),
         "setup": {
             "recs": len(setup_recs),
@@ -474,6 +511,13 @@ def format_digest(d: Mapping[str, Any]) -> str:
     neg_pct = quality.get("neg_rate_pct")
     good_text = f"{good_pct:g}%" if good_pct is not None else "n/a"
     neg_text = f"{neg_pct:g}%" if neg_pct is not None else "n/a"
+    driver = d.get("driver", {})
+    driver_line = (
+        f"driver rating {driver['rating']:.2f} "
+        f"(confidence {driver['confidence']:.2f}, {driver['source']})"
+        if driver.get("source")
+        else "driver rating n/a"
+    )
     lines = [
         f"session {s['uid']} track {s['track_id']} laps {s['laps']}"
         f"  strategy {d['strategy']['executed'] or '-'}  stops {d['stops']}",
@@ -481,6 +525,7 @@ def format_digest(d: Mapping[str, Any]) -> str:
         f"quality {good_text} good · neg {neg_text} · "
         f"{quality.get('unanswered_questions', 0)} unanswered questions · "
         f"{quality.get('ungraded', 0)} ungraded",
+        driver_line,
         "findings:",
     ]
     lines += [f"  - {f}" for f in d["findings"]] or ["  (none)"]

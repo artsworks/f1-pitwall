@@ -22,9 +22,10 @@ from pitwall.debrief import (
 )
 from pitwall.metrics import Metrics
 from pitwall.model.deg import DegFit
+from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
 from pitwall.server.app import create_app
 from pitwall.server.hub import Hub
-from pitwall.state.lap import LapSummary
+from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
 
 
@@ -315,8 +316,10 @@ def test_incidents_keep_unknown_sc_status_values() -> None:
     db = Database(":memory:")
     db.upsert_session(156, track_id=16, session_type=15)
     _insert_lap(db, 156, 1, sc_status=4)
+    _insert_lap(db, 156, 2, sc_status=SC_UNKNOWN)
 
     assert "<td>4</td>" in _incidents_section(db.laps_for(156))
+    assert "<td>unknown</td>" in _incidents_section(db.laps_for(156))
     db.close()
 
 
@@ -525,6 +528,24 @@ def test_debrief_labels_sprint_and_race_by_weekend_link() -> None:
     index = render_debrief_index(db)
     assert "<td>Sprint</td>" in index
     assert "<td>Race</td>" in index
+
+
+def test_summary_shows_track_and_global_driver_rating() -> None:
+    db = Database(":memory:")
+    db.upsert_session(166, track_id=7, session_type=15)
+    db.set_param(7, DRIVER_COMPOUND, RATING, 0.62, 5)
+    db.set_param(7, DRIVER_COMPOUND, "driver_pace_delta_ms", -150, 5)
+    db.set_param(GLOBAL_TRACK_ID, DRIVER_COMPOUND, RATING, 0.4, 10)
+
+    report = render_debrief(db, 166, ConfigStore().current())
+
+    assert "DRIVER RATING" in report
+    assert "overall rating" in report
+    assert "pace delta ms" in report
+    assert "overtakes per lap" in report
+    assert "infringements per lap" in report
+    assert "track" in report and "global" in report
+    assert "0.620" in report and "0.400" in report
 
 
 def test_debrief_labels_from_stored_weekend_structure() -> None:

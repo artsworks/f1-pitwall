@@ -90,7 +90,8 @@ Zone rules:
 
 - **A status bar**: place freshness at the far left. Right-align session, lap and
   position. The OV chip lights when overtake mode is active or earned, and the SM chip
-  lights in straight mode. The compact mindset pill sits at the far right.
+  lights in straight mode. The DRV chip sits left of the mindset pill and shows the
+  learned driver rating. The compact mindset pill sits at the far right.
 - **B banner**: keep it full-width and fixed-height. It holds the current call, one
   evidence line and one dim PREVIOUS line. The main screen has no radio log. With no
   call, the banner says "— radio quiet —".
@@ -201,6 +202,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries in a strip under the tiles; wraps only when needed; amber ≥ 5 %, red ≥ 25 %; smaller text past 3 entries; `✓ none` when all values and faults are zero |
 | Last laps | `race.recent_laps[{lap,time_ms,sectors_ms}]` | Two rows compare the newer lap with the lap before. Each shows its lap and time, lap delta, and S1/S2/S3 deltas. Keep three laps so the oldest is the baseline. Negative deltas are green and positive deltas are amber. With no laps, row 2 says `no lap yet`. With one lap, row 2 shows its time and `--` for the delta and sectors. Missing rows and sectors show `--`; a sector delta is `--` if either value is 0 |
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
+| Driver rating chip | `driver.{rating,confidence,source,neutral}` | `DRV 62 global`; green at or above `neutral` (0.5), amber below; hidden when `driver` is null; tooltip shows confidence |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |
 | Banner age | envelope `t` of the `call` frame relative to a server timestamp + local monotonic elapsed time | `8 s ago`, updated once per second; resumed calls need their original timestamp from the server without assuming clocks are synchronized |

@@ -8,8 +8,10 @@ copies; rules decide what is worth saying.
 from __future__ import annotations
 
 import math
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from math import degrees, hypot
+from typing import Any
 
 from pitwall.protocol.layouts import Corners
 
@@ -514,6 +516,7 @@ class OffTrackTracker:
         self._recovered_at: float | None = None
         self._position = 0
         self._cur_lap = 0
+        self.count = 0
 
     def update_position(self, position: int, lap: int, in_pit: bool) -> None:
         if in_pit or lap != self._lap:
@@ -533,6 +536,7 @@ class OffTrackTracker:
             went_off = t - self._off_since >= self.min_s
             self._off_since = None
             if went_off:
+                self.count += 1
                 self._back_at = t
             return
         if self._back_at is not None and t - self._back_at >= self.settle_s:
@@ -553,6 +557,57 @@ class OffTrackTracker:
 
     def recovered_recent(self, t: float) -> bool:
         return self._recovered_at is not None and 0 <= t - self._recovered_at <= self.hold_s
+
+
+class OvertakeTracker:
+    """On-track overtakes from OVTK events, filtered by both cars' LapData."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.seen = 0
+        self.made = 0
+        self.lost = 0
+        self._pitted_lap: dict[int, int] = {}
+
+    def note_lap_data(self, cars: Sequence[Any]) -> None:
+        for i, car in enumerate(cars):
+            if car.pit_status != 0:
+                self._pitted_lap[i] = car.current_lap_num
+
+    def on_event(
+        self,
+        player_idx: int,
+        overtaker: int,
+        overtaken: int,
+        cars: Sequence[Any] | None,
+        penalized: Collection[int],
+    ) -> None:
+        if (
+            overtaker == overtaken
+            or (player_idx != overtaker and player_idx != overtaken)
+            or cars is None
+            or not (0 <= overtaker < len(cars) and 0 <= overtaken < len(cars))
+        ):
+            return
+        counterpart = overtaken if player_idx == overtaker else overtaker
+        car = cars[counterpart]
+        player = cars[player_idx]
+        if (
+            player.pit_status != 0
+            or self._pitted_lap.get(player_idx) == player.current_lap_num
+            or car.result_status not in (2, 3)
+            or car.pit_status != 0
+            or self._pitted_lap.get(counterpart) == car.current_lap_num
+            or counterpart in penalized
+        ):
+            return
+        self.seen += 1
+        if player_idx == overtaker:
+            self.made += 1
+        else:
+            self.lost += 1
 
 
 class ContactTracker:

@@ -38,6 +38,7 @@ from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
 from pitwall.hindsight import grade_and_store
 from pitwall.model.deg import DEG_FUEL_REF, DegFit, fit_is_clean, fit_stint, scoped
+from pitwall.model.driver import GLOBAL_TRACK_ID
 from pitwall.protocol.enums import session_kind
 from pitwall.setup.states import majority_state
 from pitwall.store.db import Database, ModelParam
@@ -90,6 +91,8 @@ def _stint_param(name: str) -> str:
 
 
 def _bad_reason(p: ModelParam, th: Mapping[str, object]) -> str:
+    if p.track_id == GLOBAL_TRACK_ID and p.name.startswith("driver_"):
+        return ""
     if (
         p.track_id == TUNE_TRACK
         and p.compound == TUNE_COMPOUND

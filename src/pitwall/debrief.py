@@ -19,6 +19,13 @@ from pitwall.digest import call_quality
 from pitwall.hindsight import stop_laps
 from pitwall.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
+from pitwall.model.driver import (
+    DRIVER_COMPOUND,
+    GLOBAL_TRACK_ID,
+    PARAM_NAMES,
+    RATING,
+    component_score,
+)
 from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
@@ -225,7 +232,7 @@ _ACTUAL_COMPOUNDS = {
     20: "C1",
     21: "C0",
 }
-_SC_WORDS = {0: "green", 1: "SC", 2: "VSC", 3: "formation"}
+_SC_WORDS = {-1: "unknown", 0: "green", 1: "SC", 2: "VSC", 3: "formation"}
 _TRACK_NAMES = {
     0: "Melbourne",
     2: "Shanghai",
@@ -520,7 +527,7 @@ def _lap_chart(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) 
     for lap in timed:
         css_class, word = _compound(lap.visual, lap.compound)
         slow = lap.lap_time_ms > ymax
-        invalid = not lap.valid or lap.sc_status > 0 or slow
+        invalid = not lap.valid or lap.sc_status != 0 or slow
         cy = top if slow else min(height - bottom, max(top, y(lap.lap_time_ms)))
         reason = ", ".join(lap.invalid_reasons) or (
             _SC_WORDS.get(lap.sc_status, str(lap.sc_status))
@@ -722,6 +729,7 @@ def _stint_summary(stints: list[StintRow], laps: list[LapRow]) -> str:
 
 
 def _summary_section(
+    db: Database,
     session: dict[str, Any],
     laps: list[LapRow],
     pits: list[PitEventRow],
@@ -729,6 +737,7 @@ def _summary_section(
     calls: list[dict[str, Any]],
     grades: dict[str, dict[str, Any]],
     quality: dict[str, Any],
+    settings: Settings,
 ) -> str:
     clean = [lap for lap in laps if lap.valid and lap.sc_status == 0 and lap.lap_time_ms > 0]
     fired = [call for call in calls if call.get("outcome") == "fired"]
@@ -791,11 +800,52 @@ def _summary_section(
         ],
         "sessions",
     )
+    track_id = session.get("track_id")
+    track_params = db.params_for_track(track_id) if isinstance(track_id, int) else []
+    global_params = db.params_for_track(GLOBAL_TRACK_ID)
+    driver_rows = []
+    for source, params in (("track", track_params), ("global", global_params)):
+        values = {param.name: param for param in params if param.compound == DRIVER_COMPOUND}
+        rating = values.get(RATING)
+        driver_rows.append(
+            (
+                source,
+                "overall rating",
+                f"{rating.value:.3f}" if rating is not None else "n/a",
+                f"{rating.value:.3f}" if rating is not None else "n/a",
+                f"{rating.weight:g}" if rating is not None else "n/a",
+            )
+        )
+        for component, name in PARAM_NAMES.items():
+            param = values.get(name)
+            driver_rows.append(
+                (
+                    source,
+                    component.replace("_", " "),
+                    f"{param.value:.3f}" if param is not None else "n/a",
+                    (
+                        f"{component_score(component, param.value, settings.thresholds):.3f}"
+                        if param is not None
+                        else "n/a"
+                    ),
+                    f"{param.weight:g}" if param is not None else "n/a",
+                )
+            )
+    driver_card = _card(
+        "DRIVER RATING",
+        _table(
+            ("Source", "Component", "Learned value", "Score", "Weight"),
+            driver_rows,
+            "driver-rating",
+        ),
+        "model_params · track and global",
+    )
     content = (
         f"<p class='lede'>{_esc(summary_text)}</p><div class='row cols-4'>"
         + "".join(cards)
         + "</div>"
         + _card("SESSION DETAILS", table)
+        + driver_card
     )
     return _section("summary", "00", "Summary", content)
 
@@ -1421,7 +1471,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + "</nav>"
     )
     sections = (
-        _summary_section(session, laps, pits, pit_laps, calls, grades, quality)
+        _summary_section(db, session, laps, pits, pit_laps, calls, grades, quality, settings)
         + _pace_section(laps, stints, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)

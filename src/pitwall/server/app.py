@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from pitwall.config.loader import ConfigStore
+from pitwall.config.thresholds import threshold
 from pitwall.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.protocol.enums import session_kind, session_label, weekend_order
@@ -690,6 +691,14 @@ def state_payload(
         "ers_pct": snapshot.ers_store_pct,
         "safety_car": snapshot.safety_car_status,
         "mindset": mindset or settings.mindset.active,
+        "driver": {
+            "rating": snapshot.driver_rating,
+            "confidence": snapshot.driver_confidence,
+            "source": snapshot.driver_rating_source,
+            "neutral": threshold(settings.thresholds, "driver_rating_neutral", 0.5),
+        }
+        if snapshot.driver_rating_source
+        else None,
         "page": page or (settings.ui.pages[0] if settings.ui.pages else "race"),
         "pages": list(settings.ui.pages),
         "verbosity": settings.policy.verbosity,

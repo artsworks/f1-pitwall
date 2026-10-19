@@ -8,6 +8,7 @@ from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
 from pitwall.digest import DIGEST_VERSION
 from pitwall.ingest import Ingest, expand_paths, header_calls_mode, ingest_recordings
+from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
@@ -94,6 +95,57 @@ def _counts(db: Database) -> tuple[int, ...]:
     )
 
 
+def _stored_race_session(db: Database, uid: int, session_type: int = 15) -> None:
+    db.upsert_session(uid, track_id=7, session_type=session_type, started_at=1.0)
+    for car_idx in range(4):
+        for lap_num in range(1, 5):
+            db.insert_lap(
+                uid,
+                car_idx,
+                LapSummary(lap_num, 90_000, 30_000, 30_000, 17, lap_num, 10.0, True),
+            )
+    db.upsert_stint(uid, 0, 17, 1, 4, DegFit(90_000, 100.0, 30.0, 4, 100.0, 0.9, "fit"))
+    db.fold_param(7, 17, "base_ms", 90_000, weight=4)
+    db.fold_param(7, 17, "deg_ms_per_lap", 100, weight=4)
+    db.insert_grade_if_absent(
+        {
+            "session_uid": uid,
+            "call_id": "existing",
+            "rule_id": "existing",
+            "grade": "good",
+            "graded_at": 1.0,
+        }
+    )
+
+
+def _session_artifact_counts(db: Database, uid: int) -> tuple[int, ...]:
+    sessions = int(db._conn.execute("SELECT count(*) FROM sessions").fetchone()[0])  # noqa: SLF001
+    return (
+        sessions,
+        len(db.laps_for(uid)),
+        len(db.stints_for_session(uid)),
+        len(db.grades_for_session(uid)),
+        len(db.outcomes_for_session(uid)),
+    )
+
+
+def _stored_race_recording(path: Path, uid: int, session_type: int = 15) -> Path:
+    return write_packet_stream(
+        path,
+        race_stream(
+            RaceSpec(
+                laps=5,
+                session_uid=uid,
+                session_type=session_type,
+                dt=1.0,
+                send_session_end=True,
+            )
+        ),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+
+
 def test_expand_paths_directories_and_globs(tmp_path: Path) -> None:
     nested = tmp_path / "nested"
     nested.mkdir()
@@ -177,6 +229,132 @@ def test_mirrored_session_is_digest_only(tmp_path: Path) -> None:
     assert len(result) == 1 and result[0].status == "digest_only"
     assert len(db.laps_for(uid)) == 1
     assert db.is_ingested(uid, DIGEST_VERSION)
+
+
+@pytest.mark.replay
+def test_ingest_refolds_stored_race_once_without_changing_session_data(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261011
+    recording = _stored_race_recording(tmp_path / "stored-race.f1bin", uid)
+    _stored_race_session(db, uid)
+    counts_before = _session_artifact_counts(db, uid)
+    non_driver_params_before = [
+        param for param in db.all_params() if not param.name.startswith("driver_")
+    ]
+
+    first = ingest_recordings(
+        db, [str(recording)], ConfigStore().current(), out_dir=tmp_path / "digests"
+    )
+
+    assert first[0].status == "digest_only"
+    assert "driver_refolded=True" in first[0].findings
+    assert db.driver_folded(uid)
+    assert db.get_param(7, 0, "driver_rating").weight == 5
+    assert db.get_param(-2, 0, "driver_rating").weight == 5
+    assert _session_artifact_counts(db, uid) == counts_before
+    assert [param for param in db.all_params() if not param.name.startswith("driver_")] == (
+        non_driver_params_before
+    )
+
+    second = ingest_recordings(
+        db, [str(recording)], ConfigStore().current(), out_dir=tmp_path / "digests"
+    )
+
+    assert second[0].status == "skipped"
+    assert "driver_refolded=True" not in second[0].findings
+    assert db.get_param(7, 0, "driver_rating").weight == 5
+    assert db.get_param(-2, 0, "driver_rating").weight == 5
+    assert _session_artifact_counts(db, uid) == counts_before
+
+
+@pytest.mark.replay
+def test_ingest_refolds_already_ingested_stored_race(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261012
+    recording = _stored_race_recording(tmp_path / "old-race.f1bin", uid)
+    _stored_race_session(db, uid)
+    db.mark_ingested(uid, DIGEST_VERSION, str(recording))
+
+    result = ingest_recordings(
+        db, [str(recording)], ConfigStore().current(), out_dir=tmp_path / "digests"
+    )
+
+    assert result[0].status == "skipped"
+    assert "driver_refolded=True" in result[0].findings
+    assert db.driver_folded(uid)
+    assert db.get_param(7, 0, "driver_rating").weight == 5
+    assert db.get_param(-2, 0, "driver_rating").weight == 5
+
+
+def test_ingest_does_not_refold_when_recording_is_missing(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261013
+    _stored_race_session(db, uid)
+
+    result = ingest_recordings(
+        db,
+        [str(tmp_path / "missing.f1bin")],
+        ConfigStore().current(),
+        out_dir=tmp_path / "digests",
+    )
+
+    assert result == []
+    assert not db.driver_folded(uid)
+    assert db.get_param(7, 0, "driver_rating") is None
+
+
+@pytest.mark.replay
+def test_ingest_does_not_replay_practice_session_for_driver_rating(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pitwall.engine
+
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261014
+    recording = _stored_race_recording(tmp_path / "practice.f1bin", uid, session_type=3)
+    _stored_race_session(db, uid, session_type=3)
+
+    def unexpected_replay(*args: object, **kwargs: object) -> None:
+        raise AssertionError("practice session must not be replayed for a driver rating")
+
+    monkeypatch.setattr(pitwall.engine, "run_replay", unexpected_replay)
+    result = ingest_recordings(
+        db, [str(recording)], ConfigStore().current(), out_dir=tmp_path / "digests"
+    )
+
+    assert result[0].status == "digest_only"
+    assert "driver_refolded=True" not in result[0].findings
+    assert not db.driver_folded(uid)
+    assert db.get_param(7, 0, "driver_rating") is None
+
+
+@pytest.mark.replay
+def test_ingest_folds_qualifying_recording_without_send(tmp_path: Path) -> None:
+    db = Database(tmp_path / "learn.sqlite")
+    uid = 0xF1261010
+    recording = write_packet_stream(
+        tmp_path / "quali.f1bin",
+        race_stream(
+            RaceSpec(
+                laps=5,
+                session_uid=uid,
+                session_type=5,
+                dt=1.0,
+                send_session_end=False,
+            )
+        ),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+
+    result = ingest_recordings(
+        db, [str(recording)], ConfigStore().current(), out_dir=tmp_path / "digests"
+    )
+
+    assert len(result) == 1 and result[0].status == "ingested"
+    assert db.driver_folded(uid)
+    assert db.get_param(7, 0, "driver_rating").weight == 1
+    assert db.get_param(-2, 0, "driver_rating").weight == 1
 
 
 @pytest.mark.replay
