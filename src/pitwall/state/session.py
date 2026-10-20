@@ -2308,6 +2308,7 @@ class SessionState:
             if phase == "flying":
                 cutoff_ms = quali_cutoff_ms(
                     field_best,
+                    self._player_idx,
                     self.num_active_cars,
                     self.session_type,
                     advance,

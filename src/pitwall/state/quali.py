@@ -128,6 +128,7 @@ def quali_cutoff_pos(session_type: int, advance: Mapping[int, int]) -> int:
 
 def quali_cutoff_ms(
     field_best_laps: Sequence[int],
+    player_idx: int,
     num_active_cars: int,
     session_type: int,
     advance: Mapping[int, int],
@@ -139,6 +140,9 @@ def quali_cutoff_ms(
         return 0
     times = sorted(t for t in field_best_laps if t > 0)
     unset = max(0, num_active_cars - len(times))
+    player = field_best_laps[player_idx] if 0 <= player_idx < len(field_best_laps) else 0
+    if player <= 0:
+        unset = max(0, unset - 1)
     cutoff_idx = cutoff_pos - 1 - unset
     if cutoff_idx < 0 or cutoff_idx >= len(times):
         return 0
@@ -193,7 +197,7 @@ def quali_through(
     cutoff_pos = quali_cutoff_pos(session_type, advance)
     if cutoff_pos <= 0:
         return False
-    cutoff = quali_cutoff_ms(field_best_laps, num_active_cars, session_type, advance)
+    cutoff = quali_cutoff_ms(field_best_laps, player_idx, num_active_cars, session_type, advance)
     if cutoff <= 0 or (player_position > 0 and player_position > cutoff_pos):
         return False
     frac = min(1.0, max(0.0, time_left_s / open_window_s)) if open_window_s > 0 else 0.0
