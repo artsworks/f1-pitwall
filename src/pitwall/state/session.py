@@ -1509,6 +1509,7 @@ class SessionState:
         margin_ms, margin_kind = quali_margin_ms(
             field_best,
             self._player_idx,
+            self.num_active_cars,
             self.session_type,
             self._th_map("quali_advance", {5: 15, 6: 10, 7: 0}),
         )
@@ -2285,6 +2286,7 @@ class SessionState:
             margin_ms, margin_kind = quali_margin_ms(
                 field_best,
                 self._player_idx,
+                self.num_active_cars,
                 self.session_type,
                 advance,
             )
@@ -2306,6 +2308,7 @@ class SessionState:
             if phase == "flying":
                 cutoff_ms = quali_cutoff_ms(
                     field_best,
+                    self.num_active_cars,
                     self.session_type,
                     advance,
                 )

@@ -128,6 +128,7 @@ def quali_cutoff_pos(session_type: int, advance: Mapping[int, int]) -> int:
 
 def quali_cutoff_ms(
     field_best_laps: Sequence[int],
+    num_active_cars: int,
     session_type: int,
     advance: Mapping[int, int],
 ) -> int:
@@ -137,14 +138,17 @@ def quali_cutoff_ms(
     if cutoff_pos <= 0:
         return 0
     times = sorted(t for t in field_best_laps if t > 0)
-    if cutoff_pos <= 0 or len(times) < cutoff_pos:
+    unset = max(0, num_active_cars - len(times))
+    cutoff_idx = cutoff_pos - 1 - unset
+    if cutoff_idx < 0 or cutoff_idx >= len(times):
         return 0
-    return times[cutoff_pos - 1]
+    return times[cutoff_idx]
 
 
 def quali_margin_ms(
     field_best_laps: Sequence[int],
     player_idx: int,
+    num_active_cars: int,
     session_type: int,
     advance: Mapping[int, int],
 ) -> tuple[int, str]:
@@ -157,12 +161,14 @@ def quali_margin_ms(
     if player <= 0:
         return 0, ""
     others = sorted(t for i, t in enumerate(field_best_laps) if i != player_idx and t > 0)
+    unset = max(0, num_active_cars - 1 - len(others))
     cutoff_pos = quali_cutoff_pos(session_type, advance)
     if cutoff_pos > 0:
-        if len(others) < cutoff_pos:
+        cutoff_idx = cutoff_pos - 1 - unset
+        if cutoff_idx < 0 or cutoff_idx >= len(others):
             return 0, ""
-        return others[cutoff_pos - 1] - player, "cut"
-    if not others:
+        return others[cutoff_idx] - player, "cut"
+    if unset > 0 or not others:
         return 0, ""
     return others[0] - player, "pole"
 
@@ -185,14 +191,11 @@ def quali_through(
     if player <= 0:
         return False
     cutoff_pos = quali_cutoff_pos(session_type, advance)
-    if cutoff_pos <= 0 or (player_position > 0 and player_position > cutoff_pos):
+    if cutoff_pos <= 0:
         return False
-    times = sorted(lap for lap in field_best_laps if lap > 0)
-    unset = max(0, num_active_cars - len(times))
-    cutoff_idx = cutoff_pos - 1 - unset
-    if cutoff_idx < 0 or cutoff_idx >= len(times):
+    cutoff = quali_cutoff_ms(field_best_laps, num_active_cars, session_type, advance)
+    if cutoff <= 0 or (player_position > 0 and player_position > cutoff_pos):
         return False
-    cutoff = times[cutoff_idx]
     frac = min(1.0, max(0.0, time_left_s / open_window_s)) if open_window_s > 0 else 0.0
     return player < cutoff - (safe_margin_ms + open_margin_ms * frac)
 

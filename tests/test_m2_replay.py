@@ -381,7 +381,7 @@ def test_quali_through_waits_for_late_safe_margin(tmp_path: Path) -> None:
 
 def test_abort_lap_fires_once(tmp_path: Path) -> None:
     stream: list[tuple[float, bytes]] = []
-    # 20-car Q1: rivals' best laps make the cut-off 90.000 s (15th of 20).
+    # The untimed player counts ahead, so Q1's cut-off is the 14th timed rival.
     for i in range(1, 20):
         lap_ms = 89_000 if i <= 14 else (90_000 if i == 15 else 92_000)
         stream.append((i * 0.05, _history_pkt(i, lap_ms, i * 0.05)))
@@ -466,7 +466,7 @@ def test_abort_lap_fires_once(tmp_path: Path) -> None:
     rows = _read_log(log_path)
     fired = [r for r in rows if r["outcome"] == "fired" and r["rule_id"] == "abort_lap"]
     assert len(fired) == 1
-    assert "2.0" in fired[0]["text"]  # projected 92.0 vs 90.0 cutoff -> 2.0 s deficit
+    assert "3.0" in fired[0]["text"]  # projected 92.0 vs 89.0 cutoff -> 3.0 s deficit
 
 
 def test_butn_ack_and_neg(tmp_path: Path) -> None:

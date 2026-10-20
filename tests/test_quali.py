@@ -8,6 +8,7 @@ from pitwall.state.quali import (
     projected_lap_ms,
     quali_cutoff_ms,
     quali_cutoff_pos,
+    quali_margin_ms,
     quali_through,
     release_window,
 )
@@ -98,13 +99,49 @@ def test_projected_lap_ms() -> None:
 def test_quali_cutoff() -> None:
     field = [90_000 + i * 100 for i in range(20)]  # 90.0 .. 91.9 sorted
     # Q1 advances 15 cars, so the cut-off is the 15th best (index 14).
-    assert quali_cutoff_ms(field, 5, {5: 15, 6: 10, 7: 0}) == 91_400
+    assert quali_cutoff_ms(field, 20, 5, {5: 15, 6: 10, 7: 0}) == 91_400
     # Q3: nobody eliminated -> 0
-    assert quali_cutoff_ms(field, 7, {5: 15, 6: 10, 7: 0}) == 0
-    # too few laps set -> everyone through so far
-    assert quali_cutoff_ms(field[:10], 5, {5: 15, 6: 10, 7: 0}) == 0
+    assert quali_cutoff_ms(field, 20, 7, {5: 15, 6: 10, 7: 0}) == 0
+    # Untimed cars count as ahead of the timed field.
+    assert quali_cutoff_ms(field[:10], 20, 5, {5: 15, 6: 10, 7: 0}) == field[4]
+    assert quali_cutoff_ms(field[:4], 20, 5, {5: 15, 6: 10, 7: 0}) == 0
     # sprint shootout 10 maps to Q1
-    assert quali_cutoff_ms(field, 10, {5: 15, 6: 10, 7: 0}) == 91_400
+    assert quali_cutoff_ms(field, 20, 10, {5: 15, 6: 10, 7: 0}) == 91_400
+
+
+def test_quali_cutoff_counts_untimed_cars() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    times = [80_000 + i * 100 for i in range(16)]
+    assert quali_cutoff_ms(times[:10], 16, 6, advance) == times[3]
+    assert quali_cutoff_ms(times[:14], 16, 6, advance) == times[7]
+    assert quali_cutoff_ms(times, 16, 6, advance) == times[9]
+    assert quali_cutoff_ms(times[:4], 16, 6, advance) == 0
+
+
+def test_quali_margin_counts_untimed_cars() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    field = [
+        81_000,
+        79_000,
+        79_500,
+        80_000,
+        80_500,
+        81_500,
+        82_000,
+        82_500,
+        82_800,
+        82_900,
+    ]
+    field.extend([0] * 6)
+    assert quali_margin_ms(field, 0, 16, 6, advance) == (-500, "cut")
+
+    complete_field = field[:10] + [83_000, 83_500, 84_000, 84_500, 85_000, 85_500]
+    assert quali_margin_ms(complete_field, 0, 16, 6, advance) == (2_000, "cut")
+    incomplete_field = [81_000, 79_000, 79_500, 80_000, 80_500] + [0] * 11
+    assert quali_margin_ms(incomplete_field, 0, 16, 6, advance) == (0, "")
+
+    # Q3 cannot estimate pole margin while an active car has no time.
+    assert quali_margin_ms([80_000, 81_000, 0], 0, 3, 7, advance) == (0, "")
 
 
 def test_quali_cutoff_pos() -> None:
@@ -229,3 +266,13 @@ def test_abort_advice() -> None:
     # Sector 0 never advises
     a = abort_advice(95_000, 91_000, 0, 0, fresh_sets_current=2, ers_store_pct=30.0)
     assert not a.advised
+
+
+def test_abort_advice_uses_untimed_adjusted_cutoff() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    field = [79_000, 79_500, 80_000, 80_500, 80_800, 81_000, 81_200, 81_400, 82_000, 83_000]
+    cutoff = quali_cutoff_ms(field, 16, 6, advance)
+    old_cutoff = sorted(field)[9]
+    assert cutoff == sorted(field)[3]
+    assert abort_advice(85_000, cutoff, 81_000, 2, 1, 50.0).reason != "through"
+    assert abort_advice(85_000, old_cutoff, 81_000, 2, 1, 50.0).reason == "through"

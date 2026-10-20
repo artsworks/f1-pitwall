@@ -12,6 +12,7 @@ from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.server.app import state_payload
+from pitwall.state.quali import quali_margin_ms
 from pitwall.state.runplan import COOL, HOT, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.state.session import SessionState, Snapshot
 
@@ -47,6 +48,14 @@ def test_run_plan_decisions() -> None:
     assert _plan(time_left_s=0.0) == Plan("box", "flag")
     # unknown margin (no field times yet) is never "safe"
     assert _plan(margin_ms=0, margin_kind="", ers_pct=5.0) == Plan("cool", "battery")
+
+
+def test_incomplete_quali_margin_does_not_plan_box_safe() -> None:
+    field = [81_000, 79_000, 79_500, 80_000, 80_500, 81_500, 82_000, 82_500, 82_800, 82_900]
+    field.extend([0] * 6)
+    margin_ms, margin_kind = quali_margin_ms(field, 0, 16, 6, {5: 15, 6: 10, 7: 0})
+    assert margin_ms < 0 and margin_kind == "cut"
+    assert _plan(margin_ms=margin_ms, margin_kind=margin_kind) != Plan("box", "safe")
 
 
 def test_mistakes_text() -> None:
