@@ -66,7 +66,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "prep_traffic_ahead",
         "quali_safe_cut",
         "quali_safe_pole",
-        "quali_through",  # replay scenario unresolved: field history did not trigger a decision
         "saved_moment",
         "setup_bias",
         "setup_on_throttle",  # replay scenario unresolved: high slip did not yield advice

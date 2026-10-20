@@ -12,6 +12,7 @@ from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
 from pitwall.server.app import state_payload
+from pitwall.state.quali import quali_margin_ms
 from pitwall.state.runplan import COOL, HOT, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.state.session import SessionState, Snapshot
 
@@ -47,6 +48,14 @@ def test_run_plan_decisions() -> None:
     assert _plan(time_left_s=0.0) == Plan("box", "flag")
     # unknown margin (no field times yet) is never "safe"
     assert _plan(margin_ms=0, margin_kind="", ers_pct=5.0) == Plan("cool", "battery")
+
+
+def test_incomplete_quali_margin_does_not_plan_box_safe() -> None:
+    field = [81_000, 79_000, 79_500, 80_000, 80_500, 81_500, 82_000, 82_500, 82_800, 82_900]
+    field.extend([0] * 6)
+    margin_ms, margin_kind = quali_margin_ms(field, 0, 16, 6, {5: 15, 6: 10, 7: 0})
+    assert margin_ms < 0 and margin_kind == "cut"
+    assert _plan(margin_ms=margin_ms, margin_kind=margin_kind) != Plan("box", "safe")
 
 
 def test_mistakes_text() -> None:
@@ -624,6 +633,8 @@ def test_tyre_change_drops_other_compound_battery_use() -> None:
 
 
 WET_Q = Path(os.environ.get("PITWALL_WET_Q_RECORDING", "~/recordings/wet_q.f1bin.zst")).expanduser()
+Q2_THROUGH_RAW = os.environ.get("PITWALL_Q2_THROUGH_RECORDING")
+Q2_THROUGH = Path(Q2_THROUGH_RAW).expanduser() if Q2_THROUGH_RAW else None
 
 
 @pytest.mark.skipif(
@@ -647,6 +658,34 @@ def test_wet_q_recording_run_plan(tmp_path: Path) -> None:
     # Brazil wet quali on inters (2026-10-13): battery 37.5% and 34.5% at the
     # line, laps spent 9.9% and 3.0%
     assert fired[:2] == ["plan_push", "plan_push"]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    Q2_THROUGH is None or not Q2_THROUGH.exists(),
+    reason="set PITWALL_Q2_THROUGH_RECORDING to the Q2 recording",
+)
+def test_q2_recording_does_not_call_through_early(tmp_path: Path) -> None:
+    import asyncio
+    import json
+
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine, run_replay
+
+    assert Q2_THROUGH is not None
+    log = tmp_path / "q2-through.jsonl"
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        decision_log_path=log,
+    )
+    asyncio.run(run_replay(Q2_THROUGH, engine, None))
+    engine.dispatcher.log.flush()
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any(
+        row.get("rule_id") == "quali_through" and row.get("outcome") in {"queued", "fired"}
+        for row in rows
+    )
 
 
 def test_run_tracker_extends_cool_lap() -> None:

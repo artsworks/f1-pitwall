@@ -119,12 +119,13 @@ def test_quali_margin_cut_and_pole() -> None:
     best[0] = 80_000  # player
     for i in range(1, 22):
         best[i] = 81_000 + i * 100
-    # Q1: 22 cars, 5 out -> 17 safe; the 17th fastest other car is 82_700
-    assert quali_margin_ms(best, 0, 22, 5, {5: 5, 6: 5, 7: 0}) == (2_700, "cut")
+    # Q1 advances 15 cars; the 15th fastest other car is 82_500.
+    advance = {5: 15, 6: 10, 7: 0}
+    assert quali_margin_ms(best, 0, 22, 5, advance) == (2_500, "cut")
     # Q3: gap to P2
-    assert quali_margin_ms(best, 0, 22, 7, {5: 5, 6: 5, 7: 0}) == (1_100, "pole")
+    assert quali_margin_ms(best, 0, 22, 7, advance) == (1_100, "pole")
     # Behind on pole -> negative margin
-    assert quali_margin_ms(best, 5, 22, 7, {5: 5, 6: 5, 7: 0})[0] < 0
+    assert quali_margin_ms(best, 5, 22, 7, advance)[0] < 0
     # Not enough times yet
-    assert quali_margin_ms([80_000, 81_000], 0, 22, 5, {5: 5}) == (0, "")
-    assert quali_margin_ms([0, 81_000], 0, 22, 7, {7: 0}) == (0, "")
+    assert quali_margin_ms([80_000, 81_000], 0, 22, 5, advance) == (0, "")
+    assert quali_margin_ms([0, 81_000], 0, 2, 7, advance) == (0, "")

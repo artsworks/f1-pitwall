@@ -7,6 +7,9 @@ from pitwall.state.quali import (
     abort_advice,
     projected_lap_ms,
     quali_cutoff_ms,
+    quali_cutoff_pos,
+    quali_margin_ms,
+    quali_through,
     release_window,
 )
 
@@ -94,16 +97,161 @@ def test_projected_lap_ms() -> None:
 
 
 def test_quali_cutoff() -> None:
-    elim = {5: 5, 6: 5, 7: 0}
     field = [90_000 + i * 100 for i in range(20)]  # 90.0 .. 91.9 sorted
-    # Q1 with 20 cars: cut-off position 15 -> 15th best (index 14) = 91.400
-    assert quali_cutoff_ms(field, 20, 5, elim) == 91_400
+    # Q1 advances 15 cars, so the cut-off is the 15th best (index 14).
+    assert quali_cutoff_ms(field, 0, 20, 5, {5: 15, 6: 10, 7: 0}) == 91_400
     # Q3: nobody eliminated -> 0
-    assert quali_cutoff_ms(field, 10, 7, elim) == 0
-    # too few laps set -> everyone through so far
-    assert quali_cutoff_ms(field[:10], 20, 5, elim) == 0
+    assert quali_cutoff_ms(field, 0, 20, 7, {5: 15, 6: 10, 7: 0}) == 0
+    # Untimed cars count as ahead of the timed field.
+    assert quali_cutoff_ms(field[:10], 0, 20, 5, {5: 15, 6: 10, 7: 0}) == field[4]
+    assert quali_cutoff_ms(field[:4], 0, 20, 5, {5: 15, 6: 10, 7: 0}) == 0
     # sprint shootout 10 maps to Q1
-    assert quali_cutoff_ms(field, 20, 10, elim) == 91_400
+    assert quali_cutoff_ms(field, 0, 20, 10, {5: 15, 6: 10, 7: 0}) == 91_400
+
+
+def test_quali_cutoff_counts_untimed_cars() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    times = [80_000 + i * 100 for i in range(16)]
+    assert quali_cutoff_ms(times[:10], 0, 16, 6, advance) == times[3]
+    assert quali_cutoff_ms(times[:14], 0, 16, 6, advance) == times[7]
+    assert quali_cutoff_ms(times, 0, 16, 6, advance) == times[9]
+    assert quali_cutoff_ms(times[:4], 0, 16, 6, advance) == 0
+
+
+def test_quali_cutoff_does_not_count_untimed_player_as_rival() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    times = [90_000 + i * 100 for i in range(19)]
+    field = [0, *times]
+    assert quali_cutoff_ms(field, 0, 20, 5, advance) == times[14]
+
+
+def test_quali_margin_counts_untimed_cars() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    field = [
+        81_000,
+        79_000,
+        79_500,
+        80_000,
+        80_500,
+        81_500,
+        82_000,
+        82_500,
+        82_800,
+        82_900,
+    ]
+    field.extend([0] * 6)
+    assert quali_margin_ms(field, 0, 16, 6, advance) == (-500, "cut")
+
+    complete_field = field[:10] + [83_000, 83_500, 84_000, 84_500, 85_000, 85_500]
+    assert quali_margin_ms(complete_field, 0, 16, 6, advance) == (2_000, "cut")
+    incomplete_field = [81_000, 79_000, 79_500, 80_000, 80_500] + [0] * 11
+    assert quali_margin_ms(incomplete_field, 0, 16, 6, advance) == (0, "")
+
+    # Q3 cannot estimate pole margin while an active car has no time.
+    assert quali_margin_ms([80_000, 81_000, 0], 0, 3, 7, advance) == (0, "")
+
+
+def test_quali_cutoff_pos() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    assert quali_cutoff_pos(5, advance) == 15
+    assert quali_cutoff_pos(6, advance) == 10
+    assert quali_cutoff_pos(7, advance) == 0
+    assert quali_cutoff_pos(11, advance) == 10
+    assert quali_cutoff_pos(8, advance) == 0
+
+
+def test_quali_through_regression_for_incomplete_q2_field() -> None:
+    field = [
+        80_062,
+        80_261,
+        80_581,
+        80_837,
+        80_875,
+        80_972,
+        81_144,
+        81_148,
+        81_416,
+        81_813,
+        82_477,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    assert not quali_through(
+        field,
+        9,
+        10,
+        16,
+        6,
+        567,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_rejects_position_beyond_cut() -> None:
+    field = [79_400, 79_000, 79_100, 79_200, 79_300]
+    field.extend([79_500 + i * 100 for i in range(11)])
+    assert not quali_through(
+        field,
+        0,
+        11,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_treats_cars_without_times_as_ahead() -> None:
+    field = [79_000 + i * 100 for i in range(8)] + [80_000, 82_000, 83_000, 84_000]
+    field.extend([0] * 4)
+    assert not quali_through(
+        field,
+        8,
+        9,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+    complete_field = field.copy()
+    complete_field[12:] = [85_000, 86_000, 87_000, 88_000]
+    assert quali_through(
+        complete_field,
+        8,
+        9,
+        16,
+        6,
+        0,
+        advance={5: 15, 6: 10, 7: 0},
+        safe_margin_ms=300,
+        open_margin_ms=500,
+        open_window_s=300,
+    )
+
+
+def test_quali_through_margin_shrinks_near_flag() -> None:
+    field = [79_000 + i * 100 for i in range(8)] + [80_900, 81_500]
+    field.extend([82_000 + i * 100 for i in range(6)])
+    kwargs = {
+        "advance": {5: 15, 6: 10, 7: 0},
+        "safe_margin_ms": 300,
+        "open_margin_ms": 500,
+        "open_window_s": 300,
+    }
+    assert not quali_through(field, 8, 9, 16, 6, 600, **kwargs)
+    assert quali_through(field, 8, 9, 16, 6, 0, **kwargs)
 
 
 def test_abort_advice() -> None:
@@ -125,3 +273,13 @@ def test_abort_advice() -> None:
     # Sector 0 never advises
     a = abort_advice(95_000, 91_000, 0, 0, fresh_sets_current=2, ers_store_pct=30.0)
     assert not a.advised
+
+
+def test_abort_advice_uses_untimed_adjusted_cutoff() -> None:
+    advance = {5: 15, 6: 10, 7: 0}
+    field = [79_000, 79_500, 80_000, 80_500, 80_800, 81_000, 81_200, 81_400, 82_000, 83_000]
+    cutoff = quali_cutoff_ms(field, 5, 16, 6, advance)
+    old_cutoff = sorted(field)[9]
+    assert cutoff == sorted(field)[3]
+    assert abort_advice(85_000, cutoff, 81_000, 2, 1, 50.0).reason != "through"
+    assert abort_advice(85_000, old_cutoff, 81_000, 2, 1, 50.0).reason == "through"

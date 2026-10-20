@@ -47,8 +47,10 @@ thresholds:
   out_lap_factor: 1.3        # out lap vs best lap, for "time to start a lap"
   out_lap_pit_s: 40          # garage -> line overhead; Q3 final run: released at 114 s left, flag beat it
   pit_exit_m: 0.0            # lap distance of pit exit (per-track overlay later)
-  quali_eliminated: {5: 5, 6: 5, 7: 0}
+  quali_advance: {5: 15, 6: 10, 7: 0}  # cars through to the next session; 0 = no cut
   abort_safe_margin_ms: 300  # inside this margin of the cut-off = "through"
+  quali_through_open_margin_ms: 500  # extra cushion for "through" while rivals can still improve
+  quali_through_open_window_s: 300  # extra cushion shrinks to 0 over the last this-many seconds
   abort_deficit_ms: 400      # projected deficit that justifies an abort call
   abort_ers_keep_pct: 60     # ERS above this -> abort earlier (banked for next run)
   quali_safe_margin_ms: 1000 # clear of the cut / P2 by this much = "play it safe"
