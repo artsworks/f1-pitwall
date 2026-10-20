@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.31.1 (2026-10-20)
+
+### Bug Fixes
+
+- **quali**: Stop false "through" calls; sync Melbourne overlay
+  ([#123](https://github.com/artsworks/f1-pitwall/pull/123),
+  [`0a12b2b`](https://github.com/artsworks/f1-pitwall/commit/0a12b2b6076164eca35b2b4fc5499b6a64eaa86e))
+
+
 ## v0.31.0 (2026-10-19)
 
 ### Bug Fixes
