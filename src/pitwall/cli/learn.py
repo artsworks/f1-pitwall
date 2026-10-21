@@ -150,6 +150,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         run_choice="longest" if args.mode == "debrief" else "latest",
         parc_ferme=parc_ferme,
         lap=None,
+        mindset=settings.resolved_mindset(),
         store=args.store,
     )
     if advice is None:

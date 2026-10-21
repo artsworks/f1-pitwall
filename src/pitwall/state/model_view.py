@@ -41,6 +41,7 @@ class ModelView:
     pit_plan_gain_s: float = 0.0
     pit_plan_confidence: float = 0.0
     pit_plan_risk: float = 0.0
+    pit_plan_risky: bool = False
     pit_plan_rival_idx: int = -1
     pit_plan_rival_name: str = ""
     pit_plan_reason: str = ""

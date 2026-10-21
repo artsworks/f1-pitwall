@@ -546,3 +546,43 @@ def test_replay_ct2_attack_episode_logs_overtake(tmp_path: Path) -> None:
     episodes = [r for r in rows if r.get("outcome") == "battle" and r["kind"] == "attack"]
     assert episodes and all(r["overtake"] is True for r in episodes)
     assert all("drs" not in r for r in episodes)
+
+
+def test_driver_scaled_pass_prob_floor_gates_battle_attack() -> None:
+    from pitwall.config.models import resolve_mindset
+    from pitwall.model.driver import advice_scale
+
+    settings = ConfigStore().current()
+    th = settings.thresholds
+    aggr = resolve_mindset(settings.mindsets, "aggressive")
+    rates = BattleRates(pass_overtake=0.25, pass_no_overtake=0.25, hold=0.7)
+
+    low_drv = advice_scale(0.3, 0.8, th, aggr, source="track")
+    high_drv = advice_scale(0.9, 1.0, th, aggr, source="track")
+
+    low_wide = BattleTracker().update(
+        _inp(
+            gap_ahead_s=1.2,
+            attack_gap_s=1.5,
+            overtake_active=True,
+            pass_prob_min=low_drv.pass_prob_min,
+            driver=low_drv,
+        ),
+        th,
+        rates,
+    )
+    high_wide = BattleTracker().update(
+        _inp(
+            gap_ahead_s=1.2,
+            attack_gap_s=1.5,
+            overtake_active=True,
+            pass_prob_min=high_drv.pass_prob_min,
+            driver=high_drv,
+        ),
+        th,
+        rates,
+    )
+    assert low_wide.mode != ATTACKING
+    assert high_wide.mode == ATTACKING
+    assert low_wide.pass_prob < float(th["battle_attack_prob_min"])
+    assert high_wide.pass_prob >= float(th["battle_attack_prob_min"])

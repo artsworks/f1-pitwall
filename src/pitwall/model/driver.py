@@ -68,6 +68,9 @@ class DriverScale:
     confidence_factor: float = 1.0
     risk_add: float = 0.0
     pace_cap_ms: float = 0.0
+    pit_confidence_min: float = 0.70
+    position_loss_risk_max: float = 0.30
+    pass_prob_min: float = 0.30
 
 
 NEUTRAL = DriverScale()
@@ -183,15 +186,69 @@ def confidence(weight: float, th: Mapping[str, object]) -> float:
     return weight / (weight + k)
 
 
-def advice_scale(rating: float, confidence_value: float, th: Mapping[str, object]) -> DriverScale:
+def _is_aggressive_mode(mode: Mapping[str, object] | None) -> bool:
+    if mode is None:
+        return False
+    return (
+        mode.get("phrasing") == "directive"
+        or mode.get("plan_pick") == "gain"
+        or threshold(mode, "position_loss_risk_max", 0.30) > 0.30
+        or threshold(mode, "pit_confidence_min", 0.70) < 0.70
+    )
+
+
+def advice_scale(
+    rating: float,
+    confidence_value: float,
+    th: Mapping[str, object],
+    mode: Mapping[str, object] | None = None,
+    *,
+    aggressive: bool | None = None,
+    source: str | None = None,
+) -> DriverScale:
     neutral = threshold(th, "driver_rating_neutral", 0.5)
+    conf_clamped = _clamp(confidence_value)
     deficit = _clamp((neutral - rating) / max(neutral, 1e-9))
-    eff = deficit * _clamp(confidence_value)
+    eff = deficit * conf_clamped
     low_factor = threshold(th, "driver_low_confidence_factor", 0.7)
+
+    safe_conf_min = threshold(th, "driver_safe_pit_confidence_min", 0.70)
+    safe_risk_max = threshold(th, "driver_safe_position_loss_risk_max", 0.30)
+    safe_pass_min = threshold(th, "battle_attack_prob_min", 0.30)
+
+    is_aggressive = _is_aggressive_mode(mode) if aggressive is None else aggressive
+    has_source = bool(source) if source is not None else conf_clamped > 0.0
+    if is_aggressive and has_source and rating >= neutral:
+        surplus = _clamp((rating - neutral) / max(1.0 - neutral, 1e-9))
+        eff_up = surplus * conf_clamped
+        target_conf_min = threshold(mode, "pit_confidence_min", 0.55) if mode is not None else 0.55
+        target_risk_max = (
+            threshold(mode, "position_loss_risk_max", 0.55) if mode is not None else 0.55
+        )
+        target_pass_min = (
+            threshold(
+                mode,
+                "battle_attack_prob_min",
+                threshold(th, "driver_aggressive_pass_prob_min", 0.20),
+            )
+            if mode is not None
+            else threshold(th, "driver_aggressive_pass_prob_min", 0.20)
+        )
+        pit_conf_min = round(safe_conf_min - eff_up * max(0.0, safe_conf_min - target_conf_min), 4)
+        risk_max = round(safe_risk_max + eff_up * max(0.0, target_risk_max - safe_risk_max), 4)
+        pass_min = round(safe_pass_min - eff_up * max(0.0, safe_pass_min - target_pass_min), 4)
+    else:
+        pit_conf_min = safe_conf_min
+        risk_max = safe_risk_max
+        pass_min = safe_pass_min
+
     return DriverScale(
         confidence_factor=1.0 - eff * (1.0 - low_factor),
         risk_add=eff * threshold(th, "driver_risk_add", 0.2),
         pace_cap_ms=eff * threshold(th, "driver_pace_cap_ms", 300),
+        pit_confidence_min=pit_conf_min,
+        position_loss_risk_max=risk_max,
+        pass_prob_min=pass_min,
     )
 
 

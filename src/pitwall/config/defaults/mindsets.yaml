@@ -17,6 +17,12 @@ mindsets:
     rival_focus_ahead: 0.5
     rival_info_every_n_laps: 3
     call_budget_per_lap: 15
+    plan_soft_bias_s: 0.0
+    plan_pick: confidence
+    mc_every_n_laps: 1
+    plan_mc_sims: 500
+    sector_loss_call_ms: 100
+    battle_conserve_calls: true
     phrasing: advisory
   aggressive:
     inherits: balanced
@@ -37,4 +43,10 @@ mindsets:
     rival_focus_ahead: 0.8
     rival_info_every_n_laps: 1
     call_budget_per_lap: unlimited
+    plan_soft_bias_s: 1.5
+    plan_pick: gain
+    mc_every_n_laps: 1
+    plan_mc_sims: 1000
+    sector_loss_call_ms: 50
+    battle_conserve_calls: false
     phrasing: directive

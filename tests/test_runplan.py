@@ -65,6 +65,24 @@ def test_mistakes_text() -> None:
     )
     clean = HotLap(75_400, 19_200, 39_700, 15_650, 50.0, 2.0, 0, 0, False)
     assert mistakes_text(clean, (19_200, 39_700, 15_600)) == ""
+    assert (
+        mistakes_text(clean, (19_200, 39_700, 15_600), sector_loss_call_ms=50.0)
+        == "0.1 lost in sector 3 to your best"
+    )
+
+    lap_vs_theo = HotLap(75_400, 19_200, 39_700, 15_600, 50.0, 2.0, 0, 0, False)
+    best_lap_s = (19_200, 39_700, 15_600)
+    theo_best_s = (19_200, 39_500, 15_600)
+    settings = ConfigStore().current()
+    bal_mode = settings.resolved_mindset()
+    aggr_mode = {**bal_mode, **settings.mindsets["aggressive"]}
+    assert (
+        mistakes_text(lap_vs_theo, best_lap_s, theoretical_best_s=theo_best_s, mode=bal_mode) == ""
+    )
+    assert (
+        mistakes_text(lap_vs_theo, best_lap_s, theoretical_best_s=theo_best_s, mode=aggr_mode)
+        == "0.2 lost in sector 2 to your best"
+    )
 
 
 def _feed(

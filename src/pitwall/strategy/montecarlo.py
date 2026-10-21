@@ -116,7 +116,8 @@ def plan_agreement(
     plan_name: str = "",
     cover_gap_s: float = math.inf,
 ) -> McResult | None:
-    sims = int(_f(th, "plan_mc_sims", 500))
+    raw_th_sims = _f(th, "plan_mc_sims", 500)
+    sims = 0 if raw_th_sims <= 0 else min(int(_f(mode, "plan_mc_sims", raw_th_sims)), 2000)
     min_left, last_k = _candidate_range(laps_remaining, th)
     if sims <= 0 or laps_remaining <= min_left or last_k < 0:
         return None

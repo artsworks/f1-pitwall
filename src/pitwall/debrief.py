@@ -1289,6 +1289,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
             run_choice="longest",
             parc_ferme=parc_ferme,
             lap=None,
+            mindset=settings.resolved_mindset(),
             store=False,
         )
         if advice is not None:
@@ -1301,6 +1302,7 @@ def _setup_actions(db: Database, uid: int, session: dict[str, Any], settings: Se
                 rules=advice.rules,
                 thresholds=settings.thresholds,
                 learned=advice.learned,
+                mindset=settings.resolved_mindset(),
             )
             recommendations = advice.recommendations
             locked.update(

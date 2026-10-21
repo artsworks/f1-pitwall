@@ -40,6 +40,7 @@ def recommend_for_session(
     run_choice: Literal["latest", "longest"],
     parc_ferme: int,
     lap: int | None,
+    mindset: str | Mapping[str, Any] | None = None,
     setup: Mapping[str, float] | None = None,
     rules: SetupRules | None = None,
     track_id: int | None = None,
@@ -57,6 +58,7 @@ def recommend_for_session(
         ) or {}
     if rules is None:
         rules = parse_setup_rules(settings.setup_rules)
+    resolved_mindset = settings.resolved_mindset() if mindset is None else mindset
     learned = learned_gains(db, signals.track_id, signals.compound)
     recommendations = tuple(
         rec
@@ -69,6 +71,7 @@ def recommend_for_session(
             rules=rules,
             thresholds=settings.thresholds,
             learned=learned,
+            mindset=resolved_mindset,
         )
     )
     if store:
@@ -228,7 +231,14 @@ class SetupAdvisor:
         self.stop_wing_from = rec.from_value
         self.stop_wing_to = rec.to_value
 
-    def evaluate_live(self, db: Any, uid: int, settings: Settings) -> None:
+    def evaluate_live(
+        self,
+        db: Any,
+        uid: int,
+        settings: Settings,
+        *,
+        mindset: str | Mapping[str, Any] | None = None,
+    ) -> None:
         thresholds = settings.thresholds
         try:
             advice = recommend_for_session(
@@ -239,6 +249,7 @@ class SetupAdvisor:
                 run_choice="latest",
                 parc_ferme=self.state.parc_ferme_rules,
                 lap=self.state.lap_num,
+                mindset=mindset,
                 setup=self.state.setup,
                 rules=self.rules,
                 track_id=self.state.track_id,
@@ -262,7 +273,14 @@ class SetupAdvisor:
             self.clear()
             log.exception("live setup advice failed; skipping this lap")
 
-    def store_debrief(self, db: Any, uid: int, settings: Settings) -> None:
+    def store_debrief(
+        self,
+        db: Any,
+        uid: int,
+        settings: Settings,
+        *,
+        mindset: str | Mapping[str, Any] | None = None,
+    ) -> None:
         try:
             advice = recommend_for_session(
                 db,
@@ -272,6 +290,7 @@ class SetupAdvisor:
                 run_choice="longest",
                 parc_ferme=self.state.parc_ferme_rules,
                 lap=None,
+                mindset=mindset,
                 rules=self.rules,
                 track_id=self.state.track_id,
             )

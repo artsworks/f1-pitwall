@@ -342,3 +342,64 @@ def test_single_sim_delta_matches_deterministic_race_time(monkeypatch: pytest.Mo
 
     assert result is not None
     assert captured[0][0, 2] == pytest.approx(stop - no_stop, abs=1e-6)
+
+
+def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+    from pitwall.state.session import Snapshot
+
+    res = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode={"pit_gain_min_s": 0.4, "plan_mc_sims": 750},
+        th={**TH, "plan_mc_sims": 500},
+    )
+    assert res is not None and res.sims == 750
+
+    capped = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode={"pit_gain_min_s": 0.4, "plan_mc_sims": 9999},
+        th={**TH, "plan_mc_sims": 500},
+    )
+    assert capped is not None and capped.sims == 2000
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    engine.deg_fit = _fit(150.0)
+    engine._fresh_prior = _fit(80.0)
+    engine._green_pit_loss_s = 21.0
+    engine._sc_pit_loss_s = 9.0
+    engine.state.session_uid = 42
+    calls = 0
+    orig = montecarlo.plan_agreement
+
+    def counted(**kw: object) -> McResult | None:
+        nonlocal calls
+        calls += 1
+        return orig(**kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr(engine, "mode", lambda: {**MODE, "mc_every_n_laps": 2, "plan_mc_sims": 500})
+
+    snap1 = Snapshot(
+        now=1.0,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=10,
+        tyre_age_laps=1,
+        laps_of_pace=15.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+    )
+    snap2 = replace(snap1, lap_num=2, tyre_age_laps=2)
+    snap3 = replace(snap1, lap_num=3, tyre_age_laps=3)
+
+    engine._plan(snap1)
+    engine._plan(snap2)
+    assert calls == 1
+    engine._plan(snap3)
+    assert calls == 2

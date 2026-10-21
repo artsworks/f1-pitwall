@@ -6,8 +6,9 @@ rules:
   - id: battle_catching
     sessions: [race]
     min_lap: 2
-    priority: 3
+    priority: 2
     urgency: tactical
+    contradicts: [tyre_life, fuel_spare, battle_manage]
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 90
@@ -40,10 +41,11 @@ rules:
   - id: battle_attack
     sessions: [race]
     min_lap: 2
-    priority: 3
+    priority: 2
     urgency: tactical
     outcome_score: "battle_pass_prob * 2 - 1"
     rotate_with: [overtake_lost]
+    contradicts: [tyre_life, tyre_overheat, tyre_blister, fuel_spare, battle_manage]
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
@@ -78,9 +80,9 @@ rules:
     priority: 3
     urgency: tactical
     outcome_score: "1 - battle_pass_prob * 2 if laps_remaining > th.battle_patience_laps else -99"
-    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
+    when: "phase == 'racing' and sector == 1 and mode.battle_conserve_calls and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
     clear_when: "sector != 1"
-    still_true: "battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
+    still_true: "mode.battle_conserve_calls and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
     cooldown_s: 180
     cooldown_group: battle_ahead
     conflict_group: battle_call
@@ -192,8 +194,8 @@ rules:
     min_lap: 3
     priority: 3
     urgency: tactical
-    when: "phase == 'racing' and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
-    still_true: "phase == 'racing'"
+    when: "phase == 'racing' and mode.battle_conserve_calls and battle_mode == 'managing' and sector == 2 and battle_mode_laps >= th.battle_manage_every_laps and lap_num % th.battle_manage_every_laps == 0"
+    still_true: "phase == 'racing' and mode.battle_conserve_calls"
     cooldown_s: 240
     requires: [lap_data]
     say:

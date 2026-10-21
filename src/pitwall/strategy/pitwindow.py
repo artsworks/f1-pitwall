@@ -42,6 +42,7 @@ class PitPlan:
     mc_lap: int = 0
     mc_agree: float = 1.0
     mc_risk_lap: int = 0
+    risky: bool = False
 
 
 NO_PLAN = PitPlan("", 0, 0.0, 0.0, 0.0, -1, "", "", (0, 0), 0.0, 0.0, ())
@@ -167,6 +168,14 @@ def optimise(
         else min(max((pit_loss_s - gap_behind_s) / pit_loss_s, 0.0), 1.0)
     )
     gain_min = _f(mode, "pit_gain_min_s", 1.0)
+    safe_risk_max = _f(th, "driver_safe_position_loss_risk_max", 0.30)
+    mode_risk_max = _f(mode, "position_loss_risk_max", safe_risk_max)
+    risk_max = (
+        min(mode_risk_max, driver.position_loss_risk_max)
+        if driver is not NEUTRAL
+        else mode_risk_max
+    )
+    pick_mode = str(mode.get("plan_pick", "confidence"))
 
     # Undercut: our fresh laps vs the rival's current (degrading) pace.
     uc_laps = int(_f(th, "undercut_laps", 2))
@@ -243,6 +252,7 @@ def optimise(
         who: str = "",
         confidence: float | None = None,
         risk: float | None = None,
+        risky: bool | None = None,
     ) -> PitPlan:
         if confidence is None:
             confidence = rival_conf if idx >= 0 else conf
@@ -250,6 +260,15 @@ def optimise(
         if name in AGGRESSIVE_PLANS:
             confidence *= driver.confidence_factor
             plan_risk = min(1.0, plan_risk + driver.risk_add)
+        stop_plan = name in ("box_now", "box_in_n", "cheap_stop", "free_stop", "undercut", "cover")
+        is_risky = (
+            risky
+            if risky is not None
+            else (stop_plan and plan_risk > safe_risk_max and risk_max > safe_risk_max)
+        )
+        annotated_reason = (
+            f"{reason}, traffic risk" if is_risky and "traffic" not in reason.lower() else reason
+        )
         return PitPlan(
             name,
             lap,
@@ -258,11 +277,12 @@ def optimise(
             round(plan_risk, 3),
             idx,
             who,
-            reason,
+            annotated_reason,
             window,
             undercut_s,
             overcut_s,
             projections,
+            risky=is_risky,
         )
 
     if (
@@ -286,9 +306,10 @@ def optimise(
         and rival_behind.pitted
         and cover_gap_s < _f(th, "cover_max_gap_s", 3.0)
     )
+    tactical: list[PitPlan] = []
     if behind_ok and cover_s + _f(th, "cover_margin_s", 0.5) > 0:
         assert rival_behind is not None
-        return plan(
+        cover_cand = plan(
             "cover",
             lap_num,
             cover_s,
@@ -297,6 +318,8 @@ def optimise(
             rival_behind.name,
             risk=0.0,
         )
+        if cover_cand.risk <= risk_max:
+            tactical.append(cover_cand)
     if (
         rival_ahead is not None
         and gap_ahead_s < _f(th, "undercut_max_gap_s", 3.0)
@@ -304,9 +327,11 @@ def optimise(
         and laps_remaining > uc_laps + min_left
         and window[0] <= lap_num
     ):
-        return plan(
+        uc_cand = plan(
             "undercut", lap_num, undercut_s, f"Undercut on {ahead_name}", ahead_idx, ahead_name
         )
+        if uc_cand.risk <= risk_max:
+            tactical.append(uc_cand)
     if (
         rival_ahead is not None
         and rival_ahead.pitted
@@ -314,13 +339,15 @@ def optimise(
         and overcut_s >= gain_min
         and laps_remaining > oc_laps
     ):
-        return plan(
-            "overcut",
-            lap_num + oc_laps,
-            overcut_s,
-            f"Overcut on {ahead_name}",
-            ahead_idx,
-            ahead_name,
+        tactical.append(
+            plan(
+                "overcut",
+                lap_num + oc_laps,
+                overcut_s,
+                f"Overcut on {ahead_name}",
+                ahead_idx,
+                ahead_name,
+            )
         )
     if (
         behind_ok
@@ -329,14 +356,32 @@ def optimise(
         and best_k >= 1
     ):
         assert rival_behind is not None
-        return plan(
-            "defend",
-            lap_num + uc_laps,
-            -cover_s,
-            f"Defend from {rival_behind.name}",
-            rival_behind.idx,
-            rival_behind.name,
+        tactical.append(
+            plan(
+                "defend",
+                lap_num + uc_laps,
+                -cover_s,
+                f"Defend from {rival_behind.name}",
+                rival_behind.idx,
+                rival_behind.name,
+            )
         )
+    if tactical:
+        if pick_mode == "gain":
+            return max(
+                enumerate(tactical),
+                key=lambda ic: (
+                    ic[1].gain_s >= gain_min,
+                    ic[1].gain_s,
+                    ic[1].confidence,
+                    -ic[1].risk,
+                    -ic[0],
+                ),
+            )[1]
+        return max(
+            enumerate(tactical),
+            key=lambda ic: (ic[1].confidence, -ic[1].risk, -ic[0], ic[1].gain_s),
+        )[1]
     # Gain of the best lap over its neighbour: stopping one lap later, or now.
     later = projections[best_k + 1][1] if best_k + 1 < len(projections) else best_delta
     delay_gain = (later if best_k == 0 else projections[0][1]) - best_delta
@@ -346,6 +391,8 @@ def optimise(
         and pit_exit_clean
     ):
         return plan("free_stop", lap_num, max(delay_gain, gain_min), "Free stop, gap behind")
+    if position_risk > risk_max:
+        return plan("stay", lap_num + best_k, delay_gain, "Traffic behind", risky=False)
     if best_k == 0:
         reason = "Tyres are done" if laps_of_pace < 1 else "This is the lap"
         return plan("box_now", lap_num, delay_gain, reason)

@@ -437,3 +437,26 @@ def test_plan_fields_mirrored_on_snapshot_and_model_view() -> None:
     plan_names = {x.name for x in dataclasses.fields(PlanFields)}
     assert plan_names <= {x.name for x in dataclasses.fields(Snapshot)}
     assert plan_names <= {x.name for x in dataclasses.fields(ModelView)}
+
+
+def test_soft_bias_flips_ranking_to_softer_next_stint() -> None:
+    # 10 laps left with stop_now=True (or tyre_age=39 past cliff=30):
+    # fresh stint is 10 laps (ages 0..9, age_sum=45).
+    # H: 10 * 90_000 + 60 * 45 = 902_700 ms (902.7 s)
+    # S: 10 * 90_000 + 80 * 45 = 903_600 ms (903.6 s) -> 0.9 s slower than H
+    close_models = (
+        CompoundModel(S, 90_000.0, 80.0, 2),
+        CompoundModel(M, 90_000.0, 100.0, 2),
+        CompoundModel(H, 90_000.0, 60.0, 2),
+    )
+    inp = inputs(laps_remaining=10, tyre_age=35, cur_cliff_age=10.0, compounds=close_models)
+    mh = evaluate(inp, (M, H), TH)
+    ms = evaluate(inp, (M, S), TH)
+    assert mh is not None and ms is not None
+    gap_s = ms.race_time_s - mh.race_time_s
+    assert 0.0 < gap_s < 1.5
+
+    bal = derive(inp, {**TH, "plan_soft_bias_s": 0.0})
+    aggr = derive(inp, {**TH, "plan_soft_bias_s": 1.5})
+    assert bal[0].compounds == (M, H)
+    assert aggr[0].compounds == (M, S)

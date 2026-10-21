@@ -583,6 +583,91 @@ def test_alternative_cap_applies_across_all_symptoms(
     assert len([rec for rec in recs if rec.tier == "alternative"]) == 2
 
 
+def test_aggressive_mindset_proposes_extreme_range_and_keeps_quality_gates(
+    setup_config: tuple[SetupRules, dict[str, Any]],
+) -> None:
+    rules, thresholds = setup_config
+    signals = _signals(slip_balance=1.0)
+    bal = evaluate(
+        signals,
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+        mindset="balanced",
+    )
+    aggr = evaluate(
+        signals,
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=rules,
+        thresholds=thresholds,
+        mindset="aggressive",
+    )
+    bal_fw = next(r for r in bal if r.param == "front_wing")
+    aggr_fw = next(r for r in aggr if r.param == "front_wing")
+    assert aggr_fw.delta > bal_fw.delta > 0
+
+    range_candidate = Candidate(
+        param="front_wing",
+        direction=1,
+        magnitude=(1.0, 3.0),
+        confidence="high",
+        expect="more front grip",
+        tradeoff="more drag",
+    )
+    range_rules = SetupRules(
+        params={"front_wing": rules.params["front_wing"]},
+        symptoms=(
+            Symptom(
+                "us",
+                "run_laps >= setup_min_run_laps",
+                Predicate("run_laps >= setup_min_run_laps"),
+                (range_candidate,),
+            ),
+        ),
+        by_z=rules.by_z,
+        max_alternatives=2,
+        confidence_floor="medium",
+    )
+    bal_range = evaluate(
+        _signals(run_laps=6),
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=range_rules,
+        thresholds=thresholds,
+        mindset="balanced",
+    )
+    aggr_range = evaluate(
+        _signals(run_laps=6),
+        _setup(),
+        mode="garage",
+        parc_ferme=1,
+        rules=range_rules,
+        thresholds=thresholds,
+        mindset="aggressive",
+    )
+    assert bal_range[0].delta == 4.0  # midpoint 2.0 * step 1 * scale 2
+    assert aggr_range[0].delta == 6.0  # extreme 3.0 * step 1 * scale 2
+
+    # Quality gate (setup_min_run_laps=6) is unchanged under aggressive
+    assert (
+        evaluate(
+            _signals(run_laps=5),
+            _setup(),
+            mode="garage",
+            parc_ferme=1,
+            rules=range_rules,
+            thresholds=thresholds,
+            mindset="aggressive",
+        )
+        == []
+    )
+
+
 def test_profile_and_rules_directory_deep_merge_setup_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

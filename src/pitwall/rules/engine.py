@@ -148,7 +148,11 @@ class RuleEngine:
     ) -> None:
         self.rules = [Rule(r) for r in rules]
         self.thresholds = dict(thresholds)
-        self.mode = dict(mode)
+        self.mode = {
+            "sector_loss_call_ms": 100,
+            "battle_conserve_calls": True,
+            **mode,
+        }
         self.staleness_s = dict(staleness_s or {})
         self._noted_errors: set[tuple[str, str]] = set()
 

@@ -252,10 +252,26 @@ def _sequences(inp: PlanInputs, th: Mapping[str, object]) -> list[tuple[int, ...
     return out
 
 
+def _is_softer_next(compounds: tuple[int, ...]) -> bool:
+    return (
+        len(compounds) >= 2
+        and compounds[0] in DRY
+        and compounds[1] in DRY
+        and compounds[1] < compounds[0]
+    )
+
+
 def derive(inp: PlanInputs, th: Mapping[str, object]) -> list[PlanEval]:
     """Every feasible sequence, fastest first (ties: fewer stops, then order)."""
+    soft_bias_s = _f(th, "plan_soft_bias_s", 0.0)
     evals = [e for s in _sequences(inp, th) if (e := evaluate(inp, s, th)) is not None]
-    return sorted(evals, key=lambda e: (round(e.race_time_s, 3), len(e.compounds)))
+    return sorted(
+        evals,
+        key=lambda e: (
+            round(e.race_time_s - (soft_bias_s if _is_softer_next(e.compounds) else 0.0), 3),
+            len(e.compounds),
+        ),
+    )
 
 
 def reactive(inp: PlanInputs, th: Mapping[str, object]) -> PlanEval | None:
@@ -362,7 +378,7 @@ class PlanTracker:
         if not self.seqs:
             a = ranked[0]
             self._set("A", "primary", stops_done, a)
-            z = NormalDist().inv_cdf(risk_quantile(th))
+            z = 0.0 if th.get("plan_pick") == "gain" else NormalDist().inv_cdf(risk_quantile(th))
             b = alternative(ranked, a, z)
             if b is not None:
                 self._set("B", "alternative", stops_done, b)

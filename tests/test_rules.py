@@ -972,3 +972,77 @@ def test_garage_s_counts_engine_time_since_garage_entry() -> None:
     assert st.snapshot(110.5).garage_s == pytest.approx(10.5)
     st.driver_status = DriverStatus.OUT_LAP
     assert st.snapshot(111.0).garage_s == 0.0
+
+
+def test_aggressive_suppresses_battle_patience_and_manage_and_prioritises_attack() -> None:
+    from pitwall.config.loader import ConfigStore
+    from pitwall.config.models import resolve_mindset
+
+    settings = ConfigStore().current()
+    bal_mode = resolve_mindset(settings.mindsets, "balanced")
+    aggr_mode = resolve_mindset(settings.mindsets, "aggressive")
+
+    bal_engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=bal_mode,
+        staleness_s=settings.engine.staleness_s,
+    )
+    aggr_engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=aggr_mode,
+        staleness_s=settings.engine.staleness_s,
+    )
+    patience_snap = _rule_snapshot(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="racing",
+        sector=1,
+        lap_num=5,
+        laps_remaining=10,
+        rival_ahead_name="NORRIS",
+        battle_mode="attacking",
+        battle_pass_prob=0.15,
+        battle_mode_laps=3,
+        _ages={"lap_data": 0.1},
+    )
+    assert "battle_patience" in {c.rule.id for c in bal_engine.evaluate(patience_snap).candidates}
+    assert "battle_patience" not in {
+        c.rule.id for c in aggr_engine.evaluate(patience_snap).candidates
+    }
+
+    manage_snap = _rule_snapshot(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="racing",
+        sector=2,
+        lap_num=5,
+        laps_remaining=10,
+        battle_mode="managing",
+        battle_mode_laps=5,
+        _ages={"lap_data": 0.1},
+    )
+    assert "battle_manage" in {c.rule.id for c in bal_engine.evaluate(manage_snap).candidates}
+    assert "battle_manage" not in {c.rule.id for c in aggr_engine.evaluate(manage_snap).candidates}
+
+    fight_snap = _rule_snapshot(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="racing",
+        sector=1,
+        lap_num=5,
+        laps_remaining=10,
+        rival_ahead_name="NORRIS",
+        gap_ahead_s=0.6,
+        battle_mode="attacking",
+        battle_pass_prob=0.6,
+        overheat=True,
+        tyre_compound=17,
+        _ages={"lap_data": 0.1, "car_telemetry": 0.1},
+    )
+    cands = {c.rule.id: c for c in aggr_engine.evaluate(fight_snap).candidates}
+    assert cands["battle_attack"].priority < cands["tyre_overheat"].priority

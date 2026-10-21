@@ -119,8 +119,8 @@ on-throttle high (R); front wing at the stop medium. The first practice → qual
 weekend recorded with the advisor should be used to confirm the matrix: any locked field
 that changes while `parc_ferme_rules = 1` after the first qualifying out-lap is a doc bug.
 
-Setup and pressure advice do not read mindset values yet. When wired in, aggressive mode
-must recommend larger setup changes than balanced mode.
+Setup advice reads the active mindset while keeping the same sample and confidence gates.
+Under aggressive mode, the evaluator proposes the upper end of a step or range.
 
 Session-type → allowed changes (`m_sessionType` mapping from `03-strategy.md`; sprint
 shootout 10–14 follows the qualifying column, as in the rules; 18 time trial is out of

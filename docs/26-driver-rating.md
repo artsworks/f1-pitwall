@@ -51,11 +51,17 @@ Sessions without a recording file do not count. The `driver_folded` marker preve
 Confidence is `weight / (weight + driver_confidence_k)`. The default `driver_confidence_k`
 is 10. A race profile with weight 5 has confidence 0.33.
 
-Ratings at or above `driver_rating_neutral` do not change pit advice. Below neutral, the
-engine calculates `deficit = clamp((neutral - rating) / neutral)` and multiplies it by
-confidence to get the effective deficit. It lowers confidence and adds risk to undercut,
-overcut, cover and defend plans. It adds the pace cap to our undercut laps and old-tyre
-overcut laps. Cover calculations do not use the pace cap.
+Ratings at or above `driver_rating_neutral` do not change balanced pit advice. Below
+neutral, the engine calculates `deficit = clamp((neutral - rating) / neutral)` and
+multiplies it by confidence to get the effective deficit. It lowers confidence and adds
+risk to undercut, overcut, cover and defend plans. It adds the pace cap to our undercut
+laps and old-tyre overcut laps. Cover calculations do not use the pace cap.
+
+Under aggressive mode, a learned rating above `driver_rating_neutral` unlocks risky
+thresholds in proportion to `((rating - neutral) / (1 - neutral)) * confidence`. This
+lowers `pit_confidence_min`, raises `position_loss_risk_max`, and lowers the battle
+pass-probability floor toward the aggressive targets. Ratings below neutral or without a
+learned source keep the balanced thresholds.
 
 For a rating of 0.3 and weight 10, confidence is 0.5. The deficit is 0.4 and the effective
 deficit is 0.2. Advice confidence is multiplied by 0.94, plan risk rises by 0.04 and the
