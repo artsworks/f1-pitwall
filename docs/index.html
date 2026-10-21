@@ -143,7 +143,10 @@ article:has(.landing){max-width:none}
 .next a em{display:inline-block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-bottom:6px}
 .foot{font-size:13px;color:var(--muted);margin-top:30px}
 .shot .frame{position:relative;display:block}
-.video{max-width:900px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+.videos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.videos .lede{margin:0 0 10px}
+@media (max-width:860px){.videos{grid-template-columns:minmax(0,1fr)}}
+.video{aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
 .video iframe{display:block;width:100%;height:100%;border:0}
 .video .facade{display:block;width:100%;height:100%;padding:0;border:0;background:#000;cursor:pointer;position:relative}
 .video .facade img{display:block;width:100%;height:100%;object-fit:cover}
@@ -244,17 +247,15 @@ article:has(.landing){max-width:none}
   </main>
 </div>
 <script>
-const DEMO = {
-  id: "QId9M1ToDiE",
-  title: "f1-pitwall demo: a full grand prix weekend",
-  description: "Practice, qualifying and race with f1-pitwall making the calls."
-};
-const DEMO_URL = `https://youtu.be/${DEMO.id}`, DEMO_EMBED = `https://www.youtube-nocookie.com/embed/${DEMO.id}`;
-document.head.insertAdjacentHTML("beforeend", `<script type="application/ld+json">${JSON.stringify({
-  "@context": "https://schema.org", "@type": "VideoObject", name: DEMO.title, description: DEMO.description,
-  thumbnailUrl: `https://i.ytimg.com/vi/${DEMO.id}/maxresdefault.jpg`, embedUrl: DEMO_EMBED, contentUrl: DEMO_URL
-})}<\/script>`);
-document.querySelector("#content .cta").insertAdjacentHTML("beforeend", `<a class="btn" href="${DEMO_URL}">Watch the demo ↗</a>`);
+const DEMOS = [
+  {id: "QId9M1ToDiE", title: "f1-pitwall demo: a full grand prix weekend", description: "Practice, qualifying and race with f1-pitwall making the calls."},
+  {id: "qLEeD-90kQM", title: "Pitwall v0.29.0 — AI race engineer for F1 26, live at Melbourne", description: "f1-pitwall v0.29.0 making the calls, live at Melbourne."}
+].map(d => ({...d, url: `https://youtu.be/${d.id}`, embed: `https://www.youtube-nocookie.com/embed/${d.id}`}));
+document.head.insertAdjacentHTML("beforeend", `<script type="application/ld+json">${JSON.stringify(DEMOS.map(d => ({
+  "@context": "https://schema.org", "@type": "VideoObject", name: d.title, description: d.description,
+  thumbnailUrl: `https://i.ytimg.com/vi/${d.id}/maxresdefault.jpg`, embedUrl: d.embed, contentUrl: d.url
+})))}<\/script>`);
+document.querySelector("#content .cta").insertAdjacentHTML("beforeend", `<a class="btn" href="${DEMOS[0].url}">Watch the demo ↗</a>`);
 const GROUPS = [
   ["Start here", [
     ["status", "Status", "M0–M4 progress, current features, calibration evidence and open gaps."],
@@ -399,13 +400,13 @@ function overview() {
   ];
   const tall = f => f.startsWith("phone-");
   const mobile = matchMedia("(max-width: 860px), (pointer: coarse)").matches;
+  const video = d => mobile ? `<div class="video"><button type="button" class="facade" data-id="${d.id}" aria-label="Play: ${d.title}"><img src="https://i.ytimg.com/vi/${d.id}/hqdefault.jpg" alt="" loading="lazy" width="480" height="360"><span class="play" aria-hidden="true"></span></button></div>` : `<div class="video"><iframe src="${d.embed}" title="${d.title}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
   $("#content").innerHTML = `<div class="landing">
     ${HERO}
 
     <section class="reveal">
     <h2>Watch it work</h2>
-    <p class="lede">A full grand prix weekend: practice, qualifying and race.</p>
-    ${mobile ? `<div class="video"><button type="button" class="facade" aria-label="Play: ${DEMO.title}"><img src="https://i.ytimg.com/vi/${DEMO.id}/hqdefault.jpg" alt="" loading="lazy" width="480" height="360"><span class="play" aria-hidden="true"></span></button></div>` : `<div class="video"><iframe src="${DEMO_EMBED}" title="${DEMO.title}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`}
+    <div class="videos">${DEMOS.map(d => `<div><p class="lede">${d.description}</p>${video(d)}</div>`).join("")}</div>
     </section>
 
     <section class="reveal">
@@ -441,10 +442,10 @@ function overview() {
     <a class="devcard" href="#/developer"><span><b>Developer guide</b>Architecture, strategy design, decision records, build status and the roadmap.</span><i aria-hidden="true">→</i></a>
     </section>
   </div>`;
-  const facade = $(".facade");
-  if (facade) facade.addEventListener("click", () => {
-    facade.outerHTML = `<iframe src="${DEMO_EMBED}?autoplay=1" title="${DEMO.title}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
-  });
+  document.querySelectorAll(".facade").forEach(facade => facade.addEventListener("click", () => {
+    const d = DEMOS.find(v => v.id === facade.dataset.id);
+    facade.outerHTML = `<iframe src="${d.embed}?autoplay=1" title="${d.title}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+  }));
   reveal();
   heroRadio($(".shot .say"), ["Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]);
 }
