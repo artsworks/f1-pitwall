@@ -8,7 +8,6 @@ rules:
     min_lap: 2
     priority: 2
     urgency: tactical
-    contradicts: [tyre_life, fuel_spare, battle_manage]
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
     cooldown_s: 90
@@ -45,7 +44,6 @@ rules:
     urgency: tactical
     outcome_score: "battle_pass_prob * 2 - 1"
     rotate_with: [overtake_lost]
-    contradicts: [tyre_life, tyre_overheat, tyre_blister, fuel_spare, battle_manage]
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
