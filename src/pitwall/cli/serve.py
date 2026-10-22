@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, Speaker, WarmableSpeaker
+from pitwall.cli.common import _folder_link
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits
@@ -53,26 +54,6 @@ _BANNER_GROUPS = {
     "learning": 2,
     "pitwall": 2,
 }
-_LINK_TERMS = {"xterm-kitty", "alacritty", "foot", "foot-extra"}
-
-
-def _terminal_links() -> bool:
-    if not sys.stdout.isatty():
-        return False
-    if os.environ.get("WT_SESSION") or os.environ.get("WEZTERM_PANE"):
-        return True
-    if os.environ.get("VTE_VERSION") or os.environ.get("KONSOLE_VERSION"):
-        return True
-    if os.environ.get("TERM") in _LINK_TERMS:
-        return True
-    return os.environ.get("TERM_PROGRAM") in {"vscode", "iTerm.app", "ghostty", "Hyper"}
-
-
-def _pack_link(saved: Path) -> str:
-    if not _terminal_links():
-        return str(saved)
-    uri = saved.resolve().parent.as_uri()
-    return f"\x1b]8;;{uri}\x07{saved}\x1b]8;;\x07"
 
 
 def _driver_rating_text(db: Database, th: Mapping[str, object], track_id: int | None = None) -> str:
@@ -514,7 +495,7 @@ def cmd_start(args: argparse.Namespace) -> int:
             saved = write_pack(
                 db, pack_dir, keep_days=settings.learning.pack_keep_days, refresh_quality=[uid]
             )
-            print(f"learning pack: saved {_pack_link(saved)}", flush=True)
+            print(f"learning pack: saved {_folder_link(saved)}", flush=True)
         except (OSError, sqlite3.Error, ValueError) as e:
             print(f"learning pack: skipped ({e})", flush=True)
         try:
@@ -585,7 +566,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                     keep_days=settings.learning.pack_keep_days,
                     refresh_quality=[state.session_uid] if state.session_uid is not None else None,
                 )
-                print(f"learning pack: saved {_pack_link(saved)}", flush=True)
+                print(f"learning pack: saved {_folder_link(saved)}", flush=True)
             except (OSError, sqlite3.Error, ValueError) as e:
                 print(f"learning pack: skipped ({e})", flush=True)
             except KeyboardInterrupt:

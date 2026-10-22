@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -122,6 +123,28 @@ def emit_json_or(
         out = formatter(result)
         if out is not None:
             print(out)
+
+
+_LINK_TERMS = {"xterm-kitty", "alacritty", "foot", "foot-extra"}
+
+
+def _terminal_links() -> bool:
+    if not sys.stdout.isatty():
+        return False
+    if os.environ.get("WT_SESSION") or os.environ.get("WEZTERM_PANE"):
+        return True
+    if os.environ.get("VTE_VERSION") or os.environ.get("KONSOLE_VERSION"):
+        return True
+    if os.environ.get("TERM") in _LINK_TERMS:
+        return True
+    return os.environ.get("TERM_PROGRAM") in {"vscode", "iTerm.app", "ghostty", "Hyper"}
+
+
+def _folder_link(path: Path) -> str:
+    if not _terminal_links():
+        return str(path)
+    uri = path.resolve().parent.as_uri()
+    return f"\x1b]8;;{uri}\x07{path}\x1b]8;;\x07"
 
 
 def add_db_arg(sub: argparse.ArgumentParser) -> None:

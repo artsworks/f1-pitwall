@@ -12,6 +12,7 @@ from typing import Any
 import pitwall.learnpack
 from pitwall.audio.dispatcher import Call
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
+from pitwall.cli import common
 from pitwall.cli import serve as cli
 from pitwall.config.loader import ConfigStore
 from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
@@ -286,18 +287,18 @@ def test_start_second_ctrl_c_during_pack_write_exits_quietly(
     assert Database(db_path).read_heartbeat() is None
 
 
-def test_pack_link_plain_when_terminal_has_no_links(
+def test_folder_link_plain_when_terminal_has_no_links(
     tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(cli, "_terminal_links", lambda: False)
+    monkeypatch.setattr(common, "_terminal_links", lambda: False)
     saved = tmp_path / "learnings" / "learning-latest.json"
-    assert cli._pack_link(saved) == str(saved)
+    assert common._folder_link(saved) == str(saved)
 
 
-def test_pack_link_targets_parent_folder(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(cli, "_terminal_links", lambda: True)
+def test_folder_link_targets_parent_folder(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(common, "_terminal_links", lambda: True)
     saved = tmp_path / "learnings" / "learning-latest.json"
-    out = cli._pack_link(saved)
+    out = common._folder_link(saved)
     uri = saved.resolve().parent.as_uri()
     assert out == f"\x1b]8;;{uri}\x07{saved}\x1b]8;;\x07"
 
@@ -305,14 +306,14 @@ def test_pack_link_targets_parent_folder(tmp_path: Path, monkeypatch) -> None:  
 def test_terminal_links_needs_tty_and_known_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
     monkeypatch.setenv("WT_SESSION", "x")
-    assert not cli._terminal_links()
+    assert not common._terminal_links()
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
     for var in ("WT_SESSION", "WEZTERM_PANE", "VTE_VERSION", "KONSOLE_VERSION", "TERM_PROGRAM"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.delenv("TERM", raising=False)
-    assert not cli._terminal_links()
+    assert not common._terminal_links()
     monkeypatch.setenv("WT_SESSION", "x")
-    assert cli._terminal_links()
+    assert common._terminal_links()
 
 
 def test_start_supervised_forwards_log_level(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
