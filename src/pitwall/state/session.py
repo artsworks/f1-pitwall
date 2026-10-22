@@ -563,6 +563,7 @@ class Snapshot:
     track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
     track_warning_recent: bool = False
     track_warning_count: int = 0  # warnings of the latest warning's kind (cut / track limits)
+    track_limits_warnings: int = 0
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -2546,6 +2547,7 @@ class SessionState:
             track_warning_count=self._track_warnings.get(
                 _warning_family(self.track_warning_kind), 0
             ),
+            track_limits_warnings=self._track_warnings.get("limits", 0),
             track_warning_recent=(
                 self._last_track_warning_st is not None
                 and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)

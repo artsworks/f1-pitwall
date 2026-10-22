@@ -324,6 +324,9 @@ def strategy_payload(
                 snapshot.rival_ahead_compound if ahead else snapshot.rival_behind_compound
             ),
             "tyre_age": snapshot.rival_ahead_age if ahead else snapshot.rival_behind_age,
+            "tyre_age_known": bool(
+                snapshot.rival_ahead_age_known if ahead else snapshot.rival_behind_age_known
+            ),
             # + = the rival is slower than us per lap
             "pace_delta_s": round((pace - own_ms) / 1000.0, 3) if pace and own_ms else None,
             "gap_trend_s": snapshot.gap_trend_ahead_s if ahead else snapshot.gap_trend_behind_s,
@@ -767,6 +770,13 @@ def state_payload(
                 "gap_s": _finite(snapshot.pit_exit_rival_gap_s),
             },
             "rival_data_restricted": snapshot.rival_data_restricted,
+            "infringements": {
+                "corner_cuts": snapshot.corner_cut_warnings,
+                "track_limits": snapshot.track_limits_warnings,
+                "warnings": snapshot.warnings,
+                "penalty_s": snapshot.penalty_s,
+                "warn_at": int(threshold(settings.thresholds, "warnings_warn", 3.0)),
+            },
             "pit_exit_clean": snapshot.pit_exit_clean,
             "laps_of_pace": _finite(snapshot.laps_of_pace),
             "wear_per_lap_pct": snapshot.wear_per_lap_pct,

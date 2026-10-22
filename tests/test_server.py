@@ -1013,6 +1013,32 @@ def test_state_payload_corner_slow_ema_and_lockup() -> None:
     assert tyres["rr"]["lockup"] is False
 
 
+def test_state_payload_infringements() -> None:
+    from pitwall.server.app import state_payload
+
+    store = ConfigStore()
+    store.poll(0.0)
+    settings = store.current()
+    snap = make_snapshot(
+        session_type=15,
+        session_kind="race",
+        warnings=7,
+        corner_cut_warnings=2,
+        track_limits_warnings=4,
+        penalty_s=3,
+    )
+
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+
+    assert body["race"]["infringements"] == {
+        "corner_cuts": 2,
+        "track_limits": 4,
+        "warnings": 7,
+        "penalty_s": 3,
+        "warn_at": 3,
+    }
+
+
 def test_state_payload_session_label_and_weekend() -> None:
     from pitwall.config.loader import ConfigStore
     from pitwall.metrics import Metrics

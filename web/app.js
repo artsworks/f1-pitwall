@@ -334,6 +334,23 @@
         drv.appendChild(span(" " + p.driver.source, "dim"));
       }
     }
+    var limits = el("limits"), infringements = p.race && p.race.infringements;
+    if (limits) {
+      var limitsVisible = !!infringements &&
+        (p.session_kind === "race" || p.session_kind === "qualifying");
+      limits.hidden = !limitsVisible;
+      if (limitsVisible) {
+        var cuts = Number(infringements.corner_cuts) || 0;
+        var wide = Number(infringements.track_limits) || 0;
+        var penalty = Number(infringements.penalty_s) || 0;
+        var warnAt = Number(infringements.warn_at);
+        var warn = warnAt > 0 &&
+          (cuts % warnAt === warnAt - 1 || wide % warnAt === warnAt - 1);
+        limits.className = "chip limits" + (penalty > 0 ? " crit" : warn ? " warn" : "");
+        limits.textContent = (cuts || wide ? "⚠ " : "") + "CUTS " + cuts + " · WIDE " + wide +
+          (penalty > 0 ? " · +" + penalty + "s PEN" : "");
+      }
+    }
     var v = el("verbosity");
     if (v) {
       v.innerHTML = "";
@@ -703,11 +720,18 @@
     r.appendChild(c);
     return r;
   }
-  function rvRow(sideTxt, name, ot, st, gap) {
+  function rvRow(sideTxt, name, ot, st, gap, r) {
     var rv = span("", "rv", "div");
     rv.appendChild(span(sideTxt, "side"));
     var nm = span(name, "name");
     if (ot) nm.appendChild(span("OV", "tag crit"));
+    if (r && r.compound) {
+      nm.appendChild(span(String(r.compound).slice(0, 3).toUpperCase(),
+        "comp xs " + compoundClass(r.compound)));
+      if (r.tyre_age_known && typeof r.tyre_age === "number") {
+        nm.appendChild(span(" · " + r.tyre_age + "L", "age"));
+      }
+    }
     rv.appendChild(nm);
     if (st !== null) rv.appendChild(span(st, "st"));
     rv.appendChild(span(gap, "gap"));
@@ -746,14 +770,15 @@
       var r = s[side], other = s[side === "ahead" ? "behind" : "ahead"];
       if (r) {
         n.appendChild(rvRow(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", (r.pos ? "P" + r.pos + " " : "") +
-          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side)));
+          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side), r));
         if (r.gap_s !== null && r.gap_s <= 3) n.appendChild(rail(r.gap_s, side, false));
         var pr = paceRow(b, side);
         if (pr) n.appendChild(pr);
       }
       if (other) {
         var o = rvRow(side === "ahead" ? "▼ BEHIND" : "▲ AHEAD", (other.pos ? "P" + other.pos + " " : "") +
-          String(other.name || "--").toUpperCase(), false, null, gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"));
+          String(other.name || "--").toUpperCase(), false, null,
+          gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"), other);
         o.style.opacity = ".6";
         n.appendChild(o);
       }
@@ -788,7 +813,7 @@
       var calm = !train && !direct;
       var row = span("", "bcar " + (train ? "train" : calm ? "calm" : side === "behind" ? "defend" : "attack"), "div");
       row.appendChild(rvRow((side === "ahead" ? "▲ P" : "▼ P") + (r.pos || "-"), String(r.name || "--").toUpperCase(),
-        r.overtake && side === "behind", st, gapStr(r.gap_s, side)));
+        r.overtake && side === "behind", st, gapStr(r.gap_s, side), r));
       if (r.gap_s !== null && r.gap_s <= 3 && !calm) row.appendChild(rail(r.gap_s, side, train));
       if (direct) { var pr = paceRow(b, side); if (pr) row.appendChild(pr); }
       n.appendChild(row);

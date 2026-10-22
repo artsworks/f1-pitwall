@@ -361,11 +361,15 @@ def test_corner_cut_and_track_limit_warnings_count_separately() -> None:
     _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
     snap = state.snapshot(3.0)
     assert snap.track_warning_kind == "significant" and snap.track_warning_count == 2
+    assert snap.track_limits_warnings == 2
     _pena(ingest, 4.0, 5, 7, 0, 255, 255, 5, 0)
     snap = state.snapshot(4.0)
     assert snap.track_warning_kind == "cut" and snap.track_warning_count == 1
+    assert snap.track_limits_warnings == 2
     _pena(ingest, 5.0, 5, 29, 0, 255, 255, 5, 0)
-    assert state.snapshot(5.0).track_warning_count == 3
+    snap = state.snapshot(5.0)
+    assert snap.track_warning_count == 3
+    assert snap.track_limits_warnings == 3
 
 
 def test_penalty_total_includes_new_penalty_before_lap_data_catches_up() -> None:

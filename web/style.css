@@ -84,6 +84,9 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .chip.drv.ok { border-color: var(--ok); color: var(--ok); }
 .chip.drv.low { border-color: var(--warn); color: var(--warn); }
 .chip.drv .dim { color: var(--dim); font-weight: normal; }
+.chip.limits { min-width: 0; padding: 0 .3rem; font-size: .9rem; letter-spacing: .04em; }
+.chip.limits.warn { border-color: var(--warn); color: var(--warn); }
+.chip.limits.crit { border-color: var(--crit); color: var(--crit); }
 
 /* mindset pill (item 15): compact, far right */
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
@@ -316,6 +319,8 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
 .rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
 .rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
 .rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv .name .comp { margin-left: .5rem; }
+.rv .name .age { color: var(--soft); font-size: 1.1rem; }
 .rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
 .rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
   padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }

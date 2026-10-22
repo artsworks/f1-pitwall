@@ -107,6 +107,10 @@ def test_rival_behind_age_knownness(
 
     assert snapshot.rival_behind_age == expected_age
     assert snapshot.rival_behind_age_known is expected_known
+    from pitwall.server.app import strategy_payload
+
+    payload = strategy_payload(snapshot)
+    assert payload is not None and payload["behind"]["tyre_age_known"] is expected_known
 
 
 def _state() -> tuple[Ingest, SessionState]:
