@@ -287,9 +287,7 @@ def test_start_second_ctrl_c_during_pack_write_exits_quietly(
     assert Database(db_path).read_heartbeat() is None
 
 
-def test_folder_link_plain_when_terminal_has_no_links(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+def test_folder_link_plain_when_terminal_has_no_links(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(common, "_terminal_links", lambda: False)
     saved = tmp_path / "learnings" / "learning-latest.json"
     assert common._folder_link(saved) == str(saved)
