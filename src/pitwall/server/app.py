@@ -38,6 +38,7 @@ class PinRequest(BaseModel):
 
 
 def tyre_status(inner: float, cold_c: float, hot_c: float) -> str:
+    inner = math.floor(inner + 0.5)
     if inner < cold_c:
         return "COLD"
     if inner > hot_c:

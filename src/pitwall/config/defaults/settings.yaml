@@ -125,6 +125,7 @@ thresholds:
   pit_loss_sc_default_s: 8
   pit_ref_after_laps: 3        # valid laps after an out-lap for the fresh-tyre reference
   pit_loss_min_ms: 5000        # lower bound on plausible pit loss, ms
+  pit_inlap_slow_max_ms: 10000 # skip green stops whose in-lap was this much slower (incident, penalty)
   pit_loss_max_ms: 60000       # upper bound on plausible pit loss, ms
   fuel_kg_per_lap_default: 1.2  # F1 26: 0.97 Interlagos, 1.26 Silverstone
   energy_over_tolerance_j: 400000  # |lap_delta| above this flags over/under

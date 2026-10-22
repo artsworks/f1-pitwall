@@ -81,7 +81,19 @@ def thermal_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float,
     hot_map = thresholds.get("tyre_inner_hot_by_compound_c", {})
     cold = cold_map.get(compound, thresholds.get("tyre_inner_cold_c", 80.0))
     hot = hot_map.get(compound, thresholds.get("tyre_inner_hot_c", 110.0))
-    return float(cold), float(hot)
+    return widen_window(
+        float(cold),
+        float(hot),
+        float(thresholds.get("tyre_window_min_width_c", 15.0)),
+    )
+
+
+def widen_window(cold: float, hot: float, min_width: float) -> tuple[float, float]:
+    if hot - cold < min_width:
+        centre = (cold + hot) / 2
+        half_width = min_width / 2
+        return centre - half_width, centre + half_width
+    return cold, hot
 
 
 def pressure_window(thresholds: Mapping[str, Any], compound: int) -> tuple[float, float]:

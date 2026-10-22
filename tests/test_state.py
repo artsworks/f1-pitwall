@@ -1275,7 +1275,19 @@ def test_pressure_window_caps_the_inset_on_narrow_windows() -> None:
     thresholds = {
         "tyre_inner_cold_by_compound_c": {17: 90.0, 18: 80.0},
         "tyre_inner_hot_by_compound_c": {17: 95.0, 18: 100.0},
+        "tyre_window_min_width_c": 5.0,
     }
     assert thermal_window(thresholds, 17) == (90.0, 95.0)
     assert pressure_window(thresholds, 17) == (91.25, 93.75)
     assert pressure_window(thresholds, 18) == (85.0, 95.0)
+
+
+def test_thermal_window_widens_narrow_bands_and_keeps_wide_bands() -> None:
+    thresholds = {
+        "tyre_inner_cold_by_compound_c": {17: 95.0, 18: 85.0, 19: 75.0},
+        "tyre_inner_hot_by_compound_c": {17: 100.0, 18: 90.0, 19: 100.0},
+    }
+
+    assert thermal_window(thresholds, 17) == (90.0, 105.0)
+    assert thermal_window(thresholds, 18) == (80.0, 95.0)
+    assert thermal_window(thresholds, 19) == (75.0, 100.0)

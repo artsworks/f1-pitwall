@@ -18,6 +18,7 @@ def test_defaults_load() -> None:
     assert s.connection.udp_port == 20777
     assert s.engine.tick_hz == 10
     assert s.thresholds["tyre_inner_cold_c"] == 80
+    assert s.thresholds["tyre_window_min_width_c"] == 15
     assert s.thresholds["fuel_kg_per_lap_default"] == 1.2
     assert s.thresholds["energy_over_tolerance_j"] == 400_000
     assert s.thresholds["battle_pass_overtake_prior"] == 0.6
@@ -60,7 +61,7 @@ def test_track_thresholds_apply_only_after_selecting_track() -> None:
     assert store.current().track is not None
     assert store.current().track.fuel_kg_per_lap == 1.2746
     assert store.set_track(16) is True
-    assert store.current().thresholds["energy_over_tolerance_j"] == 390_000
+    assert store.current().thresholds["energy_over_tolerance_j"] == 430_000
 
 
 def test_mindset_inherits() -> None:

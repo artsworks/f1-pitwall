@@ -101,6 +101,8 @@ def test_current_pit_loss_resolution_order() -> None:
     # neutralised=1 (SC) uses its own param/overlay key/defaults
     p = current_pit_loss(db, 1, 7, 1, overlay, {"pit_loss_sc_default_s": 8.0})
     assert p.source == "default" and p.value == 8_000.0
+    p = current_pit_loss(db, 1, 7, 2, overlay, {"pit_loss_vsc_default_s": 12.0})
+    assert p.source == "default" and p.value == 12_000.0
     db.fold_param(7, 0, "pit_loss_sc_ms", 7_500.0, weight=3.0)
     p = current_pit_loss(db, 1, 7, 1, overlay, {"pit_loss_sc_default_s": 8.0})
     assert p.source == "learned" and p.value == 7_500.0

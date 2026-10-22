@@ -1013,6 +1013,30 @@ def test_state_payload_corner_slow_ema_and_lockup() -> None:
     assert tyres["rr"]["lockup"] is False
 
 
+@pytest.mark.parametrize(
+    ("inner", "expected"),
+    [(93.0, "OK"), (88.0, "COLD"), (106.0, "HOT"), (89.6, "OK")],
+)
+def test_state_payload_tyre_status_uses_widened_window_and_display_rounding(
+    inner: float, expected: str
+) -> None:
+    from pitwall.protocol.layouts import Corners
+    from pitwall.server.app import state_payload
+
+    settings = ConfigStore().current()
+    settings.thresholds["tyre_inner_cold_by_compound_c"] = {17: 95.0}
+    settings.thresholds["tyre_inner_hot_by_compound_c"] = {17: 100.0}
+    settings.thresholds["tyre_window_min_width_c"] = 15.0
+    snap = make_snapshot(
+        tyre_compound=17,
+        tyre_inner_ema_fast=Corners(inner, inner, inner, inner),
+    )
+
+    body = state_payload(snap, settings=settings, metrics=Metrics(), quiet=False)
+
+    assert {corner["status"] for corner in body["tyres"].values()} == {expected}
+
+
 def test_state_payload_infringements() -> None:
     from pitwall.server.app import state_payload
 
