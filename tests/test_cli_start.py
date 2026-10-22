@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 from collections.abc import Coroutine
 from pathlib import Path
 from types import SimpleNamespace
@@ -283,6 +284,35 @@ def test_start_second_ctrl_c_during_pack_write_exits_quietly(
     assert cli.cmd_start(_start_args()) == 0
     assert "learning pack: interrupted" in capsys.readouterr().out
     assert Database(db_path).read_heartbeat() is None
+
+
+def test_pack_link_plain_when_terminal_has_no_links(
+    tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(cli, "_terminal_links", lambda: False)
+    saved = tmp_path / "learnings" / "learning-latest.json"
+    assert cli._pack_link(saved) == str(saved)
+
+
+def test_pack_link_targets_parent_folder(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(cli, "_terminal_links", lambda: True)
+    saved = tmp_path / "learnings" / "learning-latest.json"
+    out = cli._pack_link(saved)
+    uri = saved.resolve().parent.as_uri()
+    assert out == f"\x1b]8;;{uri}\x07{saved}\x1b]8;;\x07"
+
+
+def test_terminal_links_needs_tty_and_known_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    monkeypatch.setenv("WT_SESSION", "x")
+    assert not cli._terminal_links()
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    for var in ("WT_SESSION", "WEZTERM_PANE", "VTE_VERSION", "KONSOLE_VERSION", "TERM_PROGRAM"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    assert not cli._terminal_links()
+    monkeypatch.setenv("WT_SESSION", "x")
+    assert cli._terminal_links()
 
 
 def test_start_supervised_forwards_log_level(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
