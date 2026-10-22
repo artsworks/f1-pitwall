@@ -91,18 +91,26 @@ The current defaults use these F1 26 race values:
 - `battle_pass_overtake_prior` is 0.6.
 - `battle_pass_no_overtake_prior` is 0.6.
 
-Silverstone's track overlay uses `fuel_kg_per_lap: 1.26` and
-`energy_over_tolerance_j: 600000`.
+The packaged track overlays use the fuel, energy tolerance and tyre windows from the October 2026 learning pack.
+Pit loss and degradation come from the October 2026 multiplayer races:
+
+| Track | Green pit loss | Degradation (ms per lap) |
+|---|---|---|
+| Austin | 20.5 s | default |
+| Interlagos | 21.5 s | C4 217, C3 78, C2 239 |
+| Mexico City | 28.0 s | C5 178, C4 162 |
+| Imola | default | default |
+
+- Austin and Imola keep the default degradation. Their 14 and 16 lap races do not separate fuel burn from tyre wear, so calibrate reports `not identifiable`.
+- Imola keeps the default pit loss. Its only measured stop had an in-lap 24 s slower than race pace.
+- The engine skips a green pit loss when the in-lap is more than `pit_inlap_slow_max_ms` (10 s) slower than the reference pace.
+- A tyre window narrower than `tyre_window_min_width_c` (15 °C) is widened around its centre. Calibrate fits the fastest 5 °C band, which is too narrow for the COLD and HOT colours.
 
 These settings stay unchanged:
 
 - `cliff_ms_per_lap`, `tyre_cliff_ms`, and `wear_corner_*`. No stint reached the cliff or showed uneven wear.
-- Degradation remains unchanged. Calibrate reports `not identifiable` with one stint per compound.
-- Tyre inner windows remain unchanged. The Silverstone fit uses three laps on one compound.
-  Interlagos's windows already come from a larger database.
 - `battle_defend_gap_s` stays at 1.0 s, matching the 1.0 s overtake detection gap.
 - `slow_car_*` stays unchanged because the 2026 rules do not change qualifying behavior.
-- Pit loss stays unchanged because the sample has one stop per track.
 
 Refit these values after recording more F1 26 races with `pitwall calibrate` and
 `pitwall propose`.
