@@ -341,14 +341,13 @@
         (p.session_kind === "race" || p.session_kind === "qualifying");
       limits.hidden = !limitsVisible;
       if (limitsVisible) {
-        var cuts = Number(infringements.corner_cuts) || 0;
-        var wide = Number(infringements.track_limits) || 0;
+        var n = Number(infringements.corner_cuts) || 0;
         var penalty = Number(infringements.penalty_s) || 0;
         var warnAt = Number(infringements.warn_at);
-        var warn = warnAt > 0 &&
-          (cuts % warnAt === warnAt - 1 || wide % warnAt === warnAt - 1);
-        limits.className = "chip limits" + (penalty > 0 ? " crit" : warn ? " warn" : "");
-        limits.textContent = (cuts || wide ? "⚠ " : "") + "CUTS " + cuts + " · WIDE " + wide +
+        var crit = penalty > 0 || (warnAt > 0 && n > 0 && n % warnAt === 0);
+        var warn = warnAt > 0 && n % warnAt === warnAt - 1;
+        limits.className = "chip limits" + (crit ? " crit" : warn ? " warn" : "");
+        limits.textContent = (n > 0 ? "⚠ " : "") + "CUTS " + n +
           (penalty > 0 ? " · +" + penalty + "s PEN" : "");
       }
     }

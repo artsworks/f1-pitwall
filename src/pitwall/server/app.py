@@ -772,8 +772,7 @@ def state_payload(
             },
             "rival_data_restricted": snapshot.rival_data_restricted,
             "infringements": {
-                "corner_cuts": snapshot.corner_cut_warnings,
-                "track_limits": snapshot.track_limits_warnings,
+                "corner_cuts": snapshot.track_warning_count,
                 "warnings": snapshot.warnings,
                 "penalty_s": snapshot.penalty_s,
                 "warn_at": int(threshold(settings.thresholds, "warnings_warn", 3.0)),

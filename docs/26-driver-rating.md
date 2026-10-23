@@ -24,11 +24,10 @@ The field median excludes rival laps under SC/VSC or with unknown SC status. It 
 
 An OVTK counts only when the other car's latest LapData shows it as active or finished.
 It must not be in the pit lane or have pitted on its current lap. The car must have had no
-drive-through, stop-go or time penalty in this session. Warnings count corner cuts and
-track-limit warnings (infringement types 7 and 27–29). Off-track overtake warnings (8 and 9)
-do not count. Penalties count PENA types 0, 1 and 4. LapData `penalties` holds seconds, so the
-rating does not use it. Off-track excursions stay under Errors. Sessions without event
-telemetry leave both components out.
+drive-through, stop-go or time penalty in this session. Warnings count infringement types 7–9
+and 27–29. Collision warnings (type 4) do not count. Penalties count PENA types 0, 1 and 4.
+LapData `penalties` holds seconds, so the rating does not use it. Off-track excursions stay
+under Errors. Sessions without event telemetry leave both components out.
 
 Each score is clamped to the range 0 to 1. The rating is the mean of available component
 scores. Missing measurements do not count as zero. A profile with no available scores uses

@@ -1047,8 +1047,7 @@ def test_state_payload_infringements() -> None:
         session_type=15,
         session_kind="race",
         warnings=7,
-        corner_cut_warnings=2,
-        track_limits_warnings=4,
+        track_warning_count=2,
         penalty_s=3,
     )
 
@@ -1056,7 +1055,6 @@ def test_state_payload_infringements() -> None:
 
     assert body["race"]["infringements"] == {
         "corner_cuts": 2,
-        "track_limits": 4,
         "warnings": 7,
         "penalty_s": 3,
         "warn_at": 3,

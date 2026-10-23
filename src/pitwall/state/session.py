@@ -162,12 +162,8 @@ PENALTY_TYPE_GRID = 2
 PENALTY_TYPE_WARNING = 5
 
 
-def _warning_family(kind: str) -> str:
-    """Warnings the game counts together toward a penalty: corner cuts, running wide."""
-    return kind if kind in ("cut", "overtake") else "limits"
-
-
-# PENA infringement_type -> kind of track-limit / corner-cutting warning.
+# PENA infringement_type -> kind of track warning.
+# The game counts all of these as corner-cut warnings.
 _TRACK_WARNING_KINDS = {
     7: "cut",
     8: "overtake",
@@ -176,7 +172,6 @@ _TRACK_WARNING_KINDS = {
     28: "significant",
     29: "extreme",
 }
-_INFRINGEMENT_WARNING_KINDS = ("cut", "minor", "significant", "extreme")
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,10 +567,10 @@ class Snapshot:
         math.inf
     )  # over the closest car behind after penalties (<0 = he's ahead)
     penalty_threat_name: str = ""
-    track_warning_kind: str = ""  # latest track-limit warning: 'minor' | 'significant' | ...
+    track_warning_kind: str = ""  # latest track warning: 'minor' | 'significant' | ...
     track_warning_recent: bool = False
-    track_warning_count: int = 0  # warnings of the latest warning's kind (cut / track limits)
-    track_limits_warnings: int = 0
+    # Corner-cut warnings so far (PENA 7-9 and 27-29, or Lap Data if higher).
+    track_warning_count: int = 0
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -1069,7 +1064,6 @@ class SessionState:
         self._grid_penalty_events: list[tuple[float, int]] = []
         self.track_warning_kind = ""
         self._last_track_warning_st: float | None = None
-        self._track_warnings: dict[str, int] = {}
         self._warning_events: list[tuple[float, str]] = []
         self._incident_events: list[tuple[float, str]] = []
         self.event_telemetry_seen = False
@@ -1127,7 +1121,7 @@ class SessionState:
 
     @property
     def infringement_warnings(self) -> int:
-        return sum(kind in _INFRINGEMENT_WARNING_KINDS for _, kind in self._warning_events)
+        return len(self._warning_events)
 
     @property
     def infringement_penalties(self) -> int:
@@ -1293,10 +1287,6 @@ class SessionState:
         self._rival_penalty_events = [
             (when, car_idx) for when, car_idx in self._rival_penalty_events if when <= t
         ]
-        self._track_warnings.clear()
-        for _, kind in self._warning_events:
-            family = _warning_family(kind)
-            self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
         self.track_warning_kind = self._warning_events[-1][1] if self._warning_events else ""
         self._last_track_warning_st = self._warning_events[-1][0] if self._warning_events else None
         self._grid_penalty_events = [
@@ -1733,8 +1723,6 @@ class SessionState:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
                     self._warning_events.append((pkt.header.session_time, warn_kind))
-                    family = _warning_family(warn_kind)
-                    self._track_warnings[family] = self._track_warnings.get(family, 0) + 1
                 if kind:
                     # Warnings, lap invalidations and retirements also arrive as PENA
                     # with time_s = 255; only real penalties are announced.
@@ -2556,14 +2544,7 @@ class SessionState:
                 and 0.0 <= st - self._last_grid_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
             track_warning_kind=self.track_warning_kind,
-            track_warning_count=self._track_warnings.get(
-                _warning_family(self.track_warning_kind), 0
-            ),
-            track_limits_warnings=max(
-                self._track_warnings.get("limits", 0),
-                self.warnings - self.corner_cut_warnings,
-                0,
-            ),
+            track_warning_count=max(len(self._warning_events), self.corner_cut_warnings),
             track_warning_recent=(
                 self._last_track_warning_st is not None
                 and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)
