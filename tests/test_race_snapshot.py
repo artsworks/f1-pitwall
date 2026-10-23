@@ -376,8 +376,30 @@ def test_corner_cut_warning_kinds_share_one_count() -> None:
 def test_track_warning_count_uses_lap_data_without_pena_events() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0, corner_cutting_warnings=3)
+    snap = state.snapshot(1.0)
 
-    assert state.snapshot(1.0).track_warning_count == 3
+    assert snap.track_warning_count == 3
+    assert snap.cut_warning_count == 0
+    assert snap.limit_warning_count == 0
+
+
+def test_track_warning_counts_split_by_kind_and_ignore_collision() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 5, 7, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
+    _pena(ingest, 4.0, 5, 8, 0, 255, 255, 5, 0)
+    _pena(ingest, 5.0, 5, 27, 0, 255, 255, 5, 0)
+    snap = state.snapshot(5.0)
+    assert snap.cut_warning_count == 2
+    assert snap.limit_warning_count == 2
+    assert snap.track_warning_count == 4
+
+    _pena(ingest, 6.0, 5, 4, 0, 255, 255, 5, 0)
+    snap = state.snapshot(6.0)
+    assert snap.cut_warning_count == 2
+    assert snap.limit_warning_count == 2
+    assert snap.track_warning_count == 4
 
 
 def test_track_warning_count_uses_higher_pena_count_than_lap_data() -> None:

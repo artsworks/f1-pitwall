@@ -571,6 +571,8 @@ class Snapshot:
     track_warning_recent: bool = False
     # Corner-cut warnings so far (PENA 7-9 and 27-29, or Lap Data if higher).
     track_warning_count: int = 0
+    cut_warning_count: int = 0
+    limit_warning_count: int = 0
     blue_flag: bool = False
     weather_now: int = 0
     rain_pct_now: int = 0
@@ -2545,6 +2547,8 @@ class SessionState:
             ),
             track_warning_kind=self.track_warning_kind,
             track_warning_count=max(len(self._warning_events), self.corner_cut_warnings),
+            cut_warning_count=sum(kind == "cut" for _, kind in self._warning_events),
+            limit_warning_count=sum(kind == "limits" for _, kind in self._warning_events),
             track_warning_recent=(
                 self._last_track_warning_st is not None
                 and 0.0 <= st - self._last_track_warning_st <= self._th("penalty_recent_s", 10.0)

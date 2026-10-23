@@ -775,10 +775,10 @@ body.cool .coolzone { font-size: 1.3rem; }
   <span id="voice" class="voice" hidden>● LISTENING 2s</span> <!-- voice.listening, voice.left_s -->
   <span id="drv" class="chip drv ok">DRV 62 <span class="dim">global</span></span>
   <!-- driver.rating, driver.source; ALT: chip drv low when below driver.neutral; hidden when driver is null -->
-  <span id="limits" class="chip limits warn">⚠ CUTS 2</span>
-  <!-- race.infringements: corner_cuts (corner cuts + track-limit warnings), warn_at (3), penalty_s.
-       Grey normally (CUTS 0, ⚠ CUTS 1), warn one before a penalty (n % warn_at == warn_at-1),
-       crit at a penalty: <span class="chip limits crit">⚠ CUTS 3 · +3s PEN</span>.
+  <span id="limits" class="chip limits warn">CUT 1 · TL 1</span>
+  <!-- race.infringements: corner_cuts, cut_warns, limit_warns, warn_at (3), penalty_s.
+       Show CUT c · TL t when the split covers corner_cuts, or WARN n when it does not.
+       Phone uses Cc Tt or Wn. Colour follows corner_cuts. The +Ns penalty suffix is red.
        Hidden outside race and qualifying. -->
   <!-- Balanced/aggressive engine is being reworked separately; the pill is display only. -->
   <span id="mindset" class="pill">BAL</span>               <!-- mindset='balanced' -->

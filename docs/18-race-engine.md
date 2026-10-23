@@ -378,6 +378,7 @@ drs_zone_ahead: bool; drs_available: bool (2026: overtake_active; pre-2026: drs_
 penalty_s: int; unserved_drive_through: int; unserved_stop_go: int; warnings: int; corner_cut_warnings: int
 track_warning_kind: str              # 'cut' | 'limits'
 track_warning_count: int             # shared corner-cut count for PENA 7-9 and 27-29, or Lap Data if higher
+cut_warning_count: int; limit_warning_count: int  # PENA warning counts split by family
 penalty_recent: bool                # PENA event for the player inside th.penalty_recent_s
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)
 weather_now: int; rain_pct_now: int; rain_pct_in_10: int; rain_pct_in_30: int

@@ -342,13 +342,21 @@
       limits.hidden = !limitsVisible;
       if (limitsVisible) {
         var n = Number(infringements.corner_cuts) || 0;
+        var c = Number(infringements.cut_warns) || 0;
+        var t = Number(infringements.limit_warns) || 0;
         var penalty = Number(infringements.penalty_s) || 0;
         var warnAt = Number(infringements.warn_at);
         var crit = penalty > 0 || (warnAt > 0 && n > 0 && n % warnAt === 0);
         var warn = warnAt > 0 && n % warnAt === warnAt - 1;
+        var splitComplete = c + t >= n;
         limits.className = "chip limits" + (crit ? " crit" : warn ? " warn" : "");
-        limits.textContent = (n > 0 ? "⚠ " : "") + "CUTS " + n +
-          (penalty > 0 ? " · +" + penalty + "s PEN" : "");
+        limits.textContent = document.body.classList.contains("phone") ?
+          (splitComplete ? "C" + c + " T" + t : "W" + n) :
+          (splitComplete ? "CUT " + c + " · TL " + t : "WARN " + n);
+        if (penalty > 0) {
+          limits.appendChild(document.createTextNode(" "));
+          limits.appendChild(span("+" + penalty + "s", "pen"));
+        }
       }
     }
     var v = el("verbosity");

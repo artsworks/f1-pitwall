@@ -87,6 +87,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .chip.limits { min-width: 0; padding: 0 .3rem; font-size: .9rem; letter-spacing: .04em; }
 .chip.limits.warn { border-color: var(--warn); color: var(--warn); }
 .chip.limits.crit { border-color: var(--crit); color: var(--crit); }
+.chip.limits .pen { color: var(--crit); font-weight: bold; }
 
 /* mindset pill (item 15): compact, far right */
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
@@ -471,7 +472,8 @@ body.dash.phone { width: 390px; margin: 0 auto; height: auto; min-height: 100vh;
 body.phone > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
 body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; gap: .35rem; padding: .4rem .4rem; }
 body.phone .status #lap { min-width: 0; white-space: nowrap; flex-shrink: 0; }
-body.phone .status #drv { font-size: .9rem; flex-shrink: 0; }
+body.phone .status #limits { font-size: 1rem; padding: 0 .3rem; }
+body.phone .status #drv, body.phone .status #mindset { display: none; }
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
