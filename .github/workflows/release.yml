@@ -31,9 +31,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      # Bumps pyproject.toml, runs `uv lock`, updates CHANGELOG.md, commits, tags and pushes.
-      # No GitHub Release: publish.upload_to_vcs_release is false and `publish` is never run.
+      # Bumps pyproject.toml, runs `uv lock`, updates CHANGELOG.md, commits, tags, pushes and creates the GitHub Release.
       - name: Version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run semantic-release -v version --no-vcs-release
+        run: uv run semantic-release -v version

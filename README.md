@@ -250,7 +250,7 @@ Pull requests are squash-merged, so the PR title becomes the commit on `main`. T
 | `feat!: ...` or a `BREAKING CHANGE:` footer | MINOR |
 | `docs:`, `chore:`, `refactor:`, `test:`, `build:`, `ci:` | none |
 
-The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag. It creates no GitHub Release. Do not edit the version by hand.
+The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag, then creates a GitHub Release with the same notes. Do not edit the version by hand.
 
 ## Licence
 
