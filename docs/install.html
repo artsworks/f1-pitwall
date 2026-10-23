@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install f1-pitwall · step by step</title>
+<meta name="description" content="Install f1-pitwall in about 10 minutes: on the Windows game PC, or on a Mac or Linux server that receives telemetry from the game PC.">
+<link rel="canonical" href="https://pitwall.arthurku.com/install.html">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon-32x32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-16x16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="f1-pitwall">
+<meta property="og:title" content="Install f1-pitwall · step by step">
+<meta property="og:description" content="Install f1-pitwall on the Windows game PC, or on a Mac or Linux server.">
+<meta property="og:url" content="https://pitwall.arthurku.com/install.html">
+<meta property="og:image" content="https://pitwall.arthurku.com/assets/screens/race-box-call.webp">
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--muted:#5d6570;--line:#e3e6ea;--panel:#f6f7f9;--accent:#d7261e;--code:#f1f3f5;--link:#0b62c4;--ok:#17803d;--warn:#b45309}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f35;--panel:#1a1d21;--accent:#ff5a4f;--code:#1f2328;--link:#6cb2ff;--ok:#4ade80;--warn:#fbbf24}}
+*{box-sizing:border-box}
+html{scroll-padding-top:70px}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--link)}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--bg)}
+header .brand{font-weight:700;text-decoration:none;color:var(--fg);white-space:nowrap}
+header .brand span{color:var(--accent)}
+header .top{display:flex;gap:2px;margin-left:auto}
+header .top a{padding:4px 10px;border-radius:6px;font-size:14px;font-weight:600;color:var(--fg);text-decoration:none}
+header .top a:hover{background:var(--panel)}
+header .top a.active{color:var(--accent)}
+header .gh{margin-left:6px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);font-size:14px;font-weight:600;text-decoration:none}
+header .gh:hover{border-color:var(--fg)}
+header .gh svg{width:16px;height:16px;fill:currentColor}
+main{max-width:1100px;margin:0 auto;padding:28px 40px 80px}
+h1{font-size:40px;line-height:1.15;margin:6px 0 10px}
+h1 span{color:var(--accent)}
+.lede{font-size:18px;color:var(--muted);max-width:760px;margin:0 0 18px}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.pick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0 8px}
+.pick a{display:block;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel);color:var(--fg);text-decoration:none}
+.pick a:hover{border-color:var(--accent)}
+.pick em{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-style:normal;font-weight:700;margin-bottom:6px}
+.pick b{display:block;font-size:17px}
+.pick span{font-size:14px;color:var(--muted)}
+.pick svg{display:block;width:100%;height:auto;margin-top:10px}
+section.path{margin-top:44px;padding-top:12px;border-top:3px solid var(--accent)}
+section.path>h2{font-size:28px;margin:6px 0 4px}
+section.path>h2 small{display:block;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+section.path>.lede{font-size:16px}
+.diagram{max-width:760px;margin:12px 0 4px}
+.diagram svg{display:block;width:100%;height:auto}
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:20px 0}
+ol.steps>li{counter-increment:s;position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;padding:18px 0 18px 62px;border-bottom:1px solid var(--line)}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:16px;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:2px solid var(--fg);font-weight:800;font-size:20px}
+ol.steps>li.solo{grid-template-columns:minmax(0,1fr)}
+ol.steps h3{margin:0 0 4px;font-size:19px}
+ol.steps p{margin:0 0 8px}
+ol.steps p.small{font-size:14px;color:var(--muted)}
+.cmd{display:flex;align-items:stretch;border-radius:8px;overflow:hidden;background:#0d1117;margin:6px 0 8px}
+.cmd code{flex:1;min-width:0;overflow:auto;white-space:pre;background:none;color:#e6edf3;padding:10px 12px;font-size:13px;border-radius:0}
+.cmd button{flex:none;border:0;border-left:1px solid #30363d;background:#161b22;color:#e6edf3;font:600 13px system-ui,sans-serif;padding:0 14px;cursor:pointer}
+.cmd button:hover{background:#21262d}
+.game{border-radius:10px;overflow:hidden;background:#0b0e14;color:#e8ecf2;font:14px/1.4 system-ui,sans-serif;border:1px solid #273042;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.game .bar{padding:8px 14px;background:linear-gradient(90deg,#e10600,#7a0300);font-weight:800;letter-spacing:.08em;font-size:12px;text-transform:uppercase}
+.game .row{display:flex;justify-content:space-between;gap:12px;padding:7px 14px;border-top:1px solid #1c2433}
+.game .row span{color:#9aa7ba}
+.game .row b{font-weight:700}
+.game .row.hot{background:#1d2a14;outline:2px solid #8bd450;outline-offset:-2px}
+.game .row.hot b{color:#b8f27c}
+.game .crumb{padding:6px 14px;font-size:12px;color:#9aa7ba;background:#111722}
+.browser{border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.browser .url{display:flex;gap:6px;align-items:center;padding:8px 10px;background:var(--code);border-bottom:1px solid var(--line);font:13px ui-monospace,SFMono-Regular,Consolas,monospace}
+.browser .url i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.browser .url span{flex:1;margin-left:6px;padding:3px 10px;border-radius:999px;background:var(--bg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.browser .body{padding:16px;display:grid;gap:10px;justify-items:start;font-size:14px}
+.browser .btn{display:inline-block;padding:6px 14px;border:2px solid var(--ok);border-radius:6px;color:var(--ok);font-weight:800;letter-spacing:.04em;font-size:13px}
+.browser .pin{display:flex;gap:6px}
+.browser .pin b{display:grid;place-items:center;width:34px;height:40px;border:2px solid var(--fg);border-radius:6px;font:700 20px ui-monospace,monospace}
+.term{border-radius:10px;background:#0d1117;color:#c9d1d9;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;padding:12px 14px;white-space:pre;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.term b{color:#ff7b72}
+.term i{font-style:normal;color:#7ee787}
+.note{border-left:4px solid var(--warn);background:var(--panel);border-radius:0 8px 8px 0;padding:10px 14px;margin:14px 0;max-width:860px}
+.note b{color:var(--warn)}
+.note.voice{border-left-color:var(--accent)}
+.note.voice b{color:var(--accent)}
+.variant{border:1px dashed var(--line);border-radius:12px;padding:6px 18px 12px;margin:18px 0;max-width:860px}
+.variant h3{margin:12px 0 4px}
+.update{display:flex;gap:14px;align-items:center;max-width:860px;border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:var(--panel);margin:16px 0}
+.update svg{flex:none;width:36px;height:36px}
+.foot{font-size:13px;color:var(--muted);margin-top:40px}
+@media (max-width:860px){
+  header .top{display:none}
+  header .gh{margin-left:auto}
+  main{padding:20px 18px 60px}
+  h1{font-size:32px}
+  .pick{grid-template-columns:1fr}
+  ol.steps>li{grid-template-columns:minmax(0,1fr);padding-left:54px}
+  ol.steps>li::before{width:38px;height:38px;font-size:17px}
+}
+@media print{header,.cmd button{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./">f1<span>-</span>pitwall</a>
+  <div class="top"><a class="active" href="install.html">Install</a><a href="./#/getting-started">Getting started</a><a href="./#/developer">Developer guide</a></div>
+  <a class="gh" href="https://github.com/artsworks/f1-pitwall"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+</header>
+<main>
+<h1>Install f1<span>-</span>pitwall</h1>
+<p class="lede">Pick the computer that runs pitwall. Each path takes about 10 minutes. The game always runs on the Windows game PC.</p>
+
+<div class="pick">
+  <a href="#windows"><em>1</em><b>Game PC only</b><span>Pitwall runs on the Windows PC that runs F1 26.</span>
+    <svg viewBox="0 0 240 70" aria-hidden="true"><rect x="70" y="8" width="100" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><text x="120" y="32" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Windows PC</text><text x="120" y="50" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">game + pitwall</text></svg></a>
+  <a href="#mac"><em>2</em><b>Mac server</b><span>A Mac runs pitwall. The game PC sends it telemetry.</span>
+    <svg viewBox="0 0 240 70" aria-hidden="true"><rect x="6" y="8" width="92" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><text x="52" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Game PC</text><path d="M104 35h36" stroke="#d7261e" stroke-width="3" marker-end="url(#a1)"/><defs><marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d7261e"/></marker></defs><rect x="146" y="8" width="88" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><text x="190" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Mac</text></svg></a>
+  <a href="#linux"><em>3</em><b>Linux server</b><span>A Linux box runs pitwall. The game PC sends it telemetry.</span>
+    <svg viewBox="0 0 240 70" aria-hidden="true"><rect x="6" y="8" width="92" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><text x="52" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Game PC</text><path d="M104 35h36" stroke="#d7261e" stroke-width="3" marker-end="url(#a1)"/><rect x="146" y="8" width="88" height="54" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><text x="190" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">Linux</text></svg></a>
+</div>
+
+<!-- ============ 1. Windows ============ -->
+<section class="path" id="windows">
+  <h2><small>Path 1</small>Game PC only (Windows)</h2>
+  <p class="lede">Everything runs on the game PC. The engineer speaks through the PC's audio, so you hear it in your headset.</p>
+  <ol class="steps">
+    <li><div>
+      <h3>Run the installer</h3>
+      <p>Press Start, type <b>PowerShell</b> and open it. Paste this line and press Enter.</p>
+      <div class="cmd"><code>irm https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.ps1 | iex</code><button type="button">Copy</button></div>
+      <p class="small">The installer adds uv and Git, downloads pitwall to <code>%USERPROFILE%\f1-pitwall</code> and makes the shortcuts. If it asks you to reopen PowerShell, do that and paste the line again.</p>
+    </div><div class="term">Where does F1 26 run?
+  1) On this PC
+  2) On another PC or console on this network
+Choice [1]: <i>1</i>
+Download the natural voice (about 60 MB)? [Y/n]: <i>Y</i></div></li>
+    <li><div>
+      <h3>Set the game's telemetry</h3>
+      <p>In F1 26, open <b>Settings, Telemetry Settings</b>. Set the values shown. Restart the game after you change them.</p>
+    </div><div class="game"><div class="bar">Telemetry Settings</div><div class="crumb">Settings &gt; Telemetry Settings</div>
+      <div class="row"><span>UDP Telemetry</span><b>On</b></div>
+      <div class="row"><span>UDP Broadcast Mode</span><b>Off</b></div>
+      <div class="row hot"><span>UDP IP Address</span><b>127.0.0.1</b></div>
+      <div class="row"><span>UDP Port</span><b>20777</b></div>
+      <div class="row"><span>UDP Send Rate</span><b>30 Hz</b></div>
+      <div class="row hot"><span>UDP Format</span><b>2026</b></div></div></li>
+    <li><div>
+      <h3>Start pitwall</h3>
+      <p>Double-click the <b>Pitwall</b> shortcut on the desktop or in the Start menu. You hear "Pit wall online."</p>
+      <p class="small">Keep the window open while you drive. Close it to stop pitwall.</p>
+    </div><div class="term">pitwall <b>start</b>
+  dashboard  http://localhost:8000
+  LAN        http://192.168.1.20:8000
+
+  ┌──────────────────────────────┐
+  │  PIN  <b>4821</b>  (LAN devices only)  │
+  └──────────────────────────────┘</div></li>
+    <li><div>
+      <h3>Open the dashboard</h3>
+      <p>On the second monitor, open <code>http://localhost:8000</code> in a browser. It goes LIVE when you are on track.</p>
+      <p class="small"><code>/radio</code> shows a compact call log. This PC needs no PIN.</p>
+    </div><div class="browser"><div class="url"><i></i><i></i><i></i><span>localhost:8000</span></div><div class="body"><b>LIVE · LAP 12 / 57</b><span>RADIO: Box this lap, box this lap.</span></div></div></li>
+    <li class="solo"><div>
+      <h3>If the dashboard says STALE</h3>
+      <p>Drive onto the track, then run the check in PowerShell from the pitwall folder:</p>
+      <div class="cmd"><code>cd $HOME\f1-pitwall; uv run pitwall doctor --seconds 30</code><button type="button">Copy</button></div>
+      <p class="small">"0 datagrams" means the game sends nothing. Check the settings in step 2. Then run the two <code>netsh</code> firewall lines that doctor prints, in PowerShell opened with <b>Run as administrator</b>.</p>
+    </div></li>
+  </ol>
+
+  <div class="variant" id="windows-lan">
+    <h3>Game on another PC or console?</h3>
+    <p>Pitwall can run on this Windows PC while the game runs on another device. Choose <b>2</b> in the installer. Then change three things:</p>
+    <ol>
+      <li>Set <b>UDP IP Address</b> in the game to this PC's LAN address. The installer prints it, and pitwall prints it at start as <b>LAN</b>.</li>
+      <li>Allow pitwall through the Windows firewall. Open PowerShell with <b>Run as administrator</b> and run both lines:
+        <div class="cmd"><code>netsh advfirewall firewall add rule name="pitwall udp" dir=in action=allow protocol=UDP localport=20777
+netsh advfirewall firewall add rule name="pitwall tcp" dir=in action=allow protocol=TCP localport=8000</code><button type="button">Copy</button></div></li>
+      <li>On other devices, open <code>http://&lt;LAN address&gt;:8000</code> and type the 4-digit PIN that pitwall prints at start. The PIN changes every start.</li>
+    </ol>
+  </div>
+
+  <div class="update"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg><div><b>Update later:</b> close pitwall, then double-click <b>Pitwall Update</b>. It prints the old and new version.</div></div>
+</section>
+
+<!-- ============ 2. Mac ============ -->
+<section class="path" id="mac">
+  <h2><small>Path 2</small>Mac server, Windows game PC</h2>
+  <p class="lede">The Mac runs pitwall. The game PC sends telemetry to the Mac and shows the dashboard on its second monitor.</p>
+  <div class="diagram"><svg viewBox="0 0 760 150" role="img" aria-label="The game PC sends UDP telemetry on port 20777 to the Mac. The Mac sends the dashboard and voice back on port 8000.">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d7261e"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#17803d"/></marker></defs>
+    <rect x="10" y="15" width="250" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="135" y="48" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">Windows game PC</text>
+    <text x="135" y="76" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">F1 26</text>
+    <text x="135" y="100" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">browser: dashboard + voice</text>
+    <rect x="500" y="15" width="250" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="625" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">Mac</text>
+    <text x="625" y="90" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">pitwall (no sound here)</text>
+    <path d="M270 55H490" stroke="#d7261e" stroke-width="3" marker-end="url(#ar)"/><text x="380" y="45" text-anchor="middle" font-size="13" fill="currentColor">telemetry · UDP 20777</text>
+    <path d="M490 100H270" stroke="#17803d" stroke-width="3" marker-end="url(#ag)"/><text x="380" y="122" text-anchor="middle" font-size="13" fill="currentColor">dashboard + voice · TCP 8000</text>
+  </svg></div>
+  <div class="note voice"><b>Where the voice plays.</b> The Mac plays no engineer audio. The voice plays in the browser tab that shows the dashboard. Open the dashboard on the game PC to hear it in your headset.</div>
+  <ol class="steps">
+    <li><div>
+      <h3>Run the installer on the Mac</h3>
+      <p>Open <b>Terminal</b> (Applications, Utilities). Paste this line and press Enter.</p>
+      <div class="cmd"><code>curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh</code><button type="button">Copy</button></div>
+      <p class="small">If macOS asks to install the Command Line Tools, click Install. Then paste the line again. Answer <b>1</b> to open the dashboard on the game PC.</p>
+    </div><div class="term">Where will you open the dashboard?
+  1) On the Windows game PC (second monitor)
+  2) On this computer
+Choice [1]: <i>1</i>
+...
+Game PC UDP IP Address: <b>192.168.1.30</b></div></li>
+    <li><div>
+      <h3>Set the game's telemetry on the game PC</h3>
+      <p>Use the Mac's LAN address as the UDP IP, not 127.0.0.1. The installer prints it, and pitwall prints it at start as <b>LAN</b>.</p>
+    </div><div class="game"><div class="bar">Telemetry Settings</div><div class="crumb">Settings &gt; Telemetry Settings</div>
+      <div class="row"><span>UDP Telemetry</span><b>On</b></div>
+      <div class="row"><span>UDP Broadcast Mode</span><b>Off</b></div>
+      <div class="row hot"><span>UDP IP Address</span><b>192.168.1.30 (the Mac)</b></div>
+      <div class="row"><span>UDP Port</span><b>20777</b></div>
+      <div class="row"><span>UDP Send Rate</span><b>30 Hz</b></div>
+      <div class="row hot"><span>UDP Format</span><b>2026</b></div></div></li>
+    <li><div>
+      <h3>Start pitwall on the Mac</h3>
+      <p>Double-click <b>Pitwall.command</b> on the Mac desktop. Note the 4-digit <b>PIN</b> in the window.</p>
+      <p class="small">If macOS asks whether python may accept incoming network connections, click <b>Allow</b>. Without that, the game PC cannot reach the Mac.</p>
+    </div><div class="term">pitwall <b>start</b>
+  dashboard  http://localhost:8000
+  LAN        http://192.168.1.30:8000
+
+  ┌──────────────────────────────┐
+  │  PIN  <b>4821</b>  (LAN devices only)  │
+  └──────────────────────────────┘</div></li>
+    <li><div>
+      <h3>Open the dashboard on the game PC</h3>
+      <p>On the game PC's second monitor, open the address below with the Mac's LAN address. Type the PIN, then click <b>ENABLE SOUND</b>.</p>
+      <div class="cmd"><code>http://192.168.1.30:8000/?sound=1</code><button type="button">Copy</button></div>
+      <p class="small">The PIN changes each time pitwall starts. Keep the tab open, because the voice plays from it.</p>
+    </div><div class="browser"><div class="url"><i></i><i></i><i></i><span>192.168.1.30:8000/?sound=1</span></div><div class="body"><b>ENTER PIN</b><div class="pin"><b>4</b><b>8</b><b>2</b><b>1</b></div><span class="btn">ENABLE SOUND</span></div></div></li>
+    <li class="solo"><div>
+      <h3>If the dashboard says STALE</h3>
+      <p>Drive onto the track, then run the check in Terminal on the Mac:</p>
+      <div class="cmd"><code>cd ~/f1-pitwall &amp;&amp; uv run pitwall doctor --seconds 30</code><button type="button">Copy</button></div>
+      <p class="small">"0 datagrams" means nothing reaches the Mac. Check the UDP IP in step 2. Then open <b>System Settings, Network, Firewall</b> and allow incoming connections for python.</p>
+    </div></li>
+  </ol>
+  <div class="update"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg><div><b>Update later:</b> close pitwall, then double-click <b>Pitwall Update.command</b> on the Mac desktop.</div></div>
+</section>
+
+<!-- ============ 3. Linux ============ -->
+<section class="path" id="linux">
+  <h2><small>Path 3</small>Linux server, Windows game PC</h2>
+  <p class="lede">The Linux box runs pitwall. The game PC sends telemetry to it and shows the dashboard on its second monitor.</p>
+  <div class="diagram"><svg viewBox="0 0 760 150" role="img" aria-label="The game PC sends UDP telemetry on port 20777 to the Linux box. The Linux box sends the dashboard and voice back on port 8000.">
+    <rect x="10" y="15" width="250" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="135" y="48" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">Windows game PC</text>
+    <text x="135" y="76" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">F1 26</text>
+    <text x="135" y="100" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">browser: dashboard + voice</text>
+    <rect x="500" y="15" width="250" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="625" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">Linux</text>
+    <text x="625" y="90" text-anchor="middle" font-size="14" fill="currentColor" opacity=".75">pitwall (no sound here)</text>
+    <path d="M270 55H490" stroke="#d7261e" stroke-width="3" marker-end="url(#ar)"/><text x="380" y="45" text-anchor="middle" font-size="13" fill="currentColor">telemetry · UDP 20777</text>
+    <path d="M490 100H270" stroke="#17803d" stroke-width="3" marker-end="url(#ag)"/><text x="380" y="122" text-anchor="middle" font-size="13" fill="currentColor">dashboard + voice · TCP 8000</text>
+  </svg></div>
+  <div class="note voice"><b>Where the voice plays.</b> The Linux box plays no engineer audio. The voice plays in the browser tab that shows the dashboard. Open the dashboard on the game PC to hear it in your headset.</div>
+  <ol class="steps">
+    <li><div>
+      <h3>Run the installer on the Linux box</h3>
+      <p>Open a terminal. Paste this line and press Enter.</p>
+      <div class="cmd"><code>curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh</code><button type="button">Copy</button></div>
+      <p class="small">If Git is missing, the installer asks for your password to install it. Answer <b>1</b> to open the dashboard on the game PC.</p>
+    </div><div class="term">Where will you open the dashboard?
+  1) On the Windows game PC (second monitor)
+  2) On this computer
+Choice [1]: <i>1</i>
+...
+Game PC UDP IP Address: <b>192.168.1.40</b></div></li>
+    <li><div>
+      <h3>Open the firewall</h3>
+      <p>Allow UDP 20777 for telemetry and TCP 8000 for the dashboard. The installer prints the lines for your firewall.</p>
+      <p class="small">ufw (Ubuntu, Mint):</p>
+      <div class="cmd"><code>sudo ufw allow 20777/udp
+sudo ufw allow 8000/tcp</code><button type="button">Copy</button></div>
+      <p class="small">firewalld (Fedora):</p>
+      <div class="cmd"><code>sudo firewall-cmd --permanent --add-port=20777/udp --add-port=8000/tcp
+sudo firewall-cmd --reload</code><button type="button">Copy</button></div>
+    </div><div class="term">$ sudo ufw status
+To            Action   From
+<i>20777/udp     ALLOW    Anywhere</i>
+<i>8000/tcp      ALLOW    Anywhere</i></div></li>
+    <li><div>
+      <h3>Set the game's telemetry on the game PC</h3>
+      <p>Use the Linux box's LAN address as the UDP IP, not 127.0.0.1.</p>
+    </div><div class="game"><div class="bar">Telemetry Settings</div><div class="crumb">Settings &gt; Telemetry Settings</div>
+      <div class="row"><span>UDP Telemetry</span><b>On</b></div>
+      <div class="row"><span>UDP Broadcast Mode</span><b>Off</b></div>
+      <div class="row hot"><span>UDP IP Address</span><b>192.168.1.40 (Linux)</b></div>
+      <div class="row"><span>UDP Port</span><b>20777</b></div>
+      <div class="row"><span>UDP Send Rate</span><b>30 Hz</b></div>
+      <div class="row hot"><span>UDP Format</span><b>2026</b></div></div></li>
+    <li><div>
+      <h3>Start pitwall on the Linux box</h3>
+      <p>Open <b>Pitwall</b> from the app menu or the desktop. Note the 4-digit <b>PIN</b> in the window.</p>
+      <p class="small">On some desktops you must right-click the desktop icon and choose <b>Allow Launching</b> first.</p>
+    </div><div class="term">pitwall <b>start</b>
+  dashboard  http://localhost:8000
+  LAN        http://192.168.1.40:8000
+
+  ┌──────────────────────────────┐
+  │  PIN  <b>4821</b>  (LAN devices only)  │
+  └──────────────────────────────┘</div></li>
+    <li><div>
+      <h3>Open the dashboard on the game PC</h3>
+      <p>On the game PC's second monitor, open the address below with the Linux box's LAN address. Type the PIN, then click <b>ENABLE SOUND</b>.</p>
+      <div class="cmd"><code>http://192.168.1.40:8000/?sound=1</code><button type="button">Copy</button></div>
+      <p class="small">The PIN changes each time pitwall starts. Keep the tab open, because the voice plays from it.</p>
+    </div><div class="browser"><div class="url"><i></i><i></i><i></i><span>192.168.1.40:8000/?sound=1</span></div><div class="body"><b>ENTER PIN</b><div class="pin"><b>4</b><b>8</b><b>2</b><b>1</b></div><span class="btn">ENABLE SOUND</span></div></div></li>
+    <li class="solo"><div>
+      <h3>If the dashboard says STALE</h3>
+      <p>Drive onto the track, then run the check in a terminal on the Linux box:</p>
+      <div class="cmd"><code>cd ~/f1-pitwall &amp;&amp; uv run pitwall doctor --seconds 30</code><button type="button">Copy</button></div>
+      <p class="small">"0 datagrams" means nothing reaches the Linux box. Check the UDP IP in step 3 and the firewall in step 2.</p>
+    </div></li>
+  </ol>
+  <div class="update"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg><div><b>Update later:</b> close pitwall, then open <b>Pitwall Update</b> from the app menu.</div></div>
+</section>
+
+<p class="foot">More settings and commands are in <a href="./#/getting-started">Getting started</a>. Licensed GPLv3. Source on <a href="https://github.com/artsworks/f1-pitwall">GitHub</a>.</p>
+</main>
+<script>
+document.querySelectorAll(".cmd button").forEach(b => b.addEventListener("click", () => {
+  navigator.clipboard.writeText(b.previousElementSibling.textContent).then(() => {
+    b.textContent = "Copied";
+    setTimeout(() => { b.textContent = "Copy"; }, 1500);
+  });
+}));
+</script>
+</body>
+</html>
