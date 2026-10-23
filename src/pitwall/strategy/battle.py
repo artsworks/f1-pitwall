@@ -434,9 +434,8 @@ class BattleTracker:
                 eff_pass = scaled_pass
         else:
             eff_pass = scaled_pass
-        chase_prob = (
-            0.0 if (floor > 0.0 and scaled_pass < floor) else catch_prob * rates.pass_overtake
-        )
+        chase_pass = rates.pass_overtake * drv.confidence_factor
+        chase_prob = 0.0 if (floor > 0.0 and chase_pass < floor) else catch_prob * chase_pass
         return Battle(
             mode=mode,
             mode_laps=max(0, inp.lap_num - self.since_lap),

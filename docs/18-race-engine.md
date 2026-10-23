@@ -572,7 +572,8 @@ changes over the trailing valid run for the current car ahead. The history keeps
 `catch_prob` estimates the chance of reaching the attack gap before the flag. It uses
 the closing-rate mean and `closing_sd_s * sqrt(laps_remaining)` when spread is known.
 Without spread, the catch result stays deterministic. `chase_prob` is `catch_prob`
-times the pass rate with overtake active. Snapshot fields include `battle_catch_prob`
+times the overtake-active pass rate scaled by the driver confidence factor. It is 0 when
+that scaled rate is below the attack floor. Snapshot fields include `battle_catch_prob`
 and `battle_chase_prob`.
 
 **Episodes and the pass model.** Each attacking / defending spell against one rival is an

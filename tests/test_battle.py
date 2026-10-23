@@ -167,6 +167,36 @@ def test_catch_and_chase_probabilities_use_gap_spread() -> None:
     assert deterministic_miss.catch_prob == 0.0
 
 
+@pytest.mark.parametrize(
+    ("overtake_active", "confidence_factor", "pass_overtake", "expected_chase_rate"),
+    [
+        pytest.param(False, 1.0, 0.6, 0.6, id="neutral-without-overtake"),
+        pytest.param(True, 0.7, 0.6, 0.42, id="low-confidence-overtake"),
+        pytest.param(True, 0.7, 0.4, 0.0, id="scaled-rate-below-floor"),
+    ],
+)
+def test_chase_probability_uses_confidence_scaled_overtake_rate(
+    overtake_active: bool,
+    confidence_factor: float,
+    pass_overtake: float,
+    expected_chase_rate: float,
+) -> None:
+    driver = DriverScale(pass_prob_min=0.30, confidence_factor=confidence_factor)
+    rates = BattleRates(pass_overtake=pass_overtake, pass_no_overtake=0.25)
+    battle = BattleTracker().update(
+        _inp(
+            gap_ahead_s=3.0,
+            ahead_pace_ms=90_500,
+            overtake_active=overtake_active,
+            driver=driver,
+        ),
+        TH,
+        rates,
+    )
+
+    assert battle.chase_prob == round(battle.catch_prob * expected_chase_rate, 2)
+
+
 def test_overtake_now_uses_overtake_active_under_2026_regs() -> None:
     rates = BattleRates()
     close = _inp(gap_ahead_s=0.6, regulations_2026=True)
