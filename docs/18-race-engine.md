@@ -376,6 +376,7 @@ fuel_margin_laps: float; fuel_per_lap_kg: float; fuel_source: str
 energy_per_lap_mj, energy_lap_delta_mj, energy_laps_to_floor: float; energy_mode: str
 drs_zone_ahead: bool; drs_available: bool (2026: overtake_active; pre-2026: drs_allowed and gap_ahead_s < 1.0 and not sc)
 penalty_s: int; unserved_drive_through: int; unserved_stop_go: int; warnings: int; corner_cut_warnings: int
+track_warning_kind: str              # 'cut' | 'overtake' | 'limits'
 track_warning_count: int             # shared corner-cut count for PENA 7-9 and 27-29, or Lap Data if higher
 penalty_recent: bool                # PENA event for the player inside th.penalty_recent_s
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)

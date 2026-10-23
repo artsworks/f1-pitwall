@@ -191,7 +191,7 @@ def test_pena_track_limit_warning_kind() -> None:
     ingest.on_datagram(pena, 2.0)
     _lap(ingest, 2.1)
     snap = state.snapshot(2.1)
-    assert snap.track_warning_recent and snap.track_warning_kind == "significant"
+    assert snap.track_warning_recent and snap.track_warning_kind == "limits"
     assert not snap.penalty_recent
     _lap(ingest, 30.0)
     assert not state.snapshot(30.0).track_warning_recent
@@ -361,7 +361,7 @@ def test_corner_cut_warning_kinds_share_one_count() -> None:
     _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
     _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
     snap = state.snapshot(3.0)
-    assert snap.track_warning_kind == "significant" and snap.track_warning_count == 2
+    assert snap.track_warning_kind == "limits" and snap.track_warning_count == 2
     _pena(ingest, 4.0, 5, 7, 0, 255, 255, 5, 0)
     snap = state.snapshot(4.0)
     assert snap.track_warning_kind == "cut" and snap.track_warning_count == 3
@@ -417,7 +417,7 @@ def test_flashback_removes_future_warning_counts_and_pending_penalty() -> None:
     _pena(ingest, 5.0, 4, 7, 0, 255, 10, 5, 0)
     _lap(ingest, 2.5, penalties=0)
     snap = state.snapshot(2.5)
-    assert snap.track_warning_kind == "minor"
+    assert snap.track_warning_kind == "limits"
     assert snap.track_warning_count == 1
     assert snap.penalty_s == 0 and not snap.penalty_recent
     _pena(ingest, 3.0, 5, 7, 0, 255, 255, 5, 0)

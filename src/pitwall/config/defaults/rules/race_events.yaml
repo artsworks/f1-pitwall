@@ -97,7 +97,7 @@ rules:
     sessions: [race]
     priority: 2
     urgency: coaching
-    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
+    when: "track_warning_recent and track_warning_kind == 'limits' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
     requires: [event]
@@ -114,7 +114,7 @@ rules:
     sessions: [race]
     priority: 1
     urgency: tactical
-    when: "track_warning_recent and track_warning_kind in ('minor', 'significant', 'extreme') and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
+    when: "track_warning_recent and track_warning_kind == 'limits' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
     clear_when: "not track_warning_recent"
     cooldown_s: 10
     requires: [event]
