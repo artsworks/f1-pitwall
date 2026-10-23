@@ -24,7 +24,13 @@ from .race_synth import RaceSpec, race_stream
 from .synth import make_event_packet, pack_packet
 
 
-def _rival_age_snapshot(history: object | None, *, restricted: bool = False) -> Snapshot:
+def _rival_age_snapshot(
+    history: object | None,
+    *,
+    restricted: bool = False,
+    car_idx: int = 2,
+    pit_stops: int = 0,
+) -> Snapshot:
     state = SessionState(thresholds={"plan_two_compound_rule": 0})
     state._player_idx = 0
     state.session_type = 15
@@ -46,6 +52,7 @@ def _rival_age_snapshot(history: object | None, *, restricted: bool = False) -> 
             total_distance=100_026.3,
             car_position=1,
             result_status=2,
+            num_pit_stops=pit_stops if car_idx == 1 else 0,
         ),
         CarLap(
             lap_distance=2973.7,
@@ -53,10 +60,11 @@ def _rival_age_snapshot(history: object | None, *, restricted: bool = False) -> 
             car_position=3,
             result_status=2,
             delta_to_car_in_front_ms=500,
+            num_pit_stops=pit_stops if car_idx == 2 else 0,
         ),
     )
     if history is not None:
-        state._histories[2] = history
+        state._histories[car_idx] = history
     state.rival_data_restricted = restricted
     return state.snapshot(0.0)
 
@@ -111,6 +119,31 @@ def test_rival_behind_age_knownness(
 
     payload = strategy_payload(snapshot)
     assert payload is not None and payload["behind"]["tyre_age_known"] is expected_known
+
+
+def test_rival_ahead_age_is_unknown_until_history_shows_new_stint() -> None:
+    history = SimpleNamespace(
+        num_laps=15,
+        num_tyre_stints=1,
+        tyre_stints=(SimpleNamespace(end_lap=255),),
+        laps=(),
+    )
+    snapshot = _rival_age_snapshot(history, car_idx=1, pit_stops=1)
+
+    assert snapshot.rival_ahead_age_known is False
+
+
+def test_rival_ahead_age_uses_history_after_new_stint_appears() -> None:
+    history = SimpleNamespace(
+        num_laps=15,
+        num_tyre_stints=2,
+        tyre_stints=(SimpleNamespace(end_lap=12), SimpleNamespace(end_lap=255)),
+        laps=(),
+    )
+    snapshot = _rival_age_snapshot(history, car_idx=1, pit_stops=1)
+
+    assert snapshot.rival_ahead_age_known is True
+    assert snapshot.rival_ahead_age == 3
 
 
 def _state() -> tuple[Ingest, SessionState]:
