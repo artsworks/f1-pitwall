@@ -2923,7 +2923,11 @@ class SessionState:
         if pkt is None or pkt.num_tyre_stints == 0:
             return None
         lap = self.cars_lap
-        if lap is not None and 0 <= car_idx < len(lap) and lap[car_idx].num_pit_stops >= pkt.num_tyre_stints:
+        if (
+            lap is not None
+            and 0 <= car_idx < len(lap)
+            and lap[car_idx].num_pit_stops >= pkt.num_tyre_stints
+        ):
             return None
         stints = pkt.tyre_stints[: pkt.num_tyre_stints]
         prev_end = stints[-2].end_lap if len(stints) >= 2 else 0
