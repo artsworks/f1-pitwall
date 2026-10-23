@@ -44,9 +44,9 @@ rules:
     urgency: tactical
     outcome_score: "battle_pass_prob * 2 - 1"
     rotate_with: [overtake_lost]
-    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
+    when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_attack_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
-    still_true: "battle_mode == 'attacking' and battle_pass_prob >= th.battle_attack_prob_min"
+    still_true: "battle_mode == 'attacking' and battle_attack_pass_prob >= th.battle_attack_prob_min"
     cooldown_s: 60
     cooldown_group: battle_ahead
     conflict_group: battle_call
@@ -78,9 +78,9 @@ rules:
     priority: 3
     urgency: tactical
     outcome_score: "1 - battle_pass_prob * 2 if laps_remaining > th.battle_patience_laps else -99"
-    when: "phase == 'racing' and sector == 1 and mode.battle_conserve_calls and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
+    when: "phase == 'racing' and sector == 1 and mode.battle_conserve_calls and battle_mode == 'attacking' and battle_attack_pass_prob < th.battle_attack_prob_min and battle_mode_laps >= th.battle_patience_laps and laps_remaining > th.battle_patience_laps"
     clear_when: "sector != 1"
-    still_true: "mode.battle_conserve_calls and battle_mode == 'attacking' and battle_pass_prob < th.battle_attack_prob_min"
+    still_true: "mode.battle_conserve_calls and battle_mode == 'attacking' and battle_attack_pass_prob < th.battle_attack_prob_min"
     cooldown_s: 180
     cooldown_group: battle_ahead
     conflict_group: battle_call

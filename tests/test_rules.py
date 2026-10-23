@@ -1005,6 +1005,7 @@ def test_aggressive_suppresses_battle_patience_and_manage_and_prioritises_attack
         rival_ahead_name="NORRIS",
         battle_mode="attacking",
         battle_pass_prob=0.15,
+        battle_attack_pass_prob=0.15,
         battle_mode_laps=3,
         _ages={"lap_data": 0.1},
     )
@@ -1040,6 +1041,7 @@ def test_aggressive_suppresses_battle_patience_and_manage_and_prioritises_attack
         gap_ahead_s=0.6,
         battle_mode="attacking",
         battle_pass_prob=0.6,
+        battle_attack_pass_prob=0.6,
         overheat=True,
         tyre_compound=17,
         _ages={"lap_data": 0.1, "car_telemetry": 0.1},

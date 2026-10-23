@@ -186,7 +186,7 @@ def confidence(weight: float, th: Mapping[str, object]) -> float:
     return weight / (weight + k)
 
 
-def _is_aggressive_mode(mode: Mapping[str, object] | None) -> bool:
+def is_aggressive_mode(mode: Mapping[str, object] | None) -> bool:
     if mode is None:
         return False
     return (
@@ -216,7 +216,7 @@ def advice_scale(
     safe_risk_max = threshold(th, "driver_safe_position_loss_risk_max", 0.30)
     safe_pass_min = threshold(th, "battle_attack_prob_min", 0.30)
 
-    is_aggressive = _is_aggressive_mode(mode) if aggressive is None else aggressive
+    is_aggressive = is_aggressive_mode(mode) if aggressive is None else aggressive
     has_source = bool(source) if source is not None else conf_clamped > 0.0
     if is_aggressive and has_source and rating >= neutral:
         surplus = _clamp((rating - neutral) / max(1.0 - neutral, 1e-9))

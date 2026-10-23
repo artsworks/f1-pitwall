@@ -85,6 +85,7 @@ class Battle:
     tyre_known_behind: bool = False
     behind_changed: bool = False
     pass_prob: float = 0.0
+    attack_pass_prob: float = 0.0
     hold_prob: float = 0.0
     result: str = ""  # last episode: passed | failed | held | lost
     result_recent: bool = False
@@ -452,7 +453,8 @@ class BattleTracker:
             tyre_known_ahead=inp.ahead_idx >= 0 and inp.ahead_age_known,
             tyre_known_behind=inp.behind_idx >= 0 and inp.behind_age_known,
             behind_changed=behind_changed,
-            pass_prob=round(eff_pass, 2),
+            pass_prob=round(scaled_pass, 2),
+            attack_pass_prob=round(eff_pass, 2),
             hold_prob=round(rates.hold, 2),
             result=self.result if recent else "",
             result_recent=recent and bool(self.result),

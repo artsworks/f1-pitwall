@@ -2129,6 +2129,7 @@ class Engine:
             battle_tyre_known_behind=b.tyre_known_behind,
             battle_behind_changed=b.behind_changed,
             battle_pass_prob=b.pass_prob,
+            battle_attack_pass_prob=b.attack_pass_prob,
             battle_catch_prob=b.catch_prob,
             battle_chase_prob=b.chase_prob,
             battle_hold_prob=b.hold_prob,

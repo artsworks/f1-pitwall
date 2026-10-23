@@ -11,7 +11,9 @@ import pytest
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
+from pitwall.model.driver import DriverScale
 from pitwall.rules.engine import RuleEngine
+from pitwall.rules.expr import Predicate
 from pitwall.server.app import strategy_payload
 from pitwall.state.session import CarLap, Snapshot
 from pitwall.store.db import Database
@@ -584,5 +586,31 @@ def test_driver_scaled_pass_prob_floor_gates_battle_attack() -> None:
     )
     assert low_wide.mode != ATTACKING
     assert high_wide.mode == ATTACKING
-    assert low_wide.pass_prob < float(th["battle_attack_prob_min"])
-    assert high_wide.pass_prob >= float(th["battle_attack_prob_min"])
+    assert low_wide.attack_pass_prob < float(th["battle_attack_prob_min"])
+    assert high_wide.attack_pass_prob >= float(th["battle_attack_prob_min"])
+
+
+@pytest.mark.parametrize(("floor", "attack_prob"), [(0.20, 0.35), (0.30, 0.25)])
+def test_attack_probability_keeps_raw_outcome_score(floor: float, attack_prob: float) -> None:
+    settings = ConfigStore().current()
+    battle = BattleTracker().update(
+        _inp(
+            gap_ahead_s=0.5,
+            driver=DriverScale(pass_prob_min=floor, confidence_factor=1.0),
+        ),
+        settings.thresholds,
+        BattleRates(pass_overtake=0.25, pass_no_overtake=0.25, hold=0.7),
+    )
+    assert battle.pass_prob == 0.25
+    assert battle.attack_pass_prob == attack_prob
+    rule = next(rule for rule in settings.rules if rule.id == "battle_attack")
+    assert rule.outcome_score == "battle_pass_prob * 2 - 1"
+    assert (
+        Predicate(rule.outcome_score)(
+            {
+                "battle_pass_prob": battle.pass_prob,
+                "battle_attack_pass_prob": battle.attack_pass_prob,
+            }
+        )
+        == -0.5
+    )

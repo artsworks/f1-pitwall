@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from pitwall.model.deg import DegFit, cliff_age
-from pitwall.model.driver import NEUTRAL, DriverScale
+from pitwall.model.driver import NEUTRAL, DriverScale, is_aggressive_mode
 
 AGGRESSIVE_PLANS = ("undercut", "overcut", "cover", "defend")
 
@@ -176,6 +176,7 @@ def optimise(
         else mode_risk_max
     )
     pick_mode = str(mode.get("plan_pick", "confidence"))
+    aggressive = is_aggressive_mode(mode)
 
     # Undercut: our fresh laps vs the rival's current (degrading) pace.
     uc_laps = int(_f(th, "undercut_laps", 2))
@@ -318,7 +319,7 @@ def optimise(
             rival_behind.name,
             risk=0.0,
         )
-        if cover_cand.risk <= risk_max:
+        if not aggressive or cover_cand.risk <= risk_max:
             tactical.append(cover_cand)
     if (
         rival_ahead is not None
@@ -330,7 +331,7 @@ def optimise(
         uc_cand = plan(
             "undercut", lap_num, undercut_s, f"Undercut on {ahead_name}", ahead_idx, ahead_name
         )
-        if uc_cand.risk <= risk_max:
+        if not aggressive or uc_cand.risk <= risk_max:
             tactical.append(uc_cand)
     if (
         rival_ahead is not None
@@ -339,6 +340,7 @@ def optimise(
         and overcut_s >= gain_min
         and laps_remaining > oc_laps
     ):
+        # Overcut stops later, not now, so today's position risk does not gate it.
         tactical.append(
             plan(
                 "overcut",
@@ -356,6 +358,7 @@ def optimise(
         and best_k >= 1
     ):
         assert rival_behind is not None
+        # Defend answers the threat position_risk measures; gating would hide that call.
         tactical.append(
             plan(
                 "defend",
@@ -367,6 +370,8 @@ def optimise(
             )
         )
     if tactical:
+        if not aggressive:
+            return tactical[0]
         if pick_mode == "gain":
             return max(
                 enumerate(tactical),
@@ -391,7 +396,7 @@ def optimise(
         and pit_exit_clean
     ):
         return plan("free_stop", lap_num, max(delay_gain, gain_min), "Free stop, gap behind")
-    if position_risk > risk_max:
+    if aggressive and position_risk > risk_max:
         return plan("stay", lap_num + best_k, delay_gain, "Traffic behind", risky=False)
     if best_k == 0:
         reason = "Tyres are done" if laps_of_pace < 1 else "This is the lap"
