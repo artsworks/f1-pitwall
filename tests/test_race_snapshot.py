@@ -372,6 +372,30 @@ def test_corner_cut_and_track_limit_warnings_count_separately() -> None:
     assert snap.track_limits_warnings == 3
 
 
+def test_track_limits_warnings_fall_back_to_lap_data() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, total_warnings=4, corner_cutting_warnings=1)
+
+    assert state.snapshot(1.0).track_limits_warnings == 3
+
+
+def test_track_limits_warnings_keep_higher_penalty_event_count() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, total_warnings=1)
+    _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
+    _pena(ingest, 4.0, 5, 29, 0, 255, 255, 5, 0)
+
+    assert state.snapshot(4.0).track_limits_warnings == 3
+
+
+def test_track_limits_warnings_do_not_go_below_zero() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, total_warnings=1, corner_cutting_warnings=3)
+
+    assert state.snapshot(1.0).track_limits_warnings == 0
+
+
 def test_penalty_total_includes_new_penalty_before_lap_data_catches_up() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0, penalties=3)
