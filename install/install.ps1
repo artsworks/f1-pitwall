@@ -77,7 +77,7 @@ function Install-Pitwall {
             return
         }
         if (@($changes).Count -gt 0) {
-            Write-Host "Tracked files have local changes. Skipping git pull; uv sync will still run."
+            Write-Host "Tracked files have local changes, so the installer skips git pull. uv sync still runs."
         } else {
             & $git -C $installDir pull --ff-only
             if ($LASTEXITCODE -ne 0) {
@@ -104,7 +104,10 @@ function Install-Pitwall {
         return
     }
 
-    $whereGameRuns = Read-Host "Where does F1 26 run? 1) On this PC  2) On another PC or console on this network"
+    Write-Host "Where does F1 26 run?"
+    Write-Host "  1) On this PC"
+    Write-Host "  2) On another PC or console on this network"
+    $whereGameRuns = Read-Host "Choice [1]"
     if ([string]::IsNullOrWhiteSpace($whereGameRuns)) {
         $whereGameRuns = "1"
     }
@@ -174,16 +177,18 @@ function Install-Pitwall {
     Write-Host ""
     Write-Host "Pitwall is installed in $installDir."
     if ($whereGameRuns -eq "1") {
-        Write-Host "F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, IP 127.0.0.1, Port 20777, Send Rate 30 Hz, Format 2026."
+        Write-Host "F1 26 UDP IP Address: 127.0.0.1"
+        Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
         Write-Host "Open http://localhost:8000 on the second monitor."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows"
     } else {
-        $lanConfig = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } | Select-Object -First 1
+        $lanConfig = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } | Select-Object -First 1
         $lanIp = "the LAN IPv4 address shown by Get-NetIPConfiguration"
         if ($null -ne $lanConfig -and $lanConfig.IPv4Address.Count -gt 0) {
             $lanIp = $lanConfig.IPv4Address[0].IPAddress
         }
-        Write-Host "Set the game Telemetry IP to $lanIp. Use UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
+        Write-Host "F1 26 UDP IP Address: $lanIp"
+        Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall udp" dir=in action=allow protocol=UDP localport=20777'
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall tcp" dir=in action=allow protocol=TCP localport=8000'
         Write-Host "Open http://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."

@@ -53,13 +53,14 @@ install_pitwall() {
             ;;
     esac
 
+    if [ "$os" = "Darwin" ] && ! xcode-select -p >/dev/null 2>&1; then
+        xcode-select --install
+        printf '%s\n' "Finish the Command Line Tools install window, then run this installer again."
+        return 1
+    fi
+
     if ! command -v git >/dev/null 2>&1; then
         if [ "$os" = "Darwin" ]; then
-            if ! xcode-select -p >/dev/null 2>&1; then
-                xcode-select --install
-                printf '%s\n' "Finish the Command Line Tools install window, then run this installer again."
-                return 1
-            fi
             printf '%s\n' "Git is missing. Install the Xcode Command Line Tools, then run this installer again."
             return 1
         fi
@@ -124,7 +125,7 @@ install_pitwall() {
             return 1
         fi
         if [ -n "$changes" ]; then
-            printf '%s\n' "Tracked files have local changes. Skipping git pull; uv sync will still run."
+            printf '%s\n' "Tracked files have local changes, so the installer skips git pull. uv sync still runs."
         else
             if ! git -C "$install_dir" pull --ff-only </dev/null; then
                 printf '%s\n' "git pull failed. Pitwall did not update."
@@ -143,7 +144,10 @@ install_pitwall() {
         return 1
     fi
 
-    printf '%s\n' "Where will you open the dashboard? 1) On the Windows game PC (second monitor)  2) On this computer (default 1)"
+    printf '%s\n' "Where will you open the dashboard?"
+    printf '%s\n' "  1) On the Windows game PC (second monitor)"
+    printf '%s\n' "  2) On this computer"
+    printf '%s' "Choice [1]: "
     dashboard_choice=
     { IFS= read -r dashboard_choice </dev/tty; } 2>/dev/null || dashboard_choice=
     case "$dashboard_choice" in
@@ -155,7 +159,7 @@ install_pitwall() {
             ;;
     esac
 
-    printf '%s' "Download the natural voice (about 60 MB)? [Y/n] "
+    printf '%s' "Download the natural voice (about 60 MB)? [Y/n]: "
     voice_answer=
     { IFS= read -r voice_answer </dev/tty; } 2>/dev/null || voice_answer=
     case "$voice_answer" in
@@ -169,16 +173,20 @@ install_pitwall() {
 
     lan_ip=
     if [ "$os" = "Linux" ]; then
-        lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-        if [ -z "$lan_ip" ] && command -v ip >/dev/null 2>&1; then
+        if command -v ip >/dev/null 2>&1; then
             route_output=$(ip route get 1.1.1.1 2>/dev/null)
             lan_ip=$(printf '%s\n' "$route_output" | sed -n 's/.* src \([^ ]*\).*/\1/p' | head -n 1)
+        fi
+        if [ -z "$lan_ip" ]; then
+            lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
         fi
     else
         lan_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
     fi
+    lan_ip_fallback=0
     if [ -z "$lan_ip" ]; then
         lan_ip="the LAN address pitwall prints at start"
+        lan_ip_fallback=1
     fi
 
     quoted_dir=$(printf '%s' "$install_dir" | sed "s/'/'\\\\''/g")
@@ -258,16 +266,21 @@ EOF
         fi
     fi
 
-(CDPATH='' cd "$install_dir" && "$uv_path" run pitwall doctor </dev/null) || {
-    printf '%s\n' "Pitwall doctor returned an error."
-}
-printf '%s\n' "0 datagrams is normal until you are on track."
+    (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall doctor </dev/null) || {
+        printf '%s\n' "Pitwall doctor returned an error."
+    }
+    printf '%s\n' "0 datagrams is normal until you are on track."
 
     printf '\n%s\n' "Pitwall is installed in $install_dir."
     printf '%s\n' "This computer plays no engineer audio. The voice plays in the browser tab that shows the dashboard. Open the dashboard on the game PC to hear it in your headset."
-    printf '%s\n' "F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, IP $lan_ip, Port 20777, Format 2026, Send Rate 30 Hz."
+    printf 'Game PC UDP IP Address: %s\n' "$lan_ip"
+    printf '%s\n' "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
     if [ "$dashboard_choice" -eq 1 ]; then
-        printf 'On the game PC, open http://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$lan_ip"
+        if [ "$lan_ip_fallback" -eq 1 ]; then
+            printf '%s\n' "On the game PC, open http://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
+        else
+            printf 'On the game PC, open http://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$lan_ip"
+        fi
     else
         printf '%s\n' "On this computer, open http://localhost:8000/?sound=1 and click ENABLE SOUND. No PIN is needed. The voice plays here."
     fi
