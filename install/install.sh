@@ -108,7 +108,9 @@ install_pitwall() {
     if [ -e "$install_dir" ]; then
         top_level=$(git -C "$install_dir" rev-parse --show-toplevel </dev/null 2>/dev/null)
         git_status=$?
-        if [ "$git_status" -ne 0 ] || [ ! -f "$install_dir/pyproject.toml" ]; then
+        if [ "$git_status" -ne 0 ] \
+            || [ ! -f "$install_dir/pyproject.toml" ] \
+            || ! grep -q '^name = "pitwall"' "$install_dir/pyproject.toml"; then
             printf 'PITWALL_DIR exists and is not a Pitwall git clone: %s\n' "$install_dir"
             return 1
         fi

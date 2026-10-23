@@ -150,13 +150,9 @@ register_engine(EngineSpec("null", _make_null, None))
 
 
 def auto_engine(settings: SpeechSettings) -> str:
-    if sys.platform == "win32":
-        from pitwall.audio.piper_tts import voice_path
+    from pitwall.audio.piper_tts import voice_path
 
-        if voice_path(settings).exists():
-            return "piper"
-        return "null"
-    return "null"
+    return "piper" if voice_path(settings).exists() else "null"
 
 
 def _fallback_id(spec: EngineSpec) -> str | None:

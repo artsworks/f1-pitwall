@@ -29,6 +29,15 @@ def _git_output(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _is_pitwall(root: Path) -> bool:
+    try:
+        with (root / "pyproject.toml").open("rb") as project_file:
+            project = tomllib.load(project_file).get("project", {})
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    return isinstance(project, dict) and project.get("name") == "pitwall"
+
+
 def _version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as project_file:
         version = tomllib.load(project_file).get("project", {}).get("version")
@@ -51,6 +60,7 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
         top_level.returncode != 0
         or Path(top_level.stdout.strip()).resolve() != root
         or not (root / "pyproject.toml").is_file()
+        or not _is_pitwall(root)
     ):
         return _error(
             out,

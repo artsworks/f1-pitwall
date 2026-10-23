@@ -58,7 +58,11 @@ function Install-Pitwall {
     if (Test-Path -LiteralPath $installDir) {
         $topLevel = & $git -C $installDir rev-parse --show-toplevel 2>$null
         $gitCode = $LASTEXITCODE
-        if ($gitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $installDir "pyproject.toml"))) {
+        if (
+            $gitCode -ne 0 -or
+            -not (Test-Path -LiteralPath (Join-Path $installDir "pyproject.toml")) -or
+            -not (Select-String -Path (Join-Path $installDir 'pyproject.toml') -Pattern '^name = "pitwall"' -Quiet)
+        ) {
             Write-Host "PITWALL_DIR points to a folder that is not a Pitwall git clone: $installDir"
             Write-Host "Set PITWALL_DIR to another folder or move this folder first."
             return

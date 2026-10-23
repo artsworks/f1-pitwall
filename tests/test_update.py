@@ -76,7 +76,10 @@ def test_update_pulls_new_version(tmp_path: Path) -> None:
 def test_update_refuses_tracked_changes(tmp_path: Path) -> None:
     origin, clone = _clone(tmp_path)
     _commit_project(origin, "0.2.0")
-    (clone / "pyproject.toml").write_text("local edit\n", encoding="utf-8")
+    (clone / "pyproject.toml").write_text(
+        '[project]\nname = "pitwall"\nversion = "0.1.0"\n# local edit\n',
+        encoding="utf-8",
+    )
     head = _git("rev-parse", "HEAD", cwd=clone)
     out = StringIO()
 
@@ -104,6 +107,44 @@ def test_update_refuses_plain_directory(tmp_path: Path) -> None:
 
     assert update(root, out=out, sync_cmd=_sync()) == 1
     assert "not a git clone" in out.getvalue()
+
+
+def test_update_refuses_other_project_before_pull_or_sync(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    _, clone = _clone(tmp_path)
+    (clone / "pyproject.toml").write_text(
+        '[project]\nname = "other"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    _git("add", "pyproject.toml", cwd=clone)
+    _git("commit", "-m", "rename project", cwd=clone)
+    head = _git("rev-parse", "HEAD", cwd=clone)
+    status = _git("status", "--porcelain", cwd=clone)
+    sync_cmd = [sys.executable, "-c", "raise SystemExit('sync ran')"]
+    run = subprocess.run
+    invoked: list[str] = []
+
+    def track_run(command, *args, **kwargs):
+        if command == ["git", "-C", str(clone), "pull", "--ff-only"]:
+            invoked.append("pull")
+        elif command == sync_cmd:
+            invoked.append("sync")
+        return run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", track_run)
+    out = StringIO()
+
+    assert update(clone, out=out, sync_cmd=sync_cmd) == 1
+
+    assert "is not a git clone of f1-pitwall" in out.getvalue()
+    assert "Updating Pitwall" not in out.getvalue()
+    assert invoked == []
+    assert _git("rev-parse", "HEAD", cwd=clone) == head
+    assert _git("status", "--porcelain", cwd=clone) == status
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_update_reports_sync_failure(tmp_path: Path) -> None:

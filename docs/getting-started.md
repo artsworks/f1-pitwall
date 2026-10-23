@@ -32,7 +32,7 @@ uv sync
 
 ## Update
 
-Use the Pitwall Update launcher, or run `uv run pitwall update` from the install directory.
+Use the Pitwall Update launcher, or run `uv run python -m pitwall update` from the install directory.
 
 ## Game settings
 
@@ -57,7 +57,7 @@ uv run pitwall start                 # ingest + rules + speech + dashboard
 
 ## Speech engines
 
-`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. Set `piper` or `omnivoice` to stream audio from a Linux PC.
+`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. On Mac and Linux, `auto` also picks Piper once the voice is downloaded.
 
 | `speech.engine` | Local speech | Browser audio stream |
 |---|---|---|

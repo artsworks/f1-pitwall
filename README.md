@@ -79,7 +79,7 @@ optionally another to **UDP Action 3**). The pit wall answers every press by voi
 
 With `voice.enabled: true`, the wheel gestures stay the same. The mic listens while the driver menu is open, or for 2 s after you press `V` on the dashboard.
 
-Update with the Pitwall Update shortcut, or run `uv run pitwall update` from the install directory.
+Update with the Pitwall Update shortcut, or run `uv run python -m pitwall update` from the install directory.
 
 ### If something is off
 

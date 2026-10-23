@@ -129,22 +129,20 @@ def test_auto_engine_resolves_to_piper_or_null(
 
     voice_file = tmp_path / "voice.onnx"
     monkeypatch.setattr(piper_tts, "voice_path", lambda _settings: voice_file)
-    monkeypatch.setattr(speaker.sys, "platform", "win32")
+    monkeypatch.setattr(speaker.sys, "platform", "linux")
     settings = SpeechSettings()
     assert auto_engine(settings) == "null"
 
     voice_file.touch()
     assert auto_engine(settings) == "piper"
 
-    monkeypatch.setattr(speaker.sys, "platform", "linux")
-    assert auto_engine(settings) == "null"
-
 
 def test_unknown_sapi_engine_warns_and_uses_auto(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
-    from pitwall.audio import speaker
+    from pitwall.audio import piper_tts, speaker
 
+    monkeypatch.setattr(piper_tts, "voice_path", lambda _settings: tmp_path / "missing.onnx")
     monkeypatch.setattr(speaker.sys, "platform", "linux")
     with caplog.at_level(logging.WARNING):
         result = make_speaker(SpeechSettings(engine="sapi"))
