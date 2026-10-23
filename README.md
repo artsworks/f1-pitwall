@@ -2,13 +2,31 @@
 
 A race engineer for F1 26. It reads the game's UDP telemetry, keeps a model of
 the session, decides what is worth saying, says it over your headset, and shows
-it on a second monitor. Everything runs locally on the game PC; nothing leaves it.
+it on a second monitor. Pitwall runs on your local network. Nothing leaves it.
 
 - **Status and milestones:** [docs/status.md](docs/status.md)
 - **Docs site:** https://artsworks.github.io/f1-pitwall/
 - **Lessons from live sessions (ADRs):** [docs/adr/](docs/adr/README.md)
 
-## Quick start (Windows game PC)
+## Quick start
+
+Install on a Windows PC with PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.ps1 | iex
+```
+
+Install on a Mac or Linux server:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh
+```
+
+[Read the install guide](https://pitwall.arthurku.com/install.html).
+
+Mac and Linux servers play speech in the dashboard browser tab only.
+
+### Manual install (Windows game PC)
 
 You need Git and [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 for
 you, so nothing else is required. In PowerShell:
@@ -61,7 +79,7 @@ optionally another to **UDP Action 3**). The pit wall answers every press by voi
 
 With `voice.enabled: true`, the wheel gestures stay the same. The mic listens while the driver menu is open, or for 2 s after you press `V` on the dashboard.
 
-To update later: `git pull; uv sync`.
+Update with the Pitwall Update shortcut, or run `uv run python -m pitwall update` from the install directory.
 
 ### If something is off
 
@@ -150,6 +168,7 @@ uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the da
 |---|---|
 | `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. |
 | `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. |
+| `pitwall update` | Pull the latest code and sync dependencies. |
 | `pitwall recordings` | List recordings newest first, with the # that other commands accept. |
 | `pitwall sessions` | List stored sessions newest first, to find a session uid. |
 | `pitwall replay` | Rerun a recording through the engine to see the calls it makes. |
@@ -231,7 +250,7 @@ Pull requests are squash-merged, so the PR title becomes the commit on `main`. T
 | `feat!: ...` or a `BREAKING CHANGE:` footer | MINOR |
 | `docs:`, `chore:`, `refactor:`, `test:`, `build:`, `ci:` | none |
 
-The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag. It creates no GitHub Release. Do not edit the version by hand.
+The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag, then creates a GitHub Release with the same notes. Do not edit the version by hand.
 
 ## Licence
 

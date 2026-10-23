@@ -1,8 +1,24 @@
 # Getting started
 
-Run pitwall on the Windows game PC next to F1 26.
+Run Pitwall on the game PC or on another computer on the same network.
 
 ## Install
+
+Install on a Windows PC with PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.ps1 | iex
+```
+
+Install on a Mac or Linux server:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh
+```
+
+[Read the install guide](https://pitwall.arthurku.com/install.html).
+
+### Manual install
 
 Install Git and [uv](https://docs.astral.sh/uv/). `uv` downloads Python 3.12. Run these
 commands in PowerShell:
@@ -13,6 +29,10 @@ git clone https://github.com/artsworks/f1-pitwall.git
 cd f1-pitwall
 uv sync
 ```
+
+## Update
+
+Use the Pitwall Update launcher, or run `uv run python -m pitwall update` from the install directory.
 
 ## Game settings
 
@@ -37,7 +57,7 @@ uv run pitwall start                 # ingest + rules + speech + dashboard
 
 ## Speech engines
 
-`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. Set `piper` or `omnivoice` to stream audio from a Linux PC.
+`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. On Mac and Linux, `auto` also picks Piper once the voice is downloaded.
 
 | `speech.engine` | Local speech | Browser audio stream |
 |---|---|---|
@@ -45,7 +65,7 @@ uv run pitwall start                 # ingest + rules + speech + dashboard
 | `omnivoice` | yes | yes |
 | `null` | no | no |
 
-Local speech plays only on Windows. On other systems, Piper and OmniVoice play nothing locally but still stream audio to the browser. If an engine fails to load, Pitwall prints a warning and tries its fallback. An unknown engine id prints a warning, and Pitwall uses `auto`. [Configuration](08-configuration.md) lists the fallbacks and the fields for each engine.
+Mac and Linux servers play speech in the dashboard browser tab only. If an engine fails to load, Pitwall prints a warning and tries its fallback. An unknown engine id prints a warning, and Pitwall uses `auto`. [Configuration](08-configuration.md) lists the fallbacks and the fields for each engine.
 
 ## Natural voice (Piper)
 
