@@ -151,20 +151,6 @@ rules:
       - "{track_warning_count} corner cuts. One more costs time"
       - "Corner cut count {track_warning_count}. Next one is a penalty"
       - "{track_warning_count} cuts now. One more costs time"
-  - id: track_limit_overtake
-    sessions: [race]
-    priority: 2
-    when: "track_warning_recent and track_warning_kind == 'overtake'"
-    clear_when: "not track_warning_recent"
-    cooldown_s: 10
-    requires: [event]
-    say:
-      - "Warning for passing off track. Nice move, wrong postcode"
-      - "That pass was off track. Warning"
-      - "Warning, pass off track. Keep it on"
-      - "Off-track pass. Warning, keep it on the circuit"
-      - "Off-track pass. Warning. Stay on the circuit"
-      - "Warning for an off-track pass. Keep the car on track"
   - id: blue_flag
     sessions: [race]
     priority: 1

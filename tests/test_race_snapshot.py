@@ -367,7 +367,10 @@ def test_corner_cut_warning_kinds_share_one_count() -> None:
     assert snap.track_warning_kind == "cut" and snap.track_warning_count == 3
     _pena(ingest, 5.0, 5, 8, 0, 255, 255, 5, 0)
     snap = state.snapshot(5.0)
-    assert snap.track_warning_kind == "overtake" and snap.track_warning_count == 4
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 4
+    _pena(ingest, 6.0, 5, 9, 0, 255, 255, 5, 0)
+    snap = state.snapshot(6.0)
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 5
 
 
 def test_track_warning_count_uses_lap_data_without_pena_events() -> None:

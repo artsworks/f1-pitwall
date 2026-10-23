@@ -166,8 +166,8 @@ PENALTY_TYPE_WARNING = 5
 # The game counts all of these as corner-cut warnings.
 _TRACK_WARNING_KINDS = {
     7: "cut",
-    8: "overtake",
-    9: "overtake",
+    8: "cut",
+    9: "cut",
     27: "limits",
     28: "limits",
     29: "limits",
@@ -567,7 +567,7 @@ class Snapshot:
         math.inf
     )  # over the closest car behind after penalties (<0 = he's ahead)
     penalty_threat_name: str = ""
-    track_warning_kind: str = ""  # latest track warning: 'cut' | 'overtake' | 'limits'
+    track_warning_kind: str = ""  # latest track warning: 'cut' | 'limits'
     track_warning_recent: bool = False
     # Corner-cut warnings so far (PENA 7-9 and 27-29, or Lap Data if higher).
     track_warning_count: int = 0
