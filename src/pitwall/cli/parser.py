@@ -34,6 +34,7 @@ from pitwall.cli.recordings import (
     cmd_trim,
 )
 from pitwall.cli.serve import cmd_doctor, cmd_start
+from pitwall.cli.update import cmd_update
 from pitwall.cli.voice import cmd_voice
 from pitwall.net.profile import PROFILES
 
@@ -52,6 +53,7 @@ EVERYDAY = (
     "voice",
     "cleanup",
     "report",
+    "update",
 )
 ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore", "trim")
 
@@ -537,6 +539,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trim.add_argument("--out", required=True)
     trim.set_defaults(func=cmd_trim)
+
+    upd = _cmd(
+        sub,
+        "update",
+        "update pitwall: git pull, then uv sync",
+        "Update Pitwall: pull the latest code with git, then sync dependencies with uv.",
+        "pitwall update",
+    )
+    upd.set_defaults(func=cmd_update)
 
     everyday_epilog = (
         "Everyday commands:\n"
