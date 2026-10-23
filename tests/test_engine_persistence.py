@@ -10,7 +10,7 @@ from statistics import median
 import pytest
 
 from pitwall.clock import VirtualClock
-from pitwall.engine import build_engine, run_replay
+from pitwall.engine import _PendingPitLoss, build_engine, run_replay
 from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PacketId
 from pitwall.state.lap import SC_UNKNOWN, LapSummary
@@ -44,9 +44,9 @@ def _race_stream(
 
     def lap_time(finished_lap: int) -> int:
         if finished_lap == 8:
-            return BASE_MS + 15_000  # in-lap
+            return BASE_MS + 5_000  # in-lap
         if finished_lap == 9:
-            return BASE_MS + 8_000  # out-lap
+            return BASE_MS + 18_000  # out-lap
         return int(BASE_MS + SLOPE * finished_lap)
 
     for lap in range(1, 11 + post_laps):
@@ -182,6 +182,39 @@ def _insert_deg_prior_lap(
     )
 
 
+def _flush_pit_loss_sample(inlap_slow_ms: int, neutralised: int) -> tuple[Database, int]:
+    uid = 7001
+    db = Database(":memory:")
+    db.upsert_session(uid, track_id=7, session_type=15)
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    lap_times = [
+        (5, BASE_MS),
+        (6, BASE_MS),
+        (7, BASE_MS),
+        (8, BASE_MS + inlap_slow_ms),
+        (9, BASE_MS),
+        (10, BASE_MS),
+        (11, BASE_MS),
+        (12, BASE_MS),
+    ]
+    for lap_num, lap_time_ms in lap_times:
+        _insert_deg_prior_lap(db, uid, lap_num, lap_time_ms, lap_num)
+    laps = db.laps_for(uid, 0)
+    by_num = {lap.lap_num: lap for lap in laps}
+    engine._pending_pit_loss = _PendingPitLoss(
+        session_uid=uid,
+        track_id=7,
+        in_lap=by_num[8],
+        out_lap=by_num[9],
+        ref_pace_ms=BASE_MS,
+        lane_ms=19_500,
+        neutralised=neutralised,
+    )
+
+    engine._flush_pending_pit_loss(uid, laps, force=True)
+    return db, uid
+
+
 def test_deg_prior_uses_clean_session_lap_median() -> None:
     db = Database(":memory:")
     engine, uid, settings = _deg_prior_engine(db)
@@ -219,6 +252,15 @@ def test_deg_prior_uses_fallback_without_clean_session_laps() -> None:
     assert prior.base_ms == 95_000
 
 
+def test_learned_thermal_window_widens_the_degradation_cutoff() -> None:
+    db = Database(":memory:")
+    engine, _, settings = _deg_prior_engine(db)
+    db.set_param(7, 17, "thermal_lo_c", 95.0, weight=2.0)
+    db.set_param(7, 17, "thermal_hi_c", 100.0, weight=2.0)
+
+    assert engine._thermal_hi_c(7, 17, settings) == 105.0
+
+
 def test_player_laps_carry_wear_fuel_ers(tmp_path: Path) -> None:
     engine, state, db = _run(tmp_path)
     uid = state.session_uid
@@ -254,6 +296,29 @@ def test_pit_sequence_persists_event_and_param(tmp_path: Path) -> None:
     assert 20_000 < ev.loss_ms < 26_000
     p = db.get_param(7, 0, "pit_loss_green_ms")
     assert p is not None and p.value == float(ev.loss_ms)
+
+
+def test_slow_green_pit_inlap_does_not_persist_event_or_param() -> None:
+    db, uid = _flush_pit_loss_sample(23_700, neutralised=0)
+
+    assert db.pit_events_for_session(uid) == []
+    assert db.get_param(7, 0, "pit_loss_green_ms") is None
+
+
+@pytest.mark.parametrize(
+    ("inlap_slow_ms", "neutralised", "param_name"),
+    [(5_000, 0, "pit_loss_green_ms"), (15_000, 2, "pit_loss_vsc_ms")],
+)
+def test_pit_loss_guard_keeps_normal_and_neutralised_stops(
+    inlap_slow_ms: int, neutralised: int, param_name: str
+) -> None:
+    db, uid = _flush_pit_loss_sample(inlap_slow_ms, neutralised)
+
+    events = db.pit_events_for_session(uid)
+    assert len(events) == 1
+    assert events[0].loss_ms == inlap_slow_ms
+    param = db.get_param(7, 0, param_name)
+    assert param is not None and param.value == inlap_slow_ms
 
 
 def test_repeated_pit_lane_laps_do_not_persist_a_stop(tmp_path: Path) -> None:

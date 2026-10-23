@@ -4,6 +4,7 @@
   var STALE_MS = 1000, CONNECTING_MS = 3000, MAX_CALLS = 12;
   var IDLE_S = { 1: 30, 2: 20, 3: 20 };
   var COMPOUNDS = { 16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET" };
+  var COMP_SHORT = { SOFT: "SOFT", MEDIUM: "MED", HARD: "HARD", INTER: "INT", WET: "WET" };
   var SC_WORDS = { 1: "SAFETY CAR", 2: "VSC", 3: "FORMATION" };
 
   var ws = null, lastSeq = null, backoff = 500, mismatched = false;
@@ -332,6 +333,30 @@
         drv.innerHTML = "";
         drv.appendChild(document.createTextNode("DRV " + Math.round(p.driver.rating * 100)));
         drv.appendChild(span(" " + p.driver.source, "dim"));
+      }
+    }
+    var limits = el("limits"), infringements = p.race && p.race.infringements;
+    if (limits) {
+      var limitsVisible = !!infringements &&
+        (p.session_kind === "race" || p.session_kind === "qualifying");
+      limits.hidden = !limitsVisible;
+      if (limitsVisible) {
+        var n = Number(infringements.corner_cuts) || 0;
+        var c = Number(infringements.cut_warns) || 0;
+        var t = Number(infringements.limit_warns) || 0;
+        var penalty = Number(infringements.penalty_s) || 0;
+        var warnAt = Number(infringements.warn_at);
+        var crit = penalty > 0 || (warnAt > 0 && n > 0 && n % warnAt === 0);
+        var warn = warnAt > 0 && n % warnAt === warnAt - 1;
+        var splitComplete = c + t >= n;
+        limits.className = "chip limits" + (crit ? " crit" : warn ? " warn" : "");
+        limits.textContent = document.body.classList.contains("phone") ?
+          (splitComplete ? "C" + c + " T" + t : "W" + n) :
+          (splitComplete ? "CUT " + c + " · TL " + t : "WARN " + n);
+        if (penalty > 0) {
+          limits.appendChild(document.createTextNode(" "));
+          limits.appendChild(span("+" + penalty + "s", "pen"));
+        }
       }
     }
     var v = el("verbosity");
@@ -703,11 +728,19 @@
     r.appendChild(c);
     return r;
   }
-  function rvRow(sideTxt, name, ot, st, gap) {
+  function rvRow(sideTxt, name, ot, st, gap, r) {
     var rv = span("", "rv", "div");
     rv.appendChild(span(sideTxt, "side"));
     var nm = span(name, "name");
     if (ot) nm.appendChild(span("OV", "tag crit"));
+    if (r && r.compound) {
+      var compound = String(r.compound);
+      nm.appendChild(span(COMP_SHORT[compound.toUpperCase()] || compound,
+        "comp xs " + compoundClass(r.compound)));
+      if (r.tyre_age_known && typeof r.tyre_age === "number") {
+        nm.appendChild(span(" · " + r.tyre_age + "L", "age"));
+      }
+    }
     rv.appendChild(nm);
     if (st !== null) rv.appendChild(span(st, "st"));
     rv.appendChild(span(gap, "gap"));
@@ -746,14 +779,15 @@
       var r = s[side], other = s[side === "ahead" ? "behind" : "ahead"];
       if (r) {
         n.appendChild(rvRow(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", (r.pos ? "P" + r.pos + " " : "") +
-          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side)));
+          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side), r));
         if (r.gap_s !== null && r.gap_s <= 3) n.appendChild(rail(r.gap_s, side, false));
         var pr = paceRow(b, side);
         if (pr) n.appendChild(pr);
       }
       if (other) {
         var o = rvRow(side === "ahead" ? "▼ BEHIND" : "▲ AHEAD", (other.pos ? "P" + other.pos + " " : "") +
-          String(other.name || "--").toUpperCase(), false, null, gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"));
+          String(other.name || "--").toUpperCase(), false, null,
+          gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"), other);
         o.style.opacity = ".6";
         n.appendChild(o);
       }
@@ -788,7 +822,7 @@
       var calm = !train && !direct;
       var row = span("", "bcar " + (train ? "train" : calm ? "calm" : side === "behind" ? "defend" : "attack"), "div");
       row.appendChild(rvRow((side === "ahead" ? "▲ P" : "▼ P") + (r.pos || "-"), String(r.name || "--").toUpperCase(),
-        r.overtake && side === "behind", st, gapStr(r.gap_s, side)));
+        r.overtake && side === "behind", st, gapStr(r.gap_s, side), r));
       if (r.gap_s !== null && r.gap_s <= 3 && !calm) row.appendChild(rail(r.gap_s, side, train));
       if (direct) { var pr = paceRow(b, side); if (pr) row.appendChild(pr); }
       n.appendChild(row);

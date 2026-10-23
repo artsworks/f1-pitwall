@@ -292,15 +292,11 @@ _CASES = [
     ),
     (
         "corner_cut_warning",
-        RaceSpec(laps=8, base_ms=12_000, warning_laps=((3, 7),)),
+        RaceSpec(laps=8, base_ms=12_000, warning_laps=((3, 8),)),
     ),
     (
         "corner_cut_last_warning",
         RaceSpec(laps=8, base_ms=12_000, warning_laps=((2, 7), (3, 7), (4, 7))),
-    ),
-    (
-        "track_limit_overtake",
-        RaceSpec(laps=8, base_ms=12_000, warning_laps=((3, 8),)),
     ),
     (
         "rival_behind_pitted",

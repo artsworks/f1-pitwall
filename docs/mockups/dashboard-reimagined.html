@@ -150,6 +150,9 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .chip.drv.ok { border-color: var(--ok); color: var(--ok); }
 .chip.drv.low { border-color: var(--warn); color: var(--warn); }
 .chip.drv .dim { color: var(--dim); font-weight: normal; }
+.chip.limits { min-width: 0; padding: 0 .3rem; font-size: .9rem; letter-spacing: .04em; }
+.chip.limits.warn { border-color: var(--warn); color: var(--warn); }
+.chip.limits.crit { border-color: var(--crit); color: var(--crit); }
 
 /* mindset pill (item 15): compact, far right */
 .pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
@@ -264,7 +267,7 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .tag.lock { background: var(--aggr); border-color: var(--aggr); color: #000; }
 /* lock-up: orange border on that wheel while lockup_wheel is set (a few seconds), then gone.
    Outline sits inside the status border, so the status colour and word stay readable. */
-body.lockup .corner.fl { outline: .3rem solid var(--aggr); outline-offset: -.3rem;
+.corner.locked, body.lockup .corner.fl { outline: .3rem solid var(--aggr); outline-offset: -.3rem;
   animation: flip 700ms var(--ease-out); --ring: var(--aggr); }
 body:not(.lockup) .lockup-only { display: none !important; }
 @keyframes temp-pop { 0% { transform: scale(1.12); } 100% { transform: none; } }
@@ -278,7 +281,8 @@ body:not(.lockup) .lockup-only { display: none !important; }
   text-decoration-thickness: 3px; text-underline-offset: .3rem; }
 .setup .sug { color: var(--warn); font-weight: bold; display: inline-block; min-width: 7ch; }
 .setup .sug.none { color: var(--faint); font-weight: normal; }
-.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; }
+.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; white-space: normal; }
+.setup .sug.try { opacity: .6; }
 
 /* ------------------------------------------------------- D fixed tiles --- */
 .tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto;
@@ -383,6 +387,8 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
 .rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
 .rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
 .rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv .name .comp { margin-left: .5rem; }
+.rv .name .age { color: var(--soft); font-size: 1.1rem; }
 .rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
 .rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
   padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }
@@ -473,8 +479,6 @@ body.cool .coolzone { display: flex; flex-direction: column; gap: .8rem; grid-co
 .cz-sec .up { color: var(--ok); } .cz-sec .down { color: var(--warn); } .cz-sec .flat { color: var(--soft); }
 /* pit board: takes over the main row only; status, banner, footer stay where they are */
 body.pit .tyres, body.pit .tiles, body.pit .ctx { display: none; }
-body.pit .pitzone { display: flex; flex-direction: column; gap: .6rem; grid-column: 1 / -1; grid-row: 3; }
-.pb-release { font-size: 3.4rem; font-weight: bold; text-align: center; background: var(--ok); color: #000; border-radius: 6px; }
 
 /* ------------------------------------------------------------ G footer ---
    Permanently muted (--soft / --dim). Queue and TTS metrics do not change the footer colour.
@@ -535,23 +539,25 @@ body.dash.phone { width: 390px; margin: 0 auto; height: auto; min-height: 100vh;
   grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto;
   outline: 1px solid var(--line); }
 body.phone > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
-body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; gap: .6rem; padding: .4rem .6rem; }
+body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; gap: .35rem; padding: .4rem .4rem; }
+body.phone .status #lap { min-width: 0; white-space: nowrap; flex-shrink: 0; }
+body.phone .status #drv { font-size: .9rem; flex-shrink: 0; }
 body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
 body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
 body.phone .setup, body.phone .t-pace small,
 body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .damage,
 body.phone .ctx-head, body.phone .ctx .card:not(.strat) { display: none; }
-body.phone .banner { position: sticky; top: 2.6rem; z-index: 2; min-height: 4.2rem; }
+body.phone .banner { position: sticky; top: var(--status-h, 3.2rem); z-index: 2; min-height: 4.2rem; }
 body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
   text-overflow: ellipsis; }
 body.phone .car { min-height: 14rem; }
-body.phone .corner .temp { font-size: 2.4rem; }
+body.phone .corner .temp { font-size: 2.2rem; }
 body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
 body.phone .t-head { font-size: 1.1rem; }
 body.phone .corner .det .surf { display: none; }
 body.phone .corner .tags { display: none; }
 body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
-body.phone .arm { display: block; margin: .6rem .9rem 1rem; padding: .8rem; font: inherit; font-size: 1.4rem;
+body.phone .arm { display: block; margin: .3rem .9rem .5rem; padding: .6rem; font: inherit; font-size: 1.4rem;
   font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
 body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
 
@@ -561,6 +567,171 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .fx.once { display: none; }
 }
+/* cool-down lap (docs/17): takes over the tyre/fuel/strategy zones until the
+   hot-lap-mode point, then the normal layout comes back */
+.coolzone { display: none; flex-direction: column; gap: .8rem; font-size: 1.3rem; }
+/* glance order: traffic behind, then battery / hot-lap countdown / tyres, then detail */
+.c-alert { font-size: 2.6rem; font-weight: bold; text-align: center; padding: .5rem;
+  border-radius: 6px; letter-spacing: .06em; }
+.c-alert.clear { font-size: 1.4rem; color: var(--ok); border: 1px solid var(--line); }
+.c-alert.warn { background: var(--warn); color: #000; }
+.c-alert.crit { background: var(--crit); color: #000; animation: c-flash .8s steps(2) infinite; }
+@keyframes c-flash { 50% { opacity: .55; } }
+.c-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
+.c-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .5rem .7rem; }
+.c-tile.ok { border-color: var(--ok); }
+.c-tile.warn { border-color: var(--warn); }
+.c-tile.crit { border-color: var(--crit); }
+.c-num { font-size: 3.6rem; font-weight: bold; line-height: 1.1; }
+.c-tile.ok .c-num { color: var(--ok); }
+.c-tile.warn .c-num { color: var(--warn); }
+.c-tile.crit .c-num { color: var(--crit); }
+.coolzone .bar { position: relative; height: .9rem; background: var(--line); border-radius: 3px;
+  margin: .3rem 0; }
+.coolzone .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
+.coolzone .c-tile.warn .bar .fill { background: var(--warn); }
+.coolzone .sub.c-warn { color: var(--warn); font-weight: bold; }
+.coolzone .bar .mark { position: absolute; top: -4px; width: 3px; height: calc(100% + 8px);
+  background: var(--fg); }
+.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 2.2rem;
+  font-weight: bold; }
+.c-tyres .hot { color: var(--crit); }
+.c-tyres .cold { color: var(--cold); }
+.c-tyres .ok { color: var(--ok); }
+.c-info { display: flex; flex-direction: column; gap: .3rem; font-size: 1.2rem; }
+.c-row .worst { color: var(--warn); font-weight: bold; }
+.c-sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0; }
+.c-sec { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; text-align: center; }
+.c-sec .k { display: block; color: var(--dim); font-size: 0.75em; }
+.c-sec .t { display: block; font-weight: bold; font-variant-numeric: tabular-nums; }
+.c-sec .d { display: block; font-size: 0.8em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.c-sec.worst { border-color: var(--warn); }
+.c-sec.worst .d { color: var(--warn); font-weight: bold; }
+.c-sec.gain .d { color: var(--ok); }
+/* garage pit board: 12-column grid. Rows: release, tyres + last run + weather,
+   sectors, then setup changes + current setup taking the rest of the height. */
+.pitboard { display: none; overflow: auto; gap: .5rem .8rem; align-content: start;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: auto auto auto minmax(0, 1fr); }
+.pb-head[hidden] { display: none; }
+.pb-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 1.2rem;
+  border-radius: 6px; border: 2px solid var(--line); padding: .2rem .8rem; }
+.pb-head:has(.pb-release.ok) { background: var(--ok); border-color: var(--ok); color: #000; }
+.pb-head:has(.pb-release.warn) { background: var(--warn); border-color: var(--warn); color: #000; }
+.pb-head:has(.pb-release.crit) { background: var(--crit); border-color: var(--crit); color: #000; }
+.pb-release { font-size: 1.8rem; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
+.pb-release-sub { font-size: 1.2rem; color: inherit; opacity: .85; }
+.pb-box { min-width: 0; min-height: 0; }
+.pb-box h2 { font-size: 1rem; margin-bottom: .25rem; }
+.pb-box h2 .dim { font-weight: normal; letter-spacing: 0; }
+.pb-tyrebox { grid-column: 1 / 6; }
+.pb-run { grid-column: 6 / 10; }
+.pb-wx { grid-column: 10 / 13; }
+.pb-sectors { grid-column: 1 / -1; }
+.pb-setup { grid-column: 1 / 8; display: flex; flex-direction: column; min-height: 0; }
+.pb-setup .pb-change { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pb-cur { grid-column: 8 / 13; overflow: auto; }
+.pb-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.pb-corner { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .2rem .6rem; }
+.pb-corner .lbl { color: var(--dim); font-size: 1.1rem; }
+.pb-temp { font-size: 1.4rem; color: var(--soft); margin-left: .3rem; }
+.pb-temp.ok { color: var(--ok); } .pb-temp.hot { color: var(--crit); } .pb-temp.cold { color: var(--cold); }
+.pb-move { font-size: 1.6rem; font-weight: bold; line-height: 1.1; }
+.pb-psi { font-size: 1.2rem; }
+.pb-corner.up .pb-move, .pb-corner.down .pb-move { color: var(--warn); }
+.pb-corner.up, .pb-corner.down { border-color: var(--warn); }
+.pb-corner.set { border-color: var(--ok); }
+.pb-corner.set .pb-move, .pb-corner.hold .pb-move { color: var(--ok); }
+.pb-corner.limit .pb-move { color: var(--dim); }
+.pb-corner.none .pb-move { color: var(--faint); }
+.pb-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.pb-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .2rem .6rem; min-width: 0; }
+.pb-tile .k { color: var(--soft); font-size: 1rem; font-weight: bold; letter-spacing: .06em; }
+.pb-tile .v { font-size: 1.6rem; font-weight: bold; line-height: 1.15; white-space: nowrap; }
+.pb-tile .s { color: var(--soft); font-size: 1rem; }
+.pb-tile.ok { border-color: var(--ok); }
+.pb-tile.ok .v { color: var(--ok); }
+.pb-tile.warn { border-color: var(--warn); }
+.pb-tile.warn .v { color: var(--warn); }
+.pb-tile.crit { border-color: var(--crit); }
+.pb-tile.crit .v { color: var(--crit); }
+.pb-wxl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
+.pb-wxl li { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: .5rem; align-items: baseline;
+  background: var(--panel); border-left: 4px solid var(--line); padding: .15rem .5rem; font-size: 1.2rem; }
+.pb-wxl li.dry { border-color: var(--ok); }
+.pb-wxl li.wet { border-color: var(--cold); }
+.pb-wxl li.storm { border-color: var(--crit); }
+.pb-wxl .k { color: var(--dim); font-size: 1rem; }
+.pb-wxl .sky { font-weight: bold; }
+.pb-wxl .pct { color: var(--soft); }
+.pb-sec { width: 100%; border-collapse: collapse; font-size: 1.2rem; }
+.pb-sec th, .pb-sec td { border: 1px solid var(--line); padding: 0 .5rem; text-align: right; }
+.pb-sec thead th { color: var(--dim); font-weight: normal; font-size: 1rem; letter-spacing: .1em; }
+.pb-sec tbody th { text-align: left; color: var(--soft); font-size: 1rem; letter-spacing: .06em; width: 9rem; }
+.pb-sec td { font-weight: bold; }
+.pb-sec .who { display: block; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dim); font-size: .85rem; letter-spacing: 0; }
+.pb-sec .who[hidden] { display: none; }
+.pb-sec td.ok { color: var(--ok); } .pb-sec td.warn { color: var(--warn); }
+.pb-sec td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
+.pb-setup ol, .pb-cur ol { list-style: none; margin: 0; padding: 0; }
+.pb-change { display: flex; flex-direction: column; gap: .2rem; }
+.pb-change li { display: grid; grid-template-columns: 1.4rem 2.6rem minmax(6rem, auto) auto 1fr; gap: .5rem;
+  align-items: baseline; font-size: 1.3rem; padding: 0 .5rem; background: var(--panel);
+  border-left: 6px solid var(--warn); }
+.pb-change li.try { opacity: .6; }
+.pb-change .tag.try { font-size: 1rem; }
+.pb-change .tag.spacer { visibility: hidden; }
+.pb-change .nm { font-weight: bold; white-space: nowrap; }
+.pb-change .box, .pb-change .val { color: var(--warn); font-weight: bold; white-space: nowrap; }
+.pb-change .why { color: var(--soft); font-size: 1rem; }
+.pb-change li.done { border-color: var(--ok); }
+.pb-change li.done .box, .pb-change li.done .val { color: var(--ok); }
+.pb-change li.none { display: block; border-color: var(--ok); color: var(--ok); font-weight: bold; }
+.pb-ref { font-size: .95rem; display: grid; grid-template-columns: 1fr 1fr; column-gap: 1rem; align-content: start; }
+.pb-ref li { display: grid; grid-template-columns: 1fr; gap: 0; padding: .1rem 0;
+  border-bottom: 1px solid var(--line); align-items: baseline; }
+.pb-ref li.dim { display: block; grid-column: 1 / -1; }
+.pb-ref .grp { color: var(--dim); font-size: .8rem; letter-spacing: .06em; }
+.pb-ref .chips { display: flex; flex-wrap: wrap; gap: .1rem 1.2rem; }
+.pb-ref .c .k { color: var(--soft); }
+.pb-ref .c.todo b { color: var(--warn); }
+.pb-ref .c.try { opacity: .6; }
+.pb-ref .c.lk .k { color: var(--dim); }
+.pb-locked { color: var(--soft); font-size: 1.1rem; padding-top: .3rem; }
+/* phone: one column, tyres first, then setup changes */
+@media (max-width: 800px) {
+  .pitboard { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: .6rem; }
+  .pitboard > * { grid-column: 1 / -1; }
+  .pb-head { order: 0; flex-wrap: wrap; gap: .1rem .8rem; }
+  .pb-release { font-size: 1.9rem; white-space: normal; }
+  .pb-tyrebox { order: 1; }
+  .pb-setup { order: 2; }
+  .pb-setup .pb-change { overflow: visible; }
+  .pb-sectors { order: 3; }
+  .pb-run { order: 4; }
+  .pb-wx { order: 5; }
+  .pb-cur { order: 6; overflow: visible; }
+  .pb-tiles { grid-template-columns: 1fr 1fr; }
+  .pb-change li { grid-template-columns: 2.6rem auto 1fr; font-size: 1.4rem; }
+  .pb-change .tag.spacer { display: none; }
+  .pb-change .tag.try { grid-row: 2; grid-column: 1; }
+  .pb-change .val { grid-column: 3; text-align: right; }
+  .pb-change .why { grid-column: 2 / -1; }
+  .pb-ref { grid-template-columns: 1fr; }
+  .pb-sec { font-size: 1.05rem; }
+  .pb-sec th, .pb-sec td { padding: 0 .25rem; }
+  .pb-sec tbody th { width: auto; font-size: .85rem; }
+  .pb-sec .who { max-width: 6.5rem; font-size: .8rem; }
+}
+body.pit .pitboard { display: grid; grid-column: 1 / -1; grid-row: 3; }
+body.cool .coolzone { font-size: 1.3rem; }
+/* battle rows: state word and gap keep fixed widths so values update in place */
+.battle .bcar .rv .st { display: inline-block; min-width: 13ch; text-align: right; }
+.ctx-race .card[hidden] { display: none; }
 </style>
 </head>
 
@@ -587,10 +758,10 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   <span id="live" class="live">LIVE</span>                 <!-- live -->
   <span id="age">age 42 ms</span>                         <!-- packet_age_ms: amber >= 500, red >= 1000 -->
   <!-- ALT: <span id="age" class="warn">age 640 ms</span>  <span id="age" class="crit">age 1.2 s</span> -->
-  <span class="sess">ON TRACK</span>                       <!-- phase -->
+  <span id="phase" class="sess">ON TRACK</span>            <!-- phase -->
   <!-- ALT: SC  <span class="flag sc">⚠ SAFETY CAR</span>   red flag  <span class="flag red">⚠ RED FLAG</span> -->
   <span class="spacer"></span>
-  <span class="sess">RACE · BAHRAIN</span>                 <!-- session_kind, track -->
+  <span id="session" class="sess">RACE · BAHRAIN</span>    <!-- session_kind, track -->
   <span id="lap">LAP 24/57</span>                          <!-- lap_num, total_laps -->
   <span id="position">P5</span>                            <!-- position -->
   <!-- OV and BO are the same game source (F1 26 Overtake Mode): show OV only.
@@ -604,6 +775,11 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   <span id="voice" class="voice" hidden>● LISTENING 2s</span> <!-- voice.listening, voice.left_s -->
   <span id="drv" class="chip drv ok">DRV 62 <span class="dim">global</span></span>
   <!-- driver.rating, driver.source; ALT: chip drv low when below driver.neutral; hidden when driver is null -->
+  <span id="limits" class="chip limits warn">CUT 1 · TL 1</span>
+  <!-- race.infringements: corner_cuts, cut_warns, limit_warns, warn_at (3), penalty_s.
+       Show CUT c · TL t when the split covers corner_cuts, or WARN n when it does not.
+       Phone uses Cc Tt or Wn. Colour follows corner_cuts. The +Ns penalty suffix is red.
+       Hidden outside race and qualifying. -->
   <!-- Balanced/aggressive engine is being reworked separately; the pill is display only. -->
   <span id="mindset" class="pill">BAL</span>               <!-- mindset='balanced' -->
   <!-- ALT: <span id="mindset" class="pill aggr">AGGR</span> -->
@@ -650,12 +826,12 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   <!-- Arrows only on the live-adjustable values (bias, on-throttle diff). Off-throttle is display only. -->
   <div class="setup">
     <span class="k">BB</span>
-    <span><span class="v">56%</span> <span class="sug">▲ try 57</span></span>          <!-- front_brake_bias=56, setup advisor target 57 -->
+    <span><span class="v">56%</span> <span class="sug try">▲ 57</span></span>              <!-- front_brake_bias=56, setup advisor target 57 -->
     <span></span>
     <span class="k">DIFF</span>
     <span>ON <span class="v suited">60%</span> <span class="sug none">✓ suited</span></span> <!-- setup_on_throttle_diff=60 = target -->
     <span>OFF <span class="v suited">55%</span></span>                                      <!-- setup_off_throttle_diff=55, no arrow -->
-    <span class="legend">underlined = matches setup target · ▲▼ = suggested change</span>
+    <span class="legend">underline = target met · arrows = advice · TRY = experiment</span>
   </div>
 </section>
 
@@ -665,7 +841,8 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     <!-- fuel_remaining_laps: game MFD laps spare/short at the flag (one decimal).
          TODO: revisit switching to the two-part tile, absolute fuel_laps + coloured margin_laps
          (FuelBudget in src/pitwall/model/budget.py), once the fuel_delta_laps target ownership
-         is defined (docs/15 §10 open question 1). -->
+         is defined (docs/15 §10 open question 1). ALT when strategy.fuel_delta_laps is null:
+         <div class="sub">laps SPARE · game</div> -->
     <div class="big ok">+0.4</div>
     <div class="sub">laps SPARE</div>
     <!-- ALT: <div class="big crit">−0.6</div><div class="sub">laps SHORT</div> -->
@@ -768,22 +945,24 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     <div class="card safety rain-only">
       <div class="rank">SAFETY</div>
       <div class="head">☂ RAIN CROSSOVER → <span class="comp inter">INTER</span></div>
-      <div class="line">rain <b>65%</b> in <b>~5 min</b> · about 3 laps</div>
+      <div class="line">rain <b>65%</b> in <b>~5 min</b></div>
     </div>
 
   <!-- ALT: SC + battle. Safety card goes on top; battle stays below; PLAN C line appears in strategy.
   <div class="card safety"><div class="rank">SAFETY</div><div class="head">⚠ SAFETY CAR</div>
-    <div class="line">lap 2 under SC · <b>pit loss 11.2 s</b> instead of 21.0 s</div></div>
+    <div class="line">lap 2 under SC · <b>pit loss 11.2 s</b></div></div>
   -->
   <!-- ALT: red-flag flush. Only this card remains: every queued non-safety card is flushed.
-  <div class="card safety red"><div class="rank">SAFETY · QUEUE FLUSHED</div><div class="head">⚠ RED FLAG</div>
+  <div class="card safety red"><div class="rank">SAFETY</div><div class="head">⚠ RED FLAG</div>
     <div class="line">box this lap · tyres free to change</div></div>
   -->
   <!-- ALT: box near pit entry + battle. Execution is promoted (rank -1) near pit entry and sits
        above everything except safety. resolved_by: boxing clears the blue-flag card.
-  <div class="card exec"><div class="rank">EXECUTION · PROMOTED</div><div class="head">BOX NOW · PLAN A</div>
-    <div class="line">pit entry in <b>300 m</b> · hards · rejoin P7 behind Ocon +1.2</div></div>
-  <div class="card safety" hidden>blue flag (cleared by box, resolved_by)</div>
+  <div class="card exec"><div class="rank">EXECUTION</div><div class="head">BOX NOW · PLAN A</div>
+    <div class="line">window L26–28 · costs 21 s</div></div>
+  PROPOSED: pit entry in 300 m · hards · rejoin P7 behind Ocon +1.2
+  <div class="card safety cold"><div class="rank">SAFETY</div><div class="head">⚑ BLUE FLAG</div>
+    <div class="line">let the leader by</div></div>
   -->
   <!-- ALT: reply to a menu / voice request (rank 2), sits above tactical.
   <div class="card reply"><div class="rank">REPLY · GAP TO LEADER?</div><div class="head">+18.4 s</div>
@@ -799,14 +978,14 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
       <div class="mode">◀ DEFENDING <span class="sub">· 2 laps</span></div>  <!-- battle.mode, battle.mode_laps -->
       <div class="rv">
         <span class="side">▼ BEHIND</span>
-        <span class="name">P6 HAMILTON <span class="tag crit">OV</span></span>   <!-- rival_behind.pos/name, .overtake -->
+        <span class="name">P6 HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span>   <!-- rival_behind.pos/name, .overtake -->
         <span class="gap">−0.6</span>                                            <!-- rival_behind.gap_s -->
       </div>
       <!-- gap rail: 0-3 s, 1 s overtake range shaded, marker glides (.rail .rc, --g = gap / 3) -->
       <div class="rail behind in"><div class="rz">1 S</div><div class="rc" style="--g: .2"></div></div>
       <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div> <!-- battle.closing_behind_s, battle.hold_prob -->
       <div class="rv" style="margin-top:.3rem; opacity:.6">
-        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS</span><span class="gap">+2.4</span>
+        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="gap">+2.4</span>
       </div>
     </div>
     <!-- PROPOSED multi-car battle (#fight-ahead, #sandwich, #fight-behind). Rows run in track order,
@@ -820,29 +999,29 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     <div class="card battle attack scrap fight-ahead-only">
       <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>  <!-- battle.result='scrap', battle_swaps -->
       <div class="bcar train">  <!-- rival_ahead2 -->
-        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI</span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI<span class="comp xs medium">MED</span><span class="age"> · 12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
         <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
       <div class="bcar attack">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
         <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
         <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar calm">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON</span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON<span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
       </div>
     </div>
     <div class="card battle threat sandwich-only">
       <div class="grp crit">◀ DEFENDING <span class="sub">+</span> <span class="ok">▶ ATTACKING</span></div>
       <div class="bcar attack">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
         <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .23"></div></div>
         <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar defend">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
         <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .2"></div></div>
         <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div>
       </div>
@@ -852,16 +1031,16 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     <div class="card battle threat scrap fight-behind-only">
       <div class="grp crit">⇄ SCRAP <span class="sub">· P5 to P7 · 4 swaps in 2 min</span></div>
       <div class="bcar calm">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS</span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar defend">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
         <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .13"></div></div>
         <div class="pace"><span class="crit">▲ closing 0.2 s/lap</span><span class="prob">HOLD 51%</span></div>
       </div>
       <div class="bcar train">  <!-- rival_behind2 -->
-        <div class="rv"><span class="side">▼ P7</span><span class="name">RUSSELL <span class="tag crit">OV</span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
+        <div class="rv"><span class="side">▼ P7</span><span class="name">RUSSELL <span class="tag crit">OV</span><span class="comp xs soft">SOFT</span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
         <div class="rail behind train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
     </div>
@@ -878,7 +1057,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
       <div class="rank">STRATEGY</div>
       <div class="plan"><span class="pid">PLAN A</span>
         <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span></span>
-        box L27 · window L26–28 <span class="onp">✓ ON PLAN</span></div>
+        window L26–28 <span class="onp">✓ ON PLAN</span></div>
       <!-- ALT off plan: <span class="onp off">✗ OFF PLAN −4.0 s</span>  (plan_off_s) -->
       <div class="plan alt"><span class="pid">PLAN B</span>
         <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span> <span class="arr">→</span> <span class="comp soft">S</span></span>
@@ -888,56 +1067,148 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
       -->
     </div>
 
-    <div class="card info">◦ INFO · Ocon P7 pitted L23, rejoined 4.1 s behind Hamilton</div>
+    <div class="card info">◦ INFO · Norris pitted</div>
   </div>
 
   <!-- quali zone: shown by body.quali, automatic by phase (out_lap / garage / flying / in_lap) -->
   <div class="qzone">
     <div class="qphase"><span>GARAGE</span><span>OUT LAP</span><span class="on">FLYING</span><span>IN LAP</span></div> <!-- phase -->
     <div class="card"><div class="qcut"><span>CUT-OFF</span><span class="pos">P9</span>
-      <span class="badge">THROUGH</span><span class="m">+0.21</span></div>               <!-- quali.through, margin_ms -->
+      <span class="badge">THROUGH</span><span class="m">−0.2</span></div>                <!-- quali.through, margin_ms -->
       <!-- ALT: <span class="badge out">OUT</span><span class="m" style="color:var(--crit)">−0.08</span> -->
-      <div class="line">predicted cut-off <b>1:31.904</b> · P10 Albon</div></div>    <!-- quali.cutoff_ms -->
-    <div class="card"><div class="qcut"><span>BENCHMARK</span><span class="pos">pole Leclerc</span><span class="m" style="color:var(--crit)">+0.38</span></div> <!-- pole.gap_ms -->
+      <div class="line">predicted cut-off 1:31.9 · best 1:31.7 · 8:42 left · 2 fresh</div></div> <!-- quali.cutoff_ms -->
+    <div class="card"><div class="qcut"><span>BENCHMARK</span><span class="pos">pole Leclerc</span><span class="m" style="color:var(--crit)">+0.4</span></div> <!-- pole.gap_ms -->
       <table class="qbench"><thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th></tr></thead>
         <tbody>
-          <tr><th>pole</th><td class="ok">−0.02</td><td class="crit worst">+0.29</td><td class="crit">+0.11</td></tr> <!-- pole.sector_gaps_ms, worst_sector -->
-          <tr><th>mate</th><td class="ok">−0.05</td><td class="crit worst">+0.12</td><td class="ok">−0.03</td></tr> <!-- teammate.sector_gaps_ms -->
+          <tr><th>pole</th><td class="ok">−0.1</td><td class="crit worst">+0.3</td><td class="crit">+0.2</td></tr> <!-- pole.sector_gaps_ms, worst_sector -->
+          <tr><th>mate</th><td class="ok">−0.1</td><td class="crit worst">+0.2</td><td class="ok">−0.1</td></tr> <!-- teammate.sector_gaps_ms -->
         </tbody></table>
-      <div class="line">mate Sainz <b>+0.04</b></div></div>                                <!-- teammate.gap_ms -->
+      <div class="line">mate Sainz <b>+0.1</b></div></div>                                <!-- teammate.gap_ms -->
+    <div class="card"><div class="rank">THIS RUN</div><div class="head">PROJ 1:31.6</div><div class="line">−0.3 to cut</div></div>
   </div>
 </section>
 
-<!-- cool-down lite debrief: shown by body.cool (quali.cool) over the tyres + tiles cells -->
-<section class="zone coolzone">
-  <h2>COOL-DOWN · LAST RUN</h2>
+<!-- Cool-down lap state, shown by body.cool over the tyres and tiles -->
+<section id="cool" class="zone coolzone">
   <div class="cz-top">
-    <div class="tile"><h2>LAST LAP</h2><div class="v">1:31.702</div></div>        <!-- cool.last_hot_ms -->
-    <div class="tile"><h2>GAP TO POLE</h2><div class="v crit">+0.38</div></div>  <!-- cool.pole.gap_ms -->
+    <div class="tile"><h2>LAST LAP</h2><div id="cz-last" class="v">1:31.7</div></div>
+    <div class="tile"><h2>GAP TO POLE</h2><div id="cz-pole" class="v crit">+0.4</div></div>
   </div>
-  <h2>SECTOR CONSISTENCY vs previous run</h2>
+  <div id="c-behind" class="c-alert warn">⚠ HOT LAP 4.2 s BEHIND · MOVE OFF LINE</div>
+  <div class="c-tiles">
+    <div id="c-ers-tile" class="c-tile ok">
+      <h2>BATTERY</h2>
+      <div id="c-ers" class="c-num">72%</div>
+      <div class="bar"><div id="c-ers-bar" class="fill" style="width:72%"></div><div id="c-ers-min" class="mark" style="left:60%"></div></div>
+      <div id="c-mode" class="sub">✓ RECHARGING · need 60%</div>
+    </div>
+    <div id="c-hot-tile" class="c-tile">
+      <h2>PUSH IN</h2>
+      <div id="c-hot" class="c-num">1.4 km</div>
+      <div id="c-plan" class="sub">cooling: tyres hot</div>
+    </div>
+    <div class="c-tile">
+      <h2>TYRES</h2>
+      <div class="c-tyres"><span id="c-fl" class="ok">FL 96°</span><span id="c-fr" class="hot">FR 112°</span><span id="c-rl" class="ok">RL 92°</span><span id="c-rr" class="cold">RR 78°</span></div>
+      <div id="c-hint" class="sub">fronts hot · weave less</div>
+    </div>
+  </div>
+  <div class="c-info">
+    <div id="c-pole" class="c-row">POLE Leclerc -0.4</div>
+    <div id="c-sectors" class="c-sectors">
+      <div class="c-sec gain"><span class="k">S1</span><span class="t">29.4</span><span class="d">−0.1</span></div>
+      <div class="c-sec worst"><span class="k">S2</span><span class="t">39.9</span><span class="d">+0.3</span></div>
+      <div class="c-sec"><span class="k">S3</span><span class="t">22.4</span><span class="d">+0.2</span></div>
+    </div>
+    <div id="c-mis" class="c-row">LAST LAP 1:31.7 · clean</div>
+    <div id="c-sub" class="c-row dim">8:42 left · 2 fresh · fuel 4.2 laps</div>
+  </div>
+  <!-- PROPOSED: Sector consistency vs previous run: S1 more consistent, S2 less consistent, S3 same.
   <div class="cz-sec">
     <div>S1<span class="tr up">▲</span>more consistent</div>
     <div>S2<span class="tr down">▼</span>less consistent</div>
     <div>S3<span class="tr flat">▬</span>same</div>
   </div>
-  <!-- tyre window hit: belongs in the full debrief, kept out of the lite version.
-  <div class="tile"><h2>TYRE WINDOW</h2><div class="v">3 / 4 corners in window</div></div>
   -->
 </section>
 
-<!-- pit board takeover (unchanged concept): body.pit, main row only -->
-<section class="zone pitzone">
-  <div class="pb-release">RELEASE · GO</div>
-  <div class="sub">pressures, next run and setup changes as today (web/index.html #pitboard)</div>
+<!-- Garage pit board state, shown by body.pit -->
+<section id="pitboard" class="zone pitboard">
+  <div class="pb-head">
+    <div id="pb-release" class="pb-release ok">✓ GO · TRACK CLEAR</div>
+    <div id="pb-release-sub" class="pb-release-sub">14 on track · 9 s clear ahead · 6 s behind</div>
+  </div>
+  <div class="pb-box pb-tyrebox">
+    <h2>TYRES <span id="pb-press-note" class="dim">· avg on flying laps · target 80–110°</span></h2>
+    <div class="pb-tyres">
+      <div class="pb-corner hold" id="pb-fl"><div class="lbl">FL <b class="pb-temp ok">96°</b></div><div class="pb-move">✓ KEEP</div><div class="pb-psi">23.5</div></div>
+      <div class="pb-corner down" id="pb-fr"><div class="lbl">FR <b class="pb-temp hot">112°</b></div><div class="pb-move">▼ −0.4</div><div class="pb-psi">23.9 → 23.5</div></div>
+      <div class="pb-corner set" id="pb-rl"><div class="lbl">RL <b class="pb-temp ok">92°</b></div><div class="pb-move">SET ✓</div><div class="pb-psi">21.8 psi</div></div>
+      <div class="pb-corner up" id="pb-rr"><div class="lbl">RR <b class="pb-temp cold">78°</b></div><div class="pb-move">▲ +0.3</div><div class="pb-psi">21.2 → 21.5</div></div>
+    </div>
+  </div>
+  <div class="pb-box pb-run">
+    <h2>LAST RUN</h2>
+    <div class="pb-tiles">
+      <div id="pb-runfuel" class="pb-tile"><div class="k">FUEL / LAP</div><div class="v">1.62 kg</div><div class="s">avg of 3 laps</div></div>
+      <div id="pb-fuel" class="pb-tile ok"><div class="k">IN TANK</div><div class="v">4.2 laps</div><div class="s">push lap needs 2.0</div></div>
+      <div id="pb-ers" class="pb-tile ok"><div class="k">⚡ BATTERY</div><div class="v">88%</div><div class="s">want 80%</div></div>
+      <div id="pb-plan" class="pb-tile ok"><div class="k">PLAN</div><div class="v">PUSH</div><div class="s">ready</div></div>
+      <div id="pb-time" class="pb-tile"><div class="k">TIME LEFT</div><div class="v">8:42</div><div class="s">2 fresh sets</div></div>
+      <div id="pb-pole" class="pb-tile ok"><div class="k">VS CUT</div><div class="v">−0.2</div><div class="s">best 1:31.7 · through</div></div>
+    </div>
+  </div>
+  <div class="pb-box pb-wx">
+    <h2>WEATHER</h2>
+    <ol id="pb-wx" class="pb-wxl">
+      <li class="dry"><span class="k">NOW</span><span class="sky">LIGHT CLOUD</span><span class="pct">rain 5%</span></li>
+      <li class="dry"><span class="k">+10 min</span><span class="sky">OVERCAST</span><span class="pct">rain 10%</span></li>
+      <li class="dry"><span class="k">+30 min</span><span class="sky">OVERCAST</span><span class="pct">rain 25%</span></li>
+    </ol>
+    <div id="pb-cross" class="cross">✓ no tyre change due</div>
+  </div>
+  <div class="pb-box pb-sectors">
+    <h2>SECTORS · BEST LAP</h2>
+    <table id="pb-sec" class="pb-sec">
+      <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+      <tbody>
+        <tr id="pb-sec-me"><th>YOU</th><td>29.412</td><td>39.876</td><td>22.414</td><td>1:31.7</td></tr>
+        <tr id="pb-sec-lead"><th>LEADER<span id="pb-sec-lead-who" class="who">Leclerc</span></th><td class="ok">−0.080</td><td class="warn worst">+0.290</td><td class="warn">+0.170</td><td class="warn">+0.380</td></tr>
+        <tr id="pb-sec-mate"><th>TEAMMATE<span id="pb-sec-mate-who" class="who">Sainz</span></th><td class="ok">−0.050</td><td class="warn worst">+0.120</td><td class="ok">−0.030</td><td class="warn">+0.040</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pb-box pb-setup">
+    <h2>SETUP CHANGES</h2>
+    <ol id="pb-change" class="pb-change">
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">FR psi</span><span class="val">23.9 → 23.5</span><span class="why"></span></li>
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">RR psi</span><span class="val">21.2 → 21.5</span><span class="why"></span></li>
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">F wing</span><span class="val">28 → 30</span><span class="why">front washes out mid-corner</span></li>
+      <li class="todo try"><span class="box">☐</span><span class="tag try">TRY</span><span class="nm">on-thr</span><span class="val">60% → 55%</span><span class="why">rear steps out on exit</span></li>
+      <li class="done"><span class="box">☑</span><span class="tag spacer"></span><span class="nm">bias</span><span class="val">57% ✓</span><span class="why">locks fronts into T1</span></li>
+    </ol>
+    <div id="pb-locked" class="pb-locked">Locked after this session: F wing, R wing, on-thr, off-thr</div>
+  </div>
+  <div class="pb-box pb-cur">
+    <h2>CURRENT SETUP</h2>
+    <ol id="pb-setup" class="pb-ref">
+      <li><span class="grp">AERODYNAMICS</span><span class="chips"><span class="c todo lk"><span class="k">F wing </span><b>28</b></span><span class="c lk"><span class="k">R wing </span><b>30</b></span></span></li>
+      <li><span class="grp">TRANSMISSION</span><span class="chips"><span class="c try lk"><span class="k">on-thr </span><b>60%</b></span><span class="c lk"><span class="k">off-thr </span><b>55%</b></span><span class="c"><span class="k">eng brk </span><b>50%</b></span></span></li>
+      <li><span class="grp">SUSP. GEOMETRY</span><span class="chips"><span class="c"><span class="k">F camber </span><b>-3.00°</b></span><span class="c"><span class="k">R camber </span><b>-1.50°</b></span><span class="c"><span class="k">F toe </span><b>0.05°</b></span><span class="c"><span class="k">R toe </span><b>0.20°</b></span></span></li>
+      <li><span class="grp">SUSPENSION</span><span class="chips"><span class="c"><span class="k">F spr </span><b>22</b></span><span class="c"><span class="k">R spr </span><b>8</b></span><span class="c"><span class="k">F arb </span><b>14</b></span><span class="c"><span class="k">R arb </span><b>6</b></span><span class="c"><span class="k">F ride </span><b>32</b></span><span class="c"><span class="k">R ride </span><b>70</b></span></span></li>
+      <li><span class="grp">BRAKES</span><span class="chips"><span class="c"><span class="k">pressure </span><b>95%</b></span><span class="c"><span class="k">bias </span><b>57%</b></span></span></li>
+      <li><span class="grp">TYRES</span><span class="chips"><span class="c"><span class="k">FL </span><b>23.5</b></span><span class="c"><span class="k">FR </span><b>23.9</b></span><span class="c"><span class="k">RL </span><b>21.8</b></span><span class="c"><span class="k">RR </span><b>21.2</b></span></span></li>
+      <li><span class="grp">FUEL</span><span class="chips"><span class="c"><span class="k">load </span><b>12.0 kg</b></span></span></li>
+    </ol>
+  </div>
 </section>
 
 <footer class="footer">
   <!-- muted forever; never escalates colour -->
   <span id="rate">10 upd/s</span>                                                 <!-- client-derived frame rate -->
-  <span id="lag">queue 2 · oldest 3.4 s · TTS 210 ms · screen lag 12 ms</span>  <!-- latency.queue_count, latency.queue_oldest_s, latency.tts_p99_ms, latency.packet_to_ws_p99_ms -->
-  <span>ERS 62%</span>                                                             <!-- ers_pct -->
-  <span>SC 0</span>                                                                <!-- safety_car -->
+  <span id="latency">queue 2 · oldest 3.4 s · TTS 210 ms · screen lag 12 ms</span>  <!-- latency.queue_count, latency.queue_oldest_s, latency.tts_p99_ms, latency.packet_to_ws_p99_ms -->
+  <span id="ers">ERS 62%</span>                                                     <!-- ers_pct -->
+  <span id="sc">SC 0</span>                                                        <!-- safety_car -->
 </footer>
 
 <button class="arm" type="button" aria-pressed="false">ARM PHONE RADIO</button>
@@ -1215,7 +1486,14 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     if (side === "ahead") return closing ? '<span class="ok">▶ closing ' + rt.toFixed(1) + " s/lap</span>" : '<span>▼ dropping ' + rt.toFixed(1) + " s/lap</span>";
     return closing ? '<span class="crit">▲ closing ' + rt.toFixed(1) + " s/lap</span>" : '<span class="ok">▼ dropping ' + rt.toFixed(1) + " s/lap</span>";
   }
-  function nameHTML(name, ov) { return name + (ov ? ' <span class="tag crit">OV</span>' : ""); }
+  function nameHTML(name, ov) {
+    var types = { NORRIS: ["hard", "HARD", 6], HAMILTON: ["medium", "MED", 10],
+      PIASTRI: ["medium", "MED", 12], RUSSELL: ["soft", "SOFT", 0] };
+    var tyre = types[name.replace(/^P\d+\s+/, "")];
+    return name + (ov ? ' <span class="tag crit">OV</span>' : "") +
+      (tyre ? ' <span class="comp xs ' + tyre[0] + '">' + tyre[1] + '</span>' +
+        (tyre[2] ? '<span class="age"> · ' + tyre[2] + 'L</span>' : "") : "");
+  }
   function setRail(rail, side, g) {
     if (!rail) return;
     rail.className = "rail " + side + (Math.abs(g) <= 1 ? " in" : "") + (rail.classList.contains("train") ? " train" : "");
@@ -1236,7 +1514,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     setHTML(pace, closingHTML(r.side, r.gap[0], r.gap[1], rt) + '<span class="prob">' + ph.prob[0] + " " + prob + "%</span>");
     var o = ph.other, og = o.gap + rnd(-0.05, 0.05);
     setText($(".side", rvs[1]), o.side === "ahead" ? "▲ AHEAD" : "▼ BEHIND");
-    setText($(".name", rvs[1]), "P" + o.pos + " " + o.name);
+    setHTML($(".name", rvs[1]), nameHTML("P" + o.pos + " " + o.name, false));
     setText($(".gap", rvs[1]), signed(og));
   }
   function renderMulti(ph, p) {
@@ -1277,7 +1555,7 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
   function scLine() {
     var line = $('[data-sim="safety"] .line');
     if (!line || S.red) return;
-    setHTML(line, "lap " + (S.lap - 37) + " under SC · <b>pit loss 11.2 s</b> instead of 21.0 s");
+    setHTML(line, "lap " + (S.lap - 37) + " under SC · <b>pit loss 11.2 s</b>");
   }
   function scEnding() {
     var f = $('[data-sim="flag"]'); if (f) f.textContent = S.red ? "⚠ RESTART" : "⚠ SC ENDING";
@@ -1374,8 +1652,8 @@ body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
     function adj(vEl, sugEl, v, target) {
       vEl.textContent = v + "%"; vEl.classList.toggle("suited", v === target);
       if (!sugEl) return;
-      sugEl.className = "sug" + (v === target ? " none" : "");
-      sugEl.textContent = v === target ? "✓ suited" : (v < target ? "▲" : "▼") + " try " + target;
+      sugEl.className = "sug" + (v === target ? " none" : " try");
+      sugEl.textContent = v === target ? "✓ suited" : (v < target ? "▲ " : "▼ ") + target;
     }
     adj($(".v", spans[1]), $(".sug", spans[1]), Math.round(rnd(55, 58.9)), 57);
     adj($(".v", spans[4]), $(".sug", spans[4]), pick([58, 59, 60, 60, 61, 62]), 60);

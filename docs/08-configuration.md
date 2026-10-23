@@ -51,6 +51,7 @@ cooldown and max-per-stint overrides, quiet mode, and a **mute-until-lap-N** con
 thermal windows by (actual compound, track), brake windows, wear and blister limits,
 fuel margin, ERS floor, penalty-warning margin. Defaults shipped; the calibration tool
 fits per-driver values from recordings and writes them into the user profile.
+`tyre_window_min_width_c` widens narrower thermal bands around their centre.
 
 `pressure_size_medium_c` and `pressure_size_large_c` set the temperature offsets for
 medium and large pressure steps. Large steps grow with the offset. At 112 °C with a

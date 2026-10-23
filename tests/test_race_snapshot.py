@@ -191,7 +191,7 @@ def test_pena_track_limit_warning_kind() -> None:
     ingest.on_datagram(pena, 2.0)
     _lap(ingest, 2.1)
     snap = state.snapshot(2.1)
-    assert snap.track_warning_recent and snap.track_warning_kind == "significant"
+    assert snap.track_warning_recent and snap.track_warning_kind == "limits"
     assert not snap.penalty_recent
     _lap(ingest, 30.0)
     assert not state.snapshot(30.0).track_warning_recent
@@ -221,14 +221,15 @@ def _overtake(ingest: Ingest, t: float, overtaker: int, overtaken: int) -> None:
     ingest.on_datagram(event, t)
 
 
-def test_driver_infringement_warning_counts_exclude_overtake_warnings() -> None:
+def test_driver_infringement_warning_counts_include_overtake_warnings() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0)
     for t, infringement in enumerate((7, 27, 28, 29, 8, 9), start=2):
         _pena(ingest, float(t), 5, infringement, 0, 255, 255, 5, 0)
+    _pena(ingest, 8.0, 5, 4, 0, 255, 255, 5, 0)
 
     assert state.event_telemetry_seen
-    assert state.infringement_warnings == 4
+    assert state.infringement_warnings == 6
 
 
 def test_driver_infringement_penalties_count_only_types_0_1_and_4() -> None:
@@ -354,18 +355,71 @@ def test_any_event_marks_event_telemetry_seen() -> None:
     assert state.event_telemetry_seen
 
 
-def test_corner_cut_and_track_limit_warnings_count_separately() -> None:
+def test_corner_cut_warning_kinds_share_one_count() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0)
     _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
     _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
     snap = state.snapshot(3.0)
-    assert snap.track_warning_kind == "significant" and snap.track_warning_count == 2
+    assert snap.track_warning_kind == "limits" and snap.track_warning_count == 2
     _pena(ingest, 4.0, 5, 7, 0, 255, 255, 5, 0)
     snap = state.snapshot(4.0)
-    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 1
-    _pena(ingest, 5.0, 5, 29, 0, 255, 255, 5, 0)
-    assert state.snapshot(5.0).track_warning_count == 3
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 3
+    _pena(ingest, 5.0, 5, 8, 0, 255, 255, 5, 0)
+    snap = state.snapshot(5.0)
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 4
+    _pena(ingest, 6.0, 5, 9, 0, 255, 255, 5, 0)
+    snap = state.snapshot(6.0)
+    assert snap.track_warning_kind == "cut" and snap.track_warning_count == 5
+
+
+def test_track_warning_count_uses_lap_data_without_pena_events() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, corner_cutting_warnings=3)
+    snap = state.snapshot(1.0)
+
+    assert snap.track_warning_count == 3
+    assert snap.cut_warning_count == 0
+    assert snap.limit_warning_count == 0
+
+
+def test_track_warning_counts_split_by_kind_and_ignore_collision() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0)
+    _pena(ingest, 2.0, 5, 7, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
+    _pena(ingest, 4.0, 5, 8, 0, 255, 255, 5, 0)
+    _pena(ingest, 5.0, 5, 27, 0, 255, 255, 5, 0)
+    snap = state.snapshot(5.0)
+    assert snap.cut_warning_count == 2
+    assert snap.limit_warning_count == 2
+    assert snap.track_warning_count == 4
+
+    _pena(ingest, 6.0, 5, 4, 0, 255, 255, 5, 0)
+    snap = state.snapshot(6.0)
+    assert snap.cut_warning_count == 2
+    assert snap.limit_warning_count == 2
+    assert snap.track_warning_count == 4
+
+
+def test_track_warning_count_uses_higher_pena_count_than_lap_data() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, corner_cutting_warnings=1)
+    _pena(ingest, 2.0, 5, 27, 0, 255, 255, 5, 0)
+    _pena(ingest, 3.0, 5, 28, 0, 255, 255, 5, 0)
+    _pena(ingest, 4.0, 5, 29, 0, 255, 255, 5, 0)
+
+    assert state.snapshot(4.0).track_warning_count == 3
+
+
+def test_collision_warning_does_not_add_to_track_warning_count() -> None:
+    ingest, state = _state()
+    _lap(ingest, 1.0, total_warnings=6, corner_cutting_warnings=1)
+    _pena(ingest, 2.0, 5, 4, 0, 255, 255, 5, 0)
+    snap = state.snapshot(2.0)
+
+    assert snap.track_warning_count == 1
+    assert snap.track_warning_kind == ""
 
 
 def test_penalty_total_includes_new_penalty_before_lap_data_catches_up() -> None:
@@ -388,11 +442,11 @@ def test_flashback_removes_future_warning_counts_and_pending_penalty() -> None:
     _pena(ingest, 5.0, 4, 7, 0, 255, 10, 5, 0)
     _lap(ingest, 2.5, penalties=0)
     snap = state.snapshot(2.5)
-    assert snap.track_warning_kind == "minor"
+    assert snap.track_warning_kind == "limits"
     assert snap.track_warning_count == 1
     assert snap.penalty_s == 0 and not snap.penalty_recent
     _pena(ingest, 3.0, 5, 7, 0, 255, 255, 5, 0)
-    assert state.snapshot(3.0).track_warning_count == 1
+    assert state.snapshot(3.0).track_warning_count == 2
 
 
 def test_penalty_total_does_not_double_count_lap_data_arriving_first() -> None:

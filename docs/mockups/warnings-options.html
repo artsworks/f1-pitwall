@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pitwall mockup: warning display options</title>
+<!--
+  DESIGN OPTIONS ONLY. Nothing in web/ changes. Each preview is dashboard-reimagined.html
+  in an iframe, with the option applied by the script at the end of this page.
+  The iframes need the same origin, so open this page from the docs site or a local server
+  (python3 -m http.server in docs/), not from file://.
+  Hashes: #opt-a #opt-b #opt-c #opt-d show one option. No hash shows all four.
+-->
+<style>
+/* tokens: verbatim from dashboard-reimagined.html :root */
+:root {
+  --bg: #0a0a0c; --panel: #121216; --line: #2a2a30;
+  --fg: #ececec; --soft: #c8c8d0; --dim: #a2a2ac; --faint: #62626c;
+  --ok: #37e07a; --warn: #ffc233; --crit: #ff4d4d; --cold: #5cc8ff;
+  --info: #b8b8ff; --aggr: #ff8a3d;
+  --font: "Cascadia Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font);
+  font-variant-numeric: tabular-nums; }
+main { padding: 1rem 1.2rem; max-width: 1366px; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 0 0 .4rem; }
+h2 { font-size: 1.25rem; margin: 0; letter-spacing: .04em; }
+h2 .rec { color: var(--ok); font-size: .85em; }
+p, li { color: var(--soft); line-height: 1.4; margin: .2rem 0; }
+.facts { color: var(--dim); font-size: .95rem; margin-bottom: .8rem; }
+nav a { color: var(--info); margin-right: 1rem; }
+section.opt { border-top: 1px solid var(--line); padding: .8rem 0; }
+.row { display: flex; gap: 1rem; align-items: flex-start; }
+.info { flex: 1; min-width: 0; }
+.crops { margin-top: .6rem; }
+dl { display: grid; grid-template-columns: 7rem 1fr; gap: .15rem .6rem; margin: .4rem 0; }
+dt { color: var(--dim); } dd { margin: 0; color: var(--soft); }
+table.counts { border-collapse: collapse; margin: .4rem 0; font-size: .9rem; }
+table.counts th, table.counts td { border: 1px solid var(--line); padding: .15rem .35rem; text-align: left; }
+table.counts th { color: var(--dim); font-weight: normal; }
+.warn { color: var(--warn); } .crit { color: var(--crit); } .grey { color: var(--dim); }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--line); background: #000; }
+.frame iframe { border: 0; position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.cap { color: var(--dim); font-size: .85rem; margin: .15rem 0 .4rem; }
+.crops { display: flex; flex-wrap: wrap; gap: .6rem; }
+.crops > div { min-width: 0; }
+.desk { display: flex; gap: .6rem; }
+.only-phone { display: none; }
+body.one section.opt:not(.on) { display: none; }
+body.one nav, body.one .intro { display: none; }
+@media (max-width: 600px) {
+  main { padding: .5rem; }
+  .row { flex-direction: column; }
+  .desk, .crops, dl, table.counts, .intro, nav { display: none; }
+  .only-phone { display: block; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Warning display options</h1>
+<div class="intro">
+<p class="facts">Corner cuts (PENA 7), off-track passes (8, 9) and track limits (27 to 29) add to one count.
+Every third warning (3, 6, 9) gives a 3 s penalty. Collisions (4) do not count.
+Payload today: <code>race.infringements = {corner_cuts, warnings, penalty_s, warn_at}</code> and
+<code>track_warning_kind</code> for the latest warning only.
+Each preview shows the full dashboard at count 2, crops at counts 1, 2 and 3, and the phone at count 3.</p>
+<nav><a href="#opt-a">A</a><a href="#opt-b">B</a><a href="#opt-c">C</a><a href="#opt-d">D</a><a href="#">all</a></nav>
+</div>
+<div id="opts"></div>
+</main>
+<script>
+(function () {
+  var DASH = "dashboard-reimagined.html";
+  // Example race: the 4 warnings arrive as cut, limits, limits, cut.
+  var KINDS = ["cut", "limits", "limits", "cut"];
+  function st(n) {
+    var k = n % 3, cyc = n > 0 && k === 0 ? 3 : k;
+    var cuts = 0, tl = 0;
+    for (var i = 0; i < n; i++) { if (KINDS[i] === "cut") cuts++; else tl++; }
+    return { n: n, cyc: cyc, pen: Math.floor(n / 3) * 3, cuts: cuts, tl: tl,
+      cls: n > 0 && k === 0 ? "crit" : k === 2 ? "warn" : "" };
+  }
+  function penTxt(s) { return s.pen > 0 ? " +" + s.pen + "s" : ""; }
+
+  // Crop boxes [x, y, x2, y2] in dashboard pixels, from element rects.
+  function R(doc, sel) { return doc.querySelector(sel).getBoundingClientRect(); }
+  function cropChip(doc, W) { var c = R(doc, "#limits"), b = R(doc, ".status");
+    var x2 = Math.min(W, c.right + 90); return [x2 - 440, 0, x2, b.bottom + 2]; }
+  function cropTile(doc) { var t = R(doc, ".tiles"), w = R(doc, ".tile.warns");
+    return [t.left, w.top - 120, t.right, w.bottom + 8]; }
+  function cropBanner(doc, W) { var b = R(doc, "#banner");
+    return [W - 440, b.top, W, b.bottom + 2]; }
+
+  var OPTS = [
+    { id: "a", rec: true, name: "Status chip, WARN 2/3",
+      where: "Status bar, in place of the CUTS chip, at the size of the other chips.",
+      shows: "Warnings in the current cycle out of 3, then the penalty total in red.",
+      colours: "Grey at 0 and 1 in the cycle, amber at 2, red at 3. The +Ns part is always red.",
+      cost: "No payload change: cycle = corner_cuts % warn_at. About 4 characters wider than CUTS 2 with a penalty.",
+      phone: "Short form ⚠ 2/3. The phone status bar already clips BAL at 390 px, so phone hides BAL and the DRV chip.",
+      why: "It needs no payload change or tile space and shows the one number that matters, how close the next penalty is.",
+      label: function (s) { return "WARN " + s.cyc + "/3" + penTxt(s); },
+      crop: cropChip },
+    { id: "b", name: "Status chip split by type",
+      where: "Status bar, in place of the CUTS chip.",
+      shows: "Cuts (with off-track passes, since both mean leaving the track to gain time) and track limits, then the penalty.",
+      colours: "Colour follows the shared count, as in A. The split does not change the colour.",
+      cost: "Payload: add race.infringements.cut_warns (PENA 7, 8, 9) and limit_warns (27 to 29), counted in SessionState. About 6 characters wider than A.",
+      phone: "Short form C1 T2. Phone hides BAL and the DRV chip, as in A.",
+      label: function (s) { return "CUT " + s.cuts + " · TL " + s.tl + penTxt(s); },
+      crop: cropChip },
+    { id: "c", name: "Zone D tile with pips",
+      where: "New half-width WARN tile in Zone D beside DAMAGE. The status chip goes away.",
+      shows: "⚠, three pips for the current cycle, the total and the penalty on one line.",
+      colours: "Pips grey at 1, amber at 2, red at 3. Penalty text red.",
+      cost: "No payload change. DAMAGE shrinks to half width, so 2 or more parts wrap to a second line sooner.",
+      phone: "Shown under FUEL. DAMAGE stays hidden on phone.",
+      label: function (s) { return "■■■".slice(0, s.cyc) + "□□□".slice(s.cyc) + " " + s.n + penTxt(s); },
+      crop: cropTile },
+    { id: "d", name: "Banner badge",
+      where: "Bottom right of the call banner, on the PREV line. The status chip goes away.",
+      shows: "WARN 2/3 in large text, hidden at 0 so the banner stays clean until the first warning.",
+      colours: "Grey outline at 1, amber at 2, solid red at 3. Penalty in the same badge.",
+      cost: "No payload change. Long PREV lines lose about 12 characters on the right.",
+      phone: "Sits under the one-line call, which makes the phone banner about 25 px taller.",
+      label: function (s) { return s.n === 0 ? "hidden" : "WARN " + s.cyc + "/3" + penTxt(s); },
+      crop: cropBanner }
+  ];
+
+  var CSS =
+    ".chip.limits.o-ab { font-size: 1.15rem; font-weight: bold; padding: 0 .45rem; letter-spacing: 0; }" +
+    ".chip.limits .pen { color: var(--crit); }" +
+    ".tiles .tile.damage.half { grid-column: 2; }" +
+    ".tile.warns { grid-column: 1; display: flex; align-items: center; gap: .6rem; padding: .3rem .7rem; }" +
+    ".tile.warns h2 { margin: 0; }" +
+    ".tile.warns .pips { display: inline-flex; gap: .3rem; }" +
+    ".tile.warns .pips i { width: 1.1rem; height: 1.1rem; border: 2px solid var(--dim); border-radius: 3px; }" +
+    ".tile.warns .pips i.on { background: var(--soft); border-color: var(--soft); }" +
+    ".tile.warns.warn .pips i.on { background: var(--warn); border-color: var(--warn); }" +
+    ".tile.warns.crit .pips i.on { background: var(--crit); border-color: var(--crit); }" +
+    ".tile.warns .tot { font-size: 1.3rem; font-weight: bold; } .tile.warns .pen { color: var(--crit); font-weight: bold; }" +
+    ".tile.warns.warn { border-color: var(--warn); } .tile.warns.crit { border-color: var(--crit); }" +
+    ".wbadge { position: absolute; right: 1.2rem; bottom: .55rem; font-size: 1.7rem; font-weight: bold;" +
+    "  border: 2px solid var(--dim); color: var(--soft); border-radius: .3rem; padding: 0 .5rem; background: var(--bg); }" +
+    ".wbadge.warn { border-color: var(--warn); color: var(--warn); }" +
+    ".wbadge.crit { border-color: var(--crit); background: var(--crit); color: #000; }" +
+    "body.phone .chip.limits.o-ab { font-size: 1rem; padding: 0 .3rem; }" +
+    "body.phone .banner:has(.wbadge) { padding-bottom: 1.9rem; }" +
+    "body.phone .wbadge { font-size: 1.1rem; bottom: .3rem; right: .4rem; }" +
+    "body.phone .tiles .tile.warns { grid-column: 1; }";
+
+  function apply(doc, o, n) {
+    var s = st(n), style = doc.createElement("style");
+    style.textContent = CSS; doc.head.appendChild(style);
+    var chip = doc.getElementById("limits");
+    if (o.id === "a" || o.id === "b") {
+      var ph = doc.body.classList.contains("phone");
+      var main = o.id === "a" ? (ph ? "⚠ " : "WARN ") + s.cyc + "/3" : ph ? "C" + s.cuts + " T" + s.tl : "CUT " + s.cuts + " · TL " + s.tl;
+      chip.className = "chip limits o-ab " + s.cls;
+      chip.innerHTML = main + (s.pen ? ' <span class="pen">+' + s.pen + "s</span>" : "");
+      if (ph) {
+        doc.getElementById("drv").hidden = true;
+        doc.getElementById("mindset").hidden = true;
+      }
+      return;
+    }
+    chip.hidden = true;
+    if (o.id === "c") {
+      var dmg = doc.querySelector(".tile.damage"); dmg.classList.remove("wide"); dmg.classList.add("half");
+      var t = doc.createElement("div"); t.className = "tile warns " + s.cls;
+      var pips = ""; for (var i = 1; i <= 3; i++) pips += '<i class="' + (i <= s.cyc ? "on" : "") + '"></i>';
+      t.innerHTML = '<h2>⚠</h2><span class="pips">' + pips + '</span><span class="tot">' + s.n + "</span>" +
+        (s.pen ? '<span class="pen">+' + s.pen + "s</span>" : "");
+      dmg.parentNode.insertBefore(t, dmg);
+    } else if (n > 0) {
+      var b = doc.createElement("div"); b.className = "wbadge " + s.cls;
+      b.textContent = "WARN " + s.cyc + "/3" + penTxt(s);
+      doc.getElementById("banner").appendChild(b);
+    }
+  }
+
+  function frame(o, n, mode, scale, crop) {
+    var W = mode === "phone" ? 412 : 1366, H = mode === "phone" ? 915 : 900;
+    var box = document.createElement("div"); box.className = "frame";
+    var f = document.createElement("iframe");
+    f.width = W; f.height = H; f.title = "Option " + o.id.toUpperCase() + " at count " + n;
+    f.src = DASH + (mode === "phone" ? "#phone" : "#nodemo");
+    box.style.width = W * scale + "px"; box.style.height = H * scale + "px";
+    f.style.transform = "scale(" + scale + ")";
+    f.addEventListener("load", function () {
+      var doc;
+      try { doc = f.contentDocument; } catch (e) { doc = null; }
+      if (!doc) { box.textContent = "Open this page over http to see the preview."; return; }
+      apply(doc, o, n);
+      if (crop) {
+        var c = o.crop(doc, W), x = Math.max(0, c[0]), y = Math.max(0, c[1]);
+        var x2 = Math.min(W, c[2]), y2 = Math.min(H, c[3]);
+        box.style.width = (x2 - x) + "px"; box.style.height = (y2 - y) + "px";
+        f.style.transform = "translate(" + (-x) + "px," + (-y) + "px)";
+      }
+    });
+    box.appendChild(f); return box;
+  }
+  function cap(t) { var c = document.createElement("div"); c.className = "cap"; c.textContent = t; return c; }
+  function wrap(el, t) { var d = document.createElement("div"); d.appendChild(el); d.appendChild(cap(t)); return d; }
+
+  var host = document.getElementById("opts");
+  OPTS.forEach(function (o) {
+    var sec = document.createElement("section"); sec.className = "opt"; sec.id = "opt-" + o.id;
+    var counts = "<tr><th>count</th>" + [0, 1, 2, 3, 4].map(function (n) { return "<th>" + n + "</th>"; }).join("") +
+      "</tr><tr><th>shows</th>" + [0, 1, 2, 3, 4].map(function (n) {
+        var s = st(n); return '<td class="' + (s.cls || "grey") + '">' + o.label(s) + "</td>"; }).join("") + "</tr>";
+    sec.innerHTML = "<h2>" + o.id.toUpperCase() + ". " + o.name + (o.rec ? ' <span class="rec">(recommended)</span>' : "") + "</h2>" +
+      (o.rec ? "<p>" + o.why + "</p>" : "") +
+      '<div class="row"><div class="info"><dl><dt>Where</dt><dd>' + o.where + "</dd><dt>Shows</dt><dd>" + o.shows +
+      "</dd><dt>Colours</dt><dd>" + o.colours + "</dd><dt>Cost</dt><dd>" + o.cost + "</dd><dt>Phone</dt><dd>" + o.phone +
+      '</dd></dl><table class="counts">' + counts + '</table></div>' +
+      '<div class="desk"></div><div class="ph"></div></div><div class="crops"></div>';
+    var crops = sec.querySelector(".crops");
+    [1, 2, 3].forEach(function (n) { crops.appendChild(wrap(frame(o, n, "desk", 1, true), "count " + n)); });
+    sec.querySelector(".desk").appendChild(wrap(frame(o, 2, "desk", 0.42, false), "1366x900 at count 2"));
+    sec.querySelector(".desk").appendChild(wrap(frame(o, 3, "phone", 0.4, false), "phone at count 3"));
+    var ph = document.createElement("div"); ph.className = "only-phone";
+    ph.appendChild(frame(o, 3, "phone", Math.min(1, (window.innerWidth - 16) / 412), false));
+    ph.appendChild(cap("phone at count 3"));
+    sec.querySelector(".ph").appendChild(ph);
+    host.appendChild(sec);
+  });
+
+  function onHash() {
+    var id = location.hash.replace("#", "");
+    var one = /^opt-[a-d]$/.test(id);
+    document.body.classList.toggle("one", one);
+    document.querySelectorAll("section.opt").forEach(function (s) { s.classList.toggle("on", s.id === id); });
+    if (one) window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", onHash); onHash();
+  window.addEventListener("load", function () { if (document.body.classList.contains("one")) window.scrollTo(0, 0); });
+})();
+</script>
+</body>
+</html>

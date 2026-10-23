@@ -70,7 +70,7 @@ from pitwall.setup.advisor import SetupAdvisor
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window
+from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window, widen_window
 from pitwall.store.db import LapRow
 from pitwall.strategy.battle import (
     HOLD,
@@ -1252,6 +1252,10 @@ class Engine:
             self._th("pit_loss_min_ms", 5_000) <= pit.loss_ms <= self._th("pit_loss_max_ms", 60_000)
         ):
             return
+        if pending.neutralised == 0 and pit.in_lap_ms - pit.ref_pace_ms > self._th(
+            "pit_inlap_slow_max_ms", 10_000
+        ):
+            return
         self.db.insert_pit_event(
             pending.session_uid,
             0,
@@ -1518,11 +1522,19 @@ class Engine:
         return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
 
     def _thermal_hi_c(self, track_id: int, compound: int, settings: Any) -> float:
-        learned = (
+        learned_hi = (
             self.db.get_param(track_id, compound, "thermal_hi_c") if self.db is not None else None
         )
-        if learned is not None and learned.weight >= self._th("prior_min_weight", 2):
-            return float(learned.value)
+        min_weight = self._th("prior_min_weight", 2)
+        if learned_hi is not None and learned_hi.weight >= min_weight:
+            learned_lo = self.db.get_param(track_id, compound, "thermal_lo_c")
+            if learned_lo is not None and learned_lo.weight >= min_weight:
+                return widen_window(
+                    float(learned_lo.value),
+                    float(learned_hi.value),
+                    self._th("tyre_window_min_width_c", 15.0),
+                )[1]
+            return float(learned_hi.value)
         return thermal_window(settings.thresholds, compound)[1]
 
     def _race_laps(self) -> int:
