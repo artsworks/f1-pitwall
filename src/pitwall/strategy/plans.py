@@ -252,6 +252,7 @@ def _sequences(inp: PlanInputs, th: Mapping[str, object]) -> list[tuple[int, ...
     return out
 
 
+# Visual compound IDs only (16 S < 17 M < 18 H). Actual C-numbers break the order (C6 is 22).
 def _is_softer_next(compounds: tuple[int, ...]) -> bool:
     return (
         len(compounds) >= 2

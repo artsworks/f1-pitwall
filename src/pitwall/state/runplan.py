@@ -123,8 +123,9 @@ def mistakes_text(
     ]
     if lost:
         worst_ms, sector = max(lost)
-        if worst_ms >= loss_min_ms:
-            parts.append(f"{max(0.1, worst_ms / 1000):.1f} lost in sector {sector} to your best")
+        if worst_ms > 0 and worst_ms >= loss_min_ms:
+            amount = "under a tenth" if worst_ms < 50 else f"{worst_ms / 1000:.1f}"
+            parts.append(f"{amount} lost in sector {sector} to your best")
     return ", ".join(parts)
 
 

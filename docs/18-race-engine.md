@@ -484,6 +484,7 @@ Rules gate on
 `pit_plan_risk <= mode.position_loss_risk_max`.
 
 On green laps, the engine runs `plan_mc_sims` simulations over the same candidate range as `optimise`.
+`mc_every_n_laps` (default 1) sets how often the result is recomputed. With n > 1, the engine reuses one result per n-lap block within a stint.
 Each simulation samples current linear degradation with `sigma = max(deg_sd_ms_per_lap, plan_mc_deg_sd_frac * deg_ms_per_lap)`.
 When the fit is a blend with positive posterior spread and at least `max(deg_min_laps, 3)` laps, sample a Student-t value instead.
 Use `df = max(fit.n - 2, 3)` and scale `max(deg_posterior_sd_ms_per_lap, sigma)`.

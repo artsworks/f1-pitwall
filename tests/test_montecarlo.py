@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 
 import pitwall.strategy.montecarlo as montecarlo
+from pitwall.config.loader import ConfigStore
+from pitwall.config.models import resolve_mindset
 from pitwall.model.deg import DegFit
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pitwindow import PitPlan, _fresh_fit, race_time_s
@@ -73,6 +75,13 @@ def test_same_seed_produces_the_same_result() -> None:
     args = dict(fit=fit, fresh=_fit(80.0), plan_lap=10)
 
     assert _agreement(**args) == _agreement(**args)
+
+
+def test_shipped_mindsets_keep_per_lap_mc_key() -> None:
+    settings = ConfigStore(isolated=True).current()
+
+    for mindset in ("balanced", "aggressive"):
+        assert resolve_mindset(settings.mindsets, mindset)["mc_every_n_laps"] == 1
 
 
 def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> None:

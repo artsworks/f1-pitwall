@@ -134,7 +134,7 @@ Each parameter maps to something a race engineer changes when told "we're attack
 | `call_budget_per_lap` | 15 | `unlimited` | P2/P3 calls per lap (P1 never counts); `0` is P1 only, `unlimited` removes the cap; the driver menu's "Radio calls" item overrides it live | slightly chattier, not twice as chatty |
 | `plan_soft_bias_s` | 0.0 | 1.5 | seconds subtracted when ranking a softer next compound | prefers a softer next stint when race times are close |
 | `plan_pick` | `confidence` | `gain` | tie-break preference across feasible pit plans | picks the higher-gain stop instead of the safer cover |
-| `mc_every_n_laps` | 1 | 1 | lap cadence for Monte Carlo pit-plan agreement | runs agreement checks every lap |
+| `mc_every_n_laps` | 1 | 1 | lap cadence for Monte Carlo pit-plan agreement. With n > 1, one result is kept per n-lap block within a stint | runs agreement checks every lap |
 | `plan_mc_sims` | 500 | 1000 | Monte Carlo simulations per pit-plan check | samples more trajectories under aggressive |
 | `sector_loss_call_ms` | 100 | 50 | minimum qualifying sector loss before naming the sector | calls smaller losses against the session theoretical best |
 | `battle_conserve_calls` | `true` | `false` | whether patience and tyre-management battle calls fire | suppresses conserve calls during a fight |

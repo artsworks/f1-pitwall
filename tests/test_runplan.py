@@ -85,6 +85,54 @@ def test_mistakes_text() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("sectors", "gate_ms", "expected"),
+    [
+        pytest.param(
+            (20_050, 40_000, 15_000),
+            50,
+            "0.1 lost in sector 1 to your best",
+            id="50-ms-loss-at-gate",
+        ),
+        pytest.param(
+            (20_030, 40_000, 15_000),
+            20,
+            "under a tenth lost in sector 1 to your best",
+            id="30-ms-loss",
+        ),
+        pytest.param(
+            (19_970, 39_970, 14_970),
+            -50,
+            "",
+            id="all-sectors-faster",
+        ),
+        pytest.param(
+            (20_140, 40_000, 15_000),
+            100,
+            "0.1 lost in sector 1 to your best",
+            id="140-ms-loss",
+        ),
+    ],
+)
+def test_mistakes_text_small_loss_not_overstated(
+    sectors: tuple[int, int, int], gate_ms: float, expected: str
+) -> None:
+    best = (20_000, 40_000, 15_000)
+    lap = HotLap(
+        sum(sectors),
+        sectors[0],
+        sectors[1],
+        sectors[2],
+        50.0,
+        2.0,
+        0,
+        0,
+        False,
+    )
+
+    assert mistakes_text(lap, best, sector_loss_call_ms=gate_ms) == expected
+
+
 def _feed(
     rt: RunTracker,
     t: float,

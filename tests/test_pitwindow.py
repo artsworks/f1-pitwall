@@ -485,6 +485,23 @@ def test_position_risk_veto_per_mindset_and_driver_gate() -> None:
     assert gated_uc.reason == "Traffic behind"
 
 
+def test_balanced_over_risk_limit_keeps_main_plans() -> None:
+    result = run(
+        rival_ahead=RivalView(1, "NORRIS", 92_500, False),
+        gap_ahead_s=1.0,
+        gap_behind_s=11.0,
+        laps_of_pace=19.0,
+        mode=BALANCED,
+    )
+
+    assert result.risk == pytest.approx(round(10 / 21, 3))
+    assert result.plan == "undercut"
+
+    main_plan = run(gap_behind_s=11.0, tyre_age=15, laps_of_pace=19.0, mode=BALANCED)
+    assert main_plan.risk == pytest.approx(round(10 / 21, 3))
+    assert main_plan.plan in ("box_now", "box_in_n")
+
+
 def test_plan_pick_gain_selects_higher_gain_plan_under_aggressive() -> None:
     ahead = RivalView(1, "NORRIS", 92_500, False)
     behind = RivalView(2, "PIASTRI", 90_000, True)
