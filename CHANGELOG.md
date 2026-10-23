@@ -10,6 +10,44 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.33.0 (2026-10-23)
+
+### Bug Fixes
+
+- **install**: Mac git check, prompt layout, LAN IP order
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+- **install**: Pick Piper when its voice exists, check project name, Windows-safe update docs
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+- **install**: VC++ runtime check, option-2 audio line, flush update output
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+### Continuous Integration
+
+- **release**: Create a GitHub Release for each version tag
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+### Documentation
+
+- Add step-by-step install guide ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+### Features
+
+- **install**: Add installers and self-update command
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+- **install**: One-line installers, pitwall update and install guide
+  ([#127](https://github.com/artsworks/f1-pitwall/pull/127),
+  [`1d8e695`](https://github.com/artsworks/f1-pitwall/commit/1d8e6957be7d083d6405240420d6f79214c5971d))
+
+
 ## v0.32.0 (2026-10-23)
 
 ### Bug Fixes
