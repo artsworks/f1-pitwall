@@ -118,12 +118,17 @@ function Install-Pitwall {
 
     $voiceAnswer = Read-Host "Download the natural voice (about 60 MB)? [Y/n]"
     if ($voiceAnswer -notmatch "^(n|N)$") {
-        Push-Location $installDir
-        & $uv run pitwall voice get
-        $voiceCode = $LASTEXITCODE
-        Pop-Location
-        if ($voiceCode -ne 0) {
-            Write-Host "The natural voice did not download. You can run uv run pitwall voice get later."
+        if ((Test-Path (Join-Path $env:SystemRoot 'System32\vcruntime140_1.dll')) -or (Test-Path (Join-Path $env:SystemRoot 'Sysnative\vcruntime140_1.dll'))) {
+            Push-Location $installDir
+            & $uv run pitwall voice get
+            $voiceCode = $LASTEXITCODE
+            Pop-Location
+            if ($voiceCode -ne 0) {
+                Write-Host "The natural voice did not download. You can run uv run pitwall voice get later."
+            }
+        } else {
+            Write-Host "The natural voice needs the Microsoft Visual C++ Redistributable."
+            Write-Host "Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe, then run this installer again."
         }
     }
 

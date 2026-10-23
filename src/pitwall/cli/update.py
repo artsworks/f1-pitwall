@@ -87,7 +87,7 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
         return _error(out, f"git rev-parse HEAD failed: {head_before.stderr.strip()}")
 
     head_before_value = head_before.stdout.strip()
-    print(f"Updating Pitwall {version_before} in {root}", file=out)
+    print(f"Updating Pitwall {version_before} in {root}", file=out, flush=True)
     try:
         pull = subprocess.run(
             ["git", "-C", str(root), "pull", "--ff-only"],

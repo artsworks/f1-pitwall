@@ -272,10 +272,11 @@ EOF
     printf '%s\n' "0 datagrams is normal until you are on track."
 
     printf '\n%s\n' "Pitwall is installed in $install_dir."
-    printf '%s\n' "This computer plays no engineer audio. The voice plays in the browser tab that shows the dashboard. Open the dashboard on the game PC to hear it in your headset."
+    printf '%s\n' "This computer plays no engineer audio. The voice plays in the browser tab that shows the dashboard."
     printf 'Game PC UDP IP Address: %s\n' "$lan_ip"
     printf '%s\n' "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
     if [ "$dashboard_choice" -eq 1 ]; then
+        printf '%s\n' "Open the dashboard on the game PC to hear it in your headset."
         if [ "$lan_ip_fallback" -eq 1 ]; then
             printf '%s\n' "On the game PC, open http://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
         else
