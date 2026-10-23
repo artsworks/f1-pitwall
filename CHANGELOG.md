@@ -10,6 +10,78 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.32.0 (2026-10-23)
+
+### Bug Fixes
+
+- Tyre window colours, F1 26 track refit, rival tyres and warning counts
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **dashboard**: Map rival compound labels
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **engine**: Widen tyre windows and filter pit-loss outliers
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **rules**: Count off-track passes as corner cuts
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **state**: Count all corner-cut warnings together
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **state**: Count WIDE warnings from Lap Data
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **state**: Hide rival tyre age until history shows the new stint
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **state**: One limits kind for track-limit warnings
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+### Code Style
+
+- **state**: Format rival age guard ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+### Documentation
+
+- Add Melbourne v0.29.0 demo video beside the weekend demo
+  ([#125](https://github.com/artsworks/f1-pitwall/pull/125),
+  [`9cef0c4`](https://github.com/artsworks/f1-pitwall/commit/9cef0c49525ae59e320f3841fbba5037ef15a798))
+
+- Corner-cut rule fires on PENA 7 ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **mockup**: Sync reimagined dashboard with the live build
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **mockup**: Warning display options ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+### Features
+
+- **dashboard**: Show rival tyres and infringement warnings
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **dashboard**: Split warning chip into cuts and track limits
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+- **tracks**: Sync F1 26 learning overlays
+  ([#126](https://github.com/artsworks/f1-pitwall/pull/126),
+  [`e1897c1`](https://github.com/artsworks/f1-pitwall/commit/e1897c1f116ec2d58cc7fc2342d3b856bb69f2c1))
+
+
 ## v0.31.1 (2026-10-20)
 
 ### Bug Fixes
