@@ -213,3 +213,10 @@ def test_load_yaml_matches_safe_load_on_packaged_defaults() -> None:
 @pytest.mark.skipif(not hasattr(yaml, "CSafeLoader"), reason="libyaml not available")
 def test_yaml_loader_uses_libyaml() -> None:
     assert loader._YAML_LOADER is yaml.CSafeLoader  # noqa: SLF001
+
+
+def test_yaml_loader_is_safe() -> None:
+    allowed = (
+        (yaml.SafeLoader, yaml.CSafeLoader) if hasattr(yaml, "CSafeLoader") else (yaml.SafeLoader,)
+    )
+    assert loader._YAML_LOADER in allowed  # noqa: SLF001

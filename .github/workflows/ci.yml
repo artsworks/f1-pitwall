@@ -48,6 +48,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+      - name: Assert libyaml available
+        run: uv run python -c "import yaml; assert hasattr(yaml, 'CSafeLoader'), 'libyaml (CSafeLoader) missing in CI'"
       - name: Fast tests
         run: uv run pytest -m "not slow and not replay" -n auto --dist loadfile
       - name: Replay determinism (max vs 10x)

@@ -19,6 +19,9 @@ from pitwall.config.models import Settings
 
 DEFAULTS_DIR = Path(__file__).parent / "defaults"
 
+# Must stay a safe loader (CSafeLoader or SafeLoader). Never switch to
+# yaml.Loader or yaml.CLoader: config comes from user-editable profile and
+# overlay paths, and full-loader deserialization can run arbitrary code.
 _YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
