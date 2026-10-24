@@ -684,6 +684,7 @@ def state_payload(
             "rl": corner("rl"),
             "rr": corner("rr"),
         },
+        "tyre_window_c": [cold, hot],
         "brakes": {
             "fl": snapshot.brake_ema_fast.fl,
             "fr": snapshot.brake_ema_fast.fr,

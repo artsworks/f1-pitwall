@@ -395,6 +395,26 @@ def test_state_payload_stale_after_gap() -> None:
     assert payload2["packet_age_ms"] == 5000.0
 
 
+def test_state_payload_tyre_window_follows_compound() -> None:
+    from pitwall.server.app import state_payload
+
+    settings = ConfigStore().current()
+    c0 = state_payload(
+        make_snapshot(tyre_compound=21),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert c0["tyre_window_c"] == [90.0, 125.0]
+    other = state_payload(
+        make_snapshot(tyre_compound=0),
+        settings=settings,
+        metrics=Metrics(),
+        quiet=False,
+    )
+    assert other["tyre_window_c"] == [80.0, 110.0]
+
+
 def test_hub_recent_calls_track_audio_outcome() -> None:
     hub = Hub()
     for cid in ("a", "b", "c"):

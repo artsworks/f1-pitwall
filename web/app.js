@@ -407,8 +407,9 @@
   }
 
   // Tyres: trend arrow from the fast EMA (inner) vs tyre_inner_ema_slow, wear %,
-  // window meter on a 60..130 °C scale, HOT WEAR / condition tags, LOCKED border.
-  var T_LO = 60, T_HI = 130, TREND_C = 0.5;
+  // window meter on a 40..120 °C scale with the band from tyre_window_c, ⚠ tag above 120 °C,
+  // HOT WEAR / condition tags, LOCKED border.
+  var T_LO = 40, T_HI = 120, TREND_C = 0.5;
   function renderTyres(p, s) {
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
     setText("compound", comp);
@@ -430,6 +431,9 @@
       }
     }
     if (!p.tyres) return;
+    var win = p.tyre_window_c, tspan = T_HI - T_LO;
+    var bandL = win ? Math.max(0, Math.min(1, (win[0] - T_LO) / tspan)) : null;
+    var bandR = win ? Math.max(0, Math.min(1, (win[1] - T_LO) / tspan)) : null;
     var st = s ? s.tyres || {} : {};
     var worst = null;
     CORNERS.forEach(function (k) {
@@ -452,6 +456,16 @@
       tr.title = d > TREND_C ? "heating" : d < -TREND_C ? "cooling" : "steady";
       var f = t.inner === null ? 0 : Math.max(0, Math.min(1, (t.inner - T_LO) / (T_HI - T_LO)));
       c.querySelector(".meter i").style.setProperty("--f", f.toFixed(3));
+      var twin = c.querySelector(".twin"), band = twin.querySelector("b");
+      if (win) {
+        band.style.setProperty("--band-left", (bandL * 100).toFixed(1) + "%");
+        band.style.setProperty("--band-width", ((bandR - bandL) * 100).toFixed(1) + "%");
+      } else {
+        band.style.removeProperty("--band-left");
+        band.style.removeProperty("--band-width");
+      }
+      var over = t.inner !== null && t.inner > T_HI;
+      twin.classList.toggle("over", over);
       c.querySelector(".wear b").textContent = fmt(t.wear, 0) + "%";
       c.querySelector(".surf").textContent = "surf " + fmt(t.surface, 0) + "°";
       var brk = c.querySelector(".brk");
@@ -459,6 +473,7 @@
       var tags = c.querySelector(".tags");
       tags.innerHTML = "";
       if (t.lockup) tags.appendChild(span("LOCKED", "tag lock"));
+      if (over) tags.appendChild(span("⚠ >" + T_HI + "°", "tag crit"));
       if (st.wear_hot_corner === k) {
         tags.appendChild(span("HOT WEAR" + (st.wear_hot_rate ? " +" + fmt(st.wear_hot_rate, 1) + "%/lap" : ""), "tag crit"));
       }
