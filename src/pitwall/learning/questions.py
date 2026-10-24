@@ -11,8 +11,8 @@ from typing import Any
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, RuleDefModel
-from pitwall.derive import is_synthetic_uid
-from pitwall.digest import _repeat_call_ids
+from pitwall.learning.digest import _repeat_call_ids
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database
 
 

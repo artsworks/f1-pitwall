@@ -17,10 +17,10 @@ from typing import Any, Literal
 import yaml
 
 from pitwall.config.models import Settings
-from pitwall.derive import MutationOp, derive_recording, ops_from_options
+from pitwall.learning.tune import _AUTO_SKIP_METRICS
+from pitwall.net.derive import MutationOp, derive_recording, ops_from_options
 from pitwall.net.recording import RecordingReader
 from pitwall.store.db import Database
-from pitwall.tune import _AUTO_SKIP_METRICS
 
 log = logging.getLogger(__name__)
 

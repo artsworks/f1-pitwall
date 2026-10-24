@@ -22,16 +22,16 @@ from pitwall.engine import Engine, action_bits
 from pitwall.ingest import Ingest
 from pitwall.model.driver import GLOBAL_TRACK_ID, learned_rating
 from pitwall.net.recording import RecordingRotator
-from pitwall.protocol.header import PacketId
-from pitwall.rules.engine import RuleEngine
-from pitwall.state.session import SessionState
-from pitwall.supervisor import (
+from pitwall.ops.supervisor import (
     ALIVE_FILE,
     WATCHDOG_ENV,
     Supervisor,
     read_recording_pointer,
     runtime_dir,
 )
+from pitwall.protocol.header import PacketId
+from pitwall.rules.engine import RuleEngine
+from pitwall.state.session import SessionState
 
 if TYPE_CHECKING:
     from pitwall.config.models import Settings
@@ -374,9 +374,9 @@ def _recording_metadata(store: ConfigStore, settings: Settings) -> dict[str, obj
 
 def cmd_start(args: argparse.Namespace) -> int:
     from pitwall.audio.speaker import make_speaker, wire_speaker
-    from pitwall.doctor import set_below_normal_priority
     from pitwall.net.recording import RecordingRotator
     from pitwall.net.udp import listen as udp_listen
+    from pitwall.ops.doctor import set_below_normal_priority
     from pitwall.server.hub import Hub
 
     set_below_normal_priority()
@@ -428,14 +428,14 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         db = open_configured(settings)
     if db is not None:
-        from pitwall.maintenance import maintain, mid_session
+        from pitwall.learning.maintenance import maintain, mid_session
 
         try:
             report = maintain(db, settings, refit=not mid_session(db, settings))
             banner.append(("learning", report.summary()))
         except sqlite3.Error as e:
             banner.append(("learning", f"upkeep skipped ({e})"))
-        from pitwall.digest import startup_scorecard
+        from pitwall.learning.digest import startup_scorecard
 
         try:
             banner.append(("", startup_scorecard(db, pack_dir)))
@@ -483,8 +483,8 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     def on_session_end(uid: int) -> None:
         assert db is not None
-        from pitwall.learnpack import write_pack
-        from pitwall.maintenance import maintain
+        from pitwall.learning.learnpack import write_pack
+        from pitwall.learning.maintenance import maintain
 
         print("learning: session ended, updating track learning…", flush=True)
         try:
@@ -557,7 +557,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 print(f"recording: saved {recorder.last_path}")
         dlog.close()
         if db is not None:
-            from pitwall.learnpack import write_pack
+            from pitwall.learning.learnpack import write_pack
 
             try:
                 saved = write_pack(
@@ -616,11 +616,11 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from pitwall.doctor import run_doctor
+    from pitwall.ops.doctor import run_doctor
 
     result = run_doctor(seconds=args.seconds)
     try:
-        from pitwall.learned import learned_state
+        from pitwall.learning.learned import learned_state
         from pitwall.store.db import open_configured
 
         settings = ConfigStore().current()

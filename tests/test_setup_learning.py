@@ -7,15 +7,15 @@ from typing import Any
 import pytest
 
 from pitwall.config.loader import ConfigStore
-from pitwall.digest import build_digest
-from pitwall.hindsight import grade_and_store
+from pitwall.learning.digest import build_digest
+from pitwall.learning.hindsight import grade_and_store
+from pitwall.learning.tune import tune_from_db
 from pitwall.setup.evaluate import Recommendation, evaluate
 from pitwall.setup.learn import learned_gains
 from pitwall.setup.rules import SetupRules, parse_setup_rules
 from pitwall.setup.signals import RunSignals, session_signals
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
-from pitwall.tune import tune_from_db
 
 
 def _config() -> tuple[SetupRules, dict[str, Any]]:

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore, config_hash
-from pitwall.debrief import (
+from pitwall.learning.debrief import (
     _compound,
     _fit_points,
     _hindsight,
