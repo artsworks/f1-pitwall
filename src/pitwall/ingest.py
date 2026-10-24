@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
 from pitwall.model.driver import fold_weight
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -28,6 +27,7 @@ from pitwall.protocol.header import (
     parse_header,
 )
 from pitwall.store.db import Database
+from pitwall.store.uids import is_synthetic_uid
 
 if TYPE_CHECKING:
     from pitwall.net.recording import FileHeader

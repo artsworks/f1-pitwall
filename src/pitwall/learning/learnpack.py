@@ -12,23 +12,14 @@ from typing import Any
 
 import yaml
 
+from pitwall.config.thresholds import finite_number
 from pitwall.learning.digest import call_quality
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database, _uid_from_sql
+from pitwall.store.uids import is_synthetic_uid
 
 PACK_VERSION = 1
 LEDGER_NAME = "track_ledger.jsonl"
 LATEST_NAME = "learning-latest.json"
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    try:
-        result = float(value)
-    except (OverflowError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
 
 
 def _row_uid(row: object) -> int | None:
@@ -39,7 +30,7 @@ def _row_uid(row: object) -> int | None:
 
 
 def _sort_key(row: dict[str, Any]) -> tuple[bool, float, int]:
-    started_at = _number(row.get("started_at"))
+    started_at = finite_number(row.get("started_at"))
     return (started_at is None, started_at if started_at is not None else 0.0, int(row["uid"]))
 
 
@@ -69,8 +60,8 @@ def read_ledger(path: Path) -> dict[int, dict[str, Any]]:
             continue
         row["uid"] = uid
         previous = rows.get(uid)
-        old_ms = _number(previous.get("ms")) if previous is not None else None
-        new_ms = _number(row.get("ms"))
+        old_ms = finite_number(previous.get("ms")) if previous is not None else None
+        new_ms = finite_number(row.get("ms"))
         if previous is None or (new_ms is not None and (old_ms is None or new_ms > old_ms)):
             rows[uid] = row
     return rows
@@ -87,8 +78,8 @@ def merged_sessions(db: Database, pack_dir: Path) -> dict[int, dict[str, Any]]:
         if uid is None or is_synthetic_uid(uid):
             continue
         previous = rows.get(uid)
-        old_ms = _number(previous.get("ms")) if previous is not None else None
-        new_ms = _number(row.get("ms"))
+        old_ms = finite_number(previous.get("ms")) if previous is not None else None
+        new_ms = finite_number(row.get("ms"))
         if previous is None or (new_ms is not None and (old_ms is None or new_ms > old_ms)):
             if previous is not None and "quality" in previous:
                 row["quality"] = previous["quality"]
@@ -98,9 +89,9 @@ def merged_sessions(db: Database, pack_dir: Path) -> dict[int, dict[str, Any]]:
 
 def pack_track_minutes(db: Database, pack_dir: Path) -> dict[str, Any]:
     merged = merged_sessions(db, pack_dir)
-    sessions = [row for row in merged.values() if (_number(row.get("laps")) or 0) > 0]
-    total_ms = sum(_number(row.get("ms")) or 0.0 for row in sessions)
-    laps = sum(int(_number(row.get("laps")) or 0) for row in sessions)
+    sessions = [row for row in merged.values() if (finite_number(row.get("laps")) or 0) > 0]
+    total_ms = sum(finite_number(row.get("ms")) or 0.0 for row in sessions)
+    laps = sum(int(finite_number(row.get("laps")) or 0) for row in sessions)
     return {
         "minutes": round(total_ms / 60_000, 1),
         "laps": laps,
@@ -108,7 +99,7 @@ def pack_track_minutes(db: Database, pack_dir: Path) -> dict[str, Any]:
     }
 
 
-def _atomic_write(path: Path, text: str) -> None:
+def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
@@ -187,7 +178,7 @@ def write_pack(
             row["quality"] = quality
         elif row is not None:
             row.pop("quality", None)
-    _atomic_write(root / LEDGER_NAME, _ledger_text(sessions))
+    atomic_write(root / LEDGER_NAME, _ledger_text(sessions))
 
     if now is None:
         current = datetime.now()
@@ -220,9 +211,9 @@ def write_pack(
     }
     latest_path = root / LATEST_NAME
     content = json.dumps(pack, default=str, indent=2) + "\n"
-    _atomic_write(latest_path, content)
+    atomic_write(latest_path, content)
     dated_path = root / f"learning-{current.date().isoformat()}.json"
-    _atomic_write(dated_path, content)
+    atomic_write(dated_path, content)
 
     dated_files = sorted(root.glob("learning-????-??-??.json"), key=lambda item: item.name)
     for old in dated_files[: max(0, len(dated_files) - max(0, keep_days))]:
@@ -260,7 +251,7 @@ def restore_pack(
             continue
         current = db.get_param(int(row["track_id"]), int(row["compound"]), str(row["name"]))
         weight = float(row["weight"])
-        pack_updated_at = _number(row.get("updated_at")) or 0.0
+        pack_updated_at = finite_number(row.get("updated_at")) or 0.0
         replace = current is None or weight > current.weight
         if current is not None and math.isclose(weight, current.weight):
             replace = pack_updated_at > current.updated_at
@@ -308,7 +299,7 @@ def restore_pack(
             path = root / f"{filename_id}.yaml"
             if path.exists():
                 continue
-            _atomic_write(path, yaml.safe_dump(overlay, sort_keys=False))
+            atomic_write(path, yaml.safe_dump(overlay, sort_keys=False))
             counts["track_overlays"] += 1
 
     root = Path(pack_dir).expanduser()
@@ -318,13 +309,13 @@ def restore_pack(
         if uid is None:
             continue
         previous = sessions.get(uid)
-        old_ms = _number(previous.get("ms")) if previous is not None else None
-        new_ms = _number(row.get("ms"))
+        old_ms = finite_number(previous.get("ms")) if previous is not None else None
+        new_ms = finite_number(row.get("ms"))
         if previous is None or (new_ms is not None and (old_ms is None or new_ms > old_ms)):
             if previous is not None and "quality" in previous and "quality" not in row:
                 row["quality"] = previous["quality"]
             sessions[uid] = row
             counts["sessions"] += 1
     root.mkdir(parents=True, exist_ok=True)
-    _atomic_write(root / LEDGER_NAME, _ledger_text(sessions))
+    atomic_write(root / LEDGER_NAME, _ledger_text(sessions))
     return counts

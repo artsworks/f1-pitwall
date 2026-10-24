@@ -6,11 +6,11 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.setup.rules import SetupRules
 from pitwall.setup.signals import signals_for_run
 from pitwall.setup.states import runs_for_session
 from pitwall.store.db import Database
+from pitwall.store.uids import is_synthetic_uid
 
 
 def learned_gains(

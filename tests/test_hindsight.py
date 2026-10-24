@@ -17,9 +17,9 @@ from pitwall.learning.hindsight import (
     stop_laps,
 )
 from pitwall.learning.tune import tune_from_db
-from pitwall.net.derive import derived_uid
 from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
+from pitwall.store.uids import derived_uid
 
 UID = 42
 MEDIUM, HARD = 17, 18

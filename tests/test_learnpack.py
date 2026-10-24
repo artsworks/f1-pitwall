@@ -23,9 +23,9 @@ from pitwall.learning.learnpack import (
 from pitwall.learning.maintenance import LEARN_VERSION, maintain
 from pitwall.learning.tune import tune_from_db
 from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
-from pitwall.net.derive import derived_uid
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database, ModelParam
+from pitwall.store.uids import derived_uid
 
 
 def _lap(lap_num: int, lap_time_ms: int) -> LapSummary:

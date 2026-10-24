@@ -25,12 +25,12 @@ from pitwall.model.driver import (
     RATING,
     component_score,
 )
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, PitEventRow, StintRow
+from pitwall.store.uids import is_synthetic_uid
 
 _STYLE = """<style>
 :root {

@@ -65,9 +65,9 @@ def _pitwall_version() -> str:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    from pitwall.net.derive import is_synthetic_uid
     from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
+    from pitwall.store.uids import is_synthetic_uid
 
     speed = _parse_speed(args.speed)
     file = _resolve_recording(args.file, ConfigStore().current())
@@ -356,7 +356,7 @@ def _stats_census(args: argparse.Namespace) -> int:
 
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
-    from pitwall.net.derive import is_synthetic_uid
+    from pitwall.store.uids import is_synthetic_uid
 
     directory = Path(ConfigStore().current().recording.directory)
     found = list_recordings(directory)

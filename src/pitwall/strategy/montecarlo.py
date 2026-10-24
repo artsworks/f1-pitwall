@@ -9,12 +9,12 @@ from dataclasses import dataclass, replace
 import numpy as np
 from numpy.typing import NDArray
 
+from pitwall.config.thresholds import threshold as _f
 from pitwall.model.deg import DegFit
 from pitwall.strategy.pitwindow import (
     PitPlan,
     _candidate_range,
     _cliff_age,
-    _f,
     _fresh_fit,
     _lap_ms,
 )
