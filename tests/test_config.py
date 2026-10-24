@@ -162,6 +162,31 @@ def test_poll_detects_deleted_file_in_rules_dir(tmp_path: Path) -> None:
     assert store.current().thresholds["poll_cache_a"] == 1
 
 
+def test_poll_detects_restored_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("thresholds:\n  poll_cache_p: 1\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    store = ConfigStore()
+    profile.unlink()
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert "poll_cache_p" not in store.current().thresholds
+    profile.write_text("thresholds:\n  poll_cache_p: 2\n")
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert store.current().thresholds["poll_cache_p"] == 2
+
+
+def test_poll_detects_rules_dir_created_later(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    store = ConfigStore(rules_dir=rules_dir, isolated=True)
+    rules_dir.mkdir()
+    (rules_dir / "a.yaml").write_text("thresholds:\n  poll_cache_a: 1\n")
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert store.current().thresholds["poll_cache_a"] == 1
+
+
 def test_poll_does_not_rescan_sources(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     store = ConfigStore(isolated=True)
 

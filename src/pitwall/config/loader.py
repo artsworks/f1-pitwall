@@ -73,7 +73,7 @@ class ConfigStore:
         self._isolated = isolated
         self._profile = None if isolated else profile_path()
         self._track_id: int | None = None
-        self._mtimes: dict[Path, float] = {}
+        self._mtimes: dict[Path, float | None] = {}
         self._last_poll = 0.0
         self.last_error: str | None = None
         self._settings: Settings | None = None
@@ -89,7 +89,7 @@ class ConfigStore:
 
     def _watched_dirs(self) -> list[Path]:
         roots = [DEFAULTS_DIR]
-        if self._rules_dir is not None and self._rules_dir.is_dir():
+        if self._rules_dir is not None:
             roots.append(self._rules_dir)
         dirs: list[Path] = []
         for root in roots:
@@ -183,12 +183,12 @@ class ConfigStore:
         changed = self._settings is None or settings != self._settings
         self._settings = settings
         watched = self._sources() + self._watched_dirs()
-        mtimes: dict[Path, float] = {}
+        mtimes: dict[Path, float | None] = {}
         for p in watched:
             try:
                 mtimes[p] = p.stat().st_mtime
             except OSError:
-                pass
+                mtimes[p] = None
         self._mtimes = mtimes
         return changed
 
@@ -200,9 +200,9 @@ class ConfigStore:
         self._last_poll = now
         for p, cached in self._mtimes.items():
             try:
-                mtime = p.stat().st_mtime
+                mtime: float | None = p.stat().st_mtime
             except OSError:
-                return self.reload()
+                mtime = None
             if mtime != cached:
                 return self.reload()
         return False
