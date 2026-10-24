@@ -324,6 +324,71 @@ def test_insert_lap() -> None:
     assert db.laps_for(7)[0].traffic == 0
 
 
+def test_insert_lap_same_key_keeps_one_row() -> None:
+    db = Database(":memory:")
+
+    def lap(lap_time_ms: int, sector1_ms: int, sector2_ms: int) -> LapSummary:
+        return LapSummary(3, lap_time_ms, sector1_ms, sector2_ms, 16, 2, 14.5, True)
+
+    db.insert_lap(7, 0, lap(91_234, 30_000, 31_000))
+    original_id = db.laps_for(7, 0)[0].id
+    db.insert_lap(7, 0, lap(92_345, 30_100, 31_100))
+    db.insert_lap(7, 1, lap(93_456, 30_200, 31_200))
+
+    rows = db._rows("SELECT * FROM laps WHERE session_uid=? AND lap_num=3", (7,))  # noqa: SLF001
+    assert len(rows) == 2
+    player = next(row for row in rows if row["car_idx"] == 0)
+    rival = next(row for row in rows if row["car_idx"] == 1)
+    assert player["id"] == original_id
+    assert (player["lap_time_ms"], player["s1_ms"], player["s2_ms"]) == (92_345, 30_100, 31_100)
+    assert rival["lap_time_ms"] == 93_456
+
+
+def test_insert_lap_round_trips_sector_times() -> None:
+    db = Database(":memory:")
+    lap = LapSummary(3, 91_234, 30_000, 31_000, 16, 2, 14.5, True)
+
+    db.insert_lap(7, 0, lap)
+
+    stored = db.laps_for(7, 0)[0]
+    assert (stored.s1_ms, stored.s2_ms) == (30_000, 31_000)
+
+
+def test_migration_dedupes_laps_keeping_latest_row(tmp_path) -> None:
+    path = tmp_path / "duplicate-laps.sqlite"
+    _seed_database(path, migration_count=len(MIGRATIONS) - 1)
+    conn = sqlite3.connect(path)
+    conn.executemany(
+        "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms) VALUES(?,?,?,?)",
+        [(7, 0, 3, 91_000), (7, 0, 3, 92_000), (7, 1, 3, 93_000)],
+    )
+    later_id = conn.execute(
+        "SELECT MAX(id) FROM laps WHERE session_uid=7 AND car_idx=0 AND lap_num=3"
+    ).fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+
+    rows = db._rows("SELECT * FROM laps WHERE session_uid=7 ORDER BY id", ())  # noqa: SLF001
+    assert len(rows) == 2
+    player = next(row for row in rows if row["car_idx"] == 0)
+    assert player["id"] == later_id
+    assert player["lap_time_ms"] == 92_000
+    indexes = {
+        row["name"]
+        for row in db._conn.execute("PRAGMA index_list(laps)")  # noqa: SLF001
+    }
+    assert "laps_key" in indexes
+    db.close()
+
+    reopened = Database(path)
+    assert reopened._conn.execute("PRAGMA user_version").fetchone()[0] == len(  # noqa: SLF001
+        MIGRATIONS
+    )
+    assert len(reopened._rows("SELECT * FROM laps WHERE session_uid=7", ())) == 2  # noqa: SLF001
+
+
 def test_lap_traffic_round_trip() -> None:
     db = Database(":memory:")
     db.insert_lap(8, 0, LapSummary(3, 91_234, 30_000, 31_000, 16, 2, 14.5, True, traffic=1))

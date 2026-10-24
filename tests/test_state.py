@@ -164,12 +164,14 @@ def _lap_tick(
     pit_status: int = 0,
     driver_status: int = 4,
     in_traffic: bool = False,
+    sector1_ms: int = 30_000,
+    sector2_ms: int = 30_000,
 ):
     return accumulator.update(
         current_lap_num=lap_num,
         last_lap_time_ms=90_000,
-        sector1_ms=30_000,
-        sector2_ms=30_000,
+        sector1_ms=sector1_ms,
+        sector2_ms=sector2_ms,
         pit_status=pit_status,
         driver_status=driver_status,
         current_lap_invalid=0,
@@ -179,6 +181,31 @@ def _lap_tick(
         fuel_remaining_laps=10.0,
         in_traffic=in_traffic,
     )
+
+
+def test_lap_sectors_use_last_tick_not_boundary_tick() -> None:
+    accumulator = LapAccumulator()
+    _lap_tick(accumulator, 1, sector1_ms=30_000, sector2_ms=30_500)
+    _lap_tick(accumulator, 1, sector1_ms=31_000, sector2_ms=31_500)
+
+    completed = _lap_tick(accumulator, 2, sector1_ms=0, sector2_ms=0)
+
+    assert completed is not None
+    assert (completed.sector1_ms, completed.sector2_ms) == (31_000, 31_500)
+
+
+def test_backward_lap_step_emits_no_summary_and_marks_redo_invalid() -> None:
+    accumulator = LapAccumulator()
+    for lap_num in (1, 2, 3):
+        _lap_tick(accumulator, lap_num)
+
+    assert _lap_tick(accumulator, 4) is not None
+    assert _lap_tick(accumulator, 3) is None
+
+    redone_lap = _lap_tick(accumulator, 4)
+    assert redone_lap is not None
+    assert redone_lap.lap_num == 3
+    assert "flashback" in redone_lap.invalid_reasons
 
 
 def test_early_in_lap_request_does_not_mark_laps_after_in_lap() -> None:
@@ -446,7 +473,8 @@ def test_lap_summary_and_validity() -> None:
 
     # lap 1 in progress, then lap 2 starts -> lap 1 summary (first_lap invalid)
     lap(1, 0.1, last_lap_time_ms=0)
-    lap(2, 90.0, last_lap_time_ms=80_000, sector1_time_ms_part=25_000)
+    lap(1, 60.0, sector1_time_ms_part=25_000)
+    lap(2, 90.0, last_lap_time_ms=80_000)
     assert len(state.laps) == 1
     s1 = state.laps[0]
     assert s1.lap_num == 1

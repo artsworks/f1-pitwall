@@ -81,6 +81,8 @@ def _race_stream(
                         0: {
                             "current_lap_num": lap,
                             "last_lap_time_ms": lap_time(lap - 1) if lap > 1 else 0,
+                            "sector1_time_ms_part": 30_000 + lap,
+                            "sector2_time_ms_part": 30_500 + lap,
                             "driver_status": 4,
                             "pit_status": pit_status,
                             "result_status": 2,
@@ -271,6 +273,73 @@ def test_player_laps_carry_wear_fuel_ers(tmp_path: Path) -> None:
     assert lap2.wear_pct > 0.0
     assert lap2.fuel_kg == pytest.approx(110.0 - 1.7 * 3, abs=0.01)  # lap-3 tick value
     assert lap2.ers_deployed_j == 250_000.0
+
+
+def test_player_laps_written_once_with_sector_times(tmp_path: Path) -> None:
+    _, state, db = _run(tmp_path)
+    uid = state.session_uid
+    assert uid is not None
+
+    laps = db.laps_for(uid, 0)
+    lap_nums = [lap.lap_num for lap in laps]
+    assert len(lap_nums) == len(set(lap_nums))
+    assert len(laps) >= 9
+    for lap in laps:
+        assert (lap.s1_ms, lap.s2_ms) == (30_000 + lap.lap_num, 30_500 + lap.lap_num)
+
+
+def test_flashback_across_line_keeps_one_row_per_lap(tmp_path: Path) -> None:
+    packets: list[tuple[float, bytes]] = []
+    t = 0.0
+    session_time = 0.0
+
+    def emit(pid: int, data: dict) -> None:
+        nonlocal t
+        packets.append((t, pack_packet(pid, data, session_time=session_time)))
+        t += 0.033
+
+    emit(
+        PacketId.SESSION,
+        {"session_type": 15, "track_id": 7, "total_laps": 12, "track_length": 5000},
+    )
+
+    def lap_data(lap_num: int) -> None:
+        nonlocal session_time
+        for _ in range(3):
+            emit(
+                PacketId.LAP_DATA,
+                {
+                    "cars": {
+                        0: {
+                            "current_lap_num": lap_num,
+                            "last_lap_time_ms": 90_000 + lap_num,
+                            "driver_status": 4,
+                            "result_status": 2,
+                            "sector1_time_ms_part": 30_000 + lap_num,
+                            "sector2_time_ms_part": 30_500 + lap_num,
+                        }
+                    }
+                },
+            )
+            session_time += 30
+
+    for index, lap_num in enumerate((1, 2, 3, 4, 3, 4, 5, 6)):
+        if index == 4:
+            session_time -= 100
+        lap_data(lap_num)
+
+    recording = write_packet_stream(tmp_path / "flashback.f1bin", packets)
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(recording, engine, None))
+    uid = engine.state.session_uid
+    assert uid is not None
+
+    laps = db.laps_for(uid, 0)
+    assert [lap.lap_num for lap in laps] == [1, 2, 3, 4, 5]
+    lap3 = next(lap for lap in laps if lap.lap_num == 3)
+    assert lap3.valid == 0
+    assert "flashback" in lap3.invalid_reasons
 
 
 def test_stint_refit_writes_stints_row(tmp_path: Path) -> None:
@@ -570,8 +639,6 @@ def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
     engine.ingest.on_datagram(history, 7.0)
 
     assert [lap.sc_status for _, lap in engine.state.rival_laps] == [0, 0, 0, 1, 1, 1]
-    for lap_num, lap_time in enumerate((90_000, 90_000, 90_000), start=1):
-        db.insert_lap(uid, 0, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True))
     for car_idx, lap_time in ((2, 95_000), (3, 105_000)):
         for lap_num in range(1, 4):
             db.insert_lap(
@@ -580,6 +647,8 @@ def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
 
     engine._write_laps()
     assert [lap.sc_status for lap in db.laps_for(uid, 1)] == [0, 0, 0, 1, 1, 1]
+    for lap_num, lap_time in enumerate((90_000, 90_000, 90_000), start=1):
+        db.insert_lap(uid, 0, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True))
     engine._fold_driver(uid)
 
     assert db.get_param(7, 0, "driver_pace_delta_ms").value == -5_000
