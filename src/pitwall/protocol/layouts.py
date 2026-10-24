@@ -94,10 +94,6 @@ def compile_layout(layout: tuple[Item, ...]) -> CompiledLayout:
     return CompiledLayout(layout=layout, struct=s, offsets=offsets)
 
 
-def layout_size(layout: tuple[Item, ...]) -> int:
-    return compile_layout(layout).struct.size
-
-
 # ---------------------------------------------------------------- sub-layouts
 
 MARSHAL_ZONE: tuple[Item, ...] = (

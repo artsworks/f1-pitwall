@@ -813,10 +813,6 @@ class Snapshot:
         return max(0.0, -self.fuel_margin_laps)
 
     @property
-    def energy_under_mj(self) -> float:
-        return max(0.0, -self.energy_lap_delta_mj)
-
-    @property
     def energy_prev_under_mj(self) -> float:
         return max(0.0, -self.energy_prev_lap_delta_mj)
 

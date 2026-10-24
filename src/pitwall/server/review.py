@@ -83,7 +83,6 @@ class ReviewController:
         self.clock: PausableClock | None = None
         self._task: asyncio.Task[Any] | None = None
         self._from_us = 0
-        self._started_wall: float | None = None
         self._idx: list[dict[str, Any]] | None = None
         self._dur: int | None = None
 
