@@ -225,7 +225,7 @@ def scale_plan(plan: PitPlan, mc: McResult | None, *, lap_num: int | None = None
     return replace(
         plan,
         confidence=round(plan.confidence * mc.agree, 3),
-        mc_lap=0 if mc.modal_offset is None else current_lap + max(0, mc.modal_offset),
+        mc_lap=0 if mc.modal_offset is None else current_lap + mc.modal_offset,
         mc_agree=round(mc.agree, 3),
-        mc_risk_lap=0 if mc.q_modal_offset is None else current_lap + max(0, mc.q_modal_offset),
+        mc_risk_lap=0 if mc.q_modal_offset is None else current_lap + mc.q_modal_offset,
     )

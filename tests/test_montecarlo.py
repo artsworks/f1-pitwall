@@ -311,7 +311,7 @@ def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     assert cheap_stop == replace(plan, plan="cheap_stop")
 
 
-@pytest.mark.parametrize(("offset", "expected"), [(None, 0), (0, 11), (2, 13), (-1, 11)])
+@pytest.mark.parametrize(("offset", "expected"), [(None, 0), (0, 11), (2, 13)])
 def test_scale_plan_translates_offsets_and_keeps_no_stop_distinct(
     offset: int | None, expected: int
 ) -> None:

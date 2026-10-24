@@ -512,7 +512,7 @@ Select the first minimum. Choose no stop when the best stop delta is nonnegative
 `PitPlan.mc_risk_lap` carries this downside stop lap. The modal lap and agreement keep their existing meanings.
 `McResult` stores stop offsets from the computing lap, with `None` for no stop.
 Its `modal_lap` and `q_modal_lap` properties report absolute laps for that computing lap.
-When a cached result is reused, `scale_plan` adds the offsets to the current lap and clamps past stops to that lap.
+When a cached result is reused, `scale_plan` adds the offsets to the current lap.
 The cache key includes the effective `pit_gain_min_s`, so a changed gain threshold forces a new result.
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
 For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
