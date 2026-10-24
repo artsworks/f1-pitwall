@@ -10,6 +10,31 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.35.0 (2026-10-24)
+
+### Bug Fixes
+
+- **web**: Over-scale tag reads ⚠ >120° instead of repeating the temperature
+  ([#130](https://github.com/artsworks/f1-pitwall/pull/130),
+  [`d0885c0`](https://github.com/artsworks/f1-pitwall/commit/d0885c035207de1b8f0bc1a4a0b12c903d5ef307))
+
+### Documentation
+
+- Describe current state; move M0–M4 plan and early planning docs to history
+  ([#129](https://github.com/artsworks/f1-pitwall/pull/129),
+  [`10df66b`](https://github.com/artsworks/f1-pitwall/commit/10df66b1762fec07db3297be6143a808e7a9f052))
+
+- Drop SAPI as a speech engine, add command examples to README
+  ([#128](https://github.com/artsworks/f1-pitwall/pull/128),
+  [`69c9089`](https://github.com/artsworks/f1-pitwall/commit/69c90897ee1c3aecf51d1c7025fa64847d5217c4))
+
+### Features
+
+- **web**: Tyre meter on 40–120 °C scale with compound band and over-scale tag
+  ([#130](https://github.com/artsworks/f1-pitwall/pull/130),
+  [`d0885c0`](https://github.com/artsworks/f1-pitwall/commit/d0885c035207de1b8f0bc1a4a0b12c903d5ef307))
+
+
 ## v0.34.0 (2026-10-24)
 
 ### Bug Fixes
