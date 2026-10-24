@@ -186,12 +186,12 @@ body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: gray
 .corner .trend.up { color: var(--crit); }
 .corner .trend.down { color: var(--cold); }
 .corner .trend.flat { color: var(--fg); }
-/* operating window meter: 60..130 °C scale, band = tyre_inner_cold_c 80 .. tyre_inner_hot_c 110
-   (thresholds.yaml). Fill reuses .meter i with the glide. */
+/* operating window meter: 40..120 °C scale, band = tyre_window_c [cold, hot] per compound; fallback 80..110 (tyre_inner_cold_c / tyre_inner_hot_c in thresholds.yaml). Fill reuses .meter i with the glide. */
 .corner .twin { grid-area: meter; margin: .3rem 0 .2rem; }
 .corner .twin i { background: currentColor; }
-.corner .twin b { position: absolute; left: 28.6%; width: 42.9%; top: -.2rem; bottom: -.2rem;
+.corner .twin b { position: absolute; left: var(--band-left, 50%); width: var(--band-width, 37.5%); top: -.2rem; bottom: -.2rem;
   border-left: 2px solid var(--soft); border-right: 2px solid var(--soft); }
+.corner .twin.over i { background: repeating-linear-gradient(-45deg, currentColor 0 .3rem, transparent .3rem .6rem); }
 .corner.ok .twin { color: var(--ok); } .corner.hot .twin { color: var(--crit); } .corner.cold .twin { color: var(--cold); }
 /* tags row keeps its height when empty, so a tag never pushes the tile */
 .corner .tags { grid-area: tags; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .3rem .4rem;
