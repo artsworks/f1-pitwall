@@ -473,7 +473,7 @@
       var tags = c.querySelector(".tags");
       tags.innerHTML = "";
       if (t.lockup) tags.appendChild(span("LOCKED", "tag lock"));
-      if (over) tags.appendChild(span("⚠ " + fmt(t.inner, 0) + "°", "tag crit"));
+      if (over) tags.appendChild(span("⚠ >" + T_HI + "°", "tag crit"));
       if (st.wear_hot_corner === k) {
         tags.appendChild(span("HOT WEAR" + (st.wear_hot_rate ? " +" + fmt(st.wear_hot_rate, 1) + "%/lap" : ""), "tag crit"));
       }
