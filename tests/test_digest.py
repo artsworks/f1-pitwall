@@ -10,8 +10,8 @@ from pitwall.learning.digest import (
     quality_trend,
     startup_scorecard,
 )
-from pitwall.net.derive import derived_uid
 from pitwall.store.db import Database
+from pitwall.store.uids import derived_uid
 
 
 def test_digest_separates_press_grades_and_keeps_bookmark_kind() -> None:

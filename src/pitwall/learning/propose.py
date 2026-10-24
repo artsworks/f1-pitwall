@@ -6,22 +6,18 @@ from pathlib import Path
 from typing import Any
 
 from pitwall.config.models import Settings
+from pitwall.config.thresholds import threshold
 from pitwall.learning.calibrate import calibrate
 from pitwall.learning.diff import run_diff
 from pitwall.learning.questions import question_candidates
 from pitwall.store.db import Database
 
 
-def _number(settings: Settings, key: str, default: float) -> float:
-    value = settings.thresholds.get(key, default)
-    return float(value) if isinstance(value, int | float) else default
-
-
 def propose_thresholds(
     db: Database, settings: Settings, candidate_rules: Path | None = None
 ) -> dict[str, Any]:
     fits = calibrate(db, settings, dry_run=True)
-    minimum = int(_number(settings, "prior_min_weight", 2))
+    minimum = int(threshold(settings.thresholds, "prior_min_weight", 2))
     tracks: list[dict[str, Any]] = []
     for track in fits["tracks"]:
         th: dict[str, Any] = {}
@@ -44,8 +40,8 @@ def propose_thresholds(
             th["energy_over_tolerance_j"] = (
                 round(
                     max(
-                        _number(settings, "energy_tol_min_j", 100_000),
-                        min(_number(settings, "energy_tol_max_j", 600_000), width),
+                        threshold(settings.thresholds, "energy_tol_min_j", 100_000),
+                        min(threshold(settings.thresholds, "energy_tol_max_j", 600_000), width),
                     )
                     / 10_000
                 )

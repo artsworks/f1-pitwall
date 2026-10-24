@@ -4,26 +4,16 @@ from __future__ import annotations
 
 import ast
 import json
-import math
 from collections.abc import Iterable, Mapping
 from statistics import median
 from typing import Any
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, RuleDefModel
-from pitwall.learning.digest import _repeat_call_ids
-from pitwall.net.derive import is_synthetic_uid
+from pitwall.config.thresholds import finite_number
+from pitwall.learning.digest import repeat_call_ids
 from pitwall.store.db import Database
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    try:
-        value = float(value)
-    except (OverflowError, ValueError):
-        return None
-    return value if math.isfinite(value) else None
+from pitwall.store.uids import is_synthetic_uid
 
 
 def _inputs(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -74,7 +64,7 @@ def question_candidates(
         if uid is None or is_synthetic_uid(int(uid)):
             continue
         uid = int(uid)
-        repeat_ids = _repeat_call_ids(db, int(uid))
+        repeat_ids = repeat_call_ids(db, int(uid))
         fired: dict[str, list[tuple[float, float]]] = {}
         for call in db.calls_for_session(int(uid)):
             call_id = call.get("call_id")
@@ -82,8 +72,8 @@ def question_candidates(
                 call_id is not None and str(call_id) in repeat_ids
             ):
                 continue
-            lap = _number(call.get("lap"))
-            t = _number(call.get("t"))
+            lap = finite_number(call.get("lap"))
+            t = finite_number(call.get("t"))
             rule_id = call.get("rule_id")
             if lap is None or t is None or not isinstance(rule_id, str):
                 continue
@@ -97,8 +87,8 @@ def question_candidates(
             item = items.get(str(item_id))
             if item is None:
                 continue
-            lap = _number(row.get("lap"))
-            t = _number(row.get("t"))
+            lap = finite_number(row.get("lap"))
+            t = finite_number(row.get("t"))
             if lap is None or t is None:
                 continue
             covered = any(
@@ -135,7 +125,7 @@ def question_candidates(
         signal_values: dict[str, list[float]] = {}
         for signals in entry["signals"]:
             for name, value in signals.items():
-                number = _number(value)
+                number = finite_number(value)
                 if number is not None:
                     signal_values.setdefault(str(name), []).append(number)
         at_ask = {

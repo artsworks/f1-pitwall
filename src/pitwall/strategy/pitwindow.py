@@ -9,6 +9,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from pitwall.config.thresholds import threshold as _f
 from pitwall.model.deg import DegFit, cliff_age
 from pitwall.model.driver import NEUTRAL, DriverScale, is_aggressive_mode
 
@@ -48,11 +49,6 @@ class PitPlan:
 NO_PLAN = PitPlan("", 0, 0.0, 0.0, 0.0, -1, "", "", (0, 0), 0.0, 0.0, ())
 
 PIT_LOSS_CONF = {"session": 1.0, "learned": 1.0, "overlay": 0.8, "default": 0.6}
-
-
-def _f(src: Mapping[str, object], name: str, default: float) -> float:
-    v = src.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def _lap_ms(fit: DegFit, age: int, cliff_age: float, cliff_ms_per_lap: float) -> float:

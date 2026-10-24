@@ -23,8 +23,8 @@ from pitwall.model.driver import (
     confidence,
     learned_rating,
 )
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database
+from pitwall.store.uids import is_synthetic_uid
 
 DIGEST_VERSION = 4
 
@@ -52,7 +52,7 @@ def _finite_time(value: object) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _repeat_call_ids(db: Database, uid: int) -> set[str]:
+def repeat_call_ids(db: Database, uid: int) -> set[str]:
     calls = db.calls_for_session(uid)
     repeat_ids: set[str] = set()
     marked_replays: list[tuple[str, str, float]] = []
@@ -99,7 +99,7 @@ def _repeat_call_ids(db: Database, uid: int) -> set[str]:
 
 def call_quality(db: Database, uid: int) -> dict[str, Any]:
     calls = db.calls_for_session(uid)
-    repeat_ids = _repeat_call_ids(db, uid)
+    repeat_ids = repeat_call_ids(db, uid)
     fired_calls = []
     for row in calls:
         rule_id = str(row.get("rule_id") or "")
