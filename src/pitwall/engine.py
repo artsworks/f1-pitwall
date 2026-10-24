@@ -420,7 +420,6 @@ class Engine:
         self.recovering = False
         self.alive_path: Path | None = None  # touched each live loop for the supervisor
         self._alive_t = -math.inf
-        self.tick_errors = 0
         self._rule_errors_logged: set[tuple[str, str]] = set()
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
@@ -2489,7 +2488,6 @@ class Engine:
             try:
                 self.tick(self.clock.now())
             except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race
-                self.tick_errors += 1
                 self.dispatcher.log.write(
                     {
                         "t": self.clock.now(),
