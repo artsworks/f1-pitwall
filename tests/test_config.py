@@ -136,6 +136,68 @@ def test_poll_detects_change(tmp_path: Path, monkeypatch) -> None:  # type: igno
     assert store.poll(0.0) is True
 
 
+def test_poll_detects_new_file_in_rules_dir(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "a.yaml").write_text("thresholds:\n  poll_cache_a: 1\n")
+    store = ConfigStore(rules_dir=rules_dir, isolated=True)
+    store._last_poll = -10  # noqa: SLF001
+    (rules_dir / "b.yaml").write_text("thresholds:\n  poll_cache_b: 2\n")
+    assert store.poll(0.0) is True
+    assert store.current().thresholds["poll_cache_b"] == 2
+
+
+def test_poll_detects_deleted_file_in_rules_dir(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "a.yaml").write_text("thresholds:\n  poll_cache_a: 1\n")
+    doomed = rules_dir / "b.yaml"
+    doomed.write_text("thresholds:\n  poll_cache_b: 2\n")
+    store = ConfigStore(rules_dir=rules_dir, isolated=True)
+    assert store.current().thresholds["poll_cache_b"] == 2
+    store._last_poll = -10  # noqa: SLF001
+    doomed.unlink()
+    assert store.poll(0.0) is True
+    assert "poll_cache_b" not in store.current().thresholds
+    assert store.current().thresholds["poll_cache_a"] == 1
+
+
+def test_poll_detects_restored_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("thresholds:\n  poll_cache_p: 1\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    store = ConfigStore()
+    profile.unlink()
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert "poll_cache_p" not in store.current().thresholds
+    profile.write_text("thresholds:\n  poll_cache_p: 2\n")
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert store.current().thresholds["poll_cache_p"] == 2
+
+
+def test_poll_detects_rules_dir_created_later(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    store = ConfigStore(rules_dir=rules_dir, isolated=True)
+    rules_dir.mkdir()
+    (rules_dir / "a.yaml").write_text("thresholds:\n  poll_cache_a: 1\n")
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is True
+    assert store.current().thresholds["poll_cache_a"] == 1
+
+
+def test_poll_does_not_rescan_sources(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    store = ConfigStore(isolated=True)
+
+    def fail() -> list[Path]:
+        raise AssertionError("poll rescanned sources")
+
+    monkeypatch.setattr(store, "_sources", fail)
+    store._last_poll = -10  # noqa: SLF001
+    assert store.poll(0.0) is False
+
+
 def test_calibration_overlay_round_trips_per_compound_thresholds(
     tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]

@@ -73,7 +73,7 @@ class ConfigStore:
         self._isolated = isolated
         self._profile = None if isolated else profile_path()
         self._track_id: int | None = None
-        self._mtimes: dict[Path, float] = {}
+        self._mtimes: dict[Path, float | None] = {}
         self._last_poll = 0.0
         self.last_error: str | None = None
         self._settings: Settings | None = None
@@ -86,6 +86,16 @@ class ConfigStore:
         if not self._isolated and self._profile is not None:
             srcs.append(self._profile)
         return srcs
+
+    def _watched_dirs(self) -> list[Path]:
+        roots = [DEFAULTS_DIR]
+        if self._rules_dir is not None:
+            roots.append(self._rules_dir)
+        dirs: list[Path] = []
+        for root in roots:
+            dirs.append(root)
+            dirs += sorted(p for p in root.rglob("*") if p.is_dir())
+        return dirs
 
     def _build(self) -> Settings:
         merged = _load_yaml_dir(DEFAULTS_DIR, exclude_dir=DEFAULTS_DIR / "tracks")
@@ -172,11 +182,14 @@ class ConfigStore:
         self.last_error = None
         changed = self._settings is None or settings != self._settings
         self._settings = settings
-        for p in self._sources():
+        watched = self._sources() + self._watched_dirs()
+        mtimes: dict[Path, float | None] = {}
+        for p in watched:
             try:
-                self._mtimes[p] = p.stat().st_mtime
+                mtimes[p] = p.stat().st_mtime
             except OSError:
-                pass
+                mtimes[p] = None
+        self._mtimes = mtimes
         return changed
 
     def poll(self, now: float | None = None) -> bool:
@@ -185,12 +198,12 @@ class ConfigStore:
         if now - self._last_poll < 1.0:
             return False
         self._last_poll = now
-        for p in self._sources():
+        for p, cached in self._mtimes.items():
             try:
-                mtime = p.stat().st_mtime
+                mtime: float | None = p.stat().st_mtime
             except OSError:
-                continue
-            if self._mtimes.get(p) != mtime:
+                mtime = None
+            if mtime != cached:
                 return self.reload()
         return False
 
