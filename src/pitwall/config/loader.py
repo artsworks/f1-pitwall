@@ -19,6 +19,15 @@ from pitwall.config.models import Settings
 
 DEFAULTS_DIR = Path(__file__).parent / "defaults"
 
+# Must stay a safe loader (CSafeLoader or SafeLoader). Never switch to
+# yaml.Loader or yaml.CLoader: config comes from user-editable profile and
+# overlay paths, and full-loader deserialization can run arbitrary code.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _load_yaml(text: str) -> Any:
+    return yaml.load(text, Loader=_YAML_LOADER)
+
 
 def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
     out = dict(base)
@@ -36,7 +45,7 @@ def _load_yaml_dir(path: Path, *, exclude_dir: Path | None = None) -> dict[str, 
         return merged
     files = (f for f in path.rglob("*.yaml") if exclude_dir is None or exclude_dir not in f.parents)
     for f in sorted(files, key=lambda p: (p.stem != "shared", str(p))):
-        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        data = _load_yaml(f.read_text(encoding="utf-8")) or {}
         rules = data.get("rules")
         if rules and merged.get("rules"):
             merged["rules"] = merged["rules"] + rules
@@ -100,7 +109,7 @@ class ConfigStore:
         if not self._isolated and self._profile is not None and self._profile.exists():
             merged = _deep_merge(
                 merged,
-                yaml.safe_load(self._profile.read_text(encoding="utf-8")) or {},
+                _load_yaml(self._profile.read_text(encoding="utf-8")) or {},
             )
         overlay = None if self._isolated else self._load_track_overlay()
         if overlay is not None:
@@ -128,7 +137,7 @@ class ConfigStore:
             if path.is_file():
                 overlay = _deep_merge(
                     overlay,
-                    yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                    _load_yaml(path.read_text(encoding="utf-8")) or {},
                 )
         if not overlay:
             return None
