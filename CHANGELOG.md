@@ -10,6 +10,51 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.34.0 (2026-10-24)
+
+### Bug Fixes
+
+- Cover review findings 1, 4, 5, 6 (docs, tests, sector loss text)
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+- Rebuild plans A/B on mindset change; zero sector gate keeps mistake calls
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+- **battle**: Scale chase_prob by driver confidence
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+- **rules**: Drop battle contradicts that broke radio grades; update MC cache key test
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+### Code Style
+
+- Ruff format test_cli_start ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+### Features
+
+- **cli**: Hyperlink debrief path; share the folder-link helper
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+- **cli**: Hyperlink learning pack path to its folder
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+- **mindset**: Wire aggressive mindset through planning and rules
+  ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+### Refactoring
+
+- Drop no-op clamp on MC stop offsets ([#124](https://github.com/artsworks/f1-pitwall/pull/124),
+  [`6ee92aa`](https://github.com/artsworks/f1-pitwall/commit/6ee92aa05bc86d653c1e678c91fe2afd39e28f5a))
+
+
 ## v0.33.0 (2026-10-23)
 
 ### Bug Fixes
