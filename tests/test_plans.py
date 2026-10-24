@@ -460,3 +460,97 @@ def test_soft_bias_flips_ranking_to_softer_next_stint() -> None:
     aggr = derive(inp, {**TH, "plan_soft_bias_s": 1.5})
     assert bal[0].compounds == (M, H)
     assert aggr[0].compounds == (M, S)
+
+
+def _close_inputs(**kw: object) -> PlanInputs:
+    # Same numbers as the soft-bias test: medium then hard is 0.9 s faster than
+    # medium then soft, so a 1.5 s soft bias flips the ranking.
+    close_models = (
+        CompoundModel(S, 90_000.0, 80.0, 2),
+        CompoundModel(M, 90_000.0, 100.0, 2),
+        CompoundModel(H, 90_000.0, 60.0, 2),
+    )
+    base = inputs(
+        laps_remaining=10,
+        tyre_age=35,
+        cur_cliff_age=10.0,
+        compounds=close_models,
+        used=frozenset({S, M}),
+    )
+    return dataclasses.replace(base, **kw)  # type: ignore[arg-type]
+
+
+BAL = {**TH, "plan_soft_bias_s": 0.0, "plan_pick": "confidence"}
+AGGR = {**TH, "plan_soft_bias_s": 1.5, "plan_pick": "gain"}
+
+
+def test_tracker_reseed_rebuilds_a_from_new_ranking_and_keeps_stops() -> None:
+    tr = PlanTracker()
+    st = tr.update(
+        _close_inputs(lap_num=40), BAL, stops_done=1, neutralised=False, cheap_stop=False
+    )
+    assert st.active == "A" and view_fields(st, 40).plan_next_compound == "hard"
+    tr.drain()
+
+    # a lap change under the new mindset is not a mindset change: A stays
+    st = tr.update(
+        _close_inputs(lap_num=41), AGGR, stops_done=1, neutralised=False, cheap_stop=False
+    )
+    assert tr.seqs["A"] == (1, (M, H))
+    assert view_fields(st, 41).plan_next_compound == "hard"
+    assert not [e for e in tr.drain() if e.kind in ("set", "switch")]
+
+    st = tr.update(
+        _close_inputs(lap_num=41),
+        AGGR,
+        stops_done=1,
+        neutralised=False,
+        cheap_stop=False,
+        reseed=True,
+    )
+    assert st.active == "A" and view_fields(st, 41).plan_next_compound == "soft"
+    assert tr.seqs["A"] == (1, (M, S))
+    assert tr.seqs["B"][0] == 1 and tr.seqs["B"][1] != (M, S)
+    assert st.stops_left == 1
+    assert [(e.kind, e.to_plan, e.reason) for e in tr.drain()] == [("set", "A", "mindset")]
+
+
+def test_tracker_reseed_during_sc_goes_back_to_plan_c() -> None:
+    tr = PlanTracker()
+    inp = _close_inputs(lap_num=40)
+    tr.update(inp, BAL, stops_done=1, neutralised=True, cheap_stop=True)
+    assert tr.active == "C"
+    tr.drain()
+    st = tr.update(inp, AGGR, stops_done=1, neutralised=True, cheap_stop=True, reseed=True)
+    assert st.active == "C"
+    assert tr.seqs["A"] == (1, (M, S))
+    assert [(e.kind, e.to_plan, e.reason) for e in tr.drain()] == [
+        ("set", "A", "mindset"),
+        ("switch", "C", "sc"),
+    ]
+
+
+def test_engine_reseeds_plans_only_on_mindset_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+
+    from .factories import make_snapshot
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    calls: list[bool] = []
+
+    def fake_update(*_args: object, reseed: bool = False, **_kw: object) -> object:
+        calls.append(reseed)
+        return engine.plan_tracker.state
+
+    monkeypatch.setattr(engine.plan_tracker, "update", fake_update)
+    pit = SimpleNamespace(plan="stay")
+    snap = make_snapshot(race_phase="racing", tyre_visual=M, laps_remaining=20, lap_num=5)
+    engine._plans(snap, fit(100.0), pit)  # type: ignore[arg-type]
+    engine._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
+    engine.mindset_override = "aggressive"
+    engine._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
+    engine._plans(dataclasses.replace(snap, lap_num=7), fit(100.0), pit)  # type: ignore[arg-type]
+    assert calls == [False, False, True, False]

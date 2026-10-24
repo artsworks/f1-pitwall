@@ -371,12 +371,19 @@ class PlanTracker:
         stops_done: int,
         neutralised: bool,
         cheap_stop: bool,
+        reseed: bool = False,
     ) -> PlanState:
+        """`reseed` rebuilds A/B from the current ranking (mindset change),
+        based at `stops_done` so completed stops are not replayed."""
         ranked = derive(inp, th)
         if not ranked:
             return self.state
         lap = inp.lap_num
-        if not self.seqs:
+        if not self.seqs or reseed:
+            reason = "mindset" if self.seqs else "start"
+            prev = self.active
+            self.seqs.clear()
+            self.kinds.clear()
             a = ranked[0]
             self._set("A", "primary", stops_done, a)
             z = 0.0 if th.get("plan_pick") == "gain" else NormalDist().inv_cdf(risk_quantile(th))
@@ -385,7 +392,7 @@ class PlanTracker:
                 self._set("B", "alternative", stops_done, b)
             self.active = "A"
             self.target_ref = a.stop_laps[0] if a.stop_laps else 0
-            self.events.append(PlanEvent(lap, "set", "", "A", "start", 0.0, _seq_text(a)))
+            self.events.append(PlanEvent(lap, "set", prev, "A", reason, 0.0, _seq_text(a)))
 
         evals: dict[str, PlanEval | None] = {}
         for pid in self.seqs:

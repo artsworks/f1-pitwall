@@ -410,9 +410,9 @@ def test_answer_push_check_updates_snapshot_and_quali_payload() -> None:
     assert state.run.cool_held
 
 
-def _rules() -> RuleEngine:
+def _rules(**mode: object) -> RuleEngine:
     settings = ConfigStore().current()
-    return RuleEngine(list(settings.rules), thresholds=settings.thresholds, mode={})
+    return RuleEngine(list(settings.rules), thresholds=settings.thresholds, mode=mode)
 
 
 def _qsnap(**kw: object) -> Snapshot:
@@ -902,3 +902,18 @@ def test_run_tracker_flag_first_set_at_the_line_cools_the_new_lap_only() -> None
     assert rt.plan == Plan("", "")
     assert rt.kind == HOT
     assert not rt.next_lap_invalid
+
+
+@pytest.mark.parametrize("mistake", ["a spin", "lap invalid"])
+def test_cool_mistakes_fires_with_zero_sector_gate(mistake: str) -> None:
+    snap = _qsnap(
+        sector=1,
+        cool_lap=True,
+        run_lap_kind="cool",
+        run_plan="cool",
+        track_length_m=4300.0,
+        lap_distance=1000.0,
+        last_hot_mistakes=mistake,
+    )
+    cands = _rules(sector_loss_call_ms=0).evaluate(snap).candidates
+    assert "cool_mistakes" in {c.rule.defn.id for c in cands}
