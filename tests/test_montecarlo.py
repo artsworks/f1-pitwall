@@ -278,7 +278,7 @@ def test_zero_sims_and_short_horizon_skip_mc() -> None:
 
 def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     plan = PitPlan("box_now", 10, 3.0, 0.8, 0.2, -1, "", "", (10, 12), 0.0, 0.0, ())
-    mc = McResult(12, 0.5, 500, 13)
+    mc = McResult(2, 0.5, 500, 3, 10)
 
     scaled = scale_plan(plan, mc)
     cheap_stop = scale_plan(replace(plan, plan="cheap_stop"), mc)
@@ -288,6 +288,19 @@ def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     assert scaled.mc_lap == 12 and scaled.mc_agree == 0.5
     assert scaled.mc_risk_lap == 13
     assert cheap_stop == replace(plan, plan="cheap_stop")
+
+
+@pytest.mark.parametrize(("offset", "expected"), [(None, 0), (0, 11), (2, 13), (-1, 11)])
+def test_scale_plan_translates_offsets_and_keeps_no_stop_distinct(
+    offset: int | None, expected: int
+) -> None:
+    plan = PitPlan("box_now", 10, 3.0, 0.8, 0.2, -1, "", "", (10, 12), 0.0, 0.0, ())
+    mc = McResult(offset, 0.5, 500, offset, 10)
+
+    scaled = scale_plan(plan, mc, lap_num=11)
+
+    assert scaled.mc_lap == expected
+    assert scaled.mc_risk_lap == expected
 
 
 def test_single_sim_delta_matches_deterministic_race_time(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -407,8 +420,55 @@ def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -
     snap2 = replace(snap1, lap_num=2, tyre_age_laps=2)
     snap3 = replace(snap1, lap_num=3, tyre_age_laps=3)
 
+    def candidate_deltas(**kwargs: object) -> np.ndarray:
+        deltas = np.ones((len(kwargs["deg_samples"]), int(kwargs["last_k"]) + 1))  # type: ignore[arg-type]
+        deltas[:, 0] = -10.0
+        return deltas
+
+    monkeypatch.setattr(montecarlo, "_candidate_deltas_s", candidate_deltas)
     engine._plan(snap1)
+    first = engine.pit_plan
     engine._plan(snap2)
     assert calls == 1
+    assert first is not None and engine.pit_plan is not None
+    assert (first.mc_lap, first.mc_risk_lap) == (1, 1)
+    assert (engine.pit_plan.mc_lap, engine.pit_plan.mc_risk_lap) == (2, 2)
     engine._plan(snap3)
     assert calls == 2
+
+
+def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+    from pitwall.state.session import Snapshot
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    engine.deg_fit = _fit(150.0)
+    engine._fresh_prior = _fit(80.0)
+    thresholds: list[object] = []
+    mode = {**MODE, "plan_mc_sims": 500}
+    original = montecarlo.plan_agreement
+
+    def counted(**kwargs: object) -> McResult | None:
+        thresholds.append(kwargs["mode"]["pit_gain_min_s"])  # type: ignore[index]
+        return original(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr(engine, "mode", lambda: mode)
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=9,
+        laps_remaining=10,
+        tyre_age_laps=1,
+        laps_of_pace=15.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+    )
+    engine._plan(snap)
+    mode["pit_gain_min_s"] = 0.4
+    engine._plan(snap)
+    assert thresholds == [1.0, 0.4]
