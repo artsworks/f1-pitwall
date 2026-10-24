@@ -1987,6 +1987,7 @@ class Engine:
             if key != self._plan_key:
                 if self._plan_key is not None and self._plan_key[-1] != snap.is_sprint:
                     tracker.reset()  # the weekend format arrived: a fresh plan, not a switch
+                reseed = self._plan_key is not None and self._plan_key[5] != self.mindset
                 self._plan_key = key
                 lop = snap.laps_of_pace
                 cliff = self._th("tyre_cliff_ms", 1500)
@@ -2010,6 +2011,7 @@ class Engine:
                     stops_done=self._stops_done,
                     neutralised=neutral,
                     cheap_stop=cheap,
+                    reseed=reseed,
                 )
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
