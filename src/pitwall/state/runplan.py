@@ -6,7 +6,7 @@ line crossing of a hot lap."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 # Lap kinds within a run.
@@ -74,7 +74,14 @@ def run_plan(
     return Plan("cool", need)
 
 
-def mistakes_text(lap: HotLap, best_s: tuple[int, int, int]) -> str:
+def mistakes_text(
+    lap: HotLap,
+    best_s: tuple[int, int, int],
+    *,
+    sector_loss_call_ms: float = 100.0,
+    theoretical_best_s: tuple[int, int, int] | None = None,
+    mode: Mapping[str, object] | None = None,
+) -> str:
     """Spoken summary of what went wrong on a hot lap, '' if it was clean."""
     parts: list[str] = []
     if lap.lockups:
@@ -83,16 +90,42 @@ def mistakes_text(lap: HotLap, best_s: tuple[int, int, int]) -> str:
         parts.append("a spin" if lap.spins == 1 else f"{lap.spins} spins")
     if lap.invalid:
         parts.append("lap invalid")
+    if mode is not None:
+        raw_loss = mode.get("sector_loss_call_ms", sector_loss_call_ms)
+        loss_min_ms = (
+            float(raw_loss) if isinstance(raw_loss, int | float) else float(sector_loss_call_ms)
+        )
+        use_theoretical = (
+            mode.get("phrasing") == "directive"
+            or mode.get("plan_pick") == "gain"
+            or loss_min_ms < 100.0
+        )
+    else:
+        loss_min_ms = float(sector_loss_call_ms)
+        use_theoretical = loss_min_ms < 100.0
+    if theoretical_best_s is not None and use_theoretical:
+        ref_s = tuple(
+            min((b for b in (best, theo) if b > 0), default=0)
+            for best, theo in zip(best_s, theoretical_best_s, strict=True)
+        )
+    elif theoretical_best_s is not None:
+        ref_s = tuple(
+            best if best > 0 else theo
+            for best, theo in zip(best_s, theoretical_best_s, strict=True)
+        )
+    else:
+        ref_s = best_s
     mine_s = (lap.s1_ms, lap.s2_ms, lap.s3_ms)
     lost = [
         (mine - best, i + 1)
-        for i, (mine, best) in enumerate(zip(mine_s, best_s, strict=True))
+        for i, (mine, best) in enumerate(zip(mine_s, ref_s, strict=True))
         if mine > 0 and best > 0
     ]
     if lost:
         worst_ms, sector = max(lost)
-        if worst_ms >= 100:
-            parts.append(f"{worst_ms / 1000:.1f} lost in sector {sector} to your best")
+        if worst_ms > 0 and worst_ms >= loss_min_ms:
+            amount = "under a tenth" if worst_ms < 50 else f"{worst_ms / 1000:.1f}"
+            parts.append(f"{amount} lost in sector {sector} to your best")
     return ", ".join(parts)
 
 

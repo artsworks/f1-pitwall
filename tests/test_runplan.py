@@ -65,6 +65,72 @@ def test_mistakes_text() -> None:
     )
     clean = HotLap(75_400, 19_200, 39_700, 15_650, 50.0, 2.0, 0, 0, False)
     assert mistakes_text(clean, (19_200, 39_700, 15_600)) == ""
+    assert (
+        mistakes_text(clean, (19_200, 39_700, 15_600), sector_loss_call_ms=50.0)
+        == "0.1 lost in sector 3 to your best"
+    )
+
+    lap_vs_theo = HotLap(75_400, 19_200, 39_700, 15_600, 50.0, 2.0, 0, 0, False)
+    best_lap_s = (19_200, 39_700, 15_600)
+    theo_best_s = (19_200, 39_500, 15_600)
+    settings = ConfigStore().current()
+    bal_mode = settings.resolved_mindset()
+    aggr_mode = {**bal_mode, **settings.mindsets["aggressive"]}
+    assert (
+        mistakes_text(lap_vs_theo, best_lap_s, theoretical_best_s=theo_best_s, mode=bal_mode) == ""
+    )
+    assert (
+        mistakes_text(lap_vs_theo, best_lap_s, theoretical_best_s=theo_best_s, mode=aggr_mode)
+        == "0.2 lost in sector 2 to your best"
+    )
+
+
+@pytest.mark.parametrize(
+    ("sectors", "gate_ms", "expected"),
+    [
+        pytest.param(
+            (20_050, 40_000, 15_000),
+            50,
+            "0.1 lost in sector 1 to your best",
+            id="50-ms-loss-at-gate",
+        ),
+        pytest.param(
+            (20_030, 40_000, 15_000),
+            20,
+            "under a tenth lost in sector 1 to your best",
+            id="30-ms-loss",
+        ),
+        pytest.param(
+            (19_970, 39_970, 14_970),
+            -50,
+            "",
+            id="all-sectors-faster",
+        ),
+        pytest.param(
+            (20_140, 40_000, 15_000),
+            100,
+            "0.1 lost in sector 1 to your best",
+            id="140-ms-loss",
+        ),
+    ],
+)
+def test_mistakes_text_small_loss_not_overstated(
+    sectors: tuple[int, int, int], gate_ms: float, expected: str
+) -> None:
+    best = (20_000, 40_000, 15_000)
+    lap = HotLap(
+        sum(sectors),
+        sectors[0],
+        sectors[1],
+        sectors[2],
+        50.0,
+        2.0,
+        0,
+        0,
+        False,
+    )
+
+    assert mistakes_text(lap, best, sector_loss_call_ms=gate_ms) == expected
 
 
 def _feed(
@@ -344,9 +410,9 @@ def test_answer_push_check_updates_snapshot_and_quali_payload() -> None:
     assert state.run.cool_held
 
 
-def _rules() -> RuleEngine:
+def _rules(**mode: object) -> RuleEngine:
     settings = ConfigStore().current()
-    return RuleEngine(list(settings.rules), thresholds=settings.thresholds, mode={})
+    return RuleEngine(list(settings.rules), thresholds=settings.thresholds, mode=mode)
 
 
 def _qsnap(**kw: object) -> Snapshot:
@@ -836,3 +902,18 @@ def test_run_tracker_flag_first_set_at_the_line_cools_the_new_lap_only() -> None
     assert rt.plan == Plan("", "")
     assert rt.kind == HOT
     assert not rt.next_lap_invalid
+
+
+@pytest.mark.parametrize("mistake", ["a spin", "lap invalid"])
+def test_cool_mistakes_fires_with_zero_sector_gate(mistake: str) -> None:
+    snap = _qsnap(
+        sector=1,
+        cool_lap=True,
+        run_lap_kind="cool",
+        run_plan="cool",
+        track_length_m=4300.0,
+        lap_distance=1000.0,
+        last_hot_mistakes=mistake,
+    )
+    cands = _rules(sector_loss_call_ms=0).evaluate(snap).candidates
+    assert "cool_mistakes" in {c.rule.defn.id for c in cands}

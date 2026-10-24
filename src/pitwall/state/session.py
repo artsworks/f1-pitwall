@@ -590,6 +590,7 @@ class Snapshot:
     pit_plan_gain_s: float = 0.0
     pit_plan_confidence: float = 0.0
     pit_plan_risk: float = 0.0
+    pit_plan_risky: bool = False
     pit_plan_rival_idx: int = -1
     pit_plan_rival_name: str = ""
     pit_plan_reason: str = ""
@@ -636,6 +637,7 @@ class Snapshot:
     battle_tyre_known_behind: bool = False
     battle_behind_changed: bool = False
     battle_pass_prob: float = 0.0
+    battle_attack_pass_prob: float = 0.0
     battle_catch_prob: float = 0.0
     battle_chase_prob: float = 0.0
     battle_hold_prob: float = 0.0
@@ -1108,6 +1110,7 @@ class SessionState:
         self._graining = False
         self._model = ModelView()
         self._thermal_warn_offset_c = 0.0
+        self._sector_loss_call_ms = 100.0
 
     @property
     def model(self) -> ModelView:
@@ -1117,9 +1120,15 @@ class SessionState:
         """Model outputs for the next snapshot (Engine -> state -> snapshot)."""
         self._model = view
 
-    def set_mode_offsets(self, *, thermal_warn_offset_c: float) -> None:
+    def set_mode_offsets(
+        self,
+        *,
+        thermal_warn_offset_c: float,
+        sector_loss_call_ms: float = 100.0,
+    ) -> None:
         """Mindset-dependent warning offsets (resolved in the Engine)."""
         self._thermal_warn_offset_c = thermal_warn_offset_c
+        self._sector_loss_call_ms = sector_loss_call_ms
 
     @property
     def infringement_warnings(self) -> int:
@@ -2846,6 +2855,8 @@ class SessionState:
             why = "Next lap's gone too, track limits"
         elif plan.reason == "safe":
             why = "You're safe"
+        best_lap_sectors = self._best_lap_sectors.get(self._player_idx, (0, 0, 0))
+        ref_sectors = best_lap_sectors if any(best_lap_sectors) else self._player_sectors
         out.update(
             run_lap_kind=run.kind,
             line_crossings=run.crossings,
@@ -2866,7 +2877,14 @@ class SessionState:
             dist_to_hot_mode_m=max(0.0, to_hot),
             last_hot=run.last_hot,
             last_hot_mistakes=(
-                mistakes_text(run.last_hot, self._player_sectors) if run.last_hot else ""
+                mistakes_text(
+                    run.last_hot,
+                    ref_sectors,
+                    sector_loss_call_ms=self._sector_loss_call_ms,
+                    theoretical_best_s=self._player_sectors,
+                )
+                if run.last_hot
+                else ""
             ),
             hottest_tyre=WHEEL_NAMES[hot_i],
             hottest_tyre_c=temps[hot_i],
@@ -3013,6 +3031,7 @@ class SessionState:
             pit_plan_gain_s=model.pit_plan_gain_s,
             pit_plan_confidence=model.pit_plan_confidence,
             pit_plan_risk=model.pit_plan_risk,
+            pit_plan_risky=model.pit_plan_risky,
             pit_plan_rival_idx=model.pit_plan_rival_idx,
             pit_plan_rival_name=model.pit_plan_rival_name,
             pit_plan_reason=model.pit_plan_reason,

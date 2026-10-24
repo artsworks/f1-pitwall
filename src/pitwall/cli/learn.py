@@ -7,7 +7,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pitwall.cli.common import _resolve_recordings, emit_json_or, ingest_paths, open_db
+from pitwall.cli.common import (
+    _folder_link,
+    _resolve_recordings,
+    emit_json_or,
+    ingest_paths,
+    open_db,
+)
 from pitwall.config.loader import ConfigStore
 from pitwall.input.menu import shortcut_warnings, validate_related_rules, validate_shortcuts
 from pitwall.input.menu import validate as validate_menu
@@ -119,7 +125,7 @@ def cmd_debrief(args: argparse.Namespace) -> int:
     path = Path(args.out) if args.out else Path("debriefs") / f"debrief-{uid}.html"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_debrief(db, uid, settings), encoding="utf-8")
-    print(f"debrief: {path}")
+    print(f"debrief: {_folder_link(path)}")
     return 0
 
 
@@ -150,6 +156,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         run_choice="longest" if args.mode == "debrief" else "latest",
         parc_ferme=parc_ferme,
         lap=None,
+        mindset=settings.resolved_mindset(),
         store=args.store,
     )
     if advice is None:

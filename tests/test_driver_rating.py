@@ -164,6 +164,32 @@ def test_confidence_and_advice_scaling() -> None:
     assert advice_scale(0.5, 1.0, TH).confidence_factor == 1.0
     assert advice_scale(0.8, 1.0, TH).risk_add == 0.0
 
+    settings = ConfigStore().current()
+    aggr = settings.mindsets["aggressive"]
+    unknown = advice_scale(0.5, 0.0, TH, aggr, source="")
+    assert unknown.pit_confidence_min == pytest.approx(0.70)
+    assert unknown.position_loss_risk_max == pytest.approx(0.30)
+    assert unknown.pass_prob_min == pytest.approx(0.30)
+
+    low = advice_scale(0.3, 0.8, TH, aggr, source="track")
+    assert low.pit_confidence_min == pytest.approx(0.70)
+    assert low.position_loss_risk_max == pytest.approx(0.30)
+    assert low.pass_prob_min == pytest.approx(0.30)
+
+    mid = advice_scale(0.75, 0.8, TH, aggr, source="track")
+    high = advice_scale(1.0, 1.0, TH, aggr, source="track")
+    assert 0.55 < mid.pit_confidence_min < 0.70
+    assert 0.30 < mid.position_loss_risk_max < 0.55
+    assert 0.20 < mid.pass_prob_min < 0.30
+    assert high.pit_confidence_min == pytest.approx(0.55)
+    assert high.position_loss_risk_max == pytest.approx(0.55)
+    assert high.pass_prob_min == pytest.approx(0.20)
+
+    bal_high = advice_scale(1.0, 1.0, TH, settings.resolved_mindset(), source="track")
+    assert bal_high.pit_confidence_min == pytest.approx(0.70)
+    assert bal_high.position_loss_risk_max == pytest.approx(0.30)
+    assert bal_high.pass_prob_min == pytest.approx(0.30)
+
 
 def test_learned_rating_prefers_track_then_global() -> None:
     db = Database(":memory:")

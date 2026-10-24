@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from statistics import NormalDist
 
 from pitwall.config.thresholds import threshold as _th
+from pitwall.model.driver import NEUTRAL, DriverScale
 
 FREE, CATCHING, ATTACKING, DEFENDING, THREAT, MANAGING = (
     "free_air",
@@ -57,6 +58,8 @@ class BattleInputs:
     pitting: frozenset[int] = frozenset()  # car idxs in the pit lane
     regulations_2026: bool = False
     closing_sd_s: float = 0.0
+    pass_prob_min: float = 0.0
+    driver: DriverScale = NEUTRAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +85,7 @@ class Battle:
     tyre_known_behind: bool = False
     behind_changed: bool = False
     pass_prob: float = 0.0
+    attack_pass_prob: float = 0.0
     hold_prob: float = 0.0
     result: str = ""  # last episode: passed | failed | held | lost
     result_recent: bool = False
@@ -122,10 +126,41 @@ def closings(inp: BattleInputs) -> tuple[float, float]:
     return closing(inp.trend_ahead_s, ahead), closing(inp.trend_behind_s, behind)
 
 
-def classify(inp: BattleInputs, th: Mapping[str, object], prev: str = FREE) -> str:
+def _effective_attack_gap(
+    inp: BattleInputs,
+    th: Mapping[str, object],
+    raw_pass_prob: float | None = None,
+    driver: DriverScale | None = None,
+) -> float:
+    drv = inp.driver if driver is None else driver
+    floor = (
+        inp.pass_prob_min
+        if inp.pass_prob_min > 0
+        else drv.pass_prob_min
+        if drv is not NEUTRAL
+        else 0.0
+    )
+    if floor <= 0.0:
+        return inp.attack_gap_s
+    if raw_pass_prob is not None and raw_pass_prob * drv.confidence_factor < floor:
+        return min(inp.attack_gap_s, _th(th, "battle_defend_gap_s", 1.0))
+    if drv.confidence_factor < 1.0:
+        return min(inp.attack_gap_s, _th(th, "battle_defend_gap_s", 1.0))
+    return inp.attack_gap_s
+
+
+def classify(
+    inp: BattleInputs,
+    th: Mapping[str, object],
+    prev: str = FREE,
+    *,
+    raw_pass_prob: float | None = None,
+    driver: DriverScale | None = None,
+) -> str:
     hyst = _th(th, "gap_hysteresis_s", 0.3)
     defend_gap = _th(th, "battle_defend_gap_s", 1.0) + (hyst if prev == DEFENDING else 0.0)
-    attack_gap = inp.attack_gap_s + (hyst if prev == ATTACKING else 0.0)
+    base_attack_gap = _effective_attack_gap(inp, th, raw_pass_prob, driver)
+    attack_gap = base_attack_gap + (hyst if prev == ATTACKING else 0.0)
     threat_gap = _th(th, "battle_threat_gap_s", 3.0)
     catch_gap = _th(th, "battle_catch_gap_s", 5.0)
     min_rate = _th(th, "battle_closing_min_s", 0.2)
@@ -318,13 +353,28 @@ class BattleTracker:
             cur = _Open(kind, rival, inp.lap_num, inp.position, inp.now)
         return cur
 
-    def update(self, inp: BattleInputs, th: Mapping[str, object], rates: BattleRates) -> Battle:
+    def update(
+        self,
+        inp: BattleInputs,
+        th: Mapping[str, object],
+        rates: BattleRates,
+        driver: DriverScale | None = None,
+    ) -> Battle:
         # Filtered index: pit-lane rivals read as -1.
         behind_changed = inp.behind_idx >= 0 and inp.behind_idx != self.prev_behind_idx
         self.prev_behind_idx = inp.behind_idx
-        mode = classify(inp, th, self.mode)
+        drv = inp.driver if driver is None else driver
+        # The gap fallback covers pre-2026 data only. F1 26 sends overtake_active.
+        overtake_now = inp.overtake_active or (
+            not inp.regulations_2026
+            and _finite(inp.gap_ahead_s)
+            and inp.gap_ahead_s <= _th(th, "drs_detection_gap_s", 1.0)
+        )
+        raw_pass_prob = rates.pass_overtake if overtake_now else rates.pass_no_overtake
+        mode = classify(inp, th, self.mode, raw_pass_prob=raw_pass_prob, driver=drv)
         hyst = _th(th, "gap_hysteresis_s", 0.3)
-        a_gap = inp.attack_gap_s + (hyst if self.attack is not None else 0.0)
+        eff_attack_gap = _effective_attack_gap(inp, th, raw_pass_prob, drv)
+        a_gap = eff_attack_gap + (hyst if self.attack is not None else 0.0)
         d_gap = _th(th, "battle_defend_gap_s", 1.0) + (hyst if self.defend is not None else 0.0)
         a_rival = (
             inp.ahead_idx
@@ -348,18 +398,12 @@ class BattleTracker:
         c_ahead, c_behind = closings(inp)
         catch = math.inf
         if inp.ahead_idx >= 0 and _finite(inp.gap_ahead_s) and c_ahead > 0:
-            catch = max(0.0, (inp.gap_ahead_s - inp.attack_gap_s) / c_ahead)
+            catch = max(0.0, (inp.gap_ahead_s - eff_attack_gap) / c_ahead)
         threat = math.inf
         if inp.behind_idx >= 0 and _finite(inp.gap_behind_s) and c_behind > 0:
             threat = max(0.0, (inp.gap_behind_s - _th(th, "battle_defend_gap_s", 1.0)) / c_behind)
-        # The gap fallback covers pre-2026 data only. F1 26 sends overtake_active.
-        overtake_now = inp.overtake_active or (
-            not inp.regulations_2026
-            and _finite(inp.gap_ahead_s)
-            and inp.gap_ahead_s <= _th(th, "drs_detection_gap_s", 1.0)
-        )
         recent = inp.now - self.result_t <= _th(th, "battle_result_hold_s", 20.0)
-        need = inp.gap_ahead_s - inp.attack_gap_s
+        need = inp.gap_ahead_s - eff_attack_gap
         if inp.ahead_idx < 0 or not math.isfinite(inp.gap_ahead_s) or inp.laps_remaining <= 0:
             catch_prob = 0.0
         elif need <= 0:
@@ -371,7 +415,27 @@ class BattleTracker:
             )
         else:
             catch_prob = 1.0 if c_ahead > 0 and need / c_ahead <= inp.laps_remaining else 0.0
-        chase_prob = catch_prob * rates.pass_overtake
+
+        floor = (
+            inp.pass_prob_min
+            if inp.pass_prob_min > 0
+            else drv.pass_prob_min
+            if drv is not NEUTRAL
+            else 0.0
+        )
+        base_floor = _th(th, "battle_attack_prob_min", 0.3)
+        scaled_pass = raw_pass_prob * drv.confidence_factor
+        if floor > 0.0:
+            if scaled_pass < floor:
+                eff_pass = min(scaled_pass, max(0.0, base_floor - 0.01))
+            elif floor < base_floor:
+                eff_pass = max(scaled_pass, base_floor + (scaled_pass - floor))
+            else:
+                eff_pass = scaled_pass
+        else:
+            eff_pass = scaled_pass
+        chase_pass = rates.pass_overtake * drv.confidence_factor
+        chase_prob = 0.0 if (floor > 0.0 and chase_pass < floor) else catch_prob * chase_pass
         return Battle(
             mode=mode,
             mode_laps=max(0, inp.lap_num - self.since_lap),
@@ -388,7 +452,8 @@ class BattleTracker:
             tyre_known_ahead=inp.ahead_idx >= 0 and inp.ahead_age_known,
             tyre_known_behind=inp.behind_idx >= 0 and inp.behind_age_known,
             behind_changed=behind_changed,
-            pass_prob=round(rates.pass_overtake if overtake_now else rates.pass_no_overtake, 2),
+            pass_prob=round(scaled_pass, 2),
+            attack_pass_prob=round(eff_pass, 2),
             hold_prob=round(rates.hold, 2),
             result=self.result if recent else "",
             result_recent=recent and bool(self.result),

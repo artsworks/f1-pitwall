@@ -24,6 +24,7 @@ rules:
   - id: tyre_overheat
     sessions: [race]
     priority: 2
+    urgency: tactical
     when: "overheat and tyre_compound not in (7, 8)"
     clear_when: "not overheat"
     cooldown_s: 90
@@ -35,6 +36,16 @@ rules:
       - "Tyres hot. Keep the slides down"
       - "High temps, mind the rears"
       - "Tyre temperatures rising. Smooth throttle, fewer slides"
+    severity:
+      - when: "battle_mode in ('attacking', 'catching')"
+        priority: 3
+        say:
+          - "Tyres are running hot. Ease the slides"
+          - "Temps are high, look after the rears"
+          - "Tyre temps are climbing. Smooth on the throttle, fewer slides"
+          - "Tyres hot. Keep the slides down"
+          - "High temps, mind the rears"
+          - "Tyre temperatures rising. Smooth throttle, fewer slides"
   - id: tyre_overheat_wet
     sessions: [race]
     priority: 2
@@ -95,6 +106,7 @@ rules:
   - id: tyre_blister
     sessions: [race]
     priority: 2
+    urgency: tactical
     when: "blister_max_pct >= th.blister_warn_pct"
     clear_when: "blister_max_pct < th.blister_warn_pct - th.blister_hysteresis_pct"
     cooldown_s: 120
@@ -106,6 +118,16 @@ rules:
       - "{blister_max_pct} percent blistering. Save the tyres"
       - "Blisters at {blister_max_pct} percent. Be gentle on traction"
       - "Tyre blisters, {blister_max_pct} percent. Manage the exits"
+    severity:
+      - when: "battle_mode in ('attacking', 'catching')"
+        priority: 3
+        say:
+          - "Blistering at {blister_max_pct} percent. Manage the tyres"
+          - "Blisters starting, {blister_max_pct} percent. Look after them"
+          - "{blister_max_pct} percent blistering. Easy on the traction zones"
+          - "{blister_max_pct} percent blistering. Save the tyres"
+          - "Blisters at {blister_max_pct} percent. Be gentle on traction"
+          - "Tyre blisters, {blister_max_pct} percent. Manage the exits"
   - id: fuel_short
     sessions: [race]
     priority: 1
@@ -139,6 +161,7 @@ rules:
     clear_when: "fuel_margin_laps > th.fuel_tight_laps + th.fuel_hysteresis_laps"
     cooldown_s: 180
     cooldown_group: fuel
+    contradicts: [battle_manage, battle_attack, battle_catching]
     requires: [car_status]
     say:
       - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
@@ -161,6 +184,15 @@ rules:
           - "Fuel a touch short, {fuel_margin_r:+.1f}. Bit of lift and coast"
           - "Fuel margin {fuel_margin_r:+.1f} laps. Save a little now"
           - "Just short on fuel, {fuel_margin_r:+.1f}. Lift and coast a bit"
+      - when: "battle_mode in ('attacking', 'catching')"
+        priority: 3
+        say:
+          - "Fuel is tight, margin {fuel_margin_r:+.1f} laps. Keep an eye on it"
+          - "Fuel's on the edge, {fuel_margin_r:+.1f} laps. Save where you can"
+          - "Fuel {fuel_margin_r:+.1f} laps. Lift where it's cheap"
+          - "Fuel margin {fuel_margin_r:+.1f} laps. Keep watching it"
+          - "Tight on fuel, {fuel_margin_r:+.1f} laps. Save where possible"
+          - "Fuel at {fuel_margin_r:+.1f} laps. Lift where it costs least"
   - id: fuel_spare
     sessions: [race]
     priority: 3

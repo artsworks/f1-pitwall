@@ -59,7 +59,7 @@ class ParamSpec:
 class Candidate:
     param: str
     direction: int
-    magnitude: float | str
+    magnitude: float | str | tuple[float, float]
     confidence: str
     expect: str
     tradeoff: str
@@ -275,9 +275,14 @@ def parse_setup_rules(data: Mapping[str, Any]) -> SetupRules:
             if direction not in {-1, 1}:
                 raise ValueError(f"setup_rules.{where}.dir must be -1 or 1")
             magnitude_raw = candidate.get("mag", 0)
-            magnitude: float | str
+            magnitude: float | str | tuple[float, float]
             if magnitude_raw == "by_z":
                 magnitude = "by_z"
+            elif isinstance(magnitude_raw, (list, tuple)) and len(magnitude_raw) == 2:
+                low, high = float(magnitude_raw[0]), float(magnitude_raw[1])
+                if low <= 0 or high < low:
+                    raise ValueError(f"setup_rules.{where}.mag range must be positive and ordered")
+                magnitude = (low, high)
             else:
                 magnitude = float(magnitude_raw)
                 if magnitude <= 0:

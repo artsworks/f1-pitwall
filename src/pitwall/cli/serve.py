@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, Speaker, WarmableSpeaker
+from pitwall.cli.common import _folder_link
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import Engine, action_bits
@@ -494,7 +495,7 @@ def cmd_start(args: argparse.Namespace) -> int:
             saved = write_pack(
                 db, pack_dir, keep_days=settings.learning.pack_keep_days, refresh_quality=[uid]
             )
-            print(f"learning pack: saved {saved}", flush=True)
+            print(f"learning pack: saved {_folder_link(saved)}", flush=True)
         except (OSError, sqlite3.Error, ValueError) as e:
             print(f"learning pack: skipped ({e})", flush=True)
         try:
@@ -565,7 +566,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                     keep_days=settings.learning.pack_keep_days,
                     refresh_quality=[state.session_uid] if state.session_uid is not None else None,
                 )
-                print(f"learning pack: saved {saved}", flush=True)
+                print(f"learning pack: saved {_folder_link(saved)}", flush=True)
             except (OSError, sqlite3.Error, ValueError) as e:
                 print(f"learning pack: skipped ({e})", flush=True)
             except KeyboardInterrupt:

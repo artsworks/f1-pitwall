@@ -252,10 +252,27 @@ def _sequences(inp: PlanInputs, th: Mapping[str, object]) -> list[tuple[int, ...
     return out
 
 
+# Visual compound IDs only (16 S < 17 M < 18 H). Actual C-numbers break the order (C6 is 22).
+def _is_softer_next(compounds: tuple[int, ...]) -> bool:
+    return (
+        len(compounds) >= 2
+        and compounds[0] in DRY
+        and compounds[1] in DRY
+        and compounds[1] < compounds[0]
+    )
+
+
 def derive(inp: PlanInputs, th: Mapping[str, object]) -> list[PlanEval]:
     """Every feasible sequence, fastest first (ties: fewer stops, then order)."""
+    soft_bias_s = _f(th, "plan_soft_bias_s", 0.0)
     evals = [e for s in _sequences(inp, th) if (e := evaluate(inp, s, th)) is not None]
-    return sorted(evals, key=lambda e: (round(e.race_time_s, 3), len(e.compounds)))
+    return sorted(
+        evals,
+        key=lambda e: (
+            round(e.race_time_s - (soft_bias_s if _is_softer_next(e.compounds) else 0.0), 3),
+            len(e.compounds),
+        ),
+    )
 
 
 def reactive(inp: PlanInputs, th: Mapping[str, object]) -> PlanEval | None:
@@ -354,21 +371,28 @@ class PlanTracker:
         stops_done: int,
         neutralised: bool,
         cheap_stop: bool,
+        reseed: bool = False,
     ) -> PlanState:
+        """`reseed` rebuilds A/B from the current ranking (mindset change),
+        based at `stops_done` so completed stops are not replayed."""
         ranked = derive(inp, th)
         if not ranked:
             return self.state
         lap = inp.lap_num
-        if not self.seqs:
+        if not self.seqs or reseed:
+            reason = "mindset" if self.seqs else "start"
+            prev = self.active
+            self.seqs.clear()
+            self.kinds.clear()
             a = ranked[0]
             self._set("A", "primary", stops_done, a)
-            z = NormalDist().inv_cdf(risk_quantile(th))
+            z = 0.0 if th.get("plan_pick") == "gain" else NormalDist().inv_cdf(risk_quantile(th))
             b = alternative(ranked, a, z)
             if b is not None:
                 self._set("B", "alternative", stops_done, b)
             self.active = "A"
             self.target_ref = a.stop_laps[0] if a.stop_laps else 0
-            self.events.append(PlanEvent(lap, "set", "", "A", "start", 0.0, _seq_text(a)))
+            self.events.append(PlanEvent(lap, "set", prev, "A", reason, 0.0, _seq_text(a)))
 
         evals: dict[str, PlanEval | None] = {}
         for pid in self.seqs:

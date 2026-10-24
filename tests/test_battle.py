@@ -11,7 +11,9 @@ import pytest
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
+from pitwall.model.driver import DriverScale
 from pitwall.rules.engine import RuleEngine
+from pitwall.rules.expr import Predicate
 from pitwall.server.app import strategy_payload
 from pitwall.state.session import CarLap, Snapshot
 from pitwall.store.db import Database
@@ -163,6 +165,36 @@ def test_catch_and_chase_probabilities_use_gap_spread() -> None:
     assert deterministic_catch.catch_prob == 1.0
     assert deterministic_catch.chase_prob == 0.73
     assert deterministic_miss.catch_prob == 0.0
+
+
+@pytest.mark.parametrize(
+    ("overtake_active", "confidence_factor", "pass_overtake", "expected_chase_rate"),
+    [
+        pytest.param(False, 1.0, 0.6, 0.6, id="neutral-without-overtake"),
+        pytest.param(True, 0.7, 0.6, 0.42, id="low-confidence-overtake"),
+        pytest.param(True, 0.7, 0.4, 0.0, id="scaled-rate-below-floor"),
+    ],
+)
+def test_chase_probability_uses_confidence_scaled_overtake_rate(
+    overtake_active: bool,
+    confidence_factor: float,
+    pass_overtake: float,
+    expected_chase_rate: float,
+) -> None:
+    driver = DriverScale(pass_prob_min=0.30, confidence_factor=confidence_factor)
+    rates = BattleRates(pass_overtake=pass_overtake, pass_no_overtake=0.25)
+    battle = BattleTracker().update(
+        _inp(
+            gap_ahead_s=3.0,
+            ahead_pace_ms=90_500,
+            overtake_active=overtake_active,
+            driver=driver,
+        ),
+        TH,
+        rates,
+    )
+
+    assert battle.chase_prob == round(battle.catch_prob * expected_chase_rate, 2)
 
 
 def test_overtake_now_uses_overtake_active_under_2026_regs() -> None:
@@ -546,3 +578,69 @@ def test_replay_ct2_attack_episode_logs_overtake(tmp_path: Path) -> None:
     episodes = [r for r in rows if r.get("outcome") == "battle" and r["kind"] == "attack"]
     assert episodes and all(r["overtake"] is True for r in episodes)
     assert all("drs" not in r for r in episodes)
+
+
+def test_driver_scaled_pass_prob_floor_gates_battle_attack() -> None:
+    from pitwall.config.models import resolve_mindset
+    from pitwall.model.driver import advice_scale
+
+    settings = ConfigStore().current()
+    th = settings.thresholds
+    aggr = resolve_mindset(settings.mindsets, "aggressive")
+    rates = BattleRates(pass_overtake=0.25, pass_no_overtake=0.25, hold=0.7)
+
+    low_drv = advice_scale(0.3, 0.8, th, aggr, source="track")
+    high_drv = advice_scale(0.9, 1.0, th, aggr, source="track")
+
+    low_wide = BattleTracker().update(
+        _inp(
+            gap_ahead_s=1.2,
+            attack_gap_s=1.5,
+            overtake_active=True,
+            pass_prob_min=low_drv.pass_prob_min,
+            driver=low_drv,
+        ),
+        th,
+        rates,
+    )
+    high_wide = BattleTracker().update(
+        _inp(
+            gap_ahead_s=1.2,
+            attack_gap_s=1.5,
+            overtake_active=True,
+            pass_prob_min=high_drv.pass_prob_min,
+            driver=high_drv,
+        ),
+        th,
+        rates,
+    )
+    assert low_wide.mode != ATTACKING
+    assert high_wide.mode == ATTACKING
+    assert low_wide.attack_pass_prob < float(th["battle_attack_prob_min"])
+    assert high_wide.attack_pass_prob >= float(th["battle_attack_prob_min"])
+
+
+@pytest.mark.parametrize(("floor", "attack_prob"), [(0.20, 0.35), (0.30, 0.25)])
+def test_attack_probability_keeps_raw_outcome_score(floor: float, attack_prob: float) -> None:
+    settings = ConfigStore().current()
+    battle = BattleTracker().update(
+        _inp(
+            gap_ahead_s=0.5,
+            driver=DriverScale(pass_prob_min=floor, confidence_factor=1.0),
+        ),
+        settings.thresholds,
+        BattleRates(pass_overtake=0.25, pass_no_overtake=0.25, hold=0.7),
+    )
+    assert battle.pass_prob == 0.25
+    assert battle.attack_pass_prob == attack_prob
+    rule = next(rule for rule in settings.rules if rule.id == "battle_attack")
+    assert rule.outcome_score == "battle_pass_prob * 2 - 1"
+    assert (
+        Predicate(rule.outcome_score)(
+            {
+                "battle_pass_prob": battle.pass_prob,
+                "battle_attack_pass_prob": battle.attack_pass_prob,
+            }
+        )
+        == -0.5
+    )

@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 
 import pitwall.strategy.montecarlo as montecarlo
+from pitwall.config.loader import ConfigStore
+from pitwall.config.models import resolve_mindset
 from pitwall.model.deg import DegFit
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pitwindow import PitPlan, _fresh_fit, race_time_s
@@ -73,6 +75,34 @@ def test_same_seed_produces_the_same_result() -> None:
     args = dict(fit=fit, fresh=_fit(80.0), plan_lap=10)
 
     assert _agreement(**args) == _agreement(**args)
+
+
+def test_shipped_mindsets_keep_per_lap_mc_key() -> None:
+    settings = ConfigStore(isolated=True).current()
+
+    for mindset in ("balanced", "aggressive"):
+        assert resolve_mindset(settings.mindsets, mindset)["mc_every_n_laps"] == 1
+
+
+@pytest.mark.parametrize(("mindset", "expected"), [("balanced", 100), ("aggressive", 1000)])
+@pytest.mark.parametrize("threshold_sims", [100, 0])
+def test_shipped_mindsets_use_threshold_sims_unless_overridden(
+    mindset: str, expected: int, threshold_sims: int
+) -> None:
+    settings = ConfigStore(isolated=True).current()
+    mode = resolve_mindset(settings.mindsets, mindset)
+    result = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode=mode,
+        th={**TH, "plan_mc_sims": threshold_sims},
+    )
+
+    if threshold_sims == 0:
+        assert result is None
+    else:
+        assert result is not None and result.sims == expected
 
 
 def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> None:
@@ -269,7 +299,7 @@ def test_zero_sims_and_short_horizon_skip_mc() -> None:
 
 def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     plan = PitPlan("box_now", 10, 3.0, 0.8, 0.2, -1, "", "", (10, 12), 0.0, 0.0, ())
-    mc = McResult(12, 0.5, 500, 13)
+    mc = McResult(2, 0.5, 500, 3, 10)
 
     scaled = scale_plan(plan, mc)
     cheap_stop = scale_plan(replace(plan, plan="cheap_stop"), mc)
@@ -279,6 +309,19 @@ def test_scale_plan_multiplies_confidence_but_leaves_cheap_stop_alone() -> None:
     assert scaled.mc_lap == 12 and scaled.mc_agree == 0.5
     assert scaled.mc_risk_lap == 13
     assert cheap_stop == replace(plan, plan="cheap_stop")
+
+
+@pytest.mark.parametrize(("offset", "expected"), [(None, 0), (0, 11), (2, 13)])
+def test_scale_plan_translates_offsets_and_keeps_no_stop_distinct(
+    offset: int | None, expected: int
+) -> None:
+    plan = PitPlan("box_now", 10, 3.0, 0.8, 0.2, -1, "", "", (10, 12), 0.0, 0.0, ())
+    mc = McResult(offset, 0.5, 500, offset, 10)
+
+    scaled = scale_plan(plan, mc, lap_num=11)
+
+    assert scaled.mc_lap == expected
+    assert scaled.mc_risk_lap == expected
 
 
 def test_single_sim_delta_matches_deterministic_race_time(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -342,3 +385,111 @@ def test_single_sim_delta_matches_deterministic_race_time(monkeypatch: pytest.Mo
 
     assert result is not None
     assert captured[0][0, 2] == pytest.approx(stop - no_stop, abs=1e-6)
+
+
+def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+    from pitwall.state.session import Snapshot
+
+    res = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode={"pit_gain_min_s": 0.4, "plan_mc_sims": 750},
+        th={**TH, "plan_mc_sims": 500},
+    )
+    assert res is not None and res.sims == 750
+
+    capped = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode={"pit_gain_min_s": 0.4, "plan_mc_sims": 9999},
+        th={**TH, "plan_mc_sims": 500},
+    )
+    assert capped is not None and capped.sims == 2000
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    engine.deg_fit = _fit(150.0)
+    engine._fresh_prior = _fit(80.0)
+    engine._green_pit_loss_s = 21.0
+    engine._sc_pit_loss_s = 9.0
+    engine.state.session_uid = 42
+    calls = 0
+    orig = montecarlo.plan_agreement
+
+    def counted(**kw: object) -> McResult | None:
+        nonlocal calls
+        calls += 1
+        return orig(**kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr(engine, "mode", lambda: {**MODE, "mc_every_n_laps": 2, "plan_mc_sims": 500})
+
+    snap1 = Snapshot(
+        now=1.0,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=10,
+        tyre_age_laps=1,
+        laps_of_pace=15.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+    )
+    snap2 = replace(snap1, lap_num=2, tyre_age_laps=2)
+    snap3 = replace(snap1, lap_num=3, tyre_age_laps=3)
+
+    def candidate_deltas(**kwargs: object) -> np.ndarray:
+        deltas = np.ones((len(kwargs["deg_samples"]), int(kwargs["last_k"]) + 1))  # type: ignore[arg-type]
+        deltas[:, 0] = -10.0
+        return deltas
+
+    monkeypatch.setattr(montecarlo, "_candidate_deltas_s", candidate_deltas)
+    engine._plan(snap1)
+    first = engine.pit_plan
+    engine._plan(snap2)
+    assert calls == 1
+    assert first is not None and engine.pit_plan is not None
+    assert (first.mc_lap, first.mc_risk_lap) == (1, 1)
+    assert (engine.pit_plan.mc_lap, engine.pit_plan.mc_risk_lap) == (2, 2)
+    engine._plan(snap3)
+    assert calls == 2
+
+
+def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+    from pitwall.state.session import Snapshot
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    engine.deg_fit = _fit(150.0)
+    engine._fresh_prior = _fit(80.0)
+    thresholds: list[object] = []
+    mode = {**MODE, "plan_mc_sims": 500}
+    original = montecarlo.plan_agreement
+
+    def counted(**kwargs: object) -> McResult | None:
+        thresholds.append(kwargs["mode"]["pit_gain_min_s"])  # type: ignore[index]
+        return original(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr(engine, "mode", lambda: mode)
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=9,
+        laps_remaining=10,
+        tyre_age_laps=1,
+        laps_of_pace=15.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+    )
+    engine._plan(snap)
+    mode["pit_gain_min_s"] = 0.4
+    engine._plan(snap)
+    assert thresholds == [1.0, 0.4]

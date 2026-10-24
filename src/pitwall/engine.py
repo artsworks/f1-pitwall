@@ -26,7 +26,13 @@ from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
-from pitwall.config.models import InputSettings, MenuItemModel, call_budget, resolve_mindset
+from pitwall.config.models import (
+    InputSettings,
+    MenuItemModel,
+    Settings,
+    call_budget,
+    resolve_mindset,
+)
 from pitwall.config.thresholds import threshold
 from pitwall.derive import is_synthetic_uid
 from pitwall.hindsight import grade_and_store
@@ -56,6 +62,7 @@ from pitwall.model.driver import (
     PARAM_NAMES,
     RATING,
     DriverInputs,
+    DriverScale,
     advice_scale,
     compute_profile,
     fold_weight,
@@ -86,7 +93,7 @@ from pitwall.strategy.battle import (
 )
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
-from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
+from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, _f, optimise
 from pitwall.strategy.plans import (
     DRY,
     CompoundModel,
@@ -402,6 +409,9 @@ class Engine:
         self._menu_signal_names: dict[str, frozenset[str]] = {}
         self._menu_signal_hash = self.store.hash
         self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
+        self.db: Any = dispatcher.log.db
+        self.driver_db: Any = self.db
+        self._driver_rating = (0.5, 0.0, "")
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
         # recording tail with the rules muted.
@@ -412,9 +422,6 @@ class Engine:
         self._alive_t = -math.inf
         self.tick_errors = 0
         self._rule_errors_logged: set[tuple[str, str]] = set()
-        self.db: Any = dispatcher.log.db
-        self.driver_db: Any = self.db
-        self._driver_rating = (0.5, 0.0, "")
         self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
@@ -433,10 +440,10 @@ class Engine:
         self._green_pit_loss_s = 0.0
         self._green_pit_samples_s: list[float] = []
         self._sc_pit_loss_s = 0.0
-        self._plan_mc_cache: dict[tuple[int | None, int, int, int, str, int], McResult | None] = {}
+        self._plan_mc_cache: dict[tuple[Any, ...], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
-        self._plan_key: tuple[int, int, bool, bool, int, bool] | None = None
+        self._plan_key: tuple[Any, ...] | None = None
         self._stops_done = 0
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
@@ -620,12 +627,41 @@ class Engine:
     def mindset(self) -> str:
         return self.mindset_override or self.store.current().mindset.active
 
+    def _driver_scale(
+        self,
+        settings: Settings | None = None,
+        raw_mode: Mapping[str, Any] | None = None,
+    ) -> DriverScale:
+        cfg = self.store.current() if settings is None else settings
+        base_mode = resolve_mindset(cfg.mindsets, self.mindset) if raw_mode is None else raw_mode
+        rating, conf, source = self._driver_rating
+        return advice_scale(
+            rating,
+            conf,
+            cfg.thresholds,
+            base_mode,
+            aggressive=self.mindset == "aggressive",
+            source=source,
+        )
+
     def mode(self) -> dict[str, Any]:
         settings = self.store.current()
-        return resolve_mindset(settings.mindsets, self.mindset)
+        resolved = resolve_mindset(settings.mindsets, self.mindset)
+        if self.mindset == "aggressive":
+            drv = self._driver_scale(settings, resolved)
+            resolved = {
+                **resolved,
+                "pit_confidence_min": drv.pit_confidence_min,
+                "position_loss_risk_max": drv.position_loss_risk_max,
+            }
+        return resolved
 
     def _apply_mode(self) -> None:
         mode = self.mode()
+        self.state.set_mode_offsets(
+            thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0),
+            sector_loss_call_ms=float(mode.get("sector_loss_call_ms", 100) or 100),
+        )
         if self.rule_engine is not None:
             self.rule_engine.mode = mode
         budget = (
@@ -781,7 +817,7 @@ class Engine:
         return False
 
     def _plan_thresholds(self, snap: Snapshot) -> Mapping[str, object]:
-        th = self.store.current().thresholds
+        th: dict[str, object] = {**self.store.current().thresholds, **self.mode()}
         if not snap.is_sprint:
             return th
         return {**th, "plan_two_compound_rule": 0}  # no mandatory stop in a sprint
@@ -953,12 +989,12 @@ class Engine:
         self.setup_advisor.reset(uid)
 
     def _evaluate_live_setup(self, uid: int) -> None:
-        self.setup_advisor.evaluate_live(self.db, uid, self.store.current())
+        self.setup_advisor.evaluate_live(self.db, uid, self.store.current(), mindset=self.mode())
 
     def _store_debrief_setup(self, uid: int) -> None:
         if self.db is None:
             return
-        self.setup_advisor.store_debrief(self.db, uid, self.store.current())
+        self.setup_advisor.store_debrief(self.db, uid, self.store.current(), mindset=self.mode())
 
     def _update_setup_stop_wing(self) -> None:
         self.setup_advisor.update_stop_wing(self.pit_plan.plan in _STOP_PLANS)
@@ -1548,12 +1584,13 @@ class Engine:
     def _refresh_driver_rating(self, track_id: int) -> None:
         if self.driver_db is None:
             self._driver_rating = (0.5, 0.0, "")
-            return
-        self._driver_rating = learned_rating(
-            self.driver_db.params_for_track(track_id),
-            self.driver_db.params_for_track(GLOBAL_TRACK_ID),
-            self.store.current().thresholds,
-        )
+        else:
+            self._driver_rating = learned_rating(
+                self.driver_db.params_for_track(track_id),
+                self.driver_db.params_for_track(GLOBAL_TRACK_ID),
+                self.store.current().thresholds,
+            )
+        self._apply_mode()
 
     def _lap_fraction(self) -> float:
         state = self.state
@@ -1568,7 +1605,8 @@ class Engine:
         settings = self.store.current()
         mode = self.mode()
         state.set_mode_offsets(
-            thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0)
+            thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0),
+            sector_loss_call_ms=float(mode.get("sector_loss_call_ms", 100) or 100),
         )
         track_id = state.track_id
         overlay = settings.track
@@ -1787,6 +1825,8 @@ class Engine:
             else None
         )
         behind, behind_gap_s = _true_behind_view(snap)
+        raw_mode = resolve_mindset(settings.mindsets, self.mindset)
+        drv = self._driver_scale(settings, raw_mode)
         mode = self.mode()
         plan = optimise(
             lap_num=snap.lap_num,
@@ -1807,21 +1847,27 @@ class Engine:
             rival_behind_gap_s=behind_gap_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
-            driver=advice_scale(
-                self._driver_rating[0], self._driver_rating[1], settings.thresholds
-            ),
+            driver=drv,
             mode=mode,
             th=settings.thresholds,
         )
         if snap.safety_car_status == 0:
             session_uid = self.state.session_uid
+            raw_cadence = mode.get("mc_every_n_laps", 1)
+            mc_every = max(1, int(raw_cadence) if isinstance(raw_cadence, int | float) else 1)
+            raw_sims = mode.get("plan_mc_sims", settings.thresholds.get("plan_mc_sims", 500))
+            mc_sims = int(raw_sims) if isinstance(raw_sims, int | float) else 500
+            lap_slot = snap.lap_num if mc_every == 1 else (snap.lap_num - 1) // mc_every
+            age_slot = snap.tyre_age_laps if mc_every == 1 else snap.lap_num - snap.tyre_age_laps
             key = (
                 session_uid,
-                snap.lap_num,
+                lap_slot,
                 plan.lap,
-                snap.tyre_age_laps,
+                age_slot,
+                _f(mode, "pit_gain_min_s", 1.0),
                 plan.plan,
                 plan.rival_idx,
+                mc_sims,
             )
             if key not in self._plan_mc_cache:
                 uid = session_uid if session_uid is not None else 0
@@ -1845,7 +1891,7 @@ class Engine:
                     plan_name=plan.plan,
                     cover_gap_s=behind_gap_s,
                 )
-            plan = scale_plan(plan, self._plan_mc_cache[key])
+            plan = scale_plan(plan, self._plan_mc_cache[key], lap_num=snap.lap_num)
         plan, self._held_plan = _hold_cover_plan(
             self._held_plan, plan, snap, self._th("pit_min_laps_left", 2)
         )
@@ -1858,6 +1904,7 @@ class Engine:
                 pit_plan_gain_s=plan.gain_s,
                 pit_plan_confidence=plan.confidence,
                 pit_plan_risk=plan.risk,
+                pit_plan_risky=plan.risky,
                 pit_plan_rival_idx=plan.rival_idx,
                 pit_plan_rival_name=plan.rival_name,
                 pit_plan_reason=plan.reason,
@@ -1874,6 +1921,7 @@ class Engine:
             pit_plan_gain_s=plan.gain_s,
             pit_plan_confidence=plan.confidence,
             pit_plan_risk=plan.risk,
+            pit_plan_risky=plan.risky,
             pit_plan_rival_idx=plan.rival_idx,
             pit_plan_rival_name=plan.rival_name,
             pit_plan_reason=plan.reason,
@@ -1940,10 +1988,19 @@ class Engine:
             self._used_compounds.add(snap.tyre_visual)
             neutral = phase in ("sc", "vsc")
             cheap = pit.plan == "cheap_stop"
-            key = (snap.lap_num, self._stops_done, neutral, cheap, snap.tyre_visual, snap.is_sprint)
+            key = (
+                snap.lap_num,
+                self._stops_done,
+                neutral,
+                cheap,
+                snap.tyre_visual,
+                self.mindset,
+                snap.is_sprint,
+            )
             if key != self._plan_key:
                 if self._plan_key is not None and self._plan_key[-1] != snap.is_sprint:
                     tracker.reset()  # the weekend format arrived: a fresh plan, not a switch
+                reseed = self._plan_key is not None and self._plan_key[5] != self.mindset
                 self._plan_key = key
                 lop = snap.laps_of_pace
                 cliff = self._th("tyre_cliff_ms", 1500)
@@ -1967,6 +2024,7 @@ class Engine:
                     stops_done=self._stops_done,
                     neutralised=neutral,
                     cheap_stop=cheap,
+                    reseed=reseed,
                 )
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
@@ -2032,6 +2090,7 @@ class Engine:
         if snap.session_kind != "race" or snap.race_phase != "racing":
             return snap
         attack = self.mode().get("attack_window_s", 1.0)
+        drv = self._driver_scale()
         own = snap.predicted_lap_ms or int(snap.base_pace_ms)
         inp = BattleInputs(
             now=snap.now,
@@ -2060,6 +2119,8 @@ class Engine:
             pitting=frozenset(i for i, c in enumerate(snap.cars) if c.pit_status != 0),
             regulations_2026=snap.regulations_2026,
             closing_sd_s=snap.gap_closing_sd_ahead_s,
+            pass_prob_min=drv.pass_prob_min,
+            driver=drv,
         )
         tracker = self.battle_tracker
         th = self.store.current().thresholds
@@ -2083,6 +2144,7 @@ class Engine:
             battle_tyre_known_behind=b.tyre_known_behind,
             battle_behind_changed=b.behind_changed,
             battle_pass_prob=b.pass_prob,
+            battle_attack_pass_prob=b.attack_pass_prob,
             battle_catch_prob=b.catch_prob,
             battle_chase_prob=b.chase_prob,
             battle_hold_prob=b.hold_prob,

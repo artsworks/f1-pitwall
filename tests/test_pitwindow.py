@@ -4,7 +4,7 @@ import pytest
 
 from pitwall.config.loader import ConfigStore
 from pitwall.model.deg import DegFit
-from pitwall.model.driver import DriverScale
+from pitwall.model.driver import DriverScale, advice_scale
 from pitwall.strategy.pitwindow import RivalView, optimise, race_time_s
 
 SETTINGS = ConfigStore().current()
@@ -439,3 +439,88 @@ def test_forced_stop_has_no_position_risk() -> None:
 
 def test_deterministic() -> None:
     assert run() == run()
+
+
+def test_position_risk_veto_per_mindset_and_driver_gate() -> None:
+    # gap_behind_s=11.0 with pit_loss_s=21.0 -> position_risk = 10/21 = 0.476
+    # Balanced preserves the original plan; aggressive permits risk up to 0.55.
+    bal = run(gap_behind_s=11.0, tyre_age=15, laps_of_pace=19.0, mode=BALANCED)
+    assert bal.plan in ("box_now", "box_in_n")
+    assert not bal.risky
+
+    aggr = run(gap_behind_s=11.0, tyre_age=15, laps_of_pace=19.0, mode=AGGRESSIVE)
+    assert aggr.plan in ("box_now", "box_in_n")
+    assert aggr.risky is True
+    assert "traffic risk" in aggr.reason
+
+    rival = RivalView(1, "NORRIS", 92_500, False)
+    bal_uc = run(
+        rival_ahead=rival,
+        gap_ahead_s=1.0,
+        gap_behind_s=11.0,
+        laps_of_pace=19.0,
+        mode=BALANCED,
+    )
+    aggr_uc = run(
+        rival_ahead=rival,
+        gap_ahead_s=1.0,
+        gap_behind_s=11.0,
+        laps_of_pace=19.0,
+        mode=AGGRESSIVE,
+    )
+    assert bal_uc.plan == "undercut"
+    assert bal_uc.risk > 0.30
+    assert aggr_uc.plan == "undercut" and aggr_uc.risky is True
+
+    low_drv = advice_scale(0.3, 0.8, TH, AGGRESSIVE, source="track")
+    gated_uc = run(
+        rival_ahead=rival,
+        gap_ahead_s=1.0,
+        gap_behind_s=11.0,
+        laps_of_pace=19.0,
+        driver=low_drv,
+        mode=AGGRESSIVE,
+    )
+    assert gated_uc.plan == "stay"
+    assert gated_uc.reason == "Traffic behind"
+
+
+def test_balanced_over_risk_limit_keeps_main_plans() -> None:
+    result = run(
+        rival_ahead=RivalView(1, "NORRIS", 92_500, False),
+        gap_ahead_s=1.0,
+        gap_behind_s=11.0,
+        laps_of_pace=19.0,
+        mode=BALANCED,
+    )
+
+    assert result.risk == pytest.approx(round(10 / 21, 3))
+    assert result.plan == "undercut"
+
+    main_plan = run(gap_behind_s=11.0, tyre_age=15, laps_of_pace=19.0, mode=BALANCED)
+    assert main_plan.risk == pytest.approx(round(10 / 21, 3))
+    assert main_plan.plan in ("box_now", "box_in_n")
+
+
+def test_plan_pick_gain_selects_higher_gain_plan_under_aggressive() -> None:
+    ahead = RivalView(1, "NORRIS", 92_500, False)
+    behind = RivalView(2, "PIASTRI", 90_000, True)
+    bal = run(
+        rival_ahead=ahead,
+        rival_behind=behind,
+        gap_ahead_s=1.0,
+        gap_behind_s=1.0,
+        laps_of_pace=6.0,
+        mode=BALANCED,
+    )
+    aggr = run(
+        rival_ahead=ahead,
+        rival_behind=behind,
+        gap_ahead_s=1.0,
+        gap_behind_s=1.0,
+        laps_of_pace=6.0,
+        mode=AGGRESSIVE,
+    )
+    assert bal.plan == "cover"
+    assert aggr.plan == "undercut"
+    assert aggr.gain_s > bal.gain_s

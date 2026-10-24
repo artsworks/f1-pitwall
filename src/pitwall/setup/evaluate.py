@@ -158,15 +158,41 @@ def _field_value(param: str, setup_field: str, setup: Mapping[str, float]) -> fl
     return float(setup[setup_field])
 
 
-def _magnitude_steps(candidate: Candidate, rules: SetupRules, signals: RunSignals) -> float:
+def _is_aggressive_mindset(mindset: str | Mapping[str, Any] | None) -> bool:
+    if mindset is None:
+        return False
+    if isinstance(mindset, str):
+        return mindset == "aggressive"
+    if isinstance(mindset, Mapping):
+        return (
+            mindset.get("phrasing") == "directive"
+            or mindset.get("plan_pick") == "gain"
+            or mindset.get("name") == "aggressive"
+        )
+    return False
+
+
+def _magnitude_steps(
+    candidate: Candidate,
+    rules: SetupRules,
+    signals: RunSignals,
+    *,
+    aggressive: bool = False,
+) -> float:
+    if isinstance(candidate.magnitude, tuple):
+        low, high = candidate.magnitude
+        return float(high) if aggressive else (low + high) / 2.0
     if candidate.magnitude != "by_z":
-        return float(candidate.magnitude)
+        base = float(candidate.magnitude)
+        return base * 2.0 if aggressive else base
     z_value = signals.z_rear
     steps = 1
     if z_value is not None:
-        for threshold, threshold_steps in rules.by_z:
-            if abs(z_value) >= threshold:
+        for threshold_z, threshold_steps in rules.by_z:
+            if abs(z_value) >= threshold_z:
                 steps = threshold_steps
+    if aggressive and rules.by_z:
+        steps = max(steps, rules.by_z[-1][1])
     return float(steps)
 
 
@@ -206,12 +232,14 @@ def _evaluate(
     rules: SetupRules,
     thresholds: Mapping[str, Any],
     learned: Mapping[tuple[str, str, int], tuple[float, float]] | None,
+    mindset: str | Mapping[str, Any] | None = None,
 ) -> tuple[list[Recommendation], list[dict[str, str]]]:
     if mode not in {"debrief", "garage", "race", "race_stop"}:
         raise ValueError("mode must be debrief, garage, race, or race_stop")
     kind = _session_kind(signals.session_type)
     if kind is None or (mode in {"race", "race_stop"} and kind != "race"):
         return [], []
+    aggressive = _is_aggressive_mindset(mindset)
 
     context = _context_for(mode, kind)
     environment: dict[str, Any] = {
@@ -296,7 +324,12 @@ def _evaluate(
                 if spec.category and race_step is None
                 else 1.0
             )
-            delta = candidate.direction * _magnitude_steps(candidate, rules, signals) * step * scale
+            delta = (
+                candidate.direction
+                * _magnitude_steps(candidate, rules, signals, aggressive=aggressive)
+                * step
+                * scale
+            )
             to_value = round(from_value + delta, 6)
             if spec.min_value is not None:
                 to_value = max(to_value, spec.min_value)
@@ -420,6 +453,7 @@ def evaluate(
     rules: SetupRules,
     thresholds: Mapping[str, Any],
     learned: Mapping[tuple[str, str, int], tuple[float, float]] | None = None,
+    mindset: str | Mapping[str, Any] | None = None,
 ) -> list[Recommendation]:
     """Return deterministic recommendations for the supplied run and setup."""
     recommendations, _ = _evaluate(
@@ -430,6 +464,7 @@ def evaluate(
         rules=rules,
         thresholds=thresholds,
         learned=learned,
+        mindset=mindset,
     )
     return recommendations
 
@@ -443,6 +478,7 @@ def explain(
     rules: SetupRules,
     thresholds: Mapping[str, Any],
     learned: Mapping[tuple[str, str, int], tuple[float, float]] | None = None,
+    mindset: str | Mapping[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     """Return candidate and symptom suppressions for a setup evaluation."""
     _, suppressed = _evaluate(
@@ -453,5 +489,6 @@ def explain(
         rules=rules,
         thresholds=thresholds,
         learned=learned,
+        mindset=mindset,
     )
     return suppressed

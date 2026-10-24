@@ -23,10 +23,19 @@ from pitwall.strategy.plans import risk_quantile
 
 @dataclass(frozen=True, slots=True)
 class McResult:
-    modal_lap: int
+    modal_offset: int | None
     agree: float
     sims: int
-    q_modal_lap: int = 0
+    q_modal_offset: int | None = None
+    lap_num: int = 0
+
+    @property
+    def modal_lap(self) -> int:
+        return 0 if self.modal_offset is None else self.lap_num + self.modal_offset
+
+    @property
+    def q_modal_lap(self) -> int:
+        return 0 if self.q_modal_offset is None else self.lap_num + self.q_modal_offset
 
 
 def _sampled_current_laps_ms(
@@ -116,7 +125,8 @@ def plan_agreement(
     plan_name: str = "",
     cover_gap_s: float = math.inf,
 ) -> McResult | None:
-    sims = int(_f(th, "plan_mc_sims", 500))
+    raw_th_sims = _f(th, "plan_mc_sims", 500)
+    sims = 0 if raw_th_sims <= 0 else min(int(_f(mode, "plan_mc_sims", raw_th_sims)), 2000)
     min_left, last_k = _candidate_range(laps_remaining, th)
     if sims <= 0 or laps_remaining <= min_left or last_k < 0:
         return None
@@ -167,13 +177,13 @@ def plan_agreement(
     )
     q = np.quantile(deltas, risk_quantile(th), axis=0)
     k = int(np.argmin(q))
-    q_modal_lap = lap_num + k if q[k] < 0 else 0
+    q_modal_offset = k if q[k] < 0 else None
 
     best_ks = np.argmin(deltas, axis=1)
     best_deltas = deltas[np.arange(sims), best_ks]
-    chosen_laps = np.where(best_deltas < 0.0, lap_num + best_ks, 0)
-    lap_values, counts = np.unique(chosen_laps, return_counts=True)
-    modal_lap = int(lap_values[counts == counts.max()][0])
+    chosen_offsets = np.where(best_deltas < 0.0, best_ks, -1)
+    offset_values, counts = np.unique(chosen_offsets, return_counts=True)
+    modal_offset = int(offset_values[counts == counts.max()][0])
 
     if plan_name in ("cover", "defend") and math.isfinite(cover_gap_s):
         uc = int(_f(th, "undercut_laps", 2))
@@ -203,16 +213,19 @@ def plan_agreement(
             agree = float(np.mean(deltas[:, plan_k] - min_deltas <= gain_min))
         else:
             agree = 1.0
-    return McResult(modal_lap, agree, sims, q_modal_lap)
+    return McResult(
+        None if modal_offset == -1 else modal_offset, agree, sims, q_modal_offset, lap_num
+    )
 
 
-def scale_plan(plan: PitPlan, mc: McResult | None) -> PitPlan:
+def scale_plan(plan: PitPlan, mc: McResult | None, *, lap_num: int | None = None) -> PitPlan:
     if mc is None or plan.plan in ("", "cheap_stop"):
         return plan
+    current_lap = mc.lap_num if lap_num is None else lap_num
     return replace(
         plan,
         confidence=round(plan.confidence * mc.agree, 3),
-        mc_lap=mc.modal_lap,
+        mc_lap=0 if mc.modal_offset is None else current_lap + mc.modal_offset,
         mc_agree=round(mc.agree, 3),
-        mc_risk_lap=mc.q_modal_lap,
+        mc_risk_lap=0 if mc.q_modal_offset is None else current_lap + mc.q_modal_offset,
     )

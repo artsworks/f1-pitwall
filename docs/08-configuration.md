@@ -106,8 +106,8 @@ The pilot ships two tuned mindsets: **balanced** (default) and **aggressive**. K
 and survive in the design. Add them after replay proves the first two, rather than shipping
 four untested sets.
 
-Setup and pressure advice do not read mindset values yet. When wired in, aggressive mode
-must recommend larger setup changes than balanced mode.
+Setup advice reads the active mindset. Under aggressive mode, the advisor proposes the
+upper end of a parameter step or range while keeping the same evidence thresholds.
 
 ### The vector
 
@@ -117,8 +117,8 @@ Each parameter maps to something a race engineer changes when told "we're attack
 | Parameter | Balanced | Aggressive | What it controls | The coaching behaviour it models |
 |---|---|---|---|---|
 | `pit_gain_min_s` | 1.0 | 0.4 | projected net gain required before recommending a stop | an aggressive engineer takes the marginal undercut |
-| `pit_confidence_min` | 0.70 | 0.55 | model confidence required to speak a pit call | acts on a less certain read |
-| `position_loss_risk_max` | 0.30 | 0.55 | tolerated probability that a strategy call costs a place | accepts coming out in traffic for a chance of gaining |
+| `pit_confidence_min` | 0.70 | 0.55 | model confidence required to speak a pit call | acts on a less certain read when driver rating allows |
+| `position_loss_risk_max` | 0.30 | 0.55 | tolerated probability that a strategy call costs a place | accepts traffic risk when driver rating allows |
 | `undercut_speak_threshold_s` | 1.0 | 0.4 | smallest undercut opportunity worth saying | "there's an undercut on Norris, small but it's there" |
 | `sc_stop_min_wear_pct` | 35 | 25 | wear above which a safety-car stop is recommended | takes the cheap stop earlier to get fresher tyres for the restart |
 | `tyre_life_buffer_laps` | 2.0 | 1.0 | laps of margin kept before the modelled cliff | runs the stint closer to the edge |
@@ -133,6 +133,12 @@ Each parameter maps to something a race engineer changes when told "we're attack
 | `rival_focus_ahead` | 0.5 | 0.8 | weight on the car ahead vs behind (behind = 1 − ahead) | "he's on 18-lap-old mediums, you're half a second a lap quicker" |
 | `rival_info_every_n_laps` | 3 | 1 | how often the rival summary is repeated | a gap every lap when hunting |
 | `call_budget_per_lap` | 15 | `unlimited` | P2/P3 calls per lap (P1 never counts); `0` is P1 only, `unlimited` removes the cap; the driver menu's "Radio calls" item overrides it live | slightly chattier, not twice as chatty |
+| `plan_soft_bias_s` | 0.0 | 1.5 | seconds subtracted when ranking a softer next compound | prefers a softer next stint when race times are close |
+| `plan_pick` | `confidence` | `gain` | tie-break preference across feasible pit plans | picks the higher-gain stop instead of the safer cover |
+| `mc_every_n_laps` | 1 | 1 | lap cadence for Monte Carlo pit-plan agreement. With n > 1, one result is kept per n-lap block within a stint | runs agreement checks every lap |
+| `plan_mc_sims` | uses `thresholds.plan_mc_sims` (500) | 1000 | Monte Carlo simulations per pit-plan check | samples more trajectories under aggressive |
+| `sector_loss_call_ms` | 100 | 50 | minimum qualifying sector loss before naming the sector | calls smaller losses against the session theoretical best |
+| `battle_conserve_calls` | `true` | `false` | whether patience and tyre-management battle calls fire | suppresses conserve calls during a fight |
 | `phrasing` | `advisory` | `directive` | template set used | "consider boxing" versus "box this lap" |
 
 ```yaml
@@ -155,6 +161,11 @@ mindsets:
     rival_focus_ahead: 0.5
     rival_info_every_n_laps: 3
     call_budget_per_lap: 15
+    plan_soft_bias_s: 0.0
+    plan_pick: confidence
+    mc_every_n_laps: 1
+    sector_loss_call_ms: 100
+    battle_conserve_calls: true
     phrasing: advisory
   aggressive:
     inherits: balanced
@@ -175,6 +186,12 @@ mindsets:
     rival_focus_ahead: 0.8
     rival_info_every_n_laps: 1
     call_budget_per_lap: unlimited
+    plan_soft_bias_s: 1.5
+    plan_pick: gain
+    mc_every_n_laps: 1
+    plan_mc_sims: 1000
+    sector_loss_call_ms: 50
+    battle_conserve_calls: false
     phrasing: directive
 ```
 

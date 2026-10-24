@@ -71,8 +71,8 @@ afterwards for false positives. Tune from the recording, not from another run.
 - Fuel, ERS and Overtake-mode calls, penalties, blue flags and weather crossover.
 - Rival scope filter with the pit-exit rival projection.
 - `pitwall replay --mask-restricted`: replay single-player recordings with rival fuel/ERS/wear zeroed, to prove the model degrades gracefully for league races.
-- Wire balanced / aggressive mindsets (defend and survive after M3) through the rules.
-  Make them switchable from the dashboard and record them per call.
+- Wire balanced and aggressive mindsets through the planners, setup advisor, and rules.
+  Make them switchable from the dashboard and record them per call. Keep defend and survive for later.
 - 2026 energy management as a modelled per-lap budget rather than a threshold rule.
 - Watchdog and mid-race crash recovery from SQLite plus the tail of the recording.
 - First friends-league race (3 humans + AI grid) recorded and reviewed.

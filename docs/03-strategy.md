@@ -223,6 +223,7 @@ includes each first-stop lap within `plan_window_s` of the best.
   race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
   SC/VSC pit loss, re-derived every recompute until taken.
 - A and B are frozen as compound sequences; their timing is re-optimised every lap.
+  A mindset change rebuilds A and B from the new ranking. Stops already made stay done.
   When degradation spread is known, the engine switches after `plan_off_s` when the
   probability that the best plan is faster exceeds `plan_switch_prob`.
   With no spread, the engine uses the fixed `plan_switch_s` threshold.

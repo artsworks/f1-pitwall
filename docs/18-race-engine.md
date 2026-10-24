@@ -423,9 +423,11 @@ class PitPlan:
 
 @dataclass(frozen=True, slots=True)
 class McResult:
-    modal_lap: int
+    modal_offset: int | None
     agree: float
     sims: int
+    q_modal_offset: int | None = None
+    lap_num: int = 0
 
 def plan_agreement(...) -> McResult | None
 
@@ -486,6 +488,7 @@ Rules gate on
 `pit_plan_risk <= mode.position_loss_risk_max`.
 
 On green laps, the engine runs `plan_mc_sims` simulations over the same candidate range as `optimise`.
+`mc_every_n_laps` (default 1) sets how often the result is recomputed. With n > 1, the engine reuses one result per n-lap block within a stint.
 Each simulation samples current linear degradation with `sigma = max(deg_sd_ms_per_lap, plan_mc_deg_sd_frac * deg_ms_per_lap)`.
 When the fit is a blend with positive posterior spread and at least `max(deg_min_laps, 3)` laps, sample a Student-t value instead.
 Use `df = max(fit.n - 2, 3)` and scale `max(deg_posterior_sd_ms_per_lap, sigma)`.
@@ -509,6 +512,10 @@ Select the first minimum. Choose no stop when the best stop delta is nonnegative
 `plan_mc_risk_quantile` defaults to `0.8`. The engine clamps it to `0.001` to `0.999` before calculating quantiles.
 `q_modal_lap` is the first minimum candidate lap when its quantile is negative, or zero otherwise.
 `PitPlan.mc_risk_lap` carries this downside stop lap. The modal lap and agreement keep their existing meanings.
+`McResult` stores stop offsets from the computing lap, with `None` for no stop.
+Its `modal_lap` and `q_modal_lap` properties report absolute laps for that computing lap.
+When a cached result is reused, `scale_plan` adds the offsets to the current lap.
+The cache key includes the effective `pit_gain_min_s`, so a changed gain threshold forces a new result.
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
 For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
 Plans outside the candidate range get agreement `1.0`.
@@ -574,7 +581,8 @@ changes over the trailing valid run for the current car ahead. The history keeps
 `catch_prob` estimates the chance of reaching the attack gap before the flag. It uses
 the closing-rate mean and `closing_sd_s * sqrt(laps_remaining)` when spread is known.
 Without spread, the catch result stays deterministic. `chase_prob` is `catch_prob`
-times the pass rate with overtake active. Snapshot fields include `battle_catch_prob`
+times the overtake-active pass rate scaled by the driver confidence factor. It is 0 when
+that scaled rate is below the attack floor. Snapshot fields include `battle_catch_prob`
 and `battle_chase_prob`.
 
 **Episodes and the pass model.** Each attacking / defending spell against one rival is an
