@@ -1,6 +1,6 @@
 # Debrief screen: the post-session review page
 
-Status: **design only** (M4 target). Static sample mockup: `docs/mockups/debrief.html`.
+Status: **D1 to D3 built** in M4, D4 partial, LLM prose deferred (section 8). Static sample mockup: `docs/mockups/debrief.html`.
 It uses self-contained vanilla HTML/CSS/JS and needs no build step. All numbers are
 illustrative. Each panel's source line names the real table or artifact behind it.
 

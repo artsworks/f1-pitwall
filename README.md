@@ -4,7 +4,7 @@ A race engineer for F1 26. It reads the game's UDP telemetry, keeps a model of
 the session, decides what is worth saying, says it over your headset, and shows
 it on a second monitor. Pitwall runs on your local network. Nothing leaves it.
 
-- **Status and milestones:** [docs/status.md](docs/status.md)
+- **Status and known gaps:** [docs/status.md](docs/status.md)
 - **Docs site:** https://artsworks.github.io/f1-pitwall/
 - **Lessons from live sessions (ADRs):** [docs/adr/](docs/adr/README.md)
 
@@ -204,7 +204,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 
 | Document | Contents |
 |---|---|
-| [`docs/status.md`](docs/status.md) | Milestone progress, what works today, what is next |
+| [`docs/status.md`](docs/status.md) | What works today, what is next, known gaps |
 | [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, after-session commands, recording profiles, replay |
 | [`docs/07-replay-and-debug.md`](docs/07-replay-and-debug.md) | Recording format, replay CLI, A/B diffing, live diagnostics |
 | [`docs/08-configuration.md`](docs/08-configuration.md) | Settings model, verbosity presets, balanced/aggressive mindset |
@@ -233,9 +233,9 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | Document | Contents |
 |---|---|
 | [`docs/adr/`](docs/adr/README.md) | Architecture decision records: what live sessions taught us |
-| [`docs/05-roadmap.md`](docs/05-roadmap.md) | Milestones M0–M4 as vertical slices |
+| [`docs/05-roadmap.md`](docs/05-roadmap.md) | Next work and later options; the finished M0–M4 plan as history |
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts |
-| [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md), [`06`](docs/06-direction-changes.md), [`10`](docs/10-angles-not-yet-considered.md), [`11`](docs/11-open-questions.md), [`14`](docs/14-adversarial-review.md) | Planning history: review of the first plan, direction changes, open angles and questions, adversarial review |
+| [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md), [`06`](docs/06-direction-changes.md), [`10`](docs/10-angles-not-yet-considered.md), [`11`](docs/11-open-questions.md), [`14`](docs/14-adversarial-review.md) | History / early planning (kept for reference): review of the first plan, direction changes, open angles and questions, adversarial review |
 
 ## Versioning
 
