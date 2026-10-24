@@ -20,7 +20,6 @@ mindsets:
     plan_soft_bias_s: 0.0
     plan_pick: confidence
     mc_every_n_laps: 1
-    plan_mc_sims: 500
     sector_loss_call_ms: 100
     battle_conserve_calls: true
     phrasing: advisory
