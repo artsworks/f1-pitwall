@@ -15,8 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
-from pitwall.derive import is_synthetic_uid
-from pitwall.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
+from pitwall.learning.hindsight import Outcome, grade_and_store, stint_compound, stints, stop_laps
 from pitwall.model.driver import (
     DRIVER_COMPOUND,
     GLOBAL_TRACK_ID,
@@ -24,6 +23,7 @@ from pitwall.model.driver import (
     confidence,
     learned_rating,
 )
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database
 
 DIGEST_VERSION = 4
@@ -158,7 +158,7 @@ def quality_trend(
     sessions: int = 10,
     pack_dir: Path | None = None,
 ) -> dict[str, Any]:
-    from pitwall.debrief import _session_label, _track_name
+    from pitwall.learning.debrief import _session_label, _track_name
 
     db_sessions = db.sessions()
     db_uids = {int(session["uid"]) for session in db_sessions}
@@ -196,7 +196,7 @@ def quality_trend(
             if len(rows) >= sessions:
                 break
     if sessions > 0 and pack_dir is not None:
-        from pitwall.learnpack import LEDGER_NAME, read_ledger
+        from pitwall.learning.learnpack import LEDGER_NAME, read_ledger
 
         for uid, session in read_ledger(pack_dir / LEDGER_NAME).items():
             if is_synthetic_uid(uid) or uid in db_uids:
@@ -274,7 +274,7 @@ def startup_scorecard(db: Database, pack_dir: Path | None = None) -> str:
     if pack_dir is None:
         minutes = db.track_minutes()
     else:
-        from pitwall.learnpack import pack_track_minutes
+        from pitwall.learning.learnpack import pack_track_minutes
 
         minutes = pack_track_minutes(db, pack_dir)
     report = quality_trend(db, pack_dir=pack_dir) if pack_dir is not None else quality_trend(db)

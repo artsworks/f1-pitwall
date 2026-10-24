@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from pitwall.derive import is_synthetic_uid
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.setup.rules import SetupRules
 from pitwall.setup.signals import signals_for_run
 from pitwall.setup.states import runs_for_session
@@ -43,10 +43,10 @@ def fold_setup_learning(
         return
     session = session or {}
     if rules is None:
-        from pitwall.hindsight import _setup_rules
+        from pitwall.learning.hindsight import _setup_rules
 
         rules = _setup_rules(None)
-    from pitwall.hindsight import GOOD, IGNORED, NA, WRONG
+    from pitwall.learning.hindsight import GOOD, IGNORED, NA, WRONG
 
     minimum_run_laps = float(th.get("setup_min_run_laps", 6))
     minimum_event_laps = int(th.get("setup_min_event_laps", 3))

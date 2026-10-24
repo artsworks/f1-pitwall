@@ -14,10 +14,10 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
-from pitwall.derive import is_synthetic_uid
-from pitwall.hindsight import linear_deg, stints, stop_laps
-from pitwall.learnpack import _atomic_write
+from pitwall.learning.hindsight import linear_deg, stints, stop_laps
+from pitwall.learning.learnpack import _atomic_write
 from pitwall.model.deg import DEG_FUEL_REF, fuel_burned_laps, scoped
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
 from pitwall.store.db import Database, LapRow
 

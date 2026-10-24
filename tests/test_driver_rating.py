@@ -4,9 +4,9 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
-from pitwall.digest import DIGEST_VERSION, build_digest, format_digest
 from pitwall.engine import build_engine
-from pitwall.maintenance import quarantine_bad, rebuild_stint_params
+from pitwall.learning.digest import DIGEST_VERSION, build_digest, format_digest
+from pitwall.learning.maintenance import quarantine_bad, rebuild_stint_params
 from pitwall.model.driver import (
     DRIVER_COMPOUND,
     GLOBAL_TRACK_ID,

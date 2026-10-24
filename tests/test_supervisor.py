@@ -10,10 +10,10 @@ import time
 from pathlib import Path
 from unittest.mock import Mock
 
-import pitwall.supervisor as supervisor_module
+import pitwall.ops.supervisor as supervisor_module
 from pitwall.config.models import EngineSettings
 from pitwall.net.recording import RecordingReader, RecordingRotator
-from pitwall.supervisor import WATCHDOG_ENV, Supervisor, read_recording_pointer
+from pitwall.ops.supervisor import WATCHDOG_ENV, Supervisor, read_recording_pointer
 
 
 def _free_port() -> int:

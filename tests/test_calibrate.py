@@ -5,11 +5,11 @@ import json
 import pytest
 import yaml
 
-from pitwall.calibrate import calibrate, write_overlays
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
 from pitwall.ingest import ingest_recordings
-from pitwall.propose import propose_thresholds
+from pitwall.learning.calibrate import calibrate, write_overlays
+from pitwall.learning.propose import propose_thresholds
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 

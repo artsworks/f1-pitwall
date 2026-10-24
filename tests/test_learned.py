@@ -4,10 +4,10 @@ import json
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
-from pitwall.learned import format_learned, learned_state
+from pitwall.learning.learned import format_learned, learned_state
+from pitwall.learning.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 from pitwall.store.db import Database
 from pitwall.strategy.battle import PASS_COMPOUND, PASS_OT
-from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 
 
 def test_learned_state_and_formatter_show_sources_and_feedback(tmp_path) -> None:
@@ -105,10 +105,10 @@ def test_stats_learned_json_and_empty_doctor_are_safe(tmp_path, monkeypatch, cap
     assert rendered["tracks"][0]["track_id"] == 7
     assert rendered["tracks"][0]["compounds"]["17"]["deg_ms_per_lap"]["source"] == "learned"
 
-    import pitwall.doctor
+    import pitwall.ops.doctor
     import pitwall.store.db
 
-    monkeypatch.setattr(pitwall.doctor, "run_doctor", lambda seconds: 7)
+    monkeypatch.setattr(pitwall.ops.doctor, "run_doctor", lambda seconds: 7)
     empty_db = Database(":memory:")
     monkeypatch.setattr(pitwall.store.db, "open_configured", lambda settings: empty_db)
     assert main(["doctor", "--seconds", "0"]) == 7

@@ -7,9 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from pitwall.cli import main
-from pitwall.derive import derived_uid
-from pitwall.digest import build_digest
-from pitwall.hindsight import (
+from pitwall.learning.digest import build_digest
+from pitwall.learning.hindsight import (
     grade_session,
     linear_deg,
     stint_compound,
@@ -17,9 +16,10 @@ from pitwall.hindsight import (
     stop_cost_s,
     stop_laps,
 )
+from pitwall.learning.tune import tune_from_db
+from pitwall.net.derive import derived_uid
 from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
-from pitwall.tune import tune_from_db
 
 UID = 42
 MEDIUM, HARD = 17, 18

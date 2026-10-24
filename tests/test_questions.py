@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuItemModel, MenuSettings, RuleDefModel
-from pitwall.derive import derived_uid
-from pitwall.propose import propose_thresholds
-from pitwall.questions import question_candidates
+from pitwall.learning.propose import propose_thresholds
+from pitwall.learning.questions import question_candidates
+from pitwall.net.derive import derived_uid
 from pitwall.rules.expr import expr_names
 from pitwall.store.db import Database
 

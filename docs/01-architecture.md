@@ -128,8 +128,10 @@ pitwall/
 │   ├── config/
 │   │   └── defaults/          # settings, rules, tracks, voice and menu data
 │   ├── input/
+│   ├── learning/              # offline grading, digests, calibration, tuning, debriefs
 │   ├── model/
 │   ├── net/
+│   ├── ops/                   # doctor, crash supervisor, cleanup
 │   ├── protocol/
 │   ├── rules/
 │   ├── server/

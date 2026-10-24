@@ -65,7 +65,7 @@ def _pitwall_version() -> str:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    from pitwall.derive import is_synthetic_uid
+    from pitwall.net.derive import is_synthetic_uid
     from pitwall.net.mask import mask_restricted
     from pitwall.store.db import Database
 
@@ -277,8 +277,8 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 
 def _stats_quality(args: argparse.Namespace) -> int:
-    from pitwall.digest import quality_trend
-    from pitwall.learnpack import pack_track_minutes
+    from pitwall.learning.digest import quality_trend
+    from pitwall.learning.learnpack import pack_track_minutes
 
     if args.sessions < 1:
         print("stats --quality: sessions must be positive")
@@ -321,7 +321,7 @@ def _stats_quality(args: argparse.Namespace) -> int:
 
 
 def _stats_learned(args: argparse.Namespace) -> int:
-    from pitwall.learned import format_learned, learned_state
+    from pitwall.learning.learned import format_learned, learned_state
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "stats --learned")
@@ -356,7 +356,7 @@ def _stats_census(args: argparse.Namespace) -> int:
 
 def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
-    from pitwall.derive import is_synthetic_uid
+    from pitwall.net.derive import is_synthetic_uid
 
     directory = Path(ConfigStore().current().recording.directory)
     found = list_recordings(directory)
@@ -435,7 +435,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_cleanup(args: argparse.Namespace) -> int:
     """List old files that are safe to delete; delete them after confirmation."""
-    from pitwall.cleanup import apply, learnable_recordings, plan_cleanup
+    from pitwall.ops.cleanup import apply, learnable_recordings, plan_cleanup
 
     settings = ConfigStore().current()
     db = db_from_args(args, settings)

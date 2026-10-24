@@ -13,11 +13,11 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
+from pitwall.learning.tune import load_cooldown_mults, record_diff, tune_from_db
 from pitwall.net.mask import mask_restricted
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.packets import parse
 from pitwall.store.db import Database
-from pitwall.tune import load_cooldown_mults, record_diff, tune_from_db
 
 from .race_synth import RaceSpec, race_stream
 from .synth import pack_packet, write_packet_stream

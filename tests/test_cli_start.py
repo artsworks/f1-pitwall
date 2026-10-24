@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pitwall.learnpack
+import pitwall.learning.learnpack
 from pitwall.audio.dispatcher import Call
 from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
 from pitwall.cli import common
@@ -201,7 +201,7 @@ def test_start_shutdown_pack_refreshes_only_current_session(tmp_path: Path, monk
         captured.update(kwargs)
         return Path(pack_dir) / "pack.json"
 
-    monkeypatch.setattr(pitwall.learnpack, "write_pack", fake_write_pack)
+    monkeypatch.setattr(pitwall.learning.learnpack, "write_pack", fake_write_pack)
 
     assert cli.cmd_start(_start_args()) == 0
     assert captured["refresh_quality"] == [uid]
@@ -212,9 +212,9 @@ def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, 
     uid = 654
     monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(uid))
 
-    import pitwall.maintenance
+    import pitwall.learning.maintenance
 
-    real_maintain = pitwall.maintenance.maintain
+    real_maintain = pitwall.learning.maintenance.maintain
     calls: list[tuple[bool | None, Any]] = []
 
     def tracked_maintain(*args: Any, **kwargs: Any) -> Any:
@@ -222,7 +222,7 @@ def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, 
         calls.append((kwargs.get("refit"), report))
         return report
 
-    monkeypatch.setattr(pitwall.maintenance, "maintain", tracked_maintain)
+    monkeypatch.setattr(pitwall.learning.maintenance, "maintain", tracked_maintain)
 
     assert cli.cmd_start(_start_args()) == 0
 
@@ -249,9 +249,9 @@ def test_start_session_end_upkeep_failure_still_saves_pack(
     uid = 987
     monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(uid))
 
-    import pitwall.maintenance
+    import pitwall.learning.maintenance
 
-    real_maintain = pitwall.maintenance.maintain
+    real_maintain = pitwall.learning.maintenance.maintain
     calls = 0
 
     def fail_session_end_maintain(*args: Any, **kwargs: Any) -> Any:
@@ -261,7 +261,7 @@ def test_start_session_end_upkeep_failure_still_saves_pack(
             raise sqlite3.OperationalError("boom")
         return real_maintain(*args, **kwargs)
 
-    monkeypatch.setattr(pitwall.maintenance, "maintain", fail_session_end_maintain)
+    monkeypatch.setattr(pitwall.learning.maintenance, "maintain", fail_session_end_maintain)
 
     assert cli.cmd_start(_start_args()) == 0
     lines = capsys.readouterr().out.splitlines()
@@ -280,7 +280,7 @@ def test_start_second_ctrl_c_during_pack_write_exits_quietly(
     def fake_write_pack(db: Any, pack_dir: Path, **kwargs: Any) -> Path:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(pitwall.learnpack, "write_pack", fake_write_pack)
+    monkeypatch.setattr(pitwall.learning.learnpack, "write_pack", fake_write_pack)
 
     assert cli.cmd_start(_start_args()) == 0
     assert "learning pack: interrupted" in capsys.readouterr().out

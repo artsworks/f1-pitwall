@@ -24,7 +24,7 @@ from pitwall.state.session import SessionState
 def cmd_diff(args: argparse.Namespace) -> int:
     import glob as _glob
 
-    from pitwall.diff import format_diff, run_diff
+    from pitwall.learning.diff import format_diff, run_diff
 
     settings = ConfigStore().current()
     recordings = [Path(f) for f in _resolve_recordings(args.recordings, settings)]
@@ -44,8 +44,8 @@ def cmd_diff(args: argparse.Namespace) -> int:
     )
     emit_json_or(args, result, format_diff)
     if args.record:
+        from pitwall.learning.tune import record_diff
         from pitwall.store.db import open_configured
-        from pitwall.tune import record_diff
 
         db = open_configured(settings)
         if db is not None:
@@ -63,7 +63,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 def cmd_tune(args: argparse.Namespace) -> int:
     """Fold graded calls + A/B results from SQLite into persisted rule tuning."""
-    from pitwall.tune import format_tune, tune_from_db
+    from pitwall.learning.tune import format_tune, tune_from_db
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "tune")
@@ -77,7 +77,7 @@ def cmd_tune(args: argparse.Namespace) -> int:
 
 def cmd_digest(args: argparse.Namespace) -> int:
     """Grade a session in hindsight and write its compact JSON digest."""
-    from pitwall.digest import build_digest, format_digest
+    from pitwall.learning.digest import build_digest, format_digest
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "digest")
@@ -112,7 +112,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
 
 
 def cmd_debrief(args: argparse.Namespace) -> int:
-    from pitwall.debrief import render_debrief
+    from pitwall.learning.debrief import render_debrief
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "debrief")
@@ -199,7 +199,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
 
 def cmd_evaluate(args: argparse.Namespace) -> int:
-    from pitwall.evaluate import evaluate_corpus
+    from pitwall.learning.evaluate import evaluate_corpus
 
     db = open_db(args, ConfigStore().current(), "evaluate")
     if db is None:
@@ -228,7 +228,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 def cmd_propose(args: argparse.Namespace) -> int:
     import yaml
 
-    from pitwall.propose import propose_thresholds
+    from pitwall.learning.propose import propose_thresholds
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "propose")
@@ -256,7 +256,7 @@ def cmd_propose(args: argparse.Namespace) -> int:
 
 
 def cmd_calibrate(args: argparse.Namespace) -> int:
-    from pitwall.calibrate import calibrate, format_calibration, write_overlays
+    from pitwall.learning.calibrate import calibrate, format_calibration, write_overlays
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "calibrate")
@@ -294,7 +294,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 def cmd_sessions(args: argparse.Namespace) -> int:
     """List stored sessions newest first, with their debrief link."""
-    from pitwall.derive import is_synthetic_uid
+    from pitwall.net.derive import is_synthetic_uid
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "sessions")
@@ -326,7 +326,7 @@ def cmd_sessions(args: argparse.Namespace) -> int:
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
-    from pitwall.learnpack import restore_pack
+    from pitwall.learning.learnpack import restore_pack
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "restore")
@@ -380,7 +380,7 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
 def cmd_bench(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
-    from pitwall.bench import (
+    from pitwall.learning.bench import (
         build_recording_index,
         build_scorecard,
         compare,
@@ -571,7 +571,7 @@ def _positive_int(value: str) -> int:
 
 
 def _bench_history(scenarios_dir: Path, window: int) -> int:
-    from pitwall.bench import trend
+    from pitwall.learning.bench import trend
 
     history = scenarios_dir / "history.jsonl"
     try:

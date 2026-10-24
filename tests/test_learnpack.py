@@ -9,9 +9,8 @@ import yaml
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
-from pitwall.derive import derived_uid
-from pitwall.digest import quality_trend, startup_scorecard
-from pitwall.learnpack import (
+from pitwall.learning.digest import quality_trend, startup_scorecard
+from pitwall.learning.learnpack import (
     LATEST_NAME,
     LEDGER_NAME,
     PACK_VERSION,
@@ -21,11 +20,12 @@ from pitwall.learnpack import (
     restore_pack,
     write_pack,
 )
-from pitwall.maintenance import LEARN_VERSION, maintain
+from pitwall.learning.maintenance import LEARN_VERSION, maintain
+from pitwall.learning.tune import tune_from_db
 from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
+from pitwall.net.derive import derived_uid
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database, ModelParam
-from pitwall.tune import tune_from_db
 
 
 def _lap(lap_num: int, lap_time_ms: int) -> LapSummary:
@@ -279,7 +279,7 @@ def test_session_end_quality_refresh_only_recomputes_requested_uid(
         called.append(uid)
         return {"fired": 1, "good": uid}
 
-    monkeypatch.setattr("pitwall.learnpack.call_quality", quality)
+    monkeypatch.setattr("pitwall.learning.learnpack.call_quality", quality)
 
     write_pack(db, pack_dir, refresh_quality=[401])
 
