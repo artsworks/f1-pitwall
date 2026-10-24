@@ -11,16 +11,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from statistics import NormalDist
 
+from pitwall.config.thresholds import threshold as _f
 from pitwall.model.deg import DegFit
 
 DRY = (16, 17, 18)
 LETTERS = {16: "S", 17: "M", 18: "H", 7: "I", 8: "W"}
 WORDS = {16: "soft", 17: "medium", 18: "hard", 7: "inter", 8: "wet"}
-
-
-def _f(src: Mapping[str, object], name: str, default: float) -> float:
-    v = src.get(name, default)
-    return float(v) if isinstance(v, int | float) else default
 
 
 def risk_quantile(th: Mapping[str, object]) -> float:

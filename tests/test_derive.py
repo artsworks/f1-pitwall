@@ -20,15 +20,12 @@ from pitwall.learning.learned import format_learned, learned_state
 from pitwall.learning.tune import tune_from_db
 from pitwall.model.deg import DegFit
 from pitwall.net.derive import (
-    SYNTHETIC_UID_TAG,
     InjectSafetyCar,
     Penalty,
     UidRewrite,
     WearScale,
     derive_recording,
     derive_records,
-    derived_uid,
-    is_synthetic_uid,
 )
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.header import (
@@ -45,6 +42,7 @@ from pitwall.protocol.packets import (
 from pitwall.state.lap import LapSummary
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database, _uid_to_sql
+from pitwall.store.uids import SYNTHETIC_UID_TAG, derived_uid, is_synthetic_uid
 from pitwall.strategy.battle import Episode
 
 from .race_synth import RaceSpec, race_stream

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import math
 import tempfile
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
@@ -17,7 +16,8 @@ from typing import Any, Literal
 import yaml
 
 from pitwall.config.models import Settings
-from pitwall.learning.tune import _AUTO_SKIP_METRICS
+from pitwall.config.thresholds import finite_number
+from pitwall.learning.tune import AUTO_SKIP_METRICS
 from pitwall.net.derive import MutationOp, derive_recording, ops_from_options
 from pitwall.net.recording import RecordingReader
 from pitwall.store.db import Database
@@ -391,7 +391,7 @@ def _real_metrics(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         if (
             label not in ("good", "wrong")
             or call_id.startswith("plan:")
-            or metric in _AUTO_SKIP_METRICS
+            or metric in AUTO_SKIP_METRICS
         ):
             continue
         key = (outcome.get("session_uid"), call_id)
@@ -463,12 +463,6 @@ def _check_signature(check: Mapping[str, Any]) -> tuple[str, tuple[str, ...], tu
         tuple(str(rule) for rule in check.get("rules", [])),
         tuple(int(lap) for lap in check.get("laps", [])),
     )
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
-        return None
-    return float(value)
 
 
 def _rule_accuracy(value: object) -> float | None:
@@ -558,8 +552,8 @@ def compare(
     if not isinstance(baseline_metrics, Mapping):
         baseline_metrics = {}
 
-    current_accuracy = _number(current_metrics.get("real_accuracy"))
-    baseline_accuracy = _number(baseline_metrics.get("real_accuracy"))
+    current_accuracy = finite_number(current_metrics.get("real_accuracy"))
+    baseline_accuracy = finite_number(baseline_metrics.get("real_accuracy"))
     current_graded = int(current_metrics.get("real_graded", 0))
     baseline_graded = int(baseline_metrics.get("real_graded", 0))
     if (
@@ -598,8 +592,8 @@ def compare(
                 )
 
     for metric in ("stop_cost_mae_s", "laps_of_pace_mae"):
-        current_value = _number(current_metrics.get(metric))
-        baseline_value = _number(baseline_metrics.get(metric))
+        current_value = finite_number(current_metrics.get(metric))
+        baseline_value = finite_number(baseline_metrics.get(metric))
         if (
             current_value is not None
             and baseline_value is not None
@@ -608,8 +602,8 @@ def compare(
         ):
             failures.append(f"{metric} rose from {baseline_value:.3f} to {current_value:.3f}")
 
-    baseline_score = _number(baseline_metrics.get("score"))
-    current_score = _number(current_metrics.get("score"))
+    baseline_score = finite_number(baseline_metrics.get("score"))
+    current_score = finite_number(current_metrics.get("score"))
     if baseline_score is not None and current_score is not None:
         improvements.append(
             f"score {baseline_score:.1f} -> {current_score:.1f} "
@@ -627,8 +621,8 @@ def compare(
             f"({current_accuracy - baseline_accuracy:+.4f})"
         )
     for metric in ("stop_cost_mae_s", "laps_of_pace_mae"):
-        baseline_value = _number(baseline_metrics.get(metric))
-        current_value = _number(current_metrics.get(metric))
+        baseline_value = finite_number(baseline_metrics.get(metric))
+        current_value = finite_number(current_metrics.get(metric))
         if baseline_value is not None and current_value is not None:
             improvements.append(
                 f"{metric} {baseline_value:.3f} -> {current_value:.3f} "
