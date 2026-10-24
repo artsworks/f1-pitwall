@@ -421,9 +421,11 @@ class PitPlan:
 
 @dataclass(frozen=True, slots=True)
 class McResult:
-    modal_lap: int
+    modal_offset: int | None
     agree: float
     sims: int
+    q_modal_offset: int | None = None
+    lap_num: int = 0
 
 def plan_agreement(...) -> McResult | None
 
@@ -508,6 +510,10 @@ Select the first minimum. Choose no stop when the best stop delta is nonnegative
 `plan_mc_risk_quantile` defaults to `0.8`. The engine clamps it to `0.001` to `0.999` before calculating quantiles.
 `q_modal_lap` is the first minimum candidate lap when its quantile is negative, or zero otherwise.
 `PitPlan.mc_risk_lap` carries this downside stop lap. The modal lap and agreement keep their existing meanings.
+`McResult` stores stop offsets from the computing lap, with `None` for no stop.
+Its `modal_lap` and `q_modal_lap` properties report absolute laps for that computing lap.
+When a cached result is reused, `scale_plan` adds the offsets to the current lap and clamps past stops to that lap.
+The cache key includes the effective `pit_gain_min_s`, so a changed gain threshold forces a new result.
 For a no-stop plan, agreement counts simulations with `min(delta) >= -mode.pit_gain_min_s`.
 For a candidate stop, agreement counts simulations within `mode.pit_gain_min_s` of their best stop.
 Plans outside the candidate range get agreement `1.0`.

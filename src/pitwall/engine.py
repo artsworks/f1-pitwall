@@ -93,7 +93,7 @@ from pitwall.strategy.battle import (
 )
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
-from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
+from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, _f, optimise
 from pitwall.strategy.plans import (
     DRY,
     CompoundModel,
@@ -1852,6 +1852,7 @@ class Engine:
                 lap_slot,
                 plan.lap,
                 age_slot,
+                _f(mode, "pit_gain_min_s", 1.0),
                 plan.plan,
                 plan.rival_idx,
                 mc_sims,
@@ -1878,7 +1879,7 @@ class Engine:
                     plan_name=plan.plan,
                     cover_gap_s=behind_gap_s,
                 )
-            plan = scale_plan(plan, self._plan_mc_cache[key])
+            plan = scale_plan(plan, self._plan_mc_cache[key], lap_num=snap.lap_num)
         plan, self._held_plan = _hold_cover_plan(
             self._held_plan, plan, snap, self._th("pit_min_laps_left", 2)
         )
