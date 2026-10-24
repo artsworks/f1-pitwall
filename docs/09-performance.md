@@ -107,8 +107,9 @@ Engine adapters must keep this measurement:
 3. Move the dashboard off the game PC to a phone or tablet. This option is free.
 4. Move the whole backend to a second machine on the LAN. A Pi 5 or mini-PC handles this
    comfortably. The design already allows this. It uses stdlib asyncio and a configurable
-   bind address. The Windows-only parts are SAPI speech and the keyboard hook. Put them
-   behind interfaces with a forwarder or Piper alternative.
+   bind address. The Windows-only parts are SAPI voice-command recognition and the
+   keyboard hook. Speech output uses Piper, which also runs on Linux. Put the
+   Windows-only parts behind interfaces with a forwarder.
 5. Rewrite ingest natively (Rust/Go) and keep the strategy engine in Python. The layout
    tables (DC-4) make this a transcription rather than a redesign.
 
