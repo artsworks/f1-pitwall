@@ -8,6 +8,7 @@ import yaml
 from pydantic import ValidationError
 
 from pitwall.calibrate import write_overlays
+from pitwall.config import loader
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, Settings, TrackOverlay, call_budget, resolve_mindset
 
@@ -199,3 +200,16 @@ def test_pressure_size_medium_above_large_is_rejected() -> None:
     with pytest.raises(ValidationError, match="pressure_size_large_c"):
         Settings(thresholds={"pressure_size_large_c": 2.0})
     Settings(thresholds={"pressure_size_medium_c": 0.0, "pressure_size_large_c": 0.5})
+
+
+def test_load_yaml_matches_safe_load_on_packaged_defaults() -> None:
+    files = sorted(loader.DEFAULTS_DIR.rglob("*.yaml"))
+    assert files
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        assert loader._load_yaml(text) == yaml.safe_load(text), f  # noqa: SLF001
+
+
+@pytest.mark.skipif(not hasattr(yaml, "CSafeLoader"), reason="libyaml not available")
+def test_yaml_loader_uses_libyaml() -> None:
+    assert loader._YAML_LOADER is yaml.CSafeLoader  # noqa: SLF001
