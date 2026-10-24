@@ -84,6 +84,27 @@ def test_shipped_mindsets_keep_per_lap_mc_key() -> None:
         assert resolve_mindset(settings.mindsets, mindset)["mc_every_n_laps"] == 1
 
 
+@pytest.mark.parametrize(("mindset", "expected"), [("balanced", 100), ("aggressive", 1000)])
+@pytest.mark.parametrize("threshold_sims", [100, 0])
+def test_shipped_mindsets_use_threshold_sims_unless_overridden(
+    mindset: str, expected: int, threshold_sims: int
+) -> None:
+    settings = ConfigStore(isolated=True).current()
+    mode = resolve_mindset(settings.mindsets, mindset)
+    result = _agreement(
+        fit=_fit(150.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        mode=mode,
+        th={**TH, "plan_mc_sims": threshold_sims},
+    )
+
+    if threshold_sims == 0:
+        assert result is None
+    else:
+        assert result is not None and result.sims == expected
+
+
 def test_posterior_sampling_changes_thin_fit_but_zero_sd_keeps_legacy_draw() -> None:
     thin = replace(_fit(300.0), n=5, source="blend", deg_posterior_sd_ms_per_lap=1000.0)
     without_posterior = replace(thin, deg_posterior_sd_ms_per_lap=0.0)
