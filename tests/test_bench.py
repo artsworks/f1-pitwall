@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 import yaml
 
-from pitwall.bench import (
+from pitwall.cli import main
+from pitwall.learning.bench import (
     ScenarioCheck,
     build_scorecard,
     compare,
@@ -17,8 +18,7 @@ from pitwall.bench import (
     parse_scenario,
     trend,
 )
-from pitwall.cli import main
-from pitwall.derive import ops_from_options
+from pitwall.net.derive import ops_from_options
 
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
@@ -84,7 +84,7 @@ def _card(
 
 
 def _patch_bench_run(monkeypatch, results: dict[str, str] | None = None) -> None:
-    import pitwall.bench as bench_module
+    import pitwall.learning.bench as bench_module
 
     scenario_results = results or {}
 

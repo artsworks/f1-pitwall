@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 
 from pitwall.cli import main
-from pitwall.derive import derived_uid
-from pitwall.digest import (
+from pitwall.learning.digest import (
     build_digest,
     call_quality,
     format_digest,
     quality_trend,
     startup_scorecard,
 )
+from pitwall.net.derive import derived_uid
 from pitwall.store.db import Database
 
 
@@ -168,7 +168,7 @@ def test_quality_trend_stops_after_recent_fired_sessions_and_orders_oldest_first
         called.append(uid)
         return {"fired": 1 if uid > 1 else 0, "good_pct": float(uid * 10)}
 
-    monkeypatch.setattr("pitwall.digest.call_quality", quality)
+    monkeypatch.setattr("pitwall.learning.digest.call_quality", quality)
 
     report = quality_trend(db, sessions=2)
 
@@ -216,7 +216,7 @@ def test_startup_scorecard_formats_minutes_and_quality_trend(monkeypatch) -> Non
         lambda: {"minutes": 1_234.4, "sessions": 57, "laps": 2_010},
     )
     monkeypatch.setattr(
-        "pitwall.digest.quality_trend",
+        "pitwall.learning.digest.quality_trend",
         lambda _db: {
             "sessions": [{"good_pct": 62.0}],
             "trend": {"delta_pct": 5.0, "sessions": 10},
@@ -238,7 +238,7 @@ def test_startup_scorecard_without_trend(monkeypatch) -> None:
         lambda: {"minutes": 1_234.4, "sessions": 57, "laps": 2_010},
     )
     monkeypatch.setattr(
-        "pitwall.digest.quality_trend",
+        "pitwall.learning.digest.quality_trend",
         lambda _db: {"sessions": [{"good_pct": 55.0}], "trend": None},
     )
 

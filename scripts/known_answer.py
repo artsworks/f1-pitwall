@@ -131,9 +131,9 @@ def run_one(seed: int, race_index: int = 0) -> dict[str, Any]:
     from tests.race_synth import race_stream
     from tests.synth import write_packet_stream
 
-    from pitwall.calibrate import calibrate
     from pitwall.config.loader import ConfigStore
     from pitwall.ingest import ingest_recordings
+    from pitwall.learning.calibrate import calibrate
     from pitwall.store.db import Database
 
     truth = make_truth(seed)
@@ -166,9 +166,9 @@ def run_pooled(seed: int, races: int) -> dict[str, Any]:
     from tests.race_synth import race_stream
     from tests.synth import write_packet_stream
 
-    from pitwall.calibrate import calibrate
     from pitwall.config.loader import ConfigStore
     from pitwall.ingest import ingest_recordings
+    from pitwall.learning.calibrate import calibrate
     from pitwall.store.db import Database
 
     base = replace(make_truth(seed), laps=52, noise_ms=120.0)

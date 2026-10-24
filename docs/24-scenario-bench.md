@@ -131,7 +131,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
 
-Rival stops, weather changes and red flags need a real recording or a generator. `src/pitwall/derive.py` cannot make them.
+Rival stops, weather changes and red flags need a real recording or a generator. `src/pitwall/net/derive.py` cannot make them.
 
 ## Starter scenarios
 

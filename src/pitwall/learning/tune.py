@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
-from pitwall.derive import is_synthetic_uid
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database
 
 TUNE_TRACK = -1  # model_params namespace for rule tuning (not track-specific)

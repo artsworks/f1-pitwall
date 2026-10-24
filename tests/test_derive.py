@@ -8,12 +8,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from pitwall.calibrate import calibrate
 from pitwall.cli import main
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
-from pitwall.debrief import render_debrief, render_debrief_index
-from pitwall.derive import (
+from pitwall.engine import build_engine, run_replay
+from pitwall.ingest import ingest_recordings
+from pitwall.learning.calibrate import calibrate
+from pitwall.learning.debrief import render_debrief, render_debrief_index
+from pitwall.learning.digest import DIGEST_VERSION
+from pitwall.learning.learned import format_learned, learned_state
+from pitwall.learning.tune import tune_from_db
+from pitwall.model.deg import DegFit
+from pitwall.net.derive import (
     SYNTHETIC_UID_TAG,
     InjectSafetyCar,
     Penalty,
@@ -24,11 +30,6 @@ from pitwall.derive import (
     derived_uid,
     is_synthetic_uid,
 )
-from pitwall.digest import DIGEST_VERSION
-from pitwall.engine import build_engine, run_replay
-from pitwall.ingest import ingest_recordings
-from pitwall.learned import format_learned, learned_state
-from pitwall.model.deg import DegFit
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.header import (
     HEADER_SIZE,
@@ -45,7 +46,6 @@ from pitwall.state.lap import LapSummary
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database, _uid_to_sql
 from pitwall.strategy.battle import Episode
-from pitwall.tune import tune_from_db
 
 from .race_synth import RaceSpec, race_stream
 from .synth import pack_packet, write_packet_stream

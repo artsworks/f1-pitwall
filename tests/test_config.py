@@ -7,9 +7,9 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from pitwall.calibrate import write_overlays
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuSettings, Settings, TrackOverlay, call_budget, resolve_mindset
+from pitwall.learning.calibrate import write_overlays
 
 
 def test_defaults_load() -> None:

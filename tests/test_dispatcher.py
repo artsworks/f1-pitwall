@@ -13,7 +13,7 @@ from pitwall.audio.dispatcher import Call, Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
-from pitwall.digest import call_quality
+from pitwall.learning.digest import call_quality
 from pitwall.metrics import Metrics
 from pitwall.rules.engine import Candidate, Rule, RuleEngine
 from pitwall.state.session import Snapshot

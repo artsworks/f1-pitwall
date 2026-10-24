@@ -12,17 +12,17 @@ from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import LearningSettings
 from pitwall.engine import build_engine
-from pitwall.maintenance import maintain, mid_session
-from pitwall.model.deg import DegFit, corner_wear_life, fit_is_clean, planning_fit, scoped
-from pitwall.state.lap import LapSummary
-from pitwall.store.db import Database
-from pitwall.tune import (
+from pitwall.learning.maintenance import maintain, mid_session
+from pitwall.learning.tune import (
     AB_PREFIX,
     COOLDOWN_PREFIX,
     TUNE_COMPOUND,
     TUNE_TRACK,
     load_cooldown_mults,
 )
+from pitwall.model.deg import DegFit, corner_wear_life, fit_is_clean, planning_fit, scoped
+from pitwall.state.lap import LapSummary
+from pitwall.store.db import Database
 
 SETTINGS = ConfigStore().current()
 TH = SETTINGS.thresholds
@@ -133,7 +133,7 @@ def test_maintain_keeps_global_rule_tuning() -> None:
 
 
 def test_failed_upkeep_rolls_back_params_and_version(monkeypatch) -> None:
-    import pitwall.maintenance
+    import pitwall.learning.maintenance
 
     db = Database(":memory:")
     db.set_param(7, 17, "deg_ms_per_lap", 120, 3)
@@ -142,7 +142,7 @@ def test_failed_upkeep_rolls_back_params_and_version(monkeypatch) -> None:
         raise sqlite3.OperationalError("injected database failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(pitwall.maintenance, "grade_ungraded", fail_grade)
+        patch.setattr(pitwall.learning.maintenance, "grade_ungraded", fail_grade)
         with pytest.raises(sqlite3.OperationalError):
             maintain(db, SETTINGS)
     assert db.get_param(7, 17, "deg_ms_per_lap").value == 120
@@ -327,12 +327,12 @@ def test_maintain_skips_malformed_existing_overlay(tmp_path) -> None:
 
 
 def test_maintain_writes_no_overlay_when_tune_fails(tmp_path, monkeypatch) -> None:
-    import pitwall.maintenance
+    import pitwall.learning.maintenance
 
     def fail_tune(db, th):
         raise sqlite3.OperationalError("injected tune failure")
 
-    monkeypatch.setattr(pitwall.maintenance, "tune_learned", fail_tune)
+    monkeypatch.setattr(pitwall.learning.maintenance, "tune_learned", fail_tune)
     overlay_dir = tmp_path / "tracks"
     with pytest.raises(sqlite3.OperationalError):
         maintain(_learning_db(), SETTINGS, overlay_dir=overlay_dir)

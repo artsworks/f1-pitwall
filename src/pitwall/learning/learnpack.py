@@ -12,8 +12,8 @@ from typing import Any
 
 import yaml
 
-from pitwall.derive import is_synthetic_uid
-from pitwall.digest import call_quality
+from pitwall.learning.digest import call_quality
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.store.db import Database, _uid_from_sql
 
 PACK_VERSION = 1

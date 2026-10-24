@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pitwall.derive import is_synthetic_uid
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
 
 _ADD_COLUMN_RE = re.compile(
@@ -315,7 +315,7 @@ MIGRATIONS: list[str] = [
     ALTER TABLE bookmarks ADD COLUMN kind TEXT NOT NULL DEFAULT 'hold';
     ALTER TABLE bookmarks ADD COLUMN context TEXT;
     """,
-    # 12: synthetic sessions from pitwall.derive.
+    # 12: synthetic sessions from pitwall.net.derive.
     """
     ALTER TABLE sessions ADD COLUMN synthetic INT DEFAULT 0;
     ALTER TABLE sessions ADD COLUMN derived_from TEXT DEFAULT '';

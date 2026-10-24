@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from pitwall.diff import format_diff, run_diff
+from pitwall.learning.diff import format_diff, run_diff
 
 from .synth import out_lap_scenario, write_packet_stream
 

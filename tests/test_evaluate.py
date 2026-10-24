@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pitwall.evaluate import evaluate_corpus
+from pitwall.learning.evaluate import evaluate_corpus
 from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 

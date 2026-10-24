@@ -14,10 +14,9 @@ from typing import Any
 
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
-from pitwall.derive import is_synthetic_uid
-from pitwall.digest import call_quality
-from pitwall.hindsight import stop_laps
-from pitwall.learned import learned_state
+from pitwall.learning.digest import call_quality
+from pitwall.learning.hindsight import stop_laps
+from pitwall.learning.learned import learned_state
 from pitwall.model.deg import fuel_burned_laps
 from pitwall.model.driver import (
     DRIVER_COMPOUND,
@@ -26,6 +25,7 @@ from pitwall.model.driver import (
     RATING,
     component_score,
 )
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain

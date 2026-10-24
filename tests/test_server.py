@@ -231,7 +231,7 @@ def test_win32com_not_imported_on_linux() -> None:
 
 
 def test_doctor_pass_lines(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pitwall import doctor
+    from pitwall.ops import doctor
 
     out = io.StringIO()
 

@@ -8,7 +8,7 @@ from dataclasses import fields
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _threshold
-from pitwall.hindsight import CENSORED, GOOD, IGNORED, NA, WRONG, Outcome
+from pitwall.learning.hindsight import CENSORED, GOOD, IGNORED, NA, WRONG, Outcome
 from pitwall.rules.expr import TrackedNamespace
 from pitwall.setup.rules import SetupRules, setup_fields_for_param
 from pitwall.setup.signals import RunSignals, signals_for_run, slip_base_for_session

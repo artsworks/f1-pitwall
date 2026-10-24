@@ -23,8 +23,8 @@ Implements `docs/05-roadmap.md` M3 on top of the M2 pipeline. Governing constrai
 | `pitwall.state.race` | race phase machine, rival scope, weather crossover, discipline facts |
 | `pitwall.strategy.pitwindow` | pit-window optimiser (undercut/overcut/free/cheap stop) |
 | `pitwall.mask` | `--mask-restricted` datagram transformer |
-| `pitwall.supervisor` | watchdog restarts the engine while the recorder continues |
-| `pitwall.tune` | `pitwall tune`: grades and A/B results → stored cooldown multipliers |
+| `pitwall.ops.supervisor` | watchdog restarts the engine while the recorder continues |
+| `pitwall.learning.tune` | `pitwall tune`: grades and A/B results → stored cooldown multipliers |
 
 ## SQLite migration 2
 
@@ -689,7 +689,7 @@ at `heartbeat.lap_num` through the current engine with the rule engine muted (di
 `quiet` for the tail) so state is rebuilt without re-speaking old calls. Logged as
 `{"outcome": "recovered", "from_lap": …, "tail_s": …}`.
 
-Watchdog (`pitwall.supervisor`). `pitwall start` is split into two processes, so the
+Watchdog (`pitwall.ops.supervisor`). `pitwall start` is split into two processes, so the
 recorder is the first thing to start and the last to stop:
 
 ```
