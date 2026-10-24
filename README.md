@@ -142,7 +142,7 @@ flowchart LR
     state --> rules[rules<br/>YAML, hysteresis]
     rules --> disp[dispatcher<br/>priority, cooldown, budget]
     disp --> log[(decision log<br/>.jsonl)]
-    disp --> speech[speech<br/>OmniVoice / Piper]
+    disp --> speech[speech<br/>Piper / OmniVoice]
     disp --> ws[WebSocket 8000] --> ui[dashboard<br/>2nd monitor]
     rec -.replay, same path.-> ingest
 ```
@@ -164,23 +164,23 @@ uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the da
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. |
-| `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. |
-| `pitwall update` | Pull the latest code and sync dependencies. |
-| `pitwall recordings` | List recordings newest first, with the # that other commands accept. |
-| `pitwall sessions` | List stored sessions newest first, to find a session uid. |
-| `pitwall replay` | Rerun a recording through the engine to see the calls it makes. |
-| `pitwall stats` | Show what a recording holds, or what Pitwall has learned so far. |
-| `pitwall digest` | Learn from recordings: grades each session and writes its digest. |
-| `pitwall debrief` | Export a session debrief as one HTML file you can open or share. |
-| `pitwall setup` | Suggest car setup changes from how a recorded run went. |
-| `pitwall evaluate` | Did the calls help? Compares calls-on vs calls-off outcomes. |
-| `pitwall calibrate` | Fit track priors for pace, tyre wear and fuel from your sessions. |
-| `pitwall voice` | Manage speech: list and download voices, pre-render phrases, test audio. |
-| `pitwall cleanup` | Reclaim disk space and keep recordings not learned yet. |
-| `pitwall report` | Bundle a recording and its decision log into a zip for a bug report. |
+| Command | What it does | Example |
+|---|---|---|
+| `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. | `pitwall start` |
+| `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. | `pitwall doctor --seconds 10` |
+| `pitwall update` | Update Pitwall: pull the latest code with git, then sync dependencies with uv. | `pitwall update` |
+| `pitwall recordings` | List recordings newest first, with the # that other commands accept. | `pitwall recordings` |
+| `pitwall sessions` | List stored sessions newest first, to find a session uid. | `pitwall sessions --limit 5` |
+| `pitwall replay` | Rerun a recording through the engine to see the calls it makes. | `pitwall replay latest --speed 4 --serve` |
+| `pitwall stats` | Show what a recording holds, or what Pitwall has learned so far. | `pitwall stats --learned` |
+| `pitwall digest` | Learn from recordings: grades each session and writes its digest. | `pitwall digest recordings/` |
+| `pitwall debrief` | Export a session debrief as one HTML file you can open or share. | `pitwall debrief` |
+| `pitwall setup` | Suggest car setup changes from how a recorded run went. | `pitwall setup --mode garage` |
+| `pitwall evaluate` | Did the calls help? Compares calls-on vs calls-off outcomes. | `pitwall evaluate` |
+| `pitwall calibrate` | Fit track priors for pace, tyre wear and fuel from your sessions. | `pitwall calibrate --track 7 --dry-run` |
+| `pitwall voice` | Manage speech: list and download voices, pre-render phrases, test audio. | `pitwall voice say "Box this lap"` |
+| `pitwall cleanup` | Reclaim disk space and keep recordings not learned yet. | `pitwall cleanup --learn` |
+| `pitwall report` | Bundle a recording and its decision log into a zip for a bug report. | `pitwall report latest -o report.zip` |
 
 Run `pitwall <command> -h` for its options and an example. Run `pitwall --help-all` to list
 the advanced commands for rule-engine work: `diff`, `bench`, `rules check`, `propose`,

@@ -34,36 +34,35 @@ on its second monitor during a session; the backend plays speech.
 **Target.** Friends-only online Grand Prix league. Test first on single-player Grand Prix,
 with a built-in feedback loop. See `13-league-multiplayer.md`.
 
+**Speech engine.** The backend speaks, so no browser click or focus change is needed.
+Piper is the default and OmniVoice is an option. The pilot used Windows SAPI, which is no
+longer a speech engine. Web Speech stays an option only for a phone client.
+
 **LLM.** None in the pilot and no API key. Since ADR 0009, an optional model may choose
 among rule-generated candidates. Start in shadow mode and promote only through the
 learning-loop gate. Phrasing stays deterministic.
 
 ## Still open
 
-### 1. Speech engine
-**Recommendation:** use Windows SAPI from the backend for the pilot, with no browser
-click or focus stealing. Use Piper in M4 if the voice disappoints. Use Web Speech only
-for an optional phone client.
-
-### 2. How opinionated should the assistant be by default?
+### 1. How opinionated should the assistant be by default?
 The mindset control partly answers this, but the baseline phrasing style remains open.
 **Recommendation:** directive for priority 1 ("box, box"), advisory with the number for
 priority 2 ("undercut is worth 1.2 — box lap 26 if you want it").
 
-### 3. Recordings in git?
+### 2. Recordings in git?
 Full sessions use ~0.85 GB per hour raw at 30 Hz. **Recommendation:** keep trimmed clips
 in the repo as test fixtures, full sessions outside git, and a retention policy in config.
 
-### 4. Is a spotter in scope, and when?
+### 3. Is a spotter in scope, and when?
 Proximity awareness has a different latency class and voice from strategy
 (`10-angles-not-yet-considered.md`, item 6). It is useful but is a second product.
 **Recommendation:** keep it architecturally separate and decide after M3.
 
-### 5. Career/season context worth modelling?
+### 4. Career/season context worth modelling?
 Component allocation, grid penalties, and championship position affect the right call.
 Most are absent from telemetry, so configure them. **Recommendation:** yes, but only
 after M3 and only if you play career rather than one-off races.
 
-### 6. Anything already installed to integrate with?
+### 5. Anything already installed to integrate with?
 SimHub, a wheel display, or a Streamdeck? The acknowledgement channel uses wheel button 2
 and spacebar. A Streamdeck could add a mindset toggle and quiet mode.

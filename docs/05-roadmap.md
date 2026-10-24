@@ -30,7 +30,7 @@ Proves the whole pipe before any strategy complexity.
   Car Damage, Event.
 - Session state, snapshot at 10 Hz, fast/slow EMAs, lap accumulator, validity tagging.
 - Minimal rule engine with hysteresis and cooldown; one rule: out-lap tyre temperature.
-- FastAPI WebSocket + the dashboard page with radio log; backend speech via Windows SAPI.
+- FastAPI WebSocket + the dashboard page with radio log; backend speech via Windows SAPI. Speech later moved to Piper, with OmniVoice as an option.
 - Measure trigger-to-speech-start latency in-process and add a packet-age indicator.
 - Layered config loading with validation and hot reload; config hash in the recording.
 - `pitwall doctor` (port, firewall, observed format/rate, UDP Action binding) and the tray app.

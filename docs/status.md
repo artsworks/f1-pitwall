@@ -2,14 +2,14 @@
 
 Where the build stands against the [roadmap](05-roadmap.md).
 
-_Last updated: live qualifying review, 6 Oct 2026._
+_Last updated: v0.34.0, 24 Oct 2026._
 
 ## Milestones
 
 | Milestone | State | Evidence |
 |---|---|---|
 | **M0** Capture and replay | Done | Live F1 26 practice recorded and replayed with matching packet census and decisions |
-| **M1** One call, end to end | Done | Parsers, state, rules, dispatcher, dashboard and SAPI speech run against the live game; the front-wing damage call fires on replay of the live recording and is audible. Out-lap tyre call measured at 41 to 101 ms on three live out-laps (6 Oct) |
+| **M1** One call, end to end | Done | Parsers, state, rules, dispatcher, dashboard and speech run against the live game. The first live run spoke through Windows SAPI. Speech now uses Piper. The front-wing damage call fires on replay of the live recording and is audible. Out-lap tyre call measured at 41 to 101 ms on three live out-laps (6 Oct) |
 | **M2** Qualifying | Done | Full Q1–Q3 driven with the assistant; decision logs reviewed and tuned. 6 Oct review added the next-lap invalidation call and gated the recharge nag |
 | **M3** Race | Done | 25% and 100% races recorded and reviewed; strategy fixes from the 100% race are in PR #21 |
 | **M4** Better over time | Done | Debrief produced from a real sprint and 100% race. Calibration, `pitwall evaluate` and `pitwall propose` run on recorded sessions |

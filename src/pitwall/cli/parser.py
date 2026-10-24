@@ -185,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub,
         "cleanup",
         "delete old recordings, packs and caches (asks first)",
-        "Reclaim disk space; keeps recordings not learned yet.",
+        "Reclaim disk space and keep recordings not learned yet.",
         "pitwall cleanup --learn",
     )
     cu.add_argument(
