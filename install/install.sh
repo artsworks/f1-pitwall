@@ -10,6 +10,12 @@ install_pitwall() {
             ;;
     esac
 
+    bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+    caller_has_bin_dir=0
+    case ":$PATH:" in
+        *":$bin_dir:"*) caller_has_bin_dir=1 ;;
+    esac
+
     uv_installed=0
     if command -v uv >/dev/null 2>&1; then
         uv_path=$(command -v uv)
@@ -168,7 +174,7 @@ install_pitwall() {
         n|N) ;;
         *)
             if ! (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall voice get </dev/null); then
-                printf '%s\n' "The natural voice did not download. Run uv run pitwall voice get later."
+                printf '%s\n' "The natural voice did not download. Run pitwall voice get later."
             fi
             ;;
     esac
@@ -193,6 +199,36 @@ install_pitwall() {
 
     quoted_dir=$(printf '%s' "$install_dir" | sed "s/'/'\\\\''/g")
     quoted_uv=$(printf '%s' "$uv_path" | sed "s/'/'\\\\''/g")
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/pitwall" <<EOF
+#!/bin/sh
+cd '$quoted_dir' || exit 1
+exec '$quoted_uv' run python -m pitwall "\$@"
+EOF
+    chmod +x "$bin_dir/pitwall"
+    quoted_bin=$(printf '%s' "$bin_dir" | sed "s/'/'\\\\''/g")
+    path_line="export PATH='$quoted_bin':\"\$PATH\""
+    path_rc_updated=
+    for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if [ -f "$rc_file" ]; then
+            if ! grep -F "$bin_dir" "$rc_file" >/dev/null 2>&1 \
+                && ! grep -F ".local/bin" "$rc_file" >/dev/null 2>&1; then
+                printf '\n%s\n' "$path_line" >> "$rc_file"
+            fi
+            if [ -z "$path_rc_updated" ]; then
+                path_rc_updated="$rc_file"
+            fi
+        fi
+    done
+    if [ ! -f "$HOME/.zshrc" ] && [ ! -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.profile" ]; then
+        if [ "$os" = "Darwin" ]; then
+            printf '%s\n' "$path_line" >> "$HOME/.zshrc"
+            path_rc_updated="$HOME/.zshrc"
+        else
+            printf '%s\n' "$path_line" >> "$HOME/.profile"
+            path_rc_updated="$HOME/.profile"
+        fi
+    fi
     if [ "$os" = "Darwin" ]; then
         desktop="$HOME/Desktop"
         mkdir -p "$desktop"
@@ -304,7 +340,17 @@ EOF
         printf '%s\n' "Guide: https://pitwall.arthurku.com/install.html#linux"
         printf 'Launchers: %s/start.sh and %s/update.sh\n' "$launcher_dir" "$launcher_dir"
     fi
-    printf '%s\n' "Start Pitwall from the Pitwall launcher. To update, use Pitwall Update."
+    printf '%s\n' "Start Pitwall from the Pitwall launcher or run: pitwall start"
+    printf '%s\n' "To update, use Pitwall Update or run: pitwall update"
+    if [ "$caller_has_bin_dir" -eq 0 ]; then
+        if [ -f "$HOME/.local/bin/env" ]; then
+            printf '%s\n' "To run pitwall in this terminal now, run: . \"\$HOME/.local/bin/env\" (or open a new terminal)."
+        elif [ -n "$path_rc_updated" ]; then
+            printf 'To run pitwall in this terminal now, run: . "%s" (or open a new terminal).\n' "$path_rc_updated"
+        else
+            printf '%s\n' "Open a new terminal to run pitwall from the command line."
+        fi
+    fi
 }
 
 install_pitwall

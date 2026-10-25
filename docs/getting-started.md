@@ -32,7 +32,7 @@ uv sync
 
 ## Update
 
-Use the Pitwall Update launcher, or run `uv run python -m pitwall update` from the install directory.
+Use the Pitwall Update launcher, or run `pitwall update`.
 
 ## Game settings
 
@@ -50,9 +50,9 @@ Use the Pitwall Update launcher, or run `uv run python -m pitwall update` from t
 ## Check, then run
 
 ```powershell
-uv run pitwall doctor --seconds 30   # while on track: expect "N datagrams, N accepted"
-uv run pitwall voice say             # you should hear a radio check
-uv run pitwall start                 # ingest + rules + speech + dashboard
+pitwall doctor --seconds 30   # while on track: expect "N datagrams, N accepted"
+pitwall voice say             # you should hear a radio check
+pitwall start                 # ingest + rules + speech + dashboard
 ```
 
 ## Speech engines
@@ -73,11 +73,11 @@ Download a Piper neural voice once (~60 MB, into `voices/`, git-ignored). Pitwal
 uses the voice automatically when available and plays nothing (`null`) if it cannot load:
 
 ```powershell
-uv run pitwall voice get                      # default: en_GB-northern_english_male-medium
-uv run pitwall voice get en_US-ryan-high      # try others; samples: https://rhasspy.github.io/piper-samples/
-uv run pitwall voice warm                     # pre-render common fixed phrases (default 150)
-uv run pitwall voice                          # list installed voices
-uv run pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
+pitwall voice get                      # default: en_GB-northern_english_male-medium
+pitwall voice get en_US-ryan-high      # try others; samples: https://rhasspy.github.io/piper-samples/
+pitwall voice warm                     # pre-render common fixed phrases (default 150)
+pitwall voice                          # list installed voices
+pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
 ```
 
 `speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 150.
@@ -123,8 +123,8 @@ A cold line waits up to `omnivoice_wait_s` (default 5 seconds) for OmniVoice aud
 Warm common lines or lines from a recording:
 
 ```powershell
-uv run pitwall voice warm --engine omnivoice
-uv run pitwall voice warm --engine omnivoice --replay latest
+pitwall voice warm --engine omnivoice
+pitwall voice warm --engine omnivoice --replay latest
 ```
 
 At startup, Pitwall waits for OmniVoice to render the startup lines before it speaks them.
@@ -132,7 +132,7 @@ It plays Piper only if that render fails.
 
 `voice warm --engine omnivoice` then prints the OmniVoice render times: min, p50, p95 and max. Warming uses the background path, so these times are the full render times. Use the p95 to choose `omnivoice_wait_s`. A cold line that takes longer than `omnivoice_wait_s` plays Piper instead.
 
-Add `--log-level` before the command to print more detail. `--log-level info` prints OmniVoice render stats every 10 renders. `--log-level debug` also prints each render time and the UDP packet counts every 10 seconds. For example, run `uv run pitwall --log-level debug start`.
+Add `--log-level` before the command to print more detail. `--log-level info` prints OmniVoice render stats every 10 renders. `--log-level debug` also prints each render time and the UDP packet counts every 10 seconds. For example, run `pitwall --log-level debug start`.
 
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
@@ -209,12 +209,12 @@ and leftover `.tmp` files. It never removes `learning-latest.json` or `track_led
 
 ### Reclaim disk space
 
-1. Run `uv run pitwall cleanup --days 1 --learn`. Cleanup learns recordings older than
+1. Run `pitwall cleanup --days 1 --learn`. Cleanup learns recordings older than
    `--days` and at least an hour old. It skips live recordings, then lists what it can delete.
-2. If you also want to delete recordings that Pitwall cannot learn, run `uv run pitwall cleanup --days 1 --include-unlearned`.
+2. If you also want to delete recordings that Pitwall cannot learn, run `pitwall cleanup --days 1 --include-unlearned`.
 
 When cleanup keeps unlearned recordings, it prints `learn them` and `delete anyway` commands.
-Run `uv run pitwall digest recordings/` to learn recordings without planning a cleanup.
+Run `pitwall digest recordings/` to learn recordings without planning a cleanup.
 
 Recordings named `session_0000000000000000_*` have no session UID. Digest reports
 `recording did not contain a session UID` for them and does not learn them. Cleanup
@@ -226,9 +226,9 @@ Cleanup never deletes split archives (`.zip.*` files) or decision logs such as
 
 | Command | Use |
 |---|---|
-| `uv run pitwall start` | `lite` profile: normal play, ~35 MB per 3 h |
-| `uv run pitwall start --record full` | every packet at 30 Hz, for debugging and tuning |
-| `uv run pitwall start --record minimal` / `off` | smallest useful capture / none |
+| `pitwall start` | `lite` profile: normal play, ~35 MB per 3 h |
+| `pitwall start --record full` | every packet at 30 Hz, for debugging and tuning |
+| `pitwall start --record minimal` / `off` | smallest useful capture / none |
 
 Files land in `recordings/` as `.f1bin.zst` + `.f1idx`; they stay on your PC and are
 never committed ([ADR 0005](adr/0005-recordings-never-committed.md)). It is safe to delete
@@ -241,7 +241,7 @@ Personal state (SQLite database, digests, profile, track overlays and certificat
 List recordings, newest first:
 
 ```powershell
-uv run pitwall recordings
+pitwall recordings
 ```
 
 Commands that take a recording (`replay`, `stats`, `report`, `digest`, `tune`,
@@ -255,8 +255,8 @@ Commands that take a recording (`replay`, `stats`, `report`, `digest`, `tune`,
 The command prints the file it picked. Replay offline:
 
 ```powershell
-uv run pitwall replay --speed 4 --serve          # newest recording
-uv run pitwall replay 2 --from-lap 10            # third newest, from lap 10
+pitwall replay --speed 4 --serve          # newest recording
+pitwall replay 2 --from-lap 10            # third newest, from lap 10
 ```
 
 `--from-lap` uses the `.f1idx` file next to the recording. Pitwall rebuilds that file

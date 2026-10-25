@@ -128,12 +128,38 @@ function Install-Pitwall {
             $voiceCode = $LASTEXITCODE
             Pop-Location
             if ($voiceCode -ne 0) {
-                Write-Host "The natural voice did not download. You can run uv run pitwall voice get later."
+                Write-Host "The natural voice did not download. You can run pitwall voice get later."
             }
         } else {
             Write-Host "The natural voice needs the Microsoft Visual C++ Redistributable."
             Write-Host "Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe, then run this installer again."
         }
+    }
+
+    $binDir = Join-Path $env:USERPROFILE ".local\bin"
+    New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+    $cmdPath = Join-Path $binDir "pitwall.cmd"
+    $cmdContent = "@echo off`r`nsetlocal`r`npushd `"$installDir`" || exit /b 1`r`n`"$uv`" run python -m pitwall %*`r`nset `"PITWALL_EXIT=%ERRORLEVEL%`"`r`npopd`r`nexit /b %PITWALL_EXIT%`r`n"
+    [System.IO.File]::WriteAllText($cmdPath, $cmdContent, [System.Text.UTF8Encoding]::new($false))
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $normalizedBin = $binDir.TrimEnd("\")
+    $userEntries = @()
+    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+        $userEntries = @($userPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    $hasBinInUserPath = $false
+    foreach ($entry in $userEntries) {
+        if ($entry.Trim().TrimEnd("\") -ieq $normalizedBin) {
+            $hasBinInUserPath = $true
+            break
+        }
+    }
+    if (-not $hasBinInUserPath) {
+        $newUserPath = ($userEntries + $binDir) -join ";"
+        [System.Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+    }
+    if (-not (($env:Path -split ";") | Where-Object { $_.Trim().TrimEnd("\") -ieq $normalizedBin })) {
+        $env:Path = "$binDir;$env:Path"
     }
 
     $escapedUv = $uv.Replace("'", "''")
@@ -203,6 +229,7 @@ function Install-Pitwall {
         Write-Host "Open http://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows-lan"
     }
-    Write-Host "Start Pitwall from the Pitwall shortcut. To update, use Pitwall Update."
+    Write-Host "Start Pitwall from the Pitwall shortcut or run: pitwall start"
+    Write-Host "To update, use Pitwall Update or run: pitwall update"
 }
 Install-Pitwall

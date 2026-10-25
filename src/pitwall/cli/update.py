@@ -122,14 +122,14 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
         return _error(
             out,
             "uv sync failed (see above). The code is updated. Stop Pitwall if it is running, "
-            "then run the update again. `uv run pitwall start` also finishes the sync. "
+            "then run the update again. `pitwall start` also finishes the sync. "
             f"{exc}",
         )
     if sync.returncode != 0:
         return _error(
             out,
             "uv sync failed (see above). The code is updated. Stop Pitwall if it is running, "
-            "then run the update again. `uv run pitwall start` also finishes the sync.",
+            "then run the update again. `pitwall start` also finishes the sync.",
         )
 
     try:

@@ -179,8 +179,7 @@ def run_doctor(
         _line(
             out,
             "INFO",
-            f"Piper voice {speech.piper_voice} not installed (natural voice): "
-            f"uv run pitwall voice get",
+            f"Piper voice {speech.piper_voice} not installed (natural voice): pitwall voice get",
         )
     if sys.platform == "win32":
         _line(out, "INFO", "firewall hint:")
