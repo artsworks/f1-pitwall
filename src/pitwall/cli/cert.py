@@ -161,6 +161,14 @@ def cmd_cert(args: argparse.Namespace) -> int:
         f"https://github.com/FiloSottile/mkcert"
     )
     print(f"Phone radio: open https://{ip}:8000/radio")
+    print(f"Keep {key} private. Do not copy or share it.")
+    if sys.platform != "win32":
+        print(f"Only your user should read it. Check with: ls -l {key} (expect -rw-------).")
+        print(f"If it shows more, run: chmod 600 {key}")
+    print(
+        f"pitwall cert rewrote the https_cert and https_key lines in {profile}. "
+        "Comments on those two lines are not kept."
+    )
     print("If this computer's LAN address changes, run pitwall cert again.")
     print(
         f'To turn HTTPS off, set connection.https_cert and connection.https_key to "" in {profile}.'

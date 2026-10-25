@@ -155,6 +155,13 @@ and the game PC, must trust the `rootCA.pem` that the command prints. The mkcert
 explains the phone-specific steps. The phone must trust the CA for wake lock, service worker
 and PWA installation.
 
+Keep `~/.pitwall/phone-key.pem` private. Do not copy or share it. mkcert makes the file
+readable by your user only. On a Mac or Linux, `ls -l ~/.pitwall/phone-key.pem` must show
+`-rw-------`. If it shows more, run `chmod 600 ~/.pitwall/phone-key.pem`.
+
+`pitwall cert` rewrites the `https_cert` and `https_key` lines in the profile. Comments on
+those two lines are removed. Comments on other lines stay.
+
 Open `https://<PC-LAN-IP>:8000/radio`. On the phone, choose **ARM PHONE RADIO** once.
 Install the page from the browser menu if desired. Use phone speech when backend speech is
 off to avoid duplicate calls. Browsers may suspend speech in background tabs, so keep the
