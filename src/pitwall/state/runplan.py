@@ -149,7 +149,6 @@ class RunTracker:
         "_lockups0",
         "_spins0",
         "_invalid",
-        "_lap_start_t",
         "cool_start_t",
         "next_lap_invalid",
         "cool_held",
@@ -171,7 +170,6 @@ class RunTracker:
         self._ers_start = 0.0
         self._lockups0 = self._spins0 = 0
         self._invalid = False
-        self._lap_start_t = 0.0
         self.cool_start_t = 0.0
         self.next_lap_invalid = False
         self.cool_held = False
@@ -188,7 +186,6 @@ class RunTracker:
         self._lockups0 = lockups
         self._spins0 = spins
         self._invalid = False
-        self._lap_start_t = t
         self.cool_held = False
         self._throttle_samples = 0
         self._full_throttle_samples = 0
