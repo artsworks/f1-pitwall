@@ -38,6 +38,10 @@ class PitwallServer(uvicorn.Server):
                 signal.signal(sig, handler)
 
     def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        if self.signalled:
+            self.force_exit = True
+        else:
+            print("shutting down... (Ctrl+C again to force quit)", flush=True)
         self.signalled = True
         self.should_exit = True
         if self._loop is not None:
@@ -54,12 +58,29 @@ class PitwallServer(uvicorn.Server):
             await super().shutdown(sockets)
         finally:
             timer.cancel()
+        shutdown_event = getattr(self.lifespan, "shutdown_event", None)
+        if self.force_exit and (shutdown_event is None or not shutdown_event.is_set()):
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.lifespan.shutdown(), CLOSE_GRACE_S)
 
     def _abort_connections(self) -> None:
         for connection in list(self.server_state.connections):
             transport = getattr(connection, "transport", None)
             if transport is not None:
                 transport.abort()
+
+    async def _wait_tasks_to_complete(self) -> None:
+        servers, self.servers = self.servers, []
+        try:
+            await super()._wait_tasks_to_complete()
+        finally:
+            self.servers = servers
+        # asyncio counts TLS handshakes that uvicorn never tracked.
+        # Do not wait out the graceful timeout for them.
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(
+                asyncio.gather(*(server.wait_closed() for server in servers)), CLOSE_GRACE_S
+            )
 
 
 async def serve_with(server: PitwallServer, *coros: Coroutine[Any, Any, Any]) -> None:
