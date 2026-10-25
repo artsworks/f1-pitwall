@@ -452,6 +452,8 @@ _CALL_OUTCOMES = {
 _U64 = 1 << 64
 _I64_MAX = (1 << 63) - 1
 _UID_COLUMNS = ("uid", "session_uid")
+# Unique indexes whose writers upsert, so a rebuild keeps the newest duplicate.
+_LATEST_ROW_INDEXES = frozenset({"laps_key"})
 
 
 def _uid_to_sql(uid: int) -> int:
@@ -616,9 +618,10 @@ class Database:
                                     f"{column} IS NOT NULL" for column in quoted_columns
                                 )
                                 group_by = ", ".join(quoted_columns)
+                                keep = "MAX" if index_name in _LATEST_ROW_INDEXES else "MIN"
                                 self._conn.execute(
                                     f"DELETE FROM {quoted_table} WHERE {not_null}"
-                                    f" AND rowid NOT IN (SELECT MIN(rowid) FROM {quoted_table}"
+                                    f" AND rowid NOT IN (SELECT {keep}(rowid) FROM {quoted_table}"
                                     f" WHERE {not_null} GROUP BY {group_by})"
                                 )
                         self._conn.execute(index_sql)
