@@ -177,6 +177,28 @@ def test_reconcile_creates_missing_table(tmp_path: Path) -> None:
     db.close()
 
 
+def test_reconcile_restores_laps_key_keeping_latest_row(tmp_path: Path) -> None:
+    path = tmp_path / "missing-laps-key.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS)}")
+    conn.execute("DROP INDEX laps_key")
+    conn.executemany(
+        "INSERT INTO laps(id, session_uid, car_idx, lap_num, lap_time_ms) VALUES(?,?,?,?,?)",
+        [(31, 7, 0, 3, 91_000), (32, 7, 0, 3, 92_000), (33, 7, 1, 3, 93_000)],
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    rows = db._conn.execute(  # noqa: SLF001
+        "SELECT id, lap_time_ms FROM laps WHERE session_uid=7 ORDER BY id"
+    ).fetchall()
+    assert [tuple(row) for row in rows] == [(32, 92_000), (33, 93_000)]
+    db.close()
+
+
 def test_reconcile_restores_unique_index_and_drops_duplicates(tmp_path: Path) -> None:
     path = tmp_path / "missing-unique-index.sqlite"
     conn = sqlite3.connect(path)

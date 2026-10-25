@@ -59,7 +59,6 @@ _Last updated: v0.34.0, 24 Oct 2026._
   design, so rule thresholds never change without human review.
 - There are no true calls-off sessions yet, so `pitwall evaluate` has no on/off
   comparison. `policy.quiet` still passes priority 1 calls.
-- Player lap rows in `laps` have no sector times, and lap rows are written twice per lap.
 - LLM debrief prose is deferred (item 21).
 - Windows shutdown and EA Javelin compatibility still need a local check. Linux
   tests cannot verify either.

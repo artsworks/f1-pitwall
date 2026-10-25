@@ -328,6 +328,13 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE laps ADD COLUMN traffic INTEGER DEFAULT 0;
     """,
+    # 15: one lap row per (session, car, lap); flashback redos keep the latest row.
+    """
+    DELETE FROM laps WHERE session_uid IS NOT NULL AND car_idx IS NOT NULL AND lap_num IS NOT NULL
+        AND id NOT IN (SELECT MAX(id) FROM laps WHERE session_uid IS NOT NULL
+        AND car_idx IS NOT NULL AND lap_num IS NOT NULL GROUP BY session_uid, car_idx, lap_num);
+    CREATE UNIQUE INDEX laps_key ON laps(session_uid, car_idx, lap_num);
+    """,
 ]
 
 
@@ -445,6 +452,8 @@ _CALL_OUTCOMES = {
 _U64 = 1 << 64
 _I64_MAX = (1 << 63) - 1
 _UID_COLUMNS = ("uid", "session_uid")
+# Unique indexes whose writers upsert, so a rebuild keeps the newest duplicate.
+_LATEST_ROW_INDEXES = frozenset({"laps_key"})
 
 
 def _uid_to_sql(uid: int) -> int:
@@ -609,9 +618,10 @@ class Database:
                                     f"{column} IS NOT NULL" for column in quoted_columns
                                 )
                                 group_by = ", ".join(quoted_columns)
+                                keep = "MAX" if index_name in _LATEST_ROW_INDEXES else "MIN"
                                 self._conn.execute(
                                     f"DELETE FROM {quoted_table} WHERE {not_null}"
-                                    f" AND rowid NOT IN (SELECT MIN(rowid) FROM {quoted_table}"
+                                    f" AND rowid NOT IN (SELECT {keep}(rowid) FROM {quoted_table}"
                                     f" WHERE {not_null} GROUP BY {group_by})"
                                 )
                         self._conn.execute(index_sql)
@@ -717,7 +727,26 @@ class Database:
                 " setup_state_id, traction_exits, slip_balance_deg, slip_samples,"
                 " lockups_front, lockups_rear, snaps_entry, snaps_exit,"
                 " wear_front_pct, wear_rear_pct, tyre_inner_front_c, tyre_inner_rear_c, traffic)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(session_uid, car_idx, lap_num) DO UPDATE SET"
+                " lap_time_ms=excluded.lap_time_ms, s1_ms=excluded.s1_ms,"
+                " s2_ms=excluded.s2_ms, compound=excluded.compound,"
+                " tyre_age_laps=excluded.tyre_age_laps,"
+                " fuel_remaining_laps=excluded.fuel_remaining_laps,"
+                " valid=excluded.valid, invalid_reasons=excluded.invalid_reasons,"
+                " wear_pct=excluded.wear_pct, fuel_kg=excluded.fuel_kg,"
+                " ers_deployed_j=excluded.ers_deployed_j, sc_status=excluded.sc_status,"
+                " weather=excluded.weather, tyre_inner_c=excluded.tyre_inner_c,"
+                " tyre_surface_c=excluded.tyre_surface_c, visual=excluded.visual,"
+                " setup_state_id=excluded.setup_state_id,"
+                " traction_exits=excluded.traction_exits,"
+                " slip_balance_deg=excluded.slip_balance_deg,"
+                " slip_samples=excluded.slip_samples, lockups_front=excluded.lockups_front,"
+                " lockups_rear=excluded.lockups_rear, snaps_entry=excluded.snaps_entry,"
+                " snaps_exit=excluded.snaps_exit, wear_front_pct=excluded.wear_front_pct,"
+                " wear_rear_pct=excluded.wear_rear_pct,"
+                " tyre_inner_front_c=excluded.tyre_inner_front_c,"
+                " tyre_inner_rear_c=excluded.tyre_inner_rear_c, traffic=excluded.traffic",
                 (
                     _uid_to_sql(session_uid),
                     car_idx,
@@ -1191,9 +1220,8 @@ class Database:
     def track_minutes(self) -> dict[str, Any]:
         row = self._conn.execute(
             "SELECT COALESCE(SUM(lap_time_ms), 0) AS total_ms, COUNT(*) AS laps,"
-            " COUNT(DISTINCT session_uid) AS sessions FROM laps WHERE id IN ("
-            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
-            " GROUP BY session_uid, lap_num)"
+            " COUNT(DISTINCT session_uid) AS sessions"
+            " FROM laps WHERE car_idx=0 AND lap_time_ms>0"
         ).fetchone()
         return {
             "minutes": round(int(row["total_ms"]) / 60_000, 1),
@@ -1205,9 +1233,8 @@ class Database:
         rows = self._rows(
             "SELECT l.session_uid AS uid, s.started_at, s.track_id, s.session_type,"
             " COUNT(*) AS laps, SUM(l.lap_time_ms) AS ms FROM laps l"
-            " LEFT JOIN sessions s ON s.uid=l.session_uid WHERE l.id IN ("
-            "SELECT MAX(id) FROM laps WHERE car_idx=0 AND lap_time_ms>0"
-            " GROUP BY session_uid, lap_num)"
+            " LEFT JOIN sessions s ON s.uid=l.session_uid"
+            " WHERE l.car_idx=0 AND l.lap_time_ms>0"
             " GROUP BY l.session_uid ORDER BY s.started_at, l.session_uid",
             (),
         )

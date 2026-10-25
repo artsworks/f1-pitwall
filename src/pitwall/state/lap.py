@@ -62,6 +62,8 @@ class LapAccumulator:
         self._sc_max = 0
         self._last_pit_status: int | None = None
         self._last_driver_status = 0
+        self._sector1_ms = 0
+        self._sector2_ms = 0
         self._tyre_inner_sum = 0.0
         self._tyre_inner_front_sum = 0.0
         self._tyre_inner_rear_sum = 0.0
@@ -119,12 +121,19 @@ class LapAccumulator:
         """Feed one Lap Data tick for the player. Returns a summary when the
         lap counter increments."""
         if current_lap_num == self._cur_lap and current_lap_num != 0:
+            self._sector1_ms = sector1_ms
+            self._sector2_ms = sector2_ms
             self._accumulate(pit_status, current_lap_invalid, safety_car_status, in_traffic)
             self._last_driver_status = driver_status
             return None
 
         # Lap boundary.
         finished = self._cur_lap
+        rewound = 0 < current_lap_num < finished
+        finished_sector1_ms = self._sector1_ms
+        finished_sector2_ms = self._sector2_ms
+        self._sector1_ms = sector1_ms
+        self._sector2_ms = sector2_ms
         self._cur_lap = current_lap_num
         prev_flags = (
             self._saw_pit,
@@ -159,6 +168,9 @@ class LapAccumulator:
 
         if finished == 0:
             return None  # first observation; nothing completed
+        if rewound:
+            self._saw_flashback = True
+            return None
         reasons: list[str] = []
         if finished == 1:
             reasons.append("first_lap")
@@ -177,8 +189,8 @@ class LapAccumulator:
         return LapSummary(
             lap_num=finished,
             lap_time_ms=last_lap_time_ms,
-            sector1_ms=sector1_ms,
-            sector2_ms=sector2_ms,
+            sector1_ms=finished_sector1_ms,
+            sector2_ms=finished_sector2_ms,
             compound=compound,
             tyre_age_laps=tyre_age_laps,
             fuel_remaining_laps_at_end=fuel_remaining_laps,
