@@ -10,6 +10,26 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.35.1 (2026-10-25)
+
+### Bug Fixes
+
+- **config**: Watch missing profile and rules dir so poll sees them return
+  ([#135](https://github.com/artsworks/f1-pitwall/pull/135),
+  [`b1f285e`](https://github.com/artsworks/f1-pitwall/commit/b1f285ebaf9ea563dd4517734e014917ce4a6df5))
+
+### Performance Improvements
+
+- **config**: Stop rescanning config folders on every poll
+  ([#135](https://github.com/artsworks/f1-pitwall/pull/135),
+  [`b1f285e`](https://github.com/artsworks/f1-pitwall/commit/b1f285ebaf9ea563dd4517734e014917ce4a6df5))
+
+### Refactoring
+
+- Remove dead code ([#131](https://github.com/artsworks/f1-pitwall/pull/131),
+  [`224b409`](https://github.com/artsworks/f1-pitwall/commit/224b40986ff87f22803a75724f64df0724ba6b13))
+
+
 ## v0.35.0 (2026-10-24)
 
 ### Bug Fixes
