@@ -18,8 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.enums import session_kind
+from pitwall.store.uids import is_synthetic_uid
 
 _ADD_COLUMN_RE = re.compile(
     r"^\s*ALTER\s+TABLE\s+([^\s]+)\s+ADD\s+COLUMN\s+([^\s]+)",

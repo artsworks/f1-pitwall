@@ -13,9 +13,9 @@ from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
 from pitwall.learning.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 from pitwall.model.deg import Prior, resolve_prior
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database
+from pitwall.store.uids import is_synthetic_uid
 from pitwall.strategy.battle import HOLD, PASS_COMPOUND, PASS_NO_OT, PASS_OT
 
 

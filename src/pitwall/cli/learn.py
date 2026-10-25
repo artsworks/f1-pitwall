@@ -294,7 +294,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 def cmd_sessions(args: argparse.Namespace) -> int:
     """List stored sessions newest first, with their debrief link."""
-    from pitwall.net.derive import is_synthetic_uid
+    from pitwall.store.uids import is_synthetic_uid
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "sessions")

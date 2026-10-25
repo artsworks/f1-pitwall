@@ -4,9 +4,9 @@ from pitwall.config.loader import ConfigStore
 from pitwall.config.models import MenuItemModel, MenuSettings, RuleDefModel
 from pitwall.learning.propose import propose_thresholds
 from pitwall.learning.questions import question_candidates
-from pitwall.net.derive import derived_uid
 from pitwall.rules.expr import expr_names
 from pitwall.store.db import Database
+from pitwall.store.uids import derived_uid
 
 
 def _rule() -> RuleDefModel:

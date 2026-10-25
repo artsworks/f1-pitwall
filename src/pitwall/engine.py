@@ -69,7 +69,6 @@ from pitwall.model.driver import (
     learned_rating,
 )
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_after_ms, ref_pace_ms
-from pitwall.net.derive import is_synthetic_uid
 from pitwall.net.recording import RecordingReader
 from pitwall.protocol.enums import session_kind
 from pitwall.rules.engine import STALENESS_DEFAULT_S, RuleEngine
@@ -80,6 +79,7 @@ from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window, widen_window
 from pitwall.store.db import LapRow
+from pitwall.store.uids import is_synthetic_uid
 from pitwall.strategy.battle import (
     HOLD,
     PASS_COMPOUND,
@@ -94,7 +94,7 @@ from pitwall.strategy.battle import (
 )
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
-from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, _f, optimise
+from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
     CompoundModel,
@@ -1863,7 +1863,7 @@ class Engine:
                 lap_slot,
                 plan.lap,
                 age_slot,
-                _f(mode, "pit_gain_min_s", 1.0),
+                threshold(mode, "pit_gain_min_s", 1.0),
                 plan.plan,
                 plan.rival_idx,
                 mc_sims,
