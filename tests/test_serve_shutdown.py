@@ -7,6 +7,8 @@ import signal
 import socket
 import subprocess
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -16,12 +18,16 @@ from fastapi import FastAPI
 from pitwall.server.serve import PitwallServer, serve_with
 
 
-def _server(ssl_certfile: str | None = None, ssl_keyfile: str | None = None) -> PitwallServer:
+def _server(
+    app: FastAPI | None = None,
+    ssl_certfile: str | None = None,
+    ssl_keyfile: str | None = None,
+) -> PitwallServer:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     config = uvicorn.Config(
-        FastAPI(),
+        app if app is not None else FastAPI(),
         host="127.0.0.1",
         port=port,
         timeout_graceful_shutdown=3,
@@ -79,6 +85,33 @@ def test_double_ctrl_c_exits_fast_without_traceback(
     assert signal.getsignal(signal.SIGINT) == previous_handler
 
 
+def test_double_ctrl_c_skips_stalled_lifespan_shutdown() -> None:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        await asyncio.Event().wait()
+
+    async def run() -> None:
+        server = _server(app=FastAPI(lifespan=lifespan))
+
+        async def side() -> None:
+            while True:
+                await asyncio.sleep(0.01)
+
+        serving = asyncio.create_task(serve_with(server, side()))
+        await _wait_started(server)
+        signal.raise_signal(signal.SIGINT)
+        signal.raise_signal(signal.SIGINT)
+        await serving
+
+    started = time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        asyncio.run(run())
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 1.5
+
+
 @pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl is required")
 def test_pending_tls_handshake_does_not_hit_graceful_timeout(
     caplog: pytest.LogCaptureFixture, tmp_path: Path
@@ -107,7 +140,7 @@ def test_pending_tls_handshake_does_not_hit_graceful_timeout(
     )
 
     async def run() -> None:
-        server = _server(str(cert_path), str(key_path))
+        server = _server(ssl_certfile=str(cert_path), ssl_keyfile=str(key_path))
 
         async def side() -> None:
             while True:

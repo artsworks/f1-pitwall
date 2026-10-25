@@ -60,7 +60,8 @@ class PitwallServer(uvicorn.Server):
             timer.cancel()
         shutdown_event = getattr(self.lifespan, "shutdown_event", None)
         if self.force_exit and (shutdown_event is None or not shutdown_event.is_set()):
-            await self.lifespan.shutdown()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.lifespan.shutdown(), CLOSE_GRACE_S)
 
     def _abort_connections(self) -> None:
         for connection in list(self.server_state.connections):
