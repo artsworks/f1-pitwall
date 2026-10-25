@@ -9,7 +9,6 @@ import sqlite3
 import sys
 import threading
 from collections.abc import Callable, Coroutine, Mapping, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.decision_log import DecisionLog
@@ -318,10 +317,10 @@ async def _serve(
         port=settings.connection.http_port,
         log_level="warning",
         timeout_graceful_shutdown=settings.connection.shutdown_timeout_s,
-        ssl_certfile=str(Path(settings.connection.https_cert).expanduser())
+        ssl_certfile=str(storage_path(settings.connection.https_cert))
         if settings.connection.https_cert and settings.connection.https_key
         else None,
-        ssl_keyfile=str(Path(settings.connection.https_key).expanduser())
+        ssl_keyfile=str(storage_path(settings.connection.https_key))
         if settings.connection.https_cert and settings.connection.https_key
         else None,
     )

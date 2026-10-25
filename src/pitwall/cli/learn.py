@@ -390,7 +390,9 @@ def cmd_bench(args: argparse.Namespace) -> int:
         run_scenario,
     )
 
-    scenarios_dir = Path(args.scenarios).expanduser()
+    scenarios_dir = (
+        Path(args.scenarios).expanduser() if args.scenarios else storage_path("scenarios")
+    )
     if args.accept_changes and not args.update_baseline:
         print("bench: --accept-changes requires --update-baseline")
         return 1

@@ -331,7 +331,11 @@ def build_parser() -> argparse.ArgumentParser:
         "Replay scenario files and check the calls against a baseline scorecard.",
         "pitwall bench --only brazil-sc-early",
     )
-    bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
+    bench.add_argument(
+        "--scenarios",
+        default=None,
+        help="scenario directory (default: scenarios/ in the Pitwall folder)",
+    )
     bench.add_argument(
         "--recordings",
         action="append",

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pitwall.cli.common import _resolve_recording
+from pitwall.cli.parser import build_parser
 from pitwall.config.loader import config_hash
 from pitwall.config.models import Settings
 from pitwall.config.paths import HOME_ENV, storage_path
@@ -55,3 +56,38 @@ def test_config_hash_ignores_home(tmp_path, monkeypatch):
     without = config_hash(Settings())
     monkeypatch.setenv(HOME_ENV, str(tmp_path))
     assert config_hash(Settings()) == without
+
+
+def _record_scenarios_dir(monkeypatch):
+    seen: list[Path] = []
+
+    def fake_load_scenarios(directory, only=None):
+        seen.append(directory)
+        raise ValueError("stop")
+
+    monkeypatch.setattr("pitwall.learning.bench.load_scenarios", fake_load_scenarios)
+    return seen
+
+
+def test_bench_scenarios_default_uses_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    seen = _record_scenarios_dir(monkeypatch)
+    monkeypatch.setenv(HOME_ENV, str(home))
+    monkeypatch.chdir(caller)
+    args = build_parser().parse_args(["bench"])
+    assert args.func(args) == 1
+    assert seen[0] == home / "scenarios"
+
+
+def test_bench_scenarios_flag_stays_caller_relative(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    seen = _record_scenarios_dir(monkeypatch)
+    monkeypatch.setenv(HOME_ENV, str(home))
+    monkeypatch.chdir(caller)
+    args = build_parser().parse_args(["bench", "--scenarios", "mine"])
+    assert args.func(args) == 1
+    assert seen[0] == Path("mine")

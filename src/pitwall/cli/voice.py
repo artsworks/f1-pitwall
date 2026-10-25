@@ -300,7 +300,12 @@ def _voice_channel(action: str, args: argparse.Namespace) -> int:
     if args.affinity is not None:
         update["affinity_mask"] = int(args.affinity, 0)
     voice = voice.model_copy(update=update)
-    log = Path(args.log or f"recordings/voice-spike-{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
+    log = (
+        Path(args.log)
+        if args.log
+        else storage_path(settings.recording.directory)
+        / f"voice-spike-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
+    )
     return run_spike(
         voice,
         log_path=log,
