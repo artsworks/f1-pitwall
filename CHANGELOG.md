@@ -10,6 +10,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.35.3 (2026-10-25)
+
+### Performance Improvements
+
+- **config**: Parse config YAML with the libyaml C loader
+  ([#134](https://github.com/artsworks/f1-pitwall/pull/134),
+  [`e1cd66b`](https://github.com/artsworks/f1-pitwall/commit/e1cd66befc6ad4b12429ec9aa453007f8962da54))
+
+### Testing
+
+- **config**: Pin YAML loader to safe loaders, assert libyaml in CI
+  ([#134](https://github.com/artsworks/f1-pitwall/pull/134),
+  [`e1cd66b`](https://github.com/artsworks/f1-pitwall/commit/e1cd66befc6ad4b12429ec9aa453007f8962da54))
+
+
 ## v0.35.2 (2026-10-25)
 
 ### Bug Fixes
