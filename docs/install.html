@@ -131,12 +131,13 @@ ol.steps p.small{font-size:14px;color:var(--muted)}
       <h3>Run the installer</h3>
       <p>Press Start, type <b>PowerShell</b> and open it. Paste this line and press Enter.</p>
       <div class="cmd"><code>irm https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.ps1 | iex</code><button type="button">Copy</button></div>
-      <p class="small">The installer adds uv and Git, downloads pitwall to <code>%USERPROFILE%\f1-pitwall</code> and makes the shortcuts. If it asks you to reopen PowerShell, do that and paste the line again.</p>
+      <p class="small">The installer adds uv and Git, downloads pitwall to <code>%USERPROFILE%\f1-pitwall</code> and makes the shortcuts. If it asks you to reopen PowerShell, do that and paste the line again. Answer <b>N</b> to the HTTPS question unless you want the phone radio page. You can run <code>pitwall cert</code> later.</p>
     </div><div class="term">Where does F1 26 run?
   1) On this PC
   2) On another PC or console on this network
 Choice [1]: <i>1</i>
-Download the natural voice (about 60 MB)? [Y/n]: <i>Y</i></div></li>
+Download the natural voice (about 60 MB)? [Y/n]: <i>Y</i>
+Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: <i>N</i></div></li>
     <li><div>
       <h3>Set the game's telemetry</h3>
       <p>In F1 26, open <b>Settings, Telemetry Settings</b>. Set the values shown. Restart the game after you change them.</p>
@@ -208,11 +209,12 @@ netsh advfirewall firewall add rule name="pitwall tcp" dir=in action=allow proto
       <h3>Run the installer on the Mac</h3>
       <p>Open <b>Terminal</b> (Applications, Utilities). Paste this line and press Enter.</p>
       <div class="cmd"><code>curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh</code><button type="button">Copy</button></div>
-      <p class="small">If macOS asks to install the Command Line Tools, click Install. Then paste the line again. Answer <b>1</b> to open the dashboard on the game PC.</p>
+      <p class="small">If macOS asks to install the Command Line Tools, click Install. Then paste the line again. Answer <b>1</b> to open the dashboard on the game PC. Answer <b>N</b> to the HTTPS question unless you want the phone radio page. You can run <code>pitwall cert</code> later.</p>
     </div><div class="term">Where will you open the dashboard?
   1) On the Windows game PC (second monitor)
   2) On this computer
 Choice [1]: <i>1</i>
+Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: <i>N</i>
 ...
 Game PC UDP IP Address: <b>192.168.1.30</b></div></li>
     <li><div>
@@ -273,11 +275,12 @@ Game PC UDP IP Address: <b>192.168.1.30</b></div></li>
       <h3>Run the installer on the Linux box</h3>
       <p>Open a terminal. Paste this line and press Enter.</p>
       <div class="cmd"><code>curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/install.sh | sh</code><button type="button">Copy</button></div>
-      <p class="small">If Git is missing, the installer asks for your password to install it. Answer <b>1</b> to open the dashboard on the game PC.</p>
+      <p class="small">If Git is missing, the installer asks for your password to install it. Answer <b>1</b> to open the dashboard on the game PC. Answer <b>N</b> to the HTTPS question unless you want the phone radio page. You can run <code>pitwall cert</code> later.</p>
     </div><div class="term">Where will you open the dashboard?
   1) On the Windows game PC (second monitor)
   2) On this computer
 Choice [1]: <i>1</i>
+Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: <i>N</i>
 ...
 Game PC UDP IP Address: <b>192.168.1.40</b></div></li>
     <li><div>

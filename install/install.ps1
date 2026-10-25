@@ -136,6 +136,31 @@ function Install-Pitwall {
         }
     }
 
+    $scheme = "http"
+    $certAnswer = Read-Host "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]"
+    if ($certAnswer -match "^(y|Y)$") {
+        if (
+            $null -eq (Get-Command mkcert -ErrorAction SilentlyContinue) -and
+            $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+        ) {
+            & winget install --id FiloSottile.mkcert -e --accept-source-agreements --accept-package-agreements
+            $env:Path = ($pathEntries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
+        }
+        if ($null -eq (Get-Command mkcert -ErrorAction SilentlyContinue)) {
+            Write-Host "mkcert is not installed. Install it later, then run: pitwall cert"
+        } else {
+            Push-Location $installDir
+            & $uv run pitwall cert
+            $certCode = $LASTEXITCODE
+            Pop-Location
+            if ($certCode -eq 0) {
+                $scheme = "https"
+            } else {
+                Write-Host "HTTPS setup did not finish. Run pitwall cert later."
+            }
+        }
+    }
+
     $binDir = Join-Path $env:USERPROFILE ".local\bin"
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
     $cmdPath = Join-Path $binDir "pitwall.cmd"
@@ -214,7 +239,7 @@ function Install-Pitwall {
     if ($whereGameRuns -eq "1") {
         Write-Host "F1 26 UDP IP Address: 127.0.0.1"
         Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
-        Write-Host "Open http://localhost:8000 on the second monitor."
+        Write-Host "Open ${scheme}://localhost:8000 on the second monitor."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows"
     } else {
         $lanConfig = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } | Select-Object -First 1
@@ -226,7 +251,7 @@ function Install-Pitwall {
         Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall udp" dir=in action=allow protocol=UDP localport=20777'
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall tcp" dir=in action=allow protocol=TCP localport=8000'
-        Write-Host "Open http://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."
+        Write-Host "Open ${scheme}://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows-lan"
     }
     Write-Host "Start Pitwall from the Pitwall shortcut or run: pitwall start"

@@ -169,6 +169,7 @@ pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
 | `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. | `pitwall start` |
 | `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. | `pitwall doctor --seconds 10` |
 | `pitwall update` | Update Pitwall: pull the latest code with git, then sync dependencies with uv. | `pitwall update` |
+| `pitwall cert` | Set up HTTPS for the phone radio page: makes a trusted certificate with mkcert. | `pitwall cert` |
 | `pitwall recordings` | List recordings newest first, with the # that other commands accept. | `pitwall recordings` |
 | `pitwall sessions` | List stored sessions newest first, to find a session uid. | `pitwall sessions --limit 5` |
 | `pitwall replay` | Rerun a recording through the engine to see the calls it makes. | `pitwall replay latest --speed 4 --serve` |

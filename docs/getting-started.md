@@ -143,17 +143,17 @@ You should hear "Pit wall online." at start.
 
 ## Phone radio over HTTPS
 
-On the Pitwall PC, install [mkcert](https://github.com/FiloSottile/mkcert) and run
-`mkcert -install`. Make a certificate for the PC's actual LAN IP:
+The installer offers this step. Otherwise install [mkcert](https://github.com/FiloSottile/mkcert)
+and run `pitwall cert` on the Pitwall PC. Use `--ip` to pick the address if the detected one
+is wrong.
 
-```powershell
-mkcert -cert-file "$HOME\.pitwall\phone.pem" -key-file "$HOME\.pitwall\phone-key.pem" 192.168.1.20 localhost 127.0.0.1
-```
-
-Replace `192.168.1.20` with the PC's IP. Set `connection.https_cert` and
-`connection.https_key` to those absolute PEM paths, then restart Pitwall. Install mkcert's
-local root CA on the phone. The mkcert README explains the phone-specific steps. The phone
-must trust the CA for wake lock, service worker, and PWA installation.
+`pitwall cert` makes `~/.pitwall/phone.pem` and `phone-key.pem` for the PC's LAN address,
+trusts the mkcert CA on this computer, and sets `connection.https_cert` and
+`connection.https_key` in `~/.pitwall/profile.yaml`. Restart Pitwall afterwards. The
+dashboard then only answers on https. Every other device that opens it, including the phone
+and the game PC, must trust the `rootCA.pem` that the command prints. The mkcert README
+explains the phone-specific steps. The phone must trust the CA for wake lock, service worker
+and PWA installation.
 
 Open `https://<PC-LAN-IP>:8000/radio`. On the phone, choose **ARM PHONE RADIO** once.
 Install the page from the browser menu if desired. Use phone speech when backend speech is

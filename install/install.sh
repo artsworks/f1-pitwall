@@ -179,6 +179,37 @@ install_pitwall() {
             ;;
     esac
 
+    scheme=http
+    printf '%s' "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: "
+    cert_answer=
+    { IFS= read -r cert_answer </dev/tty; } 2>/dev/null || cert_answer=
+    case "$cert_answer" in
+        y|Y)
+            if ! command -v mkcert >/dev/null 2>&1; then
+                if [ "$os" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+                    brew install mkcert </dev/null
+                elif [ "$os" = "Linux" ]; then
+                    if command -v apt-get >/dev/null 2>&1; then
+                        sudo apt-get install -y mkcert
+                    elif command -v dnf >/dev/null 2>&1; then
+                        sudo dnf install -y mkcert
+                    elif command -v pacman >/dev/null 2>&1; then
+                        sudo pacman -S --noconfirm mkcert
+                    elif command -v zypper >/dev/null 2>&1; then
+                        sudo zypper install -y mkcert
+                    fi
+                fi
+            fi
+            if ! command -v mkcert >/dev/null 2>&1; then
+                printf '%s\n' "mkcert is not installed. Install it later, then run: pitwall cert"
+            elif (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert </dev/null); then
+                scheme=https
+            else
+                printf '%s\n' "HTTPS setup did not finish. Run pitwall cert later."
+            fi
+            ;;
+    esac
+
     lan_ip=
     if [ "$os" = "Linux" ]; then
         if command -v ip >/dev/null 2>&1; then
@@ -323,12 +354,12 @@ EOF
     if [ "$dashboard_choice" -eq 1 ]; then
         printf '%s\n' "Open the dashboard on the game PC to hear it in your headset."
         if [ "$lan_ip_fallback" -eq 1 ]; then
-            printf '%s\n' "On the game PC, open http://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
+            printf '%s\n' "On the game PC, open $scheme://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
         else
-            printf 'On the game PC, open http://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$lan_ip"
+            printf 'On the game PC, open %s://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$scheme" "$lan_ip"
         fi
     else
-        printf '%s\n' "On this computer, open http://localhost:8000/?sound=1 and click ENABLE SOUND. No PIN is needed. The voice plays here."
+        printf '%s\n' "On this computer, open $scheme://localhost:8000/?sound=1 and click ENABLE SOUND. No PIN is needed. The voice plays here."
     fi
     if [ "$os" = "Darwin" ]; then
         printf '%s\n' "If macOS asks whether python may accept incoming network connections, click Allow."
