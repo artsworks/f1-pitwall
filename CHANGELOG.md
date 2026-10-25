@@ -10,6 +10,19 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.35.2 (2026-10-25)
+
+### Bug Fixes
+
+- **store**: One lap row per (session, car, lap); persist player sector times
+  ([#136](https://github.com/artsworks/f1-pitwall/pull/136),
+  [`ecf822c`](https://github.com/artsworks/f1-pitwall/commit/ecf822c08d2988ac0757bfa291c339ab8b78296d))
+
+- **store**: Schema reconcile keeps the newest row when rebuilding laps_key
+  ([#136](https://github.com/artsworks/f1-pitwall/pull/136),
+  [`ecf822c`](https://github.com/artsworks/f1-pitwall/commit/ecf822c08d2988ac0757bfa291c339ab8b78296d))
+
+
 ## v0.35.1 (2026-10-25)
 
 ### Bug Fixes
