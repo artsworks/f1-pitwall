@@ -11,12 +11,12 @@ import yaml
 
 from pitwall.config.models import Settings
 from pitwall.config.thresholds import threshold as _th
-from pitwall.derive import is_synthetic_uid
+from pitwall.learning.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 from pitwall.model.deg import Prior, resolve_prior
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database
 from pitwall.strategy.battle import HOLD, PASS_COMPOUND, PASS_NO_OT, PASS_OT
-from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK
 
 
 def _yaml(path: Path) -> dict[str, Any]:
@@ -27,7 +27,7 @@ def _yaml(path: Path) -> dict[str, Any]:
 
 
 def _track_overlays(track_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    defaults_dir = Path(__file__).parent / "config" / "defaults" / "tracks"
+    defaults_dir = Path(__file__).parents[1] / "config" / "defaults" / "tracks"
     defaults = _yaml(defaults_dir / f"{track_id}.yaml")
     user = _yaml(Path.home() / ".pitwall" / "tracks" / f"{track_id}.yaml")
     effective = {**defaults, **user}

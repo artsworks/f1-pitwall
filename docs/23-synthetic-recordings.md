@@ -2,7 +2,7 @@
 
 This spike tested how synthetic recordings from real sessions can add rule-learning
 scenarios without changing physics priors. Scenario mutations now run through
-`pitwall bench`. The mutation code remains in `src/pitwall/derive.py`.
+`pitwall bench`. The mutation code remains in `src/pitwall/net/derive.py`.
 
 _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 
@@ -28,7 +28,7 @@ See [Scenario bench](24-scenario-bench.md) for the scenario format.
 ### Identity
 
 A derived session has a new session UID. The top 24 bits are the tag `0xF1DE57`. The low 40 bits are a hash of the source UID and mutation list, so the same scenario and mutations always give the same UID.
-`src/pitwall/derive.py` writes the new UID to the file header and every packet header because the engine reads UIDs from packet headers.
+`src/pitwall/net/derive.py` writes the new UID to the file header and every packet header because the engine reads UIDs from packet headers.
 The spec asked for the top bit as the tag. That does not work, because game UIDs are random 64-bit values and about half of them have the top bit set.
 A real UID matches the 24-bit tag about once in 16 million sessions.
 

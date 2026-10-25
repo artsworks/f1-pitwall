@@ -6,8 +6,8 @@ import pytest
 
 from pitwall.cli import main
 from pitwall.config.loader import ConfigStore
-from pitwall.digest import DIGEST_VERSION
 from pitwall.ingest import Ingest, expand_paths, header_calls_mode, ingest_recordings
+from pitwall.learning.digest import DIGEST_VERSION
 from pitwall.model.deg import DegFit
 from pitwall.protocol.header import PACKET_SIZES, PacketId, parse_header
 from pitwall.state.lap import LapSummary
@@ -386,7 +386,7 @@ def test_ingest_isolates_file_errors_and_caps_findings(tmp_path: Path) -> None:
 
 @pytest.mark.replay
 def test_failed_ingest_rolls_back_learning_and_retries_complete_recording(tmp_path, monkeypatch):
-    import pitwall.digest
+    import pitwall.learning.digest
 
     db = Database(tmp_path / "learn.sqlite")
     uid = 0xF1261005
@@ -397,7 +397,7 @@ def test_failed_ingest_rolls_back_learning_and_retries_complete_recording(tmp_pa
         raise OSError("injected digest failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(pitwall.digest, "build_digest", fail_digest)
+        patch.setattr(pitwall.learning.digest, "build_digest", fail_digest)
         result = ingest_recordings(db, [str(recording)], settings, out_dir=tmp_path / "digests")
     assert result[0].status == "error"
     assert _counts(db) == (0, 0, 0, 0, 0)

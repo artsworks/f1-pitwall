@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from pitwall.calibrate import calibrate
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine, run_replay
 from pitwall.ingest import ingest_recordings
+from pitwall.learning.calibrate import calibrate
+from pitwall.learning.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK, tune_from_db
 from pitwall.store.db import Database
-from pitwall.tune import COOLDOWN_PREFIX, TUNE_COMPOUND, TUNE_TRACK, tune_from_db
 
 from .corpus_synth import generate_learning_corpus
 from .race_synth import RaceSpec, race_stream

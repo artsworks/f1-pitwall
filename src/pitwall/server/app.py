@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from pitwall.config.loader import ConfigStore
 from pitwall.config.thresholds import threshold
-from pitwall.debrief import render_debrief, render_debrief_index
+from pitwall.learning.debrief import render_debrief, render_debrief_index
 from pitwall.metrics import Metrics
 from pitwall.protocol.enums import session_kind, session_label, weekend_order
 from pitwall.server.hub import PROTOCOL_VERSION, Hub

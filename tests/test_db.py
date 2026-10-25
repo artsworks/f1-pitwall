@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 
-from pitwall.derive import derived_uid
 from pitwall.model.deg import DegFit
+from pitwall.net.derive import derived_uid
 from pitwall.state.lap import LapAccumulator, LapSummary
 from pitwall.store.db import MIGRATIONS, Database
 

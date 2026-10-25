@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pitwall.calibrate import calibrate
 from pitwall.config.models import Settings
-from pitwall.diff import run_diff
-from pitwall.questions import question_candidates
+from pitwall.learning.calibrate import calibrate
+from pitwall.learning.diff import run_diff
+from pitwall.learning.questions import question_candidates
 from pitwall.store.db import Database
 
 

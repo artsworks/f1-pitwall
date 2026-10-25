@@ -18,7 +18,7 @@ from pathlib import Path
 
 import zstandard
 
-from pitwall.learnpack import LATEST_NAME, LEDGER_NAME
+from pitwall.learning.learnpack import LATEST_NAME, LEDGER_NAME
 
 _SESSION = re.compile(r"^session_([0-9a-f]{16})_\d+\.f1(bin|bin\.zst|idx)$")
 _RECENT_S = 3600.0  # never touch files written in the last hour: a session may be live

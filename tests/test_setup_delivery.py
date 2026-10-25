@@ -11,8 +11,8 @@ import pytest
 from pitwall.cli import main
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
-from pitwall.debrief import render_debrief
 from pitwall.engine import build_engine
+from pitwall.learning.debrief import render_debrief
 from pitwall.setup.evaluate import Recommendation, evaluate, setup_modes
 from pitwall.setup.rules import parse_setup_rules
 from pitwall.setup.signals import RunSignals, session_signals

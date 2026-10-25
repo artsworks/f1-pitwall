@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 import zstandard
 
-from pitwall.cleanup import apply, learnable_recordings, plan_cleanup
 from pitwall.cli.parser import build_parser
 from pitwall.net.recording import compress_recording
+from pitwall.ops.cleanup import apply, learnable_recordings, plan_cleanup
 
 from .synth import mixed_session_packets, write_synthetic_recording
 

@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
-from pitwall.derive import is_synthetic_uid
 from pitwall.model.driver import fold_weight
+from pitwall.net.derive import is_synthetic_uid
 from pitwall.protocol.header import (
     HEADER_SIZE,
     PACKET_SIZES,
@@ -270,8 +270,8 @@ def _ingest_one(
     rules_dir: Path | None,
     isolated: bool,
 ) -> IngestResult:
-    from pitwall.digest import DIGEST_VERSION, build_digest
     from pitwall.engine import build_engine, run_replay
+    from pitwall.learning.digest import DIGEST_VERSION, build_digest
     from pitwall.net.recording import RecordingReader
 
     uid = 0

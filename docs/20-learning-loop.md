@@ -22,7 +22,7 @@ Learned values are data. A lesson ledger,
 automatic promotion and LLM debrief prose are not implemented; LLM prose is deferred
 (item 21).
 
-## 1. Hindsight grader (`pitwall.hindsight`)
+## 1. Hindsight grader (`pitwall.learning.hindsight`)
 
 Labels come only from SQLite. Each run recomputes the whole session, so reruns are
 idempotent. Store them in the `outcomes` table (migration 6):
