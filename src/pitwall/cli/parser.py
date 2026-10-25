@@ -566,6 +566,11 @@ def build_parser() -> argparse.ArgumentParser:
     cert.add_argument(
         "--ip", default=None, help="LAN address for the certificate (default: detected)"
     )
+    cert.add_argument(
+        "--status",
+        action="store_true",
+        help="print https or http, the scheme the dashboard uses now",
+    )
     cert.set_defaults(func=cmd_cert)
 
     everyday_epilog = (

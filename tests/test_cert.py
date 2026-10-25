@@ -49,9 +49,36 @@ def test_set_profile_cert_inserts_with_indent(tmp_path):
     assert data["connection"]["https_key"] == "k.pem"
 
 
+def test_set_profile_cert_replaces_empty_values(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text('connection:\n  https_cert: ""\n  https_key: ""\n')
+    assert set_profile_cert(profile, "c.pem", "k.pem") is True
+    data = yaml.safe_load(profile.read_text())
+    assert data["connection"]["https_cert"] == "c.pem"
+    assert data["connection"]["https_key"] == "k.pem"
+
+
+def test_set_profile_cert_replaces_empty_key_and_inserts_cert(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text('connection:\n  http_port: 8001\n  https_key: ""\n')
+    assert set_profile_cert(profile, "c.pem", "k.pem") is True
+    data = yaml.safe_load(profile.read_text())
+    assert data["connection"]["http_port"] == 8001
+    assert data["connection"]["https_cert"] == "c.pem"
+    assert data["connection"]["https_key"] == "k.pem"
+
+
 def test_set_profile_cert_existing_value_returns_false(tmp_path):
     profile = tmp_path / "profile.yaml"
-    profile.write_text("connection:\n  https_cert: old.pem\n")
+    profile.write_text('connection:\n  https_cert: "/mine.pem"\n')
+    before = profile.read_bytes()
+    assert set_profile_cert(profile, "c.pem", "k.pem") is False
+    assert profile.read_bytes() == before
+
+
+def test_set_profile_cert_flow_mapping_returns_false(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text('connection: {https_cert: "", https_key: ""}\n')
     before = profile.read_bytes()
     assert set_profile_cert(profile, "c.pem", "k.pem") is False
     assert profile.read_bytes() == before
@@ -103,3 +130,40 @@ def test_cmd_cert_happy_path(tmp_path, monkeypatch, capsys):
         ConfigStore().current().connection.https_cert
         == (Path.home() / ".pitwall" / "phone.pem").as_posix()
     )
+
+
+def test_cmd_cert_manual_edit_returns_1(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
+    monkeypatch.setattr("pitwall.cli.cert.shutil.which", lambda name: "mkcert")
+    profile = Path.home() / ".pitwall" / "profile.yaml"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text('connection:\n  https_cert: "/mine.pem"\n  https_key: "/mine-key.pem"\n')
+
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=str(tmp_path / "ca"))
+
+    monkeypatch.setattr("pitwall.cli.cert.subprocess.run", fake_run)
+    args = build_parser().parse_args(["cert", "--ip", "192.168.1.20"])
+    assert args.func(args) == 1
+    out = capsys.readouterr().out
+    assert "set these under connection:" in out
+    assert "HTTPS is set up" not in out
+
+
+def test_cmd_cert_status_http(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
+    monkeypatch.setattr("pitwall.cli.cert.shutil.which", lambda name: None)
+    args = build_parser().parse_args(["cert", "--status"])
+    assert args.func(args) == 0
+    assert capsys.readouterr().out.strip() == "http"
+
+
+def test_cmd_cert_status_https(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
+    monkeypatch.setattr("pitwall.cli.cert.shutil.which", lambda name: None)
+    profile = Path.home() / ".pitwall" / "profile.yaml"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text('connection:\n  https_cert: "c.pem"\n  https_key: "k.pem"\n')
+    args = build_parser().parse_args(["cert", "--status"])
+    assert args.func(args) == 0
+    assert capsys.readouterr().out.strip() == "https"

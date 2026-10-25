@@ -179,7 +179,6 @@ install_pitwall() {
             ;;
     esac
 
-    scheme=http
     printf '%s' "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: "
     cert_answer=
     { IFS= read -r cert_answer </dev/tty; } 2>/dev/null || cert_answer=
@@ -202,9 +201,7 @@ install_pitwall() {
             fi
             if ! command -v mkcert >/dev/null 2>&1; then
                 printf '%s\n' "mkcert is not installed. Install it later, then run: pitwall cert"
-            elif (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert </dev/null); then
-                scheme=https
-            else
+            elif ! (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert </dev/null); then
                 printf '%s\n' "HTTPS setup did not finish. Run pitwall cert later."
             fi
             ;;
@@ -346,6 +343,9 @@ EOF
         printf '%s\n' "Pitwall doctor returned an error."
     }
     printf '%s\n' "0 datagrams is normal until you are on track."
+
+    scheme=$(CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert --status </dev/null 2>/dev/null | tail -n 1)
+    case "$scheme" in https) ;; *) scheme=http ;; esac
 
     printf '\n%s\n' "Pitwall is installed in $install_dir."
     printf '%s\n' "This computer plays no engineer audio. The voice plays in the browser tab that shows the dashboard."

@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 from pitwall.cli.serve import _lan_ip
-from pitwall.config.loader import profile_path
+from pitwall.config.loader import ConfigStore, profile_path
 
 
 def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
@@ -39,7 +39,11 @@ def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
         return False
     if connection.get("https_cert") == cert and connection.get("https_key") == key:
         return True
-    if "https_cert" in connection or "https_key" in connection:
+    wanted = {"https_cert": cert, "https_key": key}
+    if any(
+        field in connection and connection[field] not in ("", None, value)
+        for field, value in wanted.items()
+    ):
         return False
     lines = text.splitlines(keepends=True)
     matches = [
@@ -49,24 +53,43 @@ def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
     ]
     if len(matches) != 1:
         return False
-    indent = "  "
-    for line in lines[matches[0] + 1 :]:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+    conn_line = matches[0]
+    for field, value in wanted.items():
+        if field not in connection:
             continue
-        if line[:1].isspace():
-            indent = line[: len(line) - len(line.lstrip())]
-        break
-    lines[matches[0] + 1 : matches[0] + 1] = [
-        f"{indent}https_cert: {json.dumps(cert)}\n",
-        f"{indent}https_key: {json.dumps(key)}\n",
-    ]
+        hits = [
+            i
+            for i, line in enumerate(lines[conn_line + 1 :], start=conn_line + 1)
+            if re.match(rf"\s+{field}:", line)
+        ]
+        if len(hits) != 1:
+            return False
+        hit = hits[0]
+        indent = lines[hit][: len(lines[hit]) - len(lines[hit].lstrip())]
+        lines[hit] = f"{indent}{field}: {json.dumps(value)}\n"
+    missing = [(field, value) for field, value in wanted.items() if field not in connection]
+    if missing:
+        indent = "  "
+        for line in lines[conn_line + 1 :]:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if line[:1].isspace():
+                indent = line[: len(line) - len(line.lstrip())]
+            break
+        lines[conn_line + 1 : conn_line + 1] = [
+            f"{indent}{field}: {json.dumps(value)}\n" for field, value in missing
+        ]
     profile.write_text("".join(lines), encoding="utf-8")
     return True
 
 
 def cmd_cert(args: argparse.Namespace) -> int:
     """Make a trusted LAN certificate with mkcert and enable HTTPS."""
+    if args.status:
+        connection = ConfigStore().current().connection
+        print("https" if connection.https_cert and connection.https_key else "http")
+        return 0
     mkcert = shutil.which("mkcert")
     if mkcert is None:
         print("cert: mkcert is not installed. Install it, then run pitwall cert again.")
@@ -112,6 +135,14 @@ def cmd_cert(args: argparse.Namespace) -> int:
         print(f"cert: set these under connection: in {profile}, then restart Pitwall:")
         print(f'  https_cert: "{cert_s}"')
         print(f'  https_key: "{key_s}"')
+        return 1
+    effective = ConfigStore().current().connection
+    if effective.https_cert != cert_s or effective.https_key != key_s:
+        print(
+            f"cert: {profile} was updated, but the settings Pitwall loads still differ. "
+            "Check connection.https_cert and https_key, then run pitwall cert again."
+        )
+        return 1
     caroot = (
         subprocess.run(
             [mkcert, "-CAROOT"], capture_output=True, encoding="utf-8", check=False

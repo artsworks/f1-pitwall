@@ -136,7 +136,6 @@ function Install-Pitwall {
         }
     }
 
-    $scheme = "http"
     $certAnswer = Read-Host "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]"
     if ($certAnswer -match "^(y|Y)$") {
         if (
@@ -153,9 +152,7 @@ function Install-Pitwall {
             & $uv run pitwall cert
             $certCode = $LASTEXITCODE
             Pop-Location
-            if ($certCode -eq 0) {
-                $scheme = "https"
-            } else {
+            if ($certCode -ne 0) {
                 Write-Host "HTTPS setup did not finish. Run pitwall cert later."
             }
         }
@@ -233,6 +230,11 @@ function Install-Pitwall {
         Write-Host "Pitwall doctor returned an error."
     }
     Write-Host "0 datagrams is normal until you are on track."
+
+    Push-Location $installDir
+    $scheme = ([string](& $uv run pitwall cert --status | Select-Object -Last 1)).Trim()
+    Pop-Location
+    if ($scheme -ne "https") { $scheme = "http" }
 
     Write-Host ""
     Write-Host "Pitwall is installed in $installDir."
