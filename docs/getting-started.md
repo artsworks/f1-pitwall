@@ -235,8 +235,9 @@ never committed ([ADR 0005](adr/0005-recordings-never-committed.md)). It is safe
 them while pitwall is stopped.
 
 Personal state (SQLite database, digests, profile, track overlays and certificates) lives in
-`~/.pitwall`, outside git and shared by every checkout, while `recordings/`, `learnings/` and
-`voices/` sit in the working directory and git ignores them.
+`~/.pitwall`, outside git and shared by every checkout. The `recordings/`, `learnings/` and
+`voices/` folders sit in the install directory (the Pitwall folder), and git ignores them. The
+`pitwall` command keeps them there from any folder you run it in.
 
 List recordings, newest first:
 

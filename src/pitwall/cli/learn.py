@@ -15,6 +15,7 @@ from pitwall.cli.common import (
     open_db,
 )
 from pitwall.config.loader import ConfigStore
+from pitwall.config.paths import storage_path
 from pitwall.input.menu import shortcut_warnings, validate_related_rules, validate_shortcuts
 from pitwall.input.menu import validate as validate_menu
 from pitwall.rules.engine import RuleEngine
@@ -335,7 +336,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     counts = restore_pack(
         db,
         args.pack,
-        Path(settings.learning.pack_dir).expanduser(),
+        storage_path(settings.learning.pack_dir),
         args.overlay_dir,
     )
     summary = " ".join(f"{name}={count}" for name, count in counts.items())
@@ -411,7 +412,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         if args.recordings:
             recording_dirs = [Path(directory).expanduser() for directory in args.recordings]
         else:
-            recording_dirs = [Path(ConfigStore().current().recording.directory).expanduser()]
+            recording_dirs = [storage_path(ConfigStore().current().recording.directory)]
         index = build_recording_index(recording_dirs)
         scenario_rows: dict[str, dict[str, Any]] = {}
         outcomes: list[dict[str, Any]] = []

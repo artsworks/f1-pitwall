@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pitwall.audio.dispatcher import Call
 from pitwall.config.loader import ConfigStore
+from pitwall.config.paths import storage_path
 
 _MEASURED_WORDS = frozenset({"battle_pace_ahead", "battle_pace_behind"})
 _INTEGER = re.compile(r"-?\d+")
@@ -150,7 +151,7 @@ def _voice_piper(action: str, names: list[str]) -> int:
             print(f"downloaded {name} -> {path}")
         return 0
     have = installed_voices(speech)
-    print(f"voices in {speech.voices_dir}/ (configured: {speech.piper_voice}):")
+    print(f"voices in {storage_path(speech.voices_dir)}/ (configured: {speech.piper_voice}):")
     for name in have:
         print(f"  {'*' if name == speech.piper_voice else ' '} {name}")
     if not have:

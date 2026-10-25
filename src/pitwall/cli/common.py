@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pitwall.config.paths import storage_path
 from pitwall.net.recording import list_recordings
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ class RecordingNotFoundError(LookupError):
 def _resolve_recording(arg: str | None, settings: Settings) -> Path:
     """Resolve None/"latest", an index into `pitwall recordings`, a bare file name in
     the recordings folder, or a path."""
-    directory = Path(settings.recording.directory)
+    directory = storage_path(settings.recording.directory)
     if arg is None or arg == "latest":
         found = list_recordings(directory)
         if not found:

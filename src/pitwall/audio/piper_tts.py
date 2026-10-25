@@ -37,6 +37,7 @@ from pitwall.audio.wav_speaker import (
     to_wav as to_wav,
 )
 from pitwall.config.models import RuleDefModel, SpeechSettings
+from pitwall.config.paths import storage_path
 
 SUGGESTED_VOICES = (
     "en_GB-northern_english_male-medium",
@@ -48,11 +49,11 @@ PIPER_NOISE_SCALE = 0.667  # Piper's default phoneme noise; scaled per tone
 
 
 def voice_path(settings: SpeechSettings, name: str | None = None) -> Path:
-    return Path(settings.voices_dir) / f"{name or settings.piper_voice}.onnx"
+    return storage_path(settings.voices_dir) / f"{name or settings.piper_voice}.onnx"
 
 
 def installed_voices(settings: SpeechSettings) -> list[str]:
-    d = Path(settings.voices_dir)
+    d = storage_path(settings.voices_dir)
     if not d.is_dir():
         return []
     return sorted(p.stem for p in d.glob("*.onnx") if p.with_suffix(".onnx.json").exists())
@@ -61,7 +62,7 @@ def installed_voices(settings: SpeechSettings) -> list[str]:
 def download_voice(settings: SpeechSettings, name: str) -> Path:
     from piper.download_voices import download_voice as _download
 
-    d = Path(settings.voices_dir)
+    d = storage_path(settings.voices_dir)
     d.mkdir(parents=True, exist_ok=True)
     _download(name, d)
     return voice_path(settings, name)
@@ -82,7 +83,7 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
     path = voice_path(settings)
     if not path.exists():
         raise FileNotFoundError(
-            f"Piper voice {settings.piper_voice} not found in {settings.voices_dir}/ "
+            f"Piper voice {settings.piper_voice} not found in {storage_path(settings.voices_dir)}/ "
             f"(run: pitwall voice get {settings.piper_voice})"
         )
     voice = PiperVoice.load(path)
@@ -147,7 +148,7 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
     return WavSpeaker(
         renderer,
         player or default_player(),
-        cache_dir=Path(settings.voices_dir) / ".phrases",
+        cache_dir=storage_path(settings.voices_dir) / ".phrases",
     )
 
 

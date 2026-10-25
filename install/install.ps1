@@ -139,7 +139,7 @@ function Install-Pitwall {
     $binDir = Join-Path $env:USERPROFILE ".local\bin"
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
     $cmdPath = Join-Path $binDir "pitwall.cmd"
-    $cmdContent = "@echo off`r`nsetlocal`r`npushd `"$installDir`" || exit /b 1`r`n`"$uv`" run python -m pitwall %*`r`nset `"PITWALL_EXIT=%ERRORLEVEL%`"`r`npopd`r`nexit /b %PITWALL_EXIT%`r`n"
+    $cmdContent = "@echo off`r`nsetlocal`r`nset `"PITWALL_HOME=$installDir`"`r`n`"$uv`" run --project `"$installDir`" python -m pitwall %*`r`nexit /b %ERRORLEVEL%`r`n"
     [System.IO.File]::WriteAllText($cmdPath, $cmdContent, [System.Text.UTF8Encoding]::new($false))
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
     $normalizedBin = $binDir.TrimEnd("\")
