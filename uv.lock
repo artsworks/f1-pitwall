@@ -868,7 +868,7 @@ wheels = [
 
 [[package]]
 name = "pitwall"
-version = "0.35.3"
+version = "0.36.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

@@ -10,6 +10,50 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.36.0 (2026-10-27)
+
+### Bug Fixes
+
+- **web**: Render driver menu reply card from menu_answer call tags
+  ([#140](https://github.com/artsworks/f1-pitwall/pull/140),
+  [`320d603`](https://github.com/artsworks/f1-pitwall/commit/320d60361afc01fdb773b372ae1ef9b0ca06419a))
+
+- **web**: Stack race pit board cards on separate rows
+  ([#140](https://github.com/artsworks/f1-pitwall/pull/140),
+  [`320d603`](https://github.com/artsworks/f1-pitwall/commit/320d60361afc01fdb773b372ae1ef9b0ca06419a))
+
+### Chores
+
+- **server**: Bound forced-exit lifespan shutdown
+  ([#138](https://github.com/artsworks/f1-pitwall/pull/138),
+  [`b8f4a69`](https://github.com/artsworks/f1-pitwall/commit/b8f4a69e5f13aefd9c51e474e1a828e5a536ea74))
+
+- **server**: Print shutdown notice, skip untracked TLS wait
+  ([#138](https://github.com/artsworks/f1-pitwall/pull/138),
+  [`b8f4a69`](https://github.com/artsworks/f1-pitwall/commit/b8f4a69e5f13aefd9c51e474e1a828e5a536ea74))
+
+### Continuous Integration
+
+- Deploy Pages from a workflow that runs only on docs changes
+  ([#137](https://github.com/artsworks/f1-pitwall/pull/137),
+  [`4dd0e64`](https://github.com/artsworks/f1-pitwall/commit/4dd0e64bac25e6db435896568d163bfefc2e151f))
+
+### Features
+
+- **web**: Uplift dashboard to v2 layout, motion and infographic status
+  ([#140](https://github.com/artsworks/f1-pitwall/pull/140),
+  [`320d603`](https://github.com/artsworks/f1-pitwall/commit/320d60361afc01fdb773b372ae1ef9b0ca06419a))
+
+### Refactoring
+
+- Group learning and ops modules into packages
+  ([#132](https://github.com/artsworks/f1-pitwall/pull/132),
+  [`bb36ccc`](https://github.com/artsworks/f1-pitwall/commit/bb36ccc0a8b69379cff27690af8f00a42662da38))
+
+- Share threshold, number and UID helpers ([#133](https://github.com/artsworks/f1-pitwall/pull/133),
+  [`0d96ba8`](https://github.com/artsworks/f1-pitwall/commit/0d96ba81fd282754d95a271bf121f5e226196f21))
+
+
 ## v0.35.3 (2026-10-25)
 
 ### Performance Improvements
