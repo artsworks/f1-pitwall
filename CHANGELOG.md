@@ -10,6 +10,60 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.37.0 (2026-10-27)
+
+### Bug Fixes
+
+- **cert**: Don't crash on YAML aliases when keeping line comments
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **cert**: Fail when HTTPS is not enabled; installers read the effective scheme
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **cert**: Keep trailing comments on rewritten https lines
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **cert**: Restrict ~/.pitwall and private key permissions
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **cert**: Restrict ~/.pitwall before mkcert writes the key
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **cli**: Anchor certs, bench scenarios and voice spike log to the install dir
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **install**: Keep caller cwd and put the real bin dir on PATH
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+### Code Style
+
+- **cert**: Format certificate changes ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+### Documentation
+
+- **cert**: Tell users to keep the key private and that https line comments are not kept
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+### Features
+
+- **cli**: Pitwall cert sets up HTTPS for phone radio
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+- **install**: Global pitwall command on PATH
+  ([#139](https://github.com/artsworks/f1-pitwall/pull/139),
+  [`91c439b`](https://github.com/artsworks/f1-pitwall/commit/91c439b1fdcbafa1b2092f83ca8461b6536cd3e8))
+
+
 ## v0.36.0 (2026-10-27)
 
 ### Bug Fixes
