@@ -6,6 +6,12 @@
   var COMPOUNDS = { 16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET" };
   var COMP_SHORT = { SOFT: "SOFT", MEDIUM: "MED", HARD: "HARD", INTER: "INT", WET: "WET" };
   var SC_WORDS = { 1: "SAFETY CAR", 2: "VSC", 3: "FORMATION" };
+  var MENU_HEADS = {
+    tyres: "TYRES GONE?", pit: "PIT NOW?", fight: "FIGHT",
+    rain: "RAIN COMING?", push: "PUSH OR SAVE?", budget: "RADIO CALLS",
+    understeer: "UNDERSTEER", oversteer: "OVERSTEER",
+    mindset: "MINDSET", silent: "RADIO SILENT"
+  };
 
   var ws = null, lastSeq = null, backoff = 500, mismatched = false;
   var SILENT = "data:audio/wav;base64," +
@@ -757,10 +763,7 @@
       (inRacePit ? "IN PIT LANE" : "BOX NOW") + (ap ? " · PLAN " + ap.id : ""),
       s ? (win ? "window L" + win[0] + "–" + win[1] : "") + (s.pit_loss_s ? (win ? " · " : "") + "costs " + fmt(s.pit_loss_s, 0) + " s" : "") + exitHtml : "",
       "EXECUTION");
-    var replyCall = calls.length ? calls[calls.length - 1] : null;
-    var showReply = !!(replyCall && replyCall.reply && (ageS(replyCall) || 0) < 15);
-    card("c-reply", showReply, null, showReply ? replyCall.reply.head || "REPLY" : "",
-      showReply ? esc(replyCall.reply.line || replyCall.text || "") : "", "REPLY");
+    renderReplyCard();
     renderBattle(s, p.position);
     renderPlans(s, scLive);
     var info = el("c-info"), msg = null;
@@ -768,6 +771,24 @@
     else if (s && s.behind && s.behind.pitted) msg = "◦ INFO · " + String(s.behind.name || "car behind") + " pitted";
     else if (t.penalty_s) msg = "◦ INFO · penalty +" + t.penalty_s + " s" + (t.unserved ? " · " + t.unserved + " unserved" : "");
     if (info) { info.hidden = !msg; if (msg) info.textContent = msg; }
+  }
+
+  function renderReplyCard() {
+    var replyCall = null;
+    for (var i = calls.length - 1; i >= 0; i--) {
+      var rc = calls[i];
+      if (rc.audio !== "dropped" && (rc.reply || (rc.tags && rc.tags.indexOf("menu_answer") !== -1))) {
+        replyCall = rc;
+        break;
+      }
+    }
+    var showReply = !!(replyCall && (ageS(replyCall) || 0) < 15);
+    var replyKey = showReply && String(replyCall.rule_id || "").indexOf("menu:") === 0 ?
+      replyCall.rule_id.slice(5) : "";
+    var replyHead = showReply ? (replyCall.reply && replyCall.reply.head) ||
+      MENU_HEADS[replyKey] || (replyKey ? replyKey.replace(/_/g, " ").toUpperCase() : "REPLY") : "";
+    var replyLine = showReply ? esc((replyCall.reply && replyCall.reply.line) || replyCall.text || "") : "";
+    card("c-reply", showReply, null, replyHead, replyLine, "REPLY");
   }
 
   // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
@@ -1632,6 +1653,7 @@
   function render() {
     var stale = renderFreshness();
     renderRadio(stale);
+    renderReplyCard();
   }
 
   // -- protocol -------------------------------------------------------------
@@ -1658,18 +1680,19 @@
     } else if (m.type === "state" || m.type === "snapshot") {
       lastState = p; lastStateAt = performance.now();
       stateTimes.push(lastStateAt);
-      renderState(p);
       if (p.calls) {
         calls = p.calls.map(function (c) {
           return Object.assign({ audio: "dispatched" }, c);
         });
       }
+      renderState(p);
     } else if (m.type === "call") {
       if (!calls.some(function (c) { return c.id === p.id; })) {
         calls.push(Object.assign({ t: m.t, seq: m.seq, audio: "dispatched" }, p));
         if (calls.length > MAX_CALLS) calls = calls.slice(-MAX_CALLS);
         fx("call");
       }
+      renderReplyCard();
       phoneCall(p);
     } else if (m.type === "audio") {
       queueAudio(p);
