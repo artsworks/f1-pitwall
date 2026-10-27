@@ -3,8 +3,8 @@
 Status: **phases 1–6 implemented** in `web/`. M3 adds the zone F `strategy` block,
 backend-owned `fuel_delta_laps`, and the backend-owned page reset (§10). Call evidence awaits
 backend fields. The banner clears to "radio quiet" after 20 s / 30 s, then moves the call
-to the log. Static sample mockups live in `docs/mockups/` (`dashboard-1080p.html`,
-`dashboard-m3-stale.html`, `radio.html`). They use self-contained vanilla HTML/CSS with
+to the log. Sample mockups live in `docs/mockups/` (`dashboard-reimagined-v2.html`,
+`dashboard-reimagined.html`, `radio.html`). They use self-contained vanilla HTML/CSS with
 no build step. Open them in a browser. Call evidence, fuel targets, and damage values
 illustrate planned backend fields.
 
@@ -65,7 +65,7 @@ Use a landscape 16:9 layout with a fixed 12-column grid. Set the root font size 
 viewport width (`font-size: clamp(14px, 0.9vw, 24px)`) so 1080p and 1440p use nearly the
 same physical scale on a 27-inch panel. The live screen is one fixed page. Zones never
 reflow between sessions, and empty zones keep their space when values are absent.
-`docs/mockups/dashboard-reimagined.html` is the approved visual reference.
+`docs/mockups/dashboard-reimagined-v2.html` is the approved visual reference (`docs/mockups/dashboard-reimagined.html` is kept as the v1 baseline).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐

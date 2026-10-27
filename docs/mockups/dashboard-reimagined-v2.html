@@ -1,0 +1,1534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>pitwall mockup: reimagined dashboard v1 vs v2</title>
+<!--
+  INTERACTIVE V1 <-> V2 COMPARISON MOCKUP.
+  Self-contained vanilla HTML/CSS/JS, no CDN, no build step. Open directly in a browser.
+
+  How to compare V1 and V2:
+    - Click "V1 · CURRENT" or "V2 · REIMAGINED" in the floating switcher bar (or press Tab / 1 / 2)
+      to flip instantly in place on the exact same frame and scenario.
+    - Click "SPOT DIFFS (D)" (or press D) to outline every modified zone with numbered callout tags.
+    - Click "PAUSE SIM (Space)" to freeze the live race sim on any frame and flip V1 <-> V2.
+    - Click any Scenario pill in the switcher bar to inspect specific states in both V1 and V2:
+        1. Race Battle (default) — defending battle, hot cooling FR tyre, dry weather, tiles
+        2. Box + Pit Exit        — Execution BOX NOW card with pit-exit traffic, undercut badge, Reply card
+        3. Race Pit Stop         — V1 hides race strategy/battle behind garage suspension setup;
+                                   V2 keeps .ctx race strategy + pit-exit traffic in cols 8-12
+        4. Out Lap + Motion      — OUT LAP amber phase, pos gain/loss lift, lap tick flash,
+                                   #call-life hairline, P1 3x white flash, silent/quiet/voice warn chips
+        5. Stale / Error         — V1 keeps lilac banner bar when stale; V2 paints bar red + LAST RADIO
+        6. Quali Flying          — V2 promotes THIS RUN projected lap & abort status to top of .qzone
+        7. Cool-down             — V2 deduplicates LAST LAP, glides battery bar, shows run notes
+        8. Garage Setup          — Full 12-column garage pit board for practice/qualifying
+        9. Phone                 — V1 hides safety, box, and battle cards; V2 shows them in 1 column
+-->
+<style>
+:root {
+  --bg: #0a0a0c; --panel: #121216; --line: #2a2a30;
+  --fg: #ececec; --soft: #c8c8d0; --dim: #a2a2ac; --faint: #62626c;
+  --ok: #37e07a; --warn: #ffc233; --crit: #ff4d4d; --cold: #5cc8ff;
+  --info: #b8b8ff; --aggr: #ff8a3d;
+  --font: "Cascadia Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(14px, 0.9vw, 24px);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-snap: cubic-bezier(.34, 1.56, .64, 1);
+  --t-fast: 160ms; --t-med: 320ms; --t-slow: 600ms;
+  --ease-glide: cubic-bezier(.45, 0, .55, 1);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+  font-family: var(--font); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+svg.ico { width: 1em; height: 1em; vertical-align: -.12em; fill: none; stroke: currentColor;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Visibility helpers for V1 vs V2 comparison */
+body.v1 .v2-only { display: none !important; }
+body.v2 .v1-only { display: none !important; }
+
+/* ---------------------------------------------------------------- grid --- */
+body.dash { display: grid; height: 100vh; overflow: hidden;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: 3rem 12rem minmax(0, 1fr) 2rem; gap: 1px; background: var(--line); }
+:where(body.dash > *) { background: var(--bg); min-width: 0; min-height: 0; }
+.status { grid-column: 1 / -1; grid-row: 1; }
+.banner { grid-column: 1 / -1; grid-row: 2; }
+.tyres  { grid-column: 1 / 5;  grid-row: 3; }
+.tiles  { grid-column: 5 / 8;  grid-row: 3; }
+.ctx    { grid-column: 8 / 13; grid-row: 3; }
+.footer { grid-column: 1 / -1; grid-row: 4; }
+.zone { padding: .6rem .9rem; overflow: hidden; position: relative; }
+h2 { margin: 0 0 .35rem; font-size: 1.15rem; letter-spacing: .12em; color: var(--soft); }
+
+.status, .pill, .chip, .corner, .card, .tile, .big, .flag {
+  transition: background-color var(--t-med) ease, border-color var(--t-med) ease,
+    color var(--t-med) ease, box-shadow var(--t-med) ease; }
+
+/* ------------------------------------------------------------ A status --- */
+.status { display: flex; align-items: center; gap: 1.2rem; padding: 0 .9rem; font-size: 1.5rem;
+  background: var(--panel); white-space: nowrap; overflow: hidden; position: relative; }
+body.v2 .status { gap: .85rem; }
+.status .live { color: var(--ok); font-weight: bold; min-width: 6ch; }
+.status .live::before { content: "● "; }
+.status #age { font-size: 1.1rem; color: var(--dim); display: inline-block; min-width: 9ch; }
+.status #age.warn { color: var(--warn); font-weight: bold; }
+.status #age.crit { color: var(--crit); font-weight: bold; }
+.status .spacer { flex: 1; }
+.status .sess { color: var(--soft); font-size: 1.25rem; }
+/* V2 audit fix A1: OUT LAP phase turns amber (docs/15 §5) */
+body.v2 .status #phase.warn { color: var(--warn); font-weight: bold; }
+.status #lap { font-weight: bold; display: inline-block; min-width: 9ch; border-radius: .25rem; }
+/* V2 audit fix A2: lap tick flash and position gain/loss lift (docs/15 §11) */
+body.v2 .status #lap.tick { animation: lap-tick 900ms var(--ease-out); }
+@keyframes lap-tick {
+  0% { background: color-mix(in srgb, var(--info) 45%, transparent); color: #fff; transform: scale(1.08); }
+  100% { background: transparent; transform: none; }
+}
+.status #position { font-size: 2rem; font-weight: bold; padding: 0 .5rem; border-radius: .3rem;
+  background: var(--fg); color: var(--bg); line-height: 1.2; min-width: calc(3ch + 1rem);
+  text-align: center; }
+body.v2 .status #position { height: 1.9rem; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.45rem; line-height: 1; padding: 0 .55rem; min-width: 3.4rem; }
+body.v2 .status #position.gain { background: var(--ok); color: #000; animation: pos-gain 1600ms var(--ease-out); }
+body.v2 .status #position.loss { background: var(--crit); color: #fff; animation: pos-loss 1600ms var(--ease-out); }
+@keyframes pos-gain { 0% { transform: translateY(.35rem) scale(1.12); } 25% { transform: translateY(-.18rem) scale(1.06); } 100% { transform: none; } }
+@keyframes pos-loss { 0% { transform: translateY(-.35rem) scale(1.12); } 25% { transform: translateY(.18rem) scale(1.06); } 100% { transform: none; } }
+
+.flag { border: 2px solid var(--warn); color: var(--warn); border-radius: .3rem;
+  padding: .05rem .6rem; font-size: 1.2rem; letter-spacing: .1em; font-weight: bold; }
+.flag.sc { background: var(--warn); color: #000; }
+.flag.red { border-color: #fff; background: var(--crit); color: #fff; }
+body.sc .status, body.redflag .status, body.stale .status {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 1.2rem, var(--stripe) 1.2rem 2.4rem); }
+body.sc .status { background-color: color-mix(in srgb, var(--warn) 30%, var(--panel));
+  --stripe: color-mix(in srgb, var(--warn) 22%, transparent); }
+body.redflag .status { background-color: color-mix(in srgb, var(--crit) 55%, var(--panel));
+  --stripe: color-mix(in srgb, #fff 14%, transparent); }
+body.stale .status { background-color: color-mix(in srgb, var(--crit) 35%, var(--panel));
+  --stripe: color-mix(in srgb, var(--crit) 25%, transparent); }
+body.stale .status .live { color: #fff; }
+body.stale .tyres > *, body.stale .tiles > *, body.stale .ctx > * { filter: grayscale(1); opacity: .4; }
+
+.chips { display: inline-flex; align-items: center; gap: .35rem; }
+.chip { display: inline-block; min-width: 4.6ch; text-align: center; font-size: 1.15rem;
+  font-weight: bold; letter-spacing: .08em; border: 2px solid var(--line); color: var(--faint);
+  border-radius: .3rem; padding: 0 .4rem; line-height: 1.6rem; }
+.chip.ov { min-width: 8.5ch; }
+.chip.ov.avail { border-color: var(--ok); color: var(--ok); }
+.chip.ov.active { border-color: var(--ok); background: var(--ok); color: #000; }
+.chip.sm.on { border-color: var(--info); color: var(--info); }
+.chip.drv.ok { border-color: var(--ok); color: var(--ok); }
+.chip.drv.low { border-color: var(--warn); color: var(--warn); }
+.chip.drv .dim { color: var(--dim); font-weight: normal; }
+.chip.limits { min-width: 0; padding: 0 .3rem; font-size: .9rem; letter-spacing: .04em; }
+.chip.limits.warn { border-color: var(--warn); color: var(--warn); }
+.chip.limits.crit { border-color: var(--crit); color: var(--crit); }
+.chip.limits .pen { color: var(--crit); font-weight: bold; }
+
+.pill { border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: 0 .35rem; font-size: .95rem; letter-spacing: .1em; font-weight: bold; line-height: 1.5rem; }
+.pill.aggr { border-color: var(--aggr); background: var(--aggr); color: #000; }
+.voice { display: inline-block; min-width: 13ch; padding: 0 .5rem; border: 2px solid var(--info);
+  border-radius: .3rem; background: var(--info); color: #000; font-size: 1.05rem; font-weight: bold;
+  letter-spacing: .06em; line-height: 1.5rem; text-align: center; }
+.voice.heard { border-color: var(--ok); background: var(--ok); }
+.voice.missed { border-color: var(--warn); background: var(--warn); }
+
+/* V2 unified status bar pills & icons: identical 1.9rem height, 1.1rem font, 1.1rem icons, centered flex */
+body.v2 .status .chip,
+body.v2 .status .v-chip,
+body.v2 .status .voice,
+body.v2 .status .pill,
+body.v2 .status .flag {
+  height: 1.9rem;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  padding: 0 .5rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: .06em;
+  line-height: 1;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: .3rem;
+}
+body.v2 .status .chip.ov { min-width: 7.8ch; }
+body.v2 .status .chip.sm { min-width: 4.2ch; }
+body.v2 .status .pill { min-width: 4.6ch; }
+body.v2 .status svg.ico { width: 1.1rem; height: 1.1rem; vertical-align: 0; flex-shrink: 0; }
+body.v2 .status .chip.drv > .v2-only { display: inline-flex; align-items: center; gap: .3rem; }
+body.v2 .status .chip.drv svg.ico.src { color: var(--dim); }
+body.v2 .status .chip.limits { border-color: var(--soft); color: var(--fg); }
+body.v2 .status .chip.limits.notice { border-color: var(--warn); color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, var(--panel)); }
+body.v2 .status .chip.limits.warn { border-color: var(--warn); background: var(--warn); color: #000; }
+body.v2 .status .chip.limits.crit { border-color: #fff; background: var(--crit); color: #fff; }
+body.v2 .status .chip.limits .pen { background: #000; color: var(--crit); padding: .1rem .3rem; border-radius: .2rem; margin-left: .15rem; }
+body.v2 .status .chip.limits.crit .pen { background: #fff; color: #000; }
+body.v2 #verbosity, body.v2 #verbosity > .v2-only { display: inline-flex; align-items: center; gap: .35rem; }
+body.v2 .status .v-chip { border-color: var(--line); color: var(--soft); }
+body.v2 .status .v-chip.silent { color: var(--crit); border-color: var(--crit);
+  background: color-mix(in srgb, var(--crit) 16%, var(--panel)); }
+body.v2 .status .v-chip.quiet { color: var(--warn); border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, var(--panel)); }
+body.v2 .status .voice > .v2-only { display: inline-flex; align-items: center; gap: .3rem; }
+body.v2 .status .voice.warn { border-color: var(--warn); background: var(--warn); color: #000; }
+
+/* V2 audit fix A4: responsive wrap below 1100px so right-hand pills never clip */
+@media (max-width: 1100px) and (orientation: landscape) {
+  body.v2.dash { grid-template-rows: auto 12rem minmax(0, 1fr) 2rem; }
+  body.v2 .status { flex-wrap: wrap; padding: .25rem .9rem; row-gap: .25rem; }
+}
+
+/* ------------------------------------------------------------ B banner --- */
+.banner { display: flex; align-items: stretch; gap: 1.2rem; padding: 0 1.2rem 0 0;
+  overflow: hidden; position: relative; }
+.banner .bar { width: 1rem; background: var(--info); }
+.banner.p1 .bar { background: var(--crit); }
+.banner.p2 .bar { background: var(--warn); }
+.banner.p1 { background: color-mix(in srgb, var(--crit) 15%, var(--bg)); }
+/* V2 audit fix B1: idle, stalewarn, and mismatch banner states */
+body.v2 .banner.idle .bar { background: var(--line); }
+body.v2 .banner.idle .text { color: var(--dim); font-weight: normal; }
+body.v2 .banner.stalewarn, body.v2 .banner.mismatch {
+  background: color-mix(in srgb, var(--crit) 14%, var(--bg)); }
+body.v2 .banner.stalewarn .bar, body.v2 .banner.mismatch .bar { background: var(--crit); }
+body.v2 .banner.stalewarn .text, body.v2 .banner.mismatch .text { color: var(--crit); }
+
+/* V2 audit fix B2: #call-life countdown hairline at bottom of banner (docs/15 §11) */
+.banner .life { display: none; }
+body.v2 .banner .life { display: block; position: absolute; left: 1rem; right: 0; bottom: 0;
+  height: 3px; background: var(--info); transform-origin: left center; transform: scaleX(0); opacity: .75; }
+body.v2 .banner.p1 .life { background: var(--crit); }
+body.v2 .banner.p2 .life { background: var(--warn); }
+body.v2 .banner .life.run {
+  animation: life-run var(--life, 20s) linear var(--life-at, 0s) 1 forwards;
+}
+@keyframes life-run { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+.banner .body { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: center; gap: .45rem; }
+.banner .current { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.banner .text { font-size: 2.5rem; line-height: 1.1; font-weight: bold; flex: 1; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* V2 audit fix B3: .arrive and .settle handoff animations (docs/15 §7) */
+body.v2 .banner .text.arrive { animation: call-arrive 200ms var(--ease-out); }
+body.v2 .banner .previous.settle { animation: previous-settle 220ms var(--ease-out); }
+@keyframes call-arrive { from { opacity: .55; transform: translateY(.3rem); } to { opacity: 1; transform: none; } }
+@keyframes previous-settle { from { opacity: .45; transform: translateY(-.45rem); } to { opacity: 1; transform: none; } }
+
+.banner .meta { text-align: right; color: var(--soft); font-size: 1.4rem; white-space: nowrap; }
+.banner .meta .pri { font-weight: bold; letter-spacing: .06em; color: var(--warn); }
+.banner.p1 .meta .pri { background: var(--crit); color: #fff; padding: 0 .4rem; border-radius: .25rem; }
+.banner .meta .started { color: var(--info); }
+.press { font-size: 1.2rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .3rem;
+  padding: .1rem .5rem; white-space: nowrap; min-width: 6ch; text-align: center; font-weight: bold; }
+.press.ack { border-color: var(--ok); color: var(--ok); }
+.press.neg { border-color: var(--crit); color: var(--crit); }
+.banner .evidence { color: var(--soft); font-size: 1.3rem; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.banner .evidence b { color: var(--dim); letter-spacing: .1em; font-size: .9em; }
+.banner .previous { border-top: 1px solid var(--line); padding-top: .4rem; color: var(--dim);
+  font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner .previous b { color: var(--dim); font-size: .85em; letter-spacing: .1em; }
+.banner.hit .bar { transform-origin: left center; animation: bar-hit 900ms var(--ease-out); }
+/* V2 audit fix B4: P1 priority bar flashes white 3 times (docs/15 §11) */
+body.v2 .banner.p1.hit .bar { animation: bar-p1 850ms var(--ease-out); }
+@keyframes bar-p1 {
+  0%, 36%, 72% { background: #fff; transform: scaleX(2.4); filter: brightness(1.9); }
+  18%, 54% { background: var(--crit); transform: scaleX(1.2); }
+  100% { background: var(--crit); transform: none; filter: none; }
+}
+.banner.hit::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--sweep, rgba(184,184,255,.12)) 50%, transparent);
+  transform: translateX(-100%); animation: sweep 700ms var(--ease-out) forwards; }
+.banner.p1 { --sweep: rgba(255,77,77,.28); } .banner.p2 { --sweep: rgba(255,194,51,.18); }
+@keyframes bar-hit { 0% { transform: scaleX(2.2); filter: brightness(1.8); } 100% { transform: none; filter: none; } }
+@keyframes sweep { to { transform: translateX(100%); } }
+
+/* ------------------------------------------------------------- C tyres --- */
+.tyres { display: flex; flex-direction: column; gap: .5rem; }
+.t-head { display: flex; align-items: center; gap: .7rem; font-size: 1.3rem; white-space: nowrap; }
+.t-fit { display: inline-flex; align-items: baseline; gap: .6rem; }
+.comp { padding: 0 .5rem; border-radius: .3rem; font-weight: bold; letter-spacing: .06em;
+  border: 2px solid var(--dim); background: var(--dim); color: #111; }
+.comp.soft { border-color: var(--crit); background: var(--crit); color: #fff; }
+.comp.medium { border-color: var(--warn); background: var(--warn); }
+.comp.hard { border-color: var(--fg); background: var(--fg); }
+.comp.inter { border-color: var(--ok); background: var(--ok); }
+.comp.wet { border-color: var(--cold); background: var(--cold); color: #fff; }
+.t-fit .age { font-weight: bold; min-width: 6ch; }
+.t-sep { width: 2px; align-self: stretch; background: var(--line); margin: 0 .2rem; }
+.t-pace { display: inline-flex; align-items: baseline; gap: .45rem; font-weight: bold;
+  padding: 0 .5rem; border-left: .35rem solid currentColor; }
+.t-pace.ok { color: var(--ok); } .t-pace.warn { color: var(--warn); } .t-pace.crit { color: var(--crit); }
+.t-pace small { font-size: .75em; font-weight: normal; }
+.car { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: .4rem; position: relative; min-height: 0; }
+.car::before { content: ""; position: absolute; left: 50%; top: -.3rem; bottom: -.3rem; width: 2px;
+  background: var(--faint); transform: translateX(-50%); }
+.corner { display: grid; grid-template-columns: auto 1fr; align-content: center; column-gap: .6rem;
+  grid-template-areas: "lbl lbl" "temp word" "meter meter" "det det" "tags tags"; border: 1px solid var(--line);
+  background: var(--panel); padding: .5rem .7rem; position: relative; z-index: 1; min-width: 0; }
+.corner .lbl { grid-area: lbl; color: var(--soft); font-size: 1.35rem; display: flex; justify-content: space-between; }
+.corner .lbl .brk { color: var(--dim); font-size: 1.15rem; }
+/* V2 audit fix C2: Brake & surface temp threshold highlights */
+body.v2 .corner .lbl .brk.warn { color: var(--warn); font-weight: bold; }
+body.v2 .corner .lbl .brk.crit { color: var(--crit); font-weight: bold; }
+body.v2 .corner .lbl .brk.cold { color: var(--cold); }
+.corner .temp { grid-area: temp; font-size: 3rem; font-weight: bold; line-height: 1.1; min-width: 4ch; }
+.corner .word { grid-area: word; align-self: center; font-weight: bold; font-size: 2.2rem; letter-spacing: 0; line-height: 1; }
+body.v2 .corner .word { font-size: 1.35rem; letter-spacing: .06em; display: inline-flex; align-items: center; gap: .3rem; }
+.corner .word .st-word { display: none; }
+body.v2 .corner .word .st-word { display: inline; }
+body.v2 .corner .word .trend { font-size: 1.5rem; }
+.corner .det { grid-area: det; color: var(--soft); display: flex; gap: .8rem; align-items: baseline;
+  font-size: 1.25rem; white-space: nowrap; }
+.corner .det .wear { color: var(--soft); font-size: 1.1rem; min-width: 8ch; }
+.corner .det .wear b { color: var(--fg); font-size: 1.9rem; }
+body.v2 .corner .det .wear.warn b { color: var(--warn); }
+body.v2 .corner .det .wear.crit b { color: var(--crit); }
+.corner .det .surf { color: var(--dim); font-size: 1.1rem; }
+body.v2 .corner .det .surf.hot { color: var(--crit); font-weight: bold; }
+body.v2 .corner .det .surf.warn { color: var(--warn); font-weight: bold; }
+.corner.hot .temp, .corner.hot .word, .corner.hot .lbl span:first-child { color: var(--crit); }
+.corner.ok .temp, .corner.ok .word, .corner.ok .lbl span:first-child { color: var(--ok); }
+.corner.cold .temp, .corner.cold .word, .corner.cold .lbl span:first-child { color: var(--cold); }
+.corner.hot { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, var(--panel)); }
+.corner.cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 12%, var(--panel)); }
+.corner.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.corner.flip { animation: flip 700ms var(--ease-out); }
+.corner.hot.flip { --ring: var(--crit); } .corner.cold.flip { --ring: var(--cold); } .corner.ok.flip { --ring: var(--ok); }
+@keyframes flip { 0% { box-shadow: 0 0 0 0 var(--ring, var(--info)); } 100% { box-shadow: 0 0 0 .9rem transparent; } }
+.corner.flip .temp { animation: temp-pop 700ms var(--ease-snap); }
+
+/* V1 trend colours: raw up=red, down=blue (causes red+blue clash on hot cooling or cold warming tyres) */
+body.v1 .corner .trend.up { color: var(--crit); }
+body.v1 .corner .trend.down { color: var(--cold); }
+body.v1 .corner .trend.flat { color: var(--fg); }
+/* V2 audit fix C1: semantic trend arrow colour — green when moving toward window (hot cooling or cold warming),
+   matching status colour when worsening, soft neutral when in window */
+body.v2 .corner .trend { color: var(--soft); }
+body.v2 .corner.hot .trend.up { color: var(--crit); }
+body.v2 .corner.hot .trend.down { color: var(--ok); }
+body.v2 .corner.cold .trend.down { color: var(--cold); }
+body.v2 .corner.cold .trend.up { color: var(--ok); }
+body.v2 .corner.ok .trend { color: var(--soft); }
+
+.corner .twin { grid-area: meter; margin: .3rem 0 .2rem; }
+.corner .twin i { background: currentColor; }
+.corner .twin b { position: absolute; left: 50%; width: 37.5%; top: -.2rem; bottom: -.2rem;
+  border-left: 2px solid var(--soft); border-right: 2px solid var(--soft); }
+.corner.ok .twin { color: var(--ok); } .corner.hot .twin { color: var(--crit); } .corner.cold .twin { color: var(--cold); }
+.corner .tags { grid-area: tags; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .3rem .4rem;
+  min-height: 2.2rem; margin-top: .2rem; }
+body.v1 .corner .tags { min-height: 3.6rem; }
+.tag { font-size: 1rem; font-weight: bold; letter-spacing: .08em; padding: 0 .35rem;
+  border: 1px solid currentColor; border-radius: 4px; white-space: nowrap; }
+.tag.warn { color: var(--warn); } .tag.crit { color: var(--crit); }
+.tag.lock { background: var(--aggr); border-color: var(--aggr); color: #000; }
+.corner.locked, body.lockup .corner.fl { outline: .3rem solid var(--aggr); outline-offset: -.3rem;
+  animation: flip 700ms var(--ease-out); --ring: var(--aggr); }
+body:not(.lockup) .lockup-only { display: none !important; }
+@keyframes temp-pop { 0% { transform: scale(1.12); } 100% { transform: none; } }
+
+/* V2 audit fix C3: group BB and DIFF into distinct bordered cards with clear category headers */
+.setup { display: grid; grid-template-columns: auto 1fr 1fr; gap: .6rem; align-items: baseline;
+  font-size: 1.35rem; border-top: 1px solid var(--line); padding-top: .4rem; white-space: nowrap; }
+body.v1 .setup-grp { display: contents; }
+body.v2 .setup { display: grid; grid-template-columns: auto 1fr; gap: .45rem; border-top: 0; padding-top: .15rem; font-size: 1.15rem; }
+body.v2 .setup-grp { display: flex; align-items: center; gap: .45rem; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 5px; padding: .22rem .55rem; min-width: 0; }
+body.v2 .setup-grp.diff { justify-content: space-between; }
+.setup .k { color: var(--soft); font-weight: bold; letter-spacing: .08em; font-size: 1.1rem; }
+body.v2 .setup .k { font-size: .95rem; letter-spacing: .06em; padding-right: .45rem; border-right: 1px solid var(--line); }
+.setup .v { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+body.v2 .setup .v { min-width: 0; }
+.setup .v.suited { text-decoration: underline; text-decoration-color: var(--ok);
+  text-decoration-thickness: 3px; text-underline-offset: .3rem; }
+.setup .sug { color: var(--warn); font-weight: bold; display: inline-block; min-width: 7ch; }
+body.v2 .setup .sug { min-width: 0; font-size: .95rem; }
+.setup .sug.none { color: var(--faint); font-weight: normal; }
+body.v2 .setup .sug.none { display: none; }
+.setup .sug.try { opacity: .6; }
+body.v2 .setup .sug.try { opacity: .92; border: 1px dashed var(--warn); border-radius: .25rem; padding: 0 .25rem; font-size: .9rem; margin-left: .15rem; }
+.setup .legend { grid-column: 1 / -1; color: var(--dim); font-size: 1rem; white-space: normal; }
+body.v2 .setup .legend { display: none; }
+
+/* ------------------------------------------------------- D fixed tiles --- */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto;
+  gap: .5rem; }
+body.v2 .tiles { grid-template-rows: auto auto auto auto; align-content: start; gap: .45rem; }
+.tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px;
+  padding: .4rem .65rem; min-width: 0; overflow: hidden; }
+.tile.wide { grid-column: 1 / -1; }
+.big { font-size: 2.3rem; font-weight: bold; line-height: 1.05; display: inline-block; min-width: 5ch; }
+.sub { color: var(--soft); font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fuel .big.ok { color: var(--ok); } .fuel .big.warn { color: var(--warn); } .fuel .big.crit { color: var(--crit); }
+.fuel .sub { font-size: 1rem; }
+.fuel .sub2, .batt .sub2 { color: var(--dim); font-size: .9rem; margin-top: .05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.batt .big { min-width: 4ch; }
+.batt .mode { font-weight: bold; font-size: 1.1rem; letter-spacing: .05em; }
+.batt.on_budget .mode { color: var(--fg); }
+.batt.over { border-color: var(--warn); } .batt.over .big, .batt.over .mode { color: var(--warn); }
+.batt.under { border-color: var(--cold); } .batt.under .big, .batt.under .mode { color: var(--cold); }
+.batt.attack_ok { border-color: var(--ok); } .batt.attack_ok .big, .batt.attack_ok .mode { color: var(--ok); }
+
+/* V2 Last Laps: condensed height (no vertical flex-stretch on sector boxes) so Weather gets 1-2 more rows */
+.lastlap .ok { color: var(--ok); } .lastlap .warn { color: var(--warn); }
+.lastlap { display: flex; flex-direction: column; }
+.lastlap .lap-head-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .25rem; }
+.lastlap .lap-head-row h2 { margin: 0; }
+.lastlap .base-ref { font-size: .95rem; color: var(--dim); }
+.lastlap .base-ref b { color: var(--soft); }
+.lastlap .lap-comparisons { display: flex; flex: 1; flex-direction: column; gap: .35rem; min-height: 0; }
+.lastlap .lap-comparison { display: flex; flex: 1; flex-direction: column; gap: .2rem; min-width: 0; min-height: 0; }
+body.v2 .lastlap .lap-comparisons, body.v2 .lastlap .lap-comparison { flex: none; }
+.lastlap .lap-comparison-header { display: flex; flex: 0 0 auto; align-items: baseline;
+  justify-content: space-between; gap: .3rem; min-width: 0; }
+.lastlap .cmp-label, .lastlap .cmp-delta { font-size: 1.15rem; font-weight: bold; white-space: nowrap; }
+.lastlap .cmp-label .vs { color: var(--dim); font-weight: normal; font-size: .9rem; }
+.lastlap .cmp-delta .base-d { color: var(--soft); font-weight: normal; font-size: .9rem; margin-left: .3rem; }
+.lastlap .lap-sectors { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .3rem; min-height: 0; }
+body.v2 .lastlap .lap-sectors { flex: none; }
+.lastlap .label { color: var(--soft); font-size: .85rem; letter-spacing: .06em; line-height: 1; }
+.lastlap .lap-sector { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: .15rem .25rem; }
+body.v2 .lastlap .lap-sector { flex-direction: row; justify-content: space-between; padding: .2rem .45rem; }
+.lastlap .lap-sector .value { font-size: 1.25rem; font-weight: bold; white-space: nowrap; line-height: 1.1; }
+
+.meter { position: relative; height: .6rem; margin-top: .35rem; border-radius: .3rem;
+  background: var(--line); overflow: hidden; }
+.meter i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(var(--f, 0));
+  background: currentColor; transition: transform var(--t-slow) var(--ease-glide), background-color var(--t-med) ease; }
+.wx { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; text-align: center; }
+.wx .k { color: var(--dim); font-size: 1rem; letter-spacing: .1em; }
+.wx .pct { font-size: 1.9rem; font-weight: bold; min-width: 4ch; display: inline-block; }
+.wx .sky { color: var(--soft); font-size: 1rem; }
+.wx .wet .pct, .wx .wet .wxi { color: var(--cold); }
+.wx .storm .pct, .wx .storm .wxi { color: var(--crit); }
+.wx > div { border: 2px solid transparent; border-radius: 6px; }
+.wx > div.xo-warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.wx > div.xo-cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 10%, transparent); }
+.comp.xs { font-size: .8rem; padding: 0 .25rem; letter-spacing: .04em; vertical-align: .05rem; }
+.card .head .comp { font-size: 1.5rem; vertical-align: .25rem; }
+body:not(.rain) .rain-only, body.rain .dry-only { display: none !important; }
+svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; color: var(--soft); stroke-width: 1.8; }
+/* V2 Weather: balanced height (~1 row shorter so multi-item Damage fits comfortably)
+   with 3-column forecast cards + dedicated predicted lap crossover bar below */
+body.v2 .tile.weather { display: flex; flex-direction: column; gap: .25rem; padding: .35rem .65rem; }
+body.v2 .tile.weather h2 { margin: 0; }
+body.v2 .wx { gap: .4rem; }
+body.v2 .wx > div {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "k k" "ico pct" "sky sky";
+  justify-content: center;
+  align-items: center;
+  column-gap: .3rem;
+  row-gap: .14rem;
+  padding: .25rem .25rem;
+  background: rgba(255,255,255,.025);
+  border-color: var(--line);
+  text-align: center;
+}
+body.v2 .wx > div.xo-warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+body.v2 .wx > div.xo-cold { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 12%, transparent); }
+body.v2 .wx .k { grid-area: k; font-size: .92rem; font-weight: bold; color: var(--soft); white-space: nowrap; }
+body.v2 .wx svg.wxi { grid-area: ico; display: block; width: 1.65rem; height: 1.65rem;
+  margin: 0; color: var(--warn); }
+body.v2 .wx .wet svg.wxi { color: var(--cold); }
+body.v2 .wx .storm svg.wxi { color: var(--crit); }
+body.v2 .wx .pct { grid-area: pct; font-size: 1.65rem; line-height: 1.05; min-width: 0; }
+body.v2 .wx .sky { grid-area: sky; font-size: .88rem; color: var(--soft); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cross { margin-top: .35rem; font-size: 1.25rem; font-weight: bold; padding: .1rem .5rem;
+  border-left: .35rem solid var(--line); color: var(--dim); white-space: nowrap; }
+body.v2 .cross { margin-top: 0; font-size: 1.1rem; padding: .12rem .5rem;
+  background: rgba(255,255,255,.025); border-radius: 0 4px 4px 0;
+  display: flex; align-items: center; justify-content: space-between; gap: .4rem; }
+.cross.warn { border-color: var(--warn); color: var(--warn); }
+.cross.cold { border-color: var(--cold); color: var(--cold); }
+.tile.damage { display: flex; align-items: baseline; gap: 1rem; padding: .3rem .7rem; min-height: min-content; }
+.tile.damage:has(.dmg.many) { min-height: 6rem; }
+.tile.damage h2 { margin: 0; }
+.dmg { display: flex; flex: 1; flex-wrap: wrap; gap: .1rem 1.2rem; font-size: 1.35rem; min-width: 0; }
+.dmg > * { white-space: nowrap; }
+.dmg.many { font-size: 1.05rem; column-gap: .8rem; }
+.dmg .n { font-weight: bold; display: inline-block; min-width: 4ch; text-align: right; }
+.dmg.many .n { min-width: 0; }
+.dmg .n.warn { color: var(--warn); } .dmg .n.crit { color: var(--crit); }
+.dmg .none { color: var(--soft); }
+
+/* ------------------------------------------------- E contextual zone --- */
+.ctx { display: flex; flex-direction: column; gap: .5rem; }
+.ctx-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ctx-head .how { color: var(--dim); font-size: 1rem; letter-spacing: .06em; }
+.ctx-race { display: flex; flex-direction: column; gap: .5rem; min-height: 0; }
+.card { background: var(--panel); border: 2px solid var(--line); border-left-width: .45rem;
+  border-radius: 6px; padding: .4rem .8rem; min-width: 0; flex: none; animation: card-in var(--t-med) var(--ease-out); }
+@keyframes card-in { from { opacity: 0; } }
+.card .rank { color: var(--dim); font-size: .95rem; letter-spacing: .12em; display: flex; justify-content: space-between; }
+.card.safety { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.card.safety.red { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 18%, var(--panel)); }
+.card.exec { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 10%, var(--panel)); }
+.card.reply { border-color: var(--info); background: color-mix(in srgb, var(--info) 8%, var(--panel)); }
+.card .head { font-size: 2.1rem; font-weight: bold; letter-spacing: .04em; }
+.card.safety .head { color: var(--warn); } .card.safety.red .head { color: #fff; }
+.card.exec .head { color: var(--crit); }
+.card.reply .head { color: var(--info); }
+.card .line { font-size: 1.3rem; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .line b { color: var(--fg); }
+.card .line .exit-warn { color: var(--warn); font-weight: bold; }
+.card .line .exit-ok { color: var(--ok); font-weight: bold; }
+.card.info { font-size: 1.2rem; color: var(--soft); }
+
+/* Battle card */
+.battle .modes { display: flex; gap: .3rem; flex-wrap: nowrap; margin-bottom: .3rem; }
+/* V2 audit fix E1: hide redundant 6-pill mode strip in single-rival battle card */
+body.v2 .battle .modes { display: none; }
+.battle .modes span { font-size: .9rem; letter-spacing: .06em; border: 1px solid var(--line);
+  color: var(--faint); padding: 0 .3rem; border-radius: .25rem; white-space: nowrap; }
+.battle .modes span.on { border-color: var(--fg); color: var(--fg); font-weight: bold; }
+.battle .mode-row { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; }
+.battle .mode { font-size: 2rem; font-weight: bold; letter-spacing: .06em; }
+.battle .uc-pill { font-size: 1.05rem; font-weight: bold; border: 1px solid var(--warn); color: var(--warn);
+  padding: 0 .45rem; border-radius: .25rem; letter-spacing: .06em; white-space: nowrap; }
+.battle.threat { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 14%, var(--panel));
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--crit) 35%, transparent); }
+.battle.threat .mode, .battle.threat .modes span.on { color: var(--crit); border-color: var(--crit); }
+.battle.attack .mode { color: var(--ok); }
+.battle.catching .mode { color: var(--warn); }
+.battle.calm { opacity: .55; } .battle.calm .mode { color: var(--dim); }
+.rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
+.rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
+.rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv .name .comp { margin-left: .5rem; }
+.rv .name .age { color: var(--soft); font-size: 1.1rem; }
+.rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
+.rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
+  padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }
+.rv .tag.crit { border-color: var(--crit); background: var(--crit); color: #fff; }
+.pace { font-size: 1.45rem; font-weight: bold; text-transform: uppercase; white-space: nowrap; display: flex; justify-content: space-between; align-items: baseline; }
+.pace .crit { color: var(--crit); } .pace .ok { color: var(--ok); }
+.pace .last-d { color: var(--soft); font-size: 1.15rem; font-weight: normal; text-transform: none; }
+.pace .prob { color: var(--fg); }
+.rail { position: relative; height: .9rem; margin: .3rem 0 .35rem; border-radius: .45rem; background: var(--line); }
+.rail .rz { position: absolute; left: 0; top: 0; bottom: 0; width: 33.33%; border-radius: .45rem 0 0 .45rem;
+  font-size: .7rem; line-height: .9rem; padding-left: .4rem; letter-spacing: .1em; color: var(--dim);
+  background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.rail .rc { position: absolute; top: 50%; width: 1.1rem; height: 1.1rem; border-radius: 50%;
+  left: calc(var(--g, 1) * (100% - 1.1rem)); transform: translateY(-50%); background: var(--fg);
+  box-shadow: 0 0 0 2px var(--bg);
+  transition: left var(--t-slow) var(--ease-glide), background-color var(--t-med) ease; }
+/* Simulate V1 4Hz innerHTML recreation killing the CSS transition */
+body.v1 .rail .rc { transition: none !important; }
+.rail.behind.in .rc { background: var(--crit); }
+.rail.ahead.in .rc { background: var(--ok); }
+.rail.in .rz { color: var(--fg); }
+
+/* Multi-car battle */
+.battle .grp { font-size: 1.5rem; font-weight: bold; letter-spacing: .06em; color: var(--warn);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .2rem; }
+.battle .grp.crit { color: var(--crit); } .battle .grp .ok { color: var(--ok); }
+.battle .grp .sub { color: var(--soft); font-weight: normal; }
+.battle.scrap:not(.threat) { border-color: var(--warn); }
+.battle .bcar .rv { grid-template-columns: 4.5rem minmax(0, 1fr) auto auto; }
+.battle .bcar .name { font-size: 1.4rem; }
+.battle .bcar .gap { font-size: 1.9rem; min-width: 4ch; }
+.battle .bcar .st { font-size: 1.1rem; font-weight: bold; letter-spacing: .08em; text-align: right; display: inline-block; min-width: 13ch; }
+.battle .bcar.defend .st, .battle .bcar.defend .side { color: var(--crit); }
+.battle .bcar.attack .st, .battle .bcar.attack .side { color: var(--ok); }
+.battle .bcar.train .st { color: var(--warn); }
+.battle .bcar.calm { opacity: .5; } .battle .bcar.calm .st { color: var(--dim); }
+.battle .bcar .rail { height: .6rem; margin: .1rem 0 .15rem; }
+.battle .bcar .rail .rz { font-size: 0; }
+.battle .bcar .rail .rc { width: .8rem; height: .8rem; left: calc(var(--g, 1) * (100% - .8rem)); }
+.rail.train .rc { background: var(--warn); }
+.battle .bcar .pace { font-size: 1.15rem; }
+.battle .you { font-size: 1.05rem; font-weight: bold; letter-spacing: .12em; text-align: center; color: var(--fg);
+  border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); margin: .2rem 0; }
+body:not(.fight-ahead) .fight-ahead-only, body:not(.sandwich) .sandwich-only,
+body:not(.fight-behind) .fight-behind-only { display: none !important; }
+body.fight-ahead .battle.single, body.sandwich .battle.single, body.fight-behind .battle.single { display: none; }
+
+/* Strategy card */
+.plan { display: flex; align-items: baseline; gap: .6rem; font-size: 1.35rem; white-space: nowrap; }
+.plan .pid { font-weight: bold; border: 2px solid var(--fg); border-radius: .3rem; padding: 0 .4rem; }
+.plan.alt { color: var(--dim); } .plan.alt .pid { border-color: var(--dim); }
+.plan.alt .comp { opacity: .55; }
+.plan .seq .comp { font-size: 1rem; padding: 0 .3rem; }
+.plan .seq .arr { color: var(--faint); }
+.plan .onp { margin-left: auto; font-weight: bold; color: var(--ok); }
+.plan .onp.off { color: var(--warn); }
+.plan.c { color: #fff; } .plan.c .pid { border-color: var(--crit); background: var(--crit); }
+.plan.c .boxnow { background: var(--crit); padding: 0 .5rem; border-radius: .3rem; font-weight: bold; }
+.strat-meta { margin-top: .25rem; padding-top: .25rem; border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; font-size: 1.15rem; color: var(--soft); }
+.strat-meta b.ok { color: var(--ok); } .strat-meta b.warn { color: var(--warn); }
+
+/* ------------------------------------------- Qualifying & Takeovers --- */
+.qzone, .coolzone, .pitboard { display: none; }
+.ctx-head .h-quali, body.quali .ctx-head .h-race { display: none; }
+body.quali .ctx-head .h-quali { display: block; }
+body.quali .ctx-race { display: none; }
+body.quali .qzone { display: flex; flex-direction: column; gap: .5rem; }
+.qphase { display: flex; gap: .3rem; }
+.qphase span { flex: 1; text-align: center; font-size: 1.05rem; letter-spacing: .08em; border: 1px solid var(--line);
+  color: var(--faint); padding: .1rem 0; border-radius: .25rem; }
+.qphase span.on { border-color: var(--info); color: var(--info); font-weight: bold; }
+/* V2 audit fix E4: promote THIS RUN card to top of .qzone on flying laps */
+body.v2.quali .qzone .card.q-run-card { order: -1; border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--panel)); }
+body.v2.quali .qzone .qphase { order: -2; }
+body.v2.quali .qzone .card.q-run-card .head { font-size: 2.5rem; color: var(--ok); }
+.qcut { display: flex; align-items: baseline; gap: .8rem; font-size: 1.6rem; font-weight: bold; }
+.qcut .pos { color: var(--dim); font-weight: normal; }
+.qcut .badge { font-size: 1.1rem; border: 2px solid var(--ok); color: var(--ok); border-radius: .3rem; padding: 0 .4rem; }
+.qcut .badge.out { border-color: var(--crit); color: var(--crit); }
+.qcut .m { margin-left: auto; font-size: 2.2rem; color: var(--ok); }
+.qcut-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; margin-top: .35rem; }
+.qcut-cell { background: rgba(255,255,255,.025); border: 1px solid var(--line); border-radius: 4px;
+  padding: .25rem .45rem; display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
+.qcut-cell .k { color: var(--dim); font-size: .85rem; letter-spacing: .08em; white-space: nowrap; }
+.qcut-cell .v { color: var(--fg); font-size: 1.5rem; font-weight: bold; line-height: 1.15; white-space: nowrap; }
+.qbench { width: 100%; border-collapse: collapse; font-size: 1.3rem; margin-top: .25rem; }
+.qbench th, .qbench td { border: 1px solid var(--line); padding: .15rem .5rem; text-align: right; }
+.qbench th { color: var(--dim); font-weight: normal; font-size: 1rem; letter-spacing: .1em; }
+.qbench tbody th { text-align: left; width: 9.5rem; }
+.qbench .who { display: block; color: var(--fg); font-weight: bold; font-size: 1.15rem; letter-spacing: .02em;
+  max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qbench td { font-weight: bold; font-size: 1.85rem; }
+.qbench td.ok { color: var(--ok); } .qbench td.crit { color: var(--crit); }
+.qbench td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
+
+/* Cool-down takeover */
+body.cool .tyres, body.cool .tiles { display: none; }
+body.cool .coolzone { display: flex; flex-direction: column; gap: .7rem; grid-column: 1 / 8; grid-row: 3; font-size: 1.3rem; }
+.cz-top { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.cz-top .v { font-size: 3.6rem; font-weight: bold; }
+.cz-top .v.crit { color: var(--crit); }
+.c-alert { font-size: 2.6rem; font-weight: bold; text-align: center; padding: .5rem;
+  border-radius: 6px; letter-spacing: .06em; }
+body.v2 .c-alert { line-height: 1.15; padding: .35rem .5rem; }
+body.v2 .c-alert .act { display: block; font-size: 1.9rem; letter-spacing: .12em; margin-top: .1rem; }
+.c-alert.clear { font-size: 1.4rem; color: var(--ok); border: 1px solid var(--line); }
+.c-alert.warn { background: var(--warn); color: #000; }
+.c-alert.crit { background: var(--crit); color: #000; animation: c-flash .8s steps(2) infinite; }
+@keyframes c-flash { 50% { opacity: .55; } }
+.c-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
+.c-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: .5rem .7rem; }
+.c-tile.ok { border-color: var(--ok); } .c-tile.warn { border-color: var(--warn); } .c-tile.crit { border-color: var(--crit); }
+.c-num { font-size: 3.6rem; font-weight: bold; line-height: 1.1; }
+.c-tile.ok .c-num { color: var(--ok); } .c-tile.warn .c-num { color: var(--warn); } .c-tile.crit .c-num { color: var(--crit); }
+.coolzone .bar { position: relative; height: .9rem; background: var(--line); border-radius: 3px; margin: .3rem 0; }
+.coolzone .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; width: 0; }
+/* V2 audit fix F2: smooth width glide on cool-down battery bar */
+body.v2 .coolzone .bar .fill { transition: width var(--t-slow) var(--ease-glide); }
+.coolzone .c-tile.warn .bar .fill { background: var(--warn); }
+.coolzone .sub.c-warn { color: var(--warn); font-weight: bold; }
+.coolzone .bar .mark { position: absolute; top: -4px; width: 3px; height: calc(100% + 8px); background: var(--fg); }
+.c-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .8rem; font-size: 2.2rem; font-weight: bold; }
+.c-tyres .hot { color: var(--crit); } .c-tyres .cold { color: var(--cold); } .c-tyres .ok { color: var(--ok); }
+.c-info { display: flex; flex-direction: column; gap: .3rem; font-size: 1.2rem; }
+.c-sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0; }
+.c-sec { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; text-align: center; }
+.c-sec .k { display: block; color: var(--dim); font-size: 0.75em; }
+.c-sec .t { display: block; font-weight: bold; font-variant-numeric: tabular-nums; }
+.c-sec .d { display: block; font-size: 0.8em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.c-sec.worst { border-color: var(--warn); } .c-sec.worst .d { color: var(--warn); font-weight: bold; }
+.c-sec.gain .d { color: var(--ok); }
+
+/* Pit board takeover */
+body.pit .tyres, body.pit .tiles, body.pit .ctx { display: none; }
+body.pit .pitboard { display: grid; grid-column: 1 / -1; grid-row: 3; overflow: auto; gap: .5rem .8rem;
+  align-content: start; grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: auto auto auto minmax(0, 1fr); }
+/* V2 Garage Pit Board: 6 framed section cards in a clean 3x2 grid (Cols 1-4: Tyres & Setup Changes,
+   Cols 5-8: Last Run & Sectors, Cols 9-12: Weather & Current Setup) with clear separation and inset cells */
+body.v2.pit:not(.race-pit) .pitboard {
+  gap: .75rem;
+  padding: .65rem .9rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+body.v2.pit .pb-box {
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: .5rem .75rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+body.v2.pit .pb-box h2 {
+  font-size: 1.05rem;
+  color: var(--fg);
+  letter-spacing: .12em;
+  margin: 0;
+  padding-bottom: .28rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+body.v2.pit .pb-box.pb-setup { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+body.v2.pit .pb-box.pb-setup h2 { color: var(--warn); }
+body.v2.pit:not(.race-pit) .pb-tyrebox { grid-column: 1 / 5; grid-row: 2; }
+body.v2.pit:not(.race-pit) .pb-run     { grid-column: 5 / 9; grid-row: 2; }
+body.v2.pit:not(.race-pit) .pb-wx      { grid-column: 9 / 13; grid-row: 2; }
+body.v2.pit:not(.race-pit) .pb-setup   { grid-column: 1 / 5; grid-row: 3; }
+body.v2.pit:not(.race-pit) .pb-sectors { grid-column: 5 / 9; grid-row: 3; }
+body.v2.pit:not(.race-pit) .pb-cur     { grid-column: 9 / 13; grid-row: 3; }
+body.v2.pit .pb-corner,
+body.v2.pit .pb-tile,
+body.v2.pit .pb-wxl li,
+body.v2.pit .pb-change li { background: var(--bg); }
+body.v2.pit .pb-sec th, body.v2.pit .pb-sec td { padding: .25rem .45rem; }
+body.v2.pit .pb-sec tbody th { width: 7.5rem; }
+body.v2.pit .pb-change { gap: .3rem; }
+body.v2.pit .pb-change li { padding: .2rem .5rem; border-radius: 4px; font-size: 1.2rem;
+  grid-template-columns: 1.3rem 2.4rem minmax(4.5rem, auto) auto 1fr; }
+body.v2.pit .pb-ref { grid-template-columns: 1fr; row-gap: .25rem; font-size: 1rem; }
+body.v2.pit .pb-ref li { display: grid; grid-template-columns: 8.5rem 1fr; gap: .5rem; padding: .2rem .35rem;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px; align-items: baseline; }
+
+/* V2 audit fix F1: During a race pit stop (body.pit.race-pit), keep .ctx (strategy, pit exit, battle)
+   visible in columns 8-12 while .pitboard shows stint summary in columns 1-7 without garage suspension setup */
+body.v2.pit.race-pit .pitboard { grid-column: 1 / 8; grid-row: 3; gap: .6rem; }
+body.v2.pit.race-pit .ctx { display: flex; grid-column: 8 / 13; grid-row: 3; }
+body.v2.pit.race-pit .pb-head, body.v2.pit.race-pit .pb-cur, body.v2.pit.race-pit .pb-setup { display: none !important; }
+body.v2.pit.race-pit .pb-tyrebox { grid-column: 1 / 7; }
+body.v2.pit.race-pit .pb-run { grid-column: 7 / 13; }
+body.v2.pit.race-pit .pb-wx { grid-column: 1 / 13; }
+body.v1.pit.race-pit .pb-head { display: none; }
+
+.pb-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 1.2rem;
+  border-radius: 6px; border: 2px solid var(--line); padding: .2rem .8rem; }
+.pb-head:has(.pb-release.ok) { background: var(--ok); border-color: var(--ok); color: #000; }
+.pb-head:has(.pb-release.warn) { background: var(--warn); border-color: var(--warn); color: #000; }
+.pb-head:has(.pb-release.crit) { background: var(--crit); border-color: var(--crit); color: #000; }
+.pb-release { font-size: 1.8rem; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
+.pb-release-sub { font-size: 1.2rem; color: inherit; opacity: .85; }
+.pb-box { min-width: 0; min-height: 0; }
+.pb-box h2 { font-size: 1rem; margin-bottom: .25rem; }
+.pb-box h2 .dim { font-weight: normal; letter-spacing: 0; }
+.pb-tyrebox { grid-column: 1 / 6; }
+.pb-run { grid-column: 6 / 10; }
+.pb-wx { grid-column: 10 / 13; }
+.pb-sectors { grid-column: 1 / -1; }
+.pb-setup { grid-column: 1 / 8; display: flex; flex-direction: column; min-height: 0; }
+.pb-setup .pb-change { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pb-cur { grid-column: 8 / 13; overflow: auto; }
+.pb-tyres { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.pb-corner { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: .2rem .6rem; }
+.pb-corner .lbl { color: var(--dim); font-size: 1.1rem; }
+.pb-temp { font-size: 1.4rem; color: var(--soft); margin-left: .3rem; }
+.pb-temp.ok { color: var(--ok); } .pb-temp.hot { color: var(--crit); } .pb-temp.cold { color: var(--cold); }
+.pb-move { font-size: 1.6rem; font-weight: bold; line-height: 1.1; }
+.pb-psi { font-size: 1.2rem; }
+.pb-corner.up .pb-move, .pb-corner.down .pb-move { color: var(--warn); }
+.pb-corner.up, .pb-corner.down { border-color: var(--warn); }
+.pb-corner.set { border-color: var(--ok); }
+.pb-corner.set .pb-move, .pb-corner.hold .pb-move { color: var(--ok); }
+.pb-corner.limit .pb-move { color: var(--dim); }
+.pb-corner.none .pb-move { color: var(--faint); }
+.pb-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.pb-tile { background: var(--panel); border: 2px solid var(--line); border-radius: 6px; padding: .2rem .6rem; min-width: 0; }
+.pb-tile .k { color: var(--soft); font-size: 1rem; font-weight: bold; letter-spacing: .06em; }
+.pb-tile .v { font-size: 1.6rem; font-weight: bold; line-height: 1.15; white-space: nowrap; }
+.pb-tile .s { color: var(--soft); font-size: 1rem; }
+.pb-tile.ok { border-color: var(--ok); } .pb-tile.ok .v { color: var(--ok); }
+.pb-tile.warn { border-color: var(--warn); } .pb-tile.warn .v { color: var(--warn); }
+.pb-tile.crit { border-color: var(--crit); } .pb-tile.crit .v { color: var(--crit); }
+.pb-wxl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
+.pb-wxl li { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: .5rem; align-items: baseline;
+  background: var(--panel); border-left: 4px solid var(--line); padding: .15rem .5rem; font-size: 1.2rem; }
+.pb-wxl li.dry { border-color: var(--ok); } .pb-wxl li.wet { border-color: var(--cold); } .pb-wxl li.storm { border-color: var(--crit); }
+.pb-wxl .k { color: var(--dim); font-size: 1rem; }
+.pb-wxl .sky { font-weight: bold; }
+.pb-wxl .pct { color: var(--soft); }
+.pb-sec { width: 100%; border-collapse: collapse; font-size: 1.2rem; }
+.pb-sec th, .pb-sec td { border: 1px solid var(--line); padding: 0 .5rem; text-align: right; }
+.pb-sec thead th { color: var(--dim); font-weight: normal; font-size: 1rem; letter-spacing: .1em; }
+.pb-sec tbody th { text-align: left; color: var(--soft); font-size: 1rem; letter-spacing: .06em; width: 9rem; }
+.pb-sec td { font-weight: bold; }
+.pb-sec .who { display: block; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dim); font-size: .85rem; letter-spacing: 0; }
+.pb-sec td.ok { color: var(--ok); } .pb-sec td.warn { color: var(--warn); }
+.pb-sec td.worst { background: color-mix(in srgb, var(--crit) 20%, var(--panel)); }
+.pb-setup ol, .pb-cur ol { list-style: none; margin: 0; padding: 0; }
+.pb-change { display: flex; flex-direction: column; gap: .2rem; }
+.pb-change li { display: grid; grid-template-columns: 1.4rem 2.6rem minmax(6rem, auto) auto 1fr; gap: .5rem;
+  align-items: baseline; font-size: 1.3rem; padding: 0 .5rem; background: var(--panel); border-left: 6px solid var(--warn); }
+.pb-change li.try { opacity: .6; }
+.pb-change .tag.try { font-size: 1rem; }
+.pb-change .tag.spacer { visibility: hidden; }
+.pb-change .nm { font-weight: bold; white-space: nowrap; }
+.pb-change .box, .pb-change .val { color: var(--warn); font-weight: bold; white-space: nowrap; }
+.pb-change .why { color: var(--soft); font-size: 1rem; }
+.pb-change li.done { border-color: var(--ok); } .pb-change li.done .box, .pb-change li.done .val { color: var(--ok); }
+.pb-ref { font-size: .95rem; display: grid; grid-template-columns: 1fr 1fr; column-gap: 1rem; align-content: start; }
+.pb-ref li { display: grid; grid-template-columns: 1fr; gap: 0; padding: .1rem 0;
+  border-bottom: 1px solid var(--line); align-items: baseline; }
+.pb-ref .grp { color: var(--dim); font-size: .8rem; letter-spacing: .06em; }
+.pb-ref .chips { display: flex; flex-wrap: wrap; gap: .1rem 1.2rem; }
+.pb-ref .c .k { color: var(--soft); }
+.pb-ref .c.todo b { color: var(--warn); } .pb-ref .c.try { opacity: .6; } .pb-ref .c.lk .k { color: var(--dim); }
+.pb-locked { color: var(--soft); font-size: 1.1rem; padding-top: .3rem; }
+
+/* ------------------------------------------------------------ G footer & overlays --- */
+.footer { background: var(--panel); color: var(--soft); font-size: 1rem; display: flex; gap: 2rem;
+  align-items: center; padding: 0 .9rem; white-space: nowrap; }
+.footer span { color: var(--dim); display: inline-block; }
+.footer #rate { min-width: 9ch; }
+
+.scrim { position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; top: calc(15rem + 2px);
+  background: rgba(10, 10, 12, .62); display: none; }
+.drvmenu { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); top: calc(15rem + 1.4rem);
+  width: min(46rem, 62vw); background: var(--panel); border: 3px solid var(--info);
+  box-shadow: 0 .6rem 2.4rem #000; font-size: 2.3rem; display: none; }
+body.menu .scrim, body.menu .drvmenu { display: block; }
+.drvmenu-head { display: flex; justify-content: space-between; align-items: baseline; padding: .4rem .9rem;
+  font-size: 1.3rem; letter-spacing: .14em; color: var(--info); border-bottom: 1px solid var(--line); }
+.drvmenu-head .left { color: var(--fg); font-weight: bold; min-width: 9ch; text-align: right; }
+.drvmenu .meter { margin: 0; border-radius: 0; height: .35rem; color: var(--info); }
+.drvmenu ol { list-style: none; margin: 0; padding: .3rem 0; }
+.drvmenu li { padding: .35rem .9rem; color: var(--dim); border-left: .5rem solid transparent; white-space: nowrap; }
+.drvmenu li.sel { color: var(--fg); font-weight: bold; border-left-color: var(--info);
+  background: color-mix(in srgb, var(--info) 18%, transparent); }
+
+.fx { position: fixed; inset: 0; z-index: 30; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 62%,
+    color-mix(in srgb, var(--fx, var(--info)) 45%, transparent) 100%);
+  box-shadow: inset 0 0 0 .35rem var(--fx, var(--info)); }
+.fx.ack, .fx.heard { --fx: var(--ok); }
+.fx.neg { --fx: var(--crit); }
+.fx.missed { --fx: var(--warn); }
+.fx.call { --fx: var(--info); }
+.fx.once { animation: fx-once 500ms var(--ease-out) 1 forwards; }
+@keyframes fx-once { 0% { opacity: 1; } 100% { opacity: 0; } }
+.fx.listen { --fx: var(--info); opacity: .9; transition: opacity var(--t-fast) var(--ease-out); }
+
+/* Phone layout: V1 hides safety, box, and battle cards; V2 keeps them visible and uses responsive width */
+.arm { display: none; }
+html:has(body.phone) { font-size: 14px; }
+body.dash.phone { width: min(100%, 420px); margin: 0 auto; height: auto; min-height: 100vh; overflow: visible;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto;
+  outline: 1px solid var(--line); padding-bottom: 4.5rem; }
+body.v1.dash.phone { width: 390px; }
+body.phone > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
+body.phone .status { position: sticky; top: 0; z-index: 3; font-size: 1.2rem; gap: .35rem; padding: .4rem .4rem; }
+body.phone .status #lap { min-width: 0; white-space: nowrap; flex-shrink: 0; }
+body.phone .status #drv, body.phone .status #mindset { display: none; }
+body.phone .status .sess, body.phone .status #age, body.phone .status .chips, body.phone .footer,
+body.phone .banner .evidence, body.phone .banner .previous, body.phone .banner .meta,
+body.phone .setup, body.phone .t-pace small,
+body.phone .tiles .batt, body.phone .tiles .weather, body.phone .tiles .lastlap, body.phone .tiles .damage,
+body.phone .ctx-head { display: none; }
+/* V1 bug: hid all contextual cards except .strat on phone! V2 keeps safety, exec, and battle visible. */
+body.v1.phone .ctx .card:not(.strat) { display: none !important; }
+body.v2.phone .ctx .card.reply, body.v2.phone .ctx .card.info { display: none !important; }
+body.phone .banner { position: sticky; top: var(--status-h, 3.2rem); z-index: 2; min-height: 4.2rem; }
+body.phone .banner .text { font-size: 1.7rem; -webkit-line-clamp: 1; display: block; white-space: nowrap;
+  text-overflow: ellipsis; }
+body.phone .car { min-height: 14rem; }
+body.phone .corner .temp { font-size: 2.2rem; }
+body.phone .tiles { grid-template-columns: 1fr; grid-template-rows: none; }
+body.phone .t-head { font-size: 1.1rem; }
+body.phone .corner .det .surf, body.phone .corner .tags { display: none; }
+body.phone .plan { flex-wrap: wrap; white-space: normal; row-gap: .2rem; }
+body.phone .arm { display: block; margin: .3rem .9rem .5rem; padding: .6rem; font: inherit; font-size: 1.4rem;
+  font-weight: bold; border: 2px solid var(--ok); border-radius: .4rem; color: var(--ok); background: var(--panel); }
+body.phone .arm[aria-pressed="true"] { background: var(--ok); color: #000; }
+
+/* ------------------------------------------- Interactive V1/V2 Switcher & Diff Callouts --- */
+.cmp-bar { position: fixed; z-index: 50; right: .6rem; bottom: .35rem;
+  display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; justify-content: flex-end;
+  background: rgba(18, 18, 22, .94); border: 1px solid #484854; border-radius: .45rem;
+  padding: .25rem .5rem; box-shadow: 0 .4rem 1.4rem rgba(0,0,0,.85); font-size: .78rem;
+  max-width: 64vw; backdrop-filter: blur(6px); transition: all var(--t-fast) var(--ease-out); }
+.cmp-bar.collapsed { padding: .2rem .35rem; gap: .25rem; }
+.cmp-bar.collapsed .scn, .cmp-bar.collapsed #btn-diffs, .cmp-bar.collapsed #btn-sim, .cmp-bar.collapsed .sep { display: none; }
+.cmp-bar .ver-grp { display: inline-flex; border: 1px solid #525260; border-radius: .3rem; overflow: hidden; }
+.cmp-bar button { background: transparent; color: var(--soft); border: 1px solid transparent;
+  font: inherit; font-weight: bold; padding: .18rem .5rem; cursor: pointer; border-radius: .25rem;
+  letter-spacing: .04em; white-space: nowrap; }
+.cmp-bar .ver-grp button { border-radius: 0; border: 0; padding: .2rem .65rem; }
+.cmp-bar.collapsed .ver-grp button { padding: .15rem .45rem; }
+.cmp-bar .ver-grp button.on-v1 { background: var(--warn); color: #000; }
+.cmp-bar .ver-grp button.on-v2 { background: var(--ok); color: #000; }
+.cmp-bar button.scn { border-color: #32323c; color: var(--dim); font-weight: normal; }
+.cmp-bar button.scn.active { border-color: var(--info); background: color-mix(in srgb, var(--info) 22%, transparent); color: #fff; font-weight: bold; }
+.cmp-bar button.ctl { border-color: #444452; color: var(--fg); }
+.cmp-bar button.ctl.on { border-color: var(--cold); background: color-mix(in srgb, var(--cold) 22%, transparent); color: var(--cold); }
+.cmp-bar button.collapse-btn { border-color: #444452; color: var(--soft); padding: .18rem .45rem; }
+.cmp-bar .sep { width: 1px; height: 1.1rem; background: #3a3a44; margin: 0 .1rem; }
+.cmp-note { position: fixed; z-index: 49; right: .8rem; bottom: 2.5rem; max-width: 34rem;
+  background: rgba(14, 16, 22, .95); border: 1px solid var(--cold); border-left-width: 4px;
+  border-radius: .35rem; padding: .35rem .65rem; font-size: .82rem; color: var(--soft);
+  box-shadow: 0 .3rem 1rem rgba(0,0,0,.75); pointer-events: none; }
+.cmp-note b { color: var(--cold); }
+body:not(.diffs) .cmp-note { display: none; }
+
+/* Diff callout badges when "SPOT DIFFS" is enabled */
+.diff-badge { display: none; }
+body.diffs [data-diff] { outline: 2px dashed rgba(92, 200, 255, .65); outline-offset: -2px; position: relative; }
+body.diffs [data-diff]::before {
+  content: attr(data-diff); position: absolute; z-index: 40; top: 2px; right: 4px;
+  background: #0d2230; color: var(--cold); border: 1px solid var(--cold); border-radius: 3px;
+  padding: 0 .35rem; font-size: .72rem; font-weight: bold; letter-spacing: .04em; pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .fx.once { display: none; }
+}
+</style>
+</head>
+<body class="dash v2">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="wx-0" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="wx-1" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1M9 20h8a3.5 3.5 0 0 0 0-7 4.8 4.8 0 0 0-9.2 1.3A2.9 2.9 0 0 0 9 20z"/></symbol>
+  <symbol id="wx-2" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
+  <symbol id="wx-3" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="wx-4" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="wx-5" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM13 15l-3 4h3l-2 4"/></symbol>
+  <!-- status bar infographic icons -->
+  <symbol id="ico-speak" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><path d="M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16.5 7.5c1.5 1.5 1.5 4 0 5.5M19.5 4.5c3.2 3.2 3.2 8.3 0 11.5"/></symbol>
+  <symbol id="ico-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M3.5 10h17M9.5 14.2 5.5 19M14.5 14.2l4 4.8"/></symbol>
+  <symbol id="ico-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="ico-track" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></symbol>
+  <symbol id="ico-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM22 9l-6 6M16 9l6 6"/></symbol>
+  <symbol id="ico-quiet" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7"/></symbol>
+  <symbol id="ico-vol" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/></symbol>
+</svg>
+
+<header class="status" data-diff="A: Infographic icons (steering wheel + globe for DRV, speaker icons for quiet/silent, speaking cue) · C1·T1 chip right of P5">
+  <span id="live" class="live">LIVE</span>
+  <span id="age"><span class="v1-only">age </span>42 ms</span>
+  <span id="phase" class="sess">ON TRACK</span>
+  <span id="flag" class="flag" hidden></span>
+  <span class="spacer"></span>
+  <span id="session" class="sess">RACE · BAHRAIN</span>
+  <span id="lap"><span class="v1-only">LAP </span><span class="v2-only">L</span>24/57</span>
+  <span id="position">P5</span>
+  <span id="limits" class="chip limits warn v2-only" title="1 corner cut · 1 track limit">⚠ C1 · T1</span>
+  <span class="chips">
+    <span id="ov" class="chip ov active">OV 3.2s</span>
+    <span id="sm" class="chip sm on">SM</span>
+  </span>
+  <span id="verbosity" class="dim"></span>
+  <span id="voice" class="voice" hidden><span class="v1-only">● LISTENING </span><svg class="ico v2-only"><use href="#ico-speak"/></svg>2s</span>
+  <span id="drv" class="chip drv ok" title="driver rating 62 (global)"><span class="v1-only">DRV 62 <span class="dim">global</span></span><span class="v2-only"><svg class="ico"><use href="#ico-wheel"/></svg> 62 <svg class="ico src"><use href="#ico-globe"/></svg></span></span>
+  <span id="limits-v1" class="chip limits warn v1-only">CUT 1 · TL 1</span>
+  <span id="mindset" class="pill">BAL</span>
+</header>
+
+<section id="banner" class="banner p2" data-diff="B: #call-life hairline · .arrive/.settle · P1 3x white flash · red stale/mismatch bar">
+  <div class="bar"></div>
+  <div id="call-life" class="life run" style="--life:20s; --life-at:-4s"></div>
+  <div class="body">
+    <div class="current">
+      <div id="call-text" class="text">Hamilton 0.6 behind with overtake. He's 3 tenths faster.</div>
+      <div id="call-meta" class="meta"><span class="pri">● ACTION</span> L24 · 4s<br><span class="started">▶ spoken</span></div>
+      <div id="press" class="press ack">ACK ✓</div>
+    </div>
+    <div id="call-evidence" class="evidence"><b>WHY</b> gap behind 0.6 s · closing 0.3 s/lap · OV active · hold 58%</div>
+    <div id="previous" class="previous"><b>BEFORE · L23</b> Still on Plan A, window laps 26 to 28.</div>
+  </div>
+</section>
+
+<section class="zone tyres" data-diff="C: Status word + semantic trend arrow (HOT ▼ green = cooling) · hot brake/surf tint · no 9-word legend">
+  <div class="t-head">
+    <span class="t-fit"><span class="comp medium">MEDIUM</span><span class="age">14 laps</span></span>
+    <span class="t-sep"></span>
+    <span class="t-pace warn">~6 laps of pace ▼ <small>SHRINKING</small></span>
+  </div>
+  <div class="car">
+    <!-- FL: COLD (78°) but warming (▲). V1 shows blue 78° + red ▲. V2 shows 78° + COLD + green ▲ (warming into window). -->
+    <div id="tyre-fl" class="corner ok fl">
+      <div class="lbl"><span>FL</span><span class="brk">BRK 412°</span></div>
+      <div class="temp">104°</div>
+      <div class="word"><span class="st-word">OK</span><span class="trend up" title="heating">▲</span></div>
+      <div class="meter twin"><b></b><i style="--f:.68"></i></div>
+      <div class="det"><span class="wear">wear <b>31%</b></span><span class="surf">surf 101°</span></div>
+      <div class="tags"><span class="tag lock lockup-only">LOCKED</span></div>
+    </div>
+    <!-- FR: HOT (112°) and cooling down (▼). V1 shows red 112° + blue ▼ (clash!). V2 shows 112° + HOT + green ▼ (recovering). -->
+    <div id="tyre-fr" class="corner hot flip">
+      <div class="lbl"><span>FR</span><span class="brk warn">BRK 890°</span></div>
+      <div class="temp">112°</div>
+      <div class="word"><span class="st-word">HOT</span><span class="trend down" title="cooling toward window">▼</span></div>
+      <div class="meter twin"><b></b><i style="--f:.88"></i></div>
+      <div class="det"><span class="wear">wear <b>38%</b></span><span class="surf hot">surf 121°</span></div>
+      <div class="tags"><span class="tag crit">HOT WEAR +1.9%/lap</span><span class="tag warn lockup-only">BLISTER 12%</span></div>
+    </div>
+    <div id="tyre-rl" class="corner ok">
+      <div class="lbl"><span>RL</span><span class="brk">BRK 380°</span></div>
+      <div class="temp">96°</div>
+      <div class="word"><span class="st-word">OK</span><span class="trend flat" title="steady">▬</span></div>
+      <div class="meter twin"><b></b><i style="--f:.58"></i></div>
+      <div class="det"><span class="wear">wear <b>22%</b></span><span class="surf">surf 94°</span></div>
+      <div class="tags"></div>
+    </div>
+    <!-- RR: COLD (78°) and warming (▲). V1 shows blue 78° + red ▲. V2 shows 78° + COLD + green ▲. -->
+    <div id="tyre-rr" class="corner cold">
+      <div class="lbl"><span>RR</span><span class="brk">BRK 372°</span></div>
+      <div class="temp">78°</div>
+      <div class="word"><span class="st-word">COLD</span><span class="trend up" title="warming toward window">▲</span></div>
+      <div class="meter twin"><b></b><i style="--f:.38"></i></div>
+      <div class="det"><span class="wear">wear <b>21%</b></span><span class="surf">surf 76°</span></div>
+      <div class="tags"></div>
+    </div>
+  </div>
+  <div class="setup">
+    <div class="setup-grp bb">
+      <span class="k">BB</span>
+      <span><span class="v">56%</span> <span class="sug try">▲ TRY 57%</span></span>
+    </div>
+    <span class="v1-only"></span>
+    <div class="setup-grp diff">
+      <span class="k">DIFF</span>
+      <span>ON <span class="v suited">60%</span> <span class="sug none v1-only">✓ suited</span></span>
+      <span>OFF <span class="v suited">55%</span></span>
+    </div>
+    <span class="legend">underline = target met · arrows = advice · TRY = experiment</span>
+  </div>
+</section>
+
+<section class="zone tiles" data-diff="D: Weather icons + inline predicted crossover lap (~L28) · Fuel kg/L · Battery MJ/floor · Stint base pace">
+  <div class="tile fuel">
+    <h2>FUEL AT FLAG</h2>
+    <div class="big ok">+0.4</div>
+    <div class="sub">laps SPARE</div>
+    <div class="sub2 v2-only">1.62 kg/L · 54.8 kg</div>
+  </div>
+  <div class="tile batt on_budget">
+    <h2>BATT</h2>
+    <div><span class="big">62%</span></div>
+    <div class="mode"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg> ON BUDGET</div>
+    <div class="sub2 v2-only">−0.1 MJ/L · floor 18L</div>
+  </div>
+  <div class="tile wide weather">
+    <h2>WEATHER</h2>
+    <div class="wx dry-only">
+      <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-0"/></svg><span class="pct">5%</span><div class="sky">CLEAR</div></div>
+      <div class="xo-warn"><div class="k">IN 10 <span class="comp inter xs v2-only">INTER</span></div><svg class="ico wxi"><use href="#wx-1"/></svg><span class="pct">15%</span><div class="sky">LIGHT CLOUD</div></div>
+      <div class="wet"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">60%</span><div class="sky">LIGHT RAIN</div></div>
+    </div>
+    <div class="wx rain-only">
+      <div><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">20%</span><div class="sky">OVERCAST</div></div>
+      <div class="wet xo-warn"><div class="k">IN 10 <span class="comp inter xs">INTER</span></div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">65%</span><div class="sky">LIGHT RAIN</div></div>
+      <div class="wet"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-3"/></svg><span class="pct">70%</span><div class="sky">LIGHT RAIN</div></div>
+    </div>
+    <div class="cross dry-only v1-only">✓ no crossover</div>
+    <div class="cross warn dry-only v2-only"><span>→ <span class="comp inter xs">INTER</span> <b>~L28</b> · in ~6 min</span><span>rain 60%</span></div>
+    <div class="cross warn rain-only"><span>→ <span class="comp inter xs">INTER</span> <b>~L27</b> · in ~5 min</span><span>rain 65%</span></div>
+  </div>
+  <div id="lastlap" class="tile wide lastlap">
+    <div class="lap-head-row">
+      <h2>LAST LAPS</h2>
+      <span class="base-ref v2-only">base <b>1:32.5</b></span>
+    </div>
+    <div class="lap-comparisons">
+      <div id="cmp-1" class="lap-comparison">
+        <div class="lap-comparison-header">
+          <span id="cmp-1-label" class="cmp-label">L23 1:32.6 <span class="vs v2-only">vs L22</span></span>
+          <strong id="cmp-1-delta" class="cmp-delta warn">Δ +0.1s<span class="base-d v2-only">base +0.1s</span></strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value warn">+0.1s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value warn">+0.2s</strong></div>
+        </div>
+      </div>
+      <div id="cmp-2" class="lap-comparison">
+        <div class="lap-comparison-header">
+          <span id="cmp-2-label" class="cmp-label">L24 1:32.4 <span class="vs v2-only">vs L23</span></span>
+          <strong id="cmp-2-delta" class="cmp-delta ok">Δ −0.2s<span class="base-d v2-only">base −0.1s</span></strong>
+        </div>
+        <div class="lap-sectors">
+          <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value ok">−0.2s</strong></div>
+          <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value warn">+0.3s</strong></div>
+          <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value ok">−0.3s</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tile wide damage">
+    <h2>DAMAGE</h2>
+    <div id="damage" class="dmg">
+      <span>FW L <span class="n warn">6%</span></span>
+      <span>Floor <span class="n">2%</span></span>
+    </div>
+  </div>
+</section>
+
+<section class="zone ctx" data-diff="E: Persistent rail glide · no 6-pill battle noise · Undercut + Pit Exit traffic · Reply card · Quali flying order">
+  <div class="ctx-head"><h2 class="h-race">RACE · AUTO</h2><h2 class="h-quali">QUALI · AUTO</h2><span class="how h-race">safety › box › reply › battle › info</span></div>
+  <div class="ctx-race">
+    <div class="card safety rain-only">
+      <div class="rank">SAFETY</div>
+      <div class="head">☂ RAIN CROSSOVER → <span class="comp inter">INTER</span></div>
+      <div class="line">rain <b>65%</b> in <b>~5 min</b></div>
+    </div>
+
+    <div id="c-exec" class="card exec" hidden>
+      <div class="rank"><span>EXECUTION</span><span class="v2-only">PIT WINDOW OPEN</span></div>
+      <div class="head" id="c-exec-head">BOX NOW · PLAN A</div>
+      <div class="line" id="c-exec-line">window L26–28 · costs 21 s <span class="v2-only">· <span class="exit-warn">⚠ TRAFFIC Ocon +1.2 s</span></span></div>
+    </div>
+
+    <div id="c-reply" class="card reply v2-only" hidden>
+      <div class="rank"><span>REPLY · DRIVER QUERY</span><span>JUST NOW</span></div>
+      <div class="head">PIT EXIT · OCON +1.2 S</div>
+      <div class="line">rejoin P7 on fresh <b>HARD</b> · undercut on Norris worth <b>+1.2 s</b></div>
+    </div>
+
+    <div class="card battle threat single">
+      <div class="modes">
+        <span>free air</span><span>catching</span><span>attacking</span>
+        <span class="on">defending</span><span>under threat</span><span>managing</span>
+      </div>
+      <div class="mode-row">
+        <div class="mode">◀ DEFENDING <span class="sub">· 2 laps</span></div>
+        <span class="uc-pill v2-only">UNDERCUT +1.2s</span>
+      </div>
+      <div class="rv">
+        <span class="side">▼ BEHIND</span>
+        <span class="name">P6 HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span>
+        <span class="gap">−0.6</span>
+      </div>
+      <div class="rail behind in"><div class="rz">1 S</div><div class="rc" style="--g: .2"></div></div>
+      <div class="pace">
+        <span class="crit">▲ closing 0.3 s/lap</span>
+        <span class="last-d v2-only">last −0.3s faster</span>
+        <span class="prob">HOLD 58%</span>
+      </div>
+      <div class="rv" style="margin-top:.3rem; opacity:.6">
+        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="gap">+2.4</span>
+      </div>
+    </div>
+
+    <div class="card battle attack scrap fight-ahead-only">
+      <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>
+      <div class="bcar train">
+        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI<span class="comp xs medium">MED</span><span class="age"> · 12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
+      </div>
+      <div class="bcar attack">
+        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
+        <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
+      </div>
+      <div class="you">YOU · P5</div>
+      <div class="bcar calm">
+        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON<span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+      </div>
+    </div>
+
+    <div class="card strat">
+      <div class="rank"><span>STRATEGY</span><span class="v2-only">PIT LOSS 21.0s</span></div>
+      <div class="plan"><span class="pid">PLAN A</span>
+        <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span></span>
+        window L26–28 <span class="onp">✓ ON PLAN</span></div>
+      <div class="plan alt"><span class="pid">PLAN B</span>
+        <span class="seq"><span class="comp medium">M</span> <span class="arr">→</span> <span class="comp hard">H</span> <span class="arr">→</span> <span class="comp soft">S</span></span>
+        2 stops · +3.1 s</div>
+      <div class="strat-meta v2-only">
+        <span>PIT EXIT <b class="warn" id="strat-exit">⚠ Ocon +1.2 s</b></span>
+        <span>UC <b class="ok">+1.2 s</b> · OC <b>−0.4 s</b></span>
+      </div>
+    </div>
+
+    <div class="card info">◦ INFO · Norris pitted</div>
+  </div>
+
+  <div class="qzone">
+    <div class="qphase"><span>GARAGE</span><span>OUT LAP</span><span class="on">FLYING</span><span>IN LAP</span></div>
+    <div class="card"><div class="qcut"><span>CUT-OFF</span><span class="pos">P9</span>
+      <span class="badge">THROUGH</span><span class="m">−0.2</span></div>
+      <div class="line v1-only">predicted cut-off 1:31.9 · best 1:31.7 · 8:42 left · 2 fresh</div>
+      <div class="qcut-grid v2-only">
+        <div class="qcut-cell"><span class="k">PRED CUT</span><span class="v">1:31.9</span></div>
+        <div class="qcut-cell"><span class="k">YOUR BEST</span><span class="v">1:31.7</span></div>
+        <div class="qcut-cell"><span class="k">TIME LEFT</span><span class="v">8:42</span></div>
+        <div class="qcut-cell"><span class="k">FRESH SETS</span><span class="v">2 sets</span></div>
+      </div></div>
+    <div class="card"><div class="qcut"><span>BENCHMARK</span><span class="pos v1-only">pole Leclerc</span><span class="m v1-only" style="color:var(--crit)">+0.4</span></div>
+      <table class="qbench"><thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th class="v2-only">LAP</th></tr></thead>
+        <tbody>
+          <tr><th>POLE<span class="who v2-only">Leclerc</span></th><td class="ok">−0.1</td><td class="crit worst">+0.3</td><td class="crit">+0.2</td><td class="crit v2-only">+0.4</td></tr>
+          <tr><th>MATE<span class="who v2-only">Sainz</span></th><td class="ok">−0.1</td><td class="crit worst">+0.2</td><td class="ok">−0.1</td><td class="crit v2-only">+0.1</td></tr>
+        </tbody></table>
+      <div class="line v1-only">mate Sainz <b>+0.1</b></div></div>
+    <!-- V2 promotes q-run-card to top of .qzone on flying laps so driver sees projected time & abort status first -->
+    <div class="card q-run-card"><div class="rank"><span>THIS RUN · FLYING</span><span class="v2-only">✓ KEEP PUSHING</span></div><div class="head">PROJ 1:31.6</div><div class="line"><b>−0.3 s to cut</b> · S1 purple −0.1 s</div></div>
+  </div>
+</section>
+
+<section id="cool" class="zone coolzone" data-diff="F2: Cool-down deduplicates LAST LAP and glides battery bar">
+  <div class="cz-top">
+    <div class="tile"><h2>LAST LAP</h2><div id="cz-last" class="v">1:31.7</div></div>
+    <div class="tile"><h2>GAP TO POLE</h2><div id="cz-pole" class="v crit">+0.4</div></div>
+  </div>
+  <div id="c-behind" class="c-alert warn">⚠ HOT LAP 4.2 s BEHIND<span class="v1-only"> · MOVE OFF LINE</span><span class="act v2-only">MOVE OFF LINE</span></div>
+  <div class="c-tiles">
+    <div id="c-ers-tile" class="c-tile ok">
+      <h2>BATTERY</h2>
+      <div id="c-ers" class="c-num">72%</div>
+      <div class="bar"><div id="c-ers-bar" class="fill" style="width:72%"></div><div id="c-ers-min" class="mark" style="left:60%"></div></div>
+      <div id="c-mode" class="sub">✓ RECHARGING · need 60%</div>
+    </div>
+    <div id="c-hot-tile" class="c-tile">
+      <h2>PUSH IN</h2>
+      <div id="c-hot" class="c-num">1.4 km</div>
+      <div id="c-plan" class="sub">cooling: tyres hot</div>
+    </div>
+    <div class="c-tile">
+      <h2>TYRES</h2>
+      <div class="c-tyres"><span id="c-fl" class="ok">FL 96°</span><span id="c-fr" class="hot">FR 112°</span><span id="c-rl" class="ok">RL 92°</span><span id="c-rr" class="cold">RR 78°</span></div>
+      <div id="c-hint" class="sub">fronts hot · weave less</div>
+    </div>
+  </div>
+  <div class="c-info">
+    <div id="c-pole" class="c-row">POLE Leclerc -0.4</div>
+    <div id="c-sectors" class="c-sectors">
+      <div class="c-sec gain"><span class="k">S1</span><span class="t">29.4</span><span class="d">−0.1</span></div>
+      <div class="c-sec worst"><span class="k">S2</span><span class="t">39.9</span><span class="d">+0.3</span></div>
+      <div class="c-sec"><span class="k">S3</span><span class="t">22.4</span><span class="d">+0.2</span></div>
+    </div>
+    <div id="c-mis" class="c-row"><span class="v1-only">LAST LAP 1:31.7 · clean</span><span class="v2-only">RUN CHECK · clean lap · S2 exit oversteer cost 0.2 s</span></div>
+    <div id="c-sub" class="c-row dim">8:42 left · 2 fresh · fuel 4.2 laps</div>
+  </div>
+</section>
+
+<section id="pitboard" class="zone pitboard" data-diff="F1: In a race pit stop, V2 spans cols 1-7 and keeps .ctx (strategy + pit exit) visible on the right">
+  <div class="pb-head">
+    <div id="pb-release" class="pb-release ok">✓ GO · TRACK CLEAR</div>
+    <div id="pb-release-sub" class="pb-release-sub">14 on track · 9 s clear ahead · 6 s behind</div>
+  </div>
+  <div class="pb-box pb-tyrebox">
+    <h2>TYRES <span id="pb-press-note" class="dim">· avg on flying laps · target 80–110°</span></h2>
+    <div class="pb-tyres">
+      <div class="pb-corner hold" id="pb-fl"><div class="lbl">FL <b class="pb-temp ok">96°</b></div><div class="pb-move">✓ KEEP</div><div class="pb-psi">23.5</div></div>
+      <div class="pb-corner down" id="pb-fr"><div class="lbl">FR <b class="pb-temp hot">112°</b></div><div class="pb-move">▼ −0.4</div><div class="pb-psi">23.9 → 23.5</div></div>
+      <div class="pb-corner set" id="pb-rl"><div class="lbl">RL <b class="pb-temp ok">92°</b></div><div class="pb-move">SET ✓</div><div class="pb-psi">21.8 psi</div></div>
+      <div class="pb-corner up" id="pb-rr"><div class="lbl">RR <b class="pb-temp cold">78°</b></div><div class="pb-move">▲ +0.3</div><div class="pb-psi">21.2 → 21.5</div></div>
+    </div>
+  </div>
+  <div class="pb-box pb-run">
+    <h2>LAST RUN</h2>
+    <div class="pb-tiles">
+      <div id="pb-runfuel" class="pb-tile"><div class="k">FUEL / LAP</div><div class="v">1.62 kg</div><div class="s">avg of 14 laps</div></div>
+      <div id="pb-fuel" class="pb-tile ok"><div class="k">IN TANK</div><div class="v">+0.4 laps</div><div class="s">to flag</div></div>
+      <div id="pb-ers" class="pb-tile ok"><div class="k">⚡ BATTERY</div><div class="v">62%</div><div class="s">on budget</div></div>
+      <div id="pb-plan" class="pb-tile ok"><div class="k">NEXT STINT</div><div class="v">HARD</div><div class="s">31 laps to flag</div></div>
+    </div>
+  </div>
+  <div class="pb-box pb-wx">
+    <h2>WEATHER</h2>
+    <ol id="pb-wx" class="pb-wxl">
+      <li class="dry"><span class="k">NOW</span><span class="sky">LIGHT CLOUD</span><span class="pct">rain 5%</span></li>
+      <li class="dry"><span class="k">+10 min</span><span class="sky">OVERCAST</span><span class="pct">rain 10%</span></li>
+      <li class="dry"><span class="k">+30 min</span><span class="sky">OVERCAST</span><span class="pct">rain 25%</span></li>
+    </ol>
+    <div id="pb-cross" class="cross">✓ no tyre change due</div>
+  </div>
+  <div class="pb-box pb-sectors">
+    <h2>SECTORS · BEST LAP</h2>
+    <table id="pb-sec" class="pb-sec">
+      <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+      <tbody>
+        <tr id="pb-sec-me"><th>YOU</th><td>29.412</td><td>39.876</td><td>22.414</td><td>1:31.7</td></tr>
+        <tr id="pb-sec-lead"><th>LEADER<span id="pb-sec-lead-who" class="who">Leclerc</span></th><td class="ok">−0.080</td><td class="warn worst">+0.290</td><td class="warn">+0.170</td><td class="warn">+0.380</td></tr>
+        <tr id="pb-sec-mate"><th>TEAMMATE<span id="pb-sec-mate-who" class="who">Sainz</span></th><td class="ok">−0.050</td><td class="warn worst">+0.120</td><td class="ok">−0.030</td><td class="warn">+0.040</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pb-box pb-setup">
+    <h2>SETUP CHANGES</h2>
+    <ol id="pb-change" class="pb-change">
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">FR psi</span><span class="val">23.9 → 23.5</span><span class="why"></span></li>
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">RR psi</span><span class="val">21.2 → 21.5</span><span class="why"></span></li>
+      <li class="todo"><span class="box">☐</span><span class="tag spacer"></span><span class="nm">F wing</span><span class="val">28 → 30</span><span class="why">front washes out mid-corner</span></li>
+      <li class="todo try"><span class="box">☐</span><span class="tag try">TRY</span><span class="nm">on-thr</span><span class="val">60% → 55%</span><span class="why">rear steps out on exit</span></li>
+      <li class="done"><span class="box">☑</span><span class="tag spacer"></span><span class="nm">bias</span><span class="val">57% ✓</span><span class="why">locks fronts into T1</span></li>
+    </ol>
+    <div id="pb-locked" class="pb-locked">Locked after this session: F wing, R wing, on-thr, off-thr</div>
+  </div>
+  <div class="pb-box pb-cur">
+    <h2>CURRENT SETUP</h2>
+    <ol id="pb-setup" class="pb-ref">
+      <li><span class="grp">AERODYNAMICS</span><span class="chips"><span class="c todo lk"><span class="k">F wing </span><b>28</b></span><span class="c lk"><span class="k">R wing </span><b>30</b></span></span></li>
+      <li><span class="grp">TRANSMISSION</span><span class="chips"><span class="c try lk"><span class="k">on-thr </span><b>60%</b></span><span class="c lk"><span class="k">off-thr </span><b>55%</b></span><span class="c"><span class="k">eng brk </span><b>50%</b></span></span></li>
+      <li><span class="grp">SUSP. GEOMETRY</span><span class="chips"><span class="c"><span class="k">F camber </span><b>-3.00°</b></span><span class="c"><span class="k">R camber </span><b>-1.50°</b></span><span class="c"><span class="k">F toe </span><b>0.05°</b></span><span class="c"><span class="k">R toe </span><b>0.20°</b></span></span></li>
+      <li><span class="grp">SUSPENSION</span><span class="chips"><span class="c"><span class="k">F spr </span><b>22</b></span><span class="c"><span class="k">R spr </span><b>8</b></span><span class="c"><span class="k">F arb </span><b>14</b></span><span class="c"><span class="k">R arb </span><b>6</b></span><span class="c"><span class="k">F ride </span><b>32</b></span><span class="c"><span class="k">R ride </span><b>70</b></span></span></li>
+      <li><span class="grp">BRAKES</span><span class="chips"><span class="c"><span class="k">pressure </span><b>95%</b></span><span class="c"><span class="k">bias </span><b>57%</b></span></span></li>
+      <li><span class="grp">TYRES</span><span class="chips"><span class="c"><span class="k">FL </span><b>23.5</b></span><span class="c"><span class="k">FR </span><b>23.9</b></span><span class="c"><span class="k">RL </span><b>21.8</b></span><span class="c"><span class="k">RR </span><b>21.2</b></span></span></li>
+      <li><span class="grp">FUEL</span><span class="chips"><span class="k">load </span><b>12.0 kg</b></span></li>
+    </ol>
+  </div>
+</section>
+
+<footer class="footer">
+  <span id="rate">10 upd/s</span>
+  <span id="latency">queue 2 · oldest 3.4 s · TTS 210 ms · screen lag 12 ms</span>
+  <span id="ers">ERS 62%</span>
+  <span id="sc">SC 0</span>
+</footer>
+
+<button class="arm" type="button" aria-pressed="false">ARM PHONE RADIO</button>
+
+<div class="scrim"></div>
+<aside class="drvmenu" aria-live="polite">
+  <div class="drvmenu-head">RADIO PIT <span class="left">closes 6s</span></div>
+  <div class="meter"><i style="--f:.75"></i></div>
+  <ol>
+    <li>Gap to leader?</li>
+    <li class="sel">Box this lap</li>
+    <li>Plan B?</li>
+    <li>Radio calls: normal</li>
+  </ol>
+</aside>
+
+<div id="fx" class="fx"></div>
+
+<!-- Interactive V1 <-> V2 Comparison Bar -->
+<div id="cmp-note" class="cmp-note">
+  <b>V2 active (Tab to flip V1/V2):</b> High-contrast CUT/TL chip right of P5, weather icons with predicted crossover lap (~L28), status word + semantic trend arrows, persistent battle rail glide, undercut + pit-exit traffic, race pit-lane split view.
+</div>
+<nav id="cmp-bar" class="cmp-bar" aria-label="V1 vs V2 comparison controls">
+  <div class="ver-grp" title="Press Tab to swap V1 and V2 in place">
+    <button type="button" id="btn-v1">V1 · CURRENT</button>
+    <button type="button" id="btn-v2" class="on-v2">V2 · REIMAGINED</button>
+  </div>
+  <button type="button" id="btn-diffs" class="ctl" title="Toggle zone diff callouts (D)">SPOT DIFFS (D)</button>
+  <button type="button" id="btn-sim" class="ctl on" title="Play/pause live race sim (Space)">SIM ON</button>
+  <span class="sep"></span>
+  <button type="button" class="scn active" data-scn="battle">1 Race Battle</button>
+  <button type="button" class="scn" data-scn="box">2 Box + Exit</button>
+  <button type="button" class="scn" data-scn="racepit">3 Race Pit Stop</button>
+  <button type="button" class="scn" data-scn="outlap">4 Out Lap + Motion</button>
+  <button type="button" class="scn" data-scn="stale">5 Stale</button>
+  <button type="button" class="scn" data-scn="quali">6 Quali Flying</button>
+  <button type="button" class="scn" data-scn="cool">7 Cool-down</button>
+  <button type="button" class="scn" data-scn="garage">8 Garage</button>
+  <button type="button" class="scn" data-scn="phone">9 Phone</button>
+  <span class="sep"></span>
+  <button type="button" id="btn-collapse" class="collapse-btn" title="Collapse/expand switcher to bottom right (C)">▾ COLLAPSE (C)</button>
+</nav>
+
+<script>
+(function () {
+  var body = document.body, fx = document.getElementById("fx");
+  var btnV1 = document.getElementById("btn-v1"), btnV2 = document.getElementById("btn-v2");
+  var btnDiffs = document.getElementById("btn-diffs"), btnSim = document.getElementById("btn-sim");
+  var cmpNote = document.getElementById("cmp-note");
+  var banner = document.getElementById("banner"), callText = document.getElementById("call-text");
+  var callMeta = document.getElementById("call-meta"), callEvid = document.getElementById("call-evidence");
+  var prevEl = document.getElementById("previous"), lifeEl = document.getElementById("call-life");
+  var phaseEl = document.getElementById("phase"), posEl = document.getElementById("position");
+  var lapEl = document.getElementById("lap"), verbEl = document.getElementById("verbosity");
+  var voiceEl = document.getElementById("voice"), execCard = document.getElementById("c-exec");
+  var execHead = document.getElementById("c-exec-head"), execLine = document.getElementById("c-exec-line");
+  var replyCard = document.getElementById("c-reply");
+
+  var NOTES = {
+    battle: "<b>Race Battle:</b> Flip V1/V2! Watch CUT 1 · TL 1 moved right of P5 with high-contrast amber tint, Weather icons with predicted crossover lap (~L28), FR tyre (112° HOT cooling ▼ in green), Battle UNDERCUT +1.2s, and smooth gap rail glide.",
+    box: "<b>Box + Pit Exit:</b> V2 shows Pit Exit traffic (⚠ Ocon +1.2 s) on the Execution and Strategy cards, plus the wired #c-reply card answering the driver's query.",
+    racepit: "<b>Race Pit Stop:</b> In V1, pitting in a race replaces the entire dashboard with the garage suspension/camber setup board. In V2, columns 8–12 keep your live Race Strategy, Pit Exit traffic, and Battle gaps while columns 1–7 show stint summary!",
+    outlap: "<b>Out Lap + Motion:</b> In V2, OUT LAP turns amber, P4 gain lifts green, LAP counter flashes, P1 banner bar flashes white 3x with shrinking #call-life hairline, and QUIET / VOICE WARN chips are coloured amber.",
+    stale: "<b>Stale Telemetry:</b> In V1, .banner.stalewarn has no CSS rule so the left bar stays lilac. In V2, the banner bar and text turn critical red immediately.",
+    quali: "<b>Quali Flying:</b> In V1, THIS RUN (PROJ 1:31.6) sits at the bottom of the right column below the static sector table. In V2, THIS RUN promotes to the top in green during a flying lap.",
+    cool: "<b>Cool-down:</b> V1 repeats 'LAST LAP 1:31.7' twice and jumps the battery bar width. V2 shows 'RUN CHECK · S2 exit oversteer' and smoothly glides the battery bar.",
+    garage: "<b>Garage Setup:</b> Full 12-column practice/qualifying pit board with release state, tyre pressure targets, sector benchmarks, and setup checklist.",
+    phone: "<b>Phone Layout:</b> V1 hardcodes width: 390px and hides all context cards except Strategy (hiding Safety Car, Box Now, and Battle). V2 shows Safety, Execution, and Battle cards."
+  };
+  var curScn = "battle";
+
+  function setVersion(v2) {
+    body.classList.toggle("v2", v2);
+    body.classList.toggle("v1", !v2);
+    btnV1.className = !v2 ? "on-v1" : "";
+    btnV2.className = v2 ? "on-v2" : "";
+    if (lifeEl) {
+      lifeEl.classList.remove("run");
+      void lifeEl.offsetWidth;
+      lifeEl.classList.add("run");
+    }
+  }
+
+  function clearScenarioClasses() {
+    ["phone", "quali", "cool", "pit", "race-pit", "menu", "listen", "stale", "sc", "redflag", "rain", "lockup", "fight-ahead", "sandwich", "fight-behind"].forEach(function (c) {
+      body.classList.remove(c);
+    });
+    phaseEl.textContent = "ON TRACK";
+    phaseEl.className = "sess";
+    posEl.textContent = "P5";
+    posEl.className = "";
+    lapEl.innerHTML = '<span class="v1-only">LAP </span><span class="v2-only">L</span>24/57';
+    lapEl.className = "";
+    verbEl.innerHTML = "";
+    voiceEl.hidden = true;
+    document.getElementById("live").textContent = "LIVE";
+    document.getElementById("age").innerHTML = '<span class="v1-only">age </span>42 ms';
+    document.getElementById("age").className = "";
+    banner.className = "banner p2";
+    callText.textContent = "Hamilton 0.6 behind with overtake. He's 3 tenths faster.";
+    callMeta.innerHTML = '<span class="pri">● ACTION</span> L24 · 4s<br><span class="started">▶ spoken</span>';
+    callEvid.hidden = false;
+    prevEl.innerHTML = "<b>BEFORE · L23</b> Still on Plan A, window laps 26 to 28.";
+    execCard.hidden = true;
+    replyCard.hidden = true;
+  }
+
+  function setScenario(scn) {
+    curScn = scn;
+    clearScenarioClasses();
+    Array.prototype.forEach.call(document.querySelectorAll(".cmp-bar .scn"), function (b) {
+      b.classList.toggle("active", b.dataset.scn === scn);
+    });
+    cmpNote.innerHTML = NOTES[scn] || "";
+
+    if (scn === "box") {
+      execCard.hidden = false;
+      execHead.textContent = "BOX NOW · PLAN A";
+      execLine.innerHTML = 'window L26–28 · costs 21 s <span class="v2-only">· <span class="exit-warn">⚠ TRAFFIC Ocon +1.2 s</span></span>';
+      replyCard.hidden = false;
+      banner.className = "banner p1 hit";
+      callText.textContent = "Box this lap, box this lap. Fit Hards, rejoin behind Ocon.";
+      callMeta.innerHTML = '<span class="pri">⚠ URGENT</span> L26 · 2s<br><span class="started">▶ spoken</span>';
+    } else if (scn === "racepit") {
+      body.classList.add("pit", "race-pit");
+      phaseEl.textContent = "PITTING";
+      execCard.hidden = false;
+      execHead.textContent = "IN PIT LANE · FIT HARD";
+      execLine.innerHTML = 'stop loss 21.0 s · <span class="exit-warn">⚠ REJOIN P7 behind Ocon +1.2 s</span> · FW L 6% (hold)';
+      banner.className = "banner p2";
+      callText.textContent = "Pit limiter on. Rejoining P7, Ocon 1.2 ahead on 14-lap Mediums.";
+    } else if (scn === "outlap") {
+      phaseEl.textContent = "OUT LAP";
+      phaseEl.className = "sess warn";
+      posEl.textContent = "P4";
+      posEl.className = "gain";
+      lapEl.innerHTML = '<span class="v1-only">LAP </span><span class="v2-only">L</span>27/57';
+      lapEl.className = "tick";
+      verbEl.innerHTML = '<span class="v1-only">MINIMAL <span class="quiet">QUIET 0:45</span> <span class="silent">✕ SILENT</span></span>' +
+        '<span class="v2-only"><span class="v-chip" title="verbosity: minimal"><svg class="ico"><use href="#ico-vol"/></svg>MIN</span> ' +
+        '<span class="v-chip quiet" title="quiet mode"><svg class="ico"><use href="#ico-quiet"/></svg>0:45</span> ' +
+        '<span class="v-chip silent" title="radio muted"><svg class="ico"><use href="#ico-mute"/></svg></span></span>';
+      voiceEl.hidden = false;
+      voiceEl.className = "voice warn";
+      voiceEl.innerHTML = '<span class="v1-only">● LISTENING 1s</span><span class="v2-only"><svg class="ico"><use href="#ico-speak"/></svg> 1s</span>';
+      banner.className = "banner p1 hit";
+      callText.textContent = "Clear pit exit. Warm the rears, Ocon 1.1 ahead.";
+      callText.classList.remove("arrive"); void callText.offsetWidth; callText.classList.add("arrive");
+      prevEl.classList.remove("settle"); void prevEl.offsetWidth; prevEl.classList.add("settle");
+      lifeEl.classList.remove("run"); void lifeEl.offsetWidth; lifeEl.classList.add("run");
+    } else if (scn === "stale") {
+      body.classList.add("stale");
+      document.getElementById("live").textContent = "STALE";
+      document.getElementById("age").textContent = "4.2 s old";
+      document.getElementById("age").className = "crit";
+      banner.className = "banner stalewarn";
+      callText.textContent = "TELEMETRY STALE · ADVICE PAUSED";
+      callMeta.innerHTML = "";
+      callEvid.hidden = true;
+      prevEl.innerHTML = "<b>LAST RADIO · L24 · 9s ago</b> · Hamilton 0.6 behind with overtake.";
+    } else if (scn === "quali") {
+      body.classList.add("quali");
+      phaseEl.textContent = "FLYING";
+      banner.className = "banner p2";
+      callText.textContent = "Sector 1 purple by a tenth. Cut-off margin minus 3 tenths.";
+    } else if (scn === "cool") {
+      body.classList.add("quali", "cool");
+      phaseEl.textContent = "IN LAP";
+      var bar = document.getElementById("c-ers-bar");
+      if (bar) { bar.style.width = "48%"; setTimeout(function () { bar.style.width = "74%"; }, 80); }
+    } else if (scn === "garage") {
+      body.classList.add("pit");
+      phaseEl.textContent = "GARAGE";
+    } else if (scn === "phone") {
+      body.classList.add("phone");
+      execCard.hidden = false;
+    }
+  }
+
+  btnV1.addEventListener("click", function () { setVersion(false); });
+  btnV2.addEventListener("click", function () { setVersion(true); });
+  var cmpBar = document.getElementById("cmp-bar"), btnCollapse = document.getElementById("btn-collapse");
+  function toggleCollapse() {
+    var col = cmpBar.classList.toggle("collapsed");
+    btnCollapse.textContent = col ? "▴ SCENARIOS (C)" : "▾ COLLAPSE (C)";
+  }
+  btnCollapse.addEventListener("click", toggleCollapse);
+  btnDiffs.addEventListener("click", function () {
+    var on = body.classList.toggle("diffs");
+    btnDiffs.classList.toggle("on", on);
+  });
+  var SCN_KEYS = ["battle", "box", "racepit", "outlap", "stale", "quali", "cool", "garage", "phone"];
+  Array.prototype.forEach.call(document.querySelectorAll(".cmp-bar .scn"), function (b) {
+    b.addEventListener("click", function () { setScenario(b.dataset.scn); });
+  });
+
+  // Live subtle telemetry tick so the user can watch the smooth rail glide in V2 vs snap in V1
+  var simOn = true, tickStep = 0;
+  btnSim.addEventListener("click", function () {
+    simOn = !simOn;
+    btnSim.classList.toggle("on", simOn);
+    btnSim.textContent = simOn ? "SIM ON" : "SIM PAUSED";
+  });
+
+  setInterval(function () {
+    if (!simOn || curScn === "stale") return;
+    tickStep = (tickStep + 1) % 8;
+    var gaps = [0.6, 0.45, 0.35, 0.5, 0.75, 0.9, 0.7, 0.6];
+    var g = gaps[tickStep];
+    var singleCard = document.querySelector(".card.battle.single");
+    if (singleCard) {
+      var gapNode = singleCard.querySelector(".rv .gap");
+      if (gapNode) gapNode.textContent = "−" + g.toFixed(1);
+      var rail = singleCard.querySelector(".rail");
+      if (rail) {
+        if (body.classList.contains("v1")) {
+          // V1 behavior in app.js: recreates .rail .rc via innerHTML every tick, killing the CSS transition
+          rail.innerHTML = '<div class="rz">1 S</div><div class="rc" style="--g: ' + (g / 3).toFixed(3) + '"></div>';
+        } else {
+          // V2 behavior: updates --g in place on existing .rc element so CSS transition glides smoothly
+          var rc = rail.querySelector(".rc");
+          if (rc) rc.style.setProperty("--g", (g / 3).toFixed(3));
+        }
+      }
+    }
+  }, 650);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      setVersion(!body.classList.contains("v2"));
+    } else if (e.key >= "1" && e.key <= "9") {
+      setScenario(SCN_KEYS[Number(e.key) - 1]);
+    } else if (e.key.toLowerCase() === "c") {
+      toggleCollapse();
+    } else if (e.key.toLowerCase() === "d") {
+      var on = body.classList.toggle("diffs");
+      btnDiffs.classList.toggle("on", on);
+    } else if (e.code === "Space") {
+      e.preventDefault();
+      btnSim.click();
+    }
+  });
+})();
+</script>
+</body>
+</html>

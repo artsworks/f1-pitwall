@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall — radio</title>
-  <link rel="stylesheet" href="/static/style.css?v=30">
+  <link rel="stylesheet" href="/static/style.css?v=36">
 </head>
 <body class="radio connecting">
   <header class="status">
@@ -28,16 +28,21 @@
       <div class="current">
         <div id="call-text" class="text">— radio quiet —</div>
         <div id="call-meta" class="meta"></div>
+        <div id="press" class="press" hidden></div>
       </div>
+      <div id="call-evidence" class="evidence" hidden></div>
       <div id="previous" class="previous" hidden></div>
     </div>
   </section>
 
   <section class="log"><ol id="log"></ol></section>
-  <aside id="drvmenu" class="drvmenu" hidden aria-live="polite">
-    <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="dim"></span></div>
+  <div class="scrim"></div>
+  <aside id="drvmenu" class="drvmenu" aria-live="polite">
+    <div class="drvmenu-head">RADIO PIT <span id="drvmenu-left" class="left"></span></div>
+    <div class="meter"><i id="drvmenu-meter"></i></div>
     <ol id="drvmenu-list"></ol>
   </aside>
-  <script src="/static/app.js?v=31"></script>
+  <div id="fx" class="fx"></div>
+  <script src="/static/app.js?v=38"></script>
 </body>
 </html>
