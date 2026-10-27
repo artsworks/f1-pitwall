@@ -66,9 +66,7 @@ def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
             return False
         hit = hits[0]
         indent = lines[hit][: len(lines[hit]) - len(lines[hit].lstrip())]
-        match = re.match(
-            rf"(\s*{field}:)(.*?)(\s+#.*)?$", lines[hit].rstrip("\n")
-        )
+        match = re.match(rf"(\s*{field}:)(.*?)(\s+#.*)?$", lines[hit].rstrip("\n"))
         comment = ""
         if match and yaml.safe_load(match.group(2) or "") == connection[field]:
             comment = match.group(3) or ""

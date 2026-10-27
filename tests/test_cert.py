@@ -63,9 +63,7 @@ def test_set_profile_cert_replaces_empty_values(tmp_path):
 
 def test_set_profile_cert_keeps_trailing_comments(tmp_path):
     profile = tmp_path / "profile.yaml"
-    profile.write_text(
-        'connection:\n  https_cert: ""  # phone cert\n  https_key: ~ # key\n'
-    )
+    profile.write_text('connection:\n  https_cert: ""  # phone cert\n  https_key: ~ # key\n')
     assert set_profile_cert(profile, "c.pem", "k.pem") is True
     text = profile.read_text()
     assert '  https_cert: "c.pem"  # phone cert' in text
@@ -161,9 +159,7 @@ def test_cmd_cert_happy_path(tmp_path, monkeypatch, capsys):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="directory modes are POSIX-only")
-def test_cmd_cert_restricts_directory_before_mkcert_writes_key(
-    tmp_path, monkeypatch
-):
+def test_cmd_cert_restricts_directory_before_mkcert_writes_key(tmp_path, monkeypatch):
     monkeypatch.delenv("PITWALL_PROFILE", raising=False)
     monkeypatch.setattr("pitwall.cli.cert.shutil.which", lambda name: "mkcert")
     directory = Path.home() / ".pitwall"
