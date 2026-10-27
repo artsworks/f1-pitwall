@@ -277,16 +277,17 @@ def _compound(visual: int) -> str | None:
 
 
 def _fit_mismatch(snapshot: Snapshot) -> dict[str, str] | None:
-    """Out lap only: the plan fields still hold the pre-stop plan until the
-    tracker updates on the next racing lap (where `plan_invalid` fires), so
-    `plan_next_compound` is the tyre the plan expected at this stop. Telemetry
-    does not expose the MFD pit-menu tyre choice, so a mismatch can only be
-    seen after the stop."""
-    expected = snapshot.plan_next_compound.upper()
+    """Compare tyres against the plan's next compound latched at pit entry.
+
+    The engine keeps the expected compound from pit exit to the end of the out
+    lap under green, SC, or VSC. Telemetry does not expose the MFD pit-menu
+    tyre choice, so a mismatch can only be seen after the stop.
+    """
+    expected = snapshot.stop_expected_compound
     fitted = _compound(snapshot.tyre_visual)
-    if snapshot.race_phase != "out_lap" or not expected or not fitted or fitted == expected:
+    if not expected or not fitted or fitted == expected:
         return None
-    return {"plan": snapshot.active_plan, "expected": expected, "fitted": fitted}
+    return {"plan": snapshot.stop_plan, "expected": expected, "fitted": fitted}
 
 
 def strategy_payload(

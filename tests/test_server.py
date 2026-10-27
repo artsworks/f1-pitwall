@@ -950,7 +950,7 @@ def test_strategy_payload_named_plans() -> None:
 
 
 def test_strategy_payload_next_compound_and_fit_mismatch() -> None:
-    """Out lap: fitted tyre vs the pre-stop plan's next compound."""
+    """Report a fitted-tyre mismatch from the engine's stop latch."""
     import dataclasses
 
     from pitwall.server.app import strategy_payload
@@ -970,13 +970,26 @@ def test_strategy_payload_next_compound_and_fit_mismatch() -> None:
     s = strategy_payload(snap)
     assert s is not None
     assert s["plan_next_compound"] == "HARD" and s["fit_mismatch"] is None
-    out = strategy_payload(dataclasses.replace(snap, race_phase="out_lap", tyre_visual=16))
-    assert out is not None
-    assert out["fit_mismatch"] == {"plan": "A", "expected": "HARD", "fitted": "SOFT"}
-    ok = strategy_payload(dataclasses.replace(snap, race_phase="out_lap", tyre_visual=18))
+    latched = dataclasses.replace(
+        snap,
+        race_phase="vsc",
+        stop_plan="A",
+        stop_expected_compound="HARD",
+        tyre_visual=16,
+    )
+    mismatch = strategy_payload(latched)
+    assert mismatch is not None
+    assert mismatch["fit_mismatch"] == {"plan": "A", "expected": "HARD", "fitted": "SOFT"}
+    ok = strategy_payload(dataclasses.replace(latched, tyre_visual=18))
     assert ok is not None and ok["fit_mismatch"] is None
-    later = strategy_payload(dataclasses.replace(snap, race_phase="racing", tyre_visual=16))
-    assert later is not None and later["fit_mismatch"] is None
+    later = strategy_payload(dataclasses.replace(latched, race_phase="racing", tyre_visual=16))
+    assert later is not None
+    assert later["fit_mismatch"] == {"plan": "A", "expected": "HARD", "fitted": "SOFT"}
+    cleared = strategy_payload(
+        dataclasses.replace(latched, stop_expected_compound="", tyre_visual=16)
+    )
+    assert cleared is not None
+    assert cleared["fit_mismatch"] is None
 
 
 def test_strategy_payload_battle_second_cars_swaps_and_wear() -> None:
