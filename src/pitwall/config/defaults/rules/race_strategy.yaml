@@ -69,6 +69,10 @@ rules:
       - "Plan {active_plan}, {plan_spoken}. No stop now, look after the tyres"
       - "We're staying out. {plan_spoken}, tyres to the flag"
       - "Plan {active_plan} from here, {plan_spoken}. No more stops"
+  # A wrong tyre at the stop shows here on the lap after the out lap. Telemetry does
+  # not expose the MFD pit-menu tyre choice, so nothing can catch it before the stop.
+  # The dashboard EXECUTION card shows the planned tyre as a cross-check before the
+  # stop and a FITTED/EXPECTED warning on the out lap.
   - id: plan_invalid
     sessions: [race]
     priority: 2
@@ -159,6 +163,7 @@ rules:
       - "Open window now. Plan {active_plan}, target lap {plan_target_lap}"
       - "Pit window open, Plan {active_plan}. Aim for lap {plan_target_lap}"
       - "Window's open for Plan {active_plan}. Target lap {plan_target_lap}"
+  # {plan_next_compound} is the planned tyre, not the MFD pit-menu choice (not in telemetry).
   - id: plan_target_lap
     sessions: [race]
     priority: 1

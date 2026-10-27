@@ -386,9 +386,10 @@ svg.wxi { display: block; width: 2.2rem; height: 2.2rem; margin: .1rem auto 0; c
 .battle.calm { opacity: .55; } .battle.calm .mode { color: var(--dim); }
 .rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
 .rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
-.rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rv .name .comp { margin-left: .5rem; }
-.rv .name .age { color: var(--soft); font-size: 1.1rem; }
+.rv .name { display: flex; align-items: center; gap: .5rem; min-width: 0; font-size: 1.7rem; font-weight: bold; white-space: nowrap; }
+.rv .name .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rv .name .comp { font-size: 1.1rem; padding: 0 .35rem; }
+.rv .name .age { color: var(--soft); font-size: 1.1rem; min-width: 3ch; text-align: right; }
 .rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
 .rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
   padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }
@@ -978,14 +979,14 @@ body.cool .coolzone { font-size: 1.3rem; }
       <div class="mode">◀ DEFENDING <span class="sub">· 2 laps</span></div>  <!-- battle.mode, battle.mode_laps -->
       <div class="rv">
         <span class="side">▼ BEHIND</span>
-        <span class="name">P6 HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span>   <!-- rival_behind.pos/name, .overtake -->
+        <span class="name"><span class="nm">P6 HAMILTON</span><span class="tag crit">OV</span><span class="comp medium">M</span><span class="age">10L</span></span>   <!-- rival_behind.pos/name, .overtake -->
         <span class="gap">−0.6</span>                                            <!-- rival_behind.gap_s -->
       </div>
       <!-- gap rail: 0-3 s, 1 s overtake range shaded, marker glides (.rail .rc, --g = gap / 3) -->
       <div class="rail behind in"><div class="rz">1 S</div><div class="rc" style="--g: .2"></div></div>
       <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div> <!-- battle.closing_behind_s, battle.hold_prob -->
       <div class="rv" style="margin-top:.3rem; opacity:.6">
-        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="gap">+2.4</span>
+        <span class="side">▲ AHEAD</span><span class="name"><span class="nm">P4 NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="gap">+2.4</span>
       </div>
     </div>
     <!-- PROPOSED multi-car battle (#fight-ahead, #sandwich, #fight-behind). Rows run in track order,
@@ -999,29 +1000,29 @@ body.cool .coolzone { font-size: 1.3rem; }
     <div class="card battle attack scrap fight-ahead-only">
       <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>  <!-- battle.result='scrap', battle_swaps -->
       <div class="bcar train">  <!-- rival_ahead2 -->
-        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI<span class="comp xs medium">MED</span><span class="age"> · 12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rv"><span class="side">▲ P3</span><span class="name"><span class="nm">PIASTRI</span><span class="comp medium">M</span><span class="age">12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
         <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
       <div class="bcar attack">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name"><span class="nm">NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
         <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
         <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar calm">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON<span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name"><span class="nm">HAMILTON</span><span class="comp medium">M</span><span class="age">10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
       </div>
     </div>
     <div class="card battle threat sandwich-only">
       <div class="grp crit">◀ DEFENDING <span class="sub">+</span> <span class="ok">▶ ATTACKING</span></div>
       <div class="bcar attack">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name"><span class="nm">NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.7</span></div>
         <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .23"></div></div>
         <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar defend">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name"><span class="nm">HAMILTON</span><span class="tag crit">OV</span><span class="comp medium">M</span><span class="age">10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.6</span></div>
         <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .2"></div></div>
         <div class="pace"><span class="crit">▲ closing 0.3 s/lap</span><span class="prob">HOLD 58%</span></div>
       </div>
@@ -1031,16 +1032,16 @@ body.cool .coolzone { font-size: 1.3rem; }
     <div class="card battle threat scrap fight-behind-only">
       <div class="grp crit">⇄ SCRAP <span class="sub">· P5 to P7 · 4 swaps in 2 min</span></div>
       <div class="bcar calm">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name"><span class="nm">NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="st">MANAGING</span><span class="gap">+2.4</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar defend">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name"><span class="nm">HAMILTON</span><span class="tag crit">OV</span><span class="comp medium">M</span><span class="age">10L</span></span><span class="st">DEFENDING</span><span class="gap">−0.4</span></div>
         <div class="rail behind in"><div class="rz"></div><div class="rc" style="--g: .13"></div></div>
         <div class="pace"><span class="crit">▲ closing 0.2 s/lap</span><span class="prob">HOLD 51%</span></div>
       </div>
       <div class="bcar train">  <!-- rival_behind2 -->
-        <div class="rv"><span class="side">▼ P7</span><span class="name">RUSSELL <span class="tag crit">OV</span><span class="comp xs soft">SOFT</span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
+        <div class="rv"><span class="side">▼ P7</span><span class="name"><span class="nm">RUSSELL</span><span class="tag crit">OV</span><span class="comp soft">S</span><span class="age"></span></span><span class="st">IN TRAIN</span><span class="gap">−0.9</span></div>
         <div class="rail behind train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
     </div>
@@ -1487,12 +1488,12 @@ body.cool .coolzone { font-size: 1.3rem; }
     return closing ? '<span class="crit">▲ closing ' + rt.toFixed(1) + " s/lap</span>" : '<span class="ok">▼ dropping ' + rt.toFixed(1) + " s/lap</span>";
   }
   function nameHTML(name, ov) {
-    var types = { NORRIS: ["hard", "HARD", 6], HAMILTON: ["medium", "MED", 10],
-      PIASTRI: ["medium", "MED", 12], RUSSELL: ["soft", "SOFT", 0] };
+    var types = { NORRIS: ["hard", "H", 6], HAMILTON: ["medium", "M", 10],
+      PIASTRI: ["medium", "M", 12], RUSSELL: ["soft", "S", 0] };
     var tyre = types[name.replace(/^P\d+\s+/, "")];
-    return name + (ov ? ' <span class="tag crit">OV</span>' : "") +
-      (tyre ? ' <span class="comp xs ' + tyre[0] + '">' + tyre[1] + '</span>' +
-        (tyre[2] ? '<span class="age"> · ' + tyre[2] + 'L</span>' : "") : "");
+    return '<span class="nm">' + name + '</span>' + (ov ? '<span class="tag crit">OV</span>' : "") +
+      (tyre ? '<span class="comp ' + tyre[0] + '">' + tyre[1] + '</span>' +
+        '<span class="age">' + (tyre[2] ? tyre[2] + 'L' : "") + '</span>' : "");
   }
   function setRail(rail, side, g) {
     if (!rail) return;

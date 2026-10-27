@@ -231,6 +231,9 @@ includes each first-stop lap within `plan_window_s` of the best.
   `abs(sd_active - sd_best)`. The engine clamps the risk quantile to `0.001` to `0.999`.
   The off-plan hysteresis remains `plan_off_hysteresis_s`. A plan becomes *invalid* when
   its remaining sequence is no longer legal (wrong tyre fitted, sets gone, SC stop not taken).
+  Telemetry does not expose the MFD pit-menu tyre choice. Before the stop, the dashboard
+  EXECUTION card shows the planned tyre as a chip for the driver to check against the menu.
+  On the out lap it compares the fitted tyre with that plan and warns on a mismatch.
 - A cheap-stop SC/VSC recommendation switches the active plan to C (reason `sc`).
 - After a pit stop, the tracker counts the stop on entry to the out-lap and rebases the
   plan from the new compound, tyre age, laps left and stops completed.
