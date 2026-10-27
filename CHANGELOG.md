@@ -10,6 +10,35 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.38.0 (2026-10-27)
+
+### Bug Fixes
+
+- **strategy**: Ignore flashback pit state in wrong-tyre latch
+  ([#143](https://github.com/artsworks/f1-pitwall/pull/143),
+  [`da8a0a9`](https://github.com/artsworks/f1-pitwall/commit/da8a0a9339c81d04b909ae6aa548477eba7a7784))
+
+- **strategy**: Latch expected tyre at pit entry so wrong-tyre warning works under SC/VSC
+  ([#143](https://github.com/artsworks/f1-pitwall/pull/143),
+  [`da8a0a9`](https://github.com/artsworks/f1-pitwall/commit/da8a0a9339c81d04b909ae6aa548477eba7a7784))
+
+### Documentation
+
+- Drop v1 pit-exit and final-lap gallery shots
+  ([#142](https://github.com/artsworks/f1-pitwall/pull/142),
+  [`9b14be1`](https://github.com/artsworks/f1-pitwall/commit/9b14be1c7e0a646f5c7016ad0f1e5485f85fe6ab))
+
+- Update guide, design notes and gallery for dashboard v2
+  ([#142](https://github.com/artsworks/f1-pitwall/pull/142),
+  [`9b14be1`](https://github.com/artsworks/f1-pitwall/commit/9b14be1c7e0a646f5c7016ad0f1e5485f85fe6ab))
+
+### Features
+
+- **dashboard**: Compound chips on execution card and rival rows, wrong-tyre warning
+  ([#143](https://github.com/artsworks/f1-pitwall/pull/143),
+  [`da8a0a9`](https://github.com/artsworks/f1-pitwall/commit/da8a0a9339c81d04b909ae6aa548477eba7a7784))
+
+
 ## v0.37.0 (2026-10-27)
 
 ### Bug Fixes
