@@ -55,6 +55,55 @@ pitwall voice say             # you should hear a radio check
 pitwall start                 # ingest + rules + speech + dashboard
 ```
 
+## Open the dashboard
+
+Open `http://localhost:8000` on the second monitor. You should hear "Pit wall online." at start.
+
+| Page | Shows |
+|---|---|
+| `/` | The one-screen dashboard: status bar, current call, tyres, fuel and battery, and the strategy or qualifying cards |
+| `/radio` | The current call and a log of recent calls in large type |
+| `/debrief` | Stored sessions, each with a link to its review |
+
+On another device, open `http://<PC-LAN-IP>:8000` and enter the PIN that Pitwall prints at startup.
+[Phone radio over HTTPS](getting-started.md#phone-radio-over-https) covers phones.
+
+To check the server from a script, request `/api/health`:
+
+```powershell
+irm http://localhost:8000/api/health
+```
+
+The response looks like this (`latency` trimmed):
+
+```json
+{
+  "config_hash": "bf70ccb3",
+  "config_error": null,
+  "latency": {"tts_ms": {"p50": 0.0, "p99": 0.0, "mean": 0.0}},
+  "speaker": "null",
+  "packet_age_ms": 261.8,
+  "live": true
+}
+```
+
+`live` is `true` while telemetry arrives. `config_error` shows a bad `settings.yaml` edit.
+
+The dashboard gets its data over a WebSocket at `/ws`. The server sends a `hello` frame first.
+The client answers `{"type":"hello","v":1}`, and the server then sends a `snapshot` frame
+and a `state` frame 5 times a second (`ui.state_hz`). `v` is the protocol version. It is still 1 with the v2 dashboard.
+
+A session looks like this (payloads trimmed):
+
+```text
+server  {"v": 1, "type": "hello", "seq": 76, "payload": {"protocol": 1, "config_hash": "bf70ccb3", "mindset": "balanced", "verbosity": "normal", "review": true, "audio": false}}
+client  {"type": "hello", "v": 1}
+server  {"v": 1, "type": "snapshot", "seq": 77, "payload": {"live": true, "session_kind": "race", "track": "silverstone", "lap_num": 1, "total_laps": 10, "position": 3, "tyres": {...}, "strategy": {...}, "calls": []}}
+server  {"v": 1, "type": "state", "seq": 78, "payload": {...}}
+```
+
+If the client sends another `v`, the server closes the socket with code 4001.
+
 ## Speech engines
 
 `speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. On Mac and Linux, `auto` also picks Piper once the voice is downloaded.
@@ -137,9 +186,6 @@ Add `--log-level` before the command to print more detail. `--log-level info` pr
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
 OmniVoice falls back to Piper, then `null`.
-
-Open `http://localhost:8000` on the second monitor (`/radio` for the compact log).
-You should hear "Pit wall online." at start.
 
 ## Phone radio over HTTPS
 
