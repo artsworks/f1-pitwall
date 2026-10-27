@@ -523,9 +523,10 @@ body.cool .coolzone { display: flex; flex-direction: column; gap: .8rem; grid-co
 body.pit .tyres, body.pit .tiles, body.pit .ctx { display: none; }
 body.pit.race-pit .ctx { display: flex; grid-column: 8 / 13; grid-row: 3; }
 body.pit.race-pit .pb-cur, body.pit.race-pit .pb-setup { display: none; }
-body.pit.race-pit .pb-tyrebox { grid-column: 1 / 7; }
-body.pit.race-pit .pb-run { grid-column: 7 / 13; }
-body.pit.race-pit .pb-wx { grid-column: 1 / 13; }
+body.pit.race-pit .pb-tyrebox { grid-column: 1 / 7; grid-row: 1; }
+body.pit.race-pit .pb-run { grid-column: 7 / 13; grid-row: 1; }
+body.pit.race-pit .pb-wx { grid-column: 1 / 13; grid-row: 2; }
+body.pit.race-pit .pb-sectors { grid-column: 1 / 13; grid-row: 3; }
 
 /* ------------------------------------------------------------ G footer ---
    Permanently muted (--soft / --dim). These values NEVER escalate colour, not even a
@@ -831,8 +832,8 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
 .pb-locked { color: var(--soft); font-size: 1.1rem; padding-top: .3rem; }
 /* phone: one column, tyres first, then setup changes */
 @media (max-width: 800px) {
-  .pitboard { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: .6rem; }
-  .pitboard > * { grid-column: 1 / -1; }
+  .pitboard, body.pit.race-pit .pitboard { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: .6rem; }
+  .pitboard > *, body.pit.race-pit .pitboard > * { grid-column: 1 / -1; grid-row: auto; }
   .pb-head { order: 0; flex-wrap: wrap; gap: .1rem .8rem; }
   .pb-release { font-size: 1.9rem; white-space: normal; }
   .pb-tyrebox { order: 1; }
@@ -861,7 +862,7 @@ body.dash.review { grid-template-rows: 3rem 12rem minmax(0, 1fr) auto 2rem; }
 body.dash.review .transport { grid-column: 1 / -1; grid-row: 4; }
 body.dash.review .footer { grid-row: 5; }
 body.pit .pitboard { display: grid; grid-column: 1 / -1; grid-row: 3; }
-body.pit.race-pit .pitboard { grid-column: 1 / 8; grid-row: 3; }
+body.pit.race-pit .pitboard { grid-column: 1 / 8; grid-row: 3; grid-template-rows: auto auto auto; }
 body.cool .coolzone { font-size: 1.3rem; }
 /* battle rows: state word and gap keep fixed widths so values update in place */
 .battle .bcar .rv .st { display: inline-block; min-width: 13ch; text-align: right; }
