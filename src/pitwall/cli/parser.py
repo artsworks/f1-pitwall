@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from pitwall.cli.cert import cmd_cert
 from pitwall.cli.common import (
     add_calls_mode_arg,
     add_db_arg,
@@ -54,6 +55,7 @@ EVERYDAY = (
     "cleanup",
     "report",
     "update",
+    "cert",
 )
 ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore", "trim")
 
@@ -331,7 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
         "Replay scenario files and check the calls against a baseline scorecard.",
         "pitwall bench --only brazil-sc-early",
     )
-    bench.add_argument("--scenarios", default="scenarios", help="scenario directory")
+    bench.add_argument(
+        "--scenarios",
+        default=None,
+        help="scenario directory (default: scenarios/ in the Pitwall folder)",
+    )
     bench.add_argument(
         "--recordings",
         action="append",
@@ -548,6 +554,24 @@ def build_parser() -> argparse.ArgumentParser:
         "pitwall update",
     )
     upd.set_defaults(func=cmd_update)
+
+    cert = _cmd(
+        sub,
+        "cert",
+        "set up HTTPS for the phone radio page",
+        "Make a trusted HTTPS certificate with mkcert for this computer's LAN address "
+        "and turn HTTPS on.",
+        "pitwall cert",
+    )
+    cert.add_argument(
+        "--ip", default=None, help="LAN address for the certificate (default: detected)"
+    )
+    cert.add_argument(
+        "--status",
+        action="store_true",
+        help="print https or http, the scheme the dashboard uses now",
+    )
+    cert.set_defaults(func=cmd_cert)
 
     everyday_epilog = (
         "Everyday commands:\n"

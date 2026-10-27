@@ -10,7 +10,6 @@ import urllib.error
 import urllib.request
 import wave
 from collections import deque
-from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -31,6 +30,7 @@ from pitwall.audio.wav_speaker import (
 from pitwall.audio.wav_speaker import _read_cache as _read_cache
 from pitwall.audio.wav_speaker import _write_cache as _write_cache
 from pitwall.config.models import SpeechSettings
+from pitwall.config.paths import storage_path
 
 log = logging.getLogger(__name__)
 
@@ -225,5 +225,5 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
     return WavSpeaker(
         renderer,
         player or default_player(),
-        cache_dir=Path(settings.voices_dir) / ".phrases",
+        cache_dir=storage_path(settings.voices_dir) / ".phrases",
     )

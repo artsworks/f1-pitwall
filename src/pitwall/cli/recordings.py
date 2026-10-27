@@ -21,6 +21,7 @@ from pitwall.cli.common import (
 from pitwall.cli.serve import _serve
 from pitwall.clock import Clock, ReplayClock, VirtualClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.paths import storage_path
 from pitwall.engine import Engine, build_census_engine, build_engine, run_replay
 from pitwall.ingest import Ingest
 from pitwall.net.profile import PROFILES, RecordFilter
@@ -287,7 +288,7 @@ def _stats_quality(args: argparse.Namespace) -> int:
     db = open_db(args, settings, "stats --quality")
     if db is None:
         return 1
-    pack_dir = Path(settings.learning.pack_dir).expanduser()
+    pack_dir = storage_path(settings.learning.pack_dir)
     minutes = pack_track_minutes(db, pack_dir)
     report = quality_trend(db, args.sessions, pack_dir)
     rows = report["sessions"]
@@ -358,7 +359,7 @@ def cmd_recordings(args: argparse.Namespace) -> int:
     """List recordings newest first; the index works as a recording argument."""
     from pitwall.store.uids import is_synthetic_uid
 
-    directory = Path(ConfigStore().current().recording.directory)
+    directory = storage_path(ConfigStore().current().recording.directory)
     found = list_recordings(directory)
     if not found:
         print(f"recordings: none in {directory}")
@@ -396,7 +397,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     store = ConfigStore()
     settings = store.current()
-    rec_dir = Path(settings.recording.directory)
+    rec_dir = storage_path(settings.recording.directory)
     rec_path = _resolve_recording(args.recording or args.recording_opt, settings)
     out = Path(args.out) if args.out else Path(f"pitwall-report-{int(time.time())}.zip")
 
@@ -441,7 +442,9 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     db = db_from_args(args, settings)
     if db is None:
         print("cleanup: persistence disabled, recordings are never deleted")
-    rec_dir = Path(args.recordings or settings.recording.directory)
+    rec_dir = (
+        Path(args.recordings) if args.recordings else storage_path(settings.recording.directory)
+    )
     db_path = (
         Path(db.path).expanduser()
         if db is not None
@@ -464,11 +467,11 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
         plan = plan_cleanup(
             rec_dir,
             db_path.parent,
-            Path(settings.speech.voices_dir),
+            storage_path(settings.speech.voices_dir),
             db.ingested_uids() if db is not None else set(),
             args.days,
             recording_imports=db.ingested_recordings() if db is not None else {},
-            learnings_dir=Path(settings.learning.pack_dir).expanduser(),
+            learnings_dir=storage_path(settings.learning.pack_dir),
             include_unlearned=args.include_unlearned,
         )
     except ValueError as exc:

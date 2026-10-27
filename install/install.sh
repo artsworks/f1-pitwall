@@ -10,6 +10,12 @@ install_pitwall() {
             ;;
     esac
 
+    bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+    caller_has_bin_dir=0
+    case ":$PATH:" in
+        *":$bin_dir:"*) caller_has_bin_dir=1 ;;
+    esac
+
     uv_installed=0
     if command -v uv >/dev/null 2>&1; then
         uv_path=$(command -v uv)
@@ -168,7 +174,35 @@ install_pitwall() {
         n|N) ;;
         *)
             if ! (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall voice get </dev/null); then
-                printf '%s\n' "The natural voice did not download. Run uv run pitwall voice get later."
+                printf '%s\n' "The natural voice did not download. Run pitwall voice get later."
+            fi
+            ;;
+    esac
+
+    printf '%s' "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]: "
+    cert_answer=
+    { IFS= read -r cert_answer </dev/tty; } 2>/dev/null || cert_answer=
+    case "$cert_answer" in
+        y|Y)
+            if ! command -v mkcert >/dev/null 2>&1; then
+                if [ "$os" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+                    brew install mkcert </dev/null
+                elif [ "$os" = "Linux" ]; then
+                    if command -v apt-get >/dev/null 2>&1; then
+                        sudo apt-get install -y mkcert
+                    elif command -v dnf >/dev/null 2>&1; then
+                        sudo dnf install -y mkcert
+                    elif command -v pacman >/dev/null 2>&1; then
+                        sudo pacman -S --noconfirm mkcert
+                    elif command -v zypper >/dev/null 2>&1; then
+                        sudo zypper install -y mkcert
+                    fi
+                fi
+            fi
+            if ! command -v mkcert >/dev/null 2>&1; then
+                printf '%s\n' "mkcert is not installed. Install it later, then run: pitwall cert"
+            elif ! (CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert </dev/null); then
+                printf '%s\n' "HTTPS setup did not finish. Run pitwall cert later."
             fi
             ;;
     esac
@@ -193,6 +227,43 @@ install_pitwall() {
 
     quoted_dir=$(printf '%s' "$install_dir" | sed "s/'/'\\\\''/g")
     quoted_uv=$(printf '%s' "$uv_path" | sed "s/'/'\\\\''/g")
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/pitwall" <<EOF
+#!/bin/sh
+PITWALL_HOME='$quoted_dir'
+export PITWALL_HOME
+exec '$quoted_uv' run --project '$quoted_dir' python -m pitwall "\$@"
+EOF
+    chmod +x "$bin_dir/pitwall"
+    quoted_bin=$(printf '%s' "$bin_dir" | sed "s/'/'\\\\''/g")
+    path_line="export PATH='$quoted_bin':\"\$PATH\""
+    bin_dir_home_rel=
+    case "$bin_dir" in
+        "$HOME"/*) bin_dir_home_rel=${bin_dir#"$HOME"/} ;;
+    esac
+    for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if [ -f "$rc_file" ]; then
+            covered=0
+            if grep -F "$bin_dir" "$rc_file" >/dev/null 2>&1; then
+                covered=1
+            elif [ -n "$bin_dir_home_rel" ] && {
+                    grep -F '$HOME/'"$bin_dir_home_rel" "$rc_file" >/dev/null 2>&1 ||
+                    grep -F "~/$bin_dir_home_rel" "$rc_file" >/dev/null 2>&1
+                }; then
+                covered=1
+            fi
+            if [ "$covered" -eq 0 ]; then
+                printf '\n%s\n' "$path_line" >> "$rc_file"
+            fi
+        fi
+    done
+    if [ ! -f "$HOME/.zshrc" ] && [ ! -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.profile" ]; then
+        if [ "$os" = "Darwin" ]; then
+            printf '%s\n' "$path_line" >> "$HOME/.zshrc"
+        else
+            printf '%s\n' "$path_line" >> "$HOME/.profile"
+        fi
+    fi
     if [ "$os" = "Darwin" ]; then
         desktop="$HOME/Desktop"
         mkdir -p "$desktop"
@@ -273,6 +344,9 @@ EOF
     }
     printf '%s\n' "0 datagrams is normal until you are on track."
 
+    scheme=$(CDPATH='' cd "$install_dir" && "$uv_path" run pitwall cert --status </dev/null 2>/dev/null | tail -n 1)
+    case "$scheme" in https) ;; *) scheme=http ;; esac
+
     printf '\n%s\n' "Pitwall is installed in $install_dir."
     printf '%s\n' "This computer plays no engineer audio. The voice plays in the browser tab that shows the dashboard."
     printf 'Game PC UDP IP Address: %s\n' "$lan_ip"
@@ -280,12 +354,12 @@ EOF
     if [ "$dashboard_choice" -eq 1 ]; then
         printf '%s\n' "Open the dashboard on the game PC to hear it in your headset."
         if [ "$lan_ip_fallback" -eq 1 ]; then
-            printf '%s\n' "On the game PC, open http://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
+            printf '%s\n' "On the game PC, open $scheme://<LAN address>:8000/?sound=1 using the LAN address pitwall prints at start, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start."
         else
-            printf 'On the game PC, open http://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$lan_ip"
+            printf 'On the game PC, open %s://%s:8000/?sound=1, click ENABLE SOUND, and enter the 4-digit PIN Pitwall prints at start. The PIN changes every start.\n' "$scheme" "$lan_ip"
         fi
     else
-        printf '%s\n' "On this computer, open http://localhost:8000/?sound=1 and click ENABLE SOUND. No PIN is needed. The voice plays here."
+        printf '%s\n' "On this computer, open $scheme://localhost:8000/?sound=1 and click ENABLE SOUND. No PIN is needed. The voice plays here."
     fi
     if [ "$os" = "Darwin" ]; then
         printf '%s\n' "If macOS asks whether python may accept incoming network connections, click Allow."
@@ -304,7 +378,11 @@ EOF
         printf '%s\n' "Guide: https://pitwall.arthurku.com/install.html#linux"
         printf 'Launchers: %s/start.sh and %s/update.sh\n' "$launcher_dir" "$launcher_dir"
     fi
-    printf '%s\n' "Start Pitwall from the Pitwall launcher. To update, use Pitwall Update."
+    printf '%s\n' "Start Pitwall from the Pitwall launcher or run: pitwall start"
+    printf '%s\n' "To update, use Pitwall Update or run: pitwall update"
+    if [ "$caller_has_bin_dir" -eq 0 ]; then
+        printf 'To run pitwall in this terminal now, run: export PATH="%s:$PATH" (or open a new terminal).\n' "$bin_dir"
+    fi
 }
 
 install_pitwall

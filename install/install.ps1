@@ -128,12 +128,60 @@ function Install-Pitwall {
             $voiceCode = $LASTEXITCODE
             Pop-Location
             if ($voiceCode -ne 0) {
-                Write-Host "The natural voice did not download. You can run uv run pitwall voice get later."
+                Write-Host "The natural voice did not download. You can run pitwall voice get later."
             }
         } else {
             Write-Host "The natural voice needs the Microsoft Visual C++ Redistributable."
             Write-Host "Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe, then run this installer again."
         }
+    }
+
+    $certAnswer = Read-Host "Set up HTTPS for the phone radio page (optional, needs mkcert)? [y/N]"
+    if ($certAnswer -match "^(y|Y)$") {
+        if (
+            $null -eq (Get-Command mkcert -ErrorAction SilentlyContinue) -and
+            $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+        ) {
+            & winget install --id FiloSottile.mkcert -e --accept-source-agreements --accept-package-agreements
+            $env:Path = ($pathEntries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
+        }
+        if ($null -eq (Get-Command mkcert -ErrorAction SilentlyContinue)) {
+            Write-Host "mkcert is not installed. Install it later, then run: pitwall cert"
+        } else {
+            Push-Location $installDir
+            & $uv run pitwall cert
+            $certCode = $LASTEXITCODE
+            Pop-Location
+            if ($certCode -ne 0) {
+                Write-Host "HTTPS setup did not finish. Run pitwall cert later."
+            }
+        }
+    }
+
+    $binDir = Join-Path $env:USERPROFILE ".local\bin"
+    New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+    $cmdPath = Join-Path $binDir "pitwall.cmd"
+    $cmdContent = "@echo off`r`nsetlocal`r`nset `"PITWALL_HOME=$installDir`"`r`n`"$uv`" run --project `"$installDir`" python -m pitwall %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [System.IO.File]::WriteAllText($cmdPath, $cmdContent, [System.Text.UTF8Encoding]::new($false))
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $normalizedBin = $binDir.TrimEnd("\")
+    $userEntries = @()
+    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+        $userEntries = @($userPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    $hasBinInUserPath = $false
+    foreach ($entry in $userEntries) {
+        if ($entry.Trim().TrimEnd("\") -ieq $normalizedBin) {
+            $hasBinInUserPath = $true
+            break
+        }
+    }
+    if (-not $hasBinInUserPath) {
+        $newUserPath = ($userEntries + $binDir) -join ";"
+        [System.Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+    }
+    if (-not (($env:Path -split ";") | Where-Object { $_.Trim().TrimEnd("\") -ieq $normalizedBin })) {
+        $env:Path = "$binDir;$env:Path"
     }
 
     $escapedUv = $uv.Replace("'", "''")
@@ -183,12 +231,17 @@ function Install-Pitwall {
     }
     Write-Host "0 datagrams is normal until you are on track."
 
+    Push-Location $installDir
+    $scheme = ([string](& $uv run pitwall cert --status | Select-Object -Last 1)).Trim()
+    Pop-Location
+    if ($scheme -ne "https") { $scheme = "http" }
+
     Write-Host ""
     Write-Host "Pitwall is installed in $installDir."
     if ($whereGameRuns -eq "1") {
         Write-Host "F1 26 UDP IP Address: 127.0.0.1"
         Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
-        Write-Host "Open http://localhost:8000 on the second monitor."
+        Write-Host "Open ${scheme}://localhost:8000 on the second monitor."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows"
     } else {
         $lanConfig = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } | Select-Object -First 1
@@ -200,9 +253,10 @@ function Install-Pitwall {
         Write-Host "Other F1 26 Telemetry Settings: UDP Telemetry On, Broadcast Off, Port 20777, Send Rate 30 Hz, Format 2026."
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall udp" dir=in action=allow protocol=UDP localport=20777'
         Write-Host 'In an admin PowerShell, run: netsh advfirewall firewall add rule name="pitwall tcp" dir=in action=allow protocol=TCP localport=8000'
-        Write-Host "Open http://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."
+        Write-Host "Open ${scheme}://${lanIp}:8000 on another device. Enter the 4-digit PIN Pitwall prints at start."
         Write-Host "Guide: https://pitwall.arthurku.com/install.html#windows-lan"
     }
-    Write-Host "Start Pitwall from the Pitwall shortcut. To update, use Pitwall Update."
+    Write-Host "Start Pitwall from the Pitwall shortcut or run: pitwall start"
+    Write-Host "To update, use Pitwall Update or run: pitwall update"
 }
 Install-Pitwall

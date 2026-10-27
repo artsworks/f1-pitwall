@@ -33,6 +33,7 @@ from pitwall.config.models import (
     call_budget,
     resolve_mindset,
 )
+from pitwall.config.paths import storage_path
 from pitwall.config.thresholds import threshold
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
@@ -2583,7 +2584,7 @@ def build_engine(
     )
     log_path = decision_log_path
     if log_path is None and decision_log_fp is None:
-        log_path = Path(settings.recording.directory) / "decisions.jsonl"
+        log_path = storage_path(settings.recording.directory) / "decisions.jsonl"
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     dlog = DecisionLog(

@@ -6,12 +6,12 @@ import asyncio
 import shutil
 import socket
 import sys
-from pathlib import Path
 from typing import IO
 
 from pitwall.audio.piper_tts import voice_path
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.paths import storage_path
 from pitwall.ingest import Ingest
 from pitwall.net.udp import RCVBUF_MIN_OK, effective_rcvbuf, listen
 from pitwall.protocol.header import PACKET_SIZES, PacketId
@@ -179,8 +179,7 @@ def run_doctor(
         _line(
             out,
             "INFO",
-            f"Piper voice {speech.piper_voice} not installed (natural voice): "
-            f"uv run pitwall voice get",
+            f"Piper voice {speech.piper_voice} not installed (natural voice): pitwall voice get",
         )
     if sys.platform == "win32":
         _line(out, "INFO", "firewall hint:")
@@ -198,7 +197,7 @@ def run_doctor(
         )
 
     # Disk free in recording dir.
-    rec_dir = Path(settings.recording.directory)
+    rec_dir = storage_path(settings.recording.directory)
     rec_dir.mkdir(parents=True, exist_ok=True)
     free_gb = shutil.disk_usage(rec_dir).free / 1e9
     if free_gb > 5:

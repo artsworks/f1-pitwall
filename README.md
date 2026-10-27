@@ -79,7 +79,7 @@ optionally another to **UDP Action 3**). The pit wall answers every press by voi
 
 With `voice.enabled: true`, the wheel gestures stay the same. The mic listens while the driver menu is open, or for 2 s after you press `V` on the dashboard.
 
-Update with the Pitwall Update shortcut, or run `uv run python -m pitwall update` from the install directory.
+Update with the Pitwall Update shortcut, or run `pitwall update`.
 
 ### If something is off
 
@@ -87,9 +87,9 @@ Update with the Pitwall Update shortcut, or run `uv run python -m pitwall update
 |---|---|
 | `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
 | `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
-| Dashboard says STALE | Run `uv run pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
-| No speech | `uv run pitwall voice say` prints the error. `--engine piper` uses the downloaded voice, and `--engine omnivoice` uses the configured OmniVoice server. |
-| Robotic voice | `uv run pitwall voice get`, then restart `pitwall start`. |
+| Dashboard says STALE | Run `pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
+| No speech | `pitwall voice say` prints the error. `--engine piper` uses the downloaded voice, and `--engine omnivoice` uses the configured OmniVoice server. |
+| Robotic voice | `pitwall voice get`, then restart `pitwall start`. |
 
 More in [docs/getting-started.md](docs/getting-started.md).
 
@@ -157,9 +157,9 @@ The default `lite` profile is about 35 MB per 3 hours; use `--record full`
 when you want a session for debugging.
 
 ```powershell
-uv run pitwall start --record full                      # everything at 30 Hz
-uv run pitwall replay recordings\<file>.f1bin.zst --speed 10 --stats
-uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
+pitwall start --record full                      # everything at 30 Hz
+pitwall replay recordings\<file>.f1bin.zst --speed 10 --stats
+pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
 ```
 
 ## Commands
@@ -169,6 +169,7 @@ uv run pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the da
 | `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. | `pitwall start` |
 | `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. | `pitwall doctor --seconds 10` |
 | `pitwall update` | Update Pitwall: pull the latest code with git, then sync dependencies with uv. | `pitwall update` |
+| `pitwall cert` | Set up HTTPS for the phone radio page: makes a trusted certificate with mkcert. | `pitwall cert` |
 | `pitwall recordings` | List recordings newest first, with the # that other commands accept. | `pitwall recordings` |
 | `pitwall sessions` | List stored sessions newest first, to find a session uid. | `pitwall sessions --limit 5` |
 | `pitwall replay` | Rerun a recording through the engine to see the calls it makes. | `pitwall replay latest --speed 4 --serve` |

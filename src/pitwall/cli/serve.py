@@ -9,7 +9,6 @@ import sqlite3
 import sys
 import threading
 from collections.abc import Callable, Coroutine, Mapping, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.decision_log import DecisionLog
@@ -18,6 +17,7 @@ from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, Speaker, Warm
 from pitwall.cli.common import _folder_link
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.paths import storage_path
 from pitwall.engine import Engine, action_bits
 from pitwall.ingest import Ingest
 from pitwall.model.driver import GLOBAL_TRACK_ID, learned_rating
@@ -317,10 +317,10 @@ async def _serve(
         port=settings.connection.http_port,
         log_level="warning",
         timeout_graceful_shutdown=settings.connection.shutdown_timeout_s,
-        ssl_certfile=str(Path(settings.connection.https_cert).expanduser())
+        ssl_certfile=str(storage_path(settings.connection.https_cert))
         if settings.connection.https_cert and settings.connection.https_key
         else None,
-        ssl_keyfile=str(Path(settings.connection.https_key).expanduser())
+        ssl_keyfile=str(storage_path(settings.connection.https_key))
         if settings.connection.https_cert and settings.connection.https_key
         else None,
     )
@@ -382,19 +382,19 @@ def cmd_start(args: argparse.Namespace) -> int:
     set_below_normal_priority()
     store = ConfigStore()
     settings = store.current()
-    pack_dir = Path(settings.learning.pack_dir).expanduser()
+    pack_dir = storage_path(settings.learning.pack_dir)
     child = bool(args.child)
     if settings.engine.watchdog and not child and not args.no_watchdog:
         return _start_supervised(args, store)
     hub = Hub()
     clock = WallClock()
-    rt_dir = runtime_dir(Path(settings.recording.directory))
+    rt_dir = runtime_dir(storage_path(settings.recording.directory))
 
     profile = args.record or settings.recording.profile
     recorder = None
     if settings.recording.enabled and profile != "off" and not child:
         recorder = RecordingRotator(
-            Path(settings.recording.directory),
+            storage_path(settings.recording.directory),
             config_hash=int(store.hash, 16) % (2**32),
             metadata=_recording_metadata(store, settings),
             profile=profile,
@@ -419,7 +419,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         mode=mode,
         staleness_s=settings.engine.staleness_s,
     )
-    rec_dir = Path(settings.recording.directory)
+    rec_dir = storage_path(settings.recording.directory)
     rec_dir.mkdir(parents=True, exist_ok=True)
     banner: list[BannerEntry] = []
     db = None
@@ -530,7 +530,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     engine.speaker_name = speaker.name
     engine.recording_desc = (
-        f"{profile} -> {settings.recording.directory}/"
+        f"{profile} -> {storage_path(settings.recording.directory)}/"
         if recorder is not None
         else "supervisor"
         if child and settings.recording.enabled
@@ -578,7 +578,7 @@ def _start_supervised(args: argparse.Namespace, store: ConfigStore) -> int:
     """Recorder + watchdog in this process; the engine runs as a restartable child."""
     settings = store.current()
     profile = args.record or settings.recording.profile
-    rec_dir = Path(settings.recording.directory)
+    rec_dir = storage_path(settings.recording.directory)
     recorder = None
     if settings.recording.enabled and profile != "off":
         recorder = RecordingRotator(
