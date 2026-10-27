@@ -946,6 +946,50 @@ def test_strategy_payload_named_plans() -> None:
     assert s["plan_off_prob"] == 0.97
     assert s["plan_target_lap"] == 18
     assert s["plan_switch"] == {"from": "A", "reason": "pace", "lap": 15}
+    assert s["plan_next_compound"] is None and s["fit_mismatch"] is None
+
+
+def test_strategy_payload_next_compound_and_fit_mismatch() -> None:
+    """Report a fitted-tyre mismatch from the engine's stop latch."""
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="in_lap",
+        lap_num=27,
+        laps_remaining=30,
+        tyre_visual=17,
+        active_plan="A",
+        plan_next_compound="hard",
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    assert s["plan_next_compound"] == "HARD" and s["fit_mismatch"] is None
+    latched = dataclasses.replace(
+        snap,
+        race_phase="vsc",
+        stop_plan="A",
+        stop_expected_compound="HARD",
+        tyre_visual=16,
+    )
+    mismatch = strategy_payload(latched)
+    assert mismatch is not None
+    assert mismatch["fit_mismatch"] == {"plan": "A", "expected": "HARD", "fitted": "SOFT"}
+    ok = strategy_payload(dataclasses.replace(latched, tyre_visual=18))
+    assert ok is not None and ok["fit_mismatch"] is None
+    later = strategy_payload(dataclasses.replace(latched, race_phase="racing", tyre_visual=16))
+    assert later is not None
+    assert later["fit_mismatch"] == {"plan": "A", "expected": "HARD", "fitted": "SOFT"}
+    cleared = strategy_payload(
+        dataclasses.replace(latched, stop_expected_compound="", tyre_visual=16)
+    )
+    assert cleared is not None
+    assert cleared["fit_mismatch"] is None
 
 
 def test_strategy_payload_battle_second_cars_swaps_and_wear() -> None:

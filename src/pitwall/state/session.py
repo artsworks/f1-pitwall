@@ -610,6 +610,9 @@ class Snapshot:
     plan_window_text: str = ""
     plan_window_open: bool = False
     plan_next_compound: str = ""
+    # Engine sets these from pit exit until the out lap ends.
+    stop_plan: str = ""
+    stop_expected_compound: str = ""
     plan_off_s: float = 0.0
     plan_off_prob: float = 0.0
     plan_delta_sd_s: float = 0.0

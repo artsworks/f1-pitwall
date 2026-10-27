@@ -445,6 +445,9 @@ class Engine:
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[Any, ...] | None = None
         self._stops_done = 0
+        self._prev_pit_status = 0
+        self._stop_expect: tuple[str, str] | None = None
+        self._stop_check: tuple[str, str, int, float] | None = None
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
@@ -487,6 +490,10 @@ class Engine:
             self._session_fuel_last_kg = None
             self._reset_energy_lap_tracking()
             self._held_plan = None
+            self._stop_expect = None
+            self._prev_pit_status = -1  # -1: pit state unknown until the next tick
+            if self._stop_check is not None and t < self._stop_check[3]:
+                self._stop_check = None
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
@@ -979,6 +986,9 @@ class Engine:
         self.battle_tracker.reset()
         self._battle_rates = None
         self._stops_done = 0
+        self._prev_pit_status = 0
+        self._stop_expect = None
+        self._stop_check = None
         self._stint_wear0 = ()
         self._stint_compound0 = -1
         self._used_compounds.clear()
@@ -1979,11 +1989,30 @@ class Engine:
     def _plans(self, snap: Snapshot, cur: DegFit, pit: PitPlan) -> Snapshot:
         """Named strategy plans: recompute on each lap / stop / SC change,
         persist set/switch/off events, fold scalars into snapshot + model."""
+        tracker = self.plan_tracker
+        if snap.pit_status != 0 and self._prev_pit_status == 0:
+            previous = view_fields(tracker.state, snap.lap_num)
+            self._stop_expect = (
+                snap.active_plan or previous.active_plan,
+                (snap.plan_next_compound or previous.plan_next_compound).upper(),
+            )
+            self._stop_check = None
+        elif snap.pit_status == 0 and self._prev_pit_status > 0:
+            if self._stop_expect is not None and self._stop_expect[1]:
+                self._stop_check = (*self._stop_expect, snap.lap_num, snap.session_time)
+            self._stop_expect = None
+        if self._stop_check is not None and snap.lap_num != self._stop_check[2]:
+            self._stop_check = None
+        self._prev_pit_status = snap.pit_status
+        snap = dataclasses.replace(
+            snap,
+            stop_plan=self._stop_check[0] if self._stop_check is not None else "",
+            stop_expected_compound=self._stop_check[1] if self._stop_check is not None else "",
+        )
         phase = snap.race_phase
         if phase == "out_lap" and self._prev_race_phase != "out_lap":
             self._stops_done += 1
         self._prev_race_phase = phase
-        tracker = self.plan_tracker
         if phase in ("racing", "sc", "vsc") and snap.tyre_visual and snap.laps_remaining > 0:
             self._used_compounds.add(snap.tyre_visual)
             neutral = phase in ("sc", "vsc")

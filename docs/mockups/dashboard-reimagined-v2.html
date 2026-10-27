@@ -510,9 +510,10 @@ body.v2 .battle .modes { display: none; }
 .battle.calm { opacity: .55; } .battle.calm .mode { color: var(--dim); }
 .rv { display: grid; grid-template-columns: 6rem minmax(0, 1fr) auto; column-gap: .8rem; align-items: baseline; }
 .rv .side { color: var(--soft); font-weight: bold; font-size: 1.1rem; letter-spacing: .08em; }
-.rv .name { font-size: 1.7rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rv .name .comp { margin-left: .5rem; }
-.rv .name .age { color: var(--soft); font-size: 1.1rem; }
+.rv .name { display: flex; align-items: center; gap: .5rem; min-width: 0; font-size: 1.7rem; font-weight: bold; white-space: nowrap; }
+.rv .name .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rv .name .comp { font-size: 1.1rem; padding: 0 .35rem; }
+.rv .name .age { color: var(--soft); font-size: 1.1rem; min-width: 3ch; text-align: right; }
 .rv .gap { font-size: 2.6rem; font-weight: bold; min-width: 5ch; text-align: right; }
 .rv .tag { font-size: .95rem; border: 2px solid var(--dim); color: var(--dim); border-radius: .25rem;
   padding: 0 .3rem; margin-left: .4rem; vertical-align: .2rem; }
@@ -1105,7 +1106,7 @@ body.diffs [data-diff]::before {
       </div>
       <div class="rv">
         <span class="side">▼ BEHIND</span>
-        <span class="name">P6 HAMILTON <span class="tag crit">OV</span><span class="comp xs medium">MED</span><span class="age"> · 10L</span></span>
+        <span class="name"><span class="nm">P6 HAMILTON</span><span class="tag crit">OV</span><span class="comp medium">M</span><span class="age">10L</span></span>
         <span class="gap">−0.6</span>
       </div>
       <div class="rail behind in"><div class="rz">1 S</div><div class="rc" style="--g: .2"></div></div>
@@ -1115,24 +1116,24 @@ body.diffs [data-diff]::before {
         <span class="prob">HOLD 58%</span>
       </div>
       <div class="rv" style="margin-top:.3rem; opacity:.6">
-        <span class="side">▲ AHEAD</span><span class="name">P4 NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="gap">+2.4</span>
+        <span class="side">▲ AHEAD</span><span class="name"><span class="nm">P4 NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="gap">+2.4</span>
       </div>
     </div>
 
     <div class="card battle attack scrap fight-ahead-only">
       <div class="grp">⇄ SCRAP <span class="sub">· P3 to P5 · 5 swaps in 2 min</span></div>
       <div class="bcar train">
-        <div class="rv"><span class="side">▲ P3</span><span class="name">PIASTRI<span class="comp xs medium">MED</span><span class="age"> · 12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
+        <div class="rv"><span class="side">▲ P3</span><span class="name"><span class="nm">PIASTRI</span><span class="comp medium">M</span><span class="age">12L</span></span><span class="st">IN TRAIN</span><span class="gap">+0.9</span></div>
         <div class="rail ahead train"><div class="rz"></div><div class="rc" style="--g: .3"></div></div>
       </div>
       <div class="bcar attack">
-        <div class="rv"><span class="side">▲ P4</span><span class="name">NORRIS<span class="comp xs hard">HARD</span><span class="age"> · 6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
+        <div class="rv"><span class="side">▲ P4</span><span class="name"><span class="nm">NORRIS</span><span class="comp hard">H</span><span class="age">6L</span></span><span class="st">ATTACKING</span><span class="gap">+0.5</span></div>
         <div class="rail ahead in"><div class="rz"></div><div class="rc" style="--g: .17"></div></div>
         <div class="pace"><span class="ok">▶ closing 0.2 s/lap</span><span class="prob">PASS 42%</span></div>
       </div>
       <div class="you">YOU · P5</div>
       <div class="bcar calm">
-        <div class="rv"><span class="side">▼ P6</span><span class="name">HAMILTON<span class="comp xs medium">MED</span><span class="age"> · 10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
+        <div class="rv"><span class="side">▼ P6</span><span class="name"><span class="nm">HAMILTON</span><span class="comp medium">M</span><span class="age">10L</span></span><span class="st">MANAGING</span><span class="gap">−2.4</span></div>
       </div>
     </div>
 
@@ -1412,7 +1413,7 @@ body.diffs [data-diff]::before {
       body.classList.add("pit", "race-pit");
       phaseEl.textContent = "PITTING";
       execCard.hidden = false;
-      execHead.textContent = "IN PIT LANE · FIT HARD";
+      execHead.innerHTML = 'IN PIT LANE · FIT <span class="comp hard">H</span>';
       execLine.innerHTML = 'stop loss 21.0 s · <span class="exit-warn">⚠ REJOIN P7 behind Ocon +1.2 s</span> · FW L 6% (hold)';
       banner.className = "banner p2";
       callText.textContent = "Pit limiter on. Rejoining P7, Ocon 1.2 ahead on 14-lap Mediums.";

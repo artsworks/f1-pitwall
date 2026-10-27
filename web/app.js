@@ -4,7 +4,6 @@
   var STALE_MS = 1000, CONNECTING_MS = 3000, MAX_CALLS = 12;
   var IDLE_S = { 1: 30, 2: 20, 3: 20 };
   var COMPOUNDS = { 16: "SOFT", 17: "MEDIUM", 18: "HARD", 7: "INTER", 8: "WET" };
-  var COMP_SHORT = { SOFT: "SOFT", MEDIUM: "MED", HARD: "HARD", INTER: "INT", WET: "WET" };
   var SC_WORDS = { 1: "SAFETY CAR", 2: "VSC", 3: "FORMATION" };
   var MENU_HEADS = {
     tyres: "TYRES GONE?", pit: "PIT NOW?", fight: "FIGHT",
@@ -759,8 +758,13 @@
         exitHtml = " · <span class=\"exit-ok\">✓ clean exit</span>";
       }
     }
-    card("c-exec", (boxNow || inRacePit) && !p.red_flag, null,
-      (inRacePit ? "IN PIT LANE" : "BOX NOW") + (ap ? " · PLAN " + ap.id : ""),
+    // The MFD pit-menu tyre choice is not in telemetry, so the FIT chip is the planned
+    // tyre for the driver to cross-check. A wrong tyre shows only after the stop (fit_mismatch).
+    var fit = s && s.fit_mismatch, next = s && s.plan_next_compound;
+    var execHead = fit ? ["⚠ FITTED ", compChip(fit.fitted), " NOT ", compChip(fit.expected)] :
+      [inRacePit ? "IN PIT LANE" : "BOX NOW" + (ap ? " · PLAN " + ap.id : "")].concat(next ? [" · FIT ", compChip(next)] : []);
+    card("c-exec", (boxNow || inRacePit || !!fit) && !p.red_flag, null, execHead,
+      fit ? "Plan " + esc(fit.plan) + " expected " + esc(fit.expected.toLowerCase()) + " · new plan from next lap" :
       s ? (win ? "window L" + win[0] + "–" + win[1] : "") + (s.pit_loss_s ? (win ? " · " : "") + "costs " + fmt(s.pit_loss_s, 0) + " s" : "") + exitHtml : "",
       "EXECUTION");
     renderReplyCard();
@@ -813,7 +817,7 @@
         var seq = span("", "seq");
         (pl.compounds || []).forEach(function (cp, i) {
           if (i) seq.appendChild(span(" → ", "arr"));
-          seq.appendChild(span(String(cp || "?").charAt(0).toUpperCase(), "comp " + compoundClass(cp)));
+          seq.appendChild(compChip(cp));
         });
         row.appendChild(seq);
         if (pl.active) {
@@ -859,6 +863,10 @@
     n.textContent = txt;
     if (cls) n.className = cls;
     return n;
+  }
+  function compChip(c) {
+    var w = String(c || "?");
+    return span(/^c\d/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase(), "comp " + compoundClass(c));
   }
   function compoundClass(c) {
     var w = String(c || "").toLowerCase();
@@ -906,15 +914,12 @@
   function rvRow(sideTxt, name, ot, st, gap, r) {
     var rv = span("", "rv", "div");
     rv.appendChild(span(sideTxt, "side"));
-    var nm = span(name, "name");
+    var nm = span("", "name");
+    nm.appendChild(span(name, "nm"));
     if (ot) nm.appendChild(span("OV", "tag crit"));
     if (r && r.compound) {
-      var compound = String(r.compound);
-      nm.appendChild(span(COMP_SHORT[compound.toUpperCase()] || compound,
-        "comp xs " + compoundClass(r.compound)));
-      if (r.tyre_age_known && typeof r.tyre_age === "number") {
-        nm.appendChild(span(" · " + r.tyre_age + "L", "age"));
-      }
+      nm.appendChild(compChip(r.compound));
+      nm.appendChild(span(r.tyre_age_known && typeof r.tyre_age === "number" ? r.tyre_age + "L" : "", "age"));
     }
     rv.appendChild(nm);
     if (st !== null) rv.appendChild(span(st, "st"));
