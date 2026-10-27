@@ -68,8 +68,13 @@ def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
         indent = lines[hit][: len(lines[hit]) - len(lines[hit].lstrip())]
         match = re.match(rf"(\s*{field}:)(.*?)(\s+#.*)?$", lines[hit].rstrip("\n"))
         comment = ""
-        if match and yaml.safe_load(match.group(2) or "") == connection[field]:
-            comment = match.group(3) or ""
+        if match:
+            try:
+                old_value = yaml.safe_load(match.group(2) or "")
+            except yaml.YAMLError:
+                old_value = object()
+            if old_value == connection[field]:
+                comment = match.group(3) or ""
         lines[hit] = f"{indent}{field}: {json.dumps(value)}{comment}\n"
     missing = [(field, value) for field, value in wanted.items() if field not in connection]
     if missing:
