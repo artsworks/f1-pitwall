@@ -112,6 +112,8 @@ def cmd_cert(args: argparse.Namespace) -> int:
         return 1
     directory = Path.home() / ".pitwall"
     directory.mkdir(parents=True, exist_ok=True)
+    if sys.platform != "win32":
+        directory.chmod(0o700)
     cert = directory / "phone.pem"
     key = directory / "phone-key.pem"
     if subprocess.run([mkcert, "-install"], check=False).returncode != 0:
@@ -136,7 +138,6 @@ def cmd_cert(args: argparse.Namespace) -> int:
         print("cert: mkcert could not make the certificate (see above).")
         return 1
     if sys.platform != "win32":
-        directory.chmod(0o700)
         if key.exists():
             key.chmod(0o600)
     profile = profile_path() or Path.home() / ".pitwall" / "profile.yaml"

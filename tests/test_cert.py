@@ -1,6 +1,9 @@
+import stat
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from pitwall.cli.cert import set_profile_cert
@@ -155,6 +158,28 @@ def test_cmd_cert_happy_path(tmp_path, monkeypatch, capsys):
         ConfigStore().current().connection.https_cert
         == (Path.home() / ".pitwall" / "phone.pem").as_posix()
     )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="directory modes are POSIX-only")
+def test_cmd_cert_restricts_directory_before_mkcert_writes_key(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
+    monkeypatch.setattr("pitwall.cli.cert.shutil.which", lambda name: "mkcert")
+    directory = Path.home() / ".pitwall"
+    directory.mkdir()
+    directory.chmod(0o755)
+    modes = []
+
+    def fake_run(argv, **kwargs):
+        if "-cert-file" in argv:
+            modes.append(stat.S_IMODE(directory.stat().st_mode))
+        return subprocess.CompletedProcess(argv, 0, stdout=str(tmp_path / "ca"))
+
+    monkeypatch.setattr("pitwall.cli.cert.subprocess.run", fake_run)
+    args = build_parser().parse_args(["cert", "--ip", "192.168.1.20"])
+    assert args.func(args) == 0
+    assert modes == [0o700]
 
 
 def test_cmd_cert_manual_edit_returns_1(tmp_path, monkeypatch, capsys):
