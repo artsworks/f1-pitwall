@@ -58,6 +58,31 @@ def test_set_profile_cert_replaces_empty_values(tmp_path):
     assert data["connection"]["https_key"] == "k.pem"
 
 
+def test_set_profile_cert_keeps_trailing_comments(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(
+        'connection:\n  https_cert: ""  # phone cert\n  https_key: ~ # key\n'
+    )
+    assert set_profile_cert(profile, "c.pem", "k.pem") is True
+    text = profile.read_text()
+    assert '  https_cert: "c.pem"  # phone cert' in text
+    assert '  https_key: "k.pem" # key' in text
+    data = yaml.safe_load(text)
+    assert data["connection"]["https_cert"] == "c.pem"
+    assert data["connection"]["https_key"] == "k.pem"
+
+
+def test_set_profile_cert_keeps_comment_after_single_quoted_empty_value(tmp_path):
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("connection:\n  https_cert: ''  # note\n  https_key: ~\n")
+    assert set_profile_cert(profile, "c.pem", "k.pem") is True
+    text = profile.read_text()
+    assert '  https_cert: "c.pem"  # note' in text
+    data = yaml.safe_load(text)
+    assert data["connection"]["https_cert"] == "c.pem"
+    assert data["connection"]["https_key"] == "k.pem"
+
+
 def test_set_profile_cert_replaces_empty_key_and_inserts_cert(tmp_path):
     profile = tmp_path / "profile.yaml"
     profile.write_text('connection:\n  http_port: 8001\n  https_key: ""\n')

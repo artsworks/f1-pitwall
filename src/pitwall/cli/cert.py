@@ -66,7 +66,13 @@ def set_profile_cert(profile: Path, cert: str, key: str) -> bool:
             return False
         hit = hits[0]
         indent = lines[hit][: len(lines[hit]) - len(lines[hit].lstrip())]
-        lines[hit] = f"{indent}{field}: {json.dumps(value)}\n"
+        match = re.match(
+            rf"(\s*{field}:)(.*?)(\s+#.*)?$", lines[hit].rstrip("\n")
+        )
+        comment = ""
+        if match and yaml.safe_load(match.group(2) or "") == connection[field]:
+            comment = match.group(3) or ""
+        lines[hit] = f"{indent}{field}: {json.dumps(value)}{comment}\n"
     missing = [(field, value) for field, value in wanted.items() if field not in connection]
     if missing:
         indent = "  "
@@ -166,10 +172,6 @@ def cmd_cert(args: argparse.Namespace) -> int:
     )
     print(f"Phone radio: open https://{ip}:8000/radio")
     print(f"Keep {key} private. Do not copy or share it, or make it readable by others.")
-    print(
-        f"pitwall cert rewrote the https_cert and https_key lines in {profile}. "
-        "Comments on those two lines are not kept."
-    )
     print("If this computer's LAN address changes, run pitwall cert again.")
     print(
         f'To turn HTTPS off, set connection.https_cert and connection.https_key to "" in {profile}.'
