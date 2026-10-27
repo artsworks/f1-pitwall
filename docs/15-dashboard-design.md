@@ -89,29 +89,34 @@ reflow between sessions, and empty zones keep their space when values are absent
 Zone rules:
 
 - **A status bar**: place freshness at the far left. Right-align session, lap and
-  position. The OV chip lights when overtake mode is active or earned, and the SM chip
-  lights in straight mode. The DRV chip sits left of the mindset pill and shows the
-  learned driver rating. The compact mindset pill sits at the far right.
+  position. The LIMITS chip follows the position and counts corner cuts and track
+  limits warnings. The OV chip lights when overtake mode is active or earned, and the SM chip
+  lights in straight mode. Verbosity, quiet and radio-silent chips each have an icon. The
+  DRV chip sits left of the mindset pill and shows a wheel icon, the learned driver rating
+  and a globe or track icon for its source. The compact mindset pill sits at the far right.
 - **B banner**: keep it full-width and fixed-height. It holds the current call, one
   evidence line and one dim PREVIOUS line. The main screen has no radio log. With no
   call, the banner says "— radio quiet —".
 - **C tyres**: draw a 2×2 grid as the car from above (FL top-left, RR bottom-right). Each
   corner shows the inner temperature, a trend arrow, wear %, a meter for the 80 to 110 °C
   window and the brake temperature. The arrow compares `inner` (fast EMA) with
-  `tyre_inner_ema_slow`: red ▲ heating, blue ▼ cooling, white ▬ steady. The arrow
-  replaces the status word, which is an owner exception to the colour plus word rule.
+  `tyre_inner_ema_slow`: red ▲ heating, blue ▼ cooling, white ▬ steady. The status
+  word (`COLD`, `OK`, `HOT`) sits beside the arrow.
   The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
-  orange LOCKED border. The BB and DIFF strip sits under the grid.
-- **D fixed tiles**: fuel at the flag, battery with its budget mode, weather, and two
-  LAST LAPS rows. Each row shows the newer lap and time, then lap and sector deltas against
+  orange LOCKED border. The BB and DIFF groups sit under the grid, with no legend line.
+- **D fixed tiles**: fuel at the flag with kg per lap under it, battery with its budget
+  mode plus MJ per lap and laps to the floor, weather, and two LAST LAPS rows. The LAST
+  LAPS header shows the base pace. Each row shows the newer lap and time, then lap and sector deltas against
   the lap before. Keep the last three laps so the oldest is the baseline. Damage stays at the bottom.
   Weather shows an icon and rain chance for now, 10 and 30 min. The crossover slot gets
   a marker, and a line under it gives the target compound and ETA.
 - **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
   Info. Safety covers SC, VSC, red flag, blue flag and RAIN CROSSOVER when
   `weather_crossover_min` is 5 or less. Tactical holds the battle card and the strategy
-  plans. In qualifying the zone shows the session phase, cut-off, benchmark sectors and
-  the current run.
+  plans. A line under the plans shows PIT EXIT (clean, traffic or the rival and gap) and
+  the undercut and overcut deltas. In qualifying the zone shows the session phase, the
+  cut-off, a BENCHMARK table (POLE and MATE rows with S1, S2, S3 and LAP gaps) and the
+  current run.
 - **Battle card**: one rival as the single card. When `battle.ahead2` or
   `battle.behind2` is set, or places swap, the card lists up to two cars each side
   with a state word, gap and rail around a YOU divider. The direct rival's row word
