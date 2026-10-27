@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.38.1 (2026-10-27)
+
+### Bug Fixes
+
+- **strategy**: Skip wrong-tyre warning after a drive-through
+  ([#144](https://github.com/artsworks/f1-pitwall/pull/144),
+  [`228271b`](https://github.com/artsworks/f1-pitwall/commit/228271bb477fea45afa2fc14ea8f101abff40038))
+
+
 ## v0.38.0 (2026-10-27)
 
 ### Bug Fixes
