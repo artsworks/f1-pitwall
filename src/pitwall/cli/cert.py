@@ -129,6 +129,10 @@ def cmd_cert(args: argparse.Namespace) -> int:
     ):
         print("cert: mkcert could not make the certificate (see above).")
         return 1
+    if sys.platform != "win32":
+        directory.chmod(0o700)
+        if key.exists():
+            key.chmod(0o600)
     profile = profile_path() or Path.home() / ".pitwall" / "profile.yaml"
     cert_s, key_s = cert.as_posix(), key.as_posix()
     if not set_profile_cert(profile, cert_s, key_s):
@@ -161,10 +165,7 @@ def cmd_cert(args: argparse.Namespace) -> int:
         f"https://github.com/FiloSottile/mkcert"
     )
     print(f"Phone radio: open https://{ip}:8000/radio")
-    print(f"Keep {key} private. Do not copy or share it.")
-    if sys.platform != "win32":
-        print(f"Only your user should read it. Check with: ls -l {key} (expect -rw-------).")
-        print(f"If it shows more, run: chmod 600 {key}")
+    print(f"Keep {key} private. Do not copy or share it, or make it readable by others.")
     print(
         f"pitwall cert rewrote the https_cert and https_key lines in {profile}. "
         "Comments on those two lines are not kept."
