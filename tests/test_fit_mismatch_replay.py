@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -10,18 +11,19 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
+from pitwall.model.deg import DegFit
 from pitwall.server.app import strategy_payload
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database
+from pitwall.strategy.pitwindow import NO_PLAN
 
 from .race_synth import RaceSpec, race_stream
 from .synth import write_packet_stream
 
-pytestmark = [pytest.mark.slow, pytest.mark.replay]
-
 _EXPECTED = "SOFT"
 _WRONG_VISUAL = 18
 _RIGHT_VISUAL = 16
+_LAP = 7
 
 ReplayTick = tuple[Snapshot, dict[str, Any]]
 
@@ -90,6 +92,8 @@ def _assert_no_mismatch_before_pit(ticks: list[ReplayTick]) -> None:
     assert all(payload["fit_mismatch"] is None for _, payload in ticks[:first_pit])
 
 
+@pytest.mark.slow
+@pytest.mark.replay
 def test_vsc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) -> None:
     ticks = replays["vsc_wrong"]
     _assert_no_mismatch_before_pit(ticks)
@@ -116,6 +120,8 @@ def test_vsc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) 
     )
 
 
+@pytest.mark.slow
+@pytest.mark.replay
 def test_sc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) -> None:
     ticks = replays["sc_wrong"]
     _assert_no_mismatch_before_pit(ticks)
@@ -134,6 +140,8 @@ def test_sc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) -
     )
 
 
+@pytest.mark.slow
+@pytest.mark.replay
 def test_vsc_right_tyre_does_not_warn(replays: dict[str, list[ReplayTick]]) -> None:
     ticks = replays["vsc_right"]
     latched = [
@@ -146,6 +154,8 @@ def test_vsc_right_tyre_does_not_warn(replays: dict[str, list[ReplayTick]]) -> N
     assert all(payload["fit_mismatch"] is None for _, payload in ticks)
 
 
+@pytest.mark.slow
+@pytest.mark.replay
 def test_green_wrong_tyre_warns_only_on_out_lap(
     replays: dict[str, list[ReplayTick]],
 ) -> None:
@@ -160,3 +170,72 @@ def test_green_wrong_tyre_warns_only_on_out_lap(
     assert all(
         payload["fit_mismatch"] is None for snapshot, payload in ticks if snapshot.lap_num != 7
     )
+
+
+def _plan_engine(tmp_path: Path) -> Any:
+    return build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=Database(":memory:"),
+        decision_log_path=tmp_path / "d.jsonl",
+    )
+
+
+def _plan_snapshot(t: float, pit_status: int, tyre_visual: int, phase: str = "in_lap") -> Snapshot:
+    return dataclasses.replace(
+        Snapshot(now=t),
+        session_kind="race",
+        session_type=15,
+        race_phase=phase,
+        laps_remaining=20,
+        lap_num=_LAP,
+        session_time=t,
+        pit_status=pit_status,
+        tyre_visual=tyre_visual,
+        active_plan="A",
+        plan_next_compound="soft",
+    )
+
+
+def _fit_mismatch(engine: Any, snap: Snapshot) -> dict[str, str] | None:
+    prior = DegFit(90_000.0, 80.0, 30.0, 10, 100.0, 0.9, "fit")
+    result = engine._plans(snap, prior, NO_PLAN)
+    payload = strategy_payload(result)
+    assert payload is not None
+    return payload["fit_mismatch"]
+
+
+def test_rewind_to_before_pit_entry_does_not_latch_mismatch(tmp_path: Path) -> None:
+    engine = _plan_engine(tmp_path)
+    assert _fit_mismatch(engine, _plan_snapshot(100, 0, 17)) is None
+    assert _fit_mismatch(engine, _plan_snapshot(110, 1, 17)) is None
+    for cb in engine.state.rewind_listeners:
+        cb(95)
+    assert _fit_mismatch(engine, _plan_snapshot(96, 0, 17)) is None
+    assert _fit_mismatch(engine, _plan_snapshot(97, 0, 17)) is None
+
+
+def test_rewind_after_pit_exit_keeps_mismatch(tmp_path: Path) -> None:
+    engine = _plan_engine(tmp_path)
+    assert _fit_mismatch(engine, _plan_snapshot(100, 0, 17)) is None
+    assert _fit_mismatch(engine, _plan_snapshot(110, 1, 17)) is None
+    expected = {"plan": "A", "expected": "SOFT", "fitted": "HARD"}
+    assert _fit_mismatch(engine, _plan_snapshot(130, 0, 18, "out_lap")) == expected
+    assert _fit_mismatch(engine, _plan_snapshot(140, 0, 18, "out_lap")) == expected
+    for cb in engine.state.rewind_listeners:
+        cb(135)
+    assert _fit_mismatch(engine, _plan_snapshot(136, 0, 18, "out_lap")) == expected
+    assert _fit_mismatch(engine, _plan_snapshot(137, 0, 18, "out_lap")) == expected
+
+
+def test_rewind_before_pit_entry_clears_mismatch_after_exit(tmp_path: Path) -> None:
+    engine = _plan_engine(tmp_path)
+    assert _fit_mismatch(engine, _plan_snapshot(100, 0, 17)) is None
+    assert _fit_mismatch(engine, _plan_snapshot(110, 1, 17)) is None
+    expected = {"plan": "A", "expected": "SOFT", "fitted": "HARD"}
+    assert _fit_mismatch(engine, _plan_snapshot(130, 0, 18, "out_lap")) == expected
+    assert _fit_mismatch(engine, _plan_snapshot(140, 0, 18, "out_lap")) == expected
+    for cb in engine.state.rewind_listeners:
+        cb(95)
+    assert _fit_mismatch(engine, _plan_snapshot(96, 0, 17)) is None
+    assert _fit_mismatch(engine, _plan_snapshot(97, 0, 17)) is None

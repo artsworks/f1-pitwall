@@ -447,7 +447,7 @@ class Engine:
         self._stops_done = 0
         self._prev_pit_status = 0
         self._stop_expect: tuple[str, str] | None = None
-        self._stop_check: tuple[str, str, int] | None = None
+        self._stop_check: tuple[str, str, int, float] | None = None
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._compound_priors: dict[int, DegFit] = {}
@@ -490,6 +490,10 @@ class Engine:
             self._session_fuel_last_kg = None
             self._reset_energy_lap_tracking()
             self._held_plan = None
+            self._stop_expect = None
+            self._prev_pit_status = -1  # -1: pit state unknown until the next tick
+            if self._stop_check is not None and t < self._stop_check[3]:
+                self._stop_check = None
 
         state.rewind_listeners.append(_on_rewind)
         state.session_listeners.append(self._on_new_session)
@@ -1993,9 +1997,9 @@ class Engine:
                 (snap.plan_next_compound or previous.plan_next_compound).upper(),
             )
             self._stop_check = None
-        elif snap.pit_status == 0 and self._prev_pit_status != 0:
+        elif snap.pit_status == 0 and self._prev_pit_status > 0:
             if self._stop_expect is not None and self._stop_expect[1]:
-                self._stop_check = (*self._stop_expect, snap.lap_num)
+                self._stop_check = (*self._stop_expect, snap.lap_num, snap.session_time)
             self._stop_expect = None
         if self._stop_check is not None and snap.lap_num != self._stop_check[2]:
             self._stop_check = None
