@@ -78,6 +78,11 @@ def replays(tmp_path_factory: pytest.TempPathFactory) -> dict[str, list[ReplayTi
             player_pit_lap=6,
             compound_after_stop=_RIGHT_VISUAL,
         ),
+        "drive_through": RaceSpec(
+            laps=12,
+            player_pit_lap=6,
+            player_pit_drive_through=True,
+        ),
         "green_wrong": RaceSpec(
             laps=12,
             player_pit_lap=6,
@@ -191,6 +196,7 @@ def _plan_snapshot(t: float, pit_status: int, tyre_visual: int, phase: str = "in
         lap_num=_LAP,
         session_time=t,
         pit_status=pit_status,
+        num_pit_stops=int(phase == "out_lap"),
         tyre_visual=tyre_visual,
         active_plan="A",
         plan_next_compound="soft",
@@ -239,3 +245,10 @@ def test_rewind_before_pit_entry_clears_mismatch_after_exit(tmp_path: Path) -> N
         cb(95)
     assert _fit_mismatch(engine, _plan_snapshot(96, 0, 17)) is None
     assert _fit_mismatch(engine, _plan_snapshot(97, 0, 17)) is None
+
+
+def test_drive_through_does_not_warn(replays: dict[str, list[ReplayTick]]) -> None:
+    ticks = replays["drive_through"]
+    assert any(snapshot.pit_status != 0 for snapshot, _ in ticks)
+    assert any(snapshot.plan_next_compound.upper() not in ("", "MEDIUM") for snapshot, _ in ticks)
+    assert all(payload["fit_mismatch"] is None for _, payload in ticks)

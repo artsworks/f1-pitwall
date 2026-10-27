@@ -446,7 +446,7 @@ class Engine:
         self._plan_key: tuple[Any, ...] | None = None
         self._stops_done = 0
         self._prev_pit_status = 0
-        self._stop_expect: tuple[str, str] | None = None
+        self._stop_expect: tuple[str, str, int] | None = None
         self._stop_check: tuple[str, str, int, float] | None = None
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
@@ -1995,11 +1995,15 @@ class Engine:
             self._stop_expect = (
                 snap.active_plan or previous.active_plan,
                 (snap.plan_next_compound or previous.plan_next_compound).upper(),
+                snap.num_pit_stops,
             )
             self._stop_check = None
         elif snap.pit_status == 0 and self._prev_pit_status > 0:
-            if self._stop_expect is not None and self._stop_expect[1]:
-                self._stop_check = (*self._stop_expect, snap.lap_num, snap.session_time)
+            expect = self._stop_expect
+            # A drive-through or stop-go also passes the pit lane; only a real stop
+            # raises num_pit_stops (the game counts it in the box, before pit exit).
+            if expect is not None and expect[1] and snap.num_pit_stops > expect[2]:
+                self._stop_check = (expect[0], expect[1], snap.lap_num, snap.session_time)
             self._stop_expect = None
         if self._stop_check is not None and snap.lap_num != self._stop_check[2]:
             self._stop_check = None

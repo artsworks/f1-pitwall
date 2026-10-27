@@ -40,6 +40,7 @@ class RaceSpec:
     fuel_kg: float = 30.0
     fuel_kg_per_lap: float = 1.7
     player_pit_lap: int | None = None
+    player_pit_drive_through: bool = False  # Pit lane pass with no stop (num_pit_stops stays 0)
     rival_pit_lap: int | None = None
     rival_behind_pit_lap: int | None = None  # Lap when the rival behind pits
     sc_laps: tuple[int, int] | None = None
@@ -533,6 +534,7 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "result_status": 2,
                 "driver_status": player_driver_status,
                 "pit_status": player_pit_status,
+                "num_pit_stops": int(after_stop and not spec.player_pit_drive_through),
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                 "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
