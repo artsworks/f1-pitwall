@@ -375,6 +375,50 @@ class LapRow:
     traffic: int = 0
 
 
+def lap_row_from_summary(
+    session_uid: int,
+    car_idx: int,
+    lap: LapSummary,
+    *,
+    setup_state_id: int | None = None,
+) -> LapRow:
+    return LapRow(
+        id=0,
+        session_uid=session_uid,
+        car_idx=car_idx,
+        lap_num=lap.lap_num,
+        lap_time_ms=lap.lap_time_ms,
+        s1_ms=lap.sector1_ms,
+        s2_ms=lap.sector2_ms,
+        compound=lap.compound,
+        tyre_age_laps=lap.tyre_age_laps,
+        fuel_remaining_laps=lap.fuel_remaining_laps_at_end,
+        valid=int(bool(lap.valid)),
+        invalid_reasons=tuple(lap.invalid_reasons),
+        wear_pct=lap.wear_pct,
+        fuel_kg=lap.fuel_kg,
+        ers_deployed_j=lap.ers_deployed_j,
+        sc_status=lap.sc_status,
+        weather=lap.weather,
+        tyre_inner_c=lap.tyre_inner_c,
+        wear_front_pct=lap.wear_front_pct,
+        wear_rear_pct=lap.wear_rear_pct,
+        tyre_inner_front_c=lap.tyre_inner_front_c,
+        tyre_inner_rear_c=lap.tyre_inner_rear_c,
+        tyre_surface_c=lap.tyre_surface_c,
+        visual=lap.visual,
+        setup_state_id=setup_state_id,
+        traction_exits=getattr(lap, "traction_exits", 0),
+        slip_balance_deg=getattr(lap, "slip_balance_deg", 0.0),
+        slip_samples=getattr(lap, "slip_samples", 0),
+        lockups_front=getattr(lap, "lockups_front", 0),
+        lockups_rear=getattr(lap, "lockups_rear", 0),
+        snaps_entry=getattr(lap, "snaps_entry", 0),
+        snaps_exit=getattr(lap, "snaps_exit", 0),
+        traffic=getattr(lap, "traffic", 0),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class StintRow:
     id: int

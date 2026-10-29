@@ -80,7 +80,7 @@ from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
 from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window, widen_window
-from pitwall.store.db import LapRow
+from pitwall.store.db import LapRow, lap_row_from_summary
 from pitwall.store.uids import is_synthetic_uid
 from pitwall.strategy.battle import (
     HOLD,
@@ -1052,7 +1052,14 @@ class Engine:
         self._weekend_structure_written = tuple(snap.weekend_structure)
 
     def _write_laps(self) -> None:
-        if self.db is None or self.state.session_uid is None:
+        if self.state.session_uid is None:
+            return
+        uid = self.state.session_uid
+        if self.db is None:
+            new_laps = self.state.laps[self._laps_written :]
+            self._laps_written = len(self.state.laps)
+            for lap in new_laps:
+                self._on_player_lap(uid, lap)
             return
         if self.recovering:
             # Rebuilt laps are already committed; don't insert or fold twice.
@@ -1060,7 +1067,6 @@ class Engine:
             self.state.setup_changes.clear()
             self._laps_written = len(self.state.laps)
             return
-        uid = self.state.session_uid
         parc_ferme = self.state.parc_ferme_rules
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
             self.db.set_session_parc_ferme(uid, parc_ferme)
@@ -1115,11 +1121,19 @@ class Engine:
         when an out-lap completes, fold fuel-burn deltas."""
         self._note_session_fuel(lap)
         db = self.db
-        if db is None:
-            return
         settings = self.store.current()
-        th = settings.thresholds
         track_id = self.state.track_id
+        if db is None:
+            rows_by_lap = {
+                row.lap_num: row
+                for row in (lap_row_from_summary(uid, 0, summary) for summary in self.state.laps)
+            }
+            rows = sorted(rows_by_lap.values(), key=lambda row: row.lap_num)
+            in_memory_tail = self._stint_rows(rows)
+            if in_memory_tail:
+                self._fit_current_stint(in_memory_tail, track_id, settings, None)
+            return
+        th = settings.thresholds
         all_laps = db.laps_for(uid, 0)
 
         # Current stint = contiguous tail with one compound and strictly
@@ -1154,9 +1168,7 @@ class Engine:
                     self._weekend_prior_cache.pop((uid, prev[0].compound), None)
 
         if tail:
-            self._stint_laps = tail
             compound = tail[0].compound
-            prior = self._deg_prior(track_id, compound, settings)
             fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
             fuel_param = db.get_param(track_id, compound, fuel_name)
             fuel_fixed = (
@@ -1164,32 +1176,10 @@ class Engine:
                 if fuel_param is not None and fuel_param.weight >= self._th("prior_min_weight", 2)
                 else None
             )
-            thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
-            usable = usable_laps(tail, thermal_hi_c)
-            if usable and all(lap.fuel_kg > 0 for lap in usable):
-                self._stint_fuel_ref = max(lap.fuel_kg for lap in usable)
-                self._stint_fuel_ref_laps = 0.0
-            elif usable:
-                self._stint_fuel_ref = 0.0
-                self._stint_fuel_ref_laps = max(lap.fuel_remaining_laps for lap in usable)
-            else:
-                self._stint_fuel_ref = max((lap.fuel_kg for lap in tail), default=0.0)
-                self._stint_fuel_ref_laps = 0.0
-            fit = fit_stint(
-                tail,
-                prior,
-                min_laps=int(self._th("deg_min_laps", 3)),
-                fuel_coeff_fixed=fuel_fixed,
-                deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
-                deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-                thermal_hi_c=thermal_hi_c,
-                quadratic=True,
-                quad_min_laps=int(self._th("deg_quad_min_laps", 8)),
-                quad_min_t=self._th("deg_quad_min_t", 2.0),
-            )
-            self.deg_fit = fit
+            fit = self._fit_current_stint(tail, track_id, settings, fuel_fixed)
             persist_fit = fit
             if fit.deg2_ms_per_lap2 > 0:
+                prior = self._deg_prior(track_id, compound, settings)
                 persist_fit = fit_stint(
                     tail,
                     prior,
@@ -1197,7 +1187,7 @@ class Engine:
                     fuel_coeff_fixed=fuel_fixed,
                     deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                     deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-                    thermal_hi_c=thermal_hi_c,
+                    thermal_hi_c=self._thermal_hi_c(track_id, compound, settings),
                 )
             db.upsert_stint(
                 uid,
@@ -1272,6 +1262,42 @@ class Engine:
             settings.track,
             th,
         )
+
+    def _fit_current_stint(
+        self,
+        tail: list[LapRow],
+        track_id: int,
+        settings: Any,
+        fuel_fixed: float | None,
+    ) -> DegFit:
+        self._stint_laps = tail
+        compound = tail[0].compound
+        prior = self._deg_prior(track_id, compound, settings)
+        thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
+        usable = usable_laps(tail, thermal_hi_c)
+        if usable and all(lap.fuel_kg > 0 for lap in usable):
+            self._stint_fuel_ref = max(lap.fuel_kg for lap in usable)
+            self._stint_fuel_ref_laps = 0.0
+        elif usable:
+            self._stint_fuel_ref = 0.0
+            self._stint_fuel_ref_laps = max(lap.fuel_remaining_laps for lap in usable)
+        else:
+            self._stint_fuel_ref = max((lap.fuel_kg for lap in tail), default=0.0)
+            self._stint_fuel_ref_laps = 0.0
+        fit = fit_stint(
+            tail,
+            prior,
+            min_laps=int(self._th("deg_min_laps", 3)),
+            fuel_coeff_fixed=fuel_fixed,
+            deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
+            deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
+            thermal_hi_c=thermal_hi_c,
+            quadratic=True,
+            quad_min_laps=int(self._th("deg_quad_min_laps", 8)),
+            quad_min_t=self._th("deg_quad_min_t", 2.0),
+        )
+        self.deg_fit = fit
+        return fit
 
     def _flush_pending_pit_loss(
         self,

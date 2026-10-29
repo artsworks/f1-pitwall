@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 
 from pitwall.model.deg import DegFit
 from pitwall.state.lap import LapAccumulator, LapSummary
-from pitwall.store.db import MIGRATIONS, Database
+from pitwall.store.db import MIGRATIONS, Database, lap_row_from_summary
 from pitwall.store.uids import derived_uid
 
 
@@ -352,6 +353,50 @@ def test_insert_lap_round_trips_sector_times() -> None:
 
     stored = db.laps_for(7, 0)[0]
     assert (stored.s1_ms, stored.s2_ms) == (30_000, 31_000)
+
+
+def test_lap_row_from_summary_matches_inserted_row() -> None:
+    db = Database(":memory:")
+    uid, car_idx = 17, 1
+    setup_state_id = db.setup_state_id("sha1:test", {"brake_bias": 56.5})
+    lap = LapSummary(
+        lap_num=7,
+        lap_time_ms=91_234,
+        sector1_ms=30_111,
+        sector2_ms=31_222,
+        compound=16,
+        tyre_age_laps=5,
+        fuel_remaining_laps_at_end=8.5,
+        valid=False,
+        invalid_reasons=["lap_invalid", "red_flag"],
+        wear_pct=12.5,
+        wear_front_pct=11.25,
+        wear_rear_pct=13.75,
+        fuel_kg=17.5,
+        ers_deployed_j=123_456.5,
+        sc_status=2,
+        weather=4,
+        tyre_inner_c=88.5,
+        tyre_inner_front_c=87.5,
+        tyre_inner_rear_c=89.5,
+        tyre_surface_c=78.5,
+        visual=2,
+        traction_exits=2,
+        lockups_front=3,
+        lockups_rear=4,
+        snaps_entry=5,
+        snaps_exit=6,
+        slip_balance_deg=-1.25,
+        slip_samples=14,
+        traffic=1,
+    )
+
+    db.insert_lap(uid, car_idx, lap, setup_state_id=setup_state_id)
+
+    row = db.laps_for(uid, car_idx)[0]
+    assert replace(row, id=0) == lap_row_from_summary(
+        uid, car_idx, lap, setup_state_id=setup_state_id
+    )
 
 
 def test_migration_dedupes_laps_keeping_latest_row(tmp_path) -> None:

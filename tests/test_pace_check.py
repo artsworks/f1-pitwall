@@ -384,6 +384,50 @@ def test_fuel_forecast_uses_only_fit_usable_laps(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.replay
+def test_pace_fit_works_without_persistence(tmp_path, monkeypatch) -> None:
+    original = SessionState._record_pace_delta
+    spec = RaceSpec(
+        laps=15,
+        base_ms=95_000,
+        gap_ahead_s=12.0,
+        gap_behind_s=12.0,
+        player_lap_offset_ms=((11, 500), (12, -500)),
+    )
+
+    def run(name: str, persist: bool):
+        observed = []
+
+        def record_pace_delta(state: SessionState, summary: LapSummary) -> None:
+            original(state, summary)
+            observed.append(
+                (summary.lap_num, state.pace_delta_vs_expected_s, state._model.deg_fit_source)
+            )
+
+        monkeypatch.setattr(SessionState, "_record_pace_delta", record_pace_delta)
+        path = tmp_path / name
+        path.mkdir()
+        calls, _ = replay_race(path, spec, persist=persist)
+        return calls, observed
+
+    calls_no_persistence, no_persistence_states = run("no-persistence", False)
+    assert any(source == "fit" for _, _, source in no_persistence_states)
+    slow_call = next(
+        call
+        for call in calls_no_persistence
+        if call.rule_id == "pace_check" and call.inputs["lap_num"] == 12
+    )
+    assert slow_call.inputs["pace_delta_vs_expected_s"] >= 0.15
+    assert slow_call.inputs["deg_fit_source"] == "fit"
+
+    calls_persisted, persisted_states = run("persisted", True)
+    no_persistence_lap11 = next(row for row in no_persistence_states if row[0] == 11)
+    persisted_lap11 = next(row for row in persisted_states if row[0] == 11)
+    assert abs(no_persistence_lap11[1] - persisted_lap11[1]) < 0.01
+    assert no_persistence_lap11[2] == persisted_lap11[2] == "fit"
+    assert any(call.rule_id == "pace_check" for call in calls_persisted)
+
+
+@pytest.mark.replay
 def test_pace_check_uses_traffic_of_completed_lap(pace_runs) -> None:
     calls, _, lap_states = pace_runs["traffic_cleared"]
     slow_calls = [

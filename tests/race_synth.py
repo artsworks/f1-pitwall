@@ -214,15 +214,16 @@ def _crossed(previous_m: float, current_m: float, point_m: float) -> bool:
 
 
 def replay_race(
-    tmp: Path, spec: RaceSpec, db: Database | None = None
+    tmp: Path, spec: RaceSpec, db: Database | None = None, *, persist: bool = True
 ) -> tuple[list[Call], list[dict]]:
     stream = qualifying_stream(spec) if spec.session_type in (5, 6, 7) else race_stream(spec)
     path = write_packet_stream(tmp / "race.f1bin", stream)
     log = tmp / "decisions.jsonl"
+    replay_db = (db if db is not None else Database(":memory:")) if persist else None
     engine = build_engine(
         clock=VirtualClock(),
         sinks=[],
-        db=db if db is not None else Database(":memory:"),
+        db=replay_db,
         decision_log_path=log,
     )
     _, calls = asyncio.run(run_replay(path, engine, None))
