@@ -211,8 +211,6 @@ persists and `stints_for_track` can fit rival deg later.
 stint folds when the next stint starts or the session ends. The fold is deduplicated by
 session and the stint's first lap. Only clean fits on known tracks fold:
 
-Without persistence the engine fits the current stint from in-memory laps. It saves nothing and folds no learned values.
-
 - Live-tail planning may use a quadratic fit. Persist a linear fit in `stints` and learned priors.
 - `source == "fit"` and `rmse_ms <= deg_rmse_bad_ms`
 - `0 < deg_ms_per_lap < deg_max_ms_per_lap`
@@ -220,6 +218,8 @@ Without persistence the engine fits the current stint from in-memory laps. It sa
 - `learn_base_min_ms <= base_ms <= learn_base_max_ms`
 
 Race folds use the total-distance-scoped names above; non-race folds use unscoped names.
+
+Without persistence the engine fits the current stint from in-memory laps. It saves nothing and folds no learned values.
 
 ## SQLite migration 9
 
