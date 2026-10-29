@@ -9,6 +9,47 @@ from pitwall.state.session import SessionState, Snapshot
 from tests.race_synth import RaceSpec, replay_race
 
 
+def _replay_with_lap_states(directory, spec):
+    lap_states = []
+    original = SessionState._record_pace_delta
+
+    def record_pace_delta(state: SessionState, summary: LapSummary) -> None:
+        original(state, summary)
+        lap_states.append(
+            (
+                summary.lap_num,
+                summary.valid,
+                summary.sc_status,
+                bool(summary.traffic),
+                state.pace_delta_vs_expected_s,
+                state._model.deg_fit_source,
+            )
+        )
+
+    SessionState._record_pace_delta = record_pace_delta
+    try:
+        calls, rows = replay_race(directory, spec)
+    finally:
+        SessionState._record_pace_delta = original
+    return calls, rows, lap_states
+
+
+def _assert_pace_calls_after_six_usable_laps(calls, lap_states) -> None:
+    pace_calls = [call for call in calls if call.rule_id == "pace_check"]
+    assert pace_calls
+    for call in pace_calls:
+        assert call.inputs["deg_fit_source"] == "fit"
+        usable_laps = sum(
+            valid and sc_status == 0 and not traffic and completed_lap < call.inputs["lap_num"]
+            for completed_lap, valid, sc_status, traffic, _, _ in lap_states
+        )
+        assert usable_laps >= 6
+
+
+def _completed_lap_state(lap_states, lap_num):
+    return next(state for state in lap_states if state[0] == lap_num)
+
+
 @pytest.fixture(scope="module")
 def pace_runs(tmp_path_factory):
     specs = {
@@ -20,33 +61,34 @@ def pace_runs(tmp_path_factory):
             player_lap_offset_ms=((1, -350),),
         ),
         "fast": RaceSpec(
-            laps=10,
+            laps=13,
             base_ms=95_000,
             gap_ahead_s=12.0,
             gap_behind_s=12.0,
-            player_lap_offset_ms=((5, -500), (6, 500), (8, -500), (9, 500)),
+            player_lap_offset_ms=((5, -500), (6, 500), (8, -500), (9, 500), (11, -500), (12, 500)),
         ),
         "slow": RaceSpec(
-            laps=10,
+            laps=13,
             base_ms=95_000,
             gap_ahead_s=12.0,
             gap_behind_s=12.0,
-            player_lap_offset_ms=((5, 500), (6, -500), (8, 500), (9, -500)),
+            player_lap_offset_ms=((5, 500), (6, -500), (8, 500), (9, -500), (11, 500), (12, -500)),
         ),
         "dirty": RaceSpec(
-            laps=12,
+            laps=15,
             base_ms=95_000,
-            gap_ahead_s=1.2,
+            gap_ahead_s=12.0,
+            gap_ahead_changes=((8, 1.2),),
             gap_behind_s=12.0,
-            player_lap_offset_ms=((5, 500),),
+            player_lap_offset_ms=((8, 500),),
         ),
         "traffic_cleared": RaceSpec(
-            laps=10,
+            laps=15,
             base_ms=95_000,
-            gap_ahead_s=1.0,
-            gap_ahead_from_lap=(6, 8.0),
+            gap_ahead_s=12.0,
+            gap_ahead_changes=((8, 1.0), (9, 8.0)),
             gap_behind_s=12.0,
-            player_lap_offset_ms=((5, 500),),
+            player_lap_offset_ms=((8, 500), (9, -500), (11, 500), (12, -500)),
         ),
         "noise": RaceSpec(
             laps=10,
@@ -57,7 +99,7 @@ def pace_runs(tmp_path_factory):
         ),
     }
     return {
-        name: replay_race(tmp_path_factory.mktemp(f"pace-{name}"), spec)
+        name: _replay_with_lap_states(tmp_path_factory.mktemp(f"pace-{name}"), spec)
         for name, spec in specs.items()
     }
 
@@ -74,6 +116,7 @@ def _snapshot(**changes) -> Snapshot:
         battle_mode="free_air",
         gap_ahead_s=12.0,
         gap_behind_s=12.0,
+        deg_fit_source="fit",
         pace_delta_vs_expected_s=-0.3,
         pace_slow_laps=0,
         pace_delta="three tenths",
@@ -160,6 +203,17 @@ def test_pace_check_rule_and_templates_render(caplog: pytest.LogCaptureFixture) 
     assert not any(record.getMessage().startswith("rule pace_check") for record in caplog.records)
 
 
+def test_pace_check_waits_for_settled_degradation_fit() -> None:
+    engine = _rule_engine()
+    blend = _snapshot(deg_fit_source="blend")
+    result = engine.evaluate(blend)
+    assert not any(candidate.rule.defn.id == "pace_check" for candidate in result.candidates)
+
+    fitted = replace(blend, now=1.0, deg_fit_source="fit")
+    result = engine.evaluate(fitted)
+    assert any(candidate.rule.defn.id == "pace_check" for candidate in result.candidates)
+
+
 def test_pace_check_waits_for_dirty_air_slow_laps() -> None:
     dirty_air = _snapshot(
         lap_num=6,
@@ -194,7 +248,7 @@ def test_pace_check_waits_when_traffic_clears_after_slow_lap() -> None:
 
 @pytest.mark.replay
 def test_battle_catching_call_includes_catch_laps(pace_runs) -> None:
-    calls, rows = pace_runs["catching"]
+    calls, rows, _ = pace_runs["catching"]
     call = next(call for call in calls if call.rule_id == "battle_catching")
     assert call.inputs["battle_catch_laps"] > 2
     assert "slower" in call.text.lower()
@@ -205,20 +259,24 @@ def test_battle_catching_call_includes_catch_laps(pace_runs) -> None:
 
 @pytest.mark.replay
 def test_free_air_pace_check_reports_fast_and_slow_pace(pace_runs) -> None:
-    fast_calls, _ = pace_runs["fast"]
+    fast_calls, _, fast_lap_states = pace_runs["fast"]
     fast = [call for call in fast_calls if call.rule_id == "pace_check"]
     assert len(fast) >= 2
+    _assert_pace_calls_after_six_usable_laps(fast_calls, fast_lap_states)
     assert all(call.inputs["lap_num"] % 3 == 0 for call in fast)
+    assert all(call.inputs["lap_num"] >= 9 for call in fast)
     assert all(call.inputs["pace_delta_vs_expected_s"] <= -0.3 for call in fast)
     assert all(
         "under expected" in call.text.lower() or "quicker than expected" in call.text.lower()
         for call in fast
     )
 
-    slow_calls, _ = pace_runs["slow"]
+    slow_calls, _, slow_lap_states = pace_runs["slow"]
     slow = [call for call in slow_calls if call.rule_id == "pace_check"]
     assert slow
+    _assert_pace_calls_after_six_usable_laps(slow_calls, slow_lap_states)
     assert all(call.inputs["lap_num"] % 3 == 0 for call in slow)
+    assert all(call.inputs["lap_num"] >= 9 for call in slow)
     assert all(call.inputs["pace_delta_vs_expected_s"] >= 0.15 for call in slow)
     assert all(
         "off expected" in call.text.lower() or "slower than expected" in call.text.lower()
@@ -228,17 +286,26 @@ def test_free_air_pace_check_reports_fast_and_slow_pace(pace_runs) -> None:
 
 @pytest.mark.replay
 def test_dirty_air_and_noise_suppress_pace_check(pace_runs) -> None:
-    dirty_calls, dirty_rows = pace_runs["dirty"]
+    dirty_calls, dirty_rows, dirty_lap_states = pace_runs["dirty"]
     slow_calls = [call for call in dirty_calls if call.rule_id == "pace_check"]
-    assert not any(call.inputs["lap_num"] == 6 for call in slow_calls)
+    lap_eight = _completed_lap_state(dirty_lap_states, 8)
+    assert lap_eight[3] is True
+    assert lap_eight[4] >= 0.15
+    assert lap_eight[5] == "fit"
+    assert not any(call.inputs["lap_num"] == 9 for call in slow_calls)
+    assert slow_calls
     assert all(call.inputs["pace_slow_laps"] >= 3 for call in slow_calls)
+    assert all(call.inputs["deg_fit_source"] == "fit" for call in slow_calls)
+    assert any(call.inputs["lap_num"] >= 12 for call in slow_calls)
+    _assert_pace_calls_after_six_usable_laps(dirty_calls, dirty_lap_states)
     assert any(
         row.get("rule_id") == "battle_manage"
         and row.get("inputs", {}).get("battle_mode") == "managing"
         for row in dirty_rows
     )
 
-    noise_calls, _ = pace_runs["noise"]
+    noise_calls, _, noise_lap_states = pace_runs["noise"]
+    assert any(state[5] == "fit" for state in noise_lap_states)
     assert not any(call.rule_id == "pace_check" for call in noise_calls)
 
 
@@ -268,19 +335,41 @@ def test_on_model_degradation_reads_on_expected_pace(tmp_path, monkeypatch) -> N
     fitted = [row for row in observed if row[2] == "fit"]
     assert len(fitted) >= 3
     assert all(abs(delta) < 0.05 for _, delta, _ in fitted)
-    assert not any(call.rule_id == "pace_check" and call.inputs["lap_num"] >= 9 for call in calls)
+    pace_calls = [call for call in calls if call.rule_id == "pace_check"]
+    assert all(call.inputs["deg_fit_source"] == "fit" for call in pace_calls)
+    unsettled_slow = [
+        row for row in observed if row[2] != "fit" and abs(row[1]) >= 0.15 and (row[0] + 1) % 3 == 0
+    ]
+    assert unsettled_slow
+    assert not any(
+        call.inputs["lap_num"] == lap_num + 1
+        for call in pace_calls
+        for lap_num, _, _ in unsettled_slow
+    )
+    assert not any(call.inputs["lap_num"] >= 9 for call in pace_calls)
 
 
 @pytest.mark.replay
 def test_pace_check_uses_traffic_of_completed_lap(pace_runs) -> None:
-    calls, _ = pace_runs["traffic_cleared"]
+    calls, _, lap_states = pace_runs["traffic_cleared"]
     slow_calls = [
         call
         for call in calls
         if call.rule_id == "pace_check" and call.inputs["pace_delta_vs_expected_s"] > 0
     ]
-    assert not any(call.inputs["lap_num"] == 6 for call in slow_calls)
+    lap_eight = _completed_lap_state(lap_states, 8)
+    assert lap_eight[3] is True
+    assert lap_eight[4] >= 0.15
+    assert lap_eight[5] == "fit"
+    assert not any(call.inputs["lap_num"] == 9 for call in slow_calls)
+    assert any(
+        call.inputs["lap_num"] >= 12
+        and not call.inputs.get("pace_lap_traffic", False)
+        and call.inputs["deg_fit_source"] == "fit"
+        for call in slow_calls
+    )
     assert all(
         not call.inputs.get("pace_lap_traffic", False) or call.inputs["pace_slow_laps"] >= 3
         for call in slow_calls
     )
+    _assert_pace_calls_after_six_usable_laps(calls, lap_states)

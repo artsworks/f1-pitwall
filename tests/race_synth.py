@@ -93,6 +93,7 @@ class RaceSpec:
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
     gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
+    gap_ahead_changes: tuple[tuple[int, float], ...] = ()  # ordered (lap, new gap ahead in s)
     positions_by_lap: tuple[tuple[int, int, int, int], ...] = ()  # Positions per lap
     off_track_lap: int | None = None  # player runs off track on this lap
     off_track_position_changes: tuple[tuple[float, int], ...] = ()  # (lap fraction, position)
@@ -416,6 +417,9 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         gap_ahead_s = spec.gap_ahead_s
         if spec.gap_ahead_from_lap is not None and lap >= spec.gap_ahead_from_lap[0]:
             gap_ahead_s = spec.gap_ahead_from_lap[1]
+        for change_lap, new_gap_s in spec.gap_ahead_changes:
+            if lap >= change_lap:
+                gap_ahead_s = new_gap_s
         sc = 0
         if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1]:
             sc = 2 if spec.vsc else 1

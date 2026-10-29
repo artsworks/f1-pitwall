@@ -615,7 +615,7 @@ All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.ca
 (dispatcher `budget_override` follows the mindset), predictions in `inputs` because rules
 reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`say`.
 
-`pace_check` compares the last lap with its latched prediction. It stays silent in battles and within `pace_check_min_delta_s`. If the completed lap was mostly within `traffic_gap_s` of the car ahead, a slow call waits for `pace_check_dirty_air_laps` slow laps in a row.
+`pace_check` compares the last lap with its latched prediction. It waits until the degradation fit for the stint is settled (`deg_fit_source == 'fit'`). It stays silent in battles and within `pace_check_min_delta_s`. If the completed lap was mostly within `traffic_gap_s` of the car ahead, a slow call waits for `pace_check_dirty_air_laps` slow laps in a row.
 
 | id | P | when (sketch) |
 | --- | --- | --- |
