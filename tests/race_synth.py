@@ -80,6 +80,7 @@ class RaceSpec:
     send_session_end: bool = False
     pit_lane_loss_ms: int = 0
     lap_noise_ms: float = 0.0
+    player_lap_offset_ms: tuple[tuple[int, int], ...] = ()
     seed: int = 0
     compound_after_stop: int | None = None
     deg_ms_after_stop: int | None = None
@@ -402,6 +403,7 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         )
         fuel = spec.fuel_kg - spec.fuel_kg_per_lap * (lap - 1)
         lap_ms = int(spec.base_ms + deg_ms * age + spec.fuel_ms_per_kg * fuel)
+        lap_ms += sum(ms for from_lap, ms in spec.player_lap_offset_ms if lap >= from_lap)
         if spec.tyre_inner_profile is not None:
             tyre_inner = spec.tyre_inner_profile[min(lap - 1, len(spec.tyre_inner_profile) - 1)]
         else:

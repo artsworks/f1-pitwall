@@ -14,12 +14,12 @@ rules:
     cooldown_group: battle_ahead
     requires: [lap_data]
     say:
-      - "{rival_ahead_name} ahead, {battle_pace_ahead}. {gap_ahead_s:.1f} to him"
-      - "Car ahead is {battle_pace_ahead}. {gap_ahead_s:.1f}, keep pushing"
-      - "{rival_ahead_name} is {battle_pace_ahead}. Reel him in"
-      - "{rival_ahead_name} in front, {battle_pace_ahead}. Gap {gap_ahead_s:.1f}"
-      - "Keep closing. {rival_ahead_name} {battle_pace_ahead}, {gap_ahead_s:.1f} ahead"
-      - "Car ahead, {battle_pace_ahead}. {rival_ahead_name}, {gap_ahead_s:.1f} away. Keep it tidy"
+      - "{rival_ahead_name} is {battle_pace_ahead}, on him in {battle_catch_laps:.1f} laps. Keep pushing"
+      - "Car ahead is {battle_pace_ahead}. {gap_ahead_s:.1f}, on him in {battle_catch_laps:.1f} laps. Keep pushing"
+      - "{rival_ahead_name} is {battle_pace_ahead}. On him in {battle_catch_laps:.1f} laps, reel him in"
+      - "{rival_ahead_name} in front, {battle_pace_ahead}. Gap {gap_ahead_s:.1f}, on him in {battle_catch_laps:.1f} laps. Nice work"
+      - "Keep closing. {rival_ahead_name} {battle_pace_ahead}, on him in {battle_catch_laps:.1f} laps"
+      - "Car ahead, {battle_pace_ahead}. {rival_ahead_name}, {gap_ahead_s:.1f} away. On him in {battle_catch_laps:.1f} laps, keep it tidy"
     severity:
       - when: "battle_catch_laps < 0.5"
         say:
@@ -203,6 +203,37 @@ rules:
       - "Gaps are steady. Look after the tyres"
       - "Under control. Keep the tyres in good shape"
       - "Gaps holding, keep it tidy and save the tyres"
+  # Own pace against the model's prediction for the lap just run (docs/18).
+  # Free air or managing only, so it never talks over a battle call. In dirty
+  # air the measured lap reads slow, so a slow call there needs a run of laps.
+  - id: pace_check
+    sessions: [race]
+    min_lap: 3
+    priority: 3
+    urgency: info
+    when: "phase == 'racing' and sector == 1 and battle_mode in ('free_air', 'managing') and lap_num % th.pace_check_every_laps == 0 and abs(pace_delta_vs_expected_s) >= th.pace_check_min_delta_s and (pace_delta_vs_expected_s < 0 or gap_ahead_s >= th.traffic_gap_s or pace_slow_laps >= th.pace_check_dirty_air_laps)"
+    clear_when: "sector != 1"
+    cooldown_s: 120
+    conflict_group: battle_call
+    requires: [lap_data]
+    say:
+      - "Pace is strong, {pace_delta} under expected"
+      - "Good pace, {pace_delta} quicker than expected"
+      - "{pace_delta} under expected pace. Keep it there"
+    severity:
+      - when: "position == 1 and rival_behind_idx >= 0 and pace_delta_vs_expected_s < 0"
+        say:
+          - "Pace is strong, {pace_delta} under expected. {gap_behind_s:.1f} to {rival_behind_name}"
+          - "{pace_delta} under expected. Gap behind {gap_behind_s:.1f}, keep it there"
+      - when: "position == 1 and rival_behind_idx >= 0"
+        say:
+          - "Pace is dropping, about {pace_delta} off expected. Gap behind {gap_behind_s:.1f}"
+          - "{pace_delta} off expected pace. {rival_behind_name} {gap_behind_s:.1f} back"
+      - when: "pace_delta_vs_expected_s > 0"
+        say:
+          - "Pace is dropping, about {pace_delta} off expected pace"
+          - "About {pace_delta} off expected pace this lap"
+          - "Lap was {pace_delta} slower than expected"
   - id: battle_passed
     sessions: [race]
     priority: 3

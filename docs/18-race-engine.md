@@ -389,6 +389,9 @@ pit_plan: str                       # '' | 'stay' | 'box_now' | 'box_in_n' | 'un
 pit_plan_lap: int; pit_plan_gain_s: float; pit_plan_confidence: float; pit_plan_risk: float
 pit_plan_rival_idx: int; pit_plan_rival_name: str; pit_plan_reason: str
 predicted_lap_ms: int               # model prediction for the *next* lap, for grading
+pace_delta_vs_expected_s: float     # last lap minus its latched prediction (s), + = slower; 0 = unknown
+pace_slow_laps: int                 # consecutive completed laps slower than the minimum delta
+pace_delta: str                     # spoken size of pace_delta_vs_expected_s
 ```
 
 Rival scope: `relevant_rivals(cars, player_idx, gap_behind_max_s, pit_exit_projection)` returns
@@ -610,6 +613,8 @@ are `battle_letby_hold_max`, `battle_letby_tyre_laps`, and `battle_letby_min_lap
 All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.call_budget_per_lap`
 (dispatcher `budget_override` follows the mindset), predictions in `inputs` because rules
 reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`say`.
+
+`pace_check` compares last-lap pace with a latched prediction, skips battles and noise below `pace_check_min_delta_s`, then waits for `pace_check_dirty_air_laps` slow laps within `traffic_gap_s` of cars ahead.
 
 | id | P | when (sketch) |
 | --- | --- | --- |
