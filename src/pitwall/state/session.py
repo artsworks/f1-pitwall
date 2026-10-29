@@ -1550,9 +1550,9 @@ class SessionState:
                 self._pace_prediction_latch is None
                 or self._pace_prediction_latch[0] != car.current_lap_num
             )
-            and self._model.predicted_lap_ms > 0
+            and self._model.pace_forecast_ms > 0
         ):
-            self._pace_prediction_latch = (car.current_lap_num, self._model.predicted_lap_ms)
+            self._pace_prediction_latch = (car.current_lap_num, self._model.pace_forecast_ms)
         if self._kind() == "qualifying":
             self.run.update(
                 t=self._last_session_time or 0.0,

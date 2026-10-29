@@ -195,3 +195,32 @@ def test_dirty_air_and_noise_suppress_pace_check(pace_runs) -> None:
 
     noise_calls, _ = pace_runs["noise"]
     assert not any(call.rule_id == "pace_check" for call in noise_calls)
+
+
+@pytest.mark.replay
+def test_on_model_degradation_reads_on_expected_pace(tmp_path, monkeypatch) -> None:
+    observed = []
+    original = SessionState._record_pace_delta
+
+    def record_pace_delta(self: SessionState, summary: LapSummary) -> None:
+        original(self, summary)
+        observed.append(
+            (summary.lap_num, self.pace_delta_vs_expected_s, self._model.deg_fit_source)
+        )
+
+    monkeypatch.setattr(SessionState, "_record_pace_delta", record_pace_delta)
+    calls, _ = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=12,
+            base_ms=95_000,
+            deg_ms=300,
+            gap_ahead_s=12.0,
+            gap_behind_s=12.0,
+        ),
+    )
+
+    fitted = [row for row in observed if row[2] == "fit"]
+    assert len(fitted) >= 3
+    assert all(abs(delta) < 0.05 for _, delta, _ in fitted)
+    assert not any(call.rule_id == "pace_check" and call.inputs["lap_num"] >= 9 for call in calls)

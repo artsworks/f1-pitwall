@@ -36,6 +36,7 @@ class ModelView:
     energy_laps_to_floor: float = math.inf
     energy_mode: str = ""
     predicted_lap_ms: int = 0
+    pace_forecast_ms: int = 0
     pit_plan: str = ""
     pit_plan_lap: int = 0
     pit_plan_gain_s: float = 0.0

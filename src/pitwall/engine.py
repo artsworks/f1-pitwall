@@ -1743,6 +1743,7 @@ class Engine:
             default_rate_pct=self._wear_per_lap,
         )
         predicted = 0
+        pace_forecast = 0
         if fit is not None:
             lop = min(
                 lop,
@@ -1768,6 +1769,12 @@ class Engine:
                 + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
                 + fit.deg2_ms_per_lap2 * (state.tyre_age_laps + 1) ** 2
                 - fit.fuel_ms_per_lap * (burned + 1)
+            )
+            pace_forecast = int(
+                fit.base_ms
+                + fit.deg_ms_per_lap * state.tyre_age_laps
+                + fit.deg2_ms_per_lap2 * state.tyre_age_laps**2
+                - fit.fuel_ms_per_lap * max(0.0, burned + 1 - self._lap_fraction())
             )
         eb = self.energy_budget
         fb = self.fuel_budget
@@ -1811,6 +1818,7 @@ class Engine:
                 energy_laps_to_floor=eb.laps_to_floor if eb is not None else math.inf,
                 energy_mode=eb.mode if eb is not None else "",
                 predicted_lap_ms=predicted,
+                pace_forecast_ms=pace_forecast,
             )
         )
 
