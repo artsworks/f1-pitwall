@@ -56,6 +56,7 @@ from pitwall.model.deg import (
     resolve_prior,
     scoped,
     session_base_ms,
+    usable_laps,
 )
 from pitwall.model.driver import (
     DRIVER_COMPOUND,
@@ -471,6 +472,7 @@ class Engine:
         self._run_fuel_deltas: list[tuple[float, float]] = []
         self._run_fuel_last_kg: float | None = None
         self._stint_fuel_ref = 0.0
+        self._stint_fuel_ref_laps = 0.0
         self._stint_laps: list[LapRow] = []
         self._model_key: tuple[int | None, int, int, int] | None = None
         self._fuel_prior = Prior(0.0, 0.0, "default")
@@ -991,6 +993,8 @@ class Engine:
         self._stop_check = None
         self._stint_wear0 = ()
         self._stint_compound0 = -1
+        self._stint_fuel_ref = 0.0
+        self._stint_fuel_ref_laps = 0.0
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self.session_origin_started_at = None
@@ -1151,7 +1155,6 @@ class Engine:
 
         if tail:
             self._stint_laps = tail
-            self._stint_fuel_ref = max((r.fuel_kg for r in tail), default=0.0)
             compound = tail[0].compound
             prior = self._deg_prior(track_id, compound, settings)
             fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
@@ -1162,6 +1165,16 @@ class Engine:
                 else None
             )
             thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
+            usable = usable_laps(tail, thermal_hi_c)
+            if usable and all(lap.fuel_kg > 0 for lap in usable):
+                self._stint_fuel_ref = max(lap.fuel_kg for lap in usable)
+                self._stint_fuel_ref_laps = 0.0
+            elif usable:
+                self._stint_fuel_ref = 0.0
+                self._stint_fuel_ref_laps = max(lap.fuel_remaining_laps for lap in usable)
+            else:
+                self._stint_fuel_ref = max((lap.fuel_kg for lap in tail), default=0.0)
+                self._stint_fuel_ref_laps = 0.0
             fit = fit_stint(
                 tail,
                 prior,
@@ -1759,11 +1772,14 @@ class Engine:
                 ),
             )
             per_lap = self.fuel_budget.per_lap_kg if self.fuel_budget is not None else 0.0
-            burned = (
-                max(0.0, self._stint_fuel_ref - state.fuel_in_tank) / per_lap
-                if per_lap > 0 and self._stint_fuel_ref > 0
-                else 0.0
-            )
+            if self._stint_fuel_ref_laps > 0:
+                burned = max(0.0, self._stint_fuel_ref_laps - state.fuel_remaining_laps)
+            else:
+                burned = (
+                    max(0.0, self._stint_fuel_ref - state.fuel_in_tank) / per_lap
+                    if per_lap > 0 and self._stint_fuel_ref > 0
+                    else 0.0
+                )
             predicted = int(
                 fit.base_ms
                 + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)

@@ -56,7 +56,7 @@ def pace_runs(tmp_path_factory):
         "catching": RaceSpec(
             laps=10,
             base_ms=95_000,
-            gap_ahead_s=3.0,
+            gap_ahead_s=2.5,
             gap_behind_s=12.0,
             player_lap_offset_ms=((1, -350),),
         ),
@@ -347,6 +347,40 @@ def test_on_model_degradation_reads_on_expected_pace(tmp_path, monkeypatch) -> N
         for lap_num, _, _ in unsettled_slow
     )
     assert not any(call.inputs["lap_num"] >= 9 for call in pace_calls)
+
+
+@pytest.mark.replay
+def test_fuel_forecast_uses_only_fit_usable_laps(tmp_path, monkeypatch) -> None:
+    observed = []
+    original = SessionState._record_pace_delta
+
+    def record_pace_delta(self: SessionState, summary: LapSummary) -> None:
+        original(self, summary)
+        observed.append(
+            (summary.lap_num, self.pace_delta_vs_expected_s, self._model.deg_fit_source)
+        )
+
+    monkeypatch.setattr(SessionState, "_record_pace_delta", record_pace_delta)
+    calls, _ = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=15,
+            base_ms=95_000,
+            deg_ms=300,
+            gap_ahead_s=12.0,
+            gap_behind_s=12.0,
+            sc_laps=(2, 4),
+            fuel_ms_per_kg=30.0 / 1.7,
+        ),
+    )
+
+    fitted = [row for row in observed if row[2] == "fit"]
+    assert len(fitted) >= 3
+    assert max(abs(delta) for _, delta, _ in fitted) < 0.05
+    assert not any(
+        call.rule_id == "pace_check" and call.inputs["pace_delta_vs_expected_s"] >= 0.15
+        for call in calls
+    )
 
 
 @pytest.mark.replay
