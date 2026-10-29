@@ -211,7 +211,7 @@ rules:
     min_lap: 3
     priority: 3
     urgency: info
-    when: "phase == 'racing' and sector == 1 and battle_mode in ('free_air', 'managing') and lap_num % th.pace_check_every_laps == 0 and abs(pace_delta_vs_expected_s) >= th.pace_check_min_delta_s and (pace_delta_vs_expected_s < 0 or gap_ahead_s >= th.traffic_gap_s or pace_slow_laps >= th.pace_check_dirty_air_laps)"
+    when: "phase == 'racing' and sector == 1 and battle_mode in ('free_air', 'managing') and lap_num % th.pace_check_every_laps == 0 and abs(pace_delta_vs_expected_s) >= th.pace_check_min_delta_s and (pace_delta_vs_expected_s < 0 or not pace_lap_traffic or pace_slow_laps >= th.pace_check_dirty_air_laps)"
     clear_when: "sector != 1"
     cooldown_s: 120
     conflict_group: battle_call

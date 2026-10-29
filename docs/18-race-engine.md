@@ -391,6 +391,7 @@ pit_plan_rival_idx: int; pit_plan_rival_name: str; pit_plan_reason: str
 predicted_lap_ms: int               # model prediction for the *next* lap, for grading
 pace_delta_vs_expected_s: float     # last lap minus its latched prediction (s), + = slower; 0 = unknown
 pace_slow_laps: int                 # consecutive completed laps slower than the minimum delta
+pace_lap_traffic: bool              # last completed lap was mostly within traffic_gap_s of the car ahead
 pace_delta: str                     # spoken size of pace_delta_vs_expected_s
 ```
 
@@ -614,7 +615,7 @@ All `sessions: [race]`, hysteresis via `clear_when`, per-lap budget via `mode.ca
 (dispatcher `budget_override` follows the mindset), predictions in `inputs` because rules
 reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`say`.
 
-`pace_check` compares the last lap with its latched prediction. It stays silent in battles and within `pace_check_min_delta_s`. Within `traffic_gap_s` of the car ahead, a slow call waits for `pace_check_dirty_air_laps` slow laps in a row.
+`pace_check` compares the last lap with its latched prediction. It stays silent in battles and within `pace_check_min_delta_s`. If the completed lap was mostly within `traffic_gap_s` of the car ahead, a slow call waits for `pace_check_dirty_air_laps` slow laps in a row.
 
 | id | P | when (sketch) |
 | --- | --- | --- |

@@ -657,6 +657,7 @@ class Snapshot:
     predicted_lap_ms: int = 0
     pace_delta_vs_expected_s: float = 0.0  # last lap vs prediction (s), + = slower, 0 = unknown
     pace_slow_laps: int = 0
+    pace_lap_traffic: bool = False  # last completed lap mostly within traffic_gap_s of car ahead
     pace_delta: str = ""  # spoken size of pace_delta_vs_expected_s
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
@@ -920,6 +921,7 @@ class SessionState:
         self._pace_prediction_latch: tuple[int, int] | None = None
         self.pace_delta_vs_expected_s = 0.0
         self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
 
         # telemetry / status / damage (player)
         self.tyre_surface = _ZERO_CORNERS
@@ -1266,6 +1268,7 @@ class SessionState:
         self._pace_prediction_latch = None
         self.pace_delta_vs_expected_s = 0.0
         self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
         self._ers_samples.clear()
         self._ers_lap_frame = None
         self._ers_pending = None
@@ -1682,6 +1685,7 @@ class SessionState:
 
     def _record_pace_delta(self, summary: LapSummary) -> None:
         self.pace_delta_vs_expected_s = 0.0
+        self.pace_lap_traffic = bool(summary.traffic)
         prediction = self._pace_prediction_latch
         if (
             prediction is not None
@@ -3389,6 +3393,7 @@ class SessionState:
             rival_pit_exit_pace_ms=pace_of(exit_i) if exit_i >= 0 else 0,
             pace_delta_vs_expected_s=self.pace_delta_vs_expected_s,
             pace_slow_laps=self.pace_slow_laps,
+            pace_lap_traffic=self.pace_lap_traffic,
             pace_delta=pace_words_self(self.pace_delta_vs_expected_s),
             rival_ahead_name=name_of(ahead_i),
             rival_behind_name=name_of(behind_i),

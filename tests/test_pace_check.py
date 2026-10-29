@@ -40,6 +40,14 @@ def pace_runs(tmp_path_factory):
             gap_behind_s=12.0,
             player_lap_offset_ms=((5, 500),),
         ),
+        "traffic_cleared": RaceSpec(
+            laps=10,
+            base_ms=95_000,
+            gap_ahead_s=1.0,
+            gap_ahead_from_lap=(6, 8.0),
+            gap_behind_s=12.0,
+            player_lap_offset_ms=((5, 500),),
+        ),
         "noise": RaceSpec(
             laps=10,
             base_ms=95_000,
@@ -108,6 +116,27 @@ def test_ineligible_lap_resets_pace_streak(valid: bool, sc_status: int) -> None:
     assert state.pace_slow_laps == 0
 
 
+def test_record_pace_delta_copies_lap_traffic() -> None:
+    state = SessionState(thresholds={"pace_check_min_delta_s": 0.15})
+    state.session_type = 15
+    for traffic in (1, 0):
+        state._pace_prediction_latch = (4, 90_000)
+        state._record_pace_delta(
+            LapSummary(
+                lap_num=4,
+                lap_time_ms=90_500,
+                sector1_ms=30_000,
+                sector2_ms=30_000,
+                compound=17,
+                tyre_age_laps=2,
+                fuel_remaining_laps_at_end=5.0,
+                valid=True,
+                traffic=traffic,
+            )
+        )
+        assert state.pace_lap_traffic is bool(traffic)
+
+
 def test_pace_check_rule_and_templates_render(caplog: pytest.LogCaptureFixture) -> None:
     settings = ConfigStore().current()
     engine = _rule_engine()
@@ -136,6 +165,7 @@ def test_pace_check_waits_for_dirty_air_slow_laps() -> None:
         lap_num=6,
         battle_mode="managing",
         gap_ahead_s=1.2,
+        pace_lap_traffic=True,
         pace_delta_vs_expected_s=0.3,
         pace_slow_laps=1,
     )
@@ -143,6 +173,21 @@ def test_pace_check_waits_for_dirty_air_slow_laps() -> None:
     assert not any(candidate.rule.defn.id == "pace_check" for candidate in early.candidates)
 
     after_streak = replace(dirty_air, now=1.0, pace_slow_laps=3)
+    later = _rule_engine().evaluate(after_streak)
+    assert any(candidate.rule.defn.id == "pace_check" for candidate in later.candidates)
+
+
+def test_pace_check_waits_when_traffic_clears_after_slow_lap() -> None:
+    cleared = _snapshot(
+        gap_ahead_s=8.0,
+        pace_lap_traffic=True,
+        pace_delta_vs_expected_s=0.4,
+        pace_slow_laps=1,
+    )
+    early = _rule_engine().evaluate(cleared)
+    assert not any(candidate.rule.defn.id == "pace_check" for candidate in early.candidates)
+
+    after_streak = replace(cleared, now=1.0, pace_slow_laps=3)
     later = _rule_engine().evaluate(after_streak)
     assert any(candidate.rule.defn.id == "pace_check" for candidate in later.candidates)
 
@@ -224,3 +269,18 @@ def test_on_model_degradation_reads_on_expected_pace(tmp_path, monkeypatch) -> N
     assert len(fitted) >= 3
     assert all(abs(delta) < 0.05 for _, delta, _ in fitted)
     assert not any(call.rule_id == "pace_check" and call.inputs["lap_num"] >= 9 for call in calls)
+
+
+@pytest.mark.replay
+def test_pace_check_uses_traffic_of_completed_lap(pace_runs) -> None:
+    calls, _ = pace_runs["traffic_cleared"]
+    slow_calls = [
+        call
+        for call in calls
+        if call.rule_id == "pace_check" and call.inputs["pace_delta_vs_expected_s"] > 0
+    ]
+    assert not any(call.inputs["lap_num"] == 6 for call in slow_calls)
+    assert all(
+        not call.inputs.get("pace_lap_traffic", False) or call.inputs["pace_slow_laps"] >= 3
+        for call in slow_calls
+    )
