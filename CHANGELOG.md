@@ -10,6 +10,52 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.39.0 (2026-10-30)
+
+### Bug Fixes
+
+- **model**: Align forecast fuel reference with the fitted laps
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **model**: Fit the stint in memory when persistence is off
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Gate slow pace_check on the completed lap's traffic
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Grade pace against the forecast for the lap being driven
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Hold pace_check until the deg fit settles
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+### Chores
+
+- **tracks**: Promote learned overlays from learning pack
+  ([#146](https://github.com/artsworks/f1-pitwall/pull/146),
+  [`36bca36`](https://github.com/artsworks/f1-pitwall/commit/36bca362d8fc1b80cf286983e5561e6c91e6da36))
+
+### Documentation
+
+- Move the no-persistence fit note below the fold list
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- Split pace_check sentence ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+### Features
+
+- **radio**: Pace check call and catch laps on battle_catching
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+
 ## v0.38.1 (2026-10-27)
 
 ### Bug Fixes
