@@ -127,10 +127,21 @@ def _parse_check(value: object, kind: CheckType, path: Path, index: int) -> Scen
 def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
     _check_keys(
         mutations,
-        {"inject_sc", "vsc", "wear_scale", "penalty", "teammate_pit", "damage"},
+        {
+            "inject_sc",
+            "vsc",
+            "wear_scale",
+            "penalty",
+            "damage",
+            "teammate_pit",
+            "inject_rival_pit",
+        },
         path,
         "mutations",
     )
+    rival_pit = mutations.get("inject_rival_pit")
+    if rival_pit is not None and not isinstance(rival_pit, str):
+        raise ValueError(f"{path}: mutations.inject_rival_pit must be a string")
     damage = mutations.get("damage")
     if damage is not None:
         if not isinstance(damage, dict) or "lap" not in damage:
@@ -164,8 +175,9 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 inject_sc,
                 vsc,
                 penalty,
-                teammate_pit,
-                damage,
+                rival_pit=rival_pit,
+                teammate_pit=teammate_pit,
+                damage=damage,
             )
             if mutations
             else []

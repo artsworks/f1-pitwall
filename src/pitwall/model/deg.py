@@ -163,6 +163,12 @@ def usable_laps(laps: Sequence[LapRow], thermal_hi_c: float | None = None) -> li
     ]
 
 
+def fit_laps(laps: Sequence[LapRow], thermal_hi_c: float | None, min_laps: int) -> list[LapRow]:
+    """Laps fit_stint models: thermally eligible ones, or all clean laps if too few."""
+    usable = usable_laps(laps, thermal_hi_c)
+    return usable if len(usable) >= min_laps else usable_laps(laps)
+
+
 def fit_stint(
     laps: Sequence[LapRow],
     prior: DegFit,
@@ -177,7 +183,7 @@ def fit_stint(
     quad_min_t: float = 2.0,
 ) -> DegFit:
     """OLS refit of a stint's valid laps; blend with the prior while short."""
-    usable = usable_laps(laps, thermal_hi_c)
+    usable = fit_laps(laps, thermal_hi_c, min_laps)
     n = len(usable)
     if n < min_laps:
         return DegFit(

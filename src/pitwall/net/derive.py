@@ -282,6 +282,40 @@ class Penalty:
 
 
 @dataclass(slots=True)
+class InjectRivalPit:
+    lap: int
+    side: str = "ahead"
+    label: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.lap < 1 or self.side not in ("ahead", "behind"):
+            raise ValueError("inject_rival_pit requires LAP[:ahead|behind] with LAP >= 1")
+        self.label = f"inject_rival_pit={self.lap}:{self.side}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            ctx.player_lap != self.lap
+            or header is None
+            or header.packet_id != PacketId.LAP_DATA
+            or len(payload) != PACKET_SIZES[PacketId.LAP_DATA]
+        ):
+            return [payload]
+        position = payload[
+            car_field_offset(PacketId.LAP_DATA, header.player_car_index, "car_position")
+        ]
+        target = position + (-1 if self.side == "ahead" else 1)
+        for car in range(_NUM_CARS):
+            if car != header.player_car_index and (
+                payload[car_field_offset(PacketId.LAP_DATA, car, "car_position")] == target
+            ):
+                rewritten = bytearray(payload)
+                rewritten[car_field_offset(PacketId.LAP_DATA, car, "pit_status")] = 1
+                return [bytes(rewritten)]
+        return [payload]
+
+
+@dataclass(slots=True)
 class TeammatePit:
     lap: int
     lead_m: float = 150.0
@@ -412,6 +446,7 @@ def ops_from_options(
     inject_sc: str | None,
     vsc: bool,
     penalty: int | None,
+    rival_pit: str | None = None,
     teammate_pit: int | None = None,
     damage: dict[str, int] | None = None,
 ) -> list[MutationOp]:
@@ -429,6 +464,9 @@ def ops_from_options(
         raise ValueError("--vsc requires --inject-sc")
     if penalty is not None:
         ops.append(Penalty(penalty))
+    if rival_pit is not None:
+        lap, _, side = rival_pit.partition(":")
+        ops.append(InjectRivalPit(int(lap), side or "ahead"))
     if teammate_pit is not None:
         ops.append(TeammatePit(teammate_pit))
     if damage is not None:

@@ -49,6 +49,7 @@ from pitwall.model.deg import (
     cliff_age,
     corner_wear_life,
     fit_is_clean,
+    fit_laps,
     fit_stint,
     fuel_adjusted_deg,
     laps_of_pace,
@@ -1278,7 +1279,8 @@ class Engine:
         compound = tail[0].compound
         prior = self._deg_prior(track_id, compound, settings)
         thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
-        usable = usable_laps(tail, thermal_hi_c)
+        min_laps = int(self._th("deg_min_laps", 3))
+        usable = fit_laps(tail, thermal_hi_c, min_laps)
         if usable and all(lap.fuel_kg > 0 for lap in usable):
             self._stint_fuel_ref = max(lap.fuel_kg for lap in usable)
             self._stint_fuel_ref_laps = 0.0
@@ -1291,7 +1293,7 @@ class Engine:
         fit = fit_stint(
             tail,
             prior,
-            min_laps=int(self._th("deg_min_laps", 3)),
+            min_laps=min_laps,
             fuel_coeff_fixed=fuel_fixed,
             deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
             deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
