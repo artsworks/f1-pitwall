@@ -10,6 +10,20 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.39.2 (2026-10-30)
+
+### Bug Fixes
+
+- **web**: Stop track-limits chip overwriting track_info, which blanked the weather tile
+  ([#150](https://github.com/artsworks/f1-pitwall/pull/150),
+  [`395c7af`](https://github.com/artsworks/f1-pitwall/commit/395c7afb4cd0fb273adc1bc4cd1ef07b1b290639))
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#147](https://github.com/artsworks/f1-pitwall/pull/147),
+  [`92b90f9`](https://github.com/artsworks/f1-pitwall/commit/92b90f939c4d458f7a0554381622d43348958aef))
+
+
 ## v0.39.1 (2026-10-30)
 
 ### Bug Fixes
