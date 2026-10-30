@@ -149,7 +149,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
 | `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
-| `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
+| `brazil-worn-tyres-late-stop` | guard | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
 | `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
