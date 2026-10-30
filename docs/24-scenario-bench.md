@@ -36,6 +36,7 @@ why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
 - `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `teammate_pit` and `damage` keys. The bench applies them during replay.
+- The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its
