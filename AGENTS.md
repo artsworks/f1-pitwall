@@ -31,3 +31,7 @@ These files are personal state or large local data. `.gitignore` covers most of 
 - Session digests from `~/.pitwall/digests/`.
 - Decision logs: `decisions/` and `*.decisions.jsonl`.
 - Voice models: `voices/` and `*.onnx`.
+
+## Bench
+
+Do not run `pitwall bench` in a cloud session. It replays full recordings, takes many minutes and uses a large share of the ACU allowance. CI cannot run it either, because recordings stay out of git. Ask the repo owner to run it on a machine that has the recordings, and read the output they paste.
