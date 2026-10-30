@@ -96,12 +96,33 @@ def test_teammate_stack_penalises_only_a_stop_this_lap() -> None:
     assert stacked.projections[1:] == base.projections[1:]
 
 
-def test_teammate_stack_reduces_safety_car_cheap_stop_gain() -> None:
-    kwargs = dict(sc_status=1, wear_mean=50.0, pit_loss_s=11.0)
+def test_teammate_stack_gates_safety_car_cheap_stop() -> None:
+    kwargs = dict(sc_status=1, wear_mean=50.0, pit_loss_s=20.0, green_pit_loss_s=22.0)
     base = run(**kwargs)
     stacked = run(**kwargs, teammate_pitting=True)
-    assert base.plan == stacked.plan == "cheap_stop"
-    assert base.gain_s - stacked.gain_s == pytest.approx(4.0)
+    assert base.plan == "cheap_stop"
+    assert base.gain_s == pytest.approx(2.0)
+    assert stacked.plan != "cheap_stop"
+
+
+def test_teammate_stack_gates_owed_safety_car_cheap_stop() -> None:
+    kwargs = dict(
+        lap_num=10,
+        laps_remaining=20,
+        tyre_age=20,
+        wear_mean=10.0,
+        fit=fit(400),
+        fresh=fit(80),
+        laps_of_pace=0.0,
+        pit_loss_s=20.0,
+        green_pit_loss_s=22.0,
+        sc_status=1,
+    )
+    base = run(**kwargs, stop_owed=True)
+    stacked = run(**kwargs, stop_owed=True, teammate_pitting=True)
+    assert base.window[0] <= 10 <= base.window[1]
+    assert base.plan == "cheap_stop" and base.gain_s == pytest.approx(2.0)
+    assert stacked.plan != "cheap_stop"
 
 
 def test_teammate_stack_disables_free_stop_without_enough_gap() -> None:

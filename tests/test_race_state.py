@@ -102,14 +102,21 @@ def test_red_flag_supersedes_sc_without_restart_call() -> None:
 def test_teammate_stack_gap_requires_a_stopping_teammate_ahead() -> None:
     me = CarLap(total_distance=1000.0)
 
-    def gap(mate: CarLap, *, boxed: bool = False, speed: float = 100.0) -> float:
-        return teammate_stack_gap_s(me, mate, boxed, speed, 15.0)
+    def gap(
+        mate: CarLap,
+        *,
+        boxed: bool = False,
+        in_lap: bool = False,
+        speed: float = 100.0,
+    ) -> float:
+        return teammate_stack_gap_s(me, mate, boxed, in_lap, speed, 15.0)
 
-    assert gap(CarLap(total_distance=1200.0, driver_status=2)) == 2.0
+    assert gap(CarLap(total_distance=1200.0, driver_status=2), in_lap=True) == 2.0
     assert gap(CarLap(total_distance=1200.0, pit_status=1)) == 2.0
     assert gap(CarLap(total_distance=1200.0, pit_status=2)) == 2.0
     assert math.isinf(gap(CarLap(total_distance=1200.0, pit_status=1), boxed=True))
+    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=2)))
     assert math.isinf(gap(CarLap(total_distance=800.0, driver_status=2)))
     assert math.isinf(gap(CarLap(total_distance=3000.0, driver_status=2)))
     assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=4)))
-    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=2), speed=0.0))
+    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=2), in_lap=True, speed=0.0))

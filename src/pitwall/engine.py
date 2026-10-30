@@ -1987,6 +1987,7 @@ class Engine:
                 wing_loss_s,
                 plan.plan,
                 plan.rival_idx,
+                snap.teammate_stacking,
                 mc_sims,
             )
             if key not in self._plan_mc_cache:
@@ -2003,6 +2004,11 @@ class Engine:
                     cur_cliff_age=snap.tyre_age_laps + snap.laps_of_pace,
                     pit_loss_s=snap.pit_loss_s + wing_loss_s,
                     damage_pace_ms=damage_pace_ms,
+                    stack_s=(
+                        threshold(settings.thresholds, "double_stack_loss_s", 4.0)
+                        if snap.teammate_stacking
+                        else 0.0
+                    ),
                     pit_loss_samples_s=self._green_pit_samples_s,
                     sc_pit_loss_s=self._sc_pit_loss_s,
                     plan_lap=plan.lap,

@@ -397,6 +397,14 @@ def test_tracker_sc_switch_to_c_then_back_when_not_taken() -> None:
     assert [(e.from_plan, e.reason) for e in tr.drain()] == [("C", "invalid")]
 
 
+def test_tracker_does_not_switch_to_c_without_a_cheap_stop() -> None:
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    state = tr.update(inputs(lap_num=15), TH, stops_done=0, neutralised=True, cheap_stop=False)
+
+    assert state.active == "A"
+
+
 def test_tracker_sc_stop_taken_keeps_c() -> None:
     tr = PlanTracker()
     tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)

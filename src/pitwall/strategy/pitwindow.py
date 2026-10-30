@@ -297,6 +297,7 @@ def optimise(
             or (stop_owed and window[0] <= lap_num <= window[1])
         )
         and laps_remaining > _f(th, "sc_stop_min_laps_left", 3)
+        and (stack_s == 0 or green_pit_loss_s - pit_loss_s - stack_s > 0)
     ):
         # Measured wear plus the neutralised pit loss decide this, not the deg fit.
         return plan(

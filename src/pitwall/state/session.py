@@ -1105,6 +1105,9 @@ class SessionState:
         self._cars_pitted_this_lap: set[int] = set()
         self._pitted_lap_snapshot: set[int] = set()
         self._mate_boxed: set[int] = set()
+        self._mate_in_lap: set[int] = set()
+        self._last_driver_status: dict[int, int] = {}
+        self._last_pit_status: dict[int, int] = {}
         self._restricted_streak = 0
         self.rival_data_restricted = False
         self._forecast_samples: tuple[WeatherForecastSample, ...] = ()
@@ -1334,6 +1337,9 @@ class SessionState:
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
         self._mate_boxed.clear()
+        self._mate_in_lap.clear()
+        self._last_driver_status.clear()
+        self._last_pit_status.clear()
         self._wet_to_dry_passes.clear()
         self._held_gains = [0.0, 0.0]
         self._green_from_lap.clear()
@@ -1410,10 +1416,30 @@ class SessionState:
             self._note_lap_boundary()
             self._note_corner_wear()
         for i, c in enumerate(pkt.cars):
+            previous_driver_status = self._last_driver_status.get(i)
+            previous_pit_status = self._last_pit_status.get(i)
             if c.pit_status == PitStatus.IN_PIT_AREA:
                 self._mate_boxed.add(i)
             elif c.pit_status == PitStatus.NONE:
                 self._mate_boxed.discard(i)
+            if (
+                c.driver_status == 2
+                and previous_driver_status is not None
+                and previous_driver_status != 2
+            ):
+                self._mate_in_lap.add(i)
+            if (
+                previous_pit_status is not None
+                and previous_pit_status != PitStatus.NONE
+                and c.pit_status == PitStatus.NONE
+            ) or (
+                previous_driver_status == 2
+                and c.driver_status != 2
+                and c.pit_status == PitStatus.NONE
+            ):
+                self._mate_in_lap.discard(i)
+            self._last_driver_status[i] = c.driver_status
+            self._last_pit_status[i] = c.pit_status
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
         length = self.track_length_m
@@ -3467,6 +3493,7 @@ class SessionState:
                 cars[player],
                 cars[mate],
                 mate in self._mate_boxed,
+                mate in self._mate_in_lap,
                 speed_mps,
                 self._th("double_stack_gap_s", 15.0),
             )
