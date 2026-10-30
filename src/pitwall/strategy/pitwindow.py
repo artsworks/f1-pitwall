@@ -123,6 +123,7 @@ def optimise(
     rival_behind_gap_s: float | None = None,
     pit_exit_clean: bool,
     restricted: bool,
+    stop_owed: bool = False,
     driver: DriverScale = NEUTRAL,
     mode: Mapping[str, object],
     th: Mapping[str, object],
@@ -284,7 +285,10 @@ def optimise(
 
     if (
         sc_status != 0
-        and wear_mean >= _f(mode, "sc_stop_min_wear_pct", 35)
+        and (
+            wear_mean >= _f(mode, "sc_stop_min_wear_pct", 35)
+            or (stop_owed and window[0] <= lap_num <= window[1])
+        )
         and laps_remaining > _f(th, "sc_stop_min_laps_left", 3)
     ):
         # Measured wear plus the neutralised pit loss decide this, not the deg fit.
