@@ -290,6 +290,88 @@ def test_phase_mapping() -> None:
     assert state.snapshot(2.0).phase == "garage"
 
 
+def test_teammate_stacking_requires_a_fresh_in_lap_transition() -> None:
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 15, "track_id": 7, "track_length": 5000},
+            session_time=0.0,
+        ),
+        0.0,
+    )
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.PARTICIPANTS,
+            {
+                "num_active_cars": 2,
+                "cars": {
+                    0: {"name": b"ME", "team_id": 4},
+                    1: {"name": b"MATE", "team_id": 4},
+                },
+            },
+            session_time=0.1,
+        ),
+        0.1,
+    )
+
+    def lap(
+        t: float,
+        *,
+        player_driver: int = 4,
+        mate_driver: int = 4,
+        mate_pit: int = 0,
+    ) -> Snapshot:
+        _send(
+            ingest,
+            pack_packet(
+                PacketId.LAP_DATA,
+                {
+                    "cars": {
+                        0: {
+                            "current_lap_num": 11,
+                            "driver_status": player_driver,
+                            "pit_status": 0,
+                            "result_status": 2,
+                            "lap_distance": 1000.0,
+                            "total_distance": 10_000.0,
+                        },
+                        1: {
+                            "current_lap_num": 11,
+                            "driver_status": mate_driver,
+                            "pit_status": mate_pit,
+                            "result_status": 2,
+                            "lap_distance": 1200.0,
+                            "total_distance": 10_200.0,
+                        },
+                    }
+                },
+                session_time=t,
+                frame=int(t * 100),
+            ),
+            t,
+        )
+        return state.snapshot(t)
+
+    lap(0.2)
+    lap(0.3, mate_driver=2)
+    lap(0.4, mate_driver=2, mate_pit=1)
+    lap(0.5, mate_driver=2, mate_pit=2)
+    lap(0.6, mate_driver=2, mate_pit=1)
+    exited = lap(0.7, player_driver=2, mate_driver=2)
+    assert not exited.teammate_stacking
+    assert 1 not in state._mate_in_lap
+
+    later_in_lap = lap(0.8, player_driver=2, mate_driver=2)
+    assert not later_in_lap.teammate_stacking
+
+    lap(0.9, player_driver=2, mate_driver=4)
+    fresh_transition = lap(1.0, player_driver=2, mate_driver=2)
+    assert fresh_transition.teammate_stacking
+
+
 def test_car_setup_changes_wait_for_three_seconds_of_stability() -> None:
     ingest, state = _state()
     _send(

@@ -25,6 +25,7 @@ from pitwall.net.derive import (
     DeriveContext,
     InjectSafetyCar,
     Penalty,
+    TeammatePit,
     UidRewrite,
     WearScale,
     derive_recording,
@@ -239,6 +240,70 @@ def test_derived_uid_and_signed_sqlite_uid() -> None:
     assert is_synthetic_uid(_uid_to_sql(uid))
     assert not is_synthetic_uid(0xDEADBEEF)
     assert not is_synthetic_uid(0x9234_5678_9ABC_DEF0)
+
+
+def test_teammate_pit_changes_only_target_lap_in_lap_packets() -> None:
+    participants = pack_packet(
+        PacketId.PARTICIPANTS,
+        {
+            "num_active_cars": 21,
+            "cars": {20: {"team_id": 3}, 21: {"team_id": 3}},
+        },
+        session_uid=SOURCE_UID,
+        player=21,
+    )
+
+    def lap_packet(lap: int, driver_status: int, pit_status: int) -> bytes:
+        return pack_packet(
+            PacketId.LAP_DATA,
+            {
+                "cars": {
+                    21: {
+                        "current_lap_num": lap,
+                        "driver_status": driver_status,
+                        "pit_status": pit_status,
+                        "lap_distance": 1000.0,
+                        "total_distance": 10_000.0 + lap,
+                    },
+                    20: {
+                        "lap_distance": 100.0,
+                        "total_distance": 100.0,
+                        "driver_status": 4,
+                        "pit_status": 0,
+                    },
+                }
+            },
+            session_uid=SOURCE_UID,
+            player=21,
+        )
+
+    source_packets = [
+        participants,
+        lap_packet(10, 2, 0),
+        lap_packet(11, 2, 0),
+        lap_packet(11, 4, 0),
+        lap_packet(11, 4, 1),
+        lap_packet(12, 4, 0),
+    ]
+    derived = [
+        payload for _, payload in derive_records(enumerate(source_packets), [TeammatePit(11)])
+    ]
+    assert derived[0] == participants
+    assert derived[1] == source_packets[1]
+    assert derived[3] == source_packets[3]
+    assert derived[5] == source_packets[5]
+
+    for payload, expected_pit_status in ((derived[2], 0), (derived[4], 1)):
+        lap_distance = struct.unpack_from(
+            "<f", payload, car_field_offset(PacketId.LAP_DATA, 20, "lap_distance")
+        )[0]
+        total_distance = struct.unpack_from(
+            "<f", payload, car_field_offset(PacketId.LAP_DATA, 20, "total_distance")
+        )[0]
+        assert lap_distance == pytest.approx(1150.0)
+        assert total_distance == pytest.approx(10_011.0 + 150.0)
+        assert payload[car_field_offset(PacketId.LAP_DATA, 20, "driver_status")] == 2
+        assert payload[car_field_offset(PacketId.LAP_DATA, 20, "pit_status")] == expected_pit_status
 
 
 def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) -> None:

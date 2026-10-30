@@ -42,7 +42,7 @@ def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> No
 
     assert planned.pit_plan == "cover"
     assert planned.pit_plan_confidence >= 0.70
-    assert next(iter(engine._plan_mc_cache))[-3:] == ("cover", 2, 500)
+    assert next(iter(engine._plan_mc_cache))[-4:] == ("cover", 2, False, 500)
 
 
 def test_held_cover_plan_survives_until_next_racing_lap() -> None:
