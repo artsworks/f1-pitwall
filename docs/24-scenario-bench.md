@@ -35,7 +35,7 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage` and `inject_rival_pit` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
@@ -150,6 +150,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
 | `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
+| `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
 ## Backlog

@@ -1,0 +1,15 @@
+id: brazil-double-stack
+title: Teammate stops ahead on the player's in-lap
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  teammate_pit: 11
+expect:
+  fire:
+    - {rule: double_stack, laps: [11, 11]}
+  absent:
+    - {rule: double_stack, laps: [1, 10]}
+why: The real teammate stops on lap 10 behind the player. The mutation places the teammate ahead on lap 11.

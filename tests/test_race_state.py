@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from pitwall.state.race import RacePhase
+import math
+
+from pitwall.state.race import RacePhase, teammate_stack_gap_s
+from pitwall.state.session import CarLap
 
 
 def _step(rp: RacePhase, t: float, **kw: object) -> str:
@@ -94,3 +97,26 @@ def test_red_flag_supersedes_sc_without_restart_call() -> None:
     assert _step(rp, 101.0) == "racing"
     assert _step(rp, 102.0, driver_status=3) == "racing"
     assert rp.neutral_end_kind == ""
+
+
+def test_teammate_stack_gap_requires_a_stopping_teammate_ahead() -> None:
+    me = CarLap(total_distance=1000.0)
+
+    def gap(
+        mate: CarLap,
+        *,
+        boxed: bool = False,
+        in_lap: bool = False,
+        speed: float = 100.0,
+    ) -> float:
+        return teammate_stack_gap_s(me, mate, boxed, in_lap, speed, 15.0)
+
+    assert gap(CarLap(total_distance=1200.0, driver_status=2), in_lap=True) == 2.0
+    assert gap(CarLap(total_distance=1200.0, pit_status=1)) == 2.0
+    assert gap(CarLap(total_distance=1200.0, pit_status=2)) == 2.0
+    assert math.isinf(gap(CarLap(total_distance=1200.0, pit_status=1), boxed=True))
+    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=2)))
+    assert math.isinf(gap(CarLap(total_distance=800.0, driver_status=2)))
+    assert math.isinf(gap(CarLap(total_distance=3000.0, driver_status=2)))
+    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=4)))
+    assert math.isinf(gap(CarLap(total_distance=1200.0, driver_status=2), in_lap=True, speed=0.0))

@@ -10,6 +10,30 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.41.0 (2026-10-30)
+
+### Bug Fixes
+
+- **cli**: Keep derive command removed ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+- **strategy**: Gate stacked stops and in-lap evidence
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+### Features
+
+- **strategy**: Detect double stacks and add stacking pit loss
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+### Testing
+
+- **engine**: Include stack flag in cache key assertion
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+
 ## v0.40.0 (2026-10-30)
 
 ### Bug Fixes

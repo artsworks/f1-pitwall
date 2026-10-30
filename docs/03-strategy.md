@@ -258,6 +258,7 @@ includes each first-stop lap within `plan_window_s` of the best.
 | `plan_invalid` | 2 | "We're off Plan C. New plan is A, one stop, medium then hard" |
 | `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Cheap stop under the safety car" |
 | `plan_sc_box` | 1 | fallback when `box_now` is gated out: "Plan C, box box. Hards, cheap stop" |
+| `double_stack` | 1 | teammate is ahead in the pit lane: "Double stack, ANTONELLI is in ahead. Hold in the lane, slow release" |
 
 Write every set/switch/off/on transition to the decision log (`outcome: plan`) and
 `plan_events` table. Each call row carries `active_plan` and `on_plan` for review grading.
