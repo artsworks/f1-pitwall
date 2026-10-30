@@ -348,21 +348,21 @@
         (p.session_kind === "race" || p.session_kind === "qualifying");
       limits.hidden = !limitsVisible;
       if (limitsVisible) {
-        var n = Number(infringements.corner_cuts) || 0;
-        var c = Number(infringements.cut_warns) || 0;
-        var t = Number(infringements.limit_warns) || 0;
+        var cuts = Number(infringements.corner_cuts) || 0;
+        var cutWarns = Number(infringements.cut_warns) || 0;
+        var limitWarns = Number(infringements.limit_warns) || 0;
         var penalty = Number(infringements.penalty_s) || 0;
         var warnAt = Number(infringements.warn_at);
-        var crit = penalty > 0 || (warnAt > 0 && n > 0 && n % warnAt === 0);
-        var warn = warnAt > 0 && n % warnAt === warnAt - 1;
-        var notice = !crit && !warn && n > 0;
-        var splitComplete = c + t >= n;
+        var crit = penalty > 0 || (warnAt > 0 && cuts > 0 && cuts % warnAt === 0);
+        var warn = warnAt > 0 && cuts % warnAt === warnAt - 1;
+        var notice = !crit && !warn && cuts > 0;
+        var splitComplete = cutWarns + limitWarns >= cuts;
         var prefix = (crit || warn) ? "⚠ " : "";
         limits.className = "chip limits" + (crit ? " crit" : warn ? " warn" : notice ? " notice" : "");
-        limits.title = splitComplete ? c + " corner cuts · " + t + " track limits" : n + " warnings";
+        limits.title = splitComplete ? cutWarns + " corner cuts · " + limitWarns + " track limits" : cuts + " warnings";
         limits.textContent = prefix + (document.body.classList.contains("phone") ?
-          (splitComplete ? "C" + c + " T" + t : "W" + n) :
-          (splitComplete ? "C" + c + " · T" + t : "W" + n));
+          (splitComplete ? "C" + cutWarns + " T" + limitWarns : "W" + cuts) :
+          (splitComplete ? "C" + cutWarns + " · T" + limitWarns : "W" + cuts));
         if (penalty > 0) {
           limits.appendChild(span("+" + penalty + "s", "pen"));
         }
