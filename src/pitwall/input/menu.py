@@ -149,9 +149,9 @@ def _tyres(snap: Snapshot) -> Answer:
 
 
 def _pit(snap: Snapshot) -> Answer:
-    """Plan call first; otherwise judge the tyres: box if they won't make the
-    end, box to fight if fresh tyres win back more than the stop costs, else
-    stay out and hold the position."""
+    """Plan call first; a late no-stop plan nurses the tyres unless wing review is pending.
+    Otherwise judge the tyres: box if they won't make the end, box to fight if
+    fresh tyres win back more than the stop costs, else stay out and hold position."""
     plan = snap.pit_plan
     left = snap.laps_remaining
     loss = snap.pit_loss_s if snap.pit_loss_s > 0 else PIT_LOSS_FALLBACK_S
@@ -189,6 +189,10 @@ def _pit(snap: Snapshot) -> Answer:
             return "stay_out", v
         return "unknown", v
     if snap.laps_of_pace < left:
+        if plan == "no_stop":
+            if snap.front_wing_pit_status == "review":
+                return "damage_review", v
+            return "nurse_to_end", v
         return "tyres_short", v
     if left >= 3 and gain >= loss + PIT_FIGHT_MARGIN_S:
         return "box_fight", v

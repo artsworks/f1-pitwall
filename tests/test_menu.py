@@ -740,6 +740,27 @@ def test_pit_answer_judges_tyres_to_the_end() -> None:
     assert answer(pit, make_snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
 
 
+def test_pit_answer_honours_late_no_stop() -> None:
+    pit = MenuItemModel(id="pit", label="Pit now?")
+    snap = make_snapshot(
+        now=0.0,
+        laps_remaining=3,
+        wear_max_pct=50.0,
+        tyre_age_laps=4,
+        laps_of_pace=1.4,
+        pit_plan="no_stop",
+        pit_loss_s=20.0,
+    )
+    case, values = answer(pit, snap, "b")
+    assert case == "nurse_to_end"
+    assert values["laps_left"] == "3"
+    assert (
+        answer(pit, dataclasses.replace(snap, front_wing_pit_status="review"), "b")[0]
+        == "damage_review"
+    )
+    assert answer(pit, dataclasses.replace(snap, pit_plan=""), "b")[0] == "tyres_short"
+
+
 def test_pit_answer_maps_cover_to_box_and_defend_to_stay_out() -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
     cover = make_snapshot(laps_remaining=8, pit_plan="cover")
