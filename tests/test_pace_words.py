@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from pitwall.strategy.pace import pace_words
+from pitwall.strategy.pace import pace_words, pace_words_self
 
 
 @pytest.mark.parametrize(
@@ -20,3 +20,16 @@ from pitwall.strategy.pace import pace_words
 )
 def test_pace_words(d: float, words: str) -> None:
     assert pace_words(d) == words
+
+
+@pytest.mark.parametrize(
+    ("delta_s", "words"),
+    [
+        (0.0, ""),
+        (math.nan, ""),
+        (-0.3, "three tenths"),
+        (0.2, "two tenths"),
+    ],
+)
+def test_pace_words_self(delta_s: float, words: str) -> None:
+    assert pace_words_self(delta_s) == words

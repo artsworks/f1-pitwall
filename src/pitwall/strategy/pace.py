@@ -32,3 +32,10 @@ def pace_words(delta_s: float, same_band_s: float = 0.03) -> str:
     if abs(delta_s) < same_band_s:
         return "on the same pace"
     return f"{amount_words(delta_s)} {'faster' if delta_s > 0 else 'slower'}"
+
+
+def pace_words_self(delta_s: float) -> str:
+    """Spoken size of our own delta vs expected pace: "three tenths". '' when unknown (0)."""
+    if not math.isfinite(delta_s) or delta_s == 0:
+        return ""
+    return amount_words(delta_s)

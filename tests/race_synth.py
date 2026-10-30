@@ -80,6 +80,7 @@ class RaceSpec:
     send_session_end: bool = False
     pit_lane_loss_ms: int = 0
     lap_noise_ms: float = 0.0
+    player_lap_offset_ms: tuple[tuple[int, int], ...] = ()
     seed: int = 0
     compound_after_stop: int | None = None
     deg_ms_after_stop: int | None = None
@@ -92,6 +93,7 @@ class RaceSpec:
     overtake_gap_s: float = 1.0
     rival_overtake_cars: tuple[int, ...] = ()
     gap_ahead_from_lap: tuple[int, float] | None = None  # (lap, new gap ahead in s)
+    gap_ahead_changes: tuple[tuple[int, float], ...] = ()  # ordered (lap, new gap ahead in s)
     positions_by_lap: tuple[tuple[int, int, int, int], ...] = ()  # Positions per lap
     off_track_lap: int | None = None  # player runs off track on this lap
     off_track_position_changes: tuple[tuple[float, int], ...] = ()  # (lap fraction, position)
@@ -212,15 +214,16 @@ def _crossed(previous_m: float, current_m: float, point_m: float) -> bool:
 
 
 def replay_race(
-    tmp: Path, spec: RaceSpec, db: Database | None = None
+    tmp: Path, spec: RaceSpec, db: Database | None = None, *, persist: bool = True
 ) -> tuple[list[Call], list[dict]]:
     stream = qualifying_stream(spec) if spec.session_type in (5, 6, 7) else race_stream(spec)
     path = write_packet_stream(tmp / "race.f1bin", stream)
     log = tmp / "decisions.jsonl"
+    replay_db = (db if db is not None else Database(":memory:")) if persist else None
     engine = build_engine(
         clock=VirtualClock(),
         sinks=[],
-        db=db if db is not None else Database(":memory:"),
+        db=replay_db,
         decision_log_path=log,
     )
     _, calls = asyncio.run(run_replay(path, engine, None))
@@ -402,6 +405,7 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         )
         fuel = spec.fuel_kg - spec.fuel_kg_per_lap * (lap - 1)
         lap_ms = int(spec.base_ms + deg_ms * age + spec.fuel_ms_per_kg * fuel)
+        lap_ms += sum(ms for from_lap, ms in spec.player_lap_offset_ms if lap >= from_lap)
         if spec.tyre_inner_profile is not None:
             tyre_inner = spec.tyre_inner_profile[min(lap - 1, len(spec.tyre_inner_profile) - 1)]
         else:
@@ -414,6 +418,9 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         gap_ahead_s = spec.gap_ahead_s
         if spec.gap_ahead_from_lap is not None and lap >= spec.gap_ahead_from_lap[0]:
             gap_ahead_s = spec.gap_ahead_from_lap[1]
+        for change_lap, new_gap_s in spec.gap_ahead_changes:
+            if lap >= change_lap:
+                gap_ahead_s = new_gap_s
         sc = 0
         if spec.sc_laps is not None and spec.sc_laps[0] <= lap <= spec.sc_laps[1]:
             sc = 2 if spec.vsc else 1

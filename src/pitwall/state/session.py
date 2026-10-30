@@ -69,6 +69,7 @@ from pitwall.state.race import (
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
+from pitwall.strategy.pace import pace_words_self
 from pitwall.strategy.plans import DRY, StrategyPlan
 from pitwall.strategy.weather import default_pit_loss_s, switch_net_s
 
@@ -654,6 +655,10 @@ class Snapshot:
     # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
     player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
+    pace_delta_vs_expected_s: float = 0.0  # last lap vs prediction (s), + = slower, 0 = unknown
+    pace_slow_laps: int = 0
+    pace_lap_traffic: bool = False  # last completed lap mostly within traffic_gap_s of car ahead
+    pace_delta: str = ""  # spoken size of pace_delta_vs_expected_s
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
     # M2: extra player lap fields
@@ -913,6 +918,10 @@ class SessionState:
         self.sector2_time_ms = 0
         self.current_lap_invalid = 0
         self.pit_lane_time_ms = 0
+        self._pace_prediction_latch: tuple[int, int] | None = None
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
 
         # telemetry / status / damage (player)
         self.tyre_surface = _ZERO_CORNERS
@@ -1256,6 +1265,10 @@ class SessionState:
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
         self._last_rewind_t = t
+        self._pace_prediction_latch = None
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
         self._ers_samples.clear()
         self._ers_lap_frame = None
         self._ers_pending = None
@@ -1529,9 +1542,20 @@ class SessionState:
                 setup_hash=self.setup_hash,
             )
             self.laps.append(summary)
+            self._record_pace_delta(summary)
             gap_records = max(1, int(self._th("battle_closing_window_laps", 5)) + 1)
             previous_lines = self._gap_lines[-(gap_records - 1) :] if gap_records > 1 else []
             self._gap_lines = [*previous_lines, dict(self._gap_now)]
+        if (
+            self._kind() == "race"
+            and car.sector == 1
+            and (
+                self._pace_prediction_latch is None
+                or self._pace_prediction_latch[0] != car.current_lap_num
+            )
+            and self._model.pace_forecast_ms > 0
+        ):
+            self._pace_prediction_latch = (car.current_lap_num, self._model.pace_forecast_ms)
         if self._kind() == "qualifying":
             self.run.update(
                 t=self._last_session_time or 0.0,
@@ -1658,6 +1682,25 @@ class SessionState:
             self.speed_kmh / 3.6, 30.0
         )
         return self.session_time_left > remaining_s + cool_s + lap_s * 0.2
+
+    def _record_pace_delta(self, summary: LapSummary) -> None:
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_lap_traffic = bool(summary.traffic)
+        prediction = self._pace_prediction_latch
+        if (
+            prediction is not None
+            and prediction[0] == summary.lap_num
+            and summary.valid
+            and summary.sc_status == 0
+            and self._kind() == "race"
+        ):
+            self.pace_delta_vs_expected_s = (summary.lap_time_ms - prediction[1]) / 1000.0
+        if self.pace_delta_vs_expected_s != 0 and self.pace_delta_vs_expected_s >= self._th(
+            "pace_check_min_delta_s", 0.15
+        ):
+            self.pace_slow_laps += 1
+        else:
+            self.pace_slow_laps = 0
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
         self.event_telemetry_seen = True
@@ -3348,6 +3391,10 @@ class SessionState:
             rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
             rival_pit_exit_pace_ms=pace_of(exit_i) if exit_i >= 0 else 0,
+            pace_delta_vs_expected_s=self.pace_delta_vs_expected_s,
+            pace_slow_laps=self.pace_slow_laps,
+            pace_lap_traffic=self.pace_lap_traffic,
+            pace_delta=pace_words_self(self.pace_delta_vs_expected_s),
             rival_ahead_name=name_of(ahead_i),
             rival_behind_name=name_of(behind_i),
             rival_pit_exit_name=name_of(exit_i),

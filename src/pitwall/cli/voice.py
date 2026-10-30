@@ -15,7 +15,7 @@ from pitwall.audio.dispatcher import Call
 from pitwall.config.loader import ConfigStore
 from pitwall.config.paths import storage_path
 
-_MEASURED_WORDS = frozenset({"battle_pace_ahead", "battle_pace_behind"})
+_MEASURED_WORDS = frozenset({"battle_pace_ahead", "battle_pace_behind", "pace_delta"})
 _INTEGER = re.compile(r"-?\d+")
 
 

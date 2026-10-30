@@ -240,6 +240,9 @@ thresholds:
   battle_letby_tyre_laps: 4     # chaser tyre age lead required for let-by
   battle_letby_min_laps: 3      # keep defending within the final laps
   battle_manage_every_laps: 5   # "gaps stable" cadence
+  pace_check_every_laps: 3      # own pace vs expected call cadence
+  pace_check_min_delta_s: 0.15  # within this of expected pace: no call (lap noise)
+  pace_check_dirty_air_laps: 3  # slow laps in a row before calling slow pace in traffic
   battle_charge_catch_laps: 2   # on the car ahead within this many laps: harvest first
   battle_charge_store_pct: 60   # battery under this while catching: harvest call
   energy_burst_store_pct: 40    # battery under this while attacking: short bursts call
