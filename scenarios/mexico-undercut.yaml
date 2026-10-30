@@ -1,0 +1,13 @@
+id: mexico-undercut
+title: Worn tyres with the car ahead inside 3 seconds, undercut on offer
+status: target
+source:
+  session_uid: "0xc356d841fd4d0af7"
+  sha256: "418384404dedbfb2df8b57d0f8ca7f612949f6ed736b8d6002ab63b18f233e5b"
+  where: "Mexico race, 18 laps, P2 behind Albon at 2.3 to 3.2 seconds. session_c356d841fd4d0af7_1793270788.f1bin.zst"
+mutations:
+  wear_scale: 3
+expect:
+  fire:
+    - {rule: box_now, laps: [5, 8]}
+why: With tripled wear the tyres have no life left from lap 6, the window is open and Albon is within 3 seconds. The stop is also an undercut, so pitwall must call box_now.

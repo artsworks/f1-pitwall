@@ -1,0 +1,16 @@
+id: brazil-overcut
+title: Rival ahead pits on lap 6, stay out for the overcut
+status: target
+source:
+  session_uid: "0xc235af0beb211b71"
+  sha256: "766f99657a2662a26894c7ce2c041072f70f188cdc99d8c3554f08415a24b7f7"
+  where: "Brazil race, 18 laps, P3 behind Hamilton at 0.4 to 0.9 seconds. session_c235af0beb211b71_1793272909.f1bin.zst"
+mutations:
+  wear_scale: 2
+  inject_rival_pit: "6:ahead"
+expect:
+  fire:
+    - {rule: overcut_stay_out, laps: [6, 7]}
+  absent:
+    - {rule: [box_now, cover_box], laps: [6, 7]}
+why: The car directly ahead pits on lap 6 while our tyres still have life and the window opens on lap 7. Staying out and pushing on old tyres beats stopping on the same lap.
