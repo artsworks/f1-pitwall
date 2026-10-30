@@ -135,19 +135,29 @@ Rival stops, weather changes and red flags need a real recording or a generator.
 
 ## Starter scenarios
 
-All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car.
+All scenarios are targets. Each source recording is named by its session UID inside the scenario file. The bench finds it in the `--recordings` folders.
 
-| Scenario | Status | Checks |
+| Scenario | Source | Checks |
 |---|---|---|
-| `brazil-race-real` | guard | Plan and window calls, no safety car calls |
-| `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
-| `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
-| `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
-| `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
-| `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
-| `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
-| `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
-
+| `brazil-overcut` | Brazil race, 18 laps | Stay out when the rival ahead pits on lap 6 |
+| `brazil-quali-fuel-out` | Brazil short qualifying | Box at the line when fuel is short after a cool lap |
+| `brazil2-sc-lap-1` | Brazil race, 18 laps | No stop call under a safety car on laps 1 and 2 |
+| `brazil3-penalty` | Brazil race, 18 laps | Corner-cutting penalty call on lap 8 |
+| `brazil3-race-real` | Brazil race, 18 laps | Plan announced on lap 1, no safety car calls |
+| `brazil3-sc-early` | Brazil race, 18 laps | Safety car calls on laps 2 to 5 |
+| `brazil3-vsc-early` | Brazil race, 18 laps | VSC calls, never full safety car calls |
+| `brazil4-sc-real` | Brazil race, real safety car | Safety car calls on laps 14 to 17 |
+| `austin-vsc-real` | Austin race, real VSC | VSC call on lap 11, no safety car calls |
+| `imola-race-real` | Imola race, 16 laps | Plan on lap 1, a stop call before lap 10, no safety car calls |
+| `imola-sc-last-laps` | Imola race, 16 laps | No stop call under a safety car on laps 14 to 16 |
+| `imola-wear-double` | Imola race, 16 laps | Tyre-life or stop call on laps 5 to 9 with doubled wear |
+| `imola-late-penalty` | Imola race, 16 laps | Penalty, cost, covered and finish calls on lap 16 |
+| `mexico-undercut` | Mexico race, 18 laps | Box call with the car ahead inside 3 seconds |
+| `mexico-vsc-real` | Mexico race, real VSC | VSC call on laps 12 and 13, no safety car calls |
+| `mexico2-vsc-real` | Mexico race, real VSC | VSC calls on laps 12 and 13, no safety car calls |
+| `silverstone-sc-real` | Silverstone race, real safety car | Safety car calls on laps 8 to 11, no VSC calls |
+| `spa-wear-double` | Spa race, 11 laps | Tyre-life or stop call on laps 3 to 7 with doubled wear |
+| `zandvoort-race-real` | Zandvoort race, 18 laps | Plan on lap 1, a stop call before lap 7, no safety car calls |
 ## Backlog
 
 - A safety car on lap 1 or 2, before any stop makes sense.
