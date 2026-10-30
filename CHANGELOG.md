@@ -10,6 +10,27 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.42.0 (2026-10-30)
+
+### Bug Fixes
+
+- **model**: Share thermal fallback lap selection with the engine fuel reference
+  ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+### Features
+
+- **bench**: Inject_rival_pit mutation with overcut and undercut target scenarios
+  ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+### Testing
+
+- **bench**: Overcut and undercut scenarios with inject_rival_pit mutation, thermal fallback in
+  fit_stint ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+
 ## v0.41.1 (2026-10-30)
 
 ### Bug Fixes
