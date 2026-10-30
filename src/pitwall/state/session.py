@@ -66,6 +66,7 @@ from pitwall.state.race import (
     relevant_rivals,
     second_rivals,
     stop_adjusted_gaps,
+    teammate_stack_gap_s,
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
@@ -458,6 +459,8 @@ class Snapshot:
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
+    teammate_stacking: bool = False
+    teammate_stack_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
     gap_behind_s: float = math.inf
     rival_ahead_idx: int = -1
@@ -1101,6 +1104,7 @@ class SessionState:
         self.sc_laps = 0
         self._cars_pitted_this_lap: set[int] = set()
         self._pitted_lap_snapshot: set[int] = set()
+        self._mate_boxed: set[int] = set()
         self._restricted_streak = 0
         self.rival_data_restricted = False
         self._forecast_samples: tuple[WeatherForecastSample, ...] = ()
@@ -1329,6 +1333,7 @@ class SessionState:
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
+        self._mate_boxed.clear()
         self._wet_to_dry_passes.clear()
         self._held_gains = [0.0, 0.0]
         self._green_from_lap.clear()
@@ -1405,6 +1410,10 @@ class SessionState:
             self._note_lap_boundary()
             self._note_corner_wear()
         for i, c in enumerate(pkt.cars):
+            if c.pit_status == PitStatus.IN_PIT_AREA:
+                self._mate_boxed.add(i)
+            elif c.pit_status == PitStatus.NONE:
+                self._mate_boxed.discard(i)
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
         length = self.track_length_m
@@ -3407,7 +3416,9 @@ class SessionState:
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             rival_behind_in_pit_lane=behind_i >= 0 and cars[behind_i].pit_status != 0,
             pit_exit_rival_gap_s=exit_gap,
-            **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
+            **self._teammate_view(
+                ahead_i, behind_i, gap_ahead, gap_behind, name_of, cars, ref_speed
+            ),
             slick_gain_s=slick_gain,
             inter_gain_s=inter_gain,
             tyre_switch_to=switch_to,
@@ -3438,20 +3449,34 @@ class SessionState:
         gap_ahead: float,
         gap_behind: float,
         name_of: Callable[[int], str],
+        cars: Sequence[CarLap],
+        speed_mps: float,
     ) -> dict[str, Any]:
         mate = self._teammate()
-        if mate < 0:
+        player = self._player_idx
+        if mate < 0 or player >= len(cars) or mate >= len(cars):
             return {}
         gap = math.inf
         if mate == ahead_i:
             gap = gap_ahead
         elif mate == behind_i:
             gap = gap_behind
+        stack_gap = math.inf
+        if cars[player].result_status == 2 and cars[mate].result_status == 2:
+            stack_gap = teammate_stack_gap_s(
+                cars[player],
+                cars[mate],
+                mate in self._mate_boxed,
+                speed_mps,
+                self._th("double_stack_gap_s", 15.0),
+            )
         return dict(
             teammate_name=name_of(mate),
             teammate_gap_s=gap,
             teammate_fight=self.race_phase == "racing"
             and gap <= self._th("teammate_fight_gap_s", 1.0),
+            teammate_stacking=math.isfinite(stack_gap),
+            teammate_stack_gap_s=stack_gap,
         )
 
     def _compound_gain(

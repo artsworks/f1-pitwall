@@ -22,6 +22,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "cool_recharge",
         "cool_recharge_check",
         "cool_status",
+        "double_stack",
         "cool_vs_pole",
         "cool_vs_pole_split",
         "cover_box",

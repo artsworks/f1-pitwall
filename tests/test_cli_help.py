@@ -40,8 +40,8 @@ def test_layered_top_level_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert not any(line.startswith("  trim") for line in everyday.splitlines())
 
 
-@pytest.mark.parametrize("command", ["derive"])
-def test_removed_commands_are_not_choices(command: str) -> None:
-    with pytest.raises(SystemExit) as exc:
-        main([command])
-    assert exc.value.code == 2
+def test_derive_command_accepts_teammate_pit_option() -> None:
+    args = build_parser().parse_args(
+        ["derive", "latest", "--out", "derived.f1bin", "--teammate-pit", "11"]
+    )
+    assert args.teammate_pit == 11

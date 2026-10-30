@@ -35,7 +35,7 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale` and `penalty` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty` and `teammate_pit` keys. The bench applies them during replay.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its
@@ -146,6 +146,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
 | `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
+| `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
 ## Backlog

@@ -2,7 +2,9 @@
 
 This spike tested how synthetic recordings from real sessions can add rule-learning
 scenarios without changing physics priors. Scenario mutations now run through
-`pitwall bench`. The mutation code remains in `src/pitwall/net/derive.py`.
+`pitwall bench`. The mutation code lives in `src/pitwall/net/derive.py`. Use `pitwall derive` to write a mutated recording.
+
+`pitwall derive latest --out derived.f1bin --teammate-pit 11` places the teammate 150 m ahead when the player is on an in-lap on lap 11. The mutation needs a `PARTICIPANTS` packet to find the teammate.
 
 _Spike run: 7 Oct 2026, on the Brazil race recording from 6 Oct._
 

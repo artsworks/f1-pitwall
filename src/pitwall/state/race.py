@@ -20,6 +20,19 @@ from typing import Any
 GAP_TOLERANCE_S = 3.0
 
 
+def teammate_stack_gap_s(
+    me: Any, mate: Any, mate_boxed: bool, speed_mps: float, max_gap_s: float
+) -> float:
+    if speed_mps <= 0 or not (
+        mate.pit_status == 2
+        or (mate.pit_status == 1 and not mate_boxed)
+        or (mate.driver_status == 2 and mate.pit_status == 0)
+    ):
+        return math.inf
+    gap = (mate.total_distance - me.total_distance) / speed_mps
+    return gap if 0 < gap <= max_gap_s else math.inf
+
+
 def gap_plausible(gap_ms: int, dist_m: float, speed_mps: float) -> bool:
     """True if a game time gap agrees with the on-track distance between the two cars."""
     if gap_ms <= 0:

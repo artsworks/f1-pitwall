@@ -71,6 +71,46 @@ def test_race_time_stop_costs_pit_loss_plus_warmup() -> None:
     assert stop - none == pytest.approx(20.0 + float(TH["outlap_warmup_s"]))
 
 
+def test_teammate_stack_penalises_only_a_stop_this_lap() -> None:
+    kwargs = dict(
+        tyre_age=20,
+        laps_of_pace=0.0,
+        fit=fit(280),
+        fresh=fit(80),
+    )
+    base = run(**kwargs)
+    stacked = run(**kwargs, teammate_pitting=True)
+    assert base.plan == "box_now"
+    assert stacked.plan != "box_now"
+    assert stacked.projections[0][1] - base.projections[0][1] == pytest.approx(4.0)
+    assert stacked.projections[1:] == base.projections[1:]
+
+
+def test_teammate_stack_reduces_safety_car_cheap_stop_gain() -> None:
+    kwargs = dict(sc_status=1, wear_mean=50.0, pit_loss_s=11.0)
+    base = run(**kwargs)
+    stacked = run(**kwargs, teammate_pitting=True)
+    assert base.plan == stacked.plan == "cheap_stop"
+    assert base.gain_s - stacked.gain_s == pytest.approx(4.0)
+
+
+def test_teammate_stack_disables_free_stop_without_enough_gap() -> None:
+    kwargs = dict(
+        tyre_age=20,
+        laps_of_pace=0.0,
+        fit=fit(300),
+        fresh=fit(80),
+        gap_behind_s=24.0,
+        pit_exit_clean=True,
+    )
+    assert run(**kwargs).plan == "free_stop"
+    assert run(**kwargs, teammate_pitting=True).plan != "free_stop"
+
+
+def test_teammate_pitting_false_matches_omitted_keyword() -> None:
+    assert run() == run(teammate_pitting=False)
+
+
 def test_quadratic_degradation_increases_race_time() -> None:
     linear = fit(100)
     quadratic = DegFit(90_000.0, 100.0, 30.0, 10, 100.0, 0.9, "fit", deg2_ms_per_lap2=5.0)

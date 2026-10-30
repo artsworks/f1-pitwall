@@ -1910,6 +1910,7 @@ class Engine:
             driver=drv,
             mode=mode,
             th=settings.thresholds,
+            teammate_pitting=snap.teammate_stacking,
         )
         if snap.safety_car_status == 0:
             session_uid = self.state.session_uid

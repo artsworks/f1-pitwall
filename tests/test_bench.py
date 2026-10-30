@@ -11,6 +11,7 @@ import yaml
 from pitwall.cli import main
 from pitwall.learning.bench import (
     ScenarioCheck,
+    _scenario_ops,
     build_scorecard,
     compare,
     evaluate_checks,
@@ -642,6 +643,14 @@ def test_ops_from_options_errors() -> None:
         ops_from_options(None, None, True, None)
     with pytest.raises(ValueError, match="positive, ascending"):
         ops_from_options(None, "4-3", False, None)
+
+
+def test_teammate_pit_scenario_mutation_validation(tmp_path: Path) -> None:
+    ops = _scenario_ops({"teammate_pit": 11}, tmp_path / "scenario.yaml")
+    assert [op.label for op in ops] == ["teammate_pit=11"]
+    for value in (True, "11", 11.0):
+        with pytest.raises(ValueError, match="mutations.teammate_pit must be an integer"):
+            _scenario_ops({"teammate_pit": value}, tmp_path / "scenario.yaml")
 
 
 def test_bench_cli_replays_scenarios_with_isolated_scorecard(

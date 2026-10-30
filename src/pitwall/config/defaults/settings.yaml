@@ -142,6 +142,8 @@ thresholds:
   contact_report_s: 10          # window for the post-contact damage / "car looks OK" report
   contact_damage_min_pct: 3     # damage rise since the hit worth reporting
   teammate_fight_gap_s: 1.0     # teammate directly ahead/behind within this = team fight
+  double_stack_gap_s: 15.0      # maximum road gap to a teammate stop
+  double_stack_loss_s: 4.0      # extra loss when stopping this lap behind a teammate
   last_lap_fight_s: 1.0        # last lap: car within this either way = attack/defend call
   fastest_lap_fresh_s: 10      # fastest-lap call window after the FTLP event
   fastest_lap_settle_s: 1.5    # rival fastest lap: wait in case the player beats it at once

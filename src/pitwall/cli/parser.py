@@ -11,6 +11,7 @@ from pitwall.cli.common import (
     add_json_arg,
     add_recording_arg,
 )
+from pitwall.cli.derive import cmd_derive
 from pitwall.cli.learn import (
     _positive_int,
     cmd_bench,
@@ -57,7 +58,7 @@ EVERYDAY = (
     "update",
     "cert",
 )
-ADVANCED = ("diff", "bench", "rules", "propose", "tune", "restore", "trim")
+ADVANCED = ("derive", "diff", "bench", "rules", "propose", "tune", "restore", "trim")
 
 
 def _cmd(
@@ -149,6 +150,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="SQLite db for replay persistence (default :memory:; never the real DB)",
     )
     rep.set_defaults(func=cmd_replay)
+
+    der = _cmd(
+        sub,
+        "derive",
+        "create a mutated synthetic recording",
+        "Create a derived recording with one or more packet mutations.",
+        "pitwall derive latest --out derived.f1bin --teammate-pit 11",
+    )
+    add_recording_arg(der)
+    der.add_argument("--out", required=True, help="output recording path")
+    der.add_argument("--wear-scale", type=float, default=None)
+    der.add_argument("--inject-sc", default=None, help="lap or start-end lap range")
+    der.add_argument("--vsc", action="store_true", help="inject a virtual safety car")
+    der.add_argument("--penalty", type=int, default=None, help="add a time penalty on this lap")
+    der.add_argument(
+        "--teammate-pit",
+        type=int,
+        default=None,
+        metavar="LAP",
+        help="place the teammate 150 m ahead during this lap's in-lap",
+    )
+    der.set_defaults(func=cmd_derive)
 
     dif = _cmd(
         sub,

@@ -126,9 +126,11 @@ def optimise(
     driver: DriverScale = NEUTRAL,
     mode: Mapping[str, object],
     th: Mapping[str, object],
+    teammate_pitting: bool = False,
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
+    stack_s = _f(th, "double_stack_loss_s", 4.0) if teammate_pitting else 0.0
     cover_gap_s = gap_behind_s if rival_behind_gap_s is None else rival_behind_gap_s
     min_left, last_k = _candidate_range(laps_remaining, th)
     # The fresh stint uses the current fit's base (compound priors differ in
@@ -144,7 +146,7 @@ def optimise(
             cur=fit,
             fresh=fresh_fit,
             cur_cliff_age=cur_cliff,
-            pit_loss_s=pit_loss_s,
+            pit_loss_s=pit_loss_s + (stack_s if k == 0 else 0.0),
             th=th,
         )
 
@@ -188,7 +190,7 @@ def optimise(
             theirs = rival_ahead.pace_ms + fit.deg_ms_per_lap * (j + 1)
             ours = fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j + driver.pace_cap_ms
             gained += (theirs - ours) / 1000.0
-        undercut_s = round(gained - _f(th, "outlap_warmup_s", 0.8) - gap_ahead_s, 2)
+        undercut_s = round(gained - _f(th, "outlap_warmup_s", 0.8) - gap_ahead_s - stack_s, 2)
     # Overcut: rival just pitted; our old laps vs their warm-up + fresh laps.
     oc_laps = int(_f(th, "overcut_laps", 2))
     overcut_s = 0.0
@@ -215,7 +217,7 @@ def optimise(
                 _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
-        cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s, 2)
+        cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s - stack_s, 2)
 
     if not projections:
         return PitPlan(
@@ -291,7 +293,7 @@ def optimise(
         return plan(
             "cheap_stop",
             lap_num,
-            green_pit_loss_s - pit_loss_s,
+            green_pit_loss_s - pit_loss_s - stack_s,
             "Cheap stop under the safety car",
             confidence=PIT_LOSS_CONF.get(pit_loss_source, 0.6),
         )
@@ -388,7 +390,7 @@ def optimise(
     delay_gain = (later if best_k == 0 else projections[0][1]) - best_delta
     if (
         best_k <= 1
-        and gap_behind_s > pit_loss_s + _f(th, "free_stop_margin_s", 1.0)
+        and gap_behind_s > pit_loss_s + stack_s + _f(th, "free_stop_margin_s", 1.0)
         and pit_exit_clean
     ):
         return plan("free_stop", lap_num, max(delay_gain, gain_min), "Free stop, gap behind")
