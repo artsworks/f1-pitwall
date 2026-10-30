@@ -1981,11 +1981,11 @@ class Engine:
                 plan.lap,
                 age_slot,
                 threshold(mode, "pit_gain_min_s", 1.0),
+                damage_pace_ms,
+                wing_loss_s,
                 plan.plan,
                 plan.rival_idx,
                 mc_sims,
-                damage_pace_ms,
-                wing_loss_s,
             )
             if key not in self._plan_mc_cache:
                 uid = session_uid if session_uid is not None else 0
