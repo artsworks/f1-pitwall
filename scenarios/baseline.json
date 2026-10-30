@@ -2,21 +2,59 @@
   "created_at": "2026-10-12T23:31:16.315966+00:00",
   "metrics": {
     "by_rule": {},
-    "check_pass_rate": 0.9047619047619048,
-    "checks_passed": 19,
-    "checks_total": 21,
-    "guards_passed": 6,
-    "guards_total": 6,
+    "check_pass_rate": 0.9130434782608695,
+    "checks_passed": 21,
+    "checks_total": 23,
+    "guards_passed": 7,
+    "guards_total": 7,
     "laps_of_pace_mae": null,
     "real_accuracy": null,
     "real_good": 0,
     "real_graded": 0,
-    "score": 90.5,
+    "score": 91.3,
     "stop_cost_mae_s": null,
     "targets_passed": 1,
     "targets_total": 3
   },
   "scenarios": {
+    "brazil-lap1-damage": {
+      "checks": [
+        {
+          "found": [
+            1,
+            13
+          ],
+          "laps": [
+            1,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "plan_invalid"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "plan_target_lap"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Lap 1 wing damage and position loss"
+    },
     "brazil-penalty": {
       "checks": [
         {

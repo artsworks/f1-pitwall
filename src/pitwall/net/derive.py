@@ -278,11 +278,62 @@ class Penalty:
         payload[offset] = min(255, payload[offset] + seconds)
 
 
+@dataclass(slots=True)
+class Damage:
+    lap: int
+    wing_pct: int = 0
+    positions_lost: int = 0
+    label: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if any(type(v) is not int for v in (self.lap, self.wing_pct, self.positions_lost)):
+            raise ValueError("damage values must be integers")
+        if (
+            not 1 <= self.lap <= 255
+            or not 0 <= self.wing_pct <= 100
+            or not 0 <= self.positions_lost < _NUM_CARS
+        ):
+            raise ValueError("damage requires lap 1-255, wing_pct 0-100 and positions_lost 0-21")
+        self.label = f"damage={self.lap}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            header is None
+            or header.packet_id not in PACKET_SIZES
+            or len(payload) != PACKET_SIZES[header.packet_id]
+            or ctx.player_lap is None
+            or ctx.player_lap < self.lap
+        ):
+            return [payload]
+        player = header.player_car_index
+        rewritten = bytearray(payload)
+        if header.packet_id == PacketId.CAR_DAMAGE:
+            for name in ("front_left_wing_damage", "front_right_wing_damage"):
+                offset = car_field_offset(PacketId.CAR_DAMAGE, player, name)
+                rewritten[offset] = max(rewritten[offset], self.wing_pct)
+        elif header.packet_id == PacketId.LAP_DATA:
+            offsets = [
+                car_field_offset(PacketId.LAP_DATA, i, "car_position") for i in range(_NUM_CARS)
+            ]
+            position = payload[offsets[player]]
+            last = max(payload[o] for o in offsets)
+            target = min(last, position + self.positions_lost)
+            if position > 0:
+                for i, offset in enumerate(offsets):
+                    if i == player:
+                        rewritten[offset] = target
+                    elif position < payload[offset] <= target:
+                        rewritten[offset] -= 1
+        return [bytes(rewritten)]
+
+
 def ops_from_options(
     wear_scale: float | None,
     inject_sc: str | None,
     vsc: bool,
     penalty: int | None,
+    damage: dict[str, int] | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
     if wear_scale is not None:
@@ -298,6 +349,8 @@ def ops_from_options(
         raise ValueError("--vsc requires --inject-sc")
     if penalty is not None:
         ops.append(Penalty(penalty))
+    if damage is not None:
+        ops.append(Damage(**damage))
     if not ops:
         raise ValueError("derive requires at least one mutation")
     return ops

@@ -46,6 +46,16 @@ def run(**kw: object):
     return optimise(**args)  # type: ignore[arg-type]
 
 
+def test_damage_moves_stop_to_now() -> None:
+    args = dict(fit=fit(0), fresh=fit(0), tyre_age=0, laps_of_pace=100.0)
+    assert run(**args) == run(**args, damage_pace_ms=0.0)
+    assert run(**args).plan == "no_stop"
+    damaged = run(**args, damage_pace_ms=3000.0)
+    assert damaged.plan == "box_now"
+    assert damaged.lap == 10
+    assert "Damage" in damaged.reason
+
+
 def test_race_time_stop_costs_pit_loss_plus_warmup() -> None:
     f = fit(0)
     none = race_time_s(

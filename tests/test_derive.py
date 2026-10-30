@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import math
 import struct
@@ -20,6 +21,8 @@ from pitwall.learning.learned import format_learned, learned_state
 from pitwall.learning.tune import tune_from_db
 from pitwall.model.deg import DegFit
 from pitwall.net.derive import (
+    Damage,
+    DeriveContext,
     InjectSafetyCar,
     Penalty,
     UidRewrite,
@@ -40,6 +43,7 @@ from pitwall.protocol.packets import (
     parse,
 )
 from pitwall.state.lap import LapSummary
+from pitwall.state.session import Damage as DamageView
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database, _uid_to_sql
 from pitwall.store.uids import SYNTHETIC_UID_TAG, derived_uid, is_synthetic_uid
@@ -49,6 +53,57 @@ from .race_synth import RaceSpec, race_stream
 from .synth import pack_packet, write_packet_stream
 
 SOURCE_UID = 0x1234_5678_9ABC_DEF0
+
+
+def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    snap = Snapshot(
+        now=1.0,
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=16,
+        tyre_visual=17,
+        tyre_age_laps=0,
+        laps_of_pace=30.0,
+        pit_loss_s=20.0,
+        pit_loss_source="default",
+        position=5,
+        grid_position=5,
+    )
+    engine._plan(snap)
+    damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
+    result = engine._plan(damaged)
+    assert result.plan_switch_reason == "invalid"
+    assert result.plan_switched_from == "A"
+    assert result.active_plan == "B"
+    assert engine._plan_damage(damaged, engine._fresh_prior) == ("damage", 1200.0, 5.0)
+    repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
+    assert engine._plan_damage(repaired, engine._fresh_prior) == ("", 0.0, 0.0)
+    db.close()
+
+
+def test_damage_mutation_rewrites_player_and_preserves_positions() -> None:
+    op = Damage(2, 60, 4)
+    ctx = DeriveContext(player_lap=1)
+    damage = pack_packet(PacketId.CAR_DAMAGE, session_uid=SOURCE_UID)
+    assert op.apply(damage, ctx) == [damage]
+    ctx.player_lap = 2
+    changed = op.apply(damage, ctx)[0]
+    for name in ("front_left_wing_damage", "front_right_wing_damage"):
+        assert changed[car_field_offset(PacketId.CAR_DAMAGE, 0, name)] == 60
+    lap = bytearray(pack_packet(PacketId.LAP_DATA, session_uid=SOURCE_UID))
+    offsets = [car_field_offset(PacketId.LAP_DATA, i, "car_position") for i in range(22)]
+    for i, offset in enumerate(offsets):
+        lap[offset] = i + 1
+    changed = op.apply(bytes(lap), ctx)[0]
+    assert changed[offsets[0]] == 5
+    assert sorted(changed[o] for o in offsets) == list(range(1, 23))
+    assert [changed[o] for o in offsets[1:5]] == [1, 2, 3, 4]
+    assert op.apply(b"", ctx) == [b""]
+    with pytest.raises(ValueError):
+        Damage(0)
 
 
 def _read_records(path) -> list[tuple[int, bytes]]:
