@@ -12,6 +12,7 @@ import pytest
 
 from pitwall.model.deg import (
     DegFit,
+    fit_laps,
     fit_stint,
     fuel_adjusted_deg,
     fuel_burned_laps,
@@ -101,6 +102,28 @@ def test_thermal_cutoff_is_ignored_when_it_leaves_too_few_laps() -> None:
     assert fit.source != "prior"
     assert fit.n == 6
     assert fit.deg_ms_per_lap == pytest.approx(100.0)
+
+
+def test_fit_laps_falls_back_to_clean_laps_when_thermal_leaves_too_few() -> None:
+    laps = [
+        replace(_lap(0, 90_000), tyre_inner_c=80.0),
+        replace(_lap(1, 90_100), tyre_inner_c=100.0),
+        replace(_lap(2, 90_200), tyre_inner_c=100.0),
+        replace(_lap(3, 90_300, valid=0), tyre_inner_c=100.0),
+    ]
+
+    assert fit_laps(laps, thermal_hi_c=90.0, min_laps=3) == laps[:3]
+
+    enough_cool = [
+        *laps,
+        replace(_lap(4, 90_400), tyre_inner_c=80.0),
+        replace(_lap(5, 90_500), tyre_inner_c=80.0),
+    ]
+    assert fit_laps(enough_cool, thermal_hi_c=90.0, min_laps=3) == [
+        enough_cool[0],
+        enough_cool[4],
+        enough_cool[5],
+    ]
 
 
 def test_quadratic_fit_captures_accelerating_degradation() -> None:
