@@ -10,5 +10,7 @@ mutations:
 expect:
   fire:
     - {rule: penalty_corner_cut, laps: [16, 16]}
-    - {rule: [penalty_cost, penalty_covered, finish_penalty], laps: [16, 16]}
+    - {rule: penalty_cost, laps: [16, 16]}
+    - {rule: penalty_covered, laps: [16, 16]}
+    - {rule: finish_penalty, laps: [16, 16]}
 why: A 5 s penalty on the last lap cannot be served in the pits. Pitwall must call the penalty and say whether the gap behind covers it.
