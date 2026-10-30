@@ -2,6 +2,18 @@
 
 Personal reminders. Each item says what it is, why it matters and where to start.
 
+## Next session: PR 155 checklist
+
+Written 30 Oct 2026. PR 155 (`chore/bench-scenarios-new-recordings`) adds 16 bench scenarios, this file, and a Bench note in `AGENTS.md`. It is pushed and mergeable. Do these steps in order.
+
+1. Check the stash. Run `git stash list`. `stash@{0}` holds old local edits to `bench.py`, `derive.py`, `deg.py`, `test_deg.py`, `test_derive.py` and `docs/24-scenario-bench.md`. A copy is at `C:\Users\akus1\pitwall-local-changes.patch`.
+   - Most of it duplicates `inject_rival_pit` (PR 153), which is already on `main`. Do not run `git stash pop` blindly.
+   - The thermal-cutoff change in `fit_stint` (`deg.py`) and its test `test_thermal_cutoff_is_ignored_when_it_leaves_too_few_laps` may be new. Check if `main` has it. If it does not, make a separate PR. If it does, run `git stash drop`.
+2. Rerun the bench on `main` 0.42.0. The "all 16 new targets pass" result came from a run before the merge, and the new strategy rules may change it. Run the two known gaps first: `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --only brazil-overcut mexico-undercut`.
+3. Look at the `UNSTABLE` status on the PR. Run `gh pr checks 155`.
+4. Update the baseline on a machine that has the Brazil recordings: `pitwall bench --recordings <dir> --update-baseline --accept-changes --note "..."`. It refuses here, because the Brazil guards skip when the recordings are missing.
+5. Merge PR 155 after you approve the 16 expectations.
+
 ## Recheck two bench targets
 
 In a local run on 30 Oct 2026, both targets failed. That run used code from before the 0.42.0 merge, which changed the strategy rules. Run them again on the current `main` first. If they still fail, they are known gaps, not new regressions. Neither is proven to be a pitwall fault.
