@@ -43,6 +43,7 @@ def _agreement(
     cur_cliff_age: float = 100.0,
     plan_name: str = "",
     cover_gap_s: float = float("inf"),
+    stack_s: float = 0.0,
     mode: dict[str, float] | None = None,
     th: dict[str, float] | None = None,
 ) -> McResult | None:
@@ -62,6 +63,7 @@ def _agreement(
         rng=np.random.default_rng(seed),
         plan_name=plan_name,
         cover_gap_s=cover_gap_s,
+        stack_s=stack_s,
     )
 
 
@@ -75,6 +77,35 @@ def test_same_seed_produces_the_same_result() -> None:
     args = dict(fit=fit, fresh=_fit(80.0), plan_lap=10)
 
     assert _agreement(**args) == _agreement(**args)
+
+
+def test_zero_stack_cost_matches_default() -> None:
+    args = dict(fit=_fit(150.0, sd=20.0), fresh=_fit(80.0), plan_lap=10)
+
+    assert _agreement(**args) == _agreement(**args, stack_s=0.0)
+
+
+def test_stack_cost_reduces_box_now_agreement() -> None:
+    args = dict(
+        fit=_fit(130.0),
+        fresh=_fit(80.0),
+        plan_lap=10,
+        laps_remaining=8,
+        tyre_age=20,
+        pit_loss_s=21.0,
+        mode={"pit_gain_min_s": 1.0},
+        th={
+            **TH,
+            "plan_mc_deg_sd_frac": 0.0,
+            "plan_mc_pit_loss_sd_s": 0.0,
+        },
+    )
+
+    base = _agreement(**args)
+    stacked = _agreement(**args, stack_s=4.0)
+
+    assert base is not None and stacked is not None
+    assert base.agree > stacked.agree
 
 
 def test_shipped_mindsets_keep_per_lap_mc_key() -> None:
@@ -200,9 +231,21 @@ def test_clear_cover_uses_sampled_cover_decision() -> None:
         cur_cliff_age=11.0,
         cover_gap_s=cover_gap_s,
     )
+    stacked = _agreement(
+        fit=fit,
+        fresh=fresh,
+        plan_lap=10,
+        laps_remaining=12,
+        tyre_age=10,
+        cur_cliff_age=11.0,
+        plan_name="cover",
+        cover_gap_s=cover_gap_s,
+        stack_s=4.0,
+    )
 
     assert covered is not None and covered.modal_lap == 14 and covered.agree >= 0.9
     assert old_scoring is not None and old_scoring.agree < 0.1
+    assert stacked is not None and stacked.agree < covered.agree
 
     plan = PitPlan("cover", 10, cover_s, 0.9, 0.0, 2, "PIASTRI", "", (10, 14), 0, 0, ())
     assert scale_plan(plan, covered).confidence >= 0.70
@@ -493,3 +536,39 @@ def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
     mode["pit_gain_min_s"] = 0.4
     engine._plan(snap)
     assert thresholds == [1.0, 0.4]
+
+
+def test_mc_stack_status_invalidates_cache_and_passes_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine
+    from pitwall.state.session import Snapshot
+
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    engine.deg_fit = _fit(0.0)
+    engine._fresh_prior = _fit(0.0)
+    costs: list[object] = []
+
+    def counted(**kwargs: object) -> McResult:
+        costs.append(kwargs["stack_s"])
+        return McResult(None, 1.0, 1)
+
+    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr(engine, "mode", lambda: {**MODE, "plan_mc_sims": 100})
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=10,
+        laps_remaining=10,
+        tyre_age_laps=1,
+        laps_of_pace=15.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+    )
+
+    engine._plan(snap)
+    engine._plan(replace(snap, teammate_stacking=True))
+
+    assert costs == [0.0, 4.0]

@@ -241,6 +241,21 @@ rules:
     on_neg:
       - "Understood, staying out. Plan {plan_switched_from} stays open"
       - "Copy, stay out. Plan {plan_switched_from} remains open"
+  # The game sends no teammate pit plan, so this uses teammate LapData.
+  - id: double_stack
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    when: "phase in ('racing', 'in_lap', 'sc', 'vsc') and teammate_stacking and (driver_status == 2 or pit_status != 0)"
+    clear_when: "not teammate_stacking"
+    cooldown_s: 90
+    requires: [lap_data, participants]
+    say:
+      - "Double stack, {teammate_name} is in ahead. Hold in the lane, slow release"
+      - "We're stacking behind {teammate_name}. Hold position in the pit lane, slow release"
+      - "Double stack. {teammate_name} {teammate_stack_gap_s:.1f} seconds ahead into the box. Hold in the lane"
+      - "{teammate_name} boxes {teammate_stack_gap_s:.1f} seconds ahead. Double stack, slow release"
   - id: box_in_n
     sessions: [race]
     priority: 2

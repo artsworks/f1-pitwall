@@ -902,6 +902,22 @@ def test_teammate_fight_rule() -> None:
     assert "teammate_fight" not in _texts(_engine(), phase="racing", teammate_name="LAWSON")
 
 
+def test_double_stack_rule_uses_teammate_lap_data() -> None:
+    assert "double_stack" in _texts(
+        _engine(), phase="racing", teammate_stacking=True, driver_status=2
+    )
+    assert "double_stack" in _texts(
+        _engine(), phase="in_lap", teammate_stacking=True, driver_status=2
+    )
+    assert "double_stack" in _texts(_engine(), phase="racing", teammate_stacking=True, pit_status=1)
+    assert "double_stack" not in _texts(
+        _engine(), phase="racing", teammate_stacking=True, driver_status=4, pit_status=0
+    )
+    assert "double_stack" not in _texts(
+        _engine(), phase="racing", teammate_stacking=False, driver_status=2
+    )
+
+
 def test_fuel_tight_only_at_or_below_tenth_and_urgent_late() -> None:
     fuel = dict(phase="racing", fuel_per_lap_kg=1.5, laps_remaining=10, total_laps=20)
     assert "fuel_marginal" not in _texts(_engine(), fuel_margin_laps=0.2, lap_num=5, **fuel)
