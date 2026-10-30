@@ -10,6 +10,25 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.40.0 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Preserve Monte Carlo cache plan suffix
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+- **strategy**: Refresh damage timing and reject transient pace deficits
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+### Features
+
+- **strategy**: Rebuild plans on lap-1 damage or position loss
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+
 ## v0.39.2 (2026-10-30)
 
 ### Bug Fixes
