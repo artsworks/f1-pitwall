@@ -294,7 +294,7 @@ class Damage:
             or not 0 <= self.positions_lost < _NUM_CARS
         ):
             raise ValueError("damage requires lap 1-255, wing_pct 0-100 and positions_lost 0-21")
-        self.label = f"damage={self.lap}"
+        self.label = f"damage={self.lap}:wing={self.wing_pct}:positions={self.positions_lost}"
 
     def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
         header = _header(payload)

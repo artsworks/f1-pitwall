@@ -55,6 +55,28 @@ from .synth import pack_packet, write_packet_stream
 SOURCE_UID = 0x1234_5678_9ABC_DEF0
 
 
+def test_damage_labels_distinguish_all_mutation_parameters() -> None:
+    ops = [Damage(1, 60, 4), Damage(1, 100, 4), Damage(1, 60, 3), Damage(2, 60, 4)]
+    assert ops[1].label == "damage=1:wing=100:positions=4"
+    assert len({derived_uid(SOURCE_UID, [op.label]) for op in ops}) == len(ops)
+
+
+@pytest.mark.parametrize(
+    "transient", [{"traffic": 1}, {"tyre_inner_c": 200.0}, {"sc_status": 1}, {"valid": False}]
+)
+def test_engine_damage_signal_excludes_transient_laps(transient: dict[str, object]) -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    fit = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    lap = LapSummary(2, 95_000, 30_000, 30_000, 17, 2, 10.0, True)
+    snap = Snapshot(now=1.0, race_phase="racing", lap_num=3, tyre_age_laps=3)
+    engine.state.laps.append(dataclasses.replace(lap, **transient))
+    assert engine._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps[-1] = lap
+    assert engine._plan_damage(snap, fit) == ("pace", 4800.0, 0.0)
+    db.close()
+
+
 def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
@@ -81,6 +103,46 @@ def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
     assert engine._plan_damage(damaged, engine._fresh_prior) == ("damage", 1200.0, 5.0)
     repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
     assert engine._plan_damage(repaired, engine._fresh_prior) == ("", 0.0, 0.0)
+    db.close()
+
+
+def test_engine_worsening_damage_recomputes_without_invalid_switch(monkeypatch) -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    snap = Snapshot(
+        now=1.0,
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=16,
+        tyre_visual=17,
+        laps_of_pace=30.0,
+        pit_loss_s=20.0,
+        pit_loss_source="default",
+    )
+    engine._plan(snap)
+    damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
+    initial = engine._plan(damaged)
+    count = engine.plan_tracker.state.switch_count
+    key = engine._plan_key
+    calls = []
+    tracker_type = type(engine.plan_tracker)
+    original = tracker_type.update
+
+    def capture(self, inp, th, **kwargs):
+        calls.append(inp)
+        return original(self, inp, th, **kwargs)
+
+    monkeypatch.setattr(tracker_type, "update", capture)
+    worsened = engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=100)))
+    assert engine._plan_key != key
+    assert len(calls) == 1
+    assert calls[0].damage_pace_ms == 2000.0
+    assert calls[0].wing_change_s == 5.0
+    assert engine.plan_tracker.state.switch_count == count
+    assert worsened.active_plan == initial.active_plan
+    engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=99)))
+    assert len(calls) == 1
     db.close()
 
 

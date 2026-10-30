@@ -1881,7 +1881,10 @@ class Engine:
         measured = None
         if (
             last is not None
-            and last.valid
+            and usable_laps(
+                [lap_row_from_summary(snap.session_uid, 0, last)],
+                self._thermal_hi_c(snap.track_id, last.compound, self.store.current()),
+            )
             and last.lap_num > 1
             and last.sc_status == 0
             and last.lap_num == snap.lap_num - 1
@@ -2136,6 +2139,8 @@ class Engine:
                 snap.tyre_visual,
                 self.mindset,
                 invalidate,
+                round(damage_pace_ms / 100),
+                round(wing_loss_s, 1),
                 snap.is_sprint,
             )
             if key != self._plan_key:
