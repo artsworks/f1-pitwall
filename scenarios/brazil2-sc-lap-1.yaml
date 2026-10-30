@@ -1,0 +1,15 @@
+id: brazil2-sc-lap-1
+title: Safety car on laps 1 and 2, before any stop makes sense
+status: target
+source:
+  session_uid: "0xc235af0beb211b71"
+  sha256: "766f99657a2662a26894c7ce2c041072f70f188cdc99d8c3554f08415a24b7f7"
+  where: "Brazil race, 18 laps, one stop on lap 12. session_c235af0beb211b71_1793272909.f1bin.zst"
+mutations:
+  inject_sc: "1-2"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [1, 2]}
+  absent:
+    - {rule: [box_now, plan_sc_box], laps: [1, 3]}
+why: The tyres are new on lap 1 and the window is far away. A stop under the safety car throws away a full set.

@@ -1,0 +1,13 @@
+id: austin-vsc-real
+title: Austin race as recorded, virtual safety car on lap 11
+status: target
+source:
+  session_uid: "0xf2346ae37920deb6"
+  sha256: "6c508edbcbb8c83b88951841b1c607a899f2248daa2d41664a3aee0283afdfba"
+  where: "Austin race, 22 Oct 2026, 14 laps, one stop on lap 9, real VSC on lap 11. session_f2346ae37920deb6_1792665972.f1bin.zst"
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [11, 11]}
+  absent:
+    - {rule: [sc_deployed, sc_ending, sc_restart], laps: [1, 14]}
+why: The VSC comes 2 laps after the only stop. It must give VSC calls and never full safety car calls.

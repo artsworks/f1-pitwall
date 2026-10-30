@@ -1,0 +1,14 @@
+id: imola-late-penalty
+title: Five second corner-cutting penalty on the last lap
+status: target
+source:
+  session_uid: "0xa0548b236a00d328"
+  sha256: "48c799db8107239412a5b7dfba2162f074aebd260f9f84f6d83495fc08897252"
+  where: "Imola race, 29 Oct 2026, 16 laps, one stop on lap 10. session_a0548b236a00d328_1793274908.f1bin.zst"
+mutations:
+  penalty: 16
+expect:
+  fire:
+    - {rule: penalty_corner_cut, laps: [16, 16]}
+    - {rule: [penalty_cost, penalty_covered, finish_penalty], laps: [16, 16]}
+why: A 5 s penalty on the last lap cannot be served in the pits. Pitwall must call the penalty and say whether the gap behind covers it.
