@@ -1,0 +1,15 @@
+id: brazil-worn-tyres-late-stop
+title: No second stop with two laps left
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  wear_scale: 3.0
+expect:
+  absent:
+    - {rule: box_now, laps: [15, 17]}
+why: >-
+  With 2 laps left, a stop costs a full pit loss for at most two laps on new tyres.
+  Pitwall should not call a second stop. Today it calls box_now on lap 16.

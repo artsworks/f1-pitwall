@@ -35,6 +35,8 @@ _NUM_CARS = 22
 @dataclass(slots=True)
 class DeriveContext:
     player_lap: int | None = None
+    player_pit_stops: int | None = None
+    teammate_idx: int | None = None
     last_session: bytes | None = None
     safety_events: dict[tuple[int, int, bool], set[str]] = field(default_factory=dict)
     penalty_emitted: set[int] = field(default_factory=set)
@@ -74,6 +76,7 @@ def _update_player_lap(payload: bytes, ctx: DeriveContext) -> None:
         return
     player = payload[PLAYER_CAR_INDEX_OFFSET]
     ctx.player_lap = payload[car_field_offset(PacketId.LAP_DATA, player, "current_lap_num")]
+    ctx.player_pit_stops = payload[car_field_offset(PacketId.LAP_DATA, player, "num_pit_stops")]
 
 
 @dataclass(slots=True)
@@ -278,11 +281,174 @@ class Penalty:
         payload[offset] = min(255, payload[offset] + seconds)
 
 
+@dataclass(slots=True)
+class InjectRivalPit:
+    lap: int
+    side: str = "ahead"
+    label: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.lap < 1 or self.side not in ("ahead", "behind"):
+            raise ValueError("inject_rival_pit requires LAP[:ahead|behind] with LAP >= 1")
+        self.label = f"inject_rival_pit={self.lap}:{self.side}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            ctx.player_lap != self.lap
+            or header is None
+            or header.packet_id != PacketId.LAP_DATA
+            or len(payload) != PACKET_SIZES[PacketId.LAP_DATA]
+        ):
+            return [payload]
+        position = payload[
+            car_field_offset(PacketId.LAP_DATA, header.player_car_index, "car_position")
+        ]
+        target = position + (-1 if self.side == "ahead" else 1)
+        for car in range(_NUM_CARS):
+            if car != header.player_car_index and (
+                payload[car_field_offset(PacketId.LAP_DATA, car, "car_position")] == target
+            ):
+                rewritten = bytearray(payload)
+                rewritten[car_field_offset(PacketId.LAP_DATA, car, "pit_status")] = 1
+                return [bytes(rewritten)]
+        return [payload]
+
+
+@dataclass(slots=True)
+class TeammatePit:
+    lap: int
+    lead_m: float = 150.0
+    label: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.lap <= 255:
+            raise ValueError("teammate pit lap must fit in one byte and be positive")
+        if not math.isfinite(self.lead_m) or self.lead_m <= 0:
+            raise ValueError("teammate pit lead must be finite and positive")
+        self.label = f"teammate_pit={self.lap}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if header is None or len(payload) != PACKET_SIZES.get(header.packet_id):
+            return [payload]
+        if header.packet_id == PacketId.PARTICIPANTS:
+            player = header.player_car_index
+            ctx.teammate_idx = None
+            if player >= _NUM_CARS:
+                return [payload]
+            player_team = struct.unpack_from(
+                "<H", payload, car_field_offset(PacketId.PARTICIPANTS, player, "team_id")
+            )[0]
+            ctx.teammate_idx = next(
+                (
+                    idx
+                    for idx in range(_NUM_CARS)
+                    if idx != player
+                    and struct.unpack_from(
+                        "<H",
+                        payload,
+                        car_field_offset(PacketId.PARTICIPANTS, idx, "team_id"),
+                    )[0]
+                    == player_team
+                ),
+                None,
+            )
+            return [payload]
+        if (
+            header.packet_id != PacketId.LAP_DATA
+            or ctx.player_lap != self.lap
+            or ctx.teammate_idx is None
+        ):
+            return [payload]
+        player = header.player_car_index
+        teammate = ctx.teammate_idx
+        if player >= _NUM_CARS or teammate >= _NUM_CARS or player == teammate:
+            return [payload]
+        driver_status = payload[car_field_offset(PacketId.LAP_DATA, player, "driver_status")]
+        pit_status = payload[car_field_offset(PacketId.LAP_DATA, player, "pit_status")]
+        if driver_status != 2 and pit_status == 0:
+            return [payload]
+        rewritten = bytearray(payload)
+        for field_name in ("lap_distance", "total_distance"):
+            player_offset = car_field_offset(PacketId.LAP_DATA, player, field_name)
+            teammate_offset = car_field_offset(PacketId.LAP_DATA, teammate, field_name)
+            player_distance = struct.unpack_from("<f", payload, player_offset)[0]
+            struct.pack_into("<f", rewritten, teammate_offset, player_distance + self.lead_m)
+        rewritten[car_field_offset(PacketId.LAP_DATA, teammate, "driver_status")] = 2
+        rewritten[car_field_offset(PacketId.LAP_DATA, teammate, "pit_status")] = (
+            1 if pit_status != 0 else 0
+        )
+        return [bytes(rewritten)]
+
+
+@dataclass(slots=True)
+class Damage:
+    lap: int
+    wing_pct: int = 0
+    positions_lost: int = 0
+    label: str = field(init=False)
+    _stops: int | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        if any(type(v) is not int for v in (self.lap, self.wing_pct, self.positions_lost)):
+            raise ValueError("damage values must be integers")
+        if (
+            not 1 <= self.lap <= 255
+            or not 0 <= self.wing_pct <= 100
+            or not 0 <= self.positions_lost < _NUM_CARS
+        ):
+            raise ValueError("damage requires lap 1-255, wing_pct 0-100 and positions_lost 0-21")
+        self.label = f"damage={self.lap}:wing={self.wing_pct}:positions={self.positions_lost}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            header is None
+            or header.packet_id not in PACKET_SIZES
+            or len(payload) != PACKET_SIZES[header.packet_id]
+            or ctx.player_lap is None
+            or ctx.player_lap < self.lap
+        ):
+            return [payload]
+        if self._stops is None and ctx.player_pit_stops is not None:
+            self._stops = ctx.player_pit_stops
+        player = header.player_car_index
+        rewritten = bytearray(payload)
+        if header.packet_id == PacketId.CAR_DAMAGE:
+            if (
+                self._stops is not None
+                and ctx.player_pit_stops is not None
+                and ctx.player_pit_stops > self._stops
+            ):
+                return [payload]
+            for name in ("front_left_wing_damage", "front_right_wing_damage"):
+                offset = car_field_offset(PacketId.CAR_DAMAGE, player, name)
+                rewritten[offset] = max(rewritten[offset], self.wing_pct)
+        elif header.packet_id == PacketId.LAP_DATA:
+            offsets = [
+                car_field_offset(PacketId.LAP_DATA, i, "car_position") for i in range(_NUM_CARS)
+            ]
+            position = payload[offsets[player]]
+            last = max(payload[o] for o in offsets)
+            target = min(last, position + self.positions_lost)
+            if position > 0:
+                for i, offset in enumerate(offsets):
+                    if i == player:
+                        rewritten[offset] = target
+                    elif position < payload[offset] <= target:
+                        rewritten[offset] -= 1
+        return [bytes(rewritten)]
+
+
 def ops_from_options(
     wear_scale: float | None,
     inject_sc: str | None,
     vsc: bool,
     penalty: int | None,
+    rival_pit: str | None = None,
+    teammate_pit: int | None = None,
+    damage: dict[str, int] | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
     if wear_scale is not None:
@@ -298,6 +464,13 @@ def ops_from_options(
         raise ValueError("--vsc requires --inject-sc")
     if penalty is not None:
         ops.append(Penalty(penalty))
+    if rival_pit is not None:
+        lap, _, side = rival_pit.partition(":")
+        ops.append(InjectRivalPit(int(lap), side or "ahead"))
+    if teammate_pit is not None:
+        ops.append(TeammatePit(teammate_pit))
+    if damage is not None:
+        ops.append(Damage(**damage))
     if not ops:
         raise ValueError("derive requires at least one mutation")
     return ops

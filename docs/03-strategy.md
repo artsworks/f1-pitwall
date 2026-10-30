@@ -223,6 +223,12 @@ includes each first-stop lap within `plan_window_s` of the best.
   race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
   SC/VSC pit loss, re-derived every recompute until taken.
 - A and B are frozen as compound sequences; their timing is re-optimised every lap.
+  Damage rebuilds the plans and switches to the other letter once per cause per stint, after SC/VSC ends.
+  Wing damage uses `plan_damage_wing_pct`, and a valid green lap deficit uses `plan_damage_pace_ms`.
+  Early position loss uses `plan_rebuild_max_lap` and `plan_rebuild_positions_lost`.
+  Current-set laps include the measured deficit or `damage_pace_ms_per_wing_pct`, whichever is larger.
+  Tyre damage without a measurement uses `damage_tyre_pace_ms`. A wing repair adds `pit_wing_change_s` to pit loss.
+  A stop clears the penalty after the out lap.
   A mindset change rebuilds A and B from the new ranking. Stops already made stay done.
   When degradation spread is known, the engine switches after `plan_off_s` when the
   probability that the best plan is faster exceeds `plan_switch_prob`.
@@ -252,6 +258,7 @@ includes each first-stop lap within `plan_window_s` of the best.
 | `plan_invalid` | 2 | "We're off Plan C. New plan is A, one stop, medium then hard" |
 | `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Cheap stop under the safety car" |
 | `plan_sc_box` | 1 | fallback when `box_now` is gated out: "Plan C, box box. Hards, cheap stop" |
+| `double_stack` | 1 | teammate is ahead in the pit lane: "Double stack, ANTONELLI is in ahead. Hold in the lane, slow release" |
 
 Write every set/switch/off/on transition to the decision log (`outcome: plan`) and
 `plan_events` table. Each call row carries `active_plan` and `on_plan` for review grading.

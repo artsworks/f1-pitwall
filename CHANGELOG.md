@@ -10,6 +10,148 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.42.0 (2026-10-30)
+
+### Bug Fixes
+
+- **model**: Share thermal fallback lap selection with the engine fuel reference
+  ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+### Features
+
+- **bench**: Inject_rival_pit mutation with overcut and undercut target scenarios
+  ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+### Testing
+
+- **bench**: Overcut and undercut scenarios with inject_rival_pit mutation, thermal fallback in
+  fit_stint ([#153](https://github.com/artsworks/f1-pitwall/pull/153),
+  [`33594f4`](https://github.com/artsworks/f1-pitwall/commit/33594f45316063f6e7cfac5287cccf8cae60783a))
+
+
+## v0.41.1 (2026-10-30)
+
+### Bug Fixes
+
+- **bench**: Clear damage mutation wing at the next pit stop
+  ([#154](https://github.com/artsworks/f1-pitwall/pull/154),
+  [`56ac474`](https://github.com/artsworks/f1-pitwall/commit/56ac47451371308ae8637f7cab35d481a32255a5))
+
+
+## v0.41.0 (2026-10-30)
+
+### Bug Fixes
+
+- **cli**: Keep derive command removed ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+- **strategy**: Gate stacked stops and in-lap evidence
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+### Features
+
+- **strategy**: Detect double stacks and add stacking pit loss
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+### Testing
+
+- **engine**: Include stack flag in cache key assertion
+  ([#152](https://github.com/artsworks/f1-pitwall/pull/152),
+  [`a171b13`](https://github.com/artsworks/f1-pitwall/commit/a171b137741449cdcb786d46dff99270e79f7614))
+
+
+## v0.40.0 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Preserve Monte Carlo cache plan suffix
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+- **strategy**: Refresh damage timing and reject transient pace deficits
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+### Features
+
+- **strategy**: Rebuild plans on lap-1 damage or position loss
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+
+## v0.39.2 (2026-10-30)
+
+### Bug Fixes
+
+- **web**: Stop track-limits chip overwriting track_info, which blanked the weather tile
+  ([#150](https://github.com/artsworks/f1-pitwall/pull/150),
+  [`395c7af`](https://github.com/artsworks/f1-pitwall/commit/395c7afb4cd0fb273adc1bc4cd1ef07b1b290639))
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#147](https://github.com/artsworks/f1-pitwall/pull/147),
+  [`92b90f9`](https://github.com/artsworks/f1-pitwall/commit/92b90f939c4d458f7a0554381622d43348958aef))
+
+
+## v0.39.1 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Call the SC cheap stop when the plan still owes a stop
+  ([#148](https://github.com/artsworks/f1-pitwall/pull/148),
+  [`51ec827`](https://github.com/artsworks/f1-pitwall/commit/51ec827f18520f09020391a933d53e5374d357ca))
+
+
+## v0.39.0 (2026-10-30)
+
+### Bug Fixes
+
+- **model**: Align forecast fuel reference with the fitted laps
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **model**: Fit the stint in memory when persistence is off
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Gate slow pace_check on the completed lap's traffic
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Grade pace against the forecast for the lap being driven
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- **radio**: Hold pace_check until the deg fit settles
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+### Chores
+
+- **tracks**: Promote learned overlays from learning pack
+  ([#146](https://github.com/artsworks/f1-pitwall/pull/146),
+  [`36bca36`](https://github.com/artsworks/f1-pitwall/commit/36bca362d8fc1b80cf286983e5561e6c91e6da36))
+
+### Documentation
+
+- Move the no-persistence fit note below the fold list
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+- Split pace_check sentence ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+### Features
+
+- **radio**: Pace check call and catch laps on battle_catching
+  ([#145](https://github.com/artsworks/f1-pitwall/pull/145),
+  [`08b8439`](https://github.com/artsworks/f1-pitwall/commit/08b8439c2d58a467c3bc1ceff3f7af4e799360f7))
+
+
 ## v0.38.1 (2026-10-27)
 
 ### Bug Fixes

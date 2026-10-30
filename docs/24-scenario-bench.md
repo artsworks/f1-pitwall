@@ -35,7 +35,9 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale` and `penalty` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
+- `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
+- The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its
@@ -129,41 +131,51 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 |---|---|---|
 | `inject_sc`, `vsc` | Order and timing of safety car calls, plan and box calls under a safety car | Gaps, positions and rival calls, because the field does not bunch up |
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
+| `damage` | Plan invalidation and box calls after wing damage or position loss | Pace and gap calls, because lap times do not change |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
+| `inject_rival_pit` | The rival-pitted flag that feeds `overcut`, `cover` and `defend` plans | Rival pace and gaps, which stay as recorded |
 
 Rival stops, weather changes and red flags need a real recording or a generator. `src/pitwall/net/derive.py` cannot make them.
 
 ## Starter scenarios
 
-All scenarios are targets. Each source recording is named by its session UID inside the scenario file. The bench finds it in the `--recordings` folders.
+The `brazil-*` scenarios from `brazil-race-real` to `brazil-quali-fuel-out` use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car. Every other scenario names its source recording by session UID inside the file. The bench finds it in the `--recordings` folders.
 
-| Scenario | Source | Checks |
+| Scenario | Status | Checks |
 |---|---|---|
-| `brazil-overcut` | Brazil race, 18 laps | Stay out when the rival ahead pits on lap 6 |
-| `brazil-quali-fuel-out` | Brazil short qualifying | Box at the line when fuel is short after a cool lap |
-| `brazil2-sc-lap-1` | Brazil race, 18 laps | No stop call under a safety car on laps 1 and 2 |
-| `brazil3-penalty` | Brazil race, 18 laps | Corner-cutting penalty call on lap 8 |
-| `brazil3-race-real` | Brazil race, 18 laps | Plan announced on lap 1, no safety car calls |
-| `brazil3-sc-early` | Brazil race, 18 laps | Safety car calls on laps 2 to 5 |
-| `brazil3-vsc-early` | Brazil race, 18 laps | VSC calls, never full safety car calls |
-| `brazil4-sc-real` | Brazil race, real safety car | Safety car calls on laps 14 to 17 |
-| `austin-vsc-real` | Austin race, real VSC | VSC call on lap 11, no safety car calls |
-| `imola-race-real` | Imola race, 16 laps | Plan on lap 1, a stop call before lap 10, no safety car calls |
-| `imola-sc-last-laps` | Imola race, 16 laps | No stop call under a safety car on laps 14 to 16 |
-| `imola-wear-double` | Imola race, 16 laps | Tyre-life or stop call on laps 5 to 9 with doubled wear |
-| `imola-late-penalty` | Imola race, 16 laps | Penalty, cost, covered and finish calls on lap 16 |
-| `mexico-undercut` | Mexico race, 18 laps | Box call with the car ahead inside 3 seconds |
-| `mexico-vsc-real` | Mexico race, real VSC | VSC call on laps 12 and 13, no safety car calls |
-| `mexico2-vsc-real` | Mexico race, real VSC | VSC calls on laps 12 and 13, no safety car calls |
-| `silverstone-sc-real` | Silverstone race, real safety car | Safety car calls on laps 8 to 11, no VSC calls |
-| `spa-wear-double` | Spa race, 11 laps | Tyre-life or stop call on laps 3 to 7 with doubled wear |
-| `zandvoort-race-real` | Zandvoort race, 18 laps | Plan on lap 1, a stop call before lap 7, no safety car calls |
-
+| `brazil-race-real` | guard | Plan and window calls, no safety car calls |
+| `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
+| `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
+| `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
+| `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
+| `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
+| `brazil-worn-tyres-late-stop` | target | No second stop with two laps left |
+| `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
+| `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
+| `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
+| `brazil-overcut` | target | Stay out when the rival ahead pits on lap 6 |
+| `mexico-undercut` | target | Box call with the car ahead inside 3 seconds |
+| `brazil2-sc-lap-1` | target | No stop call under a safety car on laps 1 and 2 |
+| `brazil3-penalty` | target | Corner-cutting penalty call on lap 8 |
+| `brazil3-race-real` | target | Plan announced on lap 1, no safety car calls |
+| `brazil3-sc-early` | target | Safety car calls on laps 2 to 5 |
+| `brazil3-vsc-early` | target | VSC calls, never full safety car calls |
+| `brazil4-sc-real` | target | Real safety car calls on laps 14 to 17 |
+| `austin-vsc-real` | target | Real VSC call on lap 11, no safety car calls |
+| `imola-race-real` | target | Plan on lap 1, a stop call before lap 10, no safety car calls |
+| `imola-sc-last-laps` | target | No stop call under a safety car on laps 14 to 16 |
+| `imola-wear-double` | target | Tyre-life or stop call on laps 5 to 9 with doubled wear |
+| `imola-late-penalty` | target | Penalty, cost, covered and finish calls on lap 16 |
+| `mexico-vsc-real` | target | Real VSC call on laps 12 and 13, no safety car calls |
+| `mexico2-vsc-real` | target | Real VSC calls on laps 12 and 13, no safety car calls |
+| `silverstone-sc-real` | target | Real safety car calls on laps 8 to 11, no VSC calls |
+| `spa-wear-double` | target | Tyre-life or stop call on laps 3 to 7 with doubled wear |
+| `zandvoort-race-real` | target | Plan on lap 1, a stop call before lap 7, no safety car calls |
 ## Backlog
 
 - A VSC inside the window. The stop saves less time than under a full safety car. A stop call depends on tyre wear, position risk and laps left, so write the check against the rule inputs.
 - Two safety cars in one race.
-- Fix the two failing targets. `brazil-overcut` expects `overcut_stay_out` on laps 6 to 7 and gets none. `mexico-undercut` expects `box_now` on laps 5 to 8 and gets none.
+- Recheck the two targets `brazil-overcut` and `mexico-undercut`. In a local run on 30 Oct 2026, before the 0.42.0 merge, `overcut_stay_out` did not fire on laps 6 to 7 and `box_now` did not fire on laps 5 to 8.
 - Wear twice as fast, so that Plan B with two stops is faster. The Imola and Spa scenarios check tyre-life and stop calls, not Plan B.
 
 ## Limits

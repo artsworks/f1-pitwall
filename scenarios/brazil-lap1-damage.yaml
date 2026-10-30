@@ -1,0 +1,16 @@
+id: brazil-lap1-damage
+title: Lap 1 wing damage and position loss
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  damage: {lap: 1, wing_pct: 100, positions_lost: 4}
+expect:
+  fire:
+    - {rule: plan_invalid, laps: [1, 2]}
+    - {rule: plan_target_lap, laps: [1, 2]}
+  absent:
+    - {rule: plan_invalid, laps: [3, 11]}
+why: A lost wing on lap 1 makes stopping now faster than limping, so the plans rebuild and the target moves to now.

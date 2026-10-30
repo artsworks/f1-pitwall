@@ -124,6 +124,8 @@ def plan_agreement(
     rng: np.random.Generator,
     plan_name: str = "",
     cover_gap_s: float = math.inf,
+    stack_s: float = 0.0,
+    damage_pace_ms: float = 0.0,
 ) -> McResult | None:
     raw_th_sims = _f(th, "plan_mc_sims", 500)
     sims = 0 if raw_th_sims <= 0 else min(int(_f(mode, "plan_mc_sims", raw_th_sims)), 2000)
@@ -175,6 +177,8 @@ def plan_agreement(
         last_k=last_k,
         th=th,
     )
+    deltas -= (laps_remaining - np.arange(candidate_count))[None, :] * damage_pace_ms / 1000.0
+    deltas[:, 0] += stack_s
     q = np.quantile(deltas, risk_quantile(th), axis=0)
     k = int(np.argmin(q))
     q_modal_offset = k if q[k] < 0 else None
@@ -197,8 +201,8 @@ def plan_agreement(
             th=th,
         )
         fresh_laps_ms = fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * ages
-        their_gain = np.sum(worn_ms - fresh_laps_ms[None, :], axis=1) / 1000.0
-        cover_samples = their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s
+        their_gain = np.sum(worn_ms + damage_pace_ms - fresh_laps_ms[None, :], axis=1) / 1000.0
+        cover_samples = their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s - stack_s
         if plan_name == "cover":
             agree = float(np.mean(cover_samples + _f(th, "cover_margin_s", 0.5) > 0))
         else:

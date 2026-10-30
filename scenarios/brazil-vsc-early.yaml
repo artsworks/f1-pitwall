@@ -1,0 +1,17 @@
+id: brazil-vsc-early
+title: Virtual safety car on laps 6 and 7
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "6-7"
+  vsc: true
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [6, 6]}
+    - {rule: vsc_ending, laps: [7, 7]}
+  absent:
+    - {rule: [sc_deployed, sc_ending, sc_restart], laps: [1, 17]}
+why: A VSC must give the VSC calls, never the full safety car calls.

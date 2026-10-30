@@ -105,16 +105,16 @@ def test_vsc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) 
     assert any(
         snapshot.lap_num == 6
         and snapshot.pit_status != 0
-        and snapshot.active_plan == "A"
+        and snapshot.active_plan == "C"
         and snapshot.plan_next_compound.upper() == _EXPECTED
         for snapshot, _ in ticks
     )
     assert any(
         snapshot.lap_num == 7
         and snapshot.race_phase == "vsc"
-        and snapshot.stop_plan == "A"
+        and snapshot.stop_plan == "C"
         and snapshot.stop_expected_compound == _EXPECTED
-        and payload["fit_mismatch"] == {"plan": "A", "expected": _EXPECTED, "fitted": "HARD"}
+        and payload["fit_mismatch"] == {"plan": "C", "expected": _EXPECTED, "fitted": "HARD"}
         for snapshot, payload in ticks
     )
     lap_eight = [(snapshot, payload) for snapshot, payload in ticks if snapshot.lap_num == 8]
@@ -134,7 +134,7 @@ def test_sc_wrong_tyre_uses_latched_plan(replays: dict[str, list[ReplayTick]]) -
         snapshot.lap_num == 7
         and snapshot.race_phase == "sc"
         and snapshot.stop_expected_compound == _EXPECTED
-        and payload["fit_mismatch"] == {"plan": "A", "expected": _EXPECTED, "fitted": "HARD"}
+        and payload["fit_mismatch"] == {"plan": "C", "expected": _EXPECTED, "fitted": "HARD"}
         for snapshot, payload in ticks
     )
     lap_eight = [(snapshot, payload) for snapshot, payload in ticks if snapshot.lap_num == 8]

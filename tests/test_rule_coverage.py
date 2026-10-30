@@ -10,7 +10,6 @@ from .test_rule_replay import NOT_REPLAYABLE
 # These rules currently have only unit tests. Remove each id when replay coverage lands.
 KNOWN_GAPS: frozenset[str] = frozenset(
     {
-        "battle_catching",
         "battle_patience",
         "boost_left_on",
         "contact_check",
@@ -23,6 +22,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "cool_recharge",
         "cool_recharge_check",
         "cool_status",
+        "double_stack",
         "cool_vs_pole",
         "cool_vs_pole_split",
         "cover_box",

@@ -66,9 +66,11 @@ from pitwall.state.race import (
     relevant_rivals,
     second_rivals,
     stop_adjusted_gaps,
+    teammate_stack_gap_s,
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
+from pitwall.strategy.pace import pace_words_self
 from pitwall.strategy.plans import DRY, StrategyPlan
 from pitwall.strategy.weather import default_pit_loss_s, switch_net_s
 
@@ -457,6 +459,8 @@ class Snapshot:
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
+    teammate_stacking: bool = False
+    teammate_stack_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
     gap_behind_s: float = math.inf
     rival_ahead_idx: int = -1
@@ -654,6 +658,10 @@ class Snapshot:
     # Last 3 completed player laps, oldest first (lap, time, S1, S2, S3).
     player_recent_laps: tuple[tuple[int, int, int, int, int], ...] = ()
     predicted_lap_ms: int = 0
+    pace_delta_vs_expected_s: float = 0.0  # last lap vs prediction (s), + = slower, 0 = unknown
+    pace_slow_laps: int = 0
+    pace_lap_traffic: bool = False  # last completed lap mostly within traffic_gap_s of car ahead
+    pace_delta: str = ""  # spoken size of pace_delta_vs_expected_s
     # M2: per-car lap data (all 24 cars)
     cars: tuple[CarLap, ...] = ()
     # M2: extra player lap fields
@@ -913,6 +921,10 @@ class SessionState:
         self.sector2_time_ms = 0
         self.current_lap_invalid = 0
         self.pit_lane_time_ms = 0
+        self._pace_prediction_latch: tuple[int, int] | None = None
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
 
         # telemetry / status / damage (player)
         self.tyre_surface = _ZERO_CORNERS
@@ -1092,6 +1104,10 @@ class SessionState:
         self.sc_laps = 0
         self._cars_pitted_this_lap: set[int] = set()
         self._pitted_lap_snapshot: set[int] = set()
+        self._mate_boxed: set[int] = set()
+        self._mate_in_lap: set[int] = set()
+        self._last_driver_status: dict[int, int] = {}
+        self._last_pit_status: dict[int, int] = {}
         self._restricted_streak = 0
         self.rival_data_restricted = False
         self._forecast_samples: tuple[WeatherForecastSample, ...] = ()
@@ -1256,6 +1272,10 @@ class SessionState:
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
         self._last_rewind_t = t
+        self._pace_prediction_latch = None
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_slow_laps = 0
+        self.pace_lap_traffic = False
         self._ers_samples.clear()
         self._ers_lap_frame = None
         self._ers_pending = None
@@ -1316,6 +1336,10 @@ class SessionState:
         # Per-car session history stays: it is authoritative from the game and
         # is refreshed per car after a rewind. LapData-derived caches reset.
         self.cars_lap = None
+        self._mate_boxed.clear()
+        self._mate_in_lap.clear()
+        self._last_driver_status.clear()
+        self._last_pit_status.clear()
         self._wet_to_dry_passes.clear()
         self._held_gains = [0.0, 0.0]
         self._green_from_lap.clear()
@@ -1392,6 +1416,30 @@ class SessionState:
             self._note_lap_boundary()
             self._note_corner_wear()
         for i, c in enumerate(pkt.cars):
+            previous_driver_status = self._last_driver_status.get(i)
+            previous_pit_status = self._last_pit_status.get(i)
+            if c.pit_status == PitStatus.IN_PIT_AREA:
+                self._mate_boxed.add(i)
+            elif c.pit_status == PitStatus.NONE:
+                self._mate_boxed.discard(i)
+            if (
+                c.driver_status == 2
+                and previous_driver_status is not None
+                and previous_driver_status != 2
+            ):
+                self._mate_in_lap.add(i)
+            if (
+                previous_pit_status is not None
+                and previous_pit_status != PitStatus.NONE
+                and c.pit_status == PitStatus.NONE
+            ) or (
+                previous_driver_status == 2
+                and c.driver_status != 2
+                and c.pit_status == PitStatus.NONE
+            ):
+                self._mate_in_lap.discard(i)
+            self._last_driver_status[i] = c.driver_status
+            self._last_pit_status[i] = c.pit_status
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
         length = self.track_length_m
@@ -1529,9 +1577,20 @@ class SessionState:
                 setup_hash=self.setup_hash,
             )
             self.laps.append(summary)
+            self._record_pace_delta(summary)
             gap_records = max(1, int(self._th("battle_closing_window_laps", 5)) + 1)
             previous_lines = self._gap_lines[-(gap_records - 1) :] if gap_records > 1 else []
             self._gap_lines = [*previous_lines, dict(self._gap_now)]
+        if (
+            self._kind() == "race"
+            and car.sector == 1
+            and (
+                self._pace_prediction_latch is None
+                or self._pace_prediction_latch[0] != car.current_lap_num
+            )
+            and self._model.pace_forecast_ms > 0
+        ):
+            self._pace_prediction_latch = (car.current_lap_num, self._model.pace_forecast_ms)
         if self._kind() == "qualifying":
             self.run.update(
                 t=self._last_session_time or 0.0,
@@ -1658,6 +1717,25 @@ class SessionState:
             self.speed_kmh / 3.6, 30.0
         )
         return self.session_time_left > remaining_s + cool_s + lap_s * 0.2
+
+    def _record_pace_delta(self, summary: LapSummary) -> None:
+        self.pace_delta_vs_expected_s = 0.0
+        self.pace_lap_traffic = bool(summary.traffic)
+        prediction = self._pace_prediction_latch
+        if (
+            prediction is not None
+            and prediction[0] == summary.lap_num
+            and summary.valid
+            and summary.sc_status == 0
+            and self._kind() == "race"
+        ):
+            self.pace_delta_vs_expected_s = (summary.lap_time_ms - prediction[1]) / 1000.0
+        if self.pace_delta_vs_expected_s != 0 and self.pace_delta_vs_expected_s >= self._th(
+            "pace_check_min_delta_s", 0.15
+        ):
+            self.pace_slow_laps += 1
+        else:
+            self.pace_slow_laps = 0
 
     def _on_event(self, pkt: EventPacket, recv_time: float) -> None:
         self.event_telemetry_seen = True
@@ -3348,6 +3426,10 @@ class SessionState:
             rival_ahead_pace_ms=pace_of(ahead_i) if ahead_i >= 0 else 0,
             rival_behind_pace_ms=pace_of(behind_i) if behind_i >= 0 else 0,
             rival_pit_exit_pace_ms=pace_of(exit_i) if exit_i >= 0 else 0,
+            pace_delta_vs_expected_s=self.pace_delta_vs_expected_s,
+            pace_slow_laps=self.pace_slow_laps,
+            pace_lap_traffic=self.pace_lap_traffic,
+            pace_delta=pace_words_self(self.pace_delta_vs_expected_s),
             rival_ahead_name=name_of(ahead_i),
             rival_behind_name=name_of(behind_i),
             rival_pit_exit_name=name_of(exit_i),
@@ -3360,7 +3442,9 @@ class SessionState:
             rival_behind_pitted=behind_i in pitted if behind_i >= 0 else False,
             rival_behind_in_pit_lane=behind_i >= 0 and cars[behind_i].pit_status != 0,
             pit_exit_rival_gap_s=exit_gap,
-            **self._teammate_view(ahead_i, behind_i, gap_ahead, gap_behind, name_of),
+            **self._teammate_view(
+                ahead_i, behind_i, gap_ahead, gap_behind, name_of, cars, ref_speed
+            ),
             slick_gain_s=slick_gain,
             inter_gain_s=inter_gain,
             tyre_switch_to=switch_to,
@@ -3391,20 +3475,35 @@ class SessionState:
         gap_ahead: float,
         gap_behind: float,
         name_of: Callable[[int], str],
+        cars: Sequence[CarLap],
+        speed_mps: float,
     ) -> dict[str, Any]:
         mate = self._teammate()
-        if mate < 0:
+        player = self._player_idx
+        if mate < 0 or player >= len(cars) or mate >= len(cars):
             return {}
         gap = math.inf
         if mate == ahead_i:
             gap = gap_ahead
         elif mate == behind_i:
             gap = gap_behind
+        stack_gap = math.inf
+        if cars[player].result_status == 2 and cars[mate].result_status == 2:
+            stack_gap = teammate_stack_gap_s(
+                cars[player],
+                cars[mate],
+                mate in self._mate_boxed,
+                mate in self._mate_in_lap,
+                speed_mps,
+                self._th("double_stack_gap_s", 15.0),
+            )
         return dict(
             teammate_name=name_of(mate),
             teammate_gap_s=gap,
             teammate_fight=self.race_phase == "racing"
             and gap <= self._th("teammate_fight_gap_s", 1.0),
+            teammate_stacking=math.isfinite(stack_gap),
+            teammate_stack_gap_s=stack_gap,
         )
 
     def _compound_gain(
