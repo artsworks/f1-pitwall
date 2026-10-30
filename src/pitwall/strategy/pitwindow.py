@@ -395,6 +395,9 @@ def optimise(
             enumerate(tactical),
             key=lambda ic: (ic[1].confidence, -ic[1].risk, -ic[0], ic[1].gain_s),
         )[1]
+    # The horizon reaches the last allowed stop lap and no stop beats staying out.
+    if best_delta >= 0 and last_k >= laps_remaining - min_left:
+        return plan("no_stop", 0, -best_delta, "Stop costs more than it gains")
     # Gain of the best lap over its neighbour: stopping one lap later, or now.
     later = projections[best_k + 1][1] if best_k + 1 < len(projections) else best_delta
     delay_gain = (later if best_k == 0 else projections[0][1]) - best_delta
