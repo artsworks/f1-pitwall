@@ -35,7 +35,7 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty` and `teammate_pit` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `teammate_pit` and `damage` keys. The bench applies them during replay.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its
@@ -129,6 +129,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 |---|---|---|
 | `inject_sc`, `vsc` | Order and timing of safety car calls, plan and box calls under a safety car | Gaps, positions and rival calls, because the field does not bunch up |
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
+| `damage` | Plan invalidation and box calls after wing damage or position loss | Pace and gap calls, because lap times do not change |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
 
 Rival stops, weather changes and red flags need a real recording or a generator. `src/pitwall/net/derive.py` cannot make them.
@@ -141,6 +142,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 |---|---|---|
 | `brazil-race-real` | guard | Plan and window calls, no safety car calls |
 | `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
+| `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
 | `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |

@@ -82,6 +82,40 @@ def inputs(**kw: object) -> PlanInputs:
     return dataclasses.replace(base, **kw)  # type: ignore[arg-type]
 
 
+def test_damage_invalidation_flips_slots_and_latches() -> None:
+    tracker = PlanTracker()
+    kw = dict(stops_done=0, neutralised=False, cheap_stop=False)
+    tracker.update(inputs(), TH, **kw)
+    state = tracker.update(inputs(), TH, invalidate="damage", **kw)
+    assert (state.active, state.switched_from, state.switch_reason, state.switch_lap) == (
+        "B",
+        "A",
+        "invalid",
+        1,
+    )
+    count = state.switch_count
+    assert tracker.update(inputs(), TH, invalidate="damage", **kw).switch_count == count
+    tracker.reset()
+    tracker.update(inputs(), TH, **kw)
+    state = tracker.update(
+        inputs(), TH, invalidate="damage", stops_done=0, neutralised=True, cheap_stop=False
+    )
+    assert state.active == "A"
+    state = tracker.update(inputs(lap_num=2), TH, **kw)
+    assert (state.active, state.switch_reason, state.switch_lap) == ("B", "invalid", 2)
+
+
+def test_damage_penalty_only_applies_before_first_stop() -> None:
+    clean = inputs()
+    damaged = inputs(damage_pace_ms=1500.0)
+    assert evaluate(damaged, (M,), TH).race_time_s - evaluate(
+        clean, (M,), TH
+    ).race_time_s == pytest.approx(75.0)
+    assert evaluate(damaged, (M, H), TH, stop_now=True) == evaluate(
+        clean, (M, H), TH, stop_now=True
+    )
+
+
 def test_two_compound_rule_forces_a_stop_onto_another_compound() -> None:
     inp = inputs()
     assert not feasible(inp, (M,), TH)

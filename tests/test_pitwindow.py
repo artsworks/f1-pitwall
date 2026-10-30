@@ -46,6 +46,16 @@ def run(**kw: object):
     return optimise(**args)  # type: ignore[arg-type]
 
 
+def test_damage_moves_stop_to_now() -> None:
+    args = dict(fit=fit(0), fresh=fit(0), tyre_age=0, laps_of_pace=100.0)
+    assert run(**args) == run(**args, damage_pace_ms=0.0)
+    assert run(**args).plan == "no_stop"
+    damaged = run(**args, damage_pace_ms=3000.0)
+    assert damaged.plan == "box_now"
+    assert damaged.lap == 10
+    assert "Damage" in damaged.reason
+
+
 def test_race_time_stop_costs_pit_loss_plus_warmup() -> None:
     f = fit(0)
     none = race_time_s(
@@ -198,6 +208,26 @@ def test_sc_cheap_stop_needs_wear() -> None:
     assert worn.gain_s == pytest.approx(10.0)
     fresh = run(sc_status=1, wear_mean=10.0, pit_loss_s=11.0, laps_of_pace=30.0)
     assert fresh.plan != "cheap_stop"
+
+
+def test_sc_cheap_stop_when_plan_owes_a_stop() -> None:
+    # brazil-sc-in-window, lap 10: tyres last to the end, but the plan still owes a stop.
+    kw = dict(
+        lap_num=10,
+        laps_remaining=9,
+        tyre_age=9,
+        wear_mean=22.8,
+        fit=fit(150),
+        laps_of_pace=10.3,
+        pit_loss_s=8.0,
+        green_pit_loss_s=22.0,
+        sc_status=1,
+    )
+    owed = run(**kw, stop_owed=True)
+    assert owed.window[0] <= 10 <= owed.window[1]
+    assert owed.plan == "cheap_stop"
+    assert owed.gain_s == pytest.approx(14.0)
+    assert run(**kw).plan != "cheap_stop"
 
 
 def test_aggressive_sc_stop_lower_wear() -> None:

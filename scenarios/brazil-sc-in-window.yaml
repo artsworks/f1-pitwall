@@ -13,6 +13,6 @@ expect:
     - {rule: sc_ending, laps: [11, 11]}
     - {rule: [plan_sc_box, box_now], laps: [10, 11]}
 why: >-
-  The mediums are 9 laps old, the plan window is laps 7 to 13 and 7 laps remain.
-  A safety car in the window makes the stop cheap, so pitwall should call the box.
-  Today it calls nothing. The optimiser does not return cheap_stop, so Plan C never starts.
+  On lap 10 the mediums are 9 laps old, 9 laps remain and the plan window is laps 10 to 13.
+  The tyres could reach the end, but Plan A still owes its one stop to the soft.
+  A safety car in the window makes that stop cheap, so pitwall should call the box.

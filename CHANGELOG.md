@@ -10,6 +10,48 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.40.0 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Preserve Monte Carlo cache plan suffix
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+- **strategy**: Refresh damage timing and reject transient pace deficits
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+### Features
+
+- **strategy**: Rebuild plans on lap-1 damage or position loss
+  ([#151](https://github.com/artsworks/f1-pitwall/pull/151),
+  [`bf6ca65`](https://github.com/artsworks/f1-pitwall/commit/bf6ca65dfee99901d93a0a4a42efeef87163dd86))
+
+
+## v0.39.2 (2026-10-30)
+
+### Bug Fixes
+
+- **web**: Stop track-limits chip overwriting track_info, which blanked the weather tile
+  ([#150](https://github.com/artsworks/f1-pitwall/pull/150),
+  [`395c7af`](https://github.com/artsworks/f1-pitwall/commit/395c7afb4cd0fb273adc1bc4cd1ef07b1b290639))
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#147](https://github.com/artsworks/f1-pitwall/pull/147),
+  [`92b90f9`](https://github.com/artsworks/f1-pitwall/commit/92b90f939c4d458f7a0554381622d43348958aef))
+
+
+## v0.39.1 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Call the SC cheap stop when the plan still owes a stop
+  ([#148](https://github.com/artsworks/f1-pitwall/pull/148),
+  [`51ec827`](https://github.com/artsworks/f1-pitwall/commit/51ec827f18520f09020391a933d53e5374d357ca))
+
+
 ## v0.39.0 (2026-10-30)
 
 ### Bug Fixes

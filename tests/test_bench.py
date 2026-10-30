@@ -116,6 +116,21 @@ def _patch_bench_run(monkeypatch, results: dict[str, str] | None = None) -> None
     monkeypatch.setattr(bench_module, "run_scenario", fake_run_scenario)
 
 
+@pytest.mark.parametrize("damage", [{"lap": 1}, {"lap": 1, "wing_pct": 60, "positions_lost": 4}])
+def test_damage_scenario_key(tmp_path: Path, damage: dict[str, int]) -> None:
+    path = _write_scenario(tmp_path, _scenario_data(mutations={"damage": damage}))
+    assert parse_scenario(path).mutations["damage"] == damage
+
+
+@pytest.mark.parametrize(
+    "damage", [{}, {"lap": True}, {"lap": 0}, {"lap": 1, "wing_pct": 101}, {"lap": 1, "extra": 2}]
+)
+def test_invalid_damage_scenario_key(tmp_path: Path, damage: dict[str, int]) -> None:
+    path = _write_scenario(tmp_path, _scenario_data(mutations={"damage": damage}))
+    with pytest.raises(ValueError):
+        parse_scenario(path)
+
+
 def test_parse_scenario_and_sort_by_id(tmp_path: Path) -> None:
     _write_scenario(tmp_path, _scenario_data(id="zeta"))
     _write_scenario(tmp_path, _scenario_data(id="alpha", mutations={}))

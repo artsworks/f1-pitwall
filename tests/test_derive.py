@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import math
 import struct
@@ -20,6 +21,8 @@ from pitwall.learning.learned import format_learned, learned_state
 from pitwall.learning.tune import tune_from_db
 from pitwall.model.deg import DegFit
 from pitwall.net.derive import (
+    Damage,
+    DeriveContext,
     InjectSafetyCar,
     Penalty,
     TeammatePit,
@@ -41,6 +44,7 @@ from pitwall.protocol.packets import (
     parse,
 )
 from pitwall.state.lap import LapSummary
+from pitwall.state.session import Damage as DamageView
 from pitwall.state.session import Snapshot
 from pitwall.store.db import Database, _uid_to_sql
 from pitwall.store.uids import SYNTHETIC_UID_TAG, derived_uid, is_synthetic_uid
@@ -50,6 +54,119 @@ from .race_synth import RaceSpec, race_stream
 from .synth import pack_packet, write_packet_stream
 
 SOURCE_UID = 0x1234_5678_9ABC_DEF0
+
+
+def test_damage_labels_distinguish_all_mutation_parameters() -> None:
+    ops = [Damage(1, 60, 4), Damage(1, 100, 4), Damage(1, 60, 3), Damage(2, 60, 4)]
+    assert ops[1].label == "damage=1:wing=100:positions=4"
+    assert len({derived_uid(SOURCE_UID, [op.label]) for op in ops}) == len(ops)
+
+
+@pytest.mark.parametrize(
+    "transient", [{"traffic": 1}, {"tyre_inner_c": 200.0}, {"sc_status": 1}, {"valid": False}]
+)
+def test_engine_damage_signal_excludes_transient_laps(transient: dict[str, object]) -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    fit = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    lap = LapSummary(2, 95_000, 30_000, 30_000, 17, 2, 10.0, True)
+    snap = Snapshot(now=1.0, race_phase="racing", lap_num=3, tyre_age_laps=3)
+    engine.state.laps.append(dataclasses.replace(lap, **transient))
+    assert engine._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps[-1] = lap
+    assert engine._plan_damage(snap, fit) == ("pace", 4800.0, 0.0)
+    db.close()
+
+
+def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    snap = Snapshot(
+        now=1.0,
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=16,
+        tyre_visual=17,
+        tyre_age_laps=0,
+        laps_of_pace=30.0,
+        pit_loss_s=20.0,
+        pit_loss_source="default",
+        position=5,
+        grid_position=5,
+    )
+    engine._plan(snap)
+    damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
+    result = engine._plan(damaged)
+    assert result.plan_switch_reason == "invalid"
+    assert result.plan_switched_from == "A"
+    assert result.active_plan == "B"
+    assert engine._plan_damage(damaged, engine._fresh_prior) == ("damage", 1200.0, 5.0)
+    repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
+    assert engine._plan_damage(repaired, engine._fresh_prior) == ("", 0.0, 0.0)
+    db.close()
+
+
+def test_engine_worsening_damage_recomputes_without_invalid_switch(monkeypatch) -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    snap = Snapshot(
+        now=1.0,
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=16,
+        tyre_visual=17,
+        laps_of_pace=30.0,
+        pit_loss_s=20.0,
+        pit_loss_source="default",
+    )
+    engine._plan(snap)
+    damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
+    initial = engine._plan(damaged)
+    count = engine.plan_tracker.state.switch_count
+    key = engine._plan_key
+    calls = []
+    tracker_type = type(engine.plan_tracker)
+    original = tracker_type.update
+
+    def capture(self, inp, th, **kwargs):
+        calls.append(inp)
+        return original(self, inp, th, **kwargs)
+
+    monkeypatch.setattr(tracker_type, "update", capture)
+    worsened = engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=100)))
+    assert engine._plan_key != key
+    assert len(calls) == 1
+    assert calls[0].damage_pace_ms == 2000.0
+    assert calls[0].wing_change_s == 5.0
+    assert engine.plan_tracker.state.switch_count == count
+    assert worsened.active_plan == initial.active_plan
+    engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=99)))
+    assert len(calls) == 1
+    db.close()
+
+
+def test_damage_mutation_rewrites_player_and_preserves_positions() -> None:
+    op = Damage(2, 60, 4)
+    ctx = DeriveContext(player_lap=1)
+    damage = pack_packet(PacketId.CAR_DAMAGE, session_uid=SOURCE_UID)
+    assert op.apply(damage, ctx) == [damage]
+    ctx.player_lap = 2
+    changed = op.apply(damage, ctx)[0]
+    for name in ("front_left_wing_damage", "front_right_wing_damage"):
+        assert changed[car_field_offset(PacketId.CAR_DAMAGE, 0, name)] == 60
+    lap = bytearray(pack_packet(PacketId.LAP_DATA, session_uid=SOURCE_UID))
+    offsets = [car_field_offset(PacketId.LAP_DATA, i, "car_position") for i in range(22)]
+    for i, offset in enumerate(offsets):
+        lap[offset] = i + 1
+    changed = op.apply(bytes(lap), ctx)[0]
+    assert changed[offsets[0]] == 5
+    assert sorted(changed[o] for o in offsets) == list(range(1, 23))
+    assert [changed[o] for o in offsets[1:5]] == [1, 2, 3, 4]
+    assert op.apply(b"", ctx) == [b""]
+    with pytest.raises(ValueError):
+        Damage(0)
 
 
 def _read_records(path) -> list[tuple[int, bytes]]:
