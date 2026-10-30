@@ -37,6 +37,7 @@ why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 
 - `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
+- The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
 - The bench finds the source by session UID in `--recordings` folders and checks its

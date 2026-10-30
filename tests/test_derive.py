@@ -170,6 +170,44 @@ def test_damage_mutation_rewrites_player_and_preserves_positions() -> None:
         Damage(0)
 
 
+def test_damage_mutation_stops_rewriting_wing_after_player_pit_stop() -> None:
+    op = Damage(1, 100, 2)
+    lap_before_stop = bytearray(
+        pack_packet(
+            PacketId.LAP_DATA,
+            {"cars": {0: {"current_lap_num": 2, "num_pit_stops": 0}}},
+            session_uid=SOURCE_UID,
+        )
+    )
+    positions = [car_field_offset(PacketId.LAP_DATA, i, "car_position") for i in range(22)]
+    for i, offset in enumerate(positions):
+        lap_before_stop[offset] = i + 1
+    lap_after_stop = bytearray(lap_before_stop)
+    lap_after_stop[car_field_offset(PacketId.LAP_DATA, 0, "num_pit_stops")] = 1
+    damage = pack_packet(
+        PacketId.CAR_DAMAGE,
+        {"cars": {0: {"front_left_wing_damage": 0, "front_right_wing_damage": 0}}},
+        session_uid=SOURCE_UID,
+    )
+    records = list(
+        derive_records(
+            [
+                (0, bytes(lap_before_stop)),
+                (1, damage),
+                (2, bytes(lap_after_stop)),
+                (3, damage),
+            ],
+            [op],
+        )
+    )
+
+    left_wing = car_field_offset(PacketId.CAR_DAMAGE, 0, "front_left_wing_damage")
+    assert records[1][1][left_wing] == 100
+    assert records[3][1][left_wing] == 0
+    assert records[2][1][positions[0]] == 3
+    assert sorted(records[2][1][offset] for offset in positions) == list(range(1, 23))
+
+
 def _read_records(path) -> list[tuple[int, bytes]]:
     with RecordingReader(path) as reader:
         return list(reader.records())
