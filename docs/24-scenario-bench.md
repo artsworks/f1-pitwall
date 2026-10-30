@@ -158,17 +158,16 @@ All scenarios are targets. Each source recording is named by its session UID ins
 | `silverstone-sc-real` | Silverstone race, real safety car | Safety car calls on laps 8 to 11, no VSC calls |
 | `spa-wear-double` | Spa race, 11 laps | Tyre-life or stop call on laps 3 to 7 with doubled wear |
 | `zandvoort-race-real` | Zandvoort race, 18 laps | Plan on lap 1, a stop call before lap 7, no safety car calls |
+
 ## Backlog
 
-- A safety car on lap 1 or 2, before any stop makes sense.
-- A safety car in the last 3 laps. Pitwall must not call a stop.
-- A VSC inside the window. The stop saves less time than under a full safety car.
+- A VSC inside the window. The stop saves less time than under a full safety car. A stop call depends on tyre wear, position risk and laps left, so write the check against the rule inputs.
 - Two safety cars in one race.
-- Wear twice as fast, so that Plan B with two stops is faster.
-- A penalty in the last 3 laps, for the penalty cost and penalty covered calls.
+- Fix the two failing targets. `brazil-overcut` expects `overcut_stay_out` on laps 6 to 7 and gets none. `mexico-undercut` expects `box_now` on laps 5 to 8 and gets none.
+- Wear twice as fast, so that Plan B with two stops is faster. The Imola and Spa scenarios check tyre-life and stop calls, not Plan B.
 
 ## Limits
 
 - CI cannot run the bench, because recordings stay out of git. Run it on a machine that has the recordings, and put the output in the PR.
-- The starter set has one real race. `real_accuracy` stays empty until real scenarios give 5 or more graded outcomes. Add real races with a safety car and two stops.
+- The starter set has 9 real scenarios, but the last run graded 1 outcome. `real_accuracy` stays empty until real scenarios give 5 or more graded outcomes.
 - Scenarios use default priors. Calls with learned priors can be different.
