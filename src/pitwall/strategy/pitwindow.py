@@ -88,6 +88,7 @@ def race_time_s(
     cur_cliff_age: float,
     pit_loss_s: float,
     th: Mapping[str, object],
+    damage_pace_ms: float = 0.0,
 ) -> float:
     """Seconds to finish when stopping after `stop_after` more laps (None = never)."""
     cliff_pen = _f(th, "cliff_ms_per_lap", 1000)
@@ -95,7 +96,7 @@ def race_time_s(
     total = 0.0
     for j in range(laps_remaining):
         if stop_after is None or j < stop_after:
-            total += _lap_ms(cur, tyre_age + j, cur_cliff_age, cliff_pen)
+            total += _lap_ms(cur, tyre_age + j, cur_cliff_age, cliff_pen) + damage_pace_ms
         else:
             total += _lap_ms(fresh, j - stop_after, fresh_cliff, cliff_pen)
     if stop_after is not None:
@@ -127,6 +128,7 @@ def optimise(
     driver: DriverScale = NEUTRAL,
     mode: Mapping[str, object],
     th: Mapping[str, object],
+    damage_pace_ms: float = 0.0,
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
@@ -147,6 +149,7 @@ def optimise(
             cur_cliff_age=cur_cliff,
             pit_loss_s=pit_loss_s,
             th=th,
+            damage_pace_ms=damage_pace_ms,
         )
 
     no_stop = total(None)
@@ -199,6 +202,7 @@ def optimise(
             lost += (
                 _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
                 + driver.pace_cap_ms
+                + damage_pace_ms
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
         overcut_s = round(_f(th, "outlap_warmup_s", 0.8) - lost, 2)
@@ -214,6 +218,7 @@ def optimise(
         for j in range(uc_laps):
             their_gain += (
                 _lap_ms(fit, tyre_age + j, cur_cliff, _f(th, "cliff_ms_per_lap", 1000))
+                + damage_pace_ms
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
         cover_s = round(their_gain - _f(th, "outlap_warmup_s", 0.8) - cover_gap_s, 2)
@@ -400,6 +405,8 @@ def optimise(
         return plan("stay", lap_num + best_k, delay_gain, "Traffic behind", risky=False)
     if best_k == 0:
         reason = "Tyres are done" if laps_of_pace < 1 else "This is the lap"
+        if damage_pace_ms > 0:
+            reason = "Damage, stop to restore pace"
         return plan("box_now", lap_num, delay_gain, reason)
     if best_k <= _f(th, "box_in_max_laps", 3):
         return plan("box_in_n", lap_num + best_k, delay_gain, "Window open soon")

@@ -445,6 +445,8 @@ class Engine:
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[Any, ...] | None = None
+        self._damage_pace_ms = 0.0
+        self._damage_stops = 0
         self._stops_done = 0
         self._prev_pit_status = 0
         self._stop_expect: tuple[str, str, int] | None = None
@@ -984,6 +986,8 @@ class Engine:
         self.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
+        self._damage_pace_ms = 0.0
+        self._damage_stops = 0
         self._plan_mc_cache.clear()
         self.battle_tracker.reset()
         self._battle_rates = None
@@ -1864,6 +1868,54 @@ class Engine:
             )
         )
 
+    def _plan_damage(self, snap: Snapshot, fit: DegFit) -> tuple[str, float, float]:
+        if snap.num_pit_stops != self._damage_stops:
+            self._damage_pace_ms = 0.0
+            self._damage_stops = snap.num_pit_stops
+        if snap.race_phase not in ("racing", "sc", "vsc"):
+            return "", 0.0, 0.0
+        wing_pct = max(snap.damage.front_left_wing, snap.damage.front_right_wing)
+        wing = wing_pct >= self._th("plan_damage_wing_pct", 15)
+        tyre = bool(snap.puncture_corner)
+        last = self.state.laps[-1] if self.state.laps else None
+        measured = None
+        if (
+            last is not None
+            and usable_laps(
+                [lap_row_from_summary(snap.session_uid, 0, last)],
+                self._thermal_hi_c(snap.track_id, last.compound, self.store.current()),
+            )
+            and last.lap_num > 1
+            and last.sc_status == 0
+            and last.lap_num == snap.lap_num - 1
+            and snap.tyre_age_laps > 0
+        ):
+            age = last.tyre_age_laps
+            predicted = fit.base_ms + fit.deg_ms_per_lap * age + fit.deg2_ms_per_lap2 * age**2
+            measured = max(0.0, last.lap_time_ms - predicted)
+        pace = measured is not None and measured >= self._th("plan_damage_pace_ms", 1500)
+        positions = (
+            0 < snap.lap_num <= self._th("plan_rebuild_max_lap", 2)
+            and snap.grid_position > 0
+            and snap.position > 0
+            and snap.position - snap.grid_position >= self._th("plan_rebuild_positions_lost", 3)
+        )
+        cause = "damage" if wing or tyre else "pace" if pace else "positions" if positions else ""
+        penalty = 0.0
+        if wing or tyre:
+            penalty = max(
+                measured or 0.0,
+                wing_pct * self._th("damage_pace_ms_per_wing_pct", 20) if wing else 0.0,
+                self._th("damage_tyre_pace_ms", 1500) if tyre and measured is None else 0.0,
+            )
+        elif pace:
+            penalty = measured or 0.0
+        self._damage_pace_ms = max(self._damage_pace_ms, penalty)
+        penalty = self._damage_pace_ms
+        if not cause and penalty > 0:
+            cause = "pace"
+        return cause, penalty, self._th("pit_wing_change_s", 5.0) if wing else 0.0
+
     def _plan(self, snap: Snapshot) -> Snapshot:
         """Run the pit-window optimiser on the fresh snapshot and fold the
         plan into both the snapshot and the next ModelView."""
@@ -1871,7 +1923,9 @@ class Engine:
         if not snap.race_phase or self._fresh_prior is None:
             return snap
         if fit is None:
-            return self._plans(snap, self._fresh_prior, NO_PLAN)
+            if self._plan_damage(snap, self._fresh_prior)[1] <= 0:
+                return self._plans(snap, self._fresh_prior, NO_PLAN)
+            fit = self._fresh_prior
         fit = planning_fit(fit, self._fresh_prior, self._th("deg_rmse_bad_ms", 800))
         settings = self.store.current()
         ahead = (
@@ -1888,6 +1942,7 @@ class Engine:
         raw_mode = resolve_mindset(settings.mindsets, self.mindset)
         drv = self._driver_scale(settings, raw_mode)
         mode = self.mode()
+        _, damage_pace_ms, wing_loss_s = self._plan_damage(snap, fit)
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -1896,7 +1951,8 @@ class Engine:
             fit=fit,
             fresh=self._fresh_prior,
             laps_of_pace=snap.laps_of_pace,
-            pit_loss_s=snap.pit_loss_s,
+            pit_loss_s=snap.pit_loss_s + wing_loss_s,
+            damage_pace_ms=damage_pace_ms,
             pit_loss_source=snap.pit_loss_source,
             green_pit_loss_s=self._green_pit_loss_s,
             sc_status=snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0,
@@ -1926,6 +1982,8 @@ class Engine:
                 plan.lap,
                 age_slot,
                 threshold(mode, "pit_gain_min_s", 1.0),
+                damage_pace_ms,
+                wing_loss_s,
                 plan.plan,
                 plan.rival_idx,
                 mc_sims,
@@ -1942,7 +2000,8 @@ class Engine:
                     fit=fit,
                     fresh=self._fresh_prior,
                     cur_cliff_age=snap.tyre_age_laps + snap.laps_of_pace,
-                    pit_loss_s=snap.pit_loss_s,
+                    pit_loss_s=snap.pit_loss_s + wing_loss_s,
+                    damage_pace_ms=damage_pace_ms,
                     pit_loss_samples_s=self._green_pit_samples_s,
                     sc_pit_loss_s=self._sc_pit_loss_s,
                     plan_lap=plan.lap,
@@ -2072,6 +2131,7 @@ class Engine:
             self._used_compounds.add(snap.tyre_visual)
             neutral = phase in ("sc", "vsc")
             cheap = pit.plan == "cheap_stop"
+            invalidate, damage_pace_ms, wing_loss_s = self._plan_damage(snap, cur)
             key = (
                 snap.lap_num,
                 self._stops_done,
@@ -2079,6 +2139,9 @@ class Engine:
                 cheap,
                 snap.tyre_visual,
                 self.mindset,
+                invalidate,
+                round(damage_pace_ms / 100),
+                round(wing_loss_s, 1),
                 snap.is_sprint,
             )
             if key != self._plan_key:
@@ -2103,12 +2166,15 @@ class Engine:
                         used=frozenset(self._used_compounds),
                         green_loss_s=self._green_pit_loss_s or snap.pit_loss_s,
                         sc_loss_s=self._sc_pit_loss_s or snap.pit_loss_s,
+                        wing_change_s=wing_loss_s,
+                        damage_pace_ms=damage_pace_ms,
                     ),
                     self._plan_thresholds(snap),
                     stops_done=self._stops_done,
                     neutralised=neutral,
                     cheap_stop=cheap,
                     reseed=reseed,
+                    invalidate=invalidate,
                 )
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)

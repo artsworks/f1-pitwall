@@ -44,6 +44,8 @@ class PlanInputs:
     used: frozenset[int]  # visual compounds already raced this session
     green_loss_s: float
     sc_loss_s: float
+    damage_pace_ms: float = 0.0
+    wing_change_s: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +186,15 @@ def evaluate(
     warm = _f(th, "outlap_warmup_s", 0.8)
     loss_ms = (inp.green_loss_s + warm) * 1000.0
     first_ms = (first_loss_s + warm) * 1000.0 if first_loss_s is not None else loss_ms
-    cur = _cum(inp.cur.base_ms, inp.cur.deg_ms_per_lap, inp.tyre_age, r, inp.cur_cliff_age, pen)
+    first_ms += inp.wing_change_s * 1000.0
+    cur = _cum(
+        inp.cur.base_ms + inp.damage_pace_ms,
+        inp.cur.deg_ms_per_lap,
+        inp.tyre_age,
+        r,
+        inp.cur_cliff_age,
+        pen,
+    )
     if stops == 0:
         sd_ms = inp.cur.deg_posterior_sd_ms_per_lap * _age_sum(inp.tyre_age, r)
         return PlanEval(seq, (), (0, 0), cur[r] / 1000.0, sd_ms / 1000.0)
@@ -317,6 +327,9 @@ class PlanTracker:
     target_ref: int = 0
     state: PlanState = NO_STATE
     events: list[PlanEvent] = field(default_factory=list)
+    invalidated: set[str] = field(default_factory=set)
+    pending_invalid: str = ""
+    invalid_stops: int = 0
 
     def reset(self) -> None:
         self.seqs.clear()
@@ -331,6 +344,9 @@ class PlanTracker:
         self.target_ref = 0
         self.state = NO_STATE
         self.events.clear()
+        self.invalidated.clear()
+        self.pending_invalid = ""
+        self.invalid_stops = 0
 
     def drain(self) -> list[PlanEvent]:
         out = list(self.events)
@@ -368,6 +384,7 @@ class PlanTracker:
         neutralised: bool,
         cheap_stop: bool,
         reseed: bool = False,
+        invalidate: str = "",
     ) -> PlanState:
         """`reseed` rebuilds A/B from the current ranking (mindset change),
         based at `stops_done` so completed stops are not replayed."""
@@ -375,6 +392,28 @@ class PlanTracker:
         if not ranked:
             return self.state
         lap = inp.lap_num
+        if stops_done != self.invalid_stops:
+            self.invalidated.clear()
+            self.pending_invalid = ""
+            self.invalid_stops = stops_done
+        if invalidate and invalidate not in self.invalidated:
+            self.pending_invalid = invalidate
+        invalid = bool(self.pending_invalid) and not neutralised and bool(self.seqs)
+        if invalid:
+            self.invalidated.add(self.pending_invalid)
+            self.pending_invalid = ""
+        if invalid and self.seqs and not reseed:
+            to = "B" if self.active != "B" else "A"
+            other_slot = "A" if to == "B" else "B"
+            a = ranked[0]
+            self.seqs.clear()
+            self.kinds.clear()
+            self._set(to, "primary", stops_done, a)
+            z = 0.0 if th.get("plan_pick") == "gain" else NormalDist().inv_cdf(risk_quantile(th))
+            b = alternative(ranked, a, z)
+            if b is not None:
+                self._set(other_slot, "alternative", stops_done, b)
+            self._switch(to, "invalid", lap, 0.0, a)
         if not self.seqs or reseed:
             reason = "mindset" if self.seqs else "start"
             prev = self.active
