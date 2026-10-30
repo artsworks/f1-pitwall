@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.41.1 (2026-10-30)
+
+### Bug Fixes
+
+- **bench**: Clear damage mutation wing at the next pit stop
+  ([#154](https://github.com/artsworks/f1-pitwall/pull/154),
+  [`56ac474`](https://github.com/artsworks/f1-pitwall/commit/56ac47451371308ae8637f7cab35d481a32255a5))
+
+
 ## v0.41.0 (2026-10-30)
 
 ### Bug Fixes
