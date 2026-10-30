@@ -20,6 +20,7 @@ from pitwall.learning.learned import format_learned, learned_state
 from pitwall.learning.tune import tune_from_db
 from pitwall.model.deg import DegFit
 from pitwall.net.derive import (
+    InjectRivalPit,
     InjectSafetyCar,
     Penalty,
     UidRewrite,
@@ -220,6 +221,37 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
     assert sum(event.code == "PENA" for event in events) == 1
     assert session_statuses and {0, 1} <= set(session_statuses)
     assert green_sessions == 1
+
+
+@pytest.mark.parametrize("side", ["ahead", "behind"])
+def test_inject_rival_pit_flags_the_neighbour_on_the_chosen_lap_only(tmp_path, side) -> None:
+    source = _write_race(tmp_path / "source.f1bin", SOURCE_UID, laps=5)
+    records = _read_records(source)
+    mutated = list(derive_records(records, [InjectRivalPit(3, side)]))
+    assert len(mutated) == len(records)
+    flagged_laps: set[int] = set()
+    for (_, before), (_, after) in zip(records, mutated, strict=True):
+        header = parse_header(before)
+        if header.packet_id != PacketId.LAP_DATA:
+            assert after == before
+            continue
+        player = header.player_car_index
+        lap = before[car_field_offset(PacketId.LAP_DATA, player, "current_lap_num")]
+        changed = [
+            car
+            for car in range(22)
+            if after[car_field_offset(PacketId.LAP_DATA, car, "pit_status")]
+            != before[car_field_offset(PacketId.LAP_DATA, car, "pit_status")]
+        ]
+        if not changed:
+            continue
+        flagged_laps.add(lap)
+        position = before[car_field_offset(PacketId.LAP_DATA, player, "car_position")]
+        assert [
+            before[car_field_offset(PacketId.LAP_DATA, car, "car_position")] for car in changed
+        ] == [position + (-1 if side == "ahead" else 1)]
+        assert after[car_field_offset(PacketId.LAP_DATA, changed[0], "pit_status")] == 1
+    assert flagged_laps <= {3}
 
 
 def test_malformed_short_and_unrelated_packets_pass_through(tmp_path) -> None:

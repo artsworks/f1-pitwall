@@ -93,6 +93,16 @@ def test_overheated_laps_are_excluded() -> None:
     assert unfiltered.deg_ms_per_lap > fit.deg_ms_per_lap + 50.0
 
 
+def test_thermal_cutoff_is_ignored_when_it_leaves_too_few_laps() -> None:
+    laps = [replace(_lap(age, 90_000 + 100 * age), tyre_inner_c=96.0 + age) for age in range(1, 7)]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0, thermal_hi_c=90.0)
+
+    assert fit.source != "prior"
+    assert fit.n == 6
+    assert fit.deg_ms_per_lap == pytest.approx(100.0)
+
+
 def test_quadratic_fit_captures_accelerating_degradation() -> None:
     laps = [_lap(age, 90_000 + 20 * age + 6 * age**2) for age in range(12)]
 

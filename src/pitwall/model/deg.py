@@ -178,6 +178,8 @@ def fit_stint(
 ) -> DegFit:
     """OLS refit of a stint's valid laps; blend with the prior while short."""
     usable = usable_laps(laps, thermal_hi_c)
+    if len(usable) < min_laps:
+        usable = usable_laps(laps)
     n = len(usable)
     if n < min_laps:
         return DegFit(
