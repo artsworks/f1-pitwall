@@ -98,6 +98,13 @@ thresholds:
   cool_ers_need_max_pct: 70  # cap on the learned battery need
   # Interlagos quali recordings: hot laps burn 0.92-1.01 laps. Cool laps
   # burn 0.87-0.95. Require fuel for one hot lap or cool + hot at the line.
+  plan_damage_wing_pct: 15  # wing damage that rebuilds strategy plans
+  plan_damage_pace_ms: 1500 # valid green lap deficit that rebuilds plans
+  plan_rebuild_max_lap: 2   # last lap for incident position-loss rebuilds
+  plan_rebuild_positions_lost: 3 # places lost from the grid to rebuild plans
+  damage_pace_ms_per_wing_pct: 20 # current-set lap penalty per wing damage point
+  damage_tyre_pace_ms: 1500 # tyre damage penalty before a valid measured lap
+  pit_wing_change_s: 5.0    # extra pit loss to replace a damaged wing
   fuel_push_need_laps: 1.1   # one more hot lap
   fuel_cool_need_laps: 2.1   # cool + hot lap
   slow_car_warn_s: 5         # hot lap: warn when a slow car ahead is this many seconds from being caught
