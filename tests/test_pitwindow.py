@@ -160,6 +160,28 @@ def test_sc_cheap_stop_needs_wear() -> None:
     assert fresh.plan != "cheap_stop"
 
 
+def test_sc_cheap_stop_inside_open_window_below_wear_gate() -> None:
+    # brazil-sc-in-window: lap 10, 9-lap-old mediums at the 2.5 %/lap default
+    # (22.5 % wear), 7 laps left, window already open.
+    kw = dict(
+        lap_num=10,
+        laps_remaining=7,
+        tyre_age=9,
+        wear_mean=22.5,
+        fit=fit(150),
+        laps_of_pace=3.0,
+        pit_loss_s=11.0,
+        green_pit_loss_s=21.0,
+        sc_status=1,
+    )
+    p = run(**kw)
+    assert p.window[0] <= 10 <= p.window[1]
+    assert p.plan == "cheap_stop"
+    assert p.gain_s == pytest.approx(10.0)
+    fresh = run(**{**kw, "tyre_age": 2, "wear_mean": 5.0, "laps_of_pace": 30.0})
+    assert fresh.plan != "cheap_stop"
+
+
 def test_aggressive_sc_stop_lower_wear() -> None:
     p = run(sc_status=2, wear_mean=30.0, pit_loss_s=11.0, mode=AGGRESSIVE)
     assert p.plan == "cheap_stop"

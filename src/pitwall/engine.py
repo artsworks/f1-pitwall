@@ -1849,7 +1849,7 @@ class Engine:
             pit_loss_s=snap.pit_loss_s,
             pit_loss_source=snap.pit_loss_source,
             green_pit_loss_s=self._green_pit_loss_s,
-            sc_status=snap.safety_car_status,
+            sc_status=snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0,
             rival_ahead=ahead,
             rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
