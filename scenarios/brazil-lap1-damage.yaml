@@ -11,4 +11,6 @@ expect:
   fire:
     - {rule: plan_invalid, laps: [1, 2]}
     - {rule: plan_target_lap, laps: [1, 2]}
+  absent:
+    - {rule: plan_invalid, laps: [3, 11]}
 why: A lost wing on lap 1 makes stopping now faster than limping, so the plans rebuild and the target moves to now.

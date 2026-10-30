@@ -35,6 +35,7 @@ _NUM_CARS = 22
 @dataclass(slots=True)
 class DeriveContext:
     player_lap: int | None = None
+    player_pit_stops: int | None = None
     last_session: bytes | None = None
     safety_events: dict[tuple[int, int, bool], set[str]] = field(default_factory=dict)
     penalty_emitted: set[int] = field(default_factory=set)
@@ -74,6 +75,7 @@ def _update_player_lap(payload: bytes, ctx: DeriveContext) -> None:
         return
     player = payload[PLAYER_CAR_INDEX_OFFSET]
     ctx.player_lap = payload[car_field_offset(PacketId.LAP_DATA, player, "current_lap_num")]
+    ctx.player_pit_stops = payload[car_field_offset(PacketId.LAP_DATA, player, "num_pit_stops")]
 
 
 @dataclass(slots=True)
@@ -284,6 +286,7 @@ class Damage:
     wing_pct: int = 0
     positions_lost: int = 0
     label: str = field(init=False)
+    _stops: int | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         if any(type(v) is not int for v in (self.lap, self.wing_pct, self.positions_lost)):
@@ -306,9 +309,17 @@ class Damage:
             or ctx.player_lap < self.lap
         ):
             return [payload]
+        if self._stops is None and ctx.player_pit_stops is not None:
+            self._stops = ctx.player_pit_stops
         player = header.player_car_index
         rewritten = bytearray(payload)
         if header.packet_id == PacketId.CAR_DAMAGE:
+            if (
+                self._stops is not None
+                and ctx.player_pit_stops is not None
+                and ctx.player_pit_stops > self._stops
+            ):
+                return [payload]
             for name in ("front_left_wing_damage", "front_right_wing_damage"):
                 offset = car_field_offset(PacketId.CAR_DAMAGE, player, name)
                 rewritten[offset] = max(rewritten[offset], self.wing_pct)
