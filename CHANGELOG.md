@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.39.1 (2026-10-30)
+
+### Bug Fixes
+
+- **strategy**: Call the SC cheap stop when the plan still owes a stop
+  ([#148](https://github.com/artsworks/f1-pitwall/pull/148),
+  [`51ec827`](https://github.com/artsworks/f1-pitwall/commit/51ec827f18520f09020391a933d53e5374d357ca))
+
+
 ## v0.39.0 (2026-10-30)
 
 ### Bug Fixes
