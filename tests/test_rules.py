@@ -487,7 +487,7 @@ def test_neutralisation_pit_rules_respect_stop_gates(rule_id: str, phase: str, f
         ("sc_escalated_box", "sc", "sc_escalated"),
     ],
 )
-def test_neutralisation_pit_rules_respect_confidence_and_risk_gates(
+def test_neutralisation_pit_rules_respect_risk_and_allow_low_confidence(
     rule_id: str, phase: str, flag: str
 ) -> None:
     fields = {
@@ -507,12 +507,15 @@ def test_neutralisation_pit_rules_respect_confidence_and_risk_gates(
     }
     fields[flag] = True
 
-    for changed in (
-        {"pit_plan_risk": 0.8},
-        {"pit_plan_confidence": 0.0, "laps_of_pace": 1},
-    ):
-        result = _default_rule_engine().evaluate(_rule_snapshot(**(fields | changed)))
-        assert rule_id not in {candidate.rule.defn.id for candidate in result.candidates}
+    high_risk = _default_rule_engine().evaluate(_rule_snapshot(**(fields | {"pit_plan_risk": 0.8})))
+    assert rule_id not in {candidate.rule.defn.id for candidate in high_risk.candidates}
+
+    low_confidence = _default_rule_engine().evaluate(
+        _rule_snapshot(
+            **(fields | {"pit_plan_confidence": 0.6, "laps_of_pace": 1, "pit_plan_risk": 0.0})
+        )
+    )
+    assert rule_id in {candidate.rule.defn.id for candidate in low_confidence.candidates}
 
 
 def test_overcut_defend_rule_fires() -> None:

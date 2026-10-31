@@ -674,7 +674,7 @@ rules:
     urgency: execution
     decision_point: pit_entry
     supersedes: [box_now]
-    when: "phase == 'vsc' and sc_ending and pit_status == 0 and pit_plan == 'cheap_stop' and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    when: "phase == 'vsc' and sc_ending and pit_status == 0 and pit_plan == 'cheap_stop' and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
     clear_when: "not sc_ending or pit_status != 0 or pit_plan != 'cheap_stop'"
     still_true: "phase == 'vsc' and sc_ending and pit_plan == 'cheap_stop'"
     cooldown_s: 45
@@ -695,7 +695,7 @@ rules:
     urgency: execution
     decision_point: pit_entry
     supersedes: [box_now]
-    when: "phase == 'sc' and sc_escalated and pit_status == 0 and pit_plan == 'cheap_stop' and (pit_plan_confidence >= mode.pit_confidence_min or laps_of_pace < 1) and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    when: "phase == 'sc' and sc_escalated and pit_status == 0 and pit_plan == 'cheap_stop' and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
     clear_when: "not sc_escalated or pit_status != 0 or pit_plan != 'cheap_stop'"
     still_true: "phase == 'sc' and sc_escalated and pit_plan == 'cheap_stop'"
     cooldown_s: 45
