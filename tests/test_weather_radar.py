@@ -140,6 +140,33 @@ def test_rain_heads_up_softens_approximate_forecast(tmp_path) -> None:
 
 
 @pytest.mark.replay
+def test_rain_heads_up_ignores_forecast_beyond_race_horizon(tmp_path) -> None:
+    spec = RaceSpec(
+        laps=4,
+        base_ms=90_000,
+        rain_lap=3,
+        rain_percentages=(45, 45),
+        player_history=True,
+    )
+    _, rows = replay_race(tmp_path, spec)
+    assert "weather_rain_soon" not in _fired(rows)
+
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    snapshots = {}
+    last_lap = 0
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.lap_num != last_lap:
+            last_lap = state.lap_num
+            if last_lap == 3:
+                snapshots[last_lap] = state.snapshot(session_time)
+
+    assert snapshots[3].rain_soon_pct == 0
+
+
+@pytest.mark.replay
 def test_inter_forecast_keeps_standard_wording_for_perfect_accuracy(tmp_path) -> None:
     _, rows = replay_race(
         tmp_path,

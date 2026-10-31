@@ -2067,7 +2067,8 @@ class SessionState:
             (
                 (pct, offset)
                 for pct, offset in ahead
-                if offset <= self._th("rain_heads_up_max_min", 15.0)
+                if offset <= horizon
+                and offset <= self._th("rain_heads_up_max_min", 15.0)
                 and pct >= self._th("rain_heads_up_pct", 40.0)
             ),
             key=lambda sample: sample[1],
