@@ -127,6 +127,8 @@ thresholds:
   cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
   ers_recharge_mode: 0       # ers_deploy_mode value for recharge (Q3 recording: battery only rises in 0); -1 = don't check
   cool_recharge_full_pct: 95 # battery at or above this on a cool lap: stop asking for recharge mode
+  # Track-limit escalation chain
+  track_limits_flag_warnings: 3 # initial black-and-white warning, next offence brings a penalty
   # SC/VSC restart procedures (sc-restart)
   sc_delta_warn_s: -0.1   # SC/VSC delta below this is too fast (penalty risk)
   sc_delta_clear_s: 0.3   # re-arm once the delta is back above this

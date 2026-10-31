@@ -334,6 +334,7 @@ class RuleDefModel(BaseModel):
     when: str
     clear_when: str | None = None
     still_true: str | None = None
+    retry_on_suppression: bool = False  # rearm after budget or focus suppression
     cooldown_s: float = 0.0
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     conflict_group: str = ""  # queued calls in one group: only the one still true is kept

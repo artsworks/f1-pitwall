@@ -1,0 +1,17 @@
+id: austria-track-limits
+title: Track-limit warnings at one, two and three before a penalty
+status: guard
+source:
+  session_uid: "0xdeadbeef"
+  sha256: "321d90a4d572b7576d1f7672aee2ac0fb2f1063b76f59d40bf97b8d73ad5c707"
+  where: "Synthetic Austria stream from tests.synth.track_limits_scenario, written with wall_clock_start_us=0. See docs/research/track-limits.md."
+expect:
+  fire:
+    - {rule: track_limit_warning, laps: [2, 2]}
+    - {rule: track_limit_second_warning, laps: [3, 3]}
+    - {rule: track_limit_last_warning, laps: [4, 4]}
+    - {rule: penalty_track_limits, laps: [5, 5]}
+  absent:
+    - {rule: track_limit_last_warning, laps: [1, 3]}
+    - {rule: [track_limit_warning, track_limit_second_warning, track_limit_last_warning], laps: [5, 6]}
+why: The shared warning count reaches 1, 2 and 3 on laps 2, 3 and 4. The fourth offence on lap 5 carries a real time-penalty event. Warning calls must not wrap around after a penalty.
