@@ -1705,7 +1705,12 @@ class Engine:
                 else []
             )
             sc = current_pit_loss(
-                self.db, state.session_uid, track_id, 1, overlay, settings.thresholds
+                self.db,
+                state.session_uid,
+                track_id,
+                2 if state.safety_car_status == 2 else 1,
+                overlay,
+                settings.thresholds,
             )
             self._sc_pit_loss_s = sc.value / 1000.0
             self._compound_priors.clear()
@@ -2147,7 +2152,7 @@ class Engine:
             key = (
                 snap.lap_num,
                 self._stops_done,
-                neutral,
+                phase if neutral else "",
                 cheap,
                 snap.tyre_visual,
                 self.mindset,

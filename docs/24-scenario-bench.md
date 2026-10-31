@@ -35,7 +35,8 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `escalate_sc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
+- `escalate_sc: LAP` changes a VSC to a full safety car on that lap. It requires `vsc: true` and a lap inside the `inject_sc` window.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
 - The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
@@ -129,7 +130,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 
 | Mutation | Trust | Do not trust |
 |---|---|---|
-| `inject_sc`, `vsc` | Order and timing of safety car calls, plan and box calls under a safety car | Gaps, positions and rival calls, because the field does not bunch up |
+| `inject_sc`, `vsc`, `escalate_sc` | Order and timing of safety car calls, plan and box calls under a safety car | Gaps, positions and rival calls, because the field does not bunch up |
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
 | `damage` | Plan invalidation and box calls after wing damage or position loss | Pace and gap calls, because lap times do not change |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
@@ -147,6 +148,8 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
 | `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
+| `brazil-vsc-in-window` | target | VSC-ending call and box call on the last VSC lap |
+| `brazil-vsc-to-sc` | target | VSC-to-SC escalation call on lap 11 |
 | `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
 | `brazil-worn-tyres-late-stop` | guard | No second stop with two laps left |
@@ -158,7 +161,6 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 
 - A safety car on lap 1 or 2, before any stop makes sense.
 - A safety car in the last 3 laps. Pitwall must not call a stop.
-- A VSC inside the window. The stop saves less time than under a full safety car.
 - Two safety cars in one race.
 - Wear twice as fast, so that Plan B with two stops is faster.
 - A penalty in the last 3 laps, for the penalty cost and penalty covered calls.

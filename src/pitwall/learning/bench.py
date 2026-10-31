@@ -130,6 +130,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
         {
             "inject_sc",
             "vsc",
+            "escalate_sc",
             "wear_scale",
             "penalty",
             "damage",
@@ -160,6 +161,9 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
     vsc = mutations.get("vsc", False)
     if not isinstance(vsc, bool):
         raise ValueError(f"{path}: mutations.vsc must be a boolean")
+    escalate_sc = mutations.get("escalate_sc")
+    if escalate_sc is not None and type(escalate_sc) is not int:
+        raise ValueError(f"{path}: mutations.escalate_sc must be an integer")
     penalty = mutations.get("penalty")
     if penalty is not None and (isinstance(penalty, bool) or not isinstance(penalty, int)):
         raise ValueError(f"{path}: mutations.penalty must be an integer")
@@ -178,6 +182,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 rival_pit=rival_pit,
                 teammate_pit=teammate_pit,
                 damage=damage,
+                escalate_sc=escalate_sc,
             )
             if mutations
             else []

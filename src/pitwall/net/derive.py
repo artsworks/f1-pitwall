@@ -38,7 +38,7 @@ class DeriveContext:
     player_pit_stops: int | None = None
     teammate_idx: int | None = None
     last_session: bytes | None = None
-    safety_events: dict[tuple[int, int, bool], set[str]] = field(default_factory=dict)
+    safety_events: dict[tuple[int, int, bool, int | None], set[str]] = field(default_factory=dict)
     penalty_emitted: set[int] = field(default_factory=set)
     penalty_seconds: dict[int, int] = field(default_factory=dict)
 
@@ -145,10 +145,15 @@ class InjectSafetyCar:
     end_lap: int
     vsc: bool = False
     lap_time_factor: float = 1.4
+    escalate_lap: int | None = None
     label: str = field(init=False)
 
     def __post_init__(self) -> None:
-        self.label = f"inject_sc={self.start_lap}-{self.end_lap}" + (":vsc" if self.vsc else "")
+        self.label = (
+            f"inject_sc={self.start_lap}-{self.end_lap}"
+            + (":vsc" if self.vsc else "")
+            + (f">sc@{self.escalate_lap}" if self.escalate_lap is not None else "")
+        )
 
     def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
         header = _header(payload)
@@ -163,7 +168,9 @@ class InjectSafetyCar:
         rewritten = bytearray(payload)
         extra: list[bytes] = []
         session_copy: bytes | None = None
-        status = ctx.safety_events.setdefault((self.start_lap, self.end_lap, self.vsc), set())
+        status = ctx.safety_events.setdefault(
+            (self.start_lap, self.end_lap, self.vsc, self.escalate_lap), set()
+        )
         if ctx.player_lap is not None and ctx.player_lap >= self.start_lap:
             if "deployed" not in status:
                 status.add("deployed")
@@ -174,13 +181,25 @@ class InjectSafetyCar:
                         struct.pack("<BB", 2 if self.vsc else 1, 0),
                     )
                 )
+            if (
+                self.escalate_lap is not None
+                and ctx.player_lap >= self.escalate_lap
+                and "escalated" not in status
+            ):
+                status.add("escalated")
+                extra.append(_event_from(payload, b"SCAR", struct.pack("<BB", 1, 0)))
+            event_type = (
+                2
+                if self.vsc and (self.escalate_lap is None or ctx.player_lap < self.escalate_lap)
+                else 1
+            )
             if ctx.player_lap == self.end_lap and "returning" not in status:
                 status.add("returning")
                 extra.append(
                     _event_from(
                         payload,
                         b"SCAR",
-                        struct.pack("<BB", 2 if self.vsc else 1, 1),
+                        struct.pack("<BB", event_type, 1),
                     )
                 )
             if ctx.player_lap > self.end_lap and "returned" not in status:
@@ -189,7 +208,7 @@ class InjectSafetyCar:
                     _event_from(
                         payload,
                         b"SCAR",
-                        struct.pack("<BB", 2 if self.vsc else 1, 2),
+                        struct.pack("<BB", event_type, 2),
                     )
                 )
         if (
@@ -198,7 +217,11 @@ class InjectSafetyCar:
             and ctx.player_lap is not None
             and self.start_lap <= ctx.player_lap <= self.end_lap
         ):
-            rewritten[SESSION_SAFETY_CAR_STATUS_OFFSET] = 2 if self.vsc else 1
+            rewritten[SESSION_SAFETY_CAR_STATUS_OFFSET] = (
+                2
+                if self.vsc and (self.escalate_lap is None or ctx.player_lap < self.escalate_lap)
+                else 1
+            )
         elif (
             header.packet_id == PacketId.LAP_DATA
             and len(payload) == PACKET_SIZES[PacketId.LAP_DATA]
@@ -449,8 +472,13 @@ def ops_from_options(
     rival_pit: str | None = None,
     teammate_pit: int | None = None,
     damage: dict[str, int] | None = None,
+    escalate_sc: int | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
+    if escalate_sc is not None and type(escalate_sc) is not int:
+        raise ValueError("--escalate-sc must be an integer")
+    if escalate_sc is not None and not vsc:
+        raise ValueError("--escalate-sc requires --vsc")
     if wear_scale is not None:
         ops.append(WearScale(wear_scale))
     if inject_sc is not None:
@@ -459,7 +487,9 @@ def ops_from_options(
         end_lap = int(end) if separator else start_lap + 2
         if start_lap < 1 or end_lap < start_lap:
             raise ValueError("--inject-sc requires positive, ascending lap numbers")
-        ops.append(InjectSafetyCar(start_lap, end_lap, vsc=vsc))
+        if escalate_sc is not None and not start_lap < escalate_sc <= end_lap:
+            raise ValueError("--escalate-sc requires start_lap < escalate_sc <= end_lap")
+        ops.append(InjectSafetyCar(start_lap, end_lap, vsc=vsc, escalate_lap=escalate_sc))
     elif vsc:
         raise ValueError("--vsc requires --inject-sc")
     if penalty is not None:

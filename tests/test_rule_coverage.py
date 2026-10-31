@@ -67,6 +67,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "quali_safe_cut",
         "quali_safe_pole",
         "saved_moment",
+        "sc_escalated_box",
         "setup_bias",
         "setup_on_throttle",  # replay scenario unresolved: high slip did not yield advice
         "setup_stop_wing",  # replay scenario unresolved: stop setup did not yield advice

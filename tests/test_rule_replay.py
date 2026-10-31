@@ -303,6 +303,10 @@ _CASES = [
         RaceSpec(laps=8, base_ms=12_000, rival_behind_pit_lap=3, gap_behind_s=1.0),
     ),
     (
+        "vsc_ending_box",
+        RaceSpec(laps=17, sc_laps=(10, 11), vsc=True),
+    ),
+    (
         "weather_to_wet",
         RaceSpec(laps=8, base_ms=12_000, rain_lap=3, rain_percentages=(100, 100)),
     ),

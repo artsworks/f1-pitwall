@@ -20,6 +20,7 @@ mutations:
 - `wear_scale: X` multiplies Car Damage `tyres_wear` and `tyres_damage` for every car. Values stay between 0 and 100.
 - `inject_sc: "START[-END]"` adds a safety car for the selected laps. The default end is two laps after the start. The mutation adds `SCAR` events and increases lap time inside the window.
 - `vsc: true` changes the safety-car status to VSC.
+- `escalate_sc: LAP` changes a VSC to a full safety car on that lap. Use it with `vsc: true`.
 - `penalty: LAP` adds a 5 s `PENA` event for the player and increases the player's penalty total from that lap.
 - A rival-pit mutation is not built. See [Breaking mutations](#breaking-mutations).
 

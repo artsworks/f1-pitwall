@@ -123,6 +123,7 @@ class RacePhase:
         self.sc_laps = 0
         self._finished = False
         self._sc_kind = ""  # 'sc' | 'vsc' while inside a neutralised period
+        self.escalated = False
         self._sc_last_seen = 0.0
         self._ever_raced = False
         self._pit_seen = False  # pit lane entered during this in_lap
@@ -153,12 +154,14 @@ class RacePhase:
         if self._finished:
             self.phase = "finished"
             self._sc_kind = ""
+            self.escalated = False
             self.sc_laps = 0
             return "red_flag" if red_flag else self.phase
 
         if red_flag:
             # The red flag supersedes any SC/VSC; the restart is a fresh start.
             self._sc_kind = ""
+            self.escalated = False
             self.sc_laps = 0
             self._red_restart = True
             return "red_flag"
@@ -167,6 +170,10 @@ class RacePhase:
 
         # Neutralisation: enter immediately, leave only after the hold.
         if safety_car_status in (1, 2):
+            if not self._sc_kind:
+                self.escalated = False
+            elif self._sc_kind == "vsc" and safety_car_status == 1:
+                self.escalated = True
             self._sc_kind = "sc" if safety_car_status == 1 else "vsc"
             self._sc_last_seen = session_time
             phase = self._sc_kind
@@ -177,6 +184,7 @@ class RacePhase:
                 self.neutral_end_kind = self._sc_kind
                 self.neutral_end_t = session_time
             self._sc_kind = ""
+            self.escalated = False
             if self.phase in ("sc", "vsc", "formation", "racing"):
                 # Pit sequence only applies from the free-running phases.
                 if self.phase == "formation":
