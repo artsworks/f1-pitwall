@@ -1469,6 +1469,7 @@ class SessionState:
             self._last_pit_status[i] = c.pit_status
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
+        self.lap_num = car.current_lap_num
         self._update_field_lap_trend(pkt.cars)
         length = self.track_length_m
         line_after_flag = self.chequered and (
@@ -1479,7 +1480,6 @@ class SessionState:
                 and 0 <= car.lap_distance < 0.2 * length
             )
         )
-        self.lap_num = car.current_lap_num
         self.lap_distance = car.lap_distance
         if car.sector == 2 and self.sector != 2:
             self.s3_entry_coldest_c = min(self._ema_or_zero(self.tyre_inner_fast).as_tuple())
@@ -2144,6 +2144,7 @@ class SessionState:
                 )
             self._field_lap_records[i] = current
 
+        self._field_lap_deltas = [d for d in self._field_lap_deltas if d[0] >= self.lap_num - 2]
         if not self._field_lap_deltas:
             self._field_lap_trend_s = 0.0
             self._field_trend_cars = 0

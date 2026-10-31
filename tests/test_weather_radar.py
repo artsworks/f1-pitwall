@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from pitwall.ingest import Ingest
+from pitwall.state.session import SessionState
 from pitwall.strategy.weather import crossover_projection
 
 from .race_synth import RaceSpec, race_stream, replay_race
@@ -75,6 +77,37 @@ def test_default_race_stream_cache_key() -> None:
     changed = race_stream(RaceSpec(laps=2, extra_by_lap={1: {"session": {"weather": 4}}}))
     assert default == explicit_defaults
     assert changed != default
+
+
+def test_field_lap_trend_expires_without_new_clean_pairs() -> None:
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    spec = RaceSpec(
+        laps=6,
+        compound=16,
+        extra_by_lap={
+            1: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 90_000, 2: 90_000, 3: 90_000}),
+            2: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 90_000, 2: 90_000, 3: 90_000}),
+            3: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 92_000, 2: 92_000, 3: 92_000}),
+            4: _lap_extra(
+                {1: 16, 2: 16, 3: 16},
+                {1: 92_000, 2: 92_000, 3: 92_000},
+                invalid=(1, 2, 3),
+            ),
+        },
+    )
+    snapshots = {}
+    last_lap = 0
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.lap_num != last_lap:
+            last_lap = state.lap_num
+            if last_lap in (3, 5):
+                snapshots[last_lap] = state.snapshot(session_time)
+
+    assert snapshots[3].field_lap_trend_s == 2.0
+    assert snapshots[5].field_lap_trend_s == 0.0
 
 
 @pytest.mark.replay
