@@ -283,12 +283,73 @@ def write_packet_stream(
     *,
     session_uid: int = 0xDEADBEEF,
     metadata: dict[str, object] | None = None,
+    wall_clock_start_us: int | None = None,
 ) -> Path:
     meta: dict[str, object] = {"synthetic": True, **(metadata or {})}
-    with RecordingWriter(path, session_uid=session_uid, metadata=meta) as writer:
+    with RecordingWriter(
+        path, session_uid=session_uid, metadata=meta, wall_clock_start_us=wall_clock_start_us
+    ) as writer:
         for t, pkt in packets:
             writer.write_datagram(t, pkt)
     return path
+
+
+def track_limits_scenario(
+    *,
+    events: bool = True,
+    lap_counts: bool = True,
+    infringements: tuple[int, ...] = (27, 28, 29),
+    vehicle_idx: int = 0,
+    session_type: int = 15,
+    penalty: bool = True,
+) -> list[tuple[float, bytes]]:
+    """Synthetic Austria warnings on laps 2, 3, 4, then a penalty on lap 5."""
+    packets: list[tuple[float, bytes]] = []
+    for frame in range(501):
+        t = frame / 10
+        lap = 1 + int(t // 10)
+        count = min(lap - 1, 4) if lap_counts else 0
+
+        def emit(
+            packet_id: int, data: dict[str, object], *, t: float = t, frame: int = frame
+        ) -> None:
+            packets.append((t, pack_packet(packet_id, data, session_time=t, frame=frame)))
+
+        emit(
+            PacketId.SESSION,
+            {"session_type": session_type, "track_id": 17, "track_length": 4318, "total_laps": 71},
+        )
+        emit(
+            PacketId.LAP_DATA,
+            {
+                "cars": {
+                    0: {
+                        "current_lap_num": lap,
+                        "car_position": 3,
+                        "result_status": 2,
+                        "driver_status": 4,
+                        "lap_distance": (t % 10) * 431.8,
+                        "corner_cutting_warnings": count,
+                        "total_warnings": count,
+                        "penalties": 5 if penalty and lap >= 5 else 0,
+                    }
+                }
+            },
+        )
+        emit(PacketId.CAR_TELEMETRY, {"cars": {0: {"speed": 220, "throttle": 1.0}}})
+        if events and frame in (100, 200, 300) and lap - 2 < len(infringements):
+            detail = struct.pack("<BBBBBBB", 5, infringements[lap - 2], vehicle_idx, 255, 0, lap, 0)
+            emit(
+                PacketId.EVENT,
+                {"event_string_code": b"PENA", "event_data": detail.ljust(12, b"\0")},
+            )
+        if penalty and frame == 400:
+            detail = struct.pack("<BBBBBBB", 4, 21, 0, 255, 5, lap, 0)
+            emit(
+                PacketId.EVENT,
+                {"event_string_code": b"PENA", "event_data": detail.ljust(12, b"\0")},
+            )
+    return packets
 
 
 def mixed_session_packets(n_frames: int = 10, session_uid: int = 0xDEADBEEF) -> list[bytes]:
