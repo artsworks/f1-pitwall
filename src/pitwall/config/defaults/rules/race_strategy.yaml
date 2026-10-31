@@ -268,6 +268,20 @@ rules:
       - "We're stacking behind {teammate_name}. Hold position in the pit lane, slow release"
       - "Double stack. {teammate_name} {teammate_stack_gap_s:.1f} seconds ahead into the box. Hold in the lane"
       - "{teammate_name} boxes {teammate_stack_gap_s:.1f} seconds ahead. Double stack, slow release"
+  # Team orders (docs/research/team-orders.md)
+  - id: teammate_strategy_split
+    sessions: [race]
+    priority: 3
+    urgency: info
+    when: "phase == 'racing' and teammate_split"
+    clear_when: "not teammate_split"
+    cooldown_s: 300
+    requires: [lap_data, car_status, participants]
+    say:
+      - "{teammate_name} is on a different strategy. On {teammate_compound_name}s, {teammate_tyre_age} laps old"
+      - "Different strategy for {teammate_name}, {teammate_tyre_age} laps on {teammate_compound_name}s"
+      - "{teammate_name} on {teammate_compound_name}s, {teammate_tyre_age} laps old. Different plan to you"
+      - "Your team-mate is on another strategy, {teammate_compound_name}s {teammate_tyre_age} laps old"
   - id: box_in_n
     sessions: [race]
     priority: 2

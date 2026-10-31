@@ -79,6 +79,11 @@ Each `WeatherForecastSample` carries the **session type it applies to**, `m_time
 in minutes, weather, temperatures, and rain percentage. Filter it to the current session
 before use.
 
+Session packets include five forecast samples for the current session type. Their offsets
+are 0, 5, 10, 15 and 30 minutes. The inspected Interlagos recordings report
+`forecast_accuracy` 0 (`Perfect`). In the Interlagos practice recording, the samples
+predicted rain onset ahead of time. Weather values 3 and above mean rain.
+
 There is **no** `m_raceDistance` field.
 
 ## Lap Data: fields we use

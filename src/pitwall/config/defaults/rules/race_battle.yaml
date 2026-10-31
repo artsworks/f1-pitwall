@@ -403,3 +403,18 @@ rules:
           - "{teammate_name} again. Keep the racing clean"
           - "Still your team-mate. Bring both cars home safely"
           - "No risks with {teammate_name}. Keep it clean"
+  # Team orders (docs/research/team-orders.md)
+  - id: teammate_hold
+    sessions: [race]
+    priority: 2
+    urgency: tactical
+    when: "phase == 'racing' and teammate_fight and teammate_ahead and 0 < laps_remaining <= th.teammate_hold_laps"
+    clear_when: "not teammate_fight or not teammate_ahead"
+    cooldown_s: 120
+    supersedes: [teammate_fight, battle_attack]
+    requires: [lap_data, participants]
+    say:
+      - "Hold position behind {teammate_name}. Gap {teammate_gap_s:.1f}, {laps_remaining} to go"
+      - "{teammate_name} ahead, {teammate_gap_s:.1f}. Hold position, {laps_remaining} to go"
+      - "Hold position. {laps_remaining} to go, {teammate_name} {teammate_gap_s:.1f} ahead"
+      - "{laps_remaining} to go. Hold behind {teammate_name}, gap {teammate_gap_s:.1f}"

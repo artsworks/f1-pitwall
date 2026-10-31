@@ -35,7 +35,8 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `drive_through`, `damage`, `teammate_pit`, `inject_rival_pit` and `red_flag` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `drive_through`, `damage`, `teammate_pit`, `inject_rival_pit`, `weather` and `red_flag` keys. The bench applies them during replay.
+- `weather` takes an optional `accuracy` and an ordered `timeline` of `{at_min, weather, rain_pct}` keyframes. Keyframes change current weather and matching-session forecast samples. Lap times stay as recorded.
 - `red_flag: "START[-END]"` adds an `RDFL` event on the player's lap `START` and an `LGOT` restart at the start of lap `END + 1`. `END` defaults to `START`.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
 - The `damage` mutation clears the wing damage at the player's next pit stop.
@@ -138,7 +139,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 | `inject_rival_pit` | The rival-pitted flag that feeds `overcut`, `cover` and `defend` plans | Rival pace and gaps, which stay as recorded |
 | `red_flag` | Red flag, free tyre change, restart and plan rebuild calls | Lap times, tyres and positions, because the car keeps racing and keeps its tyres |
 
-Rival stops and weather changes need a real recording or a generator. `src/pitwall/net/derive.py` cannot make them.
+Rival stops need a real recording or a generator. The `weather` mutation changes forecast and session weather, but lap times stay as recorded.
 
 ## Starter scenarios
 
@@ -158,6 +159,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
 | `brazil-penalty-escalation` | target | Drive-through call on lap 5 and the served call at the lap 11 visit |
 | `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
+| `brazil-team-orders` | target | No strategy-split call for a one-lap pit offset, no hold call before the last 3 laps |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
 ## Backlog

@@ -30,6 +30,7 @@ from pitwall.net.derive import (
     TeammatePit,
     UidRewrite,
     WearScale,
+    Weather,
     derive_recording,
     derive_records,
 )
@@ -40,6 +41,7 @@ from pitwall.protocol.header import (
     PacketId,
     parse_header,
 )
+from pitwall.protocol.layouts import SESSION_LAYOUT, WEATHER_FORECAST_SAMPLE, compile_layout
 from pitwall.protocol.packets import (
     SESSION_RED_FLAG_PERIODS_OFFSET,
     SESSION_SAFETY_CAR_STATUS_OFFSET,
@@ -63,6 +65,114 @@ def test_damage_labels_distinguish_all_mutation_parameters() -> None:
     ops = [Damage(1, 60, 4), Damage(1, 100, 4), Damage(1, 60, 3), Damage(2, 60, 4)]
     assert ops[1].label == "damage=1:wing=100:positions=4"
     assert len({derived_uid(SOURCE_UID, [op.label]) for op in ops}) == len(ops)
+
+
+def test_weather_mutation_updates_current_session_forecasts_only() -> None:
+    samples = {
+        0: {
+            "session_type": 10,
+            "time_offset": 0,
+            "weather": 1,
+            "rain_percentage": 12,
+            "track_temperature": 22,
+            "air_temperature": 11,
+        },
+        1: {
+            "session_type": 10,
+            "time_offset": 5,
+            "weather": 1,
+            "rain_percentage": 12,
+            "track_temperature": 23,
+            "air_temperature": 12,
+        },
+        2: {
+            "session_type": 3,
+            "time_offset": 5,
+            "weather": 2,
+            "rain_percentage": 34,
+            "track_temperature": 24,
+            "air_temperature": 13,
+        },
+    }
+    packet = pack_packet(
+        PacketId.SESSION,
+        {
+            "weather": 1,
+            "session_type": 10,
+            "num_weather_forecast_samples": 3,
+            "weather_forecast_samples": samples,
+            "forecast_accuracy": 4,
+        },
+        session_time=8 * 60,
+    )
+    op = Weather({"accuracy": 0, "timeline": [{"at_min": 9, "weather": 3, "rain_pct": 86}]})
+    mutated = op.apply(packet, DeriveContext())[0]
+    before = parse(PacketId.SESSION, packet)
+    after = parse(PacketId.SESSION, mutated)
+    assert after.weather == before.weather == 1
+    assert after.forecast_accuracy == 0
+    assert after.weather_forecast_samples[0].weather == before.weather_forecast_samples[0].weather
+    assert after.weather_forecast_samples[1].weather == 3
+    assert after.weather_forecast_samples[1].rain_percentage == 86
+    assert after.weather_forecast_samples[1].track_temperature == 23
+    assert after.weather_forecast_samples[1].air_temperature == 12
+    assert after.weather_forecast_samples[2] == before.weather_forecast_samples[2]
+
+    layout = compile_layout(SESSION_LAYOUT)
+    sample_layout = compile_layout(WEATHER_FORECAST_SAMPLE)
+    other_sample = (
+        HEADER_SIZE + layout.offsets["weather_forecast_samples"] + 2 * sample_layout.struct.size
+    )
+    assert (
+        mutated[other_sample : other_sample + sample_layout.struct.size]
+        == packet[other_sample : other_sample + sample_layout.struct.size]
+    )
+
+    at_keyframe = pack_packet(
+        PacketId.SESSION,
+        {
+            "weather": 1,
+            "session_type": 10,
+            "num_weather_forecast_samples": 3,
+            "weather_forecast_samples": samples,
+            "forecast_accuracy": 4,
+        },
+        session_time=9 * 60,
+    )
+    changed = parse(PacketId.SESSION, op.apply(at_keyframe, DeriveContext())[0])
+    assert changed.weather == 3
+    assert changed.weather_forecast_samples[0].rain_percentage == 86
+
+    lap_packet = pack_packet(PacketId.LAP_DATA)
+    assert op.apply(lap_packet, DeriveContext()) == [lap_packet]
+
+
+def test_weather_mutation_keeps_recorded_accuracy_when_omitted() -> None:
+    packet = pack_packet(
+        PacketId.SESSION,
+        {"session_type": 10, "forecast_accuracy": 3},
+    )
+    op = Weather({"timeline": [{"at_min": 0, "weather": 2, "rain_pct": 50}]})
+    assert parse(PacketId.SESSION, op.apply(packet, DeriveContext())[0]).forecast_accuracy == 3
+
+
+@pytest.mark.parametrize(
+    ("timeline", "message"),
+    [
+        (
+            [
+                {"at_min": 9, "weather": 3, "rain_pct": 86},
+                {"at_min": 8, "weather": 2, "rain_pct": 20},
+            ],
+            "strictly increasing",
+        ),
+        ([{"at_min": 9, "weather": 6, "rain_pct": 86}], "weather must be an integer"),
+        ([{"at_min": 9, "weather": 3, "rain_pct": 101}], "rain_pct must be an integer"),
+    ],
+)
+def test_weather_mutation_validates_keyframes(timeline, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        Weather({"timeline": timeline})
 
 
 @pytest.mark.parametrize(

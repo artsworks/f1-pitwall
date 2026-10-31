@@ -172,6 +172,11 @@ thresholds:
   rain_wet_pct: 85
   rain_dry_pct: 30
   rain_hysteresis_pct: 5       # crossover band hysteresis
+  slick_wet_loss_pct: 15       # Prior, not measured: slick lap-time loss on a wet track
+  inter_dry_loss_pct: 6         # Prior, not measured: inter lap-time loss on a dry track
+  rain_preempt_margin_s: 2.0   # Minimum expected gain for an early stop
+  field_follow_min_cars: 2     # rivals that must switch to inters before following
+  field_follow_window_laps: 3  # laps in which a rival's switch counts
   # Pit-window optimiser + race rules (docs/18)
   pit_horizon_laps: 8          # candidate stop laps evaluated ahead
   pit_min_laps_left: 2         # no stop inside the last N laps
