@@ -1,4 +1,13 @@
 thresholds:
+  # Lift and coast / PU thermal management
+  # Temperature thresholds are unverified against recordings.
+  engine_temp_warn_c: 128
+  engine_temp_clear_c: 123
+  brake_temp_warn_c: 1000
+  brake_temp_clear_c: 900
+  pu_dirty_air_gap_s: 1.0
+  pu_wear_warn_pct: 60
+  pu_wear_clear_pct: 55
   # Race-end and formation-lap radio
   formation_min_speed_kmh: 10
   formation_brakes_cold_c: 200
