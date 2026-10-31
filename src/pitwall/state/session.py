@@ -2146,7 +2146,8 @@ class SessionState:
             self._field_trend_cars = 0
             return
         newest_lap = max(lap for lap, _delta in self._field_lap_deltas)
-        recent = [delta for lap, delta in self._field_lap_deltas if lap >= newest_lap - 1]
+        self._field_lap_deltas = [d for d in self._field_lap_deltas if d[0] >= newest_lap - 1]
+        recent = [delta for _lap, delta in self._field_lap_deltas]
         self._field_trend_cars = len(recent)
         minimum_cars = int(self._th("track_trend_min_cars", 3.0))
         self._field_lap_trend_s = round(median(recent), 2) if len(recent) >= minimum_cars else 0.0
