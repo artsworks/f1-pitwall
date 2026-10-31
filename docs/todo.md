@@ -11,7 +11,7 @@ Written 30 Oct 2026. PR 155 (`chore/bench-scenarios-new-recordings`) adds 16 ben
    - The thermal-cutoff change in `fit_stint` (`deg.py`) and its test `test_thermal_cutoff_is_ignored_when_it_leaves_too_few_laps` may be new. Check if `main` has it. If it does not, make a separate PR. If it does, run `git stash drop`.
 2. Rerun the bench on `main` 0.42.0. The "all 16 new targets pass" result came from a run before the merge, and the new strategy rules may change it. Run the two known gaps first: `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --only brazil-overcut mexico-undercut`.
 3. Look at the `UNSTABLE` status on the PR. Run `gh pr checks 155`.
-4. Update the baseline on a machine that has the Brazil recordings: `pitwall bench --recordings <dir> --update-baseline --accept-changes --note "..."`. It refuses here, because the Brazil guards skip when the recordings are missing.
+4. After PR 157 merges, update the baseline: `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --update-baseline --accept-changes --keep-missing --note "add 16 scenarios from PR 155"`. Without `--keep-missing` it refuses, because the Brazil guards skip when the recordings are missing.
 5. Merge PR 155 after you approve the 16 expectations.
 
 ## Recheck four bench targets
@@ -59,7 +59,7 @@ In a local run on 30 Oct 2026, both targets failed. That run used code from befo
 
 ## Bench follow-ups
 
-- The 16 scenarios added on 30 Oct 2026 are all `status: target`. They are not in `baseline.json` yet. Run `pitwall bench --update-baseline --accept-changes` on a machine that has the Brazil recordings. The bench refuses to write a baseline while a guard is skipped.
+- The 16 scenarios added on 30 Oct 2026 are all `status: target`. They are not in `baseline.json` yet. Step 4 of the PR 155 checklist adds them.
 - Promote a passing target to a guard only when you agree its expectation is correct.
 - `real_accuracy` stays empty. The last run graded 1 outcome and it needs 5 or more. More real scenarios with graded calls fix this.
 - Two scenarios were not added because a stop call under a safety car or VSC depends on tyre wear, position risk and laps left: a VSC inside the stop window and a safety car at the recorded stop. A better test would set those inputs directly. The first is in the Backlog of `docs/24-scenario-bench.md`.
