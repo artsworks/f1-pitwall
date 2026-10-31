@@ -37,7 +37,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "grid_penalty",
         "lap_deleted",
         "lap_deleted_last",
-        "last_lap_attack",
         "lockup_front",
         "lockup_front_same_spot",
         "lockup_rear",
@@ -63,6 +62,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "prep_clear",
         "prep_dirty_air",
         "prep_tow",
+        "prep_tow_teammate",
         "prep_traffic_ahead",
         "quali_safe_cut",
         "quali_safe_pole",
@@ -70,12 +70,10 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "setup_bias",
         "setup_on_throttle",  # replay scenario unresolved: high slip did not yield advice
         "setup_stop_wing",  # replay scenario unresolved: stop setup did not yield advice
-        "serve_penalty",  # replay scenario unresolved: pit timing did not trigger advice
         "slow_car_ahead",
         "slow_car_crawling",
         "spun_rejoin",
         "spun_rejoin_traffic",
-        "teammate_fight",
         "tyre_life",
         "tyre_pressure_advice",
         "tyre_pressure_ok",

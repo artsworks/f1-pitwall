@@ -63,8 +63,9 @@ _Last updated: v0.34.0, 24 Oct 2026._
 - Windows shutdown and EA Javelin compatibility still need a local check. Linux
   tests cannot verify either.
 - The later 25% race fixes were reverted at the owner's request. Mixed-weather
-  calls, drive-through tyre calls, stop summaries and early-race pace need a
-  separate follow-up. The numbered menu remains removed.
+  calls, stop summaries and early-race pace need a separate follow-up. Drive-through
+  tyre calls are back with a test, see [penalty escalation](research/penalty-escalation.md).
+  The numbered menu remains removed.
 - CI runs lint, formatting and type checks on Linux. Pull requests also run the fast
   tests (`pytest -m "not slow"`) and the replay determinism check. Pushes to `main` run
   the full suite. Tests that need real recordings or Windows still skip in CI.

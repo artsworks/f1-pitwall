@@ -1,4 +1,44 @@
 rules:
+  # Race-end and formation-lap radio
+  - id: formation_tyres_cold
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and speed_kmh >= th.formation_min_speed_kmh and min(tyre_inner.FL, tyre_inner.FR, tyre_inner.RL, tyre_inner.RR) > 0 and 0 < coldest_tyre_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c)"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "{coldest_tyre} at {coldest_tyre_c:.1f} degrees. Work the tyres before the start"
+      - "Tyres need heat. {coldest_tyre}, {coldest_tyre_c:.1f} degrees"
+      - "Build tyre temperature. {coldest_tyre} still {coldest_tyre_c:.1f} degrees"
+  - id: formation_brakes_cold
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and speed_kmh >= th.formation_min_speed_kmh and sector == 1 and 0 < min(brake_temp.FL, brake_temp.FR, brake_temp.RL, brake_temp.RR) < th.formation_brakes_cold_c"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "Coldest brake {brake_min_c:.1f} degrees. Build brake temperature before the grid"
+      - "Brakes need heat, lowest {brake_min_c:.1f} degrees"
+      - "Work the brakes before the start. Coldest {brake_min_c:.1f} degrees"
+  - id: formation_grid_slot
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and sector == 2 and grid_position > 0 and speed_kmh >= th.formation_min_speed_kmh"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "Your grid slot is P{grid_position:.1f} for the start"
+      - "P{grid_position:.1f} is your slot on the grid"
+      - "Back to the grid, P{grid_position:.1f} for the start"
   - id: weather_box_now
     sessions: [race]
     priority: 1
@@ -41,12 +81,12 @@ rules:
     cooldown_s: 15
     requires: [event]
     say:
-      - "We've got a {penalty_kind_text}. Serve it within three laps"
-      - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
-      - "{penalty_kind_text}. Three laps to serve it, we'll call it"
-      - "{penalty_kind_text} penalty. Serve it within three laps"
-      - "Penalty for {penalty_kind_text}. Three laps to serve it"
-      - "Serve the {penalty_kind_text} within three laps"
+      - "We've got a {penalty_kind_text}. We'll call when to serve it"
+      - "{penalty_kind_text} penalty. We'll call the lap to take it"
+      - "{penalty_kind_text}. We'll tell you when to box for it"
+      - "{penalty_kind_text} penalty. Serve it when we call it"
+      - "Penalty for {penalty_kind_text}. We'll call the lap"
+      - "We'll serve the {penalty_kind_text}. Wait for the call"
   - id: serve_penalty
     sessions: [race]
     priority: 2
@@ -63,6 +103,70 @@ rules:
       - "Penalty still unserved. Serve it at the stop"
       - "Penalty still to serve. Take it at the stop"
       - "Penalty remains on the car. Serve it in the pits"
+    # A drive-through fits no tyres, so its lines keep the tyre stop a separate visit.
+    severity:
+      - when: "unserved_drive_through > 0"
+        say:
+          - "Drive-through first, no tyre change. Tyres on a separate stop"
+          - "Drive-through is a separate pass, no tyres. The tyre stop comes after"
+          - "Serve the drive-through first. No tyre change on that pass"
+          - "Drive-through pass first, no tyres. Then we box for the stop"
+  # Penalty escalation: game reminders to serve a drive-through or stop-go,
+  # then the served confirmation (DTSV/SGSV). See docs/research/penalty-escalation.md.
+  - id: penalty_serve_this_lap
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    when: "penalty_reminder_recent and penalty_reminder == 'this_lap' and unserved_drive_through + unserved_stop_go > 0"
+    clear_when: "not penalty_reminder_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Box this lap for the {penalty_unserved_text}. Last lap to serve it"
+      - "Last lap to serve the {penalty_unserved_text}. Box this lap"
+      - "{penalty_unserved_text} must be served this lap. Box, box"
+      - "Box, box for the {penalty_unserved_text}. This is the last lap"
+  - id: penalty_serve_reminder
+    sessions: [race]
+    priority: 2
+    urgency: execution
+    decision_point: pit_entry
+    when: "penalty_reminder_recent and penalty_reminder == 'within' and unserved_drive_through + unserved_stop_go > 0"
+    clear_when: "not penalty_reminder_recent"
+    cooldown_s: 30
+    requires: [event, lap_data]
+    say:
+      - "Reminder, {penalty_unserved_text} still to serve. {laps_remaining} laps to go"
+      - "{penalty_unserved_text} still on the car. {laps_remaining} laps left"
+      - "We still owe the {penalty_unserved_text}. {laps_remaining} to go"
+      - "{penalty_unserved_text} not served yet. {laps_remaining} laps remaining"
+  - id: penalty_served_drive_through
+    sessions: [race]
+    priority: 2
+    urgency: info
+    when: "penalty_served_recent and penalty_served_kind == 'drive_through'"
+    clear_when: "not penalty_served_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Drive-through served. P{position} now"
+      - "That's the drive-through done. P{position}"
+      - "Drive-through served, P{position}. Penalty clear"
+      - "Penalty served. Back out in P{position}"
+  - id: penalty_served_stop_go
+    sessions: [race]
+    priority: 2
+    urgency: info
+    when: "penalty_served_recent and penalty_served_kind == 'stop_go'"
+    clear_when: "not penalty_served_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Stop-go served, {penalty_stop_time_s:.1f} stationary. P{position}"
+      - "Stop-go done, {penalty_stop_time_s:.1f} seconds held. P{position}"
+      - "That's the stop-go served. P{position}, penalty clear"
+      - "Stop-go served. {penalty_stop_time_s:.1f} in the box, P{position}"
   - id: penalty_track_limits
     sessions: [race]
     priority: 1

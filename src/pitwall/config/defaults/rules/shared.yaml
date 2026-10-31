@@ -2,10 +2,11 @@ rules:
   # Out-lap tyre check lands in sector 3 (sector index 2): by then the tyres have
   # had two sectors to come in, and every tyre is cold straight out of the pits.
   # Both read the temperature latched at sector-3 entry, so exactly one speaks.
+  # Penalty escalation: a drive-through fits no tyres, so neither speaks after one.
   - id: out_lap_s3_tyres_cold
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and not pit_pass_no_stop and s3_entry_coldest_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
@@ -19,7 +20,7 @@ rules:
   - id: out_lap_s3_tyres_ready
     sessions: [practice, qualifying, race]
     priority: 2
-    when: "phase == 'out_lap' and sector == 2 and s3_entry_coldest_c >= (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    when: "phase == 'out_lap' and sector == 2 and not pit_pass_no_stop and s3_entry_coldest_c >= (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
     clear_when: "phase != 'out_lap'"
     still_true: "phase == 'out_lap'"
     requires: [car_telemetry, lap_data]
@@ -540,6 +541,23 @@ rules:
       - "Use the tow. Car is {traffic_ahead_s:.1f} ahead."
       - "Tow available, {traffic_ahead_s:.1f} ahead. Stay with it."
       - "Good gap to the car, {traffic_ahead_s:.1f}. Take the tow."
+  # Team orders (docs/research/team-orders.md)
+  - id: prep_tow_teammate
+    sessions: [practice, qualifying]
+    priority: 2
+    tags: [traffic]
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s >= th.tow_min_s and traffic_ahead_s <= th.tow_max_s and traffic_ahead_teammate"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_kind == 'flying'"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    supersedes: [prep_tow]
+    requires: [lap_data, participants]
+    say:
+      - "{traffic_ahead_name} {traffic_ahead_s:.1f} ahead. Use his tow."
+      - "Team-mate {traffic_ahead_s:.1f} ahead. Take the tow."
+      - "Tow from {traffic_ahead_name}, {traffic_ahead_s:.1f} ahead. Stay in it."
+      - "{traffic_ahead_s:.1f} to {traffic_ahead_name}. Good gap for the tow."
   - id: prep_clear
     sessions: [practice, qualifying]
     priority: 3

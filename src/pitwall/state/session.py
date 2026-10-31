@@ -22,6 +22,7 @@ from pitwall.protocol.packets import (
     CarTelemetry2Packet,
     CarTelemetryPacket,
     EventPacket,
+    FinalClassificationPacket,
     LapDataPacket,
     MotionExPacket,
     ParticipantsPacket,
@@ -71,7 +72,7 @@ from pitwall.state.race import (
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.pace import amount_words, pace_words_self
-from pitwall.strategy.plans import DRY, StrategyPlan
+from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.weather import crossover_projection, default_pit_loss_s, switch_net_s
 
 if TYPE_CHECKING:
@@ -134,6 +135,7 @@ def snapshot_scalars(snap: Snapshot) -> dict[str, Any]:
 
 
 PACKET_NAMES: dict[int, str] = {
+    PacketId.FINAL_CLASSIFICATION: "final_classification",
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",
     PacketId.EVENT: "event",
@@ -161,7 +163,10 @@ SECTOR3_VALID = 0x08
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
 PENALTY_TYPE_GRID = 2
+PENALTY_TYPE_REMINDER = 3
 PENALTY_TYPE_WARNING = 5
+# PENA infringement_type on a penalty reminder -> how soon the game wants it served.
+_REMINDER_KINDS = {15: "within", 16: "this_lap"}
 
 
 # PENA infringement_type -> kind of track warning.
@@ -333,6 +338,24 @@ class Snapshot:
     """Frozen per-tick view; everything rules read lives here."""
 
     now: float
+    # Race-end and formation-lap radio
+    formula: int = -1
+    result_status: int = 0
+    formation_lap_enabled: bool = False
+    start_lights: int = 0
+    finish_elapsed_s: float = 0.0
+    finish_details: str = ""
+    final_position: int = 0
+    final_details: str = ""
+
+    @property
+    def brake_min_c(self) -> float:
+        return float(min(self.brake_temp.as_tuple()))
+
+    @property
+    def brake_max_c(self) -> float:
+        return float(max(self.brake_temp.as_tuple()))
+
     session_time: float = 0.0
     last_packet_t: float | None = None  # clock time of newest packet, same base as `now`
     session_kind: str = "unknown"
@@ -460,6 +483,12 @@ class Snapshot:
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
+    teammate_ahead: bool = False
+    teammate_compound: int = 0
+    teammate_compound_name: str = ""
+    teammate_tyre_age: int = -1
+    teammate_stops: int = 0
+    teammate_split: bool = False
     teammate_stacking: bool = False
     teammate_stack_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
@@ -567,6 +596,14 @@ class Snapshot:
     warnings: int = 0
     corner_cut_warnings: int = 0
     penalty_recent: bool = False
+    # Penalty escalation: PENA reminders, DTSV/SGSV served events, and a
+    # pit-lane pass that did not raise num_pit_stops (no tyres fitted).
+    penalty_reminder: str = ""  # 'within' (infringement 15) | 'this_lap' (16)
+    penalty_reminder_recent: bool = False
+    penalty_served_kind: str = ""  # 'drive_through' | 'stop_go'
+    penalty_served_recent: bool = False
+    penalty_stop_time_s: float = 0.0
+    pit_pass_no_stop: bool = False
     penalty_position: int = 0  # race position once every car's time penalties apply
     penalty_margin_s: float = (
         math.inf
@@ -783,6 +820,8 @@ class Snapshot:
     traffic_ahead_m: float = math.inf
     traffic_ahead_s: float = math.inf
     traffic_ahead_kind: str = ""
+    traffic_ahead_name: str = ""
+    traffic_ahead_teammate: bool = False
     traffic_ahead_closing_s: float = math.inf  # time to catch it at the current speeds
     traffic_ahead_slow: bool = False  # it is much slower than the player right now
     traffic_ahead_state: str = ""  # ahead car: aborted, in-lap, cooling, or flying
@@ -840,6 +879,12 @@ class Snapshot:
     @property
     def energy_prev_under_mj(self) -> float:
         return max(0.0, -self.energy_prev_lap_delta_mj)
+
+    @property
+    def penalty_unserved_text(self) -> str:
+        if self.unserved_drive_through > 0:
+            return "drive-through"
+        return "stop-go" if self.unserved_stop_go > 0 else ""
 
     @property
     def penalty_kind_text(self) -> str:
@@ -1088,6 +1133,14 @@ class SessionState:
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
+        self.penalty_reminder = ""
+        self._last_penalty_reminder_st: float | None = None
+        self.penalty_served_kind = ""
+        self.penalty_stop_time_s = 0.0
+        self._last_penalty_served_st: float | None = None
+        self._pit_entry_stops: int | None = None
+        self.pit_pass_no_stop = False
+        self._lap_since_rewind = True
         self.grid_penalty_places = 0
         self._last_grid_penalty_st: float | None = None
         self._grid_penalty_events: list[tuple[float, int]] = []
@@ -1102,6 +1155,13 @@ class SessionState:
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st: float | None = None
         self.lights_out = False
+        # Race-end and formation-lap radio
+        self.formula = -1
+        self.formation_lap_enabled = False
+        self.start_lights = 0
+        self._finish_t: float | None = None
+        self._finish_details = ""
+        self._final_classification: Any | None = None
         self.chequered = False
         self._flag_as_leader = False
         self._fastest_lap: tuple[int, int, float] | None = None  # (car idx, ms, session time)
@@ -1227,6 +1287,8 @@ class SessionState:
             return
         if isinstance(pkt, SessionPacket):
             self._on_session(pkt)
+        elif isinstance(pkt, FinalClassificationPacket):
+            self._final_classification = pkt
         elif isinstance(pkt, LapDataPacket):
             self._on_lap_data(pkt)
         elif isinstance(pkt, EventPacket):
@@ -1293,7 +1355,16 @@ class SessionState:
 
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
+        # Race-end and formation-lap radio
+        self._finish_t = None
+        self._finish_details = ""
+        self._final_classification = None
+        self.start_lights = 0
         self._last_rewind_t = t
+        # A pit-status change seen across a flashback is not a real entry or exit.
+        self._pit_entry_stops = None
+        self.pit_pass_no_stop = False
+        self._lap_since_rewind = False
         self._pace_prediction_latch = None
         self.pace_delta_vs_expected_s = 0.0
         self.pace_slow_laps = 0
@@ -1352,6 +1423,8 @@ class SessionState:
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st = None
         self._last_penalty_st = None
+        self._last_penalty_reminder_st = None
+        self._last_penalty_served_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
         self._cool_latch = None
@@ -1384,6 +1457,9 @@ class SessionState:
 
     def _on_session(self, pkt: SessionPacket) -> None:
         self.session_type = pkt.session_type
+        # Race-end and formation-lap radio
+        self.formula = pkt.formula
+        self.formation_lap_enabled = bool(pkt.formation_lap)
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
@@ -1508,8 +1584,20 @@ class SessionState:
         ):
             self.hot_lap_fuel_base = None
         self.driver_status = car.driver_status
+        real_change = self._lap_since_rewind
+        self._lap_since_rewind = True
+        if real_change and self.pit_status == PitStatus.NONE and car.pit_status != PitStatus.NONE:
+            self._pit_entry_stops = self.num_pit_stops
+            self.pit_pass_no_stop = False
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
             self._pit_exit_t = self._last_session_time
+            # A drive-through (or a stop-go with no tyre work) passes the pit lane
+            # without raising num_pit_stops; the game counts a real stop in the box.
+            self.pit_pass_no_stop = (
+                real_change
+                and self._pit_entry_stops is not None
+                and car.num_pit_stops <= self._pit_entry_stops
+            )
         self.pit_status = car.pit_status
         self.current_lap_time_ms = car.current_lap_time_ms
         self.sector1_time_ms = car.sector1_ms
@@ -1517,6 +1605,32 @@ class SessionState:
         self.current_lap_invalid = car.current_lap_invalid
         self.pit_lane_time_ms = car.pit_lane_time_in_lane_ms
         self.result_status = car.result_status
+        # Race-end radio: latch measured road gaps, never strategy projections.
+        if car.result_status == 3 and self._finish_t is None:
+            self._finish_t = pkt.header.session_time
+            details = []
+            if (
+                car.car_position > 1
+                and car.delta_to_car_in_front_ms > 0
+                and any(
+                    c.car_position == car.car_position - 1
+                    and c.current_lap_num == car.current_lap_num
+                    and c.result_status in (2, 3)
+                    for c in pkt.cars
+                )
+            ):
+                details.append(f"{car.delta_to_car_in_front_ms / 1000:.1f} to the car ahead.")
+            behind = next((c for c in pkt.cars if c.car_position == car.car_position + 1), None)
+            if (
+                behind is not None
+                and behind.result_status in (2, 3)
+                and behind.current_lap_num == car.current_lap_num
+                and behind.delta_to_car_in_front_ms > 0
+            ):
+                details.append(f"{behind.delta_to_car_in_front_ms / 1000:.1f} clear behind.")
+            if self._fastest_lap is not None and self._fastest_lap[0] == self._player_idx:
+                details.append(f"Fastest lap, {self._fastest_lap[1] / 1000:.1f} seconds.")
+            self._finish_details = " ".join(details)
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
         if car.penalties != self.penalty_s:
@@ -1783,6 +1897,8 @@ class SessionState:
             self.lights_out = True
             self.red_flag = False
             self.safety_car_status = 0
+        elif pkt.code == "STLG":
+            self.start_lights = pkt.detail.get("num_lights", 0)
         elif pkt.code == "CHQF":
             self.chequered = True
             self._flag_as_leader = self.position == 1
@@ -1836,6 +1952,9 @@ class SessionState:
                 kind = _PENALTY_KINDS.get(ptype, "")
                 infringement = int(pkt.detail.get("infringement_type", 0))
                 warn_kind = _TRACK_WARNING_KINDS.get(infringement, "")
+                if ptype == PENALTY_TYPE_REMINDER and infringement in _REMINDER_KINDS:
+                    self.penalty_reminder = _REMINDER_KINDS[infringement]
+                    self._last_penalty_reminder_st = pkt.header.session_time
                 if ptype == PENALTY_TYPE_WARNING and warn_kind:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
@@ -1868,6 +1987,11 @@ class SessionState:
                         places for _, places in self._grid_penalty_events
                     )
                     self._last_grid_penalty_st = self._grid_penalty_events[-1][0]
+        elif pkt.code in ("DTSV", "SGSV"):
+            if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
+                self.penalty_served_kind = "drive_through" if pkt.code == "DTSV" else "stop_go"
+                self.penalty_stop_time_s = float(pkt.detail.get("stop_time_s", 0.0))
+                self._last_penalty_served_st = pkt.header.session_time
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -2658,6 +2782,14 @@ class SessionState:
         )
         return Snapshot(
             now=now,
+            # Race-end and formation-lap radio
+            formula=self.formula,
+            result_status=self.result_status,
+            formation_lap_enabled=self.formation_lap_enabled,
+            start_lights=self.start_lights,
+            finish_elapsed_s=max(0.0, st - self._finish_t) if self._finish_t is not None else 0.0,
+            finish_details=self._finish_details,
+            **self._final_result_view(),
             session_time=st,
             last_packet_t=self.last_recv_wall,
             session_kind=kind,
@@ -2717,6 +2849,18 @@ class SessionState:
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
+            penalty_reminder=self.penalty_reminder,
+            penalty_reminder_recent=(
+                self._last_penalty_reminder_st is not None
+                and 0.0 <= st - self._last_penalty_reminder_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            penalty_served_kind=self.penalty_served_kind,
+            penalty_served_recent=(
+                self._last_penalty_served_st is not None
+                and 0.0 <= st - self._last_penalty_served_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            penalty_stop_time_s=self.penalty_stop_time_s,
+            pit_pass_no_stop=self.pit_pass_no_stop,
             grid_penalty_places=self.grid_penalty_places,
             grid_penalty_recent=(
                 self._last_grid_penalty_st is not None
@@ -3154,6 +3298,44 @@ class SessionState:
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
         )
+
+    # Race-end radio
+    def _final_result_view(self) -> dict[str, Any]:
+        pkt = self._final_classification
+        if pkt is None or not 0 <= self._player_idx < pkt.num_cars <= CAR_SLOTS:
+            return {}
+        cars = pkt.cars[: pkt.num_cars]
+        car = cars[self._player_idx]
+        if car.result_status != 3 or not 1 <= car.position <= pkt.num_cars:
+            return {}
+        details = []
+        if car.grid_position > 0:
+            gained = car.grid_position - car.position
+            if gained > 0:
+                details.append(f"Up {gained:.1f} from the grid.")
+            elif gained < 0:
+                details.append(f"Down {-gained:.1f} from the grid.")
+            else:
+                details.append(f"Held P{car.grid_position:.1f} from the grid.")
+        total = car.total_race_time + car.penalties_time
+        if math.isfinite(total) and total > 0:
+            for offset, label in ((-1, "to the car ahead"), (1, "clear behind")):
+                rival = next((c for c in cars if c.position == car.position + offset), None)
+                if (
+                    rival is None
+                    or rival.result_status != 3
+                    or rival.num_laps != car.num_laps
+                    or not math.isfinite(rival.total_race_time)
+                    or rival.total_race_time <= 0
+                ):
+                    continue
+                gap = offset * (rival.total_race_time + rival.penalties_time - total)
+                if gap > 0:
+                    details.append(f"{gap:.1f} {label}.")
+        best = [c.best_lap_time_ms for c in cars if c.best_lap_time_ms > 0]
+        if best and car.best_lap_time_ms == min(best) and best.count(min(best)) == 1:
+            details.append(f"Fastest lap, {car.best_lap_time_ms / 1000:.1f} seconds.")
+        return dict(final_position=car.position, final_details=" ".join(details))
 
     def _race_view(
         self,
@@ -3631,6 +3813,33 @@ class SessionState:
         player = self._player_idx
         if mate < 0 or player >= len(cars) or mate >= len(cars):
             return {}
+        status = self.cars_status
+        compound = (
+            int(status[mate].visual_tyre_compound)
+            if status is not None and mate < len(status)
+            else 0
+        )
+        mate_age = self._rival_age(mate)
+        mate_stops = cars[mate].num_pit_stops
+        split_age = int(self._th("teammate_split_age_laps", 5.0))
+        player_car = cars[player]
+        mate_car = cars[mate]
+        teammate_split = (
+            self.race_phase == "racing"
+            and player_car.result_status == 2
+            and mate_car.result_status == 2
+            and player_car.pit_status == 0
+            and mate_car.pit_status == 0
+            and self.tyre_visual != 0
+            and compound != 0
+            and mate_age is not None
+            and min(self.tyre_age_laps, mate_age) >= split_age
+            and (
+                self.tyre_visual != compound
+                or self.num_pit_stops != mate_stops
+                or abs(self.tyre_age_laps - mate_age) >= split_age
+            )
+        )
         gap = math.inf
         if mate == ahead_i:
             gap = gap_ahead
@@ -3649,6 +3858,12 @@ class SessionState:
         return dict(
             teammate_name=name_of(mate),
             teammate_gap_s=gap,
+            teammate_ahead=mate == ahead_i,
+            teammate_compound=compound,
+            teammate_compound_name=WORDS.get(compound, ""),
+            teammate_tyre_age=mate_age if mate_age is not None else -1,
+            teammate_stops=mate_stops,
+            teammate_split=teammate_split,
             teammate_fight=self.race_phase == "racing"
             and gap <= self._th("teammate_fight_gap_s", 1.0),
             teammate_stacking=math.isfinite(stack_gap),
@@ -3853,6 +4068,10 @@ class SessionState:
                 ),
                 traffic_ahead_slow=closing * 3.6 >= self._th("slow_car_delta_kmh", 60.0),
                 traffic_ahead_kind=_lap_kind(c.driver_status),
+                traffic_ahead_name=(
+                    self.participants[ahead[1]].name if ahead[1] < len(self.participants) else ""
+                ),
+                traffic_ahead_teammate=ahead[1] == self._teammate(),
                 traffic_ahead_state=state,
                 traffic_ahead_launch_s=launch_s,
             )

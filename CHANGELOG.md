@@ -10,6 +10,65 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.46.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Compare visual compounds for teammate strategy split
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+### Features
+
+- **rules**: Teammate hold, strategy split and quali tow calls
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+
+## v0.45.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Discard provisional results after classification
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+### Features
+
+- **rules**: Add formation and race-end radio
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+
+## v0.44.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Drive-through serve_penalty lines keep the tyre stop separate
+  ([#162](https://github.com/artsworks/f1-pitwall/pull/162),
+  [`6eaee1f`](https://github.com/artsworks/f1-pitwall/commit/6eaee1feeaa529da8e2dabc8ae01571a20d6299d))
+
+- **state**: Ignore pit-status changes across a flashback for pit_pass_no_stop
+  ([#162](https://github.com/artsworks/f1-pitwall/pull/162),
+  [`6eaee1f`](https://github.com/artsworks/f1-pitwall/commit/6eaee1feeaa529da8e2dabc8ae01571a20d6299d))
+
+### Features
+
+- **rules**: Drive-through and stop-go reminders, served calls, no tyre call after a drive-through
+  ([#162](https://github.com/artsworks/f1-pitwall/pull/162),
+  [`6eaee1f`](https://github.com/artsworks/f1-pitwall/commit/6eaee1feeaa529da8e2dabc8ae01571a20d6299d))
+
+- **rules**: No lap count in penalty_pit, drive-through wording for serve_penalty
+  ([#162](https://github.com/artsworks/f1-pitwall/pull/162),
+  [`6eaee1f`](https://github.com/artsworks/f1-pitwall/commit/6eaee1feeaa529da8e2dabc8ae01571a20d6299d))
+
+### Testing
+
+- **rules**: Match the separate-stop drive-through wording in the replay test
+  ([#162](https://github.com/artsworks/f1-pitwall/pull/162),
+  [`6eaee1f`](https://github.com/artsworks/f1-pitwall/commit/6eaee1feeaa529da8e2dabc8ae01571a20d6299d))
+
+
 ## v0.43.0 (2026-10-31)
 
 ### Bug Fixes
