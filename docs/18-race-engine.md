@@ -646,8 +646,7 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `serve_penalty` | 2 | `unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now','box_in_n')` |
 | `penalty_serve_reminder` / `penalty_serve_this_lap` | 2/1 | PENA reminder (type 3, infringement 15 / 16) with an unserved drive-through or stop-go |
 | `penalty_served_drive_through` / `penalty_served_stop_go` | 2/2 | `DTSV` / `SGSV` for the player; the stop-go call says the time held |
-| `track_limit_warning` / `track_limit_last_warning` | 2/1 | Running-wide warnings come from PENA 27–29. They share the count with PENA 7–9. The rule keeps its running-wide wording. |
-| `corner_cut_warning` / `corner_cut_last_warning` | 2/1 | Corner-cut warnings come from PENA 7–9. They share the count with PENA 27–29. The rule keeps its corner-cut wording. |
+| `track_limit_warning` / `track_limit_second_warning` / `track_limit_last_warning` | 3 | Announce the shared count at 1, 2 and 3 warnings. Reuse the higher of PENA 7–9/27–29 and Lap Data `corner_cutting_warnings`. The third warning says the next offence brings a penalty. |
 | `penalty_corner_cut` | 1 | time penalty for a corner cut (infringement 7–9) |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
 | `rival_ahead_pitted` / `rival_behind_pitted` | 2 | Ahead call uses `rival_ahead_in_pit_lane`; behind call uses `rival_behind_in_pit_lane`, tyre age ≥ 2, and the pit-minimum lap gate |

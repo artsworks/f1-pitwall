@@ -291,11 +291,15 @@ _CASES = [
         RaceSpec(laps=8, base_ms=12_000, warning_laps=((2, 27), (3, 27), (4, 27))),
     ),
     (
-        "corner_cut_warning",
+        "track_limit_second_warning",
+        RaceSpec(laps=8, base_ms=12_000, warning_laps=((2, 27), (3, 27))),
+    ),
+    (
+        "track_limit_warning",
         RaceSpec(laps=8, base_ms=12_000, warning_laps=((3, 8),)),
     ),
     (
-        "corner_cut_last_warning",
+        "track_limit_last_warning",
         RaceSpec(laps=8, base_ms=12_000, warning_laps=((2, 7), (3, 7), (4, 7))),
     ),
     (
