@@ -295,6 +295,7 @@ rules:
       - "Virtual safety car. Keep your delta positive"
       - "VSC active. Stay on the delta"
   - id: sc_ending
+    cooldown_group: sc_ending
     sessions: [race]
     priority: 1
     urgency: safety
@@ -309,6 +310,7 @@ rules:
       - "SC in this lap. Get the tyres ready for the restart"
       - "Safety car ending this lap. Stay close and be ready"
   - id: vsc_ending
+    cooldown_group: vsc_ending
     sessions: [race]
     priority: 1
     urgency: safety
@@ -346,6 +348,56 @@ rules:
       - "VSC over, go, go, go"
       - "Green flag. VSC is over, race at full pace"
       - "VSC ended. Green flag, resume racing"
+  # SC/VSC restart procedures (sc-restart)
+  # The SCAR "returning" event (SC lights out / VSC ending) carries tyre temps when a
+  # tyre is below its compound window; the plain sc_ending/vsc_ending speak otherwise.
+  # The shared cooldown group prevents a second ending call if the tyres cool later.
+  - id: sc_ending_tyres_cold
+    cooldown_group: sc_ending
+    cooldown_s: 180
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    supersedes: [sc_ending]
+    when: "phase == 'sc' and sc_ending and coldest_tyre_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    clear_when: "not sc_ending"
+    still_true: "phase == 'sc' and sc_ending"
+    requires: [lap_data, car_telemetry]
+    say:
+      - "Safety car in this lap. {coldest_tyre} coldest at {coldest_tyre_c:.1f}"
+      - "SC in this lap. {coldest_tyre} is cold, {coldest_tyre_c:.1f}. Get heat in it"
+      - "Lights out on the safety car. {coldest_tyre} at {coldest_tyre_c:.1f}, cold for the restart"
+      - "Safety car in. Fronts {tyre_inner_front_c:.1f}, rears {tyre_inner_rear_c:.1f}. {coldest_tyre} is coldest"
+  - id: vsc_ending_tyres_cold
+    cooldown_group: vsc_ending
+    cooldown_s: 180
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    supersedes: [vsc_ending]
+    when: "phase == 'vsc' and sc_ending and coldest_tyre_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c) + mode.thermal_warn_offset_c"
+    clear_when: "not sc_ending"
+    still_true: "phase == 'vsc' and sc_ending"
+    requires: [lap_data, car_telemetry]
+    say:
+      - "VSC ending. {coldest_tyre} coldest at {coldest_tyre_c:.1f}"
+      - "VSC ending, cold tyres. {coldest_tyre} at {coldest_tyre_c:.1f}"
+      - "Virtual safety car ending. {coldest_tyre} is cold, {coldest_tyre_c:.1f}"
+      - "VSC ending. Fronts {tyre_inner_front_c:.1f}, rears {tyre_inner_rear_c:.1f}. {coldest_tyre} is coldest"
+  - id: sc_delta_negative
+    sessions: [race]
+    priority: 1
+    urgency: safety
+    when: "phase in ('sc', 'vsc') and safety_car_delta_s < th.sc_delta_warn_s"
+    clear_when: "phase not in ('sc', 'vsc') or safety_car_delta_s >= th.sc_delta_clear_s"
+    still_true: "phase in ('sc', 'vsc') and safety_car_delta_s < 0"
+    cooldown_s: 20
+    requires: [lap_data]
+    say:
+      - "Delta negative, {safety_car_delta_s:.1f}. Back off"
+      - "Delta's gone negative, {safety_car_delta_s:.1f}. Lift"
+      - "Delta {safety_car_delta_s:.1f}. Too fast, get it positive"
+      - "Negative delta, {safety_car_delta_s:.1f}. Slow down"
   # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
   - id: weather_rain_soon
     sessions: [race]
