@@ -379,6 +379,9 @@ def cmd_rules_check(args: argparse.Namespace) -> int:
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
+    import multiprocessing
+    import os
+    from concurrent.futures import ProcessPoolExecutor, as_completed
     from datetime import UTC, datetime
 
     from pitwall.learning.bench import (
@@ -429,21 +432,62 @@ def cmd_bench(args: argparse.Namespace) -> int:
         else:
             recording_dirs = [storage_path(ConfigStore().current().recording.directory)]
         index = build_recording_index(recording_dirs)
+        jobs = args.jobs or os.cpu_count() or 1
+        digests: dict[Path, str] = {}
+        results: list[tuple[dict[str, Any], list[dict[str, Any]]] | None] = [None] * len(scenarios)
+        sources = [find_source(scenario, index, digests) for scenario in scenarios]
+        pending = [(i, source) for i, (source, _) in enumerate(sources) if source is not None]
+        done = 0
+        if jobs == 1 or len(pending) <= 1:
+            for i, (scenario, (source, reason)) in enumerate(zip(scenarios, sources, strict=True)):
+                done += 1
+                print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
+                results[i] = run_scenario(
+                    scenario,
+                    source,
+                    settings,
+                    rules_dir=rules_dir,
+                    skip_reason=reason,
+                )
+        else:
+            for i, (scenario, (source, reason)) in enumerate(zip(scenarios, sources, strict=True)):
+                if source is None:
+                    results[i] = run_scenario(
+                        scenario, None, settings, rules_dir=rules_dir, skip_reason=reason
+                    )
+                    done += 1
+                    print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
+            workers = min(jobs, len(pending))
+            if sys.platform == "win32":
+                workers = min(workers, 61)
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=multiprocessing.get_context("spawn"),
+            ) as pool:
+                futures = {
+                    pool.submit(
+                        run_scenario,
+                        scenarios[i],
+                        source,
+                        settings,
+                        rules_dir=rules_dir,
+                        skip_reason="",
+                    ): i
+                    for i, source in pending
+                }
+                for future in as_completed(futures):
+                    i = futures[future]
+                    results[i] = future.result()
+                    done += 1
+                    print(
+                        f"bench {done}/{len(scenarios)}: {scenarios[i].id} done",
+                        file=sys.stderr,
+                    )
         scenario_rows: dict[str, dict[str, Any]] = {}
         outcomes: list[dict[str, Any]] = []
-        for i, scenario in enumerate(scenarios, 1):
-            source, reason = find_source(scenario, index)
-            print(
-                f"bench {i}/{len(scenarios)}: {scenario.id} ...",
-                file=sys.stderr,
-            )
-            row, scenario_outcomes = run_scenario(
-                scenario,
-                source,
-                settings,
-                rules_dir=rules_dir,
-                skip_reason=reason,
-            )
+        for scenario, result in zip(scenarios, results, strict=True):
+            assert result is not None
+            row, scenario_outcomes = result
             scenario_rows[scenario.id] = row
             outcomes.extend(scenario_outcomes)
         kept: list[str] = []
