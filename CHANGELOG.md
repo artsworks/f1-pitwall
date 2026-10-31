@@ -10,6 +10,30 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.48.0 (2026-10-31)
+
+### Bug Fixes
+
+- **strategy**: Declare rain box urgency ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+- **strategy**: Name the tyre field and forecast call for
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+### Features
+
+- **strategy**: Add expected-time dry-to-wet calls
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+### Performance Improvements
+
+- **strategy**: Recompute rain stop on session packets only
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+
 ## v0.47.0 (2026-10-31)
 
 ### Bug Fixes
