@@ -73,7 +73,7 @@ The new rules sit in `race_events.yaml` next to `penalty`, `penalty_pit` and `se
 | `penalty_served_stop_go` | 2, info | `SGSV` for the player inside `penalty_recent_s` |
 | `out_lap_s3_tyres_cold`, `out_lap_s3_tyres_ready` | unchanged | now also need `not pit_pass_no_stop` |
 
-The repo owner also decided two wording changes. `penalty_pit` names no lap count, because telemetry has no field for the serve window and the reminder calls cover timing. `serve_penalty` has a drive-through pool that never mentions a stop, because a drive-through fits no tyres. Stop-go keeps the stop wording.
+The repo owner also decided two wording changes. `penalty_pit` names no lap count, because telemetry has no field for the serve window and the reminder calls cover timing. `serve_penalty` has a drive-through pool that never implies a tyre change, because a drive-through fits no tyres. Each line keeps the tyre stop a separate visit, because `box_now` can ask for tyres on the same lap. Stop-go keeps the stop wording.
 
 There are no new thresholds. All four rules reuse `penalty_recent_s` (10 s), the same latch as the other penalty calls.
 
@@ -85,7 +85,7 @@ There are no new thresholds. All four rules reuse `penalty_recent_s` (10 s), the
 | `penalty_serve_reminder` | "Reminder, drive-through still to serve. 4 laps to go" / "Drive-through still on the car. 4 laps left" / "We still owe the drive-through. 4 to go" / "Drive-through not served yet. 4 laps remaining" |
 | `penalty_served_drive_through` | "Drive-through served. P7 now" / "That's the drive-through done. P7" / "Drive-through served, P7. Penalty clear" / "Penalty served. Back out in P7" |
 | `penalty_pit` | "We've got a drive-through. We'll call when to serve it" / "Drive-through penalty. We'll call the lap to take it" (no lap count) |
-| `serve_penalty`, drive-through | "Drive-through when we box, no tyre change" / "We box for the drive-through. No tyre change, straight through" / "Drive-through still to serve. Straight through, no tyres" / "Box is for the drive-through only. No tyre change" |
+| `serve_penalty`, drive-through | "Drive-through first, no tyre change. Tyres on a separate stop" / "Drive-through is a separate pass, no tyres. The tyre stop comes after" / "Serve the drive-through first. No tyre change on that pass" / "Drive-through pass first, no tyres. Then we box for the stop" |
 | `penalty_served_stop_go` | "Stop-go served, 10.0 stationary. P9" / "Stop-go done, 10.0 seconds held. P9" / "That's the stop-go served. P9, penalty clear" / "Stop-go served. 10.0 in the box, P9" |
 
 ## Scenario

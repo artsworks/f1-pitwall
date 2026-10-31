@@ -136,12 +136,21 @@ def _serve_penalty_text(**fields: int) -> str:
     return next(c.text for c in candidates if c.rule.defn.id == "serve_penalty")
 
 
-def test_serve_penalty_drive_through_never_mentions_a_stop() -> None:
+def test_serve_penalty_drive_through_never_implies_a_tyre_change() -> None:
     text = _serve_penalty_text(unserved_drive_through=1)
 
     assert "drive-through" in text.lower() and "tyre" in text
     pool = _race_rule("serve_penalty")["severity"][0]["say"]
-    assert all("stop" not in line.lower() and "tyre" in line for line in pool)
+    assert all("no tyre" in line.lower() for line in pool)
+
+
+def test_serve_penalty_drive_through_keeps_the_tyre_stop_separate() -> None:
+    # pit_plan is box_now, so box_now asks for tyres on the same lap.
+    pool = _race_rule("serve_penalty")["severity"][0]["say"]
+    assert all(
+        any(word in line.lower() for word in ("separate", "first", "then", "after"))
+        for line in pool
+    )
 
 
 def test_serve_penalty_stop_go_keeps_stop_wording() -> None:

@@ -63,14 +63,14 @@ rules:
       - "Penalty still unserved. Serve it at the stop"
       - "Penalty still to serve. Take it at the stop"
       - "Penalty remains on the car. Serve it in the pits"
-    # A drive-through fits no tyres, so its lines never mention the stop.
+    # A drive-through fits no tyres, so its lines keep the tyre stop a separate visit.
     severity:
       - when: "unserved_drive_through > 0"
         say:
-          - "Drive-through when we box, no tyre change"
-          - "We box for the drive-through. No tyre change, straight through"
-          - "Drive-through still to serve. Straight through, no tyres"
-          - "Box is for the drive-through only. No tyre change"
+          - "Drive-through first, no tyre change. Tyres on a separate stop"
+          - "Drive-through is a separate pass, no tyres. The tyre stop comes after"
+          - "Serve the drive-through first. No tyre change on that pass"
+          - "Drive-through pass first, no tyres. Then we box for the stop"
   # Penalty escalation: game reminders to serve a drive-through or stop-go,
   # then the served confirmation (DTSV/SGSV). See docs/research/penalty-escalation.md.
   - id: penalty_serve_this_lap
