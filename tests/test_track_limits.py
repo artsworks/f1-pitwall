@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -52,7 +53,7 @@ def test_warning_chain_replays_once_and_deterministically(
             zip(CHAIN, (2, 3, 4), strict=True)
         )
         for count, call in enumerate(warnings, 1):
-            assert f"{count:.1f}" in call.text
+            assert str(count) in call.text
             assert call.priority == 3
             assert call.urgency == "info"
             assert "{" not in call.text
@@ -207,11 +208,23 @@ def test_all_phrase_variants_include_count_and_next_consequence() -> None:
         rule = next(rule for rule in settings.rules if rule.id == rule_id)
         assert len(rule.say_pool()) >= 3
         for phrase in rule.say_pool():
-            assert "{track_warning_count:.1f}" in phrase
+            assert "{track_warning_count:.0f}" in phrase
             if count < 3:
                 assert "black-and-white" in phrase.lower()
             else:
                 assert "penalty" in phrase or "costs time" in phrase
+
+
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_all_warning_counts_render_as_integers(count: int) -> None:
+    rules = _rules()
+    rule_id = CHAIN[count - 1]
+    rule = next(rule for rule in rules.rules if rule.id == rule_id)
+    for phrase in rule.defn.say_pool():
+        text = rules.candidate_for(rule_id, _snapshot(count), text=phrase).text
+        assert re.findall(r"\d+(?:\.\d+)?", text) == (
+            [str(count), "3"] if count == 1 else [str(count)]
+        )
 
 
 def test_scenario_matches_reproducible_stream(tmp_path: Path) -> None:

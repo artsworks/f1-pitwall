@@ -12,7 +12,7 @@ These sources describe the 2023 Austrian Grand Prix. They establish radio cadenc
 | [PlanetF1, track-limits explainer, 3 July 2023](https://www.planetf1.com/news/explained-f1-track-limits-rules) | The third violation brings the black-and-white flag. The fourth brings a five-second penalty. Later violations follow a different cycle. | Announce the initial 1/2/3 chain. Do not use modulo arithmetic to invent subsequent penalty cycles. |
 
 The real calls report an offence, then the running count, then the consequence of another offence.
-Pitwall uses short deterministic variants with decimal counts, as required by the radio-copy rules.
+Pitwall uses short deterministic variants with integer warning counts.
 Pitwall does not announce an actual time penalty until telemetry reports that penalty.
 
 ## Telemetry signals
@@ -73,9 +73,9 @@ ADR 0008 phrase rotation remains deterministic and needs no LLM key.
 
 | Stage | Variants |
 | --- | --- |
-| First warning | "Track limits, 1.0 warning. Black-and-white warning at 3.0" / "That's 1.0 for track limits. Black-and-white warning at 3.0" / "1.0 track-limit warning now. At 3.0, black-and-white warning" |
-| Second warning | "Track limits, 2.0 warnings. Next is the black-and-white warning" / "That's 2.0 for track limits. Next warning brings the black-and-white flag" / "2.0 track-limit warnings now. Black-and-white warning next" |
-| Third warning | "Track limits, 3.0 warnings. Next warning is a penalty" / "That's 3.0, black-and-white warning. Next track limit is a penalty" / "3.0 track-limit warnings now. Next warning costs time" |
+| First warning | "Track limits, 1 warning. Black-and-white warning at 3" / "That's 1 for track limits. Black-and-white warning at 3" / "1 track-limit warning now. At 3, black-and-white warning" |
+| Second warning | "Track limits, 2 warnings. Next is the black-and-white warning" / "That's 2 for track limits. Next warning brings the black-and-white flag" / "2 track-limit warnings now. Black-and-white warning next" |
+| Third warning | "Track limits, 3 warnings. Next warning is a penalty" / "That's 3, black-and-white warning. Next track limit is a penalty" / "3 track-limit warnings now. Next warning costs time" |
 
 ## Scenario and verification
 

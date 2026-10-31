@@ -105,9 +105,9 @@ rules:
     cooldown_s: 10
     requires: [lap_data]
     say:
-      - "Track limits, {track_warning_count:.1f} warning. Black-and-white warning at {th.track_limits_flag_warnings:.1f}"
-      - "That's {track_warning_count:.1f} for track limits. Black-and-white warning at {th.track_limits_flag_warnings:.1f}"
-      - "{track_warning_count:.1f} track-limit warning now. At {th.track_limits_flag_warnings:.1f}, black-and-white warning"
+      - "Track limits, {track_warning_count:.0f} warning. Black-and-white warning at {th.track_limits_flag_warnings:.0f}"
+      - "That's {track_warning_count:.0f} for track limits. Black-and-white warning at {th.track_limits_flag_warnings:.0f}"
+      - "{track_warning_count:.0f} track-limit warning now. At {th.track_limits_flag_warnings:.0f}, black-and-white warning"
   - id: track_limit_second_warning
     sessions: [race]
     priority: 3
@@ -120,9 +120,9 @@ rules:
     cooldown_s: 10
     requires: [lap_data]
     say:
-      - "Track limits, {track_warning_count:.1f} warnings. Next is the black-and-white warning"
-      - "That's {track_warning_count:.1f} for track limits. Next warning brings the black-and-white flag"
-      - "{track_warning_count:.1f} track-limit warnings now. Black-and-white warning next"
+      - "Track limits, {track_warning_count:.0f} warnings. Next is the black-and-white warning"
+      - "That's {track_warning_count:.0f} for track limits. Next warning brings the black-and-white flag"
+      - "{track_warning_count:.0f} track-limit warnings now. Black-and-white warning next"
   - id: track_limit_last_warning
     sessions: [race]
     priority: 3
@@ -135,9 +135,9 @@ rules:
     cooldown_s: 10
     requires: [lap_data]
     say:
-      - "Track limits, {track_warning_count:.1f} warnings. Next warning is a penalty"
-      - "That's {track_warning_count:.1f}, black-and-white warning. Next track limit is a penalty"
-      - "{track_warning_count:.1f} track-limit warnings now. Next warning costs time"
+      - "Track limits, {track_warning_count:.0f} warnings. Next warning is a penalty"
+      - "That's {track_warning_count:.0f}, black-and-white warning. Next track limit is a penalty"
+      - "{track_warning_count:.0f} track-limit warnings now. Next warning costs time"
   - id: blue_flag
     sessions: [race]
     priority: 1
