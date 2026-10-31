@@ -10,6 +10,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.49.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Fuel save target counts the lap driven and never reads 0.0
+  ([#163](https://github.com/artsworks/f1-pitwall/pull/163),
+  [`a165070`](https://github.com/artsworks/f1-pitwall/commit/a16507014f285ffd93fd6546884de4641ba784f7))
+
+### Features
+
+- **rules**: Lift-and-coast and PU thermal management calls
+  ([#163](https://github.com/artsworks/f1-pitwall/pull/163),
+  [`a165070`](https://github.com/artsworks/f1-pitwall/commit/a16507014f285ffd93fd6546884de4641ba784f7))
+
+
 ## v0.48.0 (2026-10-31)
 
 ### Bug Fixes
