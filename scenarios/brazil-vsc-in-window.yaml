@@ -1,0 +1,19 @@
+id: brazil-vsc-in-window
+title: Virtual safety car on laps 10 and 11, inside the window
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "10-11"
+  vsc: true
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [10, 10]}
+    - {rule: vsc_ending, laps: [11, 11]}
+    - {rule: [plan_sc_box, box_now], laps: [10, 11]}
+    - {rule: vsc_ending_box, laps: [11, 11]}
+  absent:
+    - {rule: [sc_deployed, sc_ending, sc_restart, sc_escalated_box], laps: [1, 17]}
+why: The stop is still owed in the window. A VSC saves less than a full safety car but still makes the stop worthwhile. The VSC-ending call is the last chance to box before green.

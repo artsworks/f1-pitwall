@@ -663,6 +663,11 @@ def test_ops_from_options_errors() -> None:
         ops_from_options(None, None, True, None)
     with pytest.raises(ValueError, match="positive, ascending"):
         ops_from_options(None, "4-3", False, None)
+    with pytest.raises(ValueError, match="--escalate-sc requires --vsc"):
+        ops_from_options(None, "10-12", False, None, escalate_sc=11)
+    for lap in (10, 13):
+        with pytest.raises(ValueError, match="start_lap < escalate_sc <= end_lap"):
+            ops_from_options(None, "10-12", True, None, escalate_sc=lap)
 
 
 def test_teammate_pit_scenario_mutation_validation(tmp_path: Path) -> None:
@@ -671,6 +676,17 @@ def test_teammate_pit_scenario_mutation_validation(tmp_path: Path) -> None:
     for value in (True, "11", 11.0):
         with pytest.raises(ValueError, match="mutations.teammate_pit must be an integer"):
             _scenario_ops({"teammate_pit": value}, tmp_path / "scenario.yaml")
+
+
+def test_escalate_sc_scenario_mutation_validation(tmp_path: Path) -> None:
+    path = tmp_path / "scenario.yaml"
+    ops = _scenario_ops({"inject_sc": "10-12", "vsc": True, "escalate_sc": 11}, path)
+    assert [op.label for op in ops] == ["inject_sc=10-12:vsc>sc@11"]
+    for value in (True, "11", 11.0):
+        with pytest.raises(ValueError, match="mutations.escalate_sc must be an integer"):
+            _scenario_ops({"inject_sc": "10-12", "vsc": True, "escalate_sc": value}, path)
+    with pytest.raises(ValueError, match="--escalate-sc requires --vsc"):
+        _scenario_ops({"inject_sc": "10-12", "escalate_sc": 11}, path)
 
 
 def _bench_cli_argv(tmp_path: Path) -> list[str]:

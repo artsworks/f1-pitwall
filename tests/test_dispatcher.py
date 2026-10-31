@@ -152,6 +152,52 @@ def test_cooldown_and_dedupe() -> None:
     assert len(d.drain(31.0)) == 1
 
 
+def test_box_now_suppresses_vsc_ending_box_inside_pit_cooldown() -> None:
+    engine = _battle_engine()
+    dispatcher, _, buf = _dispatcher(min_gap_s=0.0)
+    shared = {
+        "pit_plan": "cheap_stop",
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "pit_plan_gain_s": 2.0,
+        "pit_plan_reason": "cheap stop",
+        "plan_next_compound": "soft",
+        "active_plan": "A",
+        "pit_status": 0,
+        "laps_of_pace": 2,
+        "laps_remaining": 10,
+        "_ages": {"car_telemetry": 0.1, "car_status": 0.1, "lap_data": 0.1},
+    }
+    box_snapshot = _battle_snapshot(0.0, **(shared | {"phase": "racing"}))
+    box_now = next(
+        candidate
+        for candidate in engine.evaluate(box_snapshot).candidates
+        if candidate.rule.id == "box_now"
+    )
+    assert box_now.rule.defn.cooldown_group == "pit"
+    dispatcher.submit([box_now], box_snapshot)
+    assert [call.rule_id for call in dispatcher.drain(0.0)] == ["box_now"]
+
+    ending_snapshot = _battle_snapshot(
+        20.0,
+        **(shared | {"phase": "vsc", "sc_ending": True, "sc_escalated": False}),
+    )
+    ending_call = next(
+        candidate
+        for candidate in engine.evaluate(ending_snapshot).candidates
+        if candidate.rule.id == "vsc_ending_box"
+    )
+    assert ending_call.rule.defn.cooldown_group == "pit"
+    dispatcher.submit([ending_call], ending_snapshot)
+    assert dispatcher.drain(20.0) == []
+    assert any(
+        row["rule_id"] == "vsc_ending_box"
+        and row["outcome"] == "suppressed"
+        and row["suppressed_by"] == "cooldown"
+        for row in _log(buf)
+    )
+
+
 def test_budget_and_p1_exempt() -> None:
     d, sink, _ = _dispatcher(calls_per_lap=1, min_gap_s=0.0)
     d.submit([_cand("a"), _cand("b")], make_snapshot(0.0))

@@ -553,6 +553,31 @@ def test_derive_mutations_preserve_headers_offsets_and_unrelated_data(tmp_path) 
     assert green_sessions == 1
 
 
+def test_vsc_escalates_to_safety_car_in_status_and_events() -> None:
+    packets = race_stream(RaceSpec(laps=7, dt=1.0, session_uid=SOURCE_UID))
+    op = InjectSafetyCar(3, 5, vsc=True, escalate_lap=4)
+    session = next(
+        payload for _, payload in packets if parse_header(payload).packet_id == PacketId.SESSION
+    )
+    statuses = {
+        lap: op.apply(session, DeriveContext(player_lap=lap))[0][SESSION_SAFETY_CAR_STATUS_OFFSET]
+        for lap in (3, 4, 5)
+    }
+    derived = list(derive_records(packets, [op]))
+    scars: list[tuple[int, int]] = []
+    for _, payload in derived:
+        header = parse_header(payload)
+        if header.packet_id == PacketId.EVENT:
+            event = parse(PacketId.EVENT, payload, header)
+            if event.code == "SCAR":
+                scars.append((event.detail["safety_car_type"], event.detail["event_type"]))
+
+    assert statuses[3] == 2
+    assert statuses[4] == 1
+    assert statuses[5] == 1
+    assert scars == [(2, 0), (1, 0), (1, 1), (1, 2)]
+
+
 @pytest.mark.parametrize("side", ["ahead", "behind"])
 def test_inject_rival_pit_flags_the_neighbour_on_the_chosen_lap_only(tmp_path, side) -> None:
     source = _write_race(tmp_path / "source.f1bin", SOURCE_UID, laps=5)

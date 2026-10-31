@@ -752,3 +752,45 @@ rules:
       - "Rear wear is {wear_hot_ratio:.1f} times the front. Smooth on throttle"
       - "Rears wearing {wear_hot_ratio:.1f} times faster. Avoid wheelspin"
       - "Rear limited. Short-shift and feed in the power"
+  - id: vsc_ending_box
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    supersedes: [box_now]
+    when: "phase == 'vsc' and sc_ending and pit_status == 0 and pit_plan == 'cheap_stop' and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "not sc_ending or pit_status != 0 or pit_plan != 'cheap_stop'"
+    still_true: "phase == 'vsc' and sc_ending and pit_plan == 'cheap_stop'"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "VSC ending. Box this lap, saves {pit_plan_gain_s:.1f} seconds"
+      - "VSC ending, box box. Last chance for the cheap stop, {pit_plan_gain_s:.1f} seconds"
+      - "Box now before the VSC ends. {plan_next_compound}s, {pit_plan_gain_s:.1f} seconds"
+      - "VSC ending. Box this lap for {plan_next_compound}s"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, staying out"
+  - id: sc_escalated_box
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    supersedes: [box_now]
+    when: "phase == 'sc' and sc_escalated and pit_status == 0 and pit_plan == 'cheap_stop' and pit_plan_risk <= mode.position_loss_risk_max and pit_plan_gain_s >= 0 and laps_remaining > th.pit_min_laps_left"
+    clear_when: "not sc_escalated or pit_status != 0 or pit_plan != 'cheap_stop'"
+    still_true: "phase == 'sc' and sc_escalated and pit_plan == 'cheap_stop'"
+    cooldown_s: 45
+    cooldown_group: pit
+    requires: [lap_data]
+    say:
+      - "Full safety car now. Box, box, stop saves {pit_plan_gain_s:.1f} seconds"
+      - "VSC is now a safety car. Box this lap, {pit_plan_gain_s:.1f} seconds"
+      - "Safety car now, cheaper stop. Box this lap for {plan_next_compound}s"
+      - "Safety car, box box. Gain {pit_plan_gain_s:.1f} seconds"
+    on_ack:
+      - "Copy, box this lap"
+    on_neg:
+      - "Understood, staying out"

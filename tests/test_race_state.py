@@ -43,6 +43,35 @@ def test_sc_exit_hysteresis() -> None:
     assert _step(rp, 5.0, safety_car_status=2) == "vsc"
 
 
+def test_vsc_escalation_survives_status_flicker_and_resets_after_period() -> None:
+    rp = RacePhase()
+    _step(rp, 0.0)
+    assert _step(rp, 1.0, safety_car_status=2) == "vsc"
+    assert not rp.escalated
+    assert _step(rp, 2.0, safety_car_status=0) == "vsc"
+    assert _step(rp, 3.0, safety_car_status=1) == "sc"
+    assert rp.escalated
+    assert _step(rp, 6.1, safety_car_status=0) == "racing"
+    assert not rp.escalated
+
+
+def test_plain_sc_is_not_an_escalation() -> None:
+    rp = RacePhase()
+    _step(rp, 0.0)
+    assert _step(rp, 1.0, safety_car_status=1) == "sc"
+    assert not rp.escalated
+
+
+def test_sc_after_vsc_period_ended_is_not_an_escalation() -> None:
+    rp = RacePhase()
+    _step(rp, 0.0)
+    assert _step(rp, 1.0, safety_car_status=2) == "vsc"
+    assert _step(rp, 4.1, safety_car_status=0) == "racing"
+    assert not rp.escalated
+    assert _step(rp, 5.0, safety_car_status=1) == "sc"
+    assert not rp.escalated
+
+
 def test_sc_laps_count() -> None:
     rp = RacePhase()
     _step(rp, 0.0)

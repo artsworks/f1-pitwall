@@ -421,6 +421,103 @@ def test_cover_box_rule_fires_and_respects_minimum_laps() -> None:
     assert "cover_box" not in {candidate.rule.defn.id for candidate in suppressed.candidates}
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "phase", "flag"),
+    [
+        ("vsc_ending_box", "vsc", "sc_ending"),
+        ("sc_escalated_box", "sc", "sc_escalated"),
+    ],
+)
+def test_neutralisation_pit_rules_fire(rule_id: str, phase: str, flag: str) -> None:
+    fields = {
+        "session_kind": "race",
+        "phase": phase,
+        "sc_ending": False,
+        "sc_escalated": False,
+        "pit_status": 0,
+        "pit_plan": "cheap_stop",
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "pit_plan_gain_s": 1.0,
+        "plan_next_compound": "soft",
+        "laps_remaining": 10,
+        "laps_of_pace": 2,
+        "_ages": {"lap_data": 0.1},
+    }
+    fields[flag] = True
+
+    result = _default_rule_engine().evaluate(_rule_snapshot(**fields))
+
+    assert rule_id in {candidate.rule.defn.id for candidate in result.candidates}
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "phase", "flag"),
+    [
+        ("vsc_ending_box", "vsc", "sc_ending"),
+        ("sc_escalated_box", "sc", "sc_escalated"),
+    ],
+)
+def test_neutralisation_pit_rules_respect_stop_gates(rule_id: str, phase: str, flag: str) -> None:
+    fields = {
+        "session_kind": "race",
+        "phase": phase,
+        "sc_ending": False,
+        "sc_escalated": False,
+        "pit_status": 0,
+        "pit_plan": "cheap_stop",
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "pit_plan_gain_s": 1.0,
+        "plan_next_compound": "soft",
+        "laps_remaining": 10,
+        "laps_of_pace": 2,
+        "_ages": {"lap_data": 0.1},
+    }
+    fields[flag] = True
+    for changed in ({"pit_status": 1}, {"pit_plan": "box_now"}, {flag: False}):
+        result = _default_rule_engine().evaluate(_rule_snapshot(**(fields | changed)))
+        assert rule_id not in {candidate.rule.defn.id for candidate in result.candidates}
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "phase", "flag"),
+    [
+        ("vsc_ending_box", "vsc", "sc_ending"),
+        ("sc_escalated_box", "sc", "sc_escalated"),
+    ],
+)
+def test_neutralisation_pit_rules_respect_risk_and_allow_low_confidence(
+    rule_id: str, phase: str, flag: str
+) -> None:
+    fields = {
+        "session_kind": "race",
+        "phase": phase,
+        "sc_ending": False,
+        "sc_escalated": False,
+        "pit_status": 0,
+        "pit_plan": "cheap_stop",
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "pit_plan_gain_s": 1.0,
+        "plan_next_compound": "soft",
+        "laps_remaining": 10,
+        "laps_of_pace": 2,
+        "_ages": {"lap_data": 0.1},
+    }
+    fields[flag] = True
+
+    high_risk = _default_rule_engine().evaluate(_rule_snapshot(**(fields | {"pit_plan_risk": 0.8})))
+    assert rule_id not in {candidate.rule.defn.id for candidate in high_risk.candidates}
+
+    low_confidence = _default_rule_engine().evaluate(
+        _rule_snapshot(
+            **(fields | {"pit_plan_confidence": 0.6, "laps_of_pace": 1, "pit_plan_risk": 0.0})
+        )
+    )
+    assert rule_id in {candidate.rule.defn.id for candidate in low_confidence.candidates}
+
+
 def test_overcut_defend_rule_fires() -> None:
     result = _default_rule_engine().evaluate(
         _rule_snapshot(
