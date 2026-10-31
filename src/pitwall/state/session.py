@@ -22,6 +22,7 @@ from pitwall.protocol.packets import (
     CarTelemetry2Packet,
     CarTelemetryPacket,
     EventPacket,
+    FinalClassificationPacket,
     LapDataPacket,
     MotionExPacket,
     ParticipantsPacket,
@@ -134,6 +135,7 @@ def snapshot_scalars(snap: Snapshot) -> dict[str, Any]:
 
 
 PACKET_NAMES: dict[int, str] = {
+    PacketId.FINAL_CLASSIFICATION: "final_classification",
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",
     PacketId.EVENT: "event",
@@ -336,6 +338,24 @@ class Snapshot:
     """Frozen per-tick view; everything rules read lives here."""
 
     now: float
+    # Race-end and formation-lap radio
+    formula: int = -1
+    result_status: int = 0
+    formation_lap_enabled: bool = False
+    start_lights: int = 0
+    finish_elapsed_s: float = 0.0
+    finish_details: str = ""
+    final_position: int = 0
+    final_details: str = ""
+
+    @property
+    def brake_min_c(self) -> float:
+        return float(min(self.brake_temp.as_tuple()))
+
+    @property
+    def brake_max_c(self) -> float:
+        return float(max(self.brake_temp.as_tuple()))
+
     session_time: float = 0.0
     last_packet_t: float | None = None  # clock time of newest packet, same base as `now`
     session_kind: str = "unknown"
@@ -1114,6 +1134,13 @@ class SessionState:
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st: float | None = None
         self.lights_out = False
+        # Race-end and formation-lap radio
+        self.formula = -1
+        self.formation_lap_enabled = False
+        self.start_lights = 0
+        self._finish_t: float | None = None
+        self._finish_details = ""
+        self._final_classification: Any | None = None
         self.chequered = False
         self._flag_as_leader = False
         self._fastest_lap: tuple[int, int, float] | None = None  # (car idx, ms, session time)
@@ -1231,6 +1258,8 @@ class SessionState:
             return
         if isinstance(pkt, SessionPacket):
             self._on_session(pkt)
+        elif isinstance(pkt, FinalClassificationPacket):
+            self._final_classification = pkt
         elif isinstance(pkt, LapDataPacket):
             self._on_lap_data(pkt)
         elif isinstance(pkt, EventPacket):
@@ -1297,6 +1326,11 @@ class SessionState:
 
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
+        # Race-end and formation-lap radio
+        self._finish_t = None
+        self._finish_details = ""
+        self._final_classification = None
+        self.start_lights = 0
         self._last_rewind_t = t
         # A pit-status change seen across a flashback is not a real entry or exit.
         self._pit_entry_stops = None
@@ -1389,6 +1423,9 @@ class SessionState:
 
     def _on_session(self, pkt: SessionPacket) -> None:
         self.session_type = pkt.session_type
+        # Race-end and formation-lap radio
+        self.formula = pkt.formula
+        self.formation_lap_enabled = bool(pkt.formation_lap)
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
@@ -1532,6 +1569,32 @@ class SessionState:
         self.current_lap_invalid = car.current_lap_invalid
         self.pit_lane_time_ms = car.pit_lane_time_in_lane_ms
         self.result_status = car.result_status
+        # Race-end radio: latch measured road gaps, never strategy projections.
+        if car.result_status == 3 and self._finish_t is None:
+            self._finish_t = pkt.header.session_time
+            details = []
+            if (
+                car.car_position > 1
+                and car.delta_to_car_in_front_ms > 0
+                and any(
+                    c.car_position == car.car_position - 1
+                    and c.current_lap_num == car.current_lap_num
+                    and c.result_status in (2, 3)
+                    for c in pkt.cars
+                )
+            ):
+                details.append(f"{car.delta_to_car_in_front_ms / 1000:.1f} to the car ahead.")
+            behind = next((c for c in pkt.cars if c.car_position == car.car_position + 1), None)
+            if (
+                behind is not None
+                and behind.result_status in (2, 3)
+                and behind.current_lap_num == car.current_lap_num
+                and behind.delta_to_car_in_front_ms > 0
+            ):
+                details.append(f"{behind.delta_to_car_in_front_ms / 1000:.1f} clear behind.")
+            if self._fastest_lap is not None and self._fastest_lap[0] == self._player_idx:
+                details.append(f"Fastest lap, {self._fastest_lap[1] / 1000:.1f} seconds.")
+            self._finish_details = " ".join(details)
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
         if car.penalties != self.penalty_s:
@@ -1798,6 +1861,8 @@ class SessionState:
             self.lights_out = True
             self.red_flag = False
             self.safety_car_status = 0
+        elif pkt.code == "STLG":
+            self.start_lights = pkt.detail.get("num_lights", 0)
         elif pkt.code == "CHQF":
             self.chequered = True
             self._flag_as_leader = self.position == 1
@@ -2619,6 +2684,14 @@ class SessionState:
         )
         return Snapshot(
             now=now,
+            # Race-end and formation-lap radio
+            formula=self.formula,
+            result_status=self.result_status,
+            formation_lap_enabled=self.formation_lap_enabled,
+            start_lights=self.start_lights,
+            finish_elapsed_s=max(0.0, st - self._finish_t) if self._finish_t is not None else 0.0,
+            finish_details=self._finish_details,
+            **self._final_result_view(),
             session_time=st,
             last_packet_t=self.last_recv_wall,
             session_kind=kind,
@@ -3119,6 +3192,44 @@ class SessionState:
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
         )
+
+    # Race-end radio
+    def _final_result_view(self) -> dict[str, Any]:
+        pkt = self._final_classification
+        if pkt is None or not 0 <= self._player_idx < pkt.num_cars <= CAR_SLOTS:
+            return {}
+        cars = pkt.cars[: pkt.num_cars]
+        car = cars[self._player_idx]
+        if car.result_status != 3 or not 1 <= car.position <= pkt.num_cars:
+            return {}
+        details = []
+        if car.grid_position > 0:
+            gained = car.grid_position - car.position
+            if gained > 0:
+                details.append(f"Up {gained:.1f} from the grid.")
+            elif gained < 0:
+                details.append(f"Down {-gained:.1f} from the grid.")
+            else:
+                details.append(f"Held P{car.grid_position:.1f} from the grid.")
+        total = car.total_race_time + car.penalties_time
+        if math.isfinite(total) and total > 0:
+            for offset, label in ((-1, "to the car ahead"), (1, "clear behind")):
+                rival = next((c for c in cars if c.position == car.position + offset), None)
+                if (
+                    rival is None
+                    or rival.result_status != 3
+                    or rival.num_laps != car.num_laps
+                    or not math.isfinite(rival.total_race_time)
+                    or rival.total_race_time <= 0
+                ):
+                    continue
+                gap = offset * (rival.total_race_time + rival.penalties_time - total)
+                if gap > 0:
+                    details.append(f"{gap:.1f} {label}.")
+        best = [c.best_lap_time_ms for c in cars if c.best_lap_time_ms > 0]
+        if best and car.best_lap_time_ms == min(best) and best.count(min(best)) == 1:
+            details.append(f"Fastest lap, {car.best_lap_time_ms / 1000:.1f} seconds.")
+        return dict(final_position=car.position, final_details=" ".join(details))
 
     def _race_view(
         self,

@@ -1,4 +1,9 @@
 thresholds:
+  # Race-end and formation-lap radio
+  formation_min_speed_kmh: 10
+  formation_brakes_cold_c: 200
+  race_cool_down_delay_s: 8
+  race_cool_down_min_speed_kmh: 10
   # Setup advisor A1 detector thresholds
   trac_slip: 0.08
   trac_throttle: 0.7
