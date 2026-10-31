@@ -3507,12 +3507,12 @@ class SessionState:
             and mate_car.result_status == 2
             and player_car.pit_status == 0
             and mate_car.pit_status == 0
-            and self.tyre_compound != 0
+            and self.tyre_visual != 0
             and compound != 0
             and mate_age is not None
             and min(self.tyre_age_laps, mate_age) >= split_age
             and (
-                self.tyre_compound != compound
+                self.tyre_visual != compound
                 or self.num_pit_stops != mate_stops
                 or abs(self.tyre_age_laps - mate_age) >= split_age
             )

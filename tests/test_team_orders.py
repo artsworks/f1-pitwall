@@ -29,6 +29,7 @@ def _team_state(
     state.track_length_m = 5000.0
     state.speed_kmh = 200.0
     state.tyre_compound = compounds[0]
+    state.tyre_visual = compounds[0]
     state.tyre_age_laps = player_age
     state.num_pit_stops = stops[0]
     state.cars_status = tuple(
@@ -107,6 +108,13 @@ def test_teammate_split_detects_different_compound_after_five_laps() -> None:
     assert snapshot.teammate_split
     assert snapshot.teammate_compound_name == "soft"
     assert snapshot.teammate_tyre_age == 6
+
+
+def test_teammate_split_compares_player_visual_compound() -> None:
+    state = _team_state(player_age=6, mate_age=6, compounds=(17, 17))
+    state.tyre_compound = 18
+
+    assert not _teammate_snapshot(state).teammate_split
 
 
 def test_teammate_split_stays_false_when_age_is_unknown() -> None:
