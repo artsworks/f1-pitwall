@@ -444,8 +444,11 @@ def cmd_bench(args: argparse.Namespace) -> int:
                     )
                     done += 1
                     print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
+            workers = min(jobs, len(pending))
+            if sys.platform == "win32":
+                workers = min(workers, 61)
             with ProcessPoolExecutor(
-                max_workers=min(jobs, len(pending)),
+                max_workers=workers,
                 mp_context=multiprocessing.get_context("spawn"),
             ) as pool:
                 futures = {

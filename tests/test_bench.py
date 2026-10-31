@@ -826,6 +826,77 @@ def test_bench_jobs_one_runs_in_process(
     ]
 
 
+def test_bench_caps_workers_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import concurrent.futures
+    import sys
+
+    _patch_bench_run(monkeypatch)
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    uid = 0x1234_5678_9ABC_DEF0
+    source = write_packet_stream(
+        recordings / "source.f1bin",
+        race_stream(RaceSpec(laps=2, dt=1.0, session_uid=uid)),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    for index in range(62):
+        scenario_id = f"scenario-{index:02}"
+        _write_scenario(
+            scenarios,
+            {
+                **_scenario_data(id=scenario_id),
+                "source": {"session_uid": hex(uid), "sha256": digest},
+            },
+        )
+    worker_counts: list[int] = []
+
+    class FakeExecutor:
+        def __init__(self, max_workers: int, **kwargs: Any) -> None:
+            worker_counts.append(max_workers)
+
+        def __enter__(self) -> FakeExecutor:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> concurrent.futures.Future[Any]:
+            future: concurrent.futures.Future[Any] = concurrent.futures.Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", FakeExecutor)
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    result = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--rules",
+            str(rules),
+            "--jobs",
+            "64",
+            "--json",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert worker_counts == [61]
+    assert result == 0
+    assert len(output["scorecard"]["scenarios"]) == 62
+
+
 def test_find_source_hashes_each_file_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import pitwall.learning.bench as bench_module
 
