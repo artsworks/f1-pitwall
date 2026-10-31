@@ -37,6 +37,20 @@ def switch_net_s(
     return gain_per_lap_s * laps_after - pit_loss_s - threshold(th, "wet_crossover_margin_s", 3.0)
 
 
+def crossover_projection(
+    gain_prev_s: float, gain_now_s: float, rate_min_s: float
+) -> tuple[float, float, float] | None:
+    """(gap_s, rate_s, laps) until the target compound's lap time crosses ours, else None.
+
+    gain = target compound minus current compound advantage per lap (+ = target quicker).
+    """
+    gap = -gain_now_s
+    rate = gain_now_s - gain_prev_s
+    if gap <= 0 or rate <= 0 or rate < rate_min_s:
+        return None
+    return round(gap, 2), round(rate, 2), round(gap / rate, 1)
+
+
 def wet_by_lap(
     samples: Sequence[tuple[int, int]], lap_s: float, lap_frac: float, laps: int
 ) -> list[float]:

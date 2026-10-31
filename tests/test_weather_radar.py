@@ -1,0 +1,328 @@
+from __future__ import annotations
+
+import pytest
+
+from pitwall.ingest import Ingest
+from pitwall.state.session import SessionState
+from pitwall.strategy.weather import crossover_projection
+
+from .race_synth import RaceSpec, race_stream, replay_race
+
+
+def _fired(rows: list[dict]) -> set[str]:
+    return {row.get("rule_id") for row in rows if row.get("outcome") == "fired"}
+
+
+def _fired_row(rows: list[dict], rule_id: str) -> dict:
+    return next(
+        row for row in rows if row.get("rule_id") == rule_id and row.get("outcome") == "fired"
+    )
+
+
+def _lap_extra(
+    compounds: dict[int, int],
+    lap_times: dict[int, int],
+    *,
+    invalid: tuple[int, ...] = (),
+) -> dict[str, object]:
+    return {
+        "car_status": {
+            "cars": {
+                car: {
+                    "actual_tyre_compound": compound,
+                    "visual_tyre_compound": compound,
+                    "tyres_age_laps": 5,
+                }
+                for car, compound in compounds.items()
+            }
+        },
+        "lap_data": {
+            "cars": {
+                car: {
+                    "last_lap_time_ms": lap_time,
+                    **({"result_status": 1} if car in invalid else {}),
+                }
+                for car, lap_time in lap_times.items()
+            }
+        },
+    }
+
+
+def _lap_extras(
+    times: list[dict[int, int]],
+    compounds: dict[int, int],
+    *,
+    invalid_first: tuple[int, ...] = (),
+) -> dict[int, dict[str, object]]:
+    return {
+        lap: _lap_extra(
+            compounds,
+            lap_times,
+            invalid=invalid_first if lap == 1 else (),
+        )
+        for lap, lap_times in enumerate(times, start=1)
+    }
+
+
+def test_crossover_projection() -> None:
+    assert crossover_projection(-4.0, -3.0, 0.3) == (3.0, 1.0, 3.0)
+    assert crossover_projection(-2.0, -3.0, 0.3) is None
+    assert crossover_projection(-3.1, -3.0, 0.3) is None
+    assert crossover_projection(-1.0, 0.1, 0.3) is None
+
+
+def test_default_race_stream_cache_key() -> None:
+    default = race_stream(RaceSpec(laps=2))
+    explicit_defaults = race_stream(RaceSpec(laps=2, weather=0, extra_by_lap={}))
+    changed = race_stream(RaceSpec(laps=2, extra_by_lap={1: {"session": {"weather": 4}}}))
+    assert default == explicit_defaults
+    assert changed != default
+
+
+def test_field_lap_trend_expires_without_new_clean_pairs() -> None:
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    spec = RaceSpec(
+        laps=6,
+        compound=16,
+        extra_by_lap={
+            1: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 90_000, 2: 90_000, 3: 90_000}),
+            2: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 90_000, 2: 90_000, 3: 90_000}),
+            3: _lap_extra({1: 16, 2: 16, 3: 16}, {1: 92_000, 2: 92_000, 3: 92_000}),
+            4: _lap_extra(
+                {1: 16, 2: 16, 3: 16},
+                {1: 92_000, 2: 92_000, 3: 92_000},
+                invalid=(1, 2, 3),
+            ),
+        },
+    )
+    snapshots = {}
+    last_lap = 0
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.lap_num != last_lap:
+            last_lap = state.lap_num
+            if last_lap in (3, 5):
+                snapshots[last_lap] = state.snapshot(session_time)
+
+    assert snapshots[3].field_lap_trend_s == 2.0
+    assert snapshots[5].field_lap_trend_s == 0.0
+
+
+@pytest.mark.replay
+def test_rain_heads_up_uses_nearest_qualifying_forecast(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(laps=8, rain_lap=2, rain_percentages=(45, 50)),
+    )
+    fired = _fired(rows)
+    assert "weather_rain_soon" in fired
+    assert "weather_to_inter" not in fired
+    text = _fired_row(rows, "weather_rain_soon").get("text", "")
+    assert text.startswith("Rain expected in")
+    assert "45 percent" in text
+
+
+@pytest.mark.replay
+def test_rain_heads_up_silent_when_forecast_has_rain_weather_type(tmp_path) -> None:
+    spec = RaceSpec(
+        laps=8,
+        rain_lap=2,
+        rain_percentages=(45, 50),
+        extra_by_lap={
+            2: {
+                "session": {
+                    "weather_forecast_samples": {
+                        1: {
+                            "session_type": 15,
+                            "time_offset": 10,
+                            "rain_percentage": 45,
+                            "weather": 3,
+                        }
+                    }
+                }
+            }
+        },
+    )
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    onset_snapshot = None
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.rain_onset_min > 0:
+            onset_snapshot = state.snapshot(session_time)
+            break
+
+    assert onset_snapshot is not None
+    assert onset_snapshot.rain_onset_min > 0
+
+    _, rows = replay_race(tmp_path, spec)
+    assert "weather_rain_soon" not in _fired(rows)
+
+
+@pytest.mark.replay
+def test_rain_heads_up_softens_approximate_forecast(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            rain_lap=2,
+            rain_percentages=(45, 50),
+            extra={"session": {"forecast_accuracy": 1}},
+        ),
+    )
+    text = _fired_row(rows, "weather_rain_soon").get("text", "")
+    assert text.startswith("Rain possible in")
+
+
+@pytest.mark.replay
+def test_rain_heads_up_ignores_forecast_beyond_race_horizon(tmp_path) -> None:
+    spec = RaceSpec(
+        laps=4,
+        base_ms=90_000,
+        rain_lap=3,
+        rain_percentages=(45, 45),
+        player_history=True,
+    )
+    _, rows = replay_race(tmp_path, spec)
+    assert "weather_rain_soon" not in _fired(rows)
+
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    snapshots = {}
+    last_lap = 0
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.lap_num != last_lap:
+            last_lap = state.lap_num
+            if last_lap == 3:
+                snapshots[last_lap] = state.snapshot(session_time)
+
+    assert snapshots[3].rain_soon_pct == 0
+
+
+@pytest.mark.replay
+def test_inter_forecast_keeps_standard_wording_for_perfect_accuracy(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(laps=8, rain_lap=2, rain_percentages=(65, 65)),
+    )
+    text = _fired_row(rows, "weather_to_inter").get("text", "")
+    assert text.startswith("Rain ")
+    assert "possible" not in text.lower()
+
+
+@pytest.mark.replay
+def test_inter_forecast_softens_approximate_wording(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            rain_lap=2,
+            rain_percentages=(65, 65),
+            extra={"session": {"forecast_accuracy": 1}},
+        ),
+    )
+    text = _fired_row(rows, "weather_to_inter").get("text", "")
+    assert text.startswith("Rain possible in")
+
+
+@pytest.mark.replay
+def test_track_wetter_uses_clean_field_lap_pairs(tmp_path) -> None:
+    calls, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            compound=16,
+            weather=3,
+            extra_by_lap=_lap_extras(
+                [
+                    {1: 90_000, 2: 90_000, 3: 90_000},
+                    {1: 90_000, 2: 90_000, 3: 90_000},
+                    {1: 92_000, 2: 92_000, 3: 92_000},
+                    {1: 94_000, 2: 94_000, 3: 94_000},
+                    {1: 96_000, 2: 96_000, 3: 96_000},
+                ],
+                {1: 16, 2: 16, 3: 16},
+                invalid_first=(1, 2, 3),
+            ),
+        ),
+    )
+    fired = _fired(rows)
+    assert "track_wetter" in fired
+    assert "track_drier" not in fired
+    assert "tyre_switch" not in fired
+    call = next(call for call in calls if call.rule_id == "track_wetter")
+    assert "2.0 seconds" in call.text
+
+
+@pytest.mark.replay
+def test_track_drier_calls_for_inters_when_field_times_fall(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            compound=7,
+            weather=3,
+            extra_by_lap=_lap_extras(
+                [
+                    {1: 96_000, 2: 96_000, 3: 96_000},
+                    {1: 96_000, 2: 96_000, 3: 96_000},
+                    {1: 94_000, 2: 94_000, 3: 94_000},
+                    {1: 92_000, 2: 92_000, 3: 92_000},
+                    {1: 90_000, 2: 90_000, 3: 90_000},
+                ],
+                {1: 7, 2: 7, 3: 7},
+                invalid_first=(1, 2, 3),
+            ),
+        ),
+    )
+    fired = _fired(rows)
+    assert "track_drier" in fired
+    assert "track_wetter" not in fired
+
+
+@pytest.mark.replay
+def test_crossover_warning_precedes_tyre_switch(tmp_path) -> None:
+    times = [
+        {1: 0, 2: 0, 3: 0},
+        {1: 90_000, 2: 94_060, 3: 94_060},
+        {1: 90_000, 2: 93_120, 3: 93_120},
+        {1: 90_000, 2: 92_180, 3: 92_180},
+        {1: 90_000, 2: 91_240, 3: 91_240},
+        {1: 90_000, 2: 90_300, 3: 90_300},
+        {1: 90_000, 2: 89_360, 3: 89_360},
+        {1: 90_000, 2: 88_420, 3: 88_420},
+        {1: 90_000, 2: 87_480, 3: 87_480},
+        {1: 90_000, 2: 86_540, 3: 86_540},
+        {1: 90_000, 2: 85_600, 3: 85_600},
+        {1: 90_000, 2: 84_660, 3: 84_660},
+    ]
+    calls, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=20,
+            compound=7,
+            weather=4,
+            extra_by_lap=_lap_extras(times, {1: 7, 2: 16, 3: 16}),
+        ),
+    )
+    fired = _fired(rows)
+    assert "compound_crossover_close" in fired
+    call_ids = [call.rule_id for call in calls]
+    crossover_index = call_ids.index("compound_crossover_close")
+    assert "slicks" in calls[crossover_index].text
+    if "tyre_switch" in call_ids:
+        assert crossover_index < call_ids.index("tyre_switch")
+
+
+@pytest.mark.replay
+def test_dry_default_race_has_no_new_weather_calls(tmp_path) -> None:
+    _, rows = replay_race(tmp_path, RaceSpec())
+    fired = _fired(rows)
+    assert not fired.intersection(
+        {"weather_rain_soon", "track_wetter", "track_drier", "compound_crossover_close"}
+    )

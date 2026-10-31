@@ -141,3 +141,10 @@ thresholds:
   # SC/VSC restart procedures (sc-restart)
   sc_delta_warn_s: -0.1   # SC/VSC delta below this is too fast (penalty risk)
   sc_delta_clear_s: 0.3   # re-arm once the delta is back above this
+  # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
+  rain_heads_up_pct: 40      # forecast rain chance for the early heads-up (below rain_inter_pct)
+  rain_heads_up_max_min: 15  # heads-up looks only at forecast samples up to this many minutes ahead
+  track_trend_s: 1.0         # field median lap-over-lap change that counts as wetter or drier
+  track_trend_min_cars: 3    # rival cars with a clean lap pair needed for a field trend
+  crossover_warn_laps: 3     # projected laps to the lap-time crossover that trigger the heads-up
+  crossover_rate_min_s: 0.3  # closing rate per lap below this gives no projection

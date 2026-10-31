@@ -1,0 +1,11 @@
+id: brazil-weather-crossover
+title: "Dry race: no rain heads-up, track-trend or crossover calls"
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+expect:
+  absent:
+    - {rule: [weather_rain_soon, track_wetter, track_drier, compound_crossover_close], laps: [1, 17]}
+why: Brazil was dry, so the weather radar and crossover calls must stay silent. Fire checks need a mixed-weather race recording.
