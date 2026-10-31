@@ -250,6 +250,7 @@ rules:
   - id: rain_box_now
     sessions: [race]
     priority: 1
+    urgency: execution
     when: "phase == 'racing' and laps_remaining > 1 and rain_box_lap == 0 and forecast_accuracy == 0 and weather_now < 3"
     clear_when: "rain_box_lap != 0"
     cooldown_group: weather
