@@ -1636,7 +1636,6 @@ class SessionState:
                 compound=self.tyre_compound,
             )
         self._update_field_wet_switches()
-        self._update_dry_to_wet()
 
     def answer_push_check(self, push: bool) -> None:
         if push:
@@ -2240,7 +2239,6 @@ class SessionState:
             self._on_tyre_change()
         self.tyre_compound = car.actual_tyre_compound
         self.tyre_visual = car.visual_tyre_compound
-        self._update_dry_to_wet()
         self.tyre_age_laps = car.tyres_age_laps
         self.fuel_remaining_laps = car.fuel_remaining_laps
         self.fuel_in_tank = car.fuel_in_tank

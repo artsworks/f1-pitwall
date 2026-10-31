@@ -40,21 +40,18 @@ def test_best_rain_stop_matches_strong_and_light_forecasts() -> None:
 
 
 def test_session_snapshot_recomputes_and_resets_rain_stop() -> None:
-    session = pack_packet(
-        PacketId.SESSION,
-        {
-            "weather": 0,
-            "session_type": 15,
-            "total_laps": 17,
-            "track_length": 5000,
-            "num_weather_forecast_samples": 3,
-            "weather_forecast_samples": {
-                0: {"session_type": 15, "time_offset": 0, "weather": 0, "rain_percentage": 0},
-                1: {"session_type": 15, "time_offset": 1, "weather": 0, "rain_percentage": 0},
-                2: {"session_type": 15, "time_offset": 2, "weather": 3, "rain_percentage": 86},
-            },
+    session_data = {
+        "weather": 0,
+        "session_type": 15,
+        "total_laps": 17,
+        "track_length": 5000,
+        "num_weather_forecast_samples": 3,
+        "weather_forecast_samples": {
+            0: {"session_type": 15, "time_offset": 0, "weather": 0, "rain_percentage": 0},
+            1: {"session_type": 15, "time_offset": 1, "weather": 0, "rain_percentage": 0},
+            2: {"session_type": 15, "time_offset": 2, "weather": 3, "rain_percentage": 86},
         },
-    )
+    }
     state = SessionState(
         thresholds={
             "pit_loss_default_s": 22.0,
@@ -63,12 +60,11 @@ def test_session_snapshot_recomputes_and_resets_rain_stop() -> None:
             "rain_preempt_margin_s": 2.0,
         }
     )
-    state._on_session(parse(PacketId.SESSION, session))
     state._best_laps[0] = 74_000
     state.lap_num = 1
     state.lap_distance = 1000
     state.tyre_visual = 16
-    state._update_dry_to_wet()
+    state._on_session(parse(PacketId.SESSION, pack_packet(PacketId.SESSION, session_data)))
 
     snapshot = state.snapshot(0)
     assert snapshot.forecast_accuracy == 0
@@ -76,15 +72,18 @@ def test_session_snapshot_recomputes_and_resets_rain_stop() -> None:
     assert snapshot.rain_box_lap == 0
     assert snapshot.rain_box_gain_s == 3.4
 
-    state.weather = 3
-    state._update_dry_to_wet()
+    state._on_session(
+        parse(
+            PacketId.SESSION,
+            pack_packet(PacketId.SESSION, {**session_data, "weather": 3}),
+        )
+    )
     assert state.rain_onset_min == 0
     assert state.rain_box_lap == -1
     assert state.rain_box_gain_s == 0.0
 
-    state.weather = 0
     state.tyre_visual = 7
-    state._update_dry_to_wet()
+    state._on_session(parse(PacketId.SESSION, pack_packet(PacketId.SESSION, session_data)))
     assert state.rain_onset_min == 2
     assert state.rain_box_lap == -1
     assert state.rain_box_gain_s == 0.0

@@ -192,7 +192,7 @@ The two directions use different tests:
 - Dry to wet is a grip risk. `tyre_switch` calls the stop when the net gain test passes. `weather_box_now` makes it a priority 1 call when `slip_trend` reaches `th.wet_slip_trend_min` while the rain forecast rises or rain is falling. `slip_trend` is the driver's traction and snap episodes on the last lap minus the lap before.
 - Wet to dry is a pace question. The net gain test must pass on `th.wet_to_dry_confirm_laps` measured laps in a row before `tyre_switch` calls slicks. If the projected rejoin is not clear (`pit_exit_clean` is false), `tyre_switch_slicks_traffic` warns about traffic on cold tyres. `out_lap_s3_tyres_cold` covers slick warm-up on the out-lap.
 
-`rain_box_now` compares expected finish times from forecast rain probabilities and uses a 15% slicks-in-wet loss prior until a recording captures slick laps in rain. `_compound_gain` and the field-lap trend in parallel PR #167 are reactive only.
+`rain_box_now` compares expected finish times from forecast rain probabilities and uses a 15% slicks-in-wet loss prior until a recording captures slick laps in rain. `_compound_gain` is reactive only.
 
 ## Strategy plans (Plan A/B/C)
 
