@@ -488,6 +488,31 @@ def _scenario_map(scorecard: Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def keep_missing(
+    scenarios: Mapping[str, Mapping[str, Any]], baseline: Mapping[str, Any] | None
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    rows = {scenario_id: dict(row) for scenario_id, row in scenarios.items()}
+    if baseline is None:
+        return rows, []
+
+    baseline_scenarios = _scenario_map(baseline)
+    kept: list[str] = []
+    for scenario_id, row in rows.items():
+        old_row = baseline_scenarios.get(scenario_id)
+        if (
+            row.get("result") == "skipped"
+            and row.get("reason") == "source not found"
+            and isinstance(old_row, Mapping)
+            and old_row.get("result") != "skipped"
+        ):
+            rows[scenario_id] = {
+                **dict(old_row),
+                "reason": "kept from baseline: source not found",
+            }
+            kept.append(scenario_id)
+    return rows, sorted(kept)
+
+
 def _check_signature(check: Mapping[str, Any]) -> tuple[str, tuple[str, ...], tuple[int, ...]]:
     return (
         str(check.get("type") or ""),

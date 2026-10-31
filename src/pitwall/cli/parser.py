@@ -351,6 +351,11 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--tolerance", type=float, default=0.02)
     bench.add_argument("--update-baseline", action="store_true")
     bench.add_argument(
+        "--keep-missing",
+        action="store_true",
+        help="with --update-baseline, keep saved entries for scenarios whose recording is missing",
+    )
+    bench.add_argument(
         "--accept-changes",
         action="store_true",
         help="with --update-baseline, accept removed or edited passing checks",
