@@ -360,6 +360,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_json_arg(bench, help="print scorecard and gate as JSON")
     bench.add_argument("--trend", action="store_true", help="show history trend without replay")
     bench.add_argument("--window", type=_positive_int, default=5)
+    bench.add_argument(
+        "--jobs",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="scenarios to replay at once (default: CPU count)",
+    )
     bench.set_defaults(func=cmd_bench)
 
     st = _cmd(
