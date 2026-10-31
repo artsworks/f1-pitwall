@@ -214,6 +214,43 @@ def test_too_late_to_stop() -> None:
     assert p.undercut_s == p.overcut_s == 0.0
 
 
+@pytest.mark.parametrize("mode", [BALANCED, AGGRESSIVE], ids=["balanced", "aggressive"])
+@pytest.mark.parametrize(
+    ("laps_remaining", "min_left", "expected"),
+    [
+        (1, 2, "no_stop"),
+        (2, 2, "no_stop"),
+        (3, 2, "box_now"),
+        (2, 3, "no_stop"),
+        (3, 3, "no_stop"),
+        (4, 3, "box_now"),
+    ],
+)
+def test_cliffed_tyres_respect_min_laps_left(
+    laps_remaining: int, min_left: int, expected: str, mode: dict[str, object]
+) -> None:
+    p = run(
+        lap_num=18 - laps_remaining,
+        laps_remaining=laps_remaining,
+        tyre_age=20,
+        wear_mean=85.0,
+        laps_of_pace=0.0,
+        fit=fit(300),
+        pit_loss_s=10.0,
+        th={**TH, "pit_min_laps_left": min_left},
+        mode=mode,
+    )
+    assert p.plan == expected
+    if expected == "no_stop":
+        assert p.reason == "too late to stop"
+        assert p.lap == 0
+        assert not p.projections
+    else:
+        assert p.reason == "Tyres are done"
+        assert p.lap == 18 - laps_remaining
+        assert p.projections[0][1] < 0
+
+
 @pytest.mark.parametrize("laps_remaining", [1, 2])
 def test_rival_pits_too_late_to_overcut(laps_remaining: int) -> None:
     p = run(
