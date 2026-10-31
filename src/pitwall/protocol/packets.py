@@ -38,6 +38,8 @@ from pitwall.protocol.layouts import (
     CAR_TELEMETRY_CAR,
     CAR_TELEMETRY_LAYOUT,
     EVENT_LAYOUT,
+    FINAL_CLASSIFICATION_CAR,
+    FINAL_CLASSIFICATION_LAYOUT,
     LAP_DATA_CAR,
     LAP_DATA_LAYOUT,
     LAP_HISTORY,
@@ -106,6 +108,14 @@ TyreStintHistory: Any = _class_for("TyreStintHistory", TYRE_STINT_HISTORY, heade
 TyreSetData: Any = _class_for("TyreSetData", TYRE_SET, header=False)
 CarTelemetry2: Any = _class_for("CarTelemetry2", CAR_TELEMETRY_2_CAR, header=False)
 
+# Race-end radio
+FinalClassificationCar: Any = _class_for(
+    "FinalClassificationCar", FINAL_CLASSIFICATION_CAR, header=False
+)
+FinalClassificationPacket: Any = _class_for(
+    "FinalClassificationPacket", FINAL_CLASSIFICATION_LAYOUT
+)
+
 SessionPacket: Any = _class_for("SessionPacket", SESSION_LAYOUT)
 LapDataPacket: Any = _class_for("LapDataPacket", LAP_DATA_LAYOUT)
 EventPacket: Any = _class_for("EventPacket", EVENT_LAYOUT, ("code", "detail"))
@@ -120,6 +130,7 @@ MotionExPacket: Any = _class_for("MotionExPacket", MOTION_EX_LAYOUT)
 CarTelemetry2Packet: Any = _class_for("CarTelemetry2Packet", CAR_TELEMETRY_2_LAYOUT)
 
 _SUB_CLASSES: dict[tuple[Item, ...], Any] = {
+    FINAL_CLASSIFICATION_CAR: FinalClassificationCar,
     MARSHAL_ZONE: MarshalZone,
     WEATHER_FORECAST_SAMPLE: WeatherForecastSample,
     ACTIVE_AERO_ZONE: Zone,
@@ -137,6 +148,7 @@ _SUB_CLASSES: dict[tuple[Item, ...], Any] = {
 
 _COMPILED: dict[tuple[Item, ...], CompiledLayout] = {}
 _PACKET_CLASSES: dict[int, tuple[Any, tuple[Item, ...]]] = {
+    PacketId.FINAL_CLASSIFICATION: (FinalClassificationPacket, FINAL_CLASSIFICATION_LAYOUT),
     PacketId.SESSION: (SessionPacket, SESSION_LAYOUT),
     PacketId.LAP_DATA: (LapDataPacket, LAP_DATA_LAYOUT),
     PacketId.EVENT: (EventPacket, EVENT_LAYOUT),

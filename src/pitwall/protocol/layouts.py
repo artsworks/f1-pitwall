@@ -311,6 +311,29 @@ CAR_TELEMETRY_2_CAR: tuple[Item, ...] = (
     Field("driving_wrong_way", "B"),
 )
 
+# Race-end radio: final results use the format-2026 classification packet.
+FINAL_CLASSIFICATION_CAR: tuple[Item, ...] = (
+    Field("position", "B"),
+    Field("num_laps", "B"),
+    Field("grid_position", "B"),
+    Field("points", "B"),
+    Field("num_pit_stops", "B"),
+    Field("result_status", "B"),
+    Field("result_reason", "B"),
+    Field("best_lap_time_ms", "I"),
+    Field("total_race_time", "d"),
+    Field("penalties_time", "B"),
+    Field("num_penalties", "B"),
+    Field("num_tyre_stints", "B"),
+    Field("tyre_stints_actual", "B", 8),
+    Field("tyre_stints_visual", "B", 8),
+    Field("tyre_stints_end_laps", "B", 8),
+)
+FINAL_CLASSIFICATION_LAYOUT: tuple[Item, ...] = (
+    Field("num_cars", "B"),
+    Array("cars", FINAL_CLASSIFICATION_CAR, CAR_SLOTS),
+)
+
 # ------------------------------------------------------------- packet layouts
 
 SESSION_LAYOUT: tuple[Item, ...] = (

@@ -1,0 +1,12 @@
+id: brazil-team-orders
+title: Teammate one-stop a lap apart, no team-order calls
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+expect:
+  absent:
+    - {rule: teammate_strategy_split, laps: [1, 17]}
+    - {rule: teammate_hold, laps: [1, 14]}
+why: Both cars one-stop a lap apart, which is the same strategy, so no split call. Hold position can only fire in the last three laps.
