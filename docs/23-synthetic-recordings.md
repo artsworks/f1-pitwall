@@ -21,6 +21,7 @@ mutations:
 - `inject_sc: "START[-END]"` adds a safety car for the selected laps. The default end is two laps after the start. The mutation adds `SCAR` events and increases lap time inside the window.
 - `vsc: true` changes the safety-car status to VSC.
 - `penalty: LAP` adds a 5 s `PENA` event for the player and increases the player's penalty total from that lap.
+- `weather` applies ordered `{at_min, weather, rain_pct}` keyframes to Session weather and matching-session forecast samples. Lap times stay as recorded.
 - A rival-pit mutation is not built. See [Breaking mutations](#breaking-mutations).
 
 See [Scenario bench](24-scenario-bench.md) for the scenario format.

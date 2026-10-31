@@ -135,6 +135,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
             "damage",
             "teammate_pit",
             "inject_rival_pit",
+            "weather",
         },
         path,
         "mutations",
@@ -168,6 +169,9 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
         isinstance(teammate_pit, bool) or not isinstance(teammate_pit, int)
     ):
         raise ValueError(f"{path}: mutations.teammate_pit must be an integer")
+    weather = mutations.get("weather")
+    if "weather" in mutations and not isinstance(weather, dict):
+        raise ValueError(f"{path}: mutations.weather must be a mapping")
     try:
         return (
             ops_from_options(
@@ -178,6 +182,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 rival_pit=rival_pit,
                 teammate_pit=teammate_pit,
                 damage=damage,
+                weather=weather,
             )
             if mutations
             else []
