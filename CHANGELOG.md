@@ -10,6 +10,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.46.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Compare visual compounds for teammate strategy split
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+### Features
+
+- **rules**: Teammate hold, strategy split and quali tow calls
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+
 ## v0.45.0 (2026-10-31)
 
 ### Bug Fixes
