@@ -14,6 +14,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
+from typing import Any
 
 from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
@@ -103,6 +104,19 @@ class RaceSpec:
     traction_laps: tuple[int, ...] = ()  # Laps with rear-wheel spin early in the lap
     traction_bursts: int = 1  # Separate spin episodes inside each traction lap
     setup_change_lap: int | None = None  # Change front wing by one click on this lap
+    weather: int = 0
+    extra_by_lap: dict[int, dict[str, object]] = field(default_factory=dict)
+
+
+def _deep_merge(base: dict[Any, Any], overlay: dict[Any, Any]) -> dict[Any, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(current, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _rival_lap_distance(spec: RaceSpec, d: float, offset_s: float) -> float:
@@ -314,9 +328,10 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     t = 0.0
     frame = 1
     ct2_model = _Ct2Model(spec) if spec.ct2 else None
+    extra_for_lap: dict[Any, Any] = spec.extra
 
     def emit(pid: int, data: dict[str, object], *, apply_extra: bool = True) -> None:
-        extra = spec.extra.get(PacketId(pid).name.lower())
+        extra = extra_for_lap.get(PacketId(pid).name.lower())
         if apply_extra and isinstance(extra, dict):
             merged = dict(data)
             for key, value in extra.items():
@@ -388,6 +403,12 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     player_last_ms = 0
     rng = Random(spec.seed)
     for lap in range(1, spec.laps + 1):
+        applicable_laps = [key for key in spec.extra_by_lap if key <= lap]
+        extra_for_lap = (
+            _deep_merge(spec.extra, spec.extra_by_lap[max(applicable_laps)])
+            if applicable_laps
+            else spec.extra
+        )
         positions = (
             spec.positions_by_lap[min(lap - 1, len(spec.positions_by_lap) - 1)]
             if spec.positions_by_lap
@@ -519,6 +540,7 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     "session_type": spec.session_type,
                     "weekend_link_identifier": spec.weekend_link,
                     "track_id": spec.track_id,
+                    "weather": spec.weather,
                     "total_laps": spec.laps,
                     "track_length": TRACK_M,
                     "safety_car_status": sc,

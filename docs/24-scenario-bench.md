@@ -145,6 +145,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 |---|---|---|
 | `brazil-race-real` | guard | Plan and window calls, no safety car calls |
 | `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
+| `brazil-weather-crossover` | guard | No weather radar or crossover calls in a dry race |
 | `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
 | `brazil-vsc-early` | guard | VSC calls, never full safety car calls |

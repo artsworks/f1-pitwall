@@ -328,3 +328,53 @@ rules:
       - "VSC over, go, go, go"
       - "Green flag. VSC is over, race at full pace"
       - "VSC ended. Green flag, resume racing"
+  # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
+  - id: weather_rain_soon
+    sessions: [race]
+    priority: 3
+    when: "phase in ('racing', 'sc', 'vsc') and rain_soon_pct > 0 and weather_crossover == '' and weather_now < 3 and tyre_compound not in (0, 7, 8)"
+    clear_when: "rain_soon_pct == 0"
+    cooldown_s: 300
+    requires: [session]
+    say:
+      - "Rain expected in {rain_soon_min} minutes, {rain_soon_pct} percent"
+      - "Rain in {rain_soon_min} minutes, {rain_soon_pct} percent chance. Slicks for now"
+      - "{rain_soon_pct} percent chance of rain in {rain_soon_min} minutes"
+      - "Radar shows rain in {rain_soon_min} minutes, {rain_soon_pct} percent"
+      - "Rain chance {rain_soon_pct} percent, {rain_soon_min} minutes out. Stay on slicks"
+  - id: track_wetter
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and weather_now >= 3 and field_lap_trend_s >= th.track_trend_s and tyre_switch_to == ''"
+    clear_when: "field_lap_trend_s < th.track_trend_s / 2"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Track getting wetter. Field {field_lap_trend} slower last lap"
+      - "Getting wetter. Lap times up {field_lap_trend} across the field"
+      - "Rain getting heavier. Field lost {field_lap_trend} last lap"
+      - "Wetter now, field {field_lap_trend} slower on the last lap"
+  - id: track_drier
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and tyre_compound in (7, 8) and weather_now <= 3 and field_lap_trend_s <= -th.track_trend_s and tyre_switch_to == ''"
+    clear_when: "field_lap_trend_s > -th.track_trend_s / 2"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Track drying. Field {field_lap_trend} quicker last lap"
+      - "Drying out. Lap times down {field_lap_trend}"
+      - "Track improving. Field {field_lap_trend} faster last lap"
+      - "Drier now, field gained {field_lap_trend} last lap"
+  - id: compound_crossover_close
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and crossover_laps > 0 and crossover_laps <= th.crossover_warn_laps and tyre_switch_to == '' and laps_remaining > crossover_laps + th.wet_crossover_min_laps"
+    clear_when: "crossover_laps == 0 or crossover_laps > th.crossover_warn_laps"
+    cooldown_s: 90
+    requires: [lap_data]
+    say:
+      - "Crossover in {crossover_laps:.1f} laps. Field on {crossover_to} {crossover_gap} off, closing {crossover_rate} a lap"
+      - "Cars on {crossover_to} {crossover_gap} slower, closing {crossover_rate} a lap. Crossover in {crossover_laps:.1f} laps"
+      - "Gap to {crossover_to} is {crossover_gap} a lap, closing {crossover_rate}. About {crossover_laps:.1f} laps to the crossover"
+      - "Crossover coming, {crossover_laps:.1f} laps. {crossover_to} {crossover_gap} slower, gaining {crossover_rate} a lap"
