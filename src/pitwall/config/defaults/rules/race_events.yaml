@@ -93,64 +93,48 @@ rules:
       - "{penalty_time_s} second penalty, cutting. {penalty_s} total"
       - "Corner cut penalty, {penalty_time_s} seconds. {penalty_s} total"
       - "Penalty for cutting, {penalty_time_s} seconds. Total {penalty_s}"
+  # Track-limit escalation chain
   - id: track_limit_warning
     sessions: [race]
-    priority: 2
-    urgency: coaching
-    when: "track_warning_recent and track_warning_kind == 'limits' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
-    clear_when: "not track_warning_recent"
+    priority: 3
+    urgency: info
+    when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 2"
+    clear_when: "track_warning_count != th.track_limits_flag_warnings - 2"
+    still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 2"
     cooldown_s: 10
-    requires: [event]
+    requires: [lap_data]
     say:
-      - "Track limits. The track's the grey bit, mate"
-      - "Track limits warning. Stay inside the kerbs"
-      - "Track limits warning. Lovely bit of grass you found there"
-      - "Warning for track limits. Stewards noticed, so did we"
-      - "Track limits warning. Keep all four wheels inside"
-      - "Warning, track limits. Stay within the white lines"
-      - "Track limits. Keep it on the circuit"
-      - "Another track limits warning. Don't wander beyond the white lines"
+      - "Track limits, {track_warning_count:.1f} warning. Black-and-white warning at {th.track_limits_flag_warnings:.1f}"
+      - "That's {track_warning_count:.1f} for track limits. Black-and-white warning at {th.track_limits_flag_warnings:.1f}"
+      - "{track_warning_count:.1f} track-limit warning now. At {th.track_limits_flag_warnings:.1f}, black-and-white warning"
+  - id: track_limit_second_warning
+    sessions: [race]
+    priority: 3
+    urgency: info
+    when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 1"
+    clear_when: "track_warning_count != th.track_limits_flag_warnings - 1"
+    still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 1"
+    supersedes: [track_limit_warning]
+    cooldown_s: 10
+    requires: [lap_data]
+    say:
+      - "Track limits, {track_warning_count:.1f} warnings. Next is the black-and-white warning"
+      - "That's {track_warning_count:.1f} for track limits. Next warning brings the black-and-white flag"
+      - "{track_warning_count:.1f} track-limit warnings now. Black-and-white warning next"
   - id: track_limit_last_warning
     sessions: [race]
-    priority: 1
-    urgency: tactical
-    when: "track_warning_recent and track_warning_kind == 'limits' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
-    clear_when: "not track_warning_recent"
+    priority: 3
+    urgency: info
+    when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings"
+    clear_when: "track_warning_count != th.track_limits_flag_warnings"
+    still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings"
+    supersedes: [track_limit_warning, track_limit_second_warning]
     cooldown_s: 10
-    requires: [event]
+    requires: [lap_data]
     say:
-      - "Track limits, {track_warning_count} now. Next one's a penalty"
-      - "Track limits, {track_warning_count}. Next one costs time"
-      - "{track_warning_count} track limits. One more is a penalty"
-      - "{track_warning_count} track limits now. Next one is a penalty"
-      - "Warning count {track_warning_count}. Another track limit costs time"
-      - "Track limits warning number {track_warning_count}. One more brings a penalty"
-  - id: corner_cut_warning
-    sessions: [race]
-    priority: 2
-    urgency: coaching
-    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn not in (0, th.warnings_warn - 1)"
-    clear_when: "not track_warning_recent"
-    cooldown_s: 10
-    requires: [event]
-    say:
-      - "Corner cut warning. Give the time back"
-      - "Warning, cutting the corner. Stay on track"
-      - "Corner cut. Return the time"
-      - "Corner cut warning. Don't wander off the track. Give the time back"
-  - id: corner_cut_last_warning
-    sessions: [race]
-    priority: 1
-    urgency: tactical
-    when: "track_warning_recent and track_warning_kind == 'cut' and track_warning_count % th.warnings_warn == th.warnings_warn - 1"
-    clear_when: "not track_warning_recent"
-    cooldown_s: 10
-    requires: [event]
-    say:
-      - "Corner cuts, {track_warning_count} now. Next one's a penalty"
-      - "{track_warning_count} corner cuts. One more costs time"
-      - "Corner cut count {track_warning_count}. Next one is a penalty"
-      - "{track_warning_count} cuts now. One more costs time"
+      - "Track limits, {track_warning_count:.1f} warnings. Next warning is a penalty"
+      - "That's {track_warning_count:.1f}, black-and-white warning. Next track limit is a penalty"
+      - "{track_warning_count:.1f} track-limit warnings now. Next warning costs time"
   - id: blue_flag
     sessions: [race]
     priority: 1
