@@ -516,6 +516,9 @@ SESSION_TYPE_OFFSET = HEADER_SIZE + _compiled(SESSION_LAYOUT).offsets["session_t
 SESSION_SAFETY_CAR_STATUS_OFFSET = (
     HEADER_SIZE + _compiled(SESSION_LAYOUT).offsets["safety_car_status"]
 )
+SESSION_RED_FLAG_PERIODS_OFFSET = (
+    HEADER_SIZE + _compiled(SESSION_LAYOUT).offsets["num_red_flag_periods"]
+)
 
 
 def car_field_offset(packet_id: int, car_idx: int, field_name: str) -> int:

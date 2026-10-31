@@ -131,6 +131,11 @@ class RacePhase:
         self.neutral_end_kind = ""  # 'sc' | 'vsc' of the last neutralisation that ended
         self.neutral_end_t = -math.inf
 
+    @property
+    def red_restart(self) -> bool:
+        """From a red flag until the first lap boundary after the restart."""
+        return self._red_restart
+
     def update(
         self,
         *,

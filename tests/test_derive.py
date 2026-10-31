@@ -26,6 +26,7 @@ from pitwall.net.derive import (
     InjectRivalPit,
     InjectSafetyCar,
     Penalty,
+    RedFlag,
     TeammatePit,
     UidRewrite,
     WearScale,
@@ -42,6 +43,7 @@ from pitwall.protocol.header import (
 )
 from pitwall.protocol.layouts import SESSION_LAYOUT, WEATHER_FORECAST_SAMPLE, compile_layout
 from pitwall.protocol.packets import (
+    SESSION_RED_FLAG_PERIODS_OFFSET,
     SESSION_SAFETY_CAR_STATUS_OFFSET,
     car_field_offset,
     parse,
@@ -996,3 +998,56 @@ def test_ingest_cli_digest_tune_and_provenance_keep_synthetic(
         line for line in recordings_output.splitlines() if "metadata-only.f1bin" in line
     )
     assert "synthetic" in metadata_only_line
+
+
+def _red_flag_race(tmp_path, start: int, end: int):
+    source = write_packet_stream(
+        tmp_path / "source.f1bin",
+        race_stream(RaceSpec(laps=12, session_uid=SOURCE_UID, dt=1.0)),
+        session_uid=SOURCE_UID,
+        metadata={"synthetic": False},
+    )
+    output = tmp_path / "red.f1bin"
+    derive_recording(source, output, [RedFlag(start, end)])
+    return output
+
+
+def test_red_flag_mutation_emits_flag_and_restart_events(tmp_path) -> None:
+    derived = _read_records(_red_flag_race(tmp_path, 4, 5))
+    lap = None
+    events: list[tuple[str, int | None]] = []
+    red_periods: dict[int, set[int]] = {}
+    for _, payload in derived:
+        if len(payload) < HEADER_SIZE:
+            continue
+        header = parse_header(payload)
+        if header.packet_id == PacketId.LAP_DATA and len(payload) == PACKET_SIZES[header.packet_id]:
+            lap = payload[
+                car_field_offset(PacketId.LAP_DATA, header.player_car_index, "current_lap_num")
+            ]
+        elif header.packet_id == PacketId.SESSION and lap is not None:
+            red_periods.setdefault(lap, set()).add(payload[SESSION_RED_FLAG_PERIODS_OFFSET])
+        elif header.packet_id == PacketId.EVENT:
+            code = parse(PacketId.EVENT, payload, header).code
+            if code in {"RDFL", "LGOT"}:
+                events.append((code, lap))
+    assert ("RDFL", 4) in events and ("LGOT", 6) in events
+    assert [code for code, _ in events].count("RDFL") == 1
+    assert red_periods[3] == {0} and red_periods[4] == {1} and red_periods[8] == {1}
+
+
+@pytest.mark.replay
+def test_red_flag_restart_calls_tyres_warmup_and_new_plan(tmp_path) -> None:
+    log_path = tmp_path / "red.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    asyncio.run(run_replay(_red_flag_race(tmp_path, 6, 6), engine, None))
+    engine.dispatcher.log.flush()
+    rows = [json.loads(line) for line in log_path.read_text().splitlines() if line]
+    fired = {r["rule_id"]: r for r in rows if r["outcome"] == "fired"}
+    assert fired["red_flag"]["lap"] == 6
+    assert fired["red_flag_tyres"]["lap"] == 6
+    assert "softs" in fired["red_flag_tyres"]["text"]
+    assert fired["red_restart_warmup"]["lap"] == 7
+    assert fired["plan_restart"]["lap"] == 7
+    assert "red_flag_fresh_tyres" not in fired
+    assert "sc_restart" not in fired

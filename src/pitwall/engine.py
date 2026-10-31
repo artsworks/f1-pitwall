@@ -450,6 +450,7 @@ class Engine:
         self._damage_pace_ms = 0.0
         self._damage_stops = 0
         self._stops_done = 0
+        self._red_restart = False
         self._prev_pit_status = 0
         self._stop_expect: tuple[str, str, int] | None = None
         self._stop_check: tuple[str, str, int, float] | None = None
@@ -994,6 +995,7 @@ class Engine:
         self.battle_tracker.reset()
         self._battle_rates = None
         self._stops_done = 0
+        self._red_restart = False
         self._prev_pit_status = 0
         self._stop_expect = None
         self._stop_check = None
@@ -2139,6 +2141,9 @@ class Engine:
         if phase == "out_lap" and self._prev_race_phase != "out_lap":
             self._stops_done += 1
         self._prev_race_phase = phase
+        if phase == "red_flag":
+            self._red_restart = True  # rebuild the plan from the restart tyres
+            self._plan_key = None
         if phase in ("racing", "sc", "vsc") and snap.tyre_visual and snap.laps_remaining > 0:
             self._used_compounds.add(snap.tyre_visual)
             neutral = phase in ("sc", "vsc")
@@ -2187,7 +2192,9 @@ class Engine:
                     cheap_stop=cheap,
                     reseed=reseed,
                     invalidate=invalidate,
+                    restart=self._red_restart,
                 )
+                self._red_restart = False
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
         st: PlanState = tracker.state

@@ -673,6 +673,16 @@ def test_teammate_pit_scenario_mutation_validation(tmp_path: Path) -> None:
             _scenario_ops({"teammate_pit": value}, tmp_path / "scenario.yaml")
 
 
+def test_red_flag_scenario_mutation_validation(tmp_path: Path) -> None:
+    path = tmp_path / "scenario.yaml"
+    assert [op.label for op in _scenario_ops({"red_flag": "5"}, path)] == ["red_flag=5-5"]
+    assert [op.label for op in _scenario_ops({"red_flag": "5-7"}, path)] == ["red_flag=5-7"]
+    with pytest.raises(ValueError, match="mutations.red_flag must be a string"):
+        _scenario_ops({"red_flag": 5}, path)
+    with pytest.raises(ValueError, match="positive, ascending"):
+        _scenario_ops({"red_flag": "7-5"}, path)
+
+
 def _bench_cli_argv(tmp_path: Path) -> list[str]:
     recordings = tmp_path / "recordings"
     recordings.mkdir()

@@ -99,6 +99,20 @@ def test_red_flag_supersedes_sc_without_restart_call() -> None:
     assert rp.neutral_end_kind == ""
 
 
+def test_red_restart_lasts_until_the_first_lap_boundary_after_the_flag() -> None:
+    rp = RacePhase()
+    _step(rp, 0.0, lap_num=4)
+    assert not rp.red_restart
+    assert _step(rp, 1.0, lap_num=4, red_flag=True) == "red_flag"
+    assert rp.red_restart
+    assert _step(rp, 50.0, lap_num=5, lap_boundary=True, red_flag=True) == "red_flag"
+    assert rp.red_restart
+    assert _step(rp, 60.0, lap_num=5, driver_status=3) == "racing"
+    assert rp.red_restart
+    assert _step(rp, 150.0, lap_num=6, lap_boundary=True) == "racing"
+    assert not rp.red_restart
+
+
 def test_teammate_stack_gap_requires_a_stopping_teammate_ahead() -> None:
     me = CarLap(total_distance=1000.0)
 

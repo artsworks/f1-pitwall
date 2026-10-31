@@ -430,6 +430,37 @@ rules:
       - "VSC ending. Stay on the delta until it goes green"
       - "VSC ending. Prepare to race when it goes green"
       - "Virtual safety car ending. Hold the delta until green"
+  # Red flag: a tyre change in the pit lane is free. With a stop left in the
+  # plan the change covers it, otherwise it is a fresh set.
+  - id: red_flag_tyres
+    sessions: [race]
+    priority: 2
+    when: "red_flag and laps_remaining > 1 and plan_stops_left > 0 and plan_next_compound != ''"
+    clear_when: "not red_flag"
+    requires: [lap_data]
+    say:
+      - "Tyre change is free under the red flag. Fit the {plan_next_compound}s, that's our stop"
+      - "Free tyre change under the red flag. Take the {plan_next_compound}s, no stop needed"
+      - "Red flag gives us a free stop. {plan_next_compound}s for the restart"
+  - id: red_flag_fresh_tyres
+    sessions: [race]
+    priority: 2
+    when: "red_flag and laps_remaining > 1 and plan_stops_left == 0 and tyre_age_laps >= 5"
+    clear_when: "not red_flag"
+    requires: [lap_data]
+    say:
+      - "Free tyre change under the red flag. These have {tyre_age_laps} laps, take a fresh set"
+      - "Red flag, new tyres are free. This set has {tyre_age_laps} laps, swap it"
+  # Red-flag restart: from leaving the garage until the first lap boundary.
+  - id: red_restart_warmup
+    sessions: [race]
+    priority: 2
+    when: "red_restart and phase == 'racing'"
+    clear_when: "not red_restart"
+    requires: [lap_data]
+    say:
+      - "Restart. Tyres and brakes are cold, build heat before turn one"
+      - "Cold tyres and brakes for the restart. Warm them up, brake early into turn one"
   - id: sc_restart
     sessions: [race]
     priority: 1
