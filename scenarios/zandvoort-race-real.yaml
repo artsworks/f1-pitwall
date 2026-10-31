@@ -8,7 +8,8 @@ source:
 expect:
   fire:
     - {rule: plan_announce, laps: [1, 1]}
-    - {rule: [plan_window_open, plan_target_lap, box_now, box_in_n], laps: [3, 7]}
+    - {rule: plan_window_open, laps: [3, 7]}
+    - {rule: [plan_target_lap, box_now, box_in_n], laps: [3, 7]}
   absent:
     - {rule: [sc_deployed, vsc_deployed, sc_ending, vsc_ending, sc_restart, vsc_restart], laps: [1, 18]}
-why: The real race had no safety car and two stops. A plan must be announced on lap 1 and a stop call must come before the first stop on lap 7.
+why: The real race had no safety car and two stops. A plan must be announced on lap 1. The window must open and a stop call must come before the first stop on lap 7.

@@ -162,7 +162,7 @@ The `brazil-*` scenarios from `brazil-race-real` to `brazil-double-stack` use th
 | `brazil3-vsc-early` | target | VSC calls, never full safety car calls |
 | `brazil4-sc-real` | target | Real safety car calls on laps 14 to 17 |
 | `austin-vsc-real` | target | Real VSC call on lap 11, no safety car calls |
-| `imola-race-real` | target | Plan on lap 1, a stop call before lap 10, no safety car calls |
+| `imola-race-real` | target | Plan on lap 1, window open and a stop call before lap 10, no safety car calls |
 | `imola-sc-last-laps` | target | No stop call under a safety car on laps 14 to 16 |
 | `imola-wear-double` | target | Tyre-life or stop call on laps 5 to 9 with doubled wear |
 | `imola-late-penalty` | target | Penalty, cost, covered and finish calls on lap 16 |
@@ -170,7 +170,7 @@ The `brazil-*` scenarios from `brazil-race-real` to `brazil-double-stack` use th
 | `mexico2-vsc-real` | target | Real VSC calls on laps 12 and 13, no safety car calls |
 | `silverstone-sc-real` | target | Real safety car calls on laps 8 to 11, no VSC calls |
 | `spa-wear-double` | target | Tyre-life or stop call on laps 3 to 7 with doubled wear |
-| `zandvoort-race-real` | target | Plan on lap 1, a stop call before lap 7, no safety car calls |
+| `zandvoort-race-real` | target | Plan on lap 1, window open and a stop call before lap 7, no safety car calls |
 ## Backlog
 
 - A VSC inside the window. The stop saves less time than under a full safety car. A stop call depends on tyre wear, position risk and laps left, so write the check against the rule inputs.
