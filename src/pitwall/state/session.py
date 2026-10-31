@@ -1098,6 +1098,7 @@ class SessionState:
         self._last_penalty_served_st: float | None = None
         self._pit_entry_stops: int | None = None
         self.pit_pass_no_stop = False
+        self._lap_since_rewind = True
         self.grid_penalty_places = 0
         self._last_grid_penalty_st: float | None = None
         self._grid_penalty_events: list[tuple[float, int]] = []
@@ -1296,6 +1297,10 @@ class SessionState:
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
         self._last_rewind_t = t
+        # A pit-status change seen across a flashback is not a real entry or exit.
+        self._pit_entry_stops = None
+        self.pit_pass_no_stop = False
+        self._lap_since_rewind = False
         self._pace_prediction_latch = None
         self.pace_delta_vs_expected_s = 0.0
         self.pace_slow_laps = 0
@@ -1505,7 +1510,9 @@ class SessionState:
         ):
             self.hot_lap_fuel_base = None
         self.driver_status = car.driver_status
-        if self.pit_status == PitStatus.NONE and car.pit_status != PitStatus.NONE:
+        real_change = self._lap_since_rewind
+        self._lap_since_rewind = True
+        if real_change and self.pit_status == PitStatus.NONE and car.pit_status != PitStatus.NONE:
             self._pit_entry_stops = self.num_pit_stops
             self.pit_pass_no_stop = False
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
@@ -1513,7 +1520,9 @@ class SessionState:
             # A drive-through (or a stop-go with no tyre work) passes the pit lane
             # without raising num_pit_stops; the game counts a real stop in the box.
             self.pit_pass_no_stop = (
-                self._pit_entry_stops is not None and car.num_pit_stops <= self._pit_entry_stops
+                real_change
+                and self._pit_entry_stops is not None
+                and car.num_pit_stops <= self._pit_entry_stops
             )
         self.pit_status = car.pit_status
         self.current_lap_time_ms = car.current_lap_time_ms
