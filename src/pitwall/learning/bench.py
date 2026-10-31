@@ -136,10 +136,16 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
             "teammate_pit",
             "inject_rival_pit",
             "red_flag",
+            "drive_through",
         },
         path,
         "mutations",
     )
+    drive_through = mutations.get("drive_through")
+    if drive_through is not None and (
+        isinstance(drive_through, bool) or not isinstance(drive_through, int)
+    ):
+        raise ValueError(f"{path}: mutations.drive_through must be an integer")
     rival_pit = mutations.get("inject_rival_pit")
     if rival_pit is not None and not isinstance(rival_pit, str):
         raise ValueError(f"{path}: mutations.inject_rival_pit must be a string")
@@ -183,6 +189,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 teammate_pit=teammate_pit,
                 damage=damage,
                 red_flag=red_flag,
+                drive_through=drive_through,
             )
             if mutations
             else []
