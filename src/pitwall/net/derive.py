@@ -26,10 +26,21 @@ from pitwall.protocol.header import (
     PacketId,
     parse_header,
 )
+from pitwall.protocol.layouts import SESSION_LAYOUT, WEATHER_FORECAST_SAMPLE, compile_layout
 from pitwall.protocol.packets import SESSION_SAFETY_CAR_STATUS_OFFSET, car_field_offset
 from pitwall.store.uids import derived_uid
 
 _NUM_CARS = 22
+_SESSION_FIELDS = compile_layout(SESSION_LAYOUT)
+_FORECAST_FIELDS = compile_layout(WEATHER_FORECAST_SAMPLE)
+_SESSION_WEATHER_OFFSET = HEADER_SIZE + _SESSION_FIELDS.offsets["weather"]
+_SESSION_TYPE_FIELD_OFFSET = HEADER_SIZE + _SESSION_FIELDS.offsets["session_type"]
+_SESSION_FORECAST_COUNT_OFFSET = (
+    HEADER_SIZE + _SESSION_FIELDS.offsets["num_weather_forecast_samples"]
+)
+_SESSION_FORECASTS_OFFSET = HEADER_SIZE + _SESSION_FIELDS.offsets["weather_forecast_samples"]
+_SESSION_FORECAST_ACCURACY_OFFSET = HEADER_SIZE + _SESSION_FIELDS.offsets["forecast_accuracy"]
+_FORECAST_SAMPLE_SIZE = _FORECAST_FIELDS.struct.size
 
 
 @dataclass(slots=True)
@@ -136,6 +147,90 @@ class WearScale:
                 damage_offset = damage + corner
                 scaled = round(rewritten[damage_offset] * self.factor)
                 rewritten[damage_offset] = min(100, max(0, scaled))
+        return [bytes(rewritten)]
+
+
+@dataclass(slots=True)
+class Weather:
+    config: dict[str, object]
+    label: str = field(init=False)
+    accuracy: int | None = field(init=False, default=None)
+    timeline: tuple[tuple[float, int, int], ...] = field(init=False, default=())
+
+    def __post_init__(self) -> None:
+        if set(self.config) - {"accuracy", "timeline"}:
+            raise ValueError("weather mutation accepts only accuracy and timeline")
+        accuracy = self.config.get("accuracy")
+        if accuracy is not None and (type(accuracy) is not int or not 0 <= accuracy <= 255):
+            raise ValueError("weather accuracy must be an integer from 0 to 255")
+        frames = self.config.get("timeline")
+        if not isinstance(frames, list) or not frames:
+            raise ValueError("weather timeline must be a non-empty list of keyframes")
+        timeline: list[tuple[float, int, int]] = []
+        previous = -math.inf
+        for frame in frames:
+            if not isinstance(frame, dict) or set(frame) != {"at_min", "weather", "rain_pct"}:
+                raise ValueError("weather keyframes require at_min, weather and rain_pct")
+            at_min = frame["at_min"]
+            weather = frame["weather"]
+            rain_pct = frame["rain_pct"]
+            if (
+                isinstance(at_min, bool)
+                or not isinstance(at_min, int | float)
+                or not math.isfinite(at_min)
+                or at_min < 0
+            ):
+                raise ValueError("weather keyframe at_min must be a finite non-negative number")
+            if type(weather) is not int or not 0 <= weather <= 5:
+                raise ValueError("weather keyframe weather must be an integer from 0 to 5")
+            if type(rain_pct) is not int or not 0 <= rain_pct <= 100:
+                raise ValueError("weather keyframe rain_pct must be an integer from 0 to 100")
+            if at_min <= previous:
+                raise ValueError("weather keyframes must be sorted by strictly increasing at_min")
+            timeline.append((float(at_min), weather, rain_pct))
+            previous = float(at_min)
+        self.accuracy = accuracy
+        self.timeline = tuple(timeline)
+        self.label = "weather=" + ",".join(
+            f"{at:g}:{weather}/{rain_pct}" for at, weather, rain_pct in timeline
+        )
+        if accuracy is not None:
+            self.label += f":accuracy={accuracy}"
+
+    def _state_at(self, minute: float) -> tuple[int, int] | None:
+        state = None
+        for at_min, weather, rain_pct in self.timeline:
+            if at_min > minute:
+                break
+            state = weather, rain_pct
+        return state
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            header is None
+            or header.packet_id != PacketId.SESSION
+            or len(payload) != PACKET_SIZES[PacketId.SESSION]
+        ):
+            return [payload]
+        rewritten = bytearray(payload)
+        session_type = payload[_SESSION_TYPE_FIELD_OFFSET]
+        current_state = self._state_at(header.session_time / 60.0)
+        if current_state is not None:
+            rewritten[_SESSION_WEATHER_OFFSET] = current_state[0]
+        count = min(payload[_SESSION_FORECAST_COUNT_OFFSET], 64)
+        for index in range(count):
+            sample = _SESSION_FORECASTS_OFFSET + index * _FORECAST_SAMPLE_SIZE
+            if rewritten[sample + _FORECAST_FIELDS.offsets["session_type"]] != session_type:
+                continue
+            offset = rewritten[sample + _FORECAST_FIELDS.offsets["time_offset"]]
+            state = self._state_at(header.session_time / 60.0 + offset)
+            if state is None:
+                continue
+            rewritten[sample + _FORECAST_FIELDS.offsets["weather"]] = state[0]
+            rewritten[sample + _FORECAST_FIELDS.offsets["rain_percentage"]] = state[1]
+        if self.accuracy is not None:
+            rewritten[_SESSION_FORECAST_ACCURACY_OFFSET] = self.accuracy
         return [bytes(rewritten)]
 
 
@@ -514,6 +609,7 @@ def ops_from_options(
     teammate_pit: int | None = None,
     damage: dict[str, int] | None = None,
     escalate_sc: int | None = None,
+    weather: dict[str, object] | None = None,
     drive_through: int | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
@@ -543,6 +639,8 @@ def ops_from_options(
         ops.append(TeammatePit(teammate_pit))
     if damage is not None:
         ops.append(Damage(**damage))
+    if weather is not None:
+        ops.append(Weather(weather))
     if drive_through is not None:
         ops.append(DriveThrough(drive_through))
     if not ops:

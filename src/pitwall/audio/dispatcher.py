@@ -19,7 +19,7 @@ from pitwall.clock import Clock
 from pitwall.config.models import InputSettings, PolicySettings, RuleDefModel
 from pitwall.input.press import Press
 from pitwall.metrics import Metrics
-from pitwall.rules.engine import Candidate
+from pitwall.rules.engine import Candidate, Rule
 from pitwall.state.session import Snapshot, snapshot_scalars
 
 log = logging.getLogger(__name__)
@@ -179,6 +179,7 @@ class Dispatcher:
         self.tuned_cooldown: dict[str, float] = {}
         self._acked: dict[str, int] = {}  # rule_id -> lap acknowledged on
         self._defs: dict[str, RuleDefModel] = {}
+        self._retry_rules: dict[str, Rule] = {}
         self._reply_n: dict[str, int] = {}
         self._focus_until = 0.0
         self._tactical_focus_until = 0.0
@@ -212,6 +213,10 @@ class Dispatcher:
         for cand in candidates:
             definition = cand.rule.defn
             self._defs[cand.rule.id] = definition
+            if definition.retry_on_suppression:
+                self._retry_rules[cand.rule.id] = cand.rule
+            else:
+                self._retry_rules.pop(cand.rule.id, None)
             urgency = definition.urgency_class(cand.priority)
             rank = _URGENCY_RANK[urgency]
             decision_m, decision_s, promoted = self._decision_distance(
@@ -280,9 +285,11 @@ class Dispatcher:
                 not_before = self._last_call_t + self.policy.min_gap_s
                 suppressed = None if not_before - now <= self.policy.min_gap_defer_s else "budget"
             if suppressed is not None:
+                self._retry_suppressed(call.rule_id, suppressed)
                 self._log(cand, snapshot, now, "suppressed", suppressed, call.id)
                 continue
             if self._focus_drops(call, now, snapshot):
+                self._retry_suppressed(call.rule_id, "focus")
                 self._log(cand, snapshot, now, "suppressed", "focus", call.id)
                 continue
             if call.urgency == "reply" and self._apply_reply_absorption(call):
@@ -304,6 +311,11 @@ class Dispatcher:
             self._log(cand, snapshot, now, "queued", None, call_id=call.id)
             if call.flushes_queue:
                 self._flush_for(call)
+
+    def _retry_suppressed(self, rule_id: str, reason: str) -> None:
+        rule = self._retry_rules.get(rule_id)
+        if rule is not None and reason in {"budget", "focus"}:
+            rule.armed = True
 
     def _focus_drops(self, call: Call, now: float, snapshot: Snapshot) -> bool:
         """Focus after a hazard drops coaching and P3 info. A tactical call drops
@@ -529,6 +541,7 @@ class Dispatcher:
             if queued.call.id == call_id and dropped is None:
                 dropped = queued.call
                 self._undo_booking(dropped)
+                self._retry_suppressed(dropped.rule_id, reason)
                 self._log_call(dropped, "suppressed", reason)
             else:
                 kept.append(queued)
@@ -1063,6 +1076,7 @@ class Dispatcher:
     def reset_session(self, session_uid: int = 0) -> None:
         """New session: clear the queue and per-stint/per-lap budgets."""
         self._queue.clear()
+        self._retry_rules.clear()
         self._booking_undo.clear()
         self._fires_this_stint.clear()
         self._calls_this_lap = 0

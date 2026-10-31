@@ -22,6 +22,7 @@ from pitwall.protocol.packets import (
     CarTelemetry2Packet,
     CarTelemetryPacket,
     EventPacket,
+    FinalClassificationPacket,
     LapDataPacket,
     MotionExPacket,
     ParticipantsPacket,
@@ -71,8 +72,13 @@ from pitwall.state.race import (
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.pace import pace_words_self
-from pitwall.strategy.plans import DRY, StrategyPlan
-from pitwall.strategy.weather import default_pit_loss_s, switch_net_s
+from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
+from pitwall.strategy.weather import (
+    best_rain_stop,
+    default_pit_loss_s,
+    switch_net_s,
+    wet_by_lap,
+)
 
 if TYPE_CHECKING:
     from pitwall.setup.evaluate import Recommendation
@@ -134,6 +140,7 @@ def snapshot_scalars(snap: Snapshot) -> dict[str, Any]:
 
 
 PACKET_NAMES: dict[int, str] = {
+    PacketId.FINAL_CLASSIFICATION: "final_classification",
     PacketId.SESSION: "session",
     PacketId.LAP_DATA: "lap_data",
     PacketId.EVENT: "event",
@@ -336,6 +343,24 @@ class Snapshot:
     """Frozen per-tick view; everything rules read lives here."""
 
     now: float
+    # Race-end and formation-lap radio
+    formula: int = -1
+    result_status: int = 0
+    formation_lap_enabled: bool = False
+    start_lights: int = 0
+    finish_elapsed_s: float = 0.0
+    finish_details: str = ""
+    final_position: int = 0
+    final_details: str = ""
+
+    @property
+    def brake_min_c(self) -> float:
+        return float(min(self.brake_temp.as_tuple()))
+
+    @property
+    def brake_max_c(self) -> float:
+        return float(max(self.brake_temp.as_tuple()))
+
     session_time: float = 0.0
     last_packet_t: float | None = None  # clock time of newest packet, same base as `now`
     session_kind: str = "unknown"
@@ -464,6 +489,12 @@ class Snapshot:
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
+    teammate_ahead: bool = False
+    teammate_compound: int = 0
+    teammate_compound_name: str = ""
+    teammate_tyre_age: int = -1
+    teammate_stops: int = 0
+    teammate_split: bool = False
     teammate_stacking: bool = False
     teammate_stack_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
@@ -597,6 +628,13 @@ class Snapshot:
     rain_pct_in_30: int = 0
     weather_in_10: int = -1  # forecast weather type (0 clear .. 5 storm), -1 unknown
     weather_in_30: int = -1
+    forecast_accuracy: int = 0
+    rain_onset_min: int = 0
+    rain_box_lap: int = -1
+    rain_box_tyre: str = ""
+    rain_box_gain_s: float = 0.0
+    field_wet_switches: int = 0
+    field_wet_tyre: str = ""
     weather_crossover: str = ""
     weather_crossover_pct: int = 0  # forecast rain chance driving the crossover
     weather_crossover_min: int = 0  # ... and how many minutes out
@@ -782,6 +820,8 @@ class Snapshot:
     traffic_ahead_m: float = math.inf
     traffic_ahead_s: float = math.inf
     traffic_ahead_kind: str = ""
+    traffic_ahead_name: str = ""
+    traffic_ahead_teammate: bool = False
     traffic_ahead_closing_s: float = math.inf  # time to catch it at the current speeds
     traffic_ahead_slow: bool = False  # it is much slower than the player right now
     traffic_ahead_state: str = ""  # ahead car: aborted, in-lap, cooling, or flying
@@ -917,6 +957,15 @@ class SessionState:
         self.game_paused = False
         self.network_paused = False
         self.weather = 0
+        self.forecast_accuracy = 0
+        self.rain_onset_min = 0
+        self.rain_box_lap = -1
+        self.rain_box_tyre = ""
+        self.rain_box_gain_s = 0.0
+        self.field_wet_switches = 0
+        self.field_wet_tyre = ""
+        self._field_previous_visual_compounds: dict[int, int] = {}
+        self._field_wet_switch_laps: dict[int, tuple[int, int]] = {}
         self.game_mode = 0
         self.num_active_cars = 0
         self.red_flag = False
@@ -1115,6 +1164,13 @@ class SessionState:
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st: float | None = None
         self.lights_out = False
+        # Race-end and formation-lap radio
+        self.formula = -1
+        self.formation_lap_enabled = False
+        self.start_lights = 0
+        self._finish_t: float | None = None
+        self._finish_details = ""
+        self._final_classification: Any | None = None
         self.chequered = False
         self._flag_as_leader = False
         self._fastest_lap: tuple[int, int, float] | None = None  # (car idx, ms, session time)
@@ -1232,6 +1288,8 @@ class SessionState:
             return
         if isinstance(pkt, SessionPacket):
             self._on_session(pkt)
+        elif isinstance(pkt, FinalClassificationPacket):
+            self._final_classification = pkt
         elif isinstance(pkt, LapDataPacket):
             self._on_lap_data(pkt)
         elif isinstance(pkt, EventPacket):
@@ -1298,6 +1356,11 @@ class SessionState:
 
     def _handle_rewind(self, t: float) -> None:
         self.rewinds += 1
+        # Race-end and formation-lap radio
+        self._finish_t = None
+        self._finish_details = ""
+        self._final_classification = None
+        self.start_lights = 0
         self._last_rewind_t = t
         # A pit-status change seen across a flashback is not a real entry or exit.
         self._pit_entry_stops = None
@@ -1379,6 +1442,10 @@ class SessionState:
         self._await_green = [False, False]
         self._gap_now = {}
         self._gap_lines = []
+        self.field_wet_switches = 0
+        self.field_wet_tyre = ""
+        self._field_previous_visual_compounds.clear()
+        self._field_wet_switch_laps.clear()
         self._ahead_latch = (-1, math.inf)
         self._behind_latch = (-1, math.inf)
         self._true_rel = {}
@@ -1390,6 +1457,9 @@ class SessionState:
 
     def _on_session(self, pkt: SessionPacket) -> None:
         self.session_type = pkt.session_type
+        # Race-end and formation-lap radio
+        self.formula = pkt.formula
+        self.formation_lap_enabled = bool(pkt.formation_lap)
         self.track_id = pkt.track_id
         self.total_laps = pkt.total_laps
         self.weekend_structure = tuple(pkt.weekend_structure[: pkt.num_sessions_in_weekend])
@@ -1402,6 +1472,7 @@ class SessionState:
         self.pit_speed_limit = pkt.pit_speed_limit
         self.game_paused = bool(pkt.game_paused)
         self.weather = pkt.weather
+        self.forecast_accuracy = pkt.forecast_accuracy
         self.game_mode = pkt.game_mode
         self._forecast_samples = pkt.weather_forecast_samples[: pkt.num_weather_forecast_samples]
         self._drs_zones = pkt.drs_zones[: pkt.num_drs_zones]
@@ -1410,6 +1481,7 @@ class SessionState:
             + pkt.active_aero_zones_partial[: pkt.num_active_aero_zones_partial]
         )
         self._update_weather_crossover()
+        self._update_dry_to_wet()
         zones = pkt.marshal_zones[: pkt.num_marshal_zones]
         self.yellows.update(
             [z.zone_start for z in zones],
@@ -1533,6 +1605,32 @@ class SessionState:
         self.current_lap_invalid = car.current_lap_invalid
         self.pit_lane_time_ms = car.pit_lane_time_in_lane_ms
         self.result_status = car.result_status
+        # Race-end radio: latch measured road gaps, never strategy projections.
+        if car.result_status == 3 and self._finish_t is None:
+            self._finish_t = pkt.header.session_time
+            details = []
+            if (
+                car.car_position > 1
+                and car.delta_to_car_in_front_ms > 0
+                and any(
+                    c.car_position == car.car_position - 1
+                    and c.current_lap_num == car.current_lap_num
+                    and c.result_status in (2, 3)
+                    for c in pkt.cars
+                )
+            ):
+                details.append(f"{car.delta_to_car_in_front_ms / 1000:.1f} to the car ahead.")
+            behind = next((c for c in pkt.cars if c.car_position == car.car_position + 1), None)
+            if (
+                behind is not None
+                and behind.result_status in (2, 3)
+                and behind.current_lap_num == car.current_lap_num
+                and behind.delta_to_car_in_front_ms > 0
+            ):
+                details.append(f"{behind.delta_to_car_in_front_ms / 1000:.1f} clear behind.")
+            if self._fastest_lap is not None and self._fastest_lap[0] == self._player_idx:
+                details.append(f"Fastest lap, {self._fastest_lap[1] / 1000:.1f} seconds.")
+            self._finish_details = " ".join(details)
         self.delta_to_car_in_front_ms = car.delta_to_car_in_front_ms
         self.num_pit_stops = car.num_pit_stops
         if car.penalties != self.penalty_s:
@@ -1658,6 +1756,7 @@ class SessionState:
                 fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
                 compound=self.tyre_compound,
             )
+        self._update_field_wet_switches()
 
     def answer_push_check(self, push: bool) -> None:
         if push:
@@ -1799,6 +1898,8 @@ class SessionState:
             self.lights_out = True
             self.red_flag = False
             self.safety_car_status = 0
+        elif pkt.code == "STLG":
+            self.start_lights = pkt.detail.get("num_lights", 0)
         elif pkt.code == "CHQF":
             self.chequered = True
             self._flag_as_leader = self.position == 1
@@ -2120,6 +2221,58 @@ class SessionState:
                 self._weather_crossover_pct, self._weather_crossover_min = first
         self._weather_crossover = cand
 
+    def _update_dry_to_wet(self) -> None:
+        samples = [
+            sample for sample in self._forecast_samples if sample.session_type == self.session_type
+        ]
+        self.rain_onset_min = (
+            0
+            if self.weather >= 3
+            else min(
+                (int(sample.time_offset) for sample in samples if sample.weather >= 3),
+                default=0,
+            )
+        )
+        self.rain_box_lap = -1
+        self.rain_box_tyre = ""
+        self.rain_box_gain_s = 0.0
+        laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps else 0
+        best_lap_ms = self._best_laps.get(self._player_idx, 0)
+        if (
+            self._kind() != "race"
+            or self.tyre_visual in (7, 8)
+            or self.weather >= 3
+            or laps_remaining <= 1
+            or not samples
+            or best_lap_ms <= 0
+        ):
+            return
+        lap_s = best_lap_ms / 1000.0
+        lap_frac = (
+            min(1.0, max(0.0, self.lap_distance / self.track_length_m))
+            if self.track_length_m > 0
+            else 0.0
+        )
+        probabilities = wet_by_lap(
+            [(int(sample.time_offset), int(sample.rain_percentage)) for sample in samples],
+            lap_s,
+            lap_frac,
+            laps_remaining,
+        )
+        stop_lap, gain = best_rain_stop(
+            probabilities,
+            default_pit_loss_s(self._thresholds, self.safety_car_status),
+            lap_s * self._th("slick_wet_loss_pct", 15.0) / 100.0,
+            lap_s * self._th("inter_dry_loss_pct", 6.0) / 100.0,
+        )
+        if stop_lap >= 0 and gain >= self._th("rain_preempt_margin_s", 2.0):
+            self.rain_box_lap = stop_lap
+            max_rain_pct = max(int(sample.rain_percentage) for sample in samples)
+            self.rain_box_tyre = (
+                "wets" if max_rain_pct >= self._th("rain_wet_pct", 85.0) else "inters"
+            )
+            self.rain_box_gain_s = round(gain, 1)
+
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
         self.num_active_cars = pkt.num_active_cars
         self.participants = tuple(
@@ -2214,6 +2367,7 @@ class SessionState:
 
     def _on_car_status(self, pkt: CarStatusPacket, st: float) -> None:
         self.cars_status = pkt.cars
+        self._update_field_wet_switches(pkt)
         car = pkt.cars[self._player_idx]
         self.front_brake_bias = car.front_brake_bias
         self.boost.update(st, car.ers_deploy_mode)
@@ -2264,6 +2418,30 @@ class SessionState:
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
+
+    def _update_field_wet_switches(self, pkt: CarStatusPacket | None = None) -> None:
+        if pkt is not None:
+            for index, car in enumerate(pkt.cars):
+                compound = int(car.visual_tyre_compound)
+                previous = self._field_previous_visual_compounds.get(index)
+                if index != self._player_idx and previous in DRY and compound in (7, 8):
+                    self._field_wet_switch_laps[index] = (self.lap_num, compound)
+                self._field_previous_visual_compounds[index] = compound
+
+        window = max(0, int(self._th("field_follow_window_laps", 3)))
+        counted_compounds = [
+            switch_compound
+            for index, (switch_lap, switch_compound) in self._field_wet_switch_laps.items()
+            if index != self._player_idx
+            and self._field_previous_visual_compounds.get(index) in (7, 8)
+            and 0 <= self.lap_num - switch_lap < window
+        ]
+        self.field_wet_switches = len(counted_compounds)
+        wet_count = counted_compounds.count(8)
+        inter_count = counted_compounds.count(7)
+        self.field_wet_tyre = (
+            "wets" if wet_count > inter_count else "inters" if counted_compounds else ""
+        )
 
     def _ers_prune(self) -> None:
         if not self._ers_samples or self._ers_newest_session_time is None:
@@ -2620,6 +2798,14 @@ class SessionState:
         )
         return Snapshot(
             now=now,
+            # Race-end and formation-lap radio
+            formula=self.formula,
+            result_status=self.result_status,
+            formation_lap_enabled=self.formation_lap_enabled,
+            start_lights=self.start_lights,
+            finish_elapsed_s=max(0.0, st - self._finish_t) if self._finish_t is not None else 0.0,
+            finish_details=self._finish_details,
+            **self._final_result_view(),
             session_time=st,
             last_packet_t=self.last_recv_wall,
             session_kind=kind,
@@ -2711,6 +2897,13 @@ class SessionState:
             rain_pct_in_30=self._rain_at(30),
             weather_in_10=self._weather_at(10),
             weather_in_30=self._weather_at(30),
+            forecast_accuracy=self.forecast_accuracy,
+            rain_onset_min=self.rain_onset_min,
+            rain_box_lap=self.rain_box_lap,
+            rain_box_tyre=self.rain_box_tyre,
+            rain_box_gain_s=self.rain_box_gain_s,
+            field_wet_switches=self.field_wet_switches,
+            field_wet_tyre=self.field_wet_tyre,
             weather_crossover=self._weather_crossover,
             weather_crossover_pct=self._weather_crossover_pct,
             weather_crossover_min=self._weather_crossover_min,
@@ -3120,6 +3313,44 @@ class SessionState:
             fastest_lap_age_s=max(0.0, st - at),
             fastest_lap_gap_s=(best - ms) / 1000.0 if best > 0 and not mine else math.inf,
         )
+
+    # Race-end radio
+    def _final_result_view(self) -> dict[str, Any]:
+        pkt = self._final_classification
+        if pkt is None or not 0 <= self._player_idx < pkt.num_cars <= CAR_SLOTS:
+            return {}
+        cars = pkt.cars[: pkt.num_cars]
+        car = cars[self._player_idx]
+        if car.result_status != 3 or not 1 <= car.position <= pkt.num_cars:
+            return {}
+        details = []
+        if car.grid_position > 0:
+            gained = car.grid_position - car.position
+            if gained > 0:
+                details.append(f"Up {gained:.1f} from the grid.")
+            elif gained < 0:
+                details.append(f"Down {-gained:.1f} from the grid.")
+            else:
+                details.append(f"Held P{car.grid_position:.1f} from the grid.")
+        total = car.total_race_time + car.penalties_time
+        if math.isfinite(total) and total > 0:
+            for offset, label in ((-1, "to the car ahead"), (1, "clear behind")):
+                rival = next((c for c in cars if c.position == car.position + offset), None)
+                if (
+                    rival is None
+                    or rival.result_status != 3
+                    or rival.num_laps != car.num_laps
+                    or not math.isfinite(rival.total_race_time)
+                    or rival.total_race_time <= 0
+                ):
+                    continue
+                gap = offset * (rival.total_race_time + rival.penalties_time - total)
+                if gap > 0:
+                    details.append(f"{gap:.1f} {label}.")
+        best = [c.best_lap_time_ms for c in cars if c.best_lap_time_ms > 0]
+        if best and car.best_lap_time_ms == min(best) and best.count(min(best)) == 1:
+            details.append(f"Fastest lap, {car.best_lap_time_ms / 1000:.1f} seconds.")
+        return dict(final_position=car.position, final_details=" ".join(details))
 
     def _race_view(
         self,
@@ -3558,6 +3789,33 @@ class SessionState:
         player = self._player_idx
         if mate < 0 or player >= len(cars) or mate >= len(cars):
             return {}
+        status = self.cars_status
+        compound = (
+            int(status[mate].visual_tyre_compound)
+            if status is not None and mate < len(status)
+            else 0
+        )
+        mate_age = self._rival_age(mate)
+        mate_stops = cars[mate].num_pit_stops
+        split_age = int(self._th("teammate_split_age_laps", 5.0))
+        player_car = cars[player]
+        mate_car = cars[mate]
+        teammate_split = (
+            self.race_phase == "racing"
+            and player_car.result_status == 2
+            and mate_car.result_status == 2
+            and player_car.pit_status == 0
+            and mate_car.pit_status == 0
+            and self.tyre_visual != 0
+            and compound != 0
+            and mate_age is not None
+            and min(self.tyre_age_laps, mate_age) >= split_age
+            and (
+                self.tyre_visual != compound
+                or self.num_pit_stops != mate_stops
+                or abs(self.tyre_age_laps - mate_age) >= split_age
+            )
+        )
         gap = math.inf
         if mate == ahead_i:
             gap = gap_ahead
@@ -3576,6 +3834,12 @@ class SessionState:
         return dict(
             teammate_name=name_of(mate),
             teammate_gap_s=gap,
+            teammate_ahead=mate == ahead_i,
+            teammate_compound=compound,
+            teammate_compound_name=WORDS.get(compound, ""),
+            teammate_tyre_age=mate_age if mate_age is not None else -1,
+            teammate_stops=mate_stops,
+            teammate_split=teammate_split,
             teammate_fight=self.race_phase == "racing"
             and gap <= self._th("teammate_fight_gap_s", 1.0),
             teammate_stacking=math.isfinite(stack_gap),
@@ -3780,6 +4044,10 @@ class SessionState:
                 ),
                 traffic_ahead_slow=closing * 3.6 >= self._th("slow_car_delta_kmh", 60.0),
                 traffic_ahead_kind=_lap_kind(c.driver_status),
+                traffic_ahead_name=(
+                    self.participants[ahead[1]].name if ahead[1] < len(self.participants) else ""
+                ),
+                traffic_ahead_teammate=ahead[1] == self._teammate(),
                 traffic_ahead_state=state,
                 traffic_ahead_launch_s=launch_s,
             )

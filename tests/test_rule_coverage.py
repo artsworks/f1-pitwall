@@ -7,7 +7,7 @@ from pitwall.config.loader import ConfigStore
 
 from .test_rule_replay import NOT_REPLAYABLE
 
-# These rules currently have only unit tests. Remove each id when replay coverage lands.
+# These rules lack pytest replay coverage. Remove each id when replay coverage lands.
 KNOWN_GAPS: frozenset[str] = frozenset(
     {
         "battle_patience",
@@ -37,7 +37,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "grid_penalty",
         "lap_deleted",
         "lap_deleted_last",
-        "last_lap_attack",
         "lockup_front",
         "lockup_front_same_spot",
         "lockup_rear",
@@ -59,10 +58,14 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "plan_switch_no_stop",
         "plan_target_lap",
         "practice_lap_invalid",
+        "rain_box_now",
+        "rain_follow_field",
+        "rain_stay_out",
         "prep_car_behind",
         "prep_clear",
         "prep_dirty_air",
         "prep_tow",
+        "prep_tow_teammate",
         "prep_traffic_ahead",
         "quali_safe_cut",
         "quali_safe_pole",
@@ -75,7 +78,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "slow_car_crawling",
         "spun_rejoin",
         "spun_rejoin_traffic",
-        "teammate_fight",
         "tyre_life",
         "tyre_pressure_advice",
         "tyre_pressure_ok",

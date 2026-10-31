@@ -10,6 +10,79 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.48.0 (2026-10-31)
+
+### Bug Fixes
+
+- **strategy**: Declare rain box urgency ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+- **strategy**: Name the tyre field and forecast call for
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+### Features
+
+- **strategy**: Add expected-time dry-to-wet calls
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+### Performance Improvements
+
+- **strategy**: Recompute rain stop on session packets only
+  ([#169](https://github.com/artsworks/f1-pitwall/pull/169),
+  [`09a91e2`](https://github.com/artsworks/f1-pitwall/commit/09a91e24edae2e25508b58a694568140bf7e0e56))
+
+
+## v0.47.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Render track-limit warning counts as integers
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+- **rules**: Retry track-limit warnings after radio suppression
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+### Features
+
+- **rules**: Add track-limit warning escalation
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+
+## v0.46.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Compare visual compounds for teammate strategy split
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+### Features
+
+- **rules**: Teammate hold, strategy split and quali tow calls
+  ([#164](https://github.com/artsworks/f1-pitwall/pull/164),
+  [`a0bcfa4`](https://github.com/artsworks/f1-pitwall/commit/a0bcfa41eb3bd7c43b586b7c338692d2955bd77e))
+
+
+## v0.45.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Discard provisional results after classification
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+### Features
+
+- **rules**: Add formation and race-end radio
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+
 ## v0.44.0 (2026-10-31)
 
 ### Bug Fixes

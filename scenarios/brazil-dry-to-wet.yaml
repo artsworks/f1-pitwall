@@ -1,0 +1,23 @@
+id: brazil-dry-to-wet
+title: Brazil race with a strong rain forecast
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  weather:
+    accuracy: 0
+    timeline:
+      - {at_min: 6, weather: 2, rain_pct: 20}
+      - {at_min: 7, weather: 2, rain_pct: 28}
+      - {at_min: 8, weather: 2, rain_pct: 45}
+      - {at_min: 9, weather: 3, rain_pct: 62}
+      - {at_min: 10, weather: 3, rain_pct: 79}
+      - {at_min: 11, weather: 3, rain_pct: 86}
+expect:
+  fire:
+    - {rule: rain_stay_out, laps: [2, 8]}
+  absent:
+    - {rule: rain_box_now, laps: [1, 17]}
+why: The forecast gives the field time to react before rain reaches the track.
