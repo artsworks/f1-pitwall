@@ -588,6 +588,7 @@ class Snapshot:
     weather_crossover_pct: int = 0  # forecast rain chance driving the crossover
     weather_crossover_min: int = 0  # ... and how many minutes out
     # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
+    forecast_accuracy: int = 0
     rain_soon_pct: int = 0
     rain_soon_min: int = 0
     field_lap_trend_s: float = 0.0
@@ -1130,6 +1131,7 @@ class SessionState:
         self._weather_crossover_min = 0
         self._rain_soon_pct = 0
         self._rain_soon_min = 0
+        self._forecast_accuracy = 0
         self._wet_to_dry_passes: dict[int, frozenset[str]] = {}
         self._held_gains: list[float] = [0.0, 0.0]
         self._gain_hist: dict[int, list[float | None]] = {}
@@ -1393,6 +1395,7 @@ class SessionState:
         self.pit_speed_limit = pkt.pit_speed_limit
         self.game_paused = bool(pkt.game_paused)
         self.weather = pkt.weather
+        self._forecast_accuracy = pkt.forecast_accuracy
         self.game_mode = pkt.game_mode
         self._forecast_samples = pkt.weather_forecast_samples[: pkt.num_weather_forecast_samples]
         self._drs_zones = pkt.drs_zones[: pkt.num_drs_zones]
@@ -2734,6 +2737,7 @@ class SessionState:
             weather_crossover=self._weather_crossover,
             weather_crossover_pct=self._weather_crossover_pct,
             weather_crossover_min=self._weather_crossover_min,
+            forecast_accuracy=self._forecast_accuracy,
             rain_soon_pct=self._rain_soon_pct,
             rain_soon_min=self._rain_soon_min,
             field_lap_trend_s=self._field_lap_trend_s,

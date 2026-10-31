@@ -11,6 +11,12 @@ def _fired(rows: list[dict]) -> set[str]:
     return {row.get("rule_id") for row in rows if row.get("outcome") == "fired"}
 
 
+def _fired_row(rows: list[dict], rule_id: str) -> dict:
+    return next(
+        row for row in rows if row.get("rule_id") == rule_id and row.get("outcome") == "fired"
+    )
+
+
 def _lap_extra(
     compounds: dict[int, int],
     lap_times: dict[int, int],
@@ -73,15 +79,57 @@ def test_default_race_stream_cache_key() -> None:
 
 @pytest.mark.replay
 def test_rain_heads_up_uses_nearest_qualifying_forecast(tmp_path) -> None:
-    calls, rows = replay_race(
+    _, rows = replay_race(
         tmp_path,
         RaceSpec(laps=8, rain_lap=2, rain_percentages=(45, 50)),
     )
     fired = _fired(rows)
     assert "weather_rain_soon" in fired
     assert "weather_to_inter" not in fired
-    call = next(call for call in calls if call.rule_id == "weather_rain_soon")
-    assert "45 percent" in call.text
+    text = _fired_row(rows, "weather_rain_soon").get("text", "")
+    assert text.startswith("Rain expected in")
+    assert "45 percent" in text
+
+
+@pytest.mark.replay
+def test_rain_heads_up_softens_approximate_forecast(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            rain_lap=2,
+            rain_percentages=(45, 50),
+            extra={"session": {"forecast_accuracy": 1}},
+        ),
+    )
+    text = _fired_row(rows, "weather_rain_soon").get("text", "")
+    assert text.startswith("Rain possible in")
+
+
+@pytest.mark.replay
+def test_inter_forecast_keeps_standard_wording_for_perfect_accuracy(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(laps=8, rain_lap=2, rain_percentages=(65, 65)),
+    )
+    text = _fired_row(rows, "weather_to_inter").get("text", "")
+    assert text.startswith("Rain ")
+    assert "possible" not in text.lower()
+
+
+@pytest.mark.replay
+def test_inter_forecast_softens_approximate_wording(tmp_path) -> None:
+    _, rows = replay_race(
+        tmp_path,
+        RaceSpec(
+            laps=8,
+            rain_lap=2,
+            rain_percentages=(65, 65),
+            extra={"session": {"forecast_accuracy": 1}},
+        ),
+    )
+    text = _fired_row(rows, "weather_to_inter").get("text", "")
+    assert text.startswith("Rain possible in")
 
 
 @pytest.mark.replay
