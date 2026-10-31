@@ -10,6 +10,25 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.47.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Render track-limit warning counts as integers
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+- **rules**: Retry track-limit warnings after radio suppression
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+### Features
+
+- **rules**: Add track-limit warning escalation
+  ([#160](https://github.com/artsworks/f1-pitwall/pull/160),
+  [`fa29c55`](https://github.com/artsworks/f1-pitwall/commit/fa29c5581532d4bb07bdd17b717a35466d725cc3))
+
+
 ## v0.46.0 (2026-10-31)
 
 ### Bug Fixes
