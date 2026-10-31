@@ -1,0 +1,20 @@
+id: brazil-sc-restart
+title: Safety car on laps 8 and 9, restart on lap 10
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "8-9"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [8, 8]}
+    - {rule: [sc_ending, sc_ending_tyres_cold], laps: [9, 9]}
+    - {rule: sc_restart, laps: [10, 10]}
+  absent:
+    - {rule: [vsc_deployed, vsc_ending, vsc_ending_tyres_cold, vsc_restart], laps: [1, 17]}
+why: >-
+  One restart call per step: SC in this lap on lap 9, with tyre temperatures when a tyre is
+  below its window, then green on lap 10. The recorded tyres stay at racing temperature, so
+  the bench cannot test the cold branch or the delta warning; pytest covers those.
