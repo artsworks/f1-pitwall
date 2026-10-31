@@ -16,6 +16,7 @@ from pitwall.strategy.plans import (
     PlanInputs,
     PlanTracker,
     alternative,
+    compound_stop_owed,
     derive,
     evaluate,
     feasible,
@@ -126,6 +127,14 @@ def test_two_compound_rule_forces_a_stop_onto_another_compound() -> None:
     assert feasible(inputs(used=frozenset({S, M})), (M,), TH)
     # rule disabled
     assert feasible(inp, (M,), {**TH, "plan_two_compound_rule": 0})
+
+
+def test_compound_stop_owed_requires_a_second_dry_compound() -> None:
+    assert compound_stop_owed(frozenset({S}), TH)
+    assert not compound_stop_owed(frozenset({S, M}), TH)
+    assert not compound_stop_owed(frozenset({S, 7}), TH)
+    assert not compound_stop_owed(frozenset(), TH)
+    assert not compound_stop_owed(frozenset({S}), {**TH, "plan_two_compound_rule": 0})
 
 
 def test_tyre_sets_limit_sequences() -> None:

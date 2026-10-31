@@ -70,6 +70,7 @@ menu:
           - "No more stops. Tyres to the flag."
           - "Tyres make the finish. {laps_left} laps left, stay out."
         tyres_short: ["Yes, box. Tyres have {pace_laps} laps, {laps_left} to go.", "Box, box. Worst tyre {wear} percent, won't last.", "Box now. {pace_laps} laps in the tyres, {laps_left} to go.", "Worst tyre {wear} percent. Box now, it won't last."]
+        nurse_to_end: ["Stay out. A stop costs {loss}, only {laps_left} laps to win it back.", "No stop. Tyres have {pace_laps} laps, {laps_left} to go. Nurse them.", "Stay out and nurse the tyres. {laps_left} to go, a stop won't pay.", "Negative. {loss} stop, {laps_left} laps left. Nurse it home."]
         box_fight: ["Box. Stop costs {loss}, fresh tyres gain {gain}.", "Yes, box. {gain} back for {loss}. Then attack.", "Pit now. {loss} stop, {gain} from fresh tyres.", "Box this lap. Gain {gain} for a {loss} stop, then attack."]
         damage_review: ["Wing {wing} percent. Box if it won't turn.", "Wing {wing} percent. Stay out unless it won't turn.", "Wing damage {wing} percent. Pit only if it won't turn.", "Wing at {wing} percent. Stay out if the car still turns."]
         damage_nurse: ["Wing {wing} percent. Too late to stop, nurse it.", "Wing {wing} percent. Stay out, protect the car.", "Wing damage {wing} percent. No time to stop, nurse it.", "Wing {wing} percent. Stay out, save the car."]

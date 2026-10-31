@@ -166,6 +166,47 @@ def test_no_stop_when_tyres_last() -> None:
     assert p.lap == 0
 
 
+def test_no_stop_when_every_late_stop_loses_time() -> None:
+    args = dict(
+        lap_num=16,
+        laps_remaining=3,
+        tyre_age=4,
+        laps_of_pace=1.4,
+        fit=fit(88),
+        fresh=fit(80),
+        pit_loss_s=20.0,
+    )
+    p = run(**args)
+    assert p.plan == "no_stop"
+    assert p.reason == "Stop costs more than it gains"
+    assert p.lap == 0
+
+    free_stop = run(**args, gap_behind_s=math.inf, pit_exit_clean=True)
+    assert free_stop.plan == "no_stop"
+
+    mandatory = run(**args, stop_mandatory=True)
+    assert mandatory.plan in ("box_now", "box_in_n")
+
+
+def test_mandatory_stop_overrides_tyres_make_the_end() -> None:
+    args = dict(
+        lap_num=16,
+        laps_remaining=3,
+        tyre_age=4,
+        laps_of_pace=3.0,
+        fit=fit(88),
+        fresh=fit(80),
+        pit_loss_s=20.0,
+    )
+    assert run(**args).plan == "no_stop"
+    mandatory = run(**args, stop_mandatory=True)
+    assert mandatory.plan != "no_stop"
+
+
+def test_stop_still_called_when_horizon_short_of_end() -> None:
+    assert run().plan != "no_stop"
+
+
 def test_too_late_to_stop() -> None:
     p = run(laps_remaining=2)
     assert p.plan == "no_stop"

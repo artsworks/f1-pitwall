@@ -106,6 +106,7 @@ from pitwall.strategy.plans import (
     PlanInputs,
     PlanState,
     PlanTracker,
+    compound_stop_owed,
     view_fields,
 )
 from pitwall.voice.channel import ChannelRecord, VoiceChannel
@@ -1944,6 +1945,7 @@ class Engine:
         raw_mode = resolve_mindset(settings.mindsets, self.mindset)
         drv = self._driver_scale(settings, raw_mode)
         mode = self.mode()
+        used = frozenset(c for c in self._used_compounds | {snap.tyre_visual} if c)
         _, damage_pace_ms, wing_loss_s = self._plan_damage(snap, fit)
         plan = optimise(
             lap_num=snap.lap_num,
@@ -1966,6 +1968,7 @@ class Engine:
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
             stop_owed=self.plan_tracker.state.stops_left > 0,
+            stop_mandatory=compound_stop_owed(used, self._plan_thresholds(snap)),
             driver=drv,
             mode=mode,
             th=settings.thresholds,

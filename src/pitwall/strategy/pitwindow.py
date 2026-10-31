@@ -125,6 +125,7 @@ def optimise(
     pit_exit_clean: bool,
     restricted: bool,
     stop_owed: bool = False,
+    stop_mandatory: bool = False,
     driver: DriverScale = NEUTRAL,
     mode: Mapping[str, object],
     th: Mapping[str, object],
@@ -308,7 +309,7 @@ def optimise(
             confidence=PIT_LOSS_CONF.get(pit_loss_source, 0.6),
         )
     # Staying out beats every stop inside the horizon and the tyre lasts.
-    if best_delta >= 0 and laps_of_pace >= laps_remaining:
+    if best_delta >= 0 and not stop_mandatory and laps_of_pace >= laps_remaining:
         return plan("no_stop", 0, -best_delta, "Tyres make the end")
     behind_ok = (
         rival_behind is not None
@@ -395,6 +396,9 @@ def optimise(
             enumerate(tactical),
             key=lambda ic: (ic[1].confidence, -ic[1].risk, -ic[0], ic[1].gain_s),
         )[1]
+    # The horizon reaches the last allowed stop lap and no stop beats staying out.
+    if best_delta >= 0 and not stop_mandatory and last_k >= laps_remaining - min_left:
+        return plan("no_stop", 0, -best_delta, "Stop costs more than it gains")
     # Gain of the best lap over its neighbour: stopping one lap later, or now.
     later = projections[best_k + 1][1] if best_k + 1 < len(projections) else best_delta
     delay_gain = (later if best_k == 0 else projections[0][1]) - best_delta

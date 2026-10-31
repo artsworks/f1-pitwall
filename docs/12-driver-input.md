@@ -203,7 +203,7 @@ open. Wheel-right (UDP Action 4) resets the page to the race layout.
 | Item | Kind | Cases (from the snapshot) | Example reply |
 |---|---|---|---|
 | Tyres gone? | question | switch / gone / fading / ok / unknown | "Fading. Worst one 55 percent, 3 laps left." |
-| Pit now? | question | box_now / soon / stay_out / no_stop / unknown | "Stay out, box lap 26. Window 24 to 28." |
+| Pit now? | question | box_now / soon / stay_out / no_stop / nurse_to_end / unknown | "Stay out, box lap 26. Window 24 to 28." |
 | Fight | question | race: both / ahead / behind / none; other sessions: times / no_time | "P4, 12 to go. Clear air." |
 | Rain coming? | question | switch / right_tyre / crossover / coming / chance / dry | "Rain coming. 60 percent in ten." |
 | Push or save? | question | save_fuel / save_energy / save_tyres / fuel_tight / attack / push | "Push, fuel's tight. Plus 0.2 laps." |

@@ -1,6 +1,6 @@
 id: brazil-worn-tyres-late-stop
 title: No second stop with two laps left
-status: target
+status: guard
 source:
   session_uid: "0x2188302d49bba3bb"
   sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
