@@ -34,4 +34,12 @@ These files are personal state or large local data. `.gitignore` covers most of 
 
 ## Bench
 
-Do not run `pitwall bench` in a cloud session. It replays full recordings, takes many minutes and uses a large share of the ACU allowance. CI cannot run it either, because recordings stay out of git. Ask the repo owner to run it on a machine that has the recordings, and read the output they paste.
+A full `pitwall bench` run replays every scenario, takes many minutes and uses a large share of the ACU allowance. CI cannot run the bench, because recordings stay out of git.
+
+In a cloud session:
+
+- Run only `pitwall bench --only <id> ...` with the scenarios that your change touches. For example, a fix to the overcut rule runs `--only brazil-overcut`.
+- Do not run the bench without `--only`.
+- Do not pass `--update-baseline` or `--accept-changes`.
+
+The repo owner runs the full bench and updates the baseline on a machine that has the recordings. Read the output that the repo owner pastes.

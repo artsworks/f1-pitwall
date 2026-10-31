@@ -55,7 +55,7 @@ In a local run on 30 Oct 2026, both targets failed. That run used code from befo
 1. Run `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --only brazil-overcut mexico-undercut imola-race-real zandvoort-race-real`.
 2. The bench prints only the rules that fire inside the check window. To see every fired rule, call `pitwall.learning.bench.run_scenario` from a short script that wraps `evaluate_checks` and prints the `fired` list. I did this for `imola-late-penalty` on 30 Oct 2026.
 3. Do not edit the `expect` block to make the scenario pass. Changes to `expect` need your approval.
-4. Do not run the bench in a cloud session. See the Bench section in `AGENTS.md`.
+4. In a cloud session, run the bench only with `--only` and the scenarios you check. See the Bench section in `AGENTS.md`.
 
 ## Bench follow-ups
 
