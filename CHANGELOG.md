@@ -10,6 +10,27 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.43.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: One SC/VSC ending call per restart
+  ([#168](https://github.com/artsworks/f1-pitwall/pull/168),
+  [`cd9407c`](https://github.com/artsworks/f1-pitwall/commit/cd9407ca2d958e932597204886964a77ea0adf6f))
+
+### Features
+
+- **rules**: SC and VSC restart calls with tyre temps and delta warning
+  ([#168](https://github.com/artsworks/f1-pitwall/pull/168),
+  [`cd9407c`](https://github.com/artsworks/f1-pitwall/commit/cd9407ca2d958e932597204886964a77ea0adf6f))
+
+### Testing
+
+- **strategy**: Cover cliffed tyres at the late-stop cutoff
+  ([#159](https://github.com/artsworks/f1-pitwall/pull/159),
+  [`6d384a0`](https://github.com/artsworks/f1-pitwall/commit/6d384a0b92725eff4d6569c6d39ef5e20b54927b))
+
+
 ## v0.42.2 (2026-10-31)
 
 ### Bug Fixes

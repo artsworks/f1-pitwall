@@ -44,6 +44,7 @@ class RaceSpec:
     rival_pit_lap: int | None = None
     rival_behind_pit_lap: int | None = None  # Lap when the rival behind pits
     sc_laps: tuple[int, int] | None = None
+    sc_delta_s: float | None = None
     penalty_lap: int | None = None
     penalty_type: int = 4  # Penalty type sent on penalty_lap
     penalty_infringement: int = 7  # Infringement id sent on penalty_lap
@@ -545,6 +546,8 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                 "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
+            if spec.sc_delta_s is not None:
+                player_lap_data["safety_car_delta"] = spec.sc_delta_s
             if spec.off_track_lap == lap:
                 player_lap_data["car_position"] = next(
                     (
