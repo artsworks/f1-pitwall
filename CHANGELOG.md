@@ -10,6 +10,29 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.42.1 (2026-10-31)
+
+### Bug Fixes
+
+- **menu**: Pit answer follows a late no_stop plan
+  ([#156](https://github.com/artsworks/f1-pitwall/pull/156),
+  [`6ecbca8`](https://github.com/artsworks/f1-pitwall/commit/6ecbca8b58993fa5363c55c4ede09d96df58cf6f))
+
+- **strategy**: No no_stop while the two-compound stop is owed
+  ([#156](https://github.com/artsworks/f1-pitwall/pull/156),
+  [`6ecbca8`](https://github.com/artsworks/f1-pitwall/commit/6ecbca8b58993fa5363c55c4ede09d96df58cf6f))
+
+- **strategy**: Stay out when every remaining stop loses time
+  ([#156](https://github.com/artsworks/f1-pitwall/pull/156),
+  [`6ecbca8`](https://github.com/artsworks/f1-pitwall/commit/6ecbca8b58993fa5363c55c4ede09d96df58cf6f))
+
+### Documentation
+
+- **bench**: Mark brazil-worn-tyres-late-stop as a guard
+  ([#156](https://github.com/artsworks/f1-pitwall/pull/156),
+  [`6ecbca8`](https://github.com/artsworks/f1-pitwall/commit/6ecbca8b58993fa5363c55c4ede09d96df58cf6f))
+
+
 ## v0.42.0 (2026-10-30)
 
 ### Bug Fixes
