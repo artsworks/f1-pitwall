@@ -37,7 +37,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "grid_penalty",
         "lap_deleted",
         "lap_deleted_last",
-        "last_lap_attack",
         "lockup_front",
         "lockup_front_same_spot",
         "lockup_rear",

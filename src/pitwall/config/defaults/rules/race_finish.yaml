@@ -1,4 +1,30 @@
 rules:
+  # Race-end and formation-lap radio
+  - id: finish_classified
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "final_position > 0"
+    requires: [final_classification]
+    say:
+      - "Confirmed P{final_position:.1f}. {final_details}"
+      - "Final result, P{final_position:.1f}. {final_details}"
+      - "Classified P{final_position:.1f}. {final_details}"
+  - id: race_cool_down
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and not session_ended and finish_elapsed_s >= th.race_cool_down_delay_s and driver_status in (2, 4) and speed_kmh >= th.race_cool_down_min_speed_kmh and min(brake_temp.FL, brake_temp.FR, brake_temp.RL, brake_temp.RR) > 0"
+    still_true: "phase == 'finished' and result_status == 3 and final_position == 0 and not session_ended and speed_kmh >= th.race_cool_down_min_speed_kmh"
+    requires: [lap_data, car_telemetry]
+    say:
+      - "Race complete. Hottest brake {brake_max_c:.1f} degrees. Cool the car"
+      - "Race complete. Brakes up to {brake_max_c:.1f} degrees, cool the car"
+      - "After the flag, keep the car cool. Hottest brake {brake_max_c:.1f} degrees"
   # End of lap 1: report against the grid slot.
   - id: lap1_gained
     sessions: [race]
@@ -192,93 +218,73 @@ rules:
     urgency: info
     flushes_queue: true
     supersedes: [finish_held, finish_gained, finish_lost]
-    when: "phase == 'finished' and penalty_places > 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and penalty_places > 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag. P{position} on the road, P{penalty_position} after penalty"
-      - "Flag. P{penalty_position} with the penalty. Pace was there"
-      - "Flag. Crossed P{position}, classified P{penalty_position}"
-      - "Chequered flag. P{position} on track, classified P{penalty_position}"
-      - "Finished P{position} on the road. Penalty makes it P{penalty_position}"
-      - "Flag. P{penalty_position} after the penalty, crossed in P{position}"
+      - "Flag. P{position:.1f} on the road, projected P{penalty_position:.1f} after penalty. {finish_details}"
+      - "Chequered flag. P{position:.1f}, penalty projects P{penalty_position:.1f}. {finish_details}"
+      - "Crossed P{position:.1f}. Provisional P{penalty_position:.1f} with the penalty. {finish_details}"
   - id: finish_gained
     sessions: [race]
     priority: 2
     urgency: info
     flushes_queue: true
-    when: "phase == 'finished' and grid_position > 0 and classified_gained > 0 and penalty_places == 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and grid_position > 0 and classified_gained > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag! P{classified_position}, up {classified_gained} from P{grid_position}"
-      - "Flag. P{classified_position}, {classified_gained} gained. Brilliant"
-      - "Chequered flag, P{classified_position}. Up {classified_gained} from P{grid_position}"
-      - "Finished P{classified_position}, gained {classified_gained} from P{grid_position}. Lovely job"
+      - "Flag. P{position:.1f} on the road, up {positions_gained:.1f} from the grid. {finish_details}"
+      - "Chequered flag, P{position:.1f}. Gained {positions_gained:.1f} on track. {finish_details}"
+      - "Finished P{position:.1f} on track, from P{grid_position:.1f}. {finish_details}"
   - id: finish_lost
     sessions: [race]
     priority: 2
     urgency: info
     flushes_queue: true
-    when: "phase == 'finished' and grid_position > 0 and classified_lost > 0 and penalty_places == 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and grid_position > 0 and classified_lost > 0 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag. P{classified_position}, from P{grid_position}. Debrief later"
-      - "Flag, P{classified_position}. Tough one"
-      - "Chequered flag, P{classified_position}. Started P{grid_position}, debrief later"
-      - "P{classified_position} at the flag. Tough one from P{grid_position}"
+      - "Flag. P{position:.1f} on the road, down {positions_lost:.1f} from the grid. {finish_details}"
+      - "Chequered flag, P{position:.1f}. Started P{grid_position:.1f}. {finish_details}"
+      - "Finished P{position:.1f} on track, lost {positions_lost:.1f} from the grid. {finish_details}"
   - id: finish_held
     sessions: [race]
     priority: 2
     urgency: info
     flushes_queue: true
-    when: "phase == 'finished' and grid_position > 0 and classified_gained == 0 and penalty_places == 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and ((grid_position > 0 and classified_gained == 0) or (grid_position == 0 and position > 3)) and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag. P{classified_position}, same as the grid. Solid job"
-      - "That's the flag, P{classified_position}. Held the grid slot, good work"
-      - "P{classified_position} at the flag, same as the grid. Well driven"
-      - "Finished P{classified_position}, held the grid place. Nice one"
+      - "Chequered flag. P{position:.1f} on the road. {finish_details}"
+      - "Flag, P{position:.1f} on track. {finish_details}"
+      - "Finished P{position:.1f} on the road. {finish_details}"
   - id: finish_win
     sessions: [race]
     priority: 1
     urgency: info
     flushes_queue: true
-    when: "phase == 'finished' and classified_position == 1 and penalty_places == 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and position == 1 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Yes! Yes! You've won the race!"
-      - "Get in there! P1! Winner!"
-      - "That's the win! Simply lovely. What a drive"
-      - "Race winner! You beauty!"
-      - "Flag, P1! What a job!"
-      - "Get in there! P1!"
-      - "Get in there. Race winner."
-      - "P1 at the flag. That's the win!"
-      - "What a drive. You've won the race!"
-      - "Chequered flag, P1. Lovely job!"
-      - "Race win! Brilliant work!"
-      - "That's P1. Winner, what a result!"
+      - "Chequered flag, P{position:.1f} on the road. {finish_details}"
+      - "First across the line, P{position:.1f}. {finish_details}"
+      - "Flag, P{position:.1f} on track. {finish_details}"
   - id: finish_podium
     sessions: [race]
     priority: 1
     urgency: info
     flushes_queue: true
-    when: "phase == 'finished' and classified_position in (2, 3) and penalty_places == 0"
+    when: "phase == 'finished' and result_status == 3 and final_position == 0 and position in (2, 3) and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "That's it, you've done it! P{classified_position}, on the podium!"
-      - "P{classified_position}! Podium! Get in there, brilliant job"
-      - "Flag, P{classified_position}. Podium! Well driven"
-      - "Yes! P{classified_position}, trophy time. Great stuff"
-      - "Chequered flag, P{classified_position}. That's a podium!"
-      - "P{classified_position} on the podium. Lovely work!"
-      - "Podium finish, P{classified_position}. What a drive!"
-      - "Podium, P{classified_position}. Brilliant job"
+      - "Chequered flag, P{position:.1f} on the road. {finish_details}"
+      - "Across the line P{position:.1f} on track. {finish_details}"
+      - "Flag. P{position:.1f} on the road. {finish_details}"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

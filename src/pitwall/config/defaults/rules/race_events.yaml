@@ -1,4 +1,44 @@
 rules:
+  # Race-end and formation-lap radio
+  - id: formation_tyres_cold
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and speed_kmh >= th.formation_min_speed_kmh and min(tyre_inner.FL, tyre_inner.FR, tyre_inner.RL, tyre_inner.RR) > 0 and 0 < coldest_tyre_c < (th.tyre_inner_cold_by_compound_c[tyre_compound] if tyre_compound in th.tyre_inner_cold_by_compound_c else th.tyre_inner_cold_c)"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "{coldest_tyre} at {coldest_tyre_c:.1f} degrees. Work the tyres before the start"
+      - "Tyres need heat. {coldest_tyre}, {coldest_tyre_c:.1f} degrees"
+      - "Build tyre temperature. {coldest_tyre} still {coldest_tyre_c:.1f} degrees"
+  - id: formation_brakes_cold
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and speed_kmh >= th.formation_min_speed_kmh and sector == 1 and 0 < min(brake_temp.FL, brake_temp.FR, brake_temp.RL, brake_temp.RR) < th.formation_brakes_cold_c"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "Coldest brake {brake_min_c:.1f} degrees. Build brake temperature before the grid"
+      - "Brakes need heat, lowest {brake_min_c:.1f} degrees"
+      - "Work the brakes before the start. Coldest {brake_min_c:.1f} degrees"
+  - id: formation_grid_slot
+    sessions: [race]
+    priority: 2
+    urgency: info
+    cooldown_s: 120
+    max_per_stint: 1
+    when: "phase == 'formation' and formula == 0 and formation_lap_enabled and safety_car_status == 3 and not lights_out and start_lights == 0 and sector == 2 and grid_position > 0 and speed_kmh >= th.formation_min_speed_kmh"
+    still_true: "phase == 'formation' and safety_car_status == 3 and not lights_out and start_lights == 0"
+    requires: [session, lap_data, car_telemetry]
+    say:
+      - "Your grid slot is P{grid_position:.1f} for the start"
+      - "P{grid_position:.1f} is your slot on the grid"
+      - "Back to the grid, P{grid_position:.1f} for the start"
   - id: weather_box_now
     sessions: [race]
     priority: 1
