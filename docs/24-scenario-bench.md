@@ -35,7 +35,7 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `wear_scale`, `penalty`, `drive_through`, `damage`, `teammate_pit` and `inject_rival_pit` keys. The bench applies them during replay.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
 - The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
@@ -133,6 +133,7 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 | `wear_scale` | Tyre-life and box calls as wear grows | Pace calls, because lap times do not drop. A new set starts worn |
 | `damage` | Plan invalidation and box calls after wing damage or position loss | Pace and gap calls, because lap times do not change |
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
+| `drive_through` | Drive-through issue and served calls | Pace and position after the visit, because the recorded visit is a real stop |
 | `inject_rival_pit` | The rival-pitted flag that feeds `overcut`, `cover` and `defend` plans | Rival pace and gaps, which stay as recorded |
 
 Rival stops, weather changes and red flags need a real recording or a generator. `src/pitwall/net/derive.py` cannot make them.
@@ -152,6 +153,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |
 | `brazil-worn-tyres-late-stop` | guard | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
+| `brazil-penalty-escalation` | target | Drive-through call on lap 5 and the served call at the lap 11 visit |
 | `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
