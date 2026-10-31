@@ -139,7 +139,7 @@ Rival stops, weather changes and red flags need a real recording or a generator.
 
 ## Starter scenarios
 
-The `brazil-*` scenarios from `brazil-race-real` to `brazil-quali-fuel-out` use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car. Every other scenario names its source recording by session UID inside the file. The bench finds it in the `--recordings` folders.
+The `brazil-*` scenarios from `brazil-race-real` to `brazil-double-stack` use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car. `brazil-quali-fuel-out` uses a Brazil short qualifying from 13 Oct 2026. Every other scenario names its source recording by session UID inside the file. The bench finds it in the `--recordings` folders.
 
 | Scenario | Status | Checks |
 |---|---|---|

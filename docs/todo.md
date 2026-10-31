@@ -53,6 +53,6 @@ In a local run on 30 Oct 2026, both targets failed. That run used code from befo
 
 ## Missing recordings
 
-The original Brazil recordings are lost on this machine: the 6 Oct race `0x2188302d49bba3bb` and the Brazil Q1 `0x02768451bbe4c8dd`. Eight guard and target scenarios use them. They skip here, so the full bench reports the gate as incomplete (exit code 2) on this machine. They still run on a machine that has the files. If you find the files, check their sha256 against the values in the scenario YAML files.
+The original Brazil recordings are lost on this machine: the 6 Oct race `0x2188302d49bba3bb` and the Brazil Q1 `0x02768451bbe4c8dd`. Ten guard and target scenarios use them: the nine table rows from `brazil-race-real` to `brazil-double-stack` use the race, and `brazil-q1-cool-push-check` uses the Q1. They skip here, so the full bench reports the gate as incomplete (exit code 2) on this machine. They still run on a machine that has the files. If you find the files, check their sha256 against the values in the scenario YAML files.
 
 Other recordings live in `recordings/` and in `F:\Labs\data-pitwall\backup-recordings`. The backup folder also holds `silverstone-sprintandrace.zip.001` to `.005` and `zandvoort.zip.001` to `.002`. Nobody has opened them yet.
