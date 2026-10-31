@@ -136,10 +136,16 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
             "teammate_pit",
             "inject_rival_pit",
             "weather",
+            "drive_through",
         },
         path,
         "mutations",
     )
+    drive_through = mutations.get("drive_through")
+    if drive_through is not None and (
+        isinstance(drive_through, bool) or not isinstance(drive_through, int)
+    ):
+        raise ValueError(f"{path}: mutations.drive_through must be an integer")
     rival_pit = mutations.get("inject_rival_pit")
     if rival_pit is not None and not isinstance(rival_pit, str):
         raise ValueError(f"{path}: mutations.inject_rival_pit must be a string")
@@ -183,6 +189,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 teammate_pit=teammate_pit,
                 damage=damage,
                 weather=weather,
+                drive_through=drive_through,
             )
             if mutations
             else []
@@ -295,13 +302,24 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def find_source(scenario: Scenario, index: Mapping[int, Sequence[Path]]) -> tuple[Path | None, str]:
+def find_source(
+    scenario: Scenario,
+    index: Mapping[int, Sequence[Path]],
+    digests: dict[Path, str] | None = None,
+) -> tuple[Path | None, str]:
     candidates = index.get(scenario.source_uid, ())
     if not candidates:
         return None, "source not found"
     for candidate in candidates:
         try:
-            if _file_sha256(candidate) == scenario.source_sha256:
+            key = candidate.resolve()
+            if digests is not None and key in digests:
+                digest = digests[key]
+            else:
+                digest = _file_sha256(candidate)
+                if digests is not None:
+                    digests[key] = digest
+            if digest == scenario.source_sha256:
                 return candidate, ""
         except OSError:
             continue

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import struct
 
+import pytest
+
 from pitwall.ingest import Ingest
 from pitwall.protocol.header import PacketId
 from pitwall.state.model_view import ModelView
@@ -62,6 +64,28 @@ def test_player_pit_stop_count() -> None:
     ingest, state = _state()
     _lap(ingest, 1.0, num_pit_stops=1)
     assert state.snapshot(1.0).num_pit_stops == 1
+
+
+def test_pit_pass_with_no_stop_is_a_drive_through() -> None:
+    ingest, state = _state()
+    _lap(ingest, 10.0)
+    _lap(ingest, 11.0, pit_status=1)
+    _lap(ingest, 12.0)
+    assert state.snapshot(12.0).pit_pass_no_stop
+
+
+@pytest.mark.parametrize("rewind_stops", [0, 1], ids=["before_box", "after_box"])
+def test_flashback_into_a_tyre_stop_is_not_a_drive_through(rewind_stops: int) -> None:
+    ingest, state = _state()
+    _lap(ingest, 10.0)
+    _lap(ingest, 11.0, pit_status=1)
+    _lap(ingest, 12.0, pit_status=2, num_pit_stops=1)
+    _lap(ingest, 13.0, num_pit_stops=1)
+    _lap(ingest, 40.0, num_pit_stops=1)
+    _lap(ingest, 11.5, pit_status=1, num_pit_stops=rewind_stops)  # flashback into the lane
+    _lap(ingest, 12.0, pit_status=2, num_pit_stops=1)
+    _lap(ingest, 13.0, num_pit_stops=1)
+    assert not state.snapshot(13.0).pit_pass_no_stop
 
 
 def test_penalty_recent_from_pena_event() -> None:
