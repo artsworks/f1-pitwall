@@ -439,7 +439,13 @@ class PlanTracker:
         evals: dict[str, PlanEval | None] = {}
         for pid in self.seqs:
             rem = self._remaining(pid, stops_done)
-            evals[pid] = evaluate(inp, rem, th) if feasible(inp, rem, th) else None
+            if feasible(inp, rem, th):
+                if pid == "C" and neutralised and self.seqs["C"][0] == stops_done:
+                    evals[pid] = evaluate(inp, rem, th, stop_now=True, first_loss_s=inp.sc_loss_s)
+                else:
+                    evals[pid] = evaluate(inp, rem, th)
+            else:
+                evals[pid] = None
         c_now = evals.get("C") if "C" in self.seqs else reactive(inp, th)
         best = ranked[0]
         switch_s = _f(th, "plan_switch_s", 5.0)
