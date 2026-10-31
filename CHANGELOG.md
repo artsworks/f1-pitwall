@@ -10,6 +10,25 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.42.2 (2026-10-31)
+
+### Bug Fixes
+
+- **bench**: Cap pool workers at 61 on Windows
+  ([#158](https://github.com/artsworks/f1-pitwall/pull/158),
+  [`8559f69`](https://github.com/artsworks/f1-pitwall/commit/8559f693ad3e1c607f503f2b6e34650b1af1ed5d))
+
+### Performance Improvements
+
+- **bench**: Cache source digests and run scenarios in a process pool
+  ([#158](https://github.com/artsworks/f1-pitwall/pull/158),
+  [`8559f69`](https://github.com/artsworks/f1-pitwall/commit/8559f693ad3e1c607f503f2b6e34650b1af1ed5d))
+
+- **bench**: Keep scenario-order progress with --jobs 1
+  ([#158](https://github.com/artsworks/f1-pitwall/pull/158),
+  [`8559f69`](https://github.com/artsworks/f1-pitwall/commit/8559f693ad3e1c607f503f2b6e34650b1af1ed5d))
+
+
 ## v0.42.1 (2026-10-31)
 
 ### Bug Fixes
