@@ -12,4 +12,4 @@ expect:
     - {rule: box_now, laps: [15, 17]}
 why: >-
   With 2 laps left, a stop costs a full pit loss for at most two laps on new tyres.
-  Pitwall should not call a second stop. Today it calls box_now on lap 16.
+  Pitwall should not call a second stop. Stay out and nurse the tyres to the end.
