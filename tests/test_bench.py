@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -12,9 +15,11 @@ from pitwall.cli import main
 from pitwall.learning.bench import (
     ScenarioCheck,
     _scenario_ops,
+    build_recording_index,
     build_scorecard,
     compare,
     evaluate_checks,
+    find_source,
     load_scenarios,
     parse_scenario,
     trend,
@@ -678,9 +683,7 @@ def test_red_flag_scenario_mutation_validation(tmp_path: Path) -> None:
         _scenario_ops({"red_flag": "7-5"}, path)
 
 
-def test_bench_cli_replays_scenarios_with_isolated_scorecard(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def _bench_cli_argv(tmp_path: Path) -> list[str]:
     recordings = tmp_path / "recordings"
     recordings.mkdir()
     scenarios = tmp_path / "scenarios"
@@ -724,6 +727,93 @@ def test_bench_cli_replays_scenarios_with_isolated_scorecard(
     (scenarios / "baseline.json").write_text(
         json.dumps({"version": 1, "scenarios": {}, "metrics": {}})
     )
+    return [
+        "bench",
+        "--scenarios",
+        str(scenarios),
+        "--recordings",
+        str(recordings),
+        "--rules",
+        str(rules),
+    ]
+
+
+def test_bench_cli_replays_scenarios_with_isolated_scorecard(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    result = main([*_bench_cli_argv(tmp_path), "--json"])
+
+    output = json.loads(capsys.readouterr().out)
+    scorecard = output["scorecard"]
+    assert result == 1
+    assert scorecard["scenarios"]["scenario-a"]["result"] == "pass"
+    assert scorecard["scenarios"]["scenario-b"]["result"] == "fail"
+    assert scorecard["scenarios"]["scenario-c"]["result"] == "skipped"
+    assert scorecard["scenarios"]["scenario-c"]["reason"] == "sha256 mismatch"
+    assert output["gate"]["status"] == "fail"
+
+
+def test_bench_parallel_matches_sequential(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pitwall.learning import bench as bench_module
+
+    argv = _bench_cli_argv(tmp_path)
+    with patch.object(bench_module, "datetime") as clock:
+        clock.now.return_value = datetime(2026, 1, 1, tzinfo=UTC)
+        with patch.object(
+            bench_module, "_file_sha256", wraps=bench_module._file_sha256
+        ) as hash_file:
+            sequential_exit = main([*argv, "--jobs", "1", "--json"])
+            sequential = capsys.readouterr()
+            assert hash_file.call_count == 1
+        parallel_exit = main([*argv, "--jobs", "2", "--json"])
+        parallel = capsys.readouterr()
+
+    sequential_output = json.loads(sequential.out)
+    parallel_output = json.loads(parallel.out)
+    assert sequential_exit == parallel_exit
+    assert sequential_output["scorecard"] == parallel_output["scorecard"]
+    assert sequential_output["gate"] == parallel_output["gate"]
+    assert len(re.findall(r"^bench \d/3: .+$", sequential.err, re.MULTILINE)) == 3
+    assert len(re.findall(r"^bench \d/3: .+$", parallel.err, re.MULTILINE)) == 3
+
+
+def test_bench_jobs_one_runs_in_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import concurrent.futures
+
+    _patch_bench_run(monkeypatch)
+
+    def fail_executor(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("ProcessPoolExecutor should not be constructed")
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", fail_executor)
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    uid = 0x1234_5678_9ABC_DEF0
+    source = write_packet_stream(
+        recordings / "source.f1bin",
+        race_stream(RaceSpec(laps=2, dt=1.0, session_uid=uid)),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    for scenario_id in ("scenario-a", "scenario-b"):
+        _write_scenario(
+            scenarios,
+            {
+                **_scenario_data(id=scenario_id),
+                "source": {"session_uid": hex(uid), "sha256": digest},
+            },
+        )
 
     result = main(
         [
@@ -734,15 +824,126 @@ def test_bench_cli_replays_scenarios_with_isolated_scorecard(
             str(recordings),
             "--rules",
             str(rules),
+            "--jobs",
+            "1",
+        ]
+    )
+
+    assert result == 0
+    assert capsys.readouterr().err.splitlines() == [
+        "bench 1/2: scenario-a ...",
+        "bench 2/2: scenario-b ...",
+    ]
+
+
+def test_bench_caps_workers_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import concurrent.futures
+    import sys
+
+    _patch_bench_run(monkeypatch)
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    uid = 0x1234_5678_9ABC_DEF0
+    source = write_packet_stream(
+        recordings / "source.f1bin",
+        race_stream(RaceSpec(laps=2, dt=1.0, session_uid=uid)),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    for index in range(62):
+        scenario_id = f"scenario-{index:02}"
+        _write_scenario(
+            scenarios,
+            {
+                **_scenario_data(id=scenario_id),
+                "source": {"session_uid": hex(uid), "sha256": digest},
+            },
+        )
+    worker_counts: list[int] = []
+
+    class FakeExecutor:
+        def __init__(self, max_workers: int, **kwargs: Any) -> None:
+            worker_counts.append(max_workers)
+
+        def __enter__(self) -> FakeExecutor:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> concurrent.futures.Future[Any]:
+            future: concurrent.futures.Future[Any] = concurrent.futures.Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", FakeExecutor)
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    result = main(
+        [
+            "bench",
+            "--scenarios",
+            str(scenarios),
+            "--recordings",
+            str(recordings),
+            "--rules",
+            str(rules),
+            "--jobs",
+            "64",
             "--json",
         ]
     )
 
     output = json.loads(capsys.readouterr().out)
-    scorecard = output["scorecard"]
-    assert result == 1
-    assert scorecard["scenarios"]["scenario-a"]["result"] == "pass"
-    assert scorecard["scenarios"]["scenario-b"]["result"] == "fail"
-    assert scorecard["scenarios"]["scenario-c"]["result"] == "skipped"
-    assert scorecard["scenarios"]["scenario-c"]["reason"] == "sha256 mismatch"
-    assert output["gate"]["status"] == "fail"
+    assert worker_counts == [61]
+    assert result == 0
+    assert len(output["scorecard"]["scenarios"]) == 62
+
+
+def test_find_source_hashes_each_file_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import pitwall.learning.bench as bench_module
+
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    uid = 0x1234_5678_9ABC_DEF0
+    source = write_packet_stream(
+        recordings / "source.f1bin",
+        race_stream(RaceSpec(laps=2, dt=1.0, session_uid=uid)),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    scenarios = [
+        parse_scenario(
+            _write_scenario(
+                tmp_path,
+                {
+                    **_scenario_data(id=scenario_id),
+                    "source": {"session_uid": hex(uid), "sha256": digest},
+                },
+            )
+        )
+        for scenario_id in ("scenario-a", "scenario-b")
+    ]
+    index = build_recording_index([recordings])
+    original = bench_module._file_sha256
+    calls = 0
+
+    def count_hash(path: Path) -> str:
+        nonlocal calls
+        calls += 1
+        return original(path)
+
+    monkeypatch.setattr(bench_module, "_file_sha256", count_hash)
+    digests: dict[Path, str] = {}
+
+    assert find_source(scenarios[0], index, digests) == (source, "")
+    assert find_source(scenarios[1], index, digests) == (source, "")
+    assert calls == 1
