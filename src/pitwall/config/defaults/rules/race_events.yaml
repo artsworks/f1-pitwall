@@ -41,12 +41,12 @@ rules:
     cooldown_s: 15
     requires: [event]
     say:
-      - "We've got a {penalty_kind_text}. Serve it within three laps"
-      - "{penalty_kind_text} penalty. We'll serve it, three laps to take it"
-      - "{penalty_kind_text}. Three laps to serve it, we'll call it"
-      - "{penalty_kind_text} penalty. Serve it within three laps"
-      - "Penalty for {penalty_kind_text}. Three laps to serve it"
-      - "Serve the {penalty_kind_text} within three laps"
+      - "We've got a {penalty_kind_text}. We'll call when to serve it"
+      - "{penalty_kind_text} penalty. We'll call the lap to take it"
+      - "{penalty_kind_text}. We'll tell you when to box for it"
+      - "{penalty_kind_text} penalty. Serve it when we call it"
+      - "Penalty for {penalty_kind_text}. We'll call the lap"
+      - "We'll serve the {penalty_kind_text}. Wait for the call"
   - id: serve_penalty
     sessions: [race]
     priority: 2
@@ -63,6 +63,14 @@ rules:
       - "Penalty still unserved. Serve it at the stop"
       - "Penalty still to serve. Take it at the stop"
       - "Penalty remains on the car. Serve it in the pits"
+    # A drive-through fits no tyres, so its lines never mention the stop.
+    severity:
+      - when: "unserved_drive_through > 0"
+        say:
+          - "Drive-through when we box, no tyre change"
+          - "We box for the drive-through. No tyre change, straight through"
+          - "Drive-through still to serve. Straight through, no tyres"
+          - "Box is for the drive-through only. No tyre change"
   # Penalty escalation: game reminders to serve a drive-through or stop-go,
   # then the served confirmation (DTSV/SGSV). See docs/research/penalty-escalation.md.
   - id: penalty_serve_this_lap

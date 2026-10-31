@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import struct
+from pathlib import Path
 
 import pytest
+import yaml
 
+from pitwall.config.loader import ConfigStore
 from pitwall.net.derive import DriveThrough, derive_records
 from pitwall.protocol.header import HEADER_SIZE, PacketId, parse_header
 from pitwall.protocol.packets import car_field_offset
+from pitwall.rules.engine import RuleEngine
+from pitwall.state.session import Snapshot
 
 from .race_synth import RaceSpec, race_stream, replay_race
+
+_RACE_EVENTS = (
+    Path(__file__).resolve().parents[1] / "src/pitwall/config/defaults/rules/race_events.yaml"
+)
 
 
 def _pena(ptype: int, infringement: int, lap: int) -> bytes:
@@ -45,6 +54,7 @@ def test_drive_through_escalates_then_confirms(tmp_path) -> None:
         "penalty_served_drive_through",
     } <= fired.keys()
     assert "drive-through" in fired["penalty_serve_this_lap"].text
+    assert "tyre" in fired["serve_penalty"].text and "stop" not in fired["serve_penalty"].text
     assert "penalty" not in fired
     assert not {"out_lap_s3_tyres_cold", "out_lap_s3_tyres_ready"} & fired.keys()
 
@@ -98,3 +108,49 @@ def test_drive_through_mutation_issues_then_serves_at_pit_visit() -> None:
         if parse_header(payload).packet_id == PacketId.LAP_DATA
     ]
     assert 1 in unserved and unserved[-1] == 0
+
+
+def _race_rule(rule_id: str) -> dict:
+    rules = yaml.safe_load(_RACE_EVENTS.read_text(encoding="utf-8"))["rules"]
+    return next(rule for rule in rules if rule["id"] == rule_id)
+
+
+def _serve_penalty_text(**fields: int) -> str:
+    settings = ConfigStore().current()
+    engine = RuleEngine(
+        list(settings.rules),
+        thresholds=settings.thresholds,
+        mode=settings.resolved_mindset(),
+        staleness_s=settings.engine.staleness_s,
+    )
+    snap = Snapshot(
+        now=100.0,
+        session_kind="race",
+        session_type=15,
+        phase="racing",
+        pit_plan="box_now",
+        _ages={"lap_data": 0.1},
+        **fields,
+    )
+    candidates = engine.evaluate(snap).candidates
+    return next(c.text for c in candidates if c.rule.defn.id == "serve_penalty")
+
+
+def test_serve_penalty_drive_through_never_mentions_a_stop() -> None:
+    text = _serve_penalty_text(unserved_drive_through=1)
+
+    assert "drive-through" in text.lower() and "tyre" in text
+    pool = _race_rule("serve_penalty")["severity"][0]["say"]
+    assert all("stop" not in line.lower() and "tyre" in line for line in pool)
+
+
+def test_serve_penalty_stop_go_keeps_stop_wording() -> None:
+    text = _serve_penalty_text(unserved_stop_go=1)
+
+    assert "stop" in text and "drive-through" not in text.lower()
+
+
+def test_penalty_pit_names_no_lap_count() -> None:
+    pool = _race_rule("penalty_pit")["say"]
+
+    assert not any(word in line.lower() for line in pool for word in ("three", "laps", "3"))
