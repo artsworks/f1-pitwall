@@ -338,6 +338,41 @@ rules:
       - "Track is drying. Rain chance {weather_crossover_pct} percent, slicks soon"
       - "Drying conditions, {weather_crossover_pct} percent rain. Prepare slicks"
       - "Rain easing. Slicks likely, {weather_crossover_pct} percent rain"
+  - id: rain_box_now
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    when: "phase == 'racing' and laps_remaining > 1 and rain_box_lap == 0 and forecast_accuracy == 0 and weather_now < 3"
+    clear_when: "rain_box_lap != 0"
+    cooldown_group: weather
+    supersedes: [weather_to_inter]
+    requires: [lap_data]
+    say:
+      - "Box this lap for {rain_box_tyre}. Rain in {rain_onset_min} minutes."
+      - "Box, box for {rain_box_tyre}. Rain due in {rain_onset_min} minutes."
+  - id: rain_stay_out
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and lap_num >= 2 and laps_remaining > 1 and rain_onset_min > 0 and rain_box_lap == -1 and weather_now < 3 and tyre_compound not in (7, 8)"
+    clear_when: "rain_onset_min == 0"
+    cooldown_s: 600
+    cooldown_group: rain_plan
+    requires: [session]
+    say:
+      - "Rain in {rain_onset_min} minutes. Stay out, a stop doesn't pay yet."
+      - "Rain due in {rain_onset_min}. Stay out for now."
+  - id: rain_follow_field
+    sessions: [race]
+    priority: 2
+    when: "phase in ('racing', 'sc', 'vsc') and laps_remaining > 1 and tyre_compound not in (7, 8) and field_wet_switches >= th.field_follow_min_cars and (rain_onset_min > 0 or weather_now >= 3)"
+    clear_when: "field_wet_switches < th.field_follow_min_cars"
+    cooldown_s: 120
+    cooldown_group: weather
+    supersedes: [rain_stay_out]
+    requires: [lap_data]
+    say:
+      - "{field_wet_switches} cars on {field_wet_tyre}. Box with them."
+      - "Cars are switching to {field_wet_tyre}. Box this lap."
   - id: sc_deployed
     sessions: [race]
     priority: 1
