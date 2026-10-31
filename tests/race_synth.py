@@ -44,10 +44,13 @@ class RaceSpec:
     rival_pit_lap: int | None = None
     rival_behind_pit_lap: int | None = None  # Lap when the rival behind pits
     sc_laps: tuple[int, int] | None = None
+    sc_delta_s: float | None = None
     penalty_lap: int | None = None
     penalty_type: int = 4  # Penalty type sent on penalty_lap
     penalty_infringement: int = 7  # Infringement id sent on penalty_lap
     warning_laps: tuple[tuple[int, int], ...] = ()  # (lap, infringement id) warnings
+    unserved_drive_through_laps: tuple[int, int] | None = None  # (first, last) laps with one
+    lap_events: tuple[tuple[int, bytes, bytes], ...] = ()  # (lap, code, detail) sent mid-lap
     blue_flag_lap: int | None = None
     rain_lap: int | None = None
     rain_end_lap: int | None = None  # Lap when forecast rain clears
@@ -72,6 +75,7 @@ class RaceSpec:
     weekend_link: int = 0
     session_uid: int = 0xDEADBEEF
     compound: int = 17
+    team_ids: tuple[int, ...] = ()
     tyre_inner_profile: tuple[float, ...] | None = None
     tyre_surface_profile: tuple[float, ...] | None = None
     thermal_window_c: tuple[float, float] | None = None
@@ -368,14 +372,21 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         participants = {
             i: {"name": NAMES.get(i, f"RIVAL_{i}".encode())} for i in range(participant_count)
         }
+        if spec.team_ids:
+            for i, car in participants.items():
+                car["team_id"] = spec.team_ids[i] if i < len(spec.team_ids) else 255
         emit(
             PacketId.PARTICIPANTS,
             {"num_active_cars": participant_count, "cars": participants},
         )
     else:
+        participants = {i: {"name": n} for i, n in NAMES.items()}
+        if spec.team_ids:
+            for i, car in participants.items():
+                car["team_id"] = spec.team_ids[i] if i < len(spec.team_ids) else 255
         emit(
             PacketId.PARTICIPANTS,
-            {"num_active_cars": 4, "cars": {i: {"name": n} for i, n in NAMES.items()}},
+            {"num_active_cars": 4, "cars": participants},
         )
     event(b"LGOT")
     car_setups = spec.extra.get("car_setups")
@@ -388,6 +399,18 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     player_last_ms = 0
     rng = Random(spec.seed)
     for lap in range(1, spec.laps + 1):
+        if lap > 1 and spec.team_ids and not spec.qualifying_field_best_ms:
+            participants = {
+                i: {
+                    "name": name,
+                    "team_id": spec.team_ids[i] if i < len(spec.team_ids) else 255,
+                }
+                for i, name in NAMES.items()
+            }
+            emit(
+                PacketId.PARTICIPANTS,
+                {"num_active_cars": 4, "cars": participants},
+            )
         positions = (
             spec.positions_by_lap[min(lap - 1, len(spec.positions_by_lap) - 1)]
             if spec.positions_by_lap
@@ -542,9 +565,17 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "driver_status": player_driver_status,
                 "pit_status": player_pit_status,
                 "num_pit_stops": int(after_stop and not spec.player_pit_drive_through),
+                "num_unserved_drive_through_pens": int(
+                    spec.unserved_drive_through_laps is not None
+                    and spec.unserved_drive_through_laps[0]
+                    <= lap
+                    <= spec.unserved_drive_through_laps[1]
+                ),
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                 "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
+            if spec.sc_delta_s is not None:
+                player_lap_data["safety_car_delta"] = spec.sc_delta_s
             if spec.off_track_lap == lap:
                 player_lap_data["car_position"] = next(
                     (
@@ -675,6 +706,9 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     ),
                 )
             if f == frames // 2:
+                for event_lap, code, detail in spec.lap_events:
+                    if event_lap == lap:
+                        event(code, detail)
                 for warning_lap, infringement in spec.warning_laps:
                     if warning_lap == lap:
                         event(

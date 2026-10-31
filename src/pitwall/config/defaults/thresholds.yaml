@@ -8,6 +8,11 @@ thresholds:
   pu_dirty_air_gap_s: 1.0
   pu_wear_warn_pct: 60
   pu_wear_clear_pct: 55
+  # Race-end and formation-lap radio
+  formation_min_speed_kmh: 10
+  formation_brakes_cold_c: 200
+  race_cool_down_delay_s: 8
+  race_cool_down_min_speed_kmh: 10
   # Setup advisor A1 detector thresholds
   trac_slip: 0.08
   trac_throttle: 0.7
@@ -101,6 +106,9 @@ thresholds:
   tow_max_s: 2.0             # ...between min and max = a tow
   prep_clear_s: 5            # nothing ahead within this = clear
   prep_behind_s: 4           # push-lap car behind closing within this = let it by
+  # Team orders (docs/research/team-orders.md)
+  teammate_hold_laps: 3   # hold position with the teammate ahead in the last N laps
+  teammate_split_age_laps: 5   # tyre-age offset (and min stint age) that counts as a different strategy
   # Run plan / cool-down lap (docs/17)
   cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
   cool_wet_ers_min_pct: 20   # inters/wets: battery floor at the line to push; a wet hot lap spends ~3-10% (Brazil wet quali)
@@ -128,3 +136,6 @@ thresholds:
   cool_car_behind_s: 3       # car on a hot lap this close behind -> get off the line
   ers_recharge_mode: 0       # ers_deploy_mode value for recharge (Q3 recording: battery only rises in 0); -1 = don't check
   cool_recharge_full_pct: 95 # battery at or above this on a cool lap: stop asking for recharge mode
+  # SC/VSC restart procedures (sc-restart)
+  sc_delta_warn_s: -0.1   # SC/VSC delta below this is too fast (penalty risk)
+  sc_delta_clear_s: 0.3   # re-arm once the delta is back above this

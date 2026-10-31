@@ -1,0 +1,24 @@
+id: brazil-race-end
+title: Formation preparation, player finish and confirmed classification
+status: target
+source:
+  session_uid: "0xdeadbeef"
+  sha256: "7eafa5dfc47abeb437f7b51cd28b0def6e54e60a2103f97dce68e4e7e02b0278"
+  where: "Synthetic Brazil fixture from tests.test_race_end.write_race_end_recording, not a real drive"
+expect:
+  fire:
+    - {rule: formation_tyres_cold, laps: [1, 1]}
+    - {rule: formation_brakes_cold, laps: [1, 1]}
+    - {rule: formation_grid_slot, laps: [1, 1]}
+    - {rule: last_lap, laps: [3, 3]}
+    - {rule: finish_gained, laps: [3, 3]}
+    - {rule: race_cool_down, laps: [3, 3]}
+    - {rule: finish_classified, laps: [3, 3]}
+  absent:
+    - {rule: [finish_gained, finish_classified, race_cool_down], laps: [1, 2]}
+    - {rule: [formation_tyres_cold, formation_brakes_cold, formation_grid_slot], laps: [2, 3]}
+why: >-
+  Cold tyres precede cold brakes and the grid reminder. CHQF alone does not finish
+  the player. Lap Data confirms the road finish, then movement permits cooling.
+  Final Classification corrects P4 to P3 and supplies the official gaps and fastest lap.
+  The recording is generated locally, never committed. See docs/research/race-end-and-formation-lap.md.
