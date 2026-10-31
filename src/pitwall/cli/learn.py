@@ -422,37 +422,28 @@ def cmd_bench(args: argparse.Namespace) -> int:
         jobs = args.jobs or os.cpu_count() or 1
         digests: dict[Path, str] = {}
         results: list[tuple[dict[str, Any], list[dict[str, Any]]] | None] = [None] * len(scenarios)
-        pending: list[tuple[int, Path]] = []
+        sources = [find_source(scenario, index, digests) for scenario in scenarios]
+        pending = [(i, source) for i, (source, _) in enumerate(sources) if source is not None]
         done = 0
-        for i, scenario in enumerate(scenarios):
-            source, reason = find_source(scenario, index, digests)
-            if source is None:
+        if jobs == 1 or len(pending) <= 1:
+            for i, (scenario, (source, reason)) in enumerate(zip(scenarios, sources, strict=True)):
+                done += 1
+                print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
                 results[i] = run_scenario(
                     scenario,
-                    None,
+                    source,
                     settings,
                     rules_dir=rules_dir,
                     skip_reason=reason,
                 )
-                done += 1
-                print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
-            else:
-                pending.append((i, source))
-        if jobs == 1 or len(pending) <= 1:
-            for i, source in pending:
-                done += 1
-                print(
-                    f"bench {done}/{len(scenarios)}: {scenarios[i].id} ...",
-                    file=sys.stderr,
-                )
-                results[i] = run_scenario(
-                    scenarios[i],
-                    source,
-                    settings,
-                    rules_dir=rules_dir,
-                    skip_reason="",
-                )
         else:
+            for i, (scenario, (source, reason)) in enumerate(zip(scenarios, sources, strict=True)):
+                if source is None:
+                    results[i] = run_scenario(
+                        scenario, None, settings, rules_dir=rules_dir, skip_reason=reason
+                    )
+                    done += 1
+                    print(f"bench {done}/{len(scenarios)}: {scenario.id} ...", file=sys.stderr)
             with ProcessPoolExecutor(
                 max_workers=min(jobs, len(pending)),
                 mp_context=multiprocessing.get_context("spawn"),
