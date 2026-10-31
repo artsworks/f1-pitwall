@@ -282,6 +282,47 @@ class Penalty:
 
 
 @dataclass(slots=True)
+class DriveThrough:
+    """A drive-through from `lap`, unserved until the player's next pit-lane visit."""
+
+    lap: int
+    label: str = field(init=False)
+    _issued: bool = field(default=False, init=False)
+    _served: bool = field(default=False, init=False)
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.lap <= 255:
+            raise ValueError("drive_through lap must be 1 to 255")
+        self.label = f"drive_through={self.lap}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            self._served
+            or header is None
+            or header.packet_id != PacketId.LAP_DATA
+            or len(payload) != PACKET_SIZES[PacketId.LAP_DATA]
+            or ctx.player_lap is None
+            or ctx.player_lap < self.lap
+        ):
+            return [payload]
+        player = header.player_car_index
+        extra: list[bytes] = []
+        if not self._issued:
+            self._issued = True
+            # Infringement 17: pit lane speeding.
+            detail = struct.pack("<BBBBBBB", 0, 17, player, 255, 255, self.lap, 0)
+            extra.append(_event_from(payload, b"PENA", detail))
+        elif payload[car_field_offset(PacketId.LAP_DATA, player, "pit_status")] != 0:
+            self._served = True
+            return [payload, _event_from(payload, b"DTSV", struct.pack("<B", player))]
+        rewritten = bytearray(payload)
+        unserved = car_field_offset(PacketId.LAP_DATA, player, "num_unserved_drive_through_pens")
+        rewritten[unserved] = 1
+        return [bytes(rewritten), *extra]
+
+
+@dataclass(slots=True)
 class InjectRivalPit:
     lap: int
     side: str = "ahead"
@@ -449,6 +490,7 @@ def ops_from_options(
     rival_pit: str | None = None,
     teammate_pit: int | None = None,
     damage: dict[str, int] | None = None,
+    drive_through: int | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
     if wear_scale is not None:
@@ -471,6 +513,8 @@ def ops_from_options(
         ops.append(TeammatePit(teammate_pit))
     if damage is not None:
         ops.append(Damage(**damage))
+    if drive_through is not None:
+        ops.append(DriveThrough(drive_through))
     if not ops:
         raise ValueError("derive requires at least one mutation")
     return ops

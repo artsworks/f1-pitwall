@@ -161,7 +161,10 @@ SECTOR3_VALID = 0x08
 # 10-15, retired 16, black-flag timer 17, ...) are not penalties to announce.
 _PENALTY_KINDS = {0: "drive_through", 1: "stop_go", 4: "time"}
 PENALTY_TYPE_GRID = 2
+PENALTY_TYPE_REMINDER = 3
 PENALTY_TYPE_WARNING = 5
+# PENA infringement_type on a penalty reminder -> how soon the game wants it served.
+_REMINDER_KINDS = {15: "within", 16: "this_lap"}
 
 
 # PENA infringement_type -> kind of track warning.
@@ -566,6 +569,14 @@ class Snapshot:
     warnings: int = 0
     corner_cut_warnings: int = 0
     penalty_recent: bool = False
+    # Penalty escalation: PENA reminders, DTSV/SGSV served events, and a
+    # pit-lane pass that did not raise num_pit_stops (no tyres fitted).
+    penalty_reminder: str = ""  # 'within' (infringement 15) | 'this_lap' (16)
+    penalty_reminder_recent: bool = False
+    penalty_served_kind: str = ""  # 'drive_through' | 'stop_go'
+    penalty_served_recent: bool = False
+    penalty_stop_time_s: float = 0.0
+    pit_pass_no_stop: bool = False
     penalty_position: int = 0  # race position once every car's time penalties apply
     penalty_margin_s: float = (
         math.inf
@@ -828,6 +839,12 @@ class Snapshot:
         return max(0.0, -self.energy_prev_lap_delta_mj)
 
     @property
+    def penalty_unserved_text(self) -> str:
+        if self.unserved_drive_through > 0:
+            return "drive-through"
+        return "stop-go" if self.unserved_stop_go > 0 else ""
+
+    @property
     def penalty_kind_text(self) -> str:
         return {"drive_through": "drive-through", "stop_go": "stop-go"}.get(
             self.penalty_kind, self.penalty_kind
@@ -1074,6 +1091,13 @@ class SessionState:
         self.penalty_infringement = 0
         self.penalty_time_s = 0
         self._last_penalty_st: float | None = None
+        self.penalty_reminder = ""
+        self._last_penalty_reminder_st: float | None = None
+        self.penalty_served_kind = ""
+        self.penalty_stop_time_s = 0.0
+        self._last_penalty_served_st: float | None = None
+        self._pit_entry_stops: int | None = None
+        self.pit_pass_no_stop = False
         self.grid_penalty_places = 0
         self._last_grid_penalty_st: float | None = None
         self._grid_penalty_events: list[tuple[float, int]] = []
@@ -1330,6 +1354,8 @@ class SessionState:
         self._penalty_lap_increase_s = 0
         self._penalty_lap_change_st = None
         self._last_penalty_st = None
+        self._last_penalty_reminder_st = None
+        self._last_penalty_served_st = None
         self.lap_acc.note_flashback()
         self.run.note_rewind()
         self._cool_latch = None
@@ -1479,8 +1505,16 @@ class SessionState:
         ):
             self.hot_lap_fuel_base = None
         self.driver_status = car.driver_status
+        if self.pit_status == PitStatus.NONE and car.pit_status != PitStatus.NONE:
+            self._pit_entry_stops = self.num_pit_stops
+            self.pit_pass_no_stop = False
         if self.pit_status != PitStatus.NONE and car.pit_status == PitStatus.NONE:
             self._pit_exit_t = self._last_session_time
+            # A drive-through (or a stop-go with no tyre work) passes the pit lane
+            # without raising num_pit_stops; the game counts a real stop in the box.
+            self.pit_pass_no_stop = (
+                self._pit_entry_stops is not None and car.num_pit_stops <= self._pit_entry_stops
+            )
         self.pit_status = car.pit_status
         self.current_lap_time_ms = car.current_lap_time_ms
         self.sector1_time_ms = car.sector1_ms
@@ -1807,6 +1841,9 @@ class SessionState:
                 kind = _PENALTY_KINDS.get(ptype, "")
                 infringement = int(pkt.detail.get("infringement_type", 0))
                 warn_kind = _TRACK_WARNING_KINDS.get(infringement, "")
+                if ptype == PENALTY_TYPE_REMINDER and infringement in _REMINDER_KINDS:
+                    self.penalty_reminder = _REMINDER_KINDS[infringement]
+                    self._last_penalty_reminder_st = pkt.header.session_time
                 if ptype == PENALTY_TYPE_WARNING and warn_kind:
                     self.track_warning_kind = warn_kind
                     self._last_track_warning_st = pkt.header.session_time
@@ -1839,6 +1876,11 @@ class SessionState:
                         places for _, places in self._grid_penalty_events
                     )
                     self._last_grid_penalty_st = self._grid_penalty_events[-1][0]
+        elif pkt.code in ("DTSV", "SGSV"):
+            if isinstance(pkt.detail, dict) and pkt.detail.get("vehicle_idx") == self._player_idx:
+                self.penalty_served_kind = "drive_through" if pkt.code == "DTSV" else "stop_go"
+                self.penalty_stop_time_s = float(pkt.detail.get("stop_time_s", 0.0))
+                self._last_penalty_served_st = pkt.header.session_time
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
             if self._press_bit is not None:
@@ -2626,6 +2668,18 @@ class SessionState:
                 self._last_penalty_st is not None
                 and 0.0 <= st - self._last_penalty_st <= self._th("penalty_recent_s", 10.0)
             ),
+            penalty_reminder=self.penalty_reminder,
+            penalty_reminder_recent=(
+                self._last_penalty_reminder_st is not None
+                and 0.0 <= st - self._last_penalty_reminder_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            penalty_served_kind=self.penalty_served_kind,
+            penalty_served_recent=(
+                self._last_penalty_served_st is not None
+                and 0.0 <= st - self._last_penalty_served_st <= self._th("penalty_recent_s", 10.0)
+            ),
+            penalty_stop_time_s=self.penalty_stop_time_s,
+            pit_pass_no_stop=self.pit_pass_no_stop,
             grid_penalty_places=self.grid_penalty_places,
             grid_penalty_recent=(
                 self._last_grid_penalty_st is not None

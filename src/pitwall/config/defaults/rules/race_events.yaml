@@ -63,6 +63,62 @@ rules:
       - "Penalty still unserved. Serve it at the stop"
       - "Penalty still to serve. Take it at the stop"
       - "Penalty remains on the car. Serve it in the pits"
+  # Penalty escalation: game reminders to serve a drive-through or stop-go,
+  # then the served confirmation (DTSV/SGSV). See docs/research/penalty-escalation.md.
+  - id: penalty_serve_this_lap
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    decision_point: pit_entry
+    when: "penalty_reminder_recent and penalty_reminder == 'this_lap' and unserved_drive_through + unserved_stop_go > 0"
+    clear_when: "not penalty_reminder_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Box this lap for the {penalty_unserved_text}. Last lap to serve it"
+      - "Last lap to serve the {penalty_unserved_text}. Box this lap"
+      - "{penalty_unserved_text} must be served this lap. Box, box"
+      - "Box, box for the {penalty_unserved_text}. This is the last lap"
+  - id: penalty_serve_reminder
+    sessions: [race]
+    priority: 2
+    urgency: execution
+    decision_point: pit_entry
+    when: "penalty_reminder_recent and penalty_reminder == 'within' and unserved_drive_through + unserved_stop_go > 0"
+    clear_when: "not penalty_reminder_recent"
+    cooldown_s: 30
+    requires: [event, lap_data]
+    say:
+      - "Reminder, {penalty_unserved_text} still to serve. {laps_remaining} laps to go"
+      - "{penalty_unserved_text} still on the car. {laps_remaining} laps left"
+      - "We still owe the {penalty_unserved_text}. {laps_remaining} to go"
+      - "{penalty_unserved_text} not served yet. {laps_remaining} laps remaining"
+  - id: penalty_served_drive_through
+    sessions: [race]
+    priority: 2
+    urgency: info
+    when: "penalty_served_recent and penalty_served_kind == 'drive_through'"
+    clear_when: "not penalty_served_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Drive-through served. P{position} now"
+      - "That's the drive-through done. P{position}"
+      - "Drive-through served, P{position}. Penalty clear"
+      - "Penalty served. Back out in P{position}"
+  - id: penalty_served_stop_go
+    sessions: [race]
+    priority: 2
+    urgency: info
+    when: "penalty_served_recent and penalty_served_kind == 'stop_go'"
+    clear_when: "not penalty_served_recent"
+    cooldown_s: 15
+    requires: [event, lap_data]
+    say:
+      - "Stop-go served, {penalty_stop_time_s:.1f} stationary. P{position}"
+      - "Stop-go done, {penalty_stop_time_s:.1f} seconds held. P{position}"
+      - "That's the stop-go served. P{position}, penalty clear"
+      - "Stop-go served. {penalty_stop_time_s:.1f} in the box, P{position}"
   - id: penalty_track_limits
     sessions: [race]
     priority: 1

@@ -48,6 +48,8 @@ class RaceSpec:
     penalty_type: int = 4  # Penalty type sent on penalty_lap
     penalty_infringement: int = 7  # Infringement id sent on penalty_lap
     warning_laps: tuple[tuple[int, int], ...] = ()  # (lap, infringement id) warnings
+    unserved_drive_through_laps: tuple[int, int] | None = None  # (first, last) laps with one
+    lap_events: tuple[tuple[int, bytes, bytes], ...] = ()  # (lap, code, detail) sent mid-lap
     blue_flag_lap: int | None = None
     rain_lap: int | None = None
     rain_end_lap: int | None = None  # Lap when forecast rain clears
@@ -542,6 +544,12 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                 "driver_status": player_driver_status,
                 "pit_status": player_pit_status,
                 "num_pit_stops": int(after_stop and not spec.player_pit_drive_through),
+                "num_unserved_drive_through_pens": int(
+                    spec.unserved_drive_through_laps is not None
+                    and spec.unserved_drive_through_laps[0]
+                    <= lap
+                    <= spec.unserved_drive_through_laps[1]
+                ),
                 "pit_lane_time_in_lane_ms": 19_500 if player_pitting else 0,
                 "delta_to_car_in_front_ms_part": int(gap_ahead_s * 1000),
             }
@@ -675,6 +683,9 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
                     ),
                 )
             if f == frames // 2:
+                for event_lap, code, detail in spec.lap_events:
+                    if event_lap == lap:
+                        event(code, detail)
                 for warning_lap, infringement in spec.warning_laps:
                     if warning_lap == lap:
                         event(
