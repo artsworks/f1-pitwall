@@ -166,6 +166,13 @@ def feasible(inp: PlanInputs, seq: tuple[int, ...], th: Mapping[str, object]) ->
     return True
 
 
+def compound_stop_owed(used: frozenset[int], th: Mapping[str, object]) -> bool:
+    """A dry race that still needs a second dry compound."""
+    if not _f(th, "plan_two_compound_rule", 1) or not used or used - set(DRY):
+        return False
+    return len(used & set(DRY)) < 2
+
+
 def evaluate(
     inp: PlanInputs,
     seq: tuple[int, ...],

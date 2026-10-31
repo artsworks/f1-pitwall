@@ -149,6 +149,7 @@ The optimiser sets `overcut_s` to zero unless `laps_remaining > th.overcut_laps`
 These limits suppress values and plans when too few laps remain to exploit the tyre advantage.
 When `laps_remaining <= th.pit_min_laps_left`, the optimiser returns `no_stop` with both values at zero.
 The `rival_ahead_pitted` rule also stays silent at this limit.
+The mandatory two-dry-compound rule blocks tyre-based `no_stop` returns while another dry compound is owed.
 
 **Cover the undercut.** When the car behind pits, the optimiser compares its projected fresh-tyre gain with our gap. It calls us to box if the rival could jump us, or stay out when the gap is safe. Cover and defend use the true rival behind in a stop-adjusted order. The order adds one pit loss per owed stop, using the two-dry-compound minimum. The system holds gaps for cars in the pit lane and recomputes the order under SC/VSC with the SC pit loss. Cars on inter or wet tyres and sprint races owe no stop. The order excludes lapped cars.
 
