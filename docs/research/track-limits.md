@@ -62,6 +62,8 @@ The existing `warnings_warn` setting remains available to the dashboard. The rad
 All three rules require fresh Lap Data, but do not require PENA packets.
 All use priority 3 and `info` urgency, below safety, pit execution, tyre and battle calls.
 Each count fires once while the count stays unchanged. A pit stop does not restart the chain.
+The rules opt into `retry_on_suppression` for radio-budget and safety-focus suppression, including calls dropped from the queue.
+Suppressed warnings retry while their count remains current. Successful calls stay disarmed until the count changes.
 Queued calls expire if the count changes. Higher-count calls also supersede lower-count calls.
 Joining at count 3 reports only count 3. Missing intermediate counts do not produce historical calls.
 Counts of 4 or more do not wrap around. An actual counter rollback can rearm earlier count rules.

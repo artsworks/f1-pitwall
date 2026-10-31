@@ -100,6 +100,7 @@ rules:
     urgency: info
     when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 2"
     clear_when: "track_warning_count != th.track_limits_flag_warnings - 2"
+    retry_on_suppression: true
     still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 2"
     cooldown_s: 10
     requires: [lap_data]
@@ -113,6 +114,7 @@ rules:
     urgency: info
     when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 1"
     clear_when: "track_warning_count != th.track_limits_flag_warnings - 1"
+    retry_on_suppression: true
     still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings - 1"
     supersedes: [track_limit_warning]
     cooldown_s: 10
@@ -127,6 +129,7 @@ rules:
     urgency: info
     when: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings"
     clear_when: "track_warning_count != th.track_limits_flag_warnings"
+    retry_on_suppression: true
     still_true: "phase in ('racing', 'sc', 'vsc') and track_warning_count == th.track_limits_flag_warnings"
     supersedes: [track_limit_warning, track_limit_second_warning]
     cooldown_s: 10

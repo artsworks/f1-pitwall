@@ -9,8 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from pitwall.audio.decision_log import DecisionLog
+from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
+from pitwall.config.models import PolicySettings, RuleDefModel
 from pitwall.engine import build_engine, run_replay
 from pitwall.learning.bench import evaluate_checks, parse_scenario
 from pitwall.rules.engine import RuleEngine
@@ -144,6 +147,58 @@ def test_count_rollback_rearms_without_inventing_penalty_cycles() -> None:
         assert [
             candidate.rule.id for candidate in rules.evaluate(_snapshot(count, now=now)).candidates
         ] == [CHAIN[count - 1]]
+
+
+@pytest.mark.parametrize("count", [1, 2, 3])
+@pytest.mark.parametrize("reason", ["budget", "focus"])
+@pytest.mark.parametrize("queued", [False, True])
+def test_busy_radio_retries_warning_at_same_count_once(
+    count: int, reason: str, queued: bool
+) -> None:
+    rules = _rules()
+    log = io.StringIO()
+    dispatcher = Dispatcher(
+        PolicySettings(calls_per_lap=1, min_gap_s=0, p3_straight_only=False, focus_window_s=5),
+        VirtualClock(),
+        decision_log=DecisionLog(fp=log),
+        sinks=[],
+    )
+    blocker = RuleEngine(
+        [
+            RuleDefModel(
+                id="blocker",
+                priority=1 if reason == "focus" else 2,
+                urgency="safety" if reason == "focus" else "tactical",
+                when="True",
+                say="Yellow flag",
+            )
+        ],
+        thresholds={},
+        mode={},
+    )
+    snap = _snapshot(count)
+    busy = replace(snap, now=31.0)
+    if queued:
+        dispatcher.submit(rules.evaluate(snap).candidates, snap)
+        if reason == "budget":
+            dispatcher.drop_budgeted()
+        else:
+            dispatcher.submit(blocker.evaluate(busy).candidates, busy)
+            assert [call.rule_id for call in dispatcher.drain(busy.now)] == ["blocker"]
+    else:
+        dispatcher.submit(blocker.evaluate(snap).candidates, snap)
+        assert [call.rule_id for call in dispatcher.drain(snap.now)] == ["blocker"]
+        dispatcher.submit(rules.evaluate(busy).candidates, busy)
+    assert dispatcher.drain(busy.now) == []
+    assert any(
+        row["rule_id"] == CHAIN[count - 1] and row.get("suppressed_by") == reason
+        for row in map(json.loads, log.getvalue().splitlines())
+    )
+
+    available = replace(snap, now=40.0, lap_num=6 if reason == "budget" else 5)
+    dispatcher.submit(rules.evaluate(available).candidates, available)
+    assert [call.rule_id for call in dispatcher.drain(available.now)] == [CHAIN[count - 1]]
+    assert not rules.evaluate(replace(available, now=70.0)).candidates
 
 
 def test_all_phrase_variants_include_count_and_next_consequence() -> None:
