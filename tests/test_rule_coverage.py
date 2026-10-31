@@ -71,7 +71,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "setup_bias",
         "setup_on_throttle",  # replay scenario unresolved: high slip did not yield advice
         "setup_stop_wing",  # replay scenario unresolved: stop setup did not yield advice
-        "serve_penalty",  # replay scenario unresolved: pit timing did not trigger advice
         "slow_car_ahead",
         "slow_car_crawling",
         "spun_rejoin",
