@@ -135,6 +135,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
             "damage",
             "teammate_pit",
             "inject_rival_pit",
+            "red_flag",
         },
         path,
         "mutations",
@@ -168,6 +169,9 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
         isinstance(teammate_pit, bool) or not isinstance(teammate_pit, int)
     ):
         raise ValueError(f"{path}: mutations.teammate_pit must be an integer")
+    red_flag = mutations.get("red_flag")
+    if red_flag is not None and not isinstance(red_flag, str):
+        raise ValueError(f"{path}: mutations.red_flag must be a string")
     try:
         return (
             ops_from_options(
@@ -178,6 +182,7 @@ def _scenario_ops(mutations: Mapping[str, Any], path: Path) -> list[MutationOp]:
                 rival_pit=rival_pit,
                 teammate_pit=teammate_pit,
                 damage=damage,
+                red_flag=red_flag,
             )
             if mutations
             else []

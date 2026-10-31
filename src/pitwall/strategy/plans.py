@@ -392,9 +392,11 @@ class PlanTracker:
         cheap_stop: bool,
         reseed: bool = False,
         invalidate: str = "",
+        restart: bool = False,
     ) -> PlanState:
         """`reseed` rebuilds A/B from the current ranking (mindset change),
-        based at `stops_done` so completed stops are not replayed."""
+        based at `stops_done` so completed stops are not replayed. `restart`
+        reseeds after a red-flag restart and reports it as a 'restart' switch."""
         ranked = derive(inp, th)
         if not ranked:
             return self.state
@@ -409,6 +411,7 @@ class PlanTracker:
         if invalid:
             self.invalidated.add(self.pending_invalid)
             self.pending_invalid = ""
+        reseed = reseed or (restart and bool(self.seqs))
         if invalid and self.seqs and not reseed:
             to = "B" if self.active != "B" else "A"
             other_slot = "A" if to == "B" else "B"
@@ -422,7 +425,7 @@ class PlanTracker:
                 self._set(other_slot, "alternative", stops_done, b)
             self._switch(to, "invalid", lap, 0.0, a)
         if not self.seqs or reseed:
-            reason = "mindset" if self.seqs else "start"
+            reason = "restart" if restart and self.seqs else "mindset" if self.seqs else "start"
             prev = self.active
             self.seqs.clear()
             self.kinds.clear()
@@ -435,6 +438,10 @@ class PlanTracker:
             self.active = "A"
             self.target_ref = a.stop_laps[0] if a.stop_laps else 0
             self.events.append(PlanEvent(lap, "set", prev, "A", reason, 0.0, _seq_text(a)))
+            if reason == "restart":
+                self.switched_from = prev
+                self.switch_reason = reason
+                self.switch_lap = lap
 
         evals: dict[str, PlanEval | None] = {}
         for pid in self.seqs:

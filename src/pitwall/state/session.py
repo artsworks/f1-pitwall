@@ -431,6 +431,7 @@ class Snapshot:
     # fills them.
     laps_remaining: int = 0
     race_phase: str = ""
+    red_restart: bool = False
     sc_laps: int = 0
     lights_out: bool = False
     chequered: bool = False
@@ -3063,6 +3064,7 @@ class SessionState:
         model = self._model
         base: dict[str, Any] = dict(
             race_phase=self.race_phase,
+            red_restart=self._race.red_restart and not self.red_flag,
             sc_laps=self.sc_laps,
             grid_position=self.grid_position,
             positions_gained=(

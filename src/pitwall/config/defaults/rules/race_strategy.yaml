@@ -88,6 +88,18 @@ rules:
       - "Plan {plan_switched_from} is out. Now Plan {active_plan}, {plan_spoken}"
       - "Switching from Plan {plan_switched_from} to Plan {active_plan}. {plan_spoken}"
       - "New call, Plan {active_plan}. {plan_spoken}, leaving Plan {plan_switched_from}"
+  - id: plan_restart
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and plan_switch_reason == 'restart' and plan_switch_lap == lap_num"
+    clear_when: "plan_switch_lap != lap_num"
+    cooldown_s: 30
+    cooldown_group: plan_switch
+    requires: [lap_data]
+    say:
+      - "New plan for the restart. Plan {active_plan}, {plan_spoken}"
+      - "Restart plan is Plan {active_plan}. {plan_spoken}"
+      - "Plan rebuilt for the restart. Plan {active_plan}, {plan_spoken}"
   - id: plan_off
     sessions: [race]
     priority: 2

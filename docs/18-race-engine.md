@@ -347,6 +347,7 @@ Snapshot fields added (all plain floats/ints/strs/bools so rules and JSON can us
 laps_remaining: int                 # total_laps - lap_num + 1 (0 when unknown)
 race_phase: str                     # as above
 sc_laps: int                        # laps spent under the current SC/VSC
+red_restart: bool                   # after a red flag, until the first lap boundary of the restart
 gap_ahead_s, gap_behind_s: float    # from delta_to_car_in_front (player) and the car behind's delta
 rival_ahead_idx, rival_behind_idx, rival_pit_exit_idx: int   # -1 = none
 rival_ahead_pace_ms, rival_behind_pace_ms, rival_pit_exit_pace_ms: int

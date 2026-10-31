@@ -1,0 +1,20 @@
+id: brazil-red-flag
+title: Red flag on lap 5, standing restart on lap 6
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  red_flag: "5"
+expect:
+  fire:
+    - {rule: red_flag, laps: [5, 5]}
+    - {rule: red_flag_tyres, laps: [5, 5]}
+    - {rule: red_restart_warmup, laps: [6, 6]}
+    - {rule: plan_restart, laps: [6, 6]}
+  absent:
+    - {rule: [sc_restart, vsc_restart, red_flag_fresh_tyres], laps: [1, 17]}
+why: >-
+  A red flag gives a free tyre change, so the radio names the planned compound.
+  The restart then gets a cold tyre and brake warning and a rebuilt plan.

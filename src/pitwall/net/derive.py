@@ -26,7 +26,11 @@ from pitwall.protocol.header import (
     PacketId,
     parse_header,
 )
-from pitwall.protocol.packets import SESSION_SAFETY_CAR_STATUS_OFFSET, car_field_offset
+from pitwall.protocol.packets import (
+    SESSION_RED_FLAG_PERIODS_OFFSET,
+    SESSION_SAFETY_CAR_STATUS_OFFSET,
+    car_field_offset,
+)
 from pitwall.store.uids import derived_uid
 
 _NUM_CARS = 22
@@ -41,6 +45,7 @@ class DeriveContext:
     safety_events: dict[tuple[int, int, bool], set[str]] = field(default_factory=dict)
     penalty_emitted: set[int] = field(default_factory=set)
     penalty_seconds: dict[int, int] = field(default_factory=dict)
+    red_flag_events: set[str] = field(default_factory=set)
 
 
 class MutationOp(Protocol):
@@ -231,6 +236,48 @@ class InjectSafetyCar:
                     struct.pack_into("<I", rewritten, time_offset, min(0xFFFF_FFFF, scaled))
         if session_copy is not None:
             return [session_copy, bytes(rewritten), *extra]
+        return [bytes(rewritten), *extra]
+
+
+@dataclass(slots=True)
+class RedFlag:
+    """Red flag from the player's `start_lap` to `end_lap`, restarting with
+    lights out at the start of `end_lap + 1`. Recorded laps are not slowed."""
+
+    start_lap: int
+    end_lap: int
+    label: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.label = f"red_flag={self.start_lap}-{self.end_lap}"
+
+    def apply(self, payload: bytes, ctx: DeriveContext) -> list[bytes]:
+        header = _header(payload)
+        if (
+            header is None
+            or header.packet_id not in PACKET_SIZES
+            or len(payload) != PACKET_SIZES[header.packet_id]
+            or ctx.player_lap is None
+            or ctx.player_lap < self.start_lap
+        ):
+            return [payload]
+        rewritten = bytearray(payload)
+        extra: list[bytes] = []
+        status = ctx.red_flag_events
+        if "red" not in status:
+            status.add("red")
+            extra.append(_event_from(payload, b"RDFL", b""))
+        if header.packet_id == PacketId.SESSION:
+            rewritten[SESSION_SAFETY_CAR_STATUS_OFFSET] = 0
+            if rewritten[SESSION_RED_FLAG_PERIODS_OFFSET] == 0:
+                rewritten[SESSION_RED_FLAG_PERIODS_OFFSET] = 1
+        elif (
+            header.packet_id == PacketId.LAP_DATA
+            and ctx.player_lap > self.end_lap
+            and "restart" not in status
+        ):
+            status.add("restart")
+            extra.append(_event_from(payload, b"LGOT", b""))
         return [bytes(rewritten), *extra]
 
 
@@ -449,6 +496,7 @@ def ops_from_options(
     rival_pit: str | None = None,
     teammate_pit: int | None = None,
     damage: dict[str, int] | None = None,
+    red_flag: str | None = None,
 ) -> list[MutationOp]:
     ops: list[MutationOp] = []
     if wear_scale is not None:
@@ -471,6 +519,13 @@ def ops_from_options(
         ops.append(TeammatePit(teammate_pit))
     if damage is not None:
         ops.append(Damage(**damage))
+    if red_flag is not None:
+        start, separator, end = red_flag.partition("-")
+        start_lap = int(start)
+        end_lap = int(end) if separator else start_lap
+        if start_lap < 1 or end_lap < start_lap:
+            raise ValueError("red_flag requires positive, ascending lap numbers")
+        ops.append(RedFlag(start_lap, end_lap))
     if not ops:
         raise ValueError("derive requires at least one mutation")
     return ops
