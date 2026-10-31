@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
+from pitwall.audio.dispatcher import Dispatcher
 from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine, run_replay
@@ -290,6 +291,47 @@ def test_final_classification_wire_result_gaps_and_fastest():
         assert fragment in text
     ingest.on_datagram(_final(t=31), 31)
     assert not _calls(engine, state.snapshot(31))
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "position", "updates"),
+    [
+        ("finish_penalty", 4, {"penalty_s": 3, "penalty_position": 5}),
+        ("finish_gained", 4, {}),
+        ("finish_lost", 4, {"grid_position": 2}),
+        ("finish_held", 4, {"grid_position": 4}),
+        ("finish_win", 1, {}),
+        ("finish_podium", 2, {}),
+    ],
+)
+def test_classification_replaces_road_result_waiting_for_radio(rule_id, position, updates):
+    ingest, state = _setup()
+    rules = _engine({rule_id, "finish_classified", "last_lap"})
+    policy = ConfigStore(isolated=True).current().policy.model_copy(update={"min_gap_s": 0.0})
+    dispatcher = Dispatcher(policy, VirtualClock(), sinks=[])
+    _frame(ingest, 0, lap=3, safety=0, formation=0, position=position)
+    ingest.on_datagram(_event("LGOT", 0), 0)
+    snap = state.snapshot(0)
+    dispatcher.submit(rules.evaluate(snap).candidates, snap)
+    assert [c.rule_id for c in dispatcher.drain(0)] == ["last_lap"]
+    speech_end = dispatcher._spoken_calls[-1][1]
+
+    _frame(ingest, 0.5, lap=3, safety=0, formation=0, result=3, position=position)
+    road = replace(state.snapshot(0.5), **updates)
+    candidates = rules.evaluate(road).candidates
+    assert [c.rule.id for c in candidates] == [rule_id]
+    dispatcher.submit(candidates, road)
+    assert dispatcher.drain(0.5) == []
+    assert dispatcher.queue_status(0.5)[0] == 1
+
+    ingest.on_datagram(_final(t=0.75), 0.75)
+    classified = state.snapshot(0.75)
+    assert classified.final_position != road.position
+    dispatcher.submit(rules.evaluate(classified).candidates, classified)
+    assert dispatcher.drain(0.75) == []
+    assert dispatcher.queue_status(0.75)[0] == 1
+    assert [c.rule_id for c in dispatcher.drain(speech_end)] == ["finish_classified"]
+    assert dispatcher.queue_status(speech_end)[0] == 0
 
 
 def test_classification_gaps_omit_lapped_cars_and_include_penalties():

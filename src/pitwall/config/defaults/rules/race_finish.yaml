@@ -8,6 +8,7 @@ rules:
     max_per_stint: 1
     when: "final_position > 0"
     requires: [final_classification]
+    supersedes: [finish_penalty, finish_gained, finish_lost, finish_held, finish_win, finish_podium]
     say:
       - "Confirmed P{final_position:.1f}. {final_details}"
       - "Final result, P{final_position:.1f}. {final_details}"
