@@ -72,6 +72,7 @@ class RaceSpec:
     weekend_link: int = 0
     session_uid: int = 0xDEADBEEF
     compound: int = 17
+    team_ids: tuple[int, ...] = ()
     tyre_inner_profile: tuple[float, ...] | None = None
     tyre_surface_profile: tuple[float, ...] | None = None
     thermal_window_c: tuple[float, float] | None = None
@@ -368,14 +369,21 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
         participants = {
             i: {"name": NAMES.get(i, f"RIVAL_{i}".encode())} for i in range(participant_count)
         }
+        if spec.team_ids:
+            for i, car in participants.items():
+                car["team_id"] = spec.team_ids[i] if i < len(spec.team_ids) else 255
         emit(
             PacketId.PARTICIPANTS,
             {"num_active_cars": participant_count, "cars": participants},
         )
     else:
+        participants = {i: {"name": n} for i, n in NAMES.items()}
+        if spec.team_ids:
+            for i, car in participants.items():
+                car["team_id"] = spec.team_ids[i] if i < len(spec.team_ids) else 255
         emit(
             PacketId.PARTICIPANTS,
-            {"num_active_cars": 4, "cars": {i: {"name": n} for i, n in NAMES.items()}},
+            {"num_active_cars": 4, "cars": participants},
         )
     event(b"LGOT")
     car_setups = spec.extra.get("car_setups")
@@ -388,6 +396,18 @@ def _build_race_stream(spec: RaceSpec) -> list[tuple[float, bytes]]:
     player_last_ms = 0
     rng = Random(spec.seed)
     for lap in range(1, spec.laps + 1):
+        if lap > 1 and spec.team_ids and not spec.qualifying_field_best_ms:
+            participants = {
+                i: {
+                    "name": name,
+                    "team_id": spec.team_ids[i] if i < len(spec.team_ids) else 255,
+                }
+                for i, name in NAMES.items()
+            }
+            emit(
+                PacketId.PARTICIPANTS,
+                {"num_active_cars": 4, "cars": participants},
+            )
         positions = (
             spec.positions_by_lap[min(lap - 1, len(spec.positions_by_lap) - 1)]
             if spec.positions_by_lap

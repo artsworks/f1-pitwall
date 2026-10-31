@@ -152,6 +152,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-worn-tyres-late-stop` | guard | No second stop with two laps left |
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
 | `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
+| `brazil-team-orders` | target | No strategy-split call for a one-lap pit offset, no hold call before the last 3 laps |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
 
 ## Backlog

@@ -92,6 +92,9 @@ thresholds:
   tow_max_s: 2.0             # ...between min and max = a tow
   prep_clear_s: 5            # nothing ahead within this = clear
   prep_behind_s: 4           # push-lap car behind closing within this = let it by
+  # Team orders (docs/research/team-orders.md)
+  teammate_hold_laps: 3   # hold position with the teammate ahead in the last N laps
+  teammate_split_age_laps: 5   # tyre-age offset (and min stint age) that counts as a different strategy
   # Run plan / cool-down lap (docs/17)
   cool_ers_min_pct: 40       # battery floor at the line to push; raised to what the last hot lap spent
   cool_wet_ers_min_pct: 20   # inters/wets: battery floor at the line to push; a wet hot lap spends ~3-10% (Brazil wet quali)

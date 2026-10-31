@@ -540,6 +540,23 @@ rules:
       - "Use the tow. Car is {traffic_ahead_s:.1f} ahead."
       - "Tow available, {traffic_ahead_s:.1f} ahead. Stay with it."
       - "Good gap to the car, {traffic_ahead_s:.1f}. Take the tow."
+  # Team orders (docs/research/team-orders.md)
+  - id: prep_tow_teammate
+    sessions: [practice, qualifying]
+    priority: 2
+    tags: [traffic]
+    when: "phase == 'out_lap' and dist_to_line_m <= th.prep_gap_m and traffic_ahead_kind == 'flying' and traffic_ahead_s >= th.tow_min_s and traffic_ahead_s <= th.tow_max_s and traffic_ahead_teammate"
+    clear_when: "phase != 'out_lap'"
+    still_true: "phase == 'out_lap' and traffic_ahead_kind == 'flying'"
+    cooldown_s: 60
+    cooldown_group: prep_gap
+    supersedes: [prep_tow]
+    requires: [lap_data, participants]
+    say:
+      - "{traffic_ahead_name} {traffic_ahead_s:.1f} ahead. Use his tow."
+      - "Team-mate {traffic_ahead_s:.1f} ahead. Take the tow."
+      - "Tow from {traffic_ahead_name}, {traffic_ahead_s:.1f} ahead. Stay in it."
+      - "{traffic_ahead_s:.1f} to {traffic_ahead_name}. Good gap for the tow."
   - id: prep_clear
     sessions: [practice, qualifying]
     priority: 3
