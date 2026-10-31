@@ -10,6 +10,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.45.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Discard provisional results after classification
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+### Features
+
+- **rules**: Add formation and race-end radio
+  ([#165](https://github.com/artsworks/f1-pitwall/pull/165),
+  [`74804d8`](https://github.com/artsworks/f1-pitwall/commit/74804d89de369b2903a67cdf029de83cc6710277))
+
+
 ## v0.44.0 (2026-10-31)
 
 ### Bug Fixes
