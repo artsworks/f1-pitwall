@@ -176,6 +176,7 @@ The `brazil-*` scenarios from `brazil-race-real` to `brazil-double-stack` use th
 - A VSC inside the window. The stop saves less time than under a full safety car. A stop call depends on tyre wear, position risk and laps left, so write the check against the rule inputs.
 - Two safety cars in one race.
 - Recheck the two targets `brazil-overcut` and `mexico-undercut`. In a local run on 30 Oct 2026, before the 0.42.0 merge, `overcut_stay_out` did not fire on laps 6 to 7 and `box_now` did not fire on laps 5 to 8.
+- Recheck the two targets `imola-race-real` and `zandvoort-race-real`. In a local run on 31 Oct 2026, `plan_window_open` never fired in the Imola race, and no stop call fired in the Zandvoort race.
 - Wear twice as fast, so that Plan B with two stops is faster. The Imola and Spa scenarios check tyre-life and stop calls, not Plan B.
 
 ## Limits

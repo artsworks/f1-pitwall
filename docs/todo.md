@@ -14,7 +14,7 @@ Written 30 Oct 2026. PR 155 (`chore/bench-scenarios-new-recordings`) adds 16 ben
 4. Update the baseline on a machine that has the Brazil recordings: `pitwall bench --recordings <dir> --update-baseline --accept-changes --note "..."`. It refuses here, because the Brazil guards skip when the recordings are missing.
 5. Merge PR 155 after you approve the 16 expectations.
 
-## Recheck two bench targets
+## Recheck four bench targets
 
 In a local run on 30 Oct 2026, both targets failed. That run used code from before the 0.42.0 merge, which changed the strategy rules. Run them again on the current `main` first. If they still fail, they are known gaps, not new regressions. Neither is proven to be a pitwall fault.
 
@@ -36,9 +36,23 @@ In a local run on 30 Oct 2026, both targets failed. That run used code from befo
 - The rule needs `pit_plan` to be `box_now`, `cheap_stop`, `free_stop` or `undercut`. It also needs enough confidence, a position-loss risk under the mode limit, a gain of zero or more, and enough laps left.
 - This may not be a fault. A stop call depends on tyre wear, position risk and laps left. Check if the recorded car really loses nothing by stopping before deciding the expectation is right.
 
+### `imola-race-real`
+
+- File: `scenarios/imola-race-real.yaml`. Source: Imola race `0xa0548b236a00d328`, 16 laps, one stop on lap 10, no safety car.
+- Expects: `plan_window_open` on laps 6 to 10, and a stop call (`plan_target_lap`, `box_now` or `box_in_n`) on laps 6 to 10.
+- Result on 31 Oct, after the window and stop checks were split: the stop call fired, but `plan_window_open` never fired in the race.
+- The rule needs `plan_window_open`, `on_plan` and `plan_target_lap > lap_num`. Check which one is false on laps 6 to 10, and whether a `plan` cooldown suppressed the call.
+
+### `zandvoort-race-real`
+
+- File: `scenarios/zandvoort-race-real.yaml`. Source: Zandvoort race `0x62763ef3aa8ff344`, 18 laps, stops on laps 7 and 17, no safety car.
+- Expects: `plan_window_open` on laps 3 to 7, and a stop call (`plan_target_lap`, `box_now` or `box_in_n`) on laps 3 to 7.
+- Result on 31 Oct, after the split: `plan_window_open` fired, but no stop call fired in the race.
+- `plan_target_lap` needs `on_plan`, `plan_stops_left > 0` and `plan_target_lap == lap_num`. Check whether the plan target lap ever matched the lap the car pitted on.
+
 ### How to investigate
 
-1. Run `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --only brazil-overcut mexico-undercut`.
+1. Run `uv run pitwall bench --recordings recordings --recordings "F:\Labs\data-pitwall\backup-recordings" --only brazil-overcut mexico-undercut imola-race-real zandvoort-race-real`.
 2. The bench prints only the rules that fire inside the check window. To see every fired rule, call `pitwall.learning.bench.run_scenario` from a short script that wraps `evaluate_checks` and prints the `fired` list. I did this for `imola-late-penalty` on 30 Oct 2026.
 3. Do not edit the `expect` block to make the scenario pass. Changes to `expect` need your approval.
 4. Do not run the bench in a cloud session. See the Bench section in `AGENTS.md`.
