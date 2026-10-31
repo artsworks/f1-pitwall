@@ -171,13 +171,12 @@ def test_fuel_target(margin, lap, rule_id):
     )
     call = _call(_rules(rule_id), snapshot, rule_id)
     assert call is not None
-    assert call.inputs.get("fuel_save_kg_per_lap") == pytest.approx(
-        -margin * 2 / snapshot.laps_remaining
-    )
+    done = snapshot.lap_distance / snapshot.track_length_m if snapshot.track_length_m else 0.0
+    expected = max(0.1, -margin * 2 / max(0.1, snapshot.laps_remaining - done))
+    assert call.inputs.get("fuel_save_kg_per_lap") == pytest.approx(expected)
     assert "kg a lap" in call.text
     if rule_id == "fuel_short":
         assert "+0.3 MJ" in call.text and "lift" in call.text.lower()
-    assert replace(snapshot, laps_remaining=0).fuel_save_kg_per_lap == pytest.approx(-margin * 2)
 
 
 def test_recording_replay_dispatches_calls(tmp_path):
@@ -212,3 +211,14 @@ def test_recording_replay_dispatches_calls(tmp_path):
     assert fired["brake_temp_high"].inputs.get("brake_temp_corner") == "Front left"
     assert fired["pu_wear_high"].inputs.get("pu_wear_pct") == 62.0
     assert fired["fuel_short"].inputs.get("fuel_save_kg_per_lap", 0) > 0
+
+
+def test_fuel_save_counts_lap_done_and_never_zero():
+    base = _replay_snapshot(
+        {}, {}, lap=14, model=ModelView(fuel_margin_laps=-0.6, fuel_per_lap_kg=2.0)
+    )
+    half = replace(base, laps_remaining=2, lap_distance=2000.0, track_length_m=4000.0)
+    assert half.fuel_save_kg_per_lap == pytest.approx(0.6 * 2.0 / 1.5)
+    tiny = replace(half, fuel_margin_laps=-0.01, laps_remaining=10, lap_distance=0.0)
+    assert tiny.fuel_save_kg_per_lap == pytest.approx(0.1)
+    assert replace(half, fuel_margin_laps=0.2).fuel_save_kg_per_lap == 0.0

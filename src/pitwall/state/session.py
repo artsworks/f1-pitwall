@@ -831,7 +831,15 @@ class Snapshot:
 
     @property
     def fuel_save_kg_per_lap(self) -> float:
-        return self.fuel_short_laps * self.fuel_per_lap_kg / max(self.laps_remaining, 1)
+        if self.fuel_short_laps <= 0:
+            return 0.0
+        done = (
+            min(1.0, max(0.0, self.lap_distance / self.track_length_m))
+            if self.track_length_m > 0
+            else 0.0
+        )
+        to_go = max(0.1, self.laps_remaining - done)
+        return max(0.1, self.fuel_short_laps * self.fuel_per_lap_kg / to_go)
 
     @property
     def brake_temp_max_c(self) -> float:
