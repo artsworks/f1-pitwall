@@ -200,6 +200,11 @@ class Damage:
     engine: int = 0
     drs_fault: int = 0
     ers_fault: int = 0
+    ice_wear: int = 0
+    mguk_wear: int = 0
+    es_wear: int = 0
+    ce_wear: int = 0
+    tc_wear: int = 0
 
 
 _ZERO_DAMAGE = Damage()
@@ -378,6 +383,7 @@ class Snapshot:
     tyre_surface: Corners = _ZERO_CORNERS
     tyre_inner: Corners = _ZERO_CORNERS
     brake_temp: Corners = _ZERO_CORNERS
+    engine_temp_c: float = 0.0
     tyre_surface_ema_fast: Corners = _ZERO_CORNERS
     tyre_surface_ema_slow: Corners = _ZERO_CORNERS
     tyre_inner_ema_fast: Corners = _ZERO_CORNERS
@@ -876,6 +882,53 @@ class Snapshot:
         return max(0.0, -self.fuel_margin_laps)
 
     @property
+    def fuel_save_kg_per_lap(self) -> float:
+        if self.fuel_short_laps <= 0:
+            return 0.0
+        done = (
+            min(1.0, max(0.0, self.lap_distance / self.track_length_m))
+            if self.track_length_m > 0
+            else 0.0
+        )
+        to_go = max(0.1, self.laps_remaining - done)
+        return max(0.1, self.fuel_short_laps * self.fuel_per_lap_kg / to_go)
+
+    @property
+    def brake_temp_max_c(self) -> float:
+        return float(max(self.brake_temp.as_tuple()))
+
+    @property
+    def brake_temp_corner(self) -> str:
+        return _CORNER_WORDS[
+            self.brake_temp.as_tuple().index(max(self.brake_temp.as_tuple()))
+        ].capitalize()
+
+    @property
+    def pu_wear_pct(self) -> float:
+        return float(
+            max(
+                self.damage.ice_wear,
+                self.damage.mguk_wear,
+                self.damage.es_wear,
+                self.damage.ce_wear,
+                self.damage.tc_wear,
+            )
+        )
+
+    @property
+    def pu_wear_component(self) -> str:
+        return max(
+            (
+                ("ICE", self.damage.ice_wear),
+                ("MGU-K", self.damage.mguk_wear),
+                ("ES", self.damage.es_wear),
+                ("CE", self.damage.ce_wear),
+                ("TC", self.damage.tc_wear),
+            ),
+            key=lambda item: item[1],
+        )[0]
+
+    @property
     def energy_prev_under_mj(self) -> float:
         return max(0.0, -self.energy_prev_lap_delta_mj)
 
@@ -997,6 +1050,7 @@ class SessionState:
         self.tyre_surface = _ZERO_CORNERS
         self.tyre_inner = _ZERO_CORNERS
         self.brake_temp = _ZERO_CORNERS
+        self.engine_temp_c = 0.0
         self.run_temps = RunTemps()
         self.run_seq = 0
         self.hot_lap_fuel_base: tuple[int, float] | None = None
@@ -2343,6 +2397,7 @@ class SessionState:
             car.tyres_inner_temperature.as_tuple(), car.tyres_surface_temperature.as_tuple()
         )
         self.brake_temp = car.brakes_temperature
+        self.engine_temp_c = float(car.engine_temperature)
         self.speed_kmh = float(car.speed)
         offs_before = self.off_track.count
         self.off_track.update_surface(st, car.surface_type.as_tuple())
@@ -2540,6 +2595,11 @@ class SessionState:
             engine=car.engine_damage,
             drs_fault=car.drs_fault,
             ers_fault=car.ers_fault,
+            ice_wear=car.engine_ice_wear,
+            mguk_wear=car.engine_mguk_wear,
+            es_wear=car.engine_es_wear,
+            ce_wear=car.engine_ce_wear,
+            tc_wear=car.engine_tc_wear,
         )
 
     def _damage_parts(self) -> dict[str, int]:
@@ -2963,6 +3023,7 @@ class SessionState:
             tyre_surface=self.tyre_surface,
             tyre_inner=self.tyre_inner,
             brake_temp=self.brake_temp,
+            engine_temp_c=self.engine_temp_c,
             tyre_surface_ema_fast=self._ema_or_zero(self.tyre_surface_fast),
             tyre_surface_ema_slow=self._ema_or_zero(self.tyre_surface_slow),
             tyre_inner_ema_fast=inner,
