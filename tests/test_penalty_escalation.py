@@ -54,7 +54,7 @@ def test_drive_through_escalates_then_confirms(tmp_path) -> None:
         "penalty_served_drive_through",
     } <= fired.keys()
     assert "drive-through" in fired["penalty_serve_this_lap"].text
-    assert "tyre" in fired["serve_penalty"].text and "stop" not in fired["serve_penalty"].text
+    assert "no tyre" in fired["serve_penalty"].text.lower()
     assert "penalty" not in fired
     assert not {"out_lap_s3_tyres_cold", "out_lap_s3_tyres_ready"} & fired.keys()
 
