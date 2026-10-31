@@ -72,7 +72,7 @@ from pitwall.state.race import (
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.strategy.pace import pace_words_self
-from pitwall.strategy.plans import DRY, StrategyPlan
+from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.weather import default_pit_loss_s, switch_net_s
 
 if TYPE_CHECKING:
@@ -483,6 +483,12 @@ class Snapshot:
     teammate_name: str = ""
     teammate_fight: bool = False  # teammate directly ahead/behind within fight range
     teammate_gap_s: float = math.inf
+    teammate_ahead: bool = False
+    teammate_compound: int = 0
+    teammate_compound_name: str = ""
+    teammate_tyre_age: int = -1
+    teammate_stops: int = 0
+    teammate_split: bool = False
     teammate_stacking: bool = False
     teammate_stack_gap_s: float = math.inf
     gap_ahead_s: float = math.inf
@@ -801,6 +807,8 @@ class Snapshot:
     traffic_ahead_m: float = math.inf
     traffic_ahead_s: float = math.inf
     traffic_ahead_kind: str = ""
+    traffic_ahead_name: str = ""
+    traffic_ahead_teammate: bool = False
     traffic_ahead_closing_s: float = math.inf  # time to catch it at the current speeds
     traffic_ahead_slow: bool = False  # it is much slower than the player right now
     traffic_ahead_state: str = ""  # ahead car: aborted, in-lap, cooling, or flying
@@ -3662,6 +3670,33 @@ class SessionState:
         player = self._player_idx
         if mate < 0 or player >= len(cars) or mate >= len(cars):
             return {}
+        status = self.cars_status
+        compound = (
+            int(status[mate].visual_tyre_compound)
+            if status is not None and mate < len(status)
+            else 0
+        )
+        mate_age = self._rival_age(mate)
+        mate_stops = cars[mate].num_pit_stops
+        split_age = int(self._th("teammate_split_age_laps", 5.0))
+        player_car = cars[player]
+        mate_car = cars[mate]
+        teammate_split = (
+            self.race_phase == "racing"
+            and player_car.result_status == 2
+            and mate_car.result_status == 2
+            and player_car.pit_status == 0
+            and mate_car.pit_status == 0
+            and self.tyre_visual != 0
+            and compound != 0
+            and mate_age is not None
+            and min(self.tyre_age_laps, mate_age) >= split_age
+            and (
+                self.tyre_visual != compound
+                or self.num_pit_stops != mate_stops
+                or abs(self.tyre_age_laps - mate_age) >= split_age
+            )
+        )
         gap = math.inf
         if mate == ahead_i:
             gap = gap_ahead
@@ -3680,6 +3715,12 @@ class SessionState:
         return dict(
             teammate_name=name_of(mate),
             teammate_gap_s=gap,
+            teammate_ahead=mate == ahead_i,
+            teammate_compound=compound,
+            teammate_compound_name=WORDS.get(compound, ""),
+            teammate_tyre_age=mate_age if mate_age is not None else -1,
+            teammate_stops=mate_stops,
+            teammate_split=teammate_split,
             teammate_fight=self.race_phase == "racing"
             and gap <= self._th("teammate_fight_gap_s", 1.0),
             teammate_stacking=math.isfinite(stack_gap),
@@ -3884,6 +3925,10 @@ class SessionState:
                 ),
                 traffic_ahead_slow=closing * 3.6 >= self._th("slow_car_delta_kmh", 60.0),
                 traffic_ahead_kind=_lap_kind(c.driver_status),
+                traffic_ahead_name=(
+                    self.participants[ahead[1]].name if ahead[1] < len(self.participants) else ""
+                ),
+                traffic_ahead_teammate=ahead[1] == self._teammate(),
                 traffic_ahead_state=state,
                 traffic_ahead_launch_s=launch_s,
             )
