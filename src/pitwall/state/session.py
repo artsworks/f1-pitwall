@@ -378,6 +378,7 @@ class Snapshot:
     tyre_inner_rear_c: float = 0.0
     coldest_tyre: str = ""
     coldest_tyre_c: float = 0.0
+    safety_car_delta_s: float = 0.0  # HUD delta: negative means faster than the SC/VSC minimum.
     s3_entry_coldest_c: float = 0.0  # coldest inner temp latched on entering sector 3
     boost_on_s: float = 0.0
     lockup: str = ""  # "front" | "rear" for a few seconds after a lock-up
@@ -2806,6 +2807,11 @@ class SessionState:
             tyre_inner_rear_c=(inner.rl + inner.rr) / 2,
             coldest_tyre=WHEEL_NAMES[coldest],
             coldest_tyre_c=inner.as_tuple()[coldest],
+            safety_car_delta_s=(
+                float(getattr(self.cars_lap[self._player_idx], "safety_car_delta", 0.0))
+                if self.cars_lap is not None
+                else 0.0
+            ),
             s3_entry_coldest_c=self.s3_entry_coldest_c,
             boost_on_s=self.boost.on_s(st),
             lockup=lockup,
