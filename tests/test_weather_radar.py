@@ -125,6 +125,44 @@ def test_rain_heads_up_uses_nearest_qualifying_forecast(tmp_path) -> None:
 
 
 @pytest.mark.replay
+def test_rain_heads_up_silent_when_forecast_has_rain_weather_type(tmp_path) -> None:
+    spec = RaceSpec(
+        laps=8,
+        rain_lap=2,
+        rain_percentages=(45, 50),
+        extra_by_lap={
+            2: {
+                "session": {
+                    "weather_forecast_samples": {
+                        1: {
+                            "session_type": 15,
+                            "time_offset": 10,
+                            "rain_percentage": 45,
+                            "weather": 3,
+                        }
+                    }
+                }
+            }
+        },
+    )
+    ingest = Ingest()
+    state = SessionState()
+    state.register(ingest)
+    onset_snapshot = None
+    for session_time, packet in race_stream(spec):
+        ingest.on_datagram(packet, session_time)
+        if state.rain_onset_min > 0:
+            onset_snapshot = state.snapshot(session_time)
+            break
+
+    assert onset_snapshot is not None
+    assert onset_snapshot.rain_onset_min > 0
+
+    _, rows = replay_race(tmp_path, spec)
+    assert "weather_rain_soon" not in _fired(rows)
+
+
+@pytest.mark.replay
 def test_rain_heads_up_softens_approximate_forecast(tmp_path) -> None:
     _, rows = replay_race(
         tmp_path,

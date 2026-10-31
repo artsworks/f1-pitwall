@@ -89,6 +89,8 @@ New thresholds (`thresholds.yaml`):
 | `crossover_warn_laps` | 3 | Real calls start at three to four laps out |
 | `crossover_rate_min_s` | 0.3 | Smaller closing rates are lap-time noise |
 
+`weather_rain_soon` stays silent when `rain_stay_out` or `rain_box_now` covers the forecast (a sample with a rain weather type, or a box lap now). `compound_crossover_close` stays silent once `rain_follow_field` has enough cars on wet tyres.
+
 ## Phrasing
 
 Each rule has four or five variants. ADR 0008 rotation applies. Percent and minutes are whole numbers because the game sends them as integers, matching `weather_to_*`. Lap counts use one decimal. Pace uses `amount_words` ("eight tenths", "1.4 seconds").

@@ -528,7 +528,7 @@ rules:
   - id: weather_rain_soon
     sessions: [race]
     priority: 3
-    when: "phase in ('racing', 'sc', 'vsc') and rain_soon_pct > 0 and weather_crossover == '' and weather_now < 3 and tyre_compound not in (0, 7, 8)"
+    when: "phase in ('racing', 'sc', 'vsc') and rain_soon_pct > 0 and weather_crossover == '' and weather_now < 3 and tyre_compound not in (0, 7, 8) and rain_onset_min == 0 and rain_box_lap != 0"
     clear_when: "rain_soon_pct == 0"
     cooldown_s: 300
     requires: [session]
@@ -572,7 +572,7 @@ rules:
   - id: compound_crossover_close
     sessions: [race]
     priority: 2
-    when: "phase == 'racing' and crossover_laps > 0 and crossover_laps <= th.crossover_warn_laps and tyre_switch_to == '' and laps_remaining > crossover_laps + th.wet_crossover_min_laps"
+    when: "phase == 'racing' and crossover_laps > 0 and crossover_laps <= th.crossover_warn_laps and tyre_switch_to == '' and laps_remaining > crossover_laps + th.wet_crossover_min_laps and field_wet_switches < th.field_follow_min_cars"
     clear_when: "crossover_laps == 0 or crossover_laps > th.crossover_warn_laps"
     cooldown_s: 90
     requires: [lap_data]
