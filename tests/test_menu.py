@@ -740,20 +740,21 @@ def test_pit_answer_judges_tyres_to_the_end() -> None:
     assert answer(pit, make_snapshot(now=0.0, pit_plan="no_stop"), "b")[0] == "no_stop"
 
 
-def test_pit_answer_honours_late_no_stop() -> None:
+@pytest.mark.parametrize(("laps_remaining", "laps_of_pace"), [(3, 1.4), (2, 0.0), (1, 0.0)])
+def test_pit_answer_honours_late_no_stop(laps_remaining: int, laps_of_pace: float) -> None:
     pit = MenuItemModel(id="pit", label="Pit now?")
     snap = make_snapshot(
         now=0.0,
-        laps_remaining=3,
+        laps_remaining=laps_remaining,
         wear_max_pct=50.0,
         tyre_age_laps=4,
-        laps_of_pace=1.4,
+        laps_of_pace=laps_of_pace,
         pit_plan="no_stop",
         pit_loss_s=20.0,
     )
     case, values = answer(pit, snap, "b")
     assert case == "nurse_to_end"
-    assert values["laps_left"] == "3"
+    assert values["laps_left"] == str(laps_remaining)
     assert (
         answer(pit, dataclasses.replace(snap, front_wing_pit_status="review"), "b")[0]
         == "damage_review"
