@@ -76,6 +76,36 @@ def test_cold_vsc_ending_uses_vsc_call(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("vsc", "plain_rule", "cold_rule"),
+    [
+        (False, "sc_ending", "sc_ending_tyres_cold"),
+        (True, "vsc_ending", "vsc_ending_tyres_cold"),
+    ],
+    ids=("sc", "vsc"),
+)
+def test_late_cold_tyre_does_not_repeat_ending_call(
+    tmp_path: Path,
+    vsc: bool,
+    plain_rule: str,
+    cold_rule: str,
+) -> None:
+    calls, _ = _replay(
+        tmp_path,
+        RaceSpec(
+            laps=6,
+            sc_laps=(3, 4),
+            vsc=vsc,
+            tyre_inner_profile=(95, 95, 95, 95, 55, 95),
+        ),
+    )
+    ending_calls = [call for call in calls if call.rule_id in (plain_rule, cold_rule)]
+    plain_call = next(call for call in ending_calls if call.rule_id == plain_rule)
+
+    assert plain_call.lap == 4
+    assert len(ending_calls) == 1, [call.rule_id for call in ending_calls]
+
+
 def test_sc_negative_delta_fires_once_with_value(tmp_path: Path) -> None:
     calls, _ = _replay(
         tmp_path,

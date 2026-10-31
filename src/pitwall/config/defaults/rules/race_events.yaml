@@ -277,6 +277,7 @@ rules:
       - "Virtual safety car. Keep your delta positive"
       - "VSC active. Stay on the delta"
   - id: sc_ending
+    cooldown_group: sc_ending
     sessions: [race]
     priority: 1
     urgency: safety
@@ -291,6 +292,7 @@ rules:
       - "SC in this lap. Get the tyres ready for the restart"
       - "Safety car ending this lap. Stay close and be ready"
   - id: vsc_ending
+    cooldown_group: vsc_ending
     sessions: [race]
     priority: 1
     urgency: safety
@@ -331,7 +333,10 @@ rules:
   # SC/VSC restart procedures (sc-restart)
   # The SCAR "returning" event (SC lights out / VSC ending) carries tyre temps when a
   # tyre is below its compound window; the plain sc_ending/vsc_ending speak otherwise.
+  # The shared cooldown group prevents a second ending call if the tyres cool later.
   - id: sc_ending_tyres_cold
+    cooldown_group: sc_ending
+    cooldown_s: 180
     sessions: [race]
     priority: 1
     urgency: safety
@@ -346,6 +351,8 @@ rules:
       - "Lights out on the safety car. {coldest_tyre} at {coldest_tyre_c:.1f}, cold for the restart"
       - "Safety car in. Fronts {tyre_inner_front_c:.1f}, rears {tyre_inner_rear_c:.1f}. {coldest_tyre} is coldest"
   - id: vsc_ending_tyres_cold
+    cooldown_group: vsc_ending
+    cooldown_s: 180
     sessions: [race]
     priority: 1
     urgency: safety
