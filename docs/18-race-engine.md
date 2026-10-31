@@ -382,6 +382,9 @@ track_warning_kind: str              # 'cut' | 'limits'
 track_warning_count: int             # shared corner-cut count for PENA 7-9 and 27-29, or Lap Data if higher
 cut_warning_count: int; limit_warning_count: int  # PENA warning counts split by family
 penalty_recent: bool                # PENA event for the player inside th.penalty_recent_s
+penalty_reminder: str; penalty_reminder_recent: bool  # PENA type 3: 'within' (15) | 'this_lap' (16)
+penalty_served_kind: str; penalty_served_recent: bool; penalty_stop_time_s: float  # DTSV / SGSV
+pit_pass_no_stop: bool              # last pit visit left num_pit_stops unchanged (drive-through)
 blue_flag: bool                     # vehicle_fia_flags == 4 (blue)
 weather_now: int; rain_pct_now: int; rain_pct_in_10: int; rain_pct_in_30: int
 weather_crossover: str              # '' | 'to_inter' | 'to_wet' | 'to_dry' from forecast + th.rain_inter_pct/th.rain_wet_pct/th.rain_dry_pct
@@ -641,6 +644,8 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `penalty` | 1 | `penalty_recent and penalty_kind == 'time'` (PENA types 0/1/4 only; warnings, lap invalidations and retirements carry `time_s = 255` and are not penalties) |
 | `penalty_pit` | 1 | `penalty_kind in ('drive_through','stop_go')` |
 | `serve_penalty` | 2 | `unserved_drive_through + unserved_stop_go > 0 and pit_plan in ('box_now','box_in_n')` |
+| `penalty_serve_reminder` / `penalty_serve_this_lap` | 2/1 | PENA reminder (type 3, infringement 15 / 16) with an unserved drive-through or stop-go |
+| `penalty_served_drive_through` / `penalty_served_stop_go` | 2/2 | `DTSV` / `SGSV` for the player; the stop-go call says the time held |
 | `track_limit_warning` / `track_limit_second_warning` / `track_limit_last_warning` | 3 | Announce the shared count at 1, 2 and 3 warnings. Reuse the higher of PENA 7–9/27–29 and Lap Data `corner_cutting_warnings`. The third warning says the next offence brings a penalty. |
 | `penalty_corner_cut` | 1 | time penalty for a corner cut (infringement 7–9) |
 | `blue_flag` | 1 | `blue_flag` cooldown 20 |
