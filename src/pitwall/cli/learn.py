@@ -389,6 +389,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         build_scorecard,
         compare,
         find_source,
+        keep_missing,
         load_scenarios,
         run_scenario,
     )
@@ -398,6 +399,9 @@ def cmd_bench(args: argparse.Namespace) -> int:
     )
     if args.accept_changes and not args.update_baseline:
         print("bench: --accept-changes requires --update-baseline")
+        return 1
+    if args.keep_missing and not args.update_baseline:
+        print("bench: --keep-missing requires --update-baseline")
         return 1
     if args.trend:
         return _bench_history(scenarios_dir, args.window)
@@ -414,6 +418,15 @@ def cmd_bench(args: argparse.Namespace) -> int:
         scenario_ids = {scenario.id for scenario in all_scenarios}
         scenarios = load_scenarios(scenarios_dir, args.only)
         settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
+        baseline_path = (
+            Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
+        )
+        baseline: dict[str, Any] | None = None
+        if baseline_path.exists():
+            loaded = json.loads(baseline_path.read_text(encoding="utf-8"))
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{baseline_path}: baseline must be a JSON object")
+            baseline = loaded
         if args.recordings:
             recording_dirs = [Path(directory).expanduser() for directory in args.recordings]
         else:
@@ -477,16 +490,10 @@ def cmd_bench(args: argparse.Namespace) -> int:
             row, scenario_outcomes = result
             scenario_rows[scenario.id] = row
             outcomes.extend(scenario_outcomes)
+        kept: list[str] = []
+        if args.keep_missing:
+            scenario_rows, kept = keep_missing(scenario_rows, baseline)
         scorecard = build_scorecard(scenario_rows, outcomes)
-        baseline_path = (
-            Path(args.baseline).expanduser() if args.baseline else scenarios_dir / "baseline.json"
-        )
-        baseline: dict[str, Any] | None = None
-        if baseline_path.exists():
-            loaded = json.loads(baseline_path.read_text(encoding="utf-8"))
-            if not isinstance(loaded, dict):
-                raise ValueError(f"{baseline_path}: baseline must be a JSON object")
-            baseline = loaded
         gate = compare(scorecard, baseline, args.tolerance, scenario_ids=scenario_ids)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"bench: {exc}")
@@ -502,6 +509,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         "improvements": gate.improvements,
         "changed": gate.changed,
         "accepted_changes": (gate.changed if args.update_baseline and update_allowed else []),
+        "kept": kept,
     }
     try:
         if args.out:
@@ -558,6 +566,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
             print(f"incomplete: {incomplete}")
         for changed in gate.changed:
             print(f"changed: {changed}")
+        for scenario_id in kept:
+            print(f"kept: {scenario_id}")
         if args.update_baseline and update_allowed:
             for changed in gate.changed:
                 print(f"accepted: {changed}")
@@ -597,6 +607,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
                     "real_accuracy": metrics["real_accuracy"],
                     "real_graded": metrics["real_graded"],
                 }
+                if kept:
+                    history_entry["kept"] = kept
                 history_path = scenarios_dir / "history.jsonl"
                 history_path.parent.mkdir(parents=True, exist_ok=True)
                 with history_path.open("a", encoding="utf-8") as stream:

@@ -82,6 +82,8 @@ Without a baseline, the gate still checks rules 1 and 7 and skipped guards.
 
 `pitwall bench --update-baseline --note "..."` writes a new baseline and adds one line to the history. It refuses if the gate fails, if a scenario was skipped or did not run, or if the gate lists `changed` items. To save `changed` items, add `--accept-changes`. The output then lists them as `accepted`. Use `--accept-changes` only after the repo owner approves the new expectations.
 
+If a recording is lost, add `--keep-missing`. A scenario that skips with `source not found` then keeps its saved entry in the baseline, and the output lists it as `kept`.
+
 ## Trend
 
 `pitwall bench --trend` reads the history and gives one verdict for the last 5 entries:

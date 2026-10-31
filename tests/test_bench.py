@@ -20,6 +20,7 @@ from pitwall.learning.bench import (
     compare,
     evaluate_checks,
     find_source,
+    keep_missing,
     load_scenarios,
     parse_scenario,
     trend,
@@ -119,6 +120,39 @@ def _patch_bench_run(monkeypatch, results: dict[str, str] | None = None) -> None
         )
 
     monkeypatch.setattr(bench_module, "run_scenario", fake_run_scenario)
+
+
+def test_keep_missing_preserves_only_saved_non_skipped_rows() -> None:
+    rows = {
+        "guard": {"result": "skipped", "reason": "source not found", "current": True},
+        "alpha-guard": {"result": "skipped", "reason": "source not found"},
+        "hash-mismatch": {"result": "skipped", "reason": "sha256 mismatch"},
+        "missing-baseline": {"result": "skipped", "reason": "source not found"},
+        "skipped-baseline": {"result": "skipped", "reason": "source not found"},
+    }
+    old_guard = {"result": "pass", "reason": "", "saved": True}
+    baseline = _card(
+        {
+            "guard": old_guard,
+            "alpha-guard": _scenario("pass"),
+            "hash-mismatch": _scenario("pass"),
+            "skipped-baseline": _scenario("skipped"),
+        }
+    )
+
+    kept_rows, kept = keep_missing(rows, baseline)
+
+    assert kept == ["alpha-guard", "guard"]
+    assert kept_rows["guard"] == {
+        **old_guard,
+        "reason": "kept from baseline: source not found",
+    }
+    assert kept_rows["hash-mismatch"] == rows["hash-mismatch"]
+    assert kept_rows["missing-baseline"] == rows["missing-baseline"]
+    assert kept_rows["skipped-baseline"] == rows["skipped-baseline"]
+    unchanged_rows, unchanged_kept = keep_missing(rows, None)
+    assert unchanged_rows == rows
+    assert unchanged_kept == []
 
 
 @pytest.mark.parametrize("damage", [{"lap": 1}, {"lap": 1, "wing_pct": 60, "positions_lost": 4}])
@@ -573,6 +607,114 @@ def test_bench_accept_changes_requires_update_baseline(tmp_path: Path, capsys) -
 
     assert exit_code == 1
     assert capsys.readouterr().out.strip() == ("bench: --accept-changes requires --update-baseline")
+
+
+def test_bench_keep_missing_requires_update_baseline(tmp_path: Path, capsys) -> None:
+    exit_code = main(
+        [
+            "bench",
+            "--scenarios",
+            str(tmp_path / "scenarios"),
+            "--keep-missing",
+        ]
+    )
+
+    assert exit_code == 1
+    assert capsys.readouterr().out.strip() == "bench: --keep-missing requires --update-baseline"
+
+
+def test_bench_keep_missing_preserves_baseline_during_update(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    import pitwall.learning.bench as bench_module
+
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    _write_scenario(scenarios, _scenario_data(id="guard", status="guard"))
+    _write_scenario(scenarios, _scenario_data(id="new", status="target"))
+    old_guard = _scenario("pass", status="guard", checks=[_check()])
+    baseline = _card({"guard": old_guard})
+    baseline_path = scenarios / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline))
+
+    def fake_find_source(scenario, index, digests=None):
+        return (None, "source not found") if scenario.id == "guard" else (Path("new.f1bin"), None)
+
+    def fake_run_scenario(scenario, source, settings, *, rules_dir, skip_reason):
+        result = "skipped" if skip_reason else "pass"
+        checks = [
+            {
+                "type": check.type,
+                "rules": list(check.rules),
+                "laps": list(check.laps),
+                "ok": result == "pass",
+                "found": [],
+            }
+            for check in scenario.checks
+        ]
+        return (
+            {
+                "title": scenario.title,
+                "status": scenario.status,
+                "kind": scenario.kind,
+                "result": result,
+                "reason": skip_reason or "",
+                "checks": checks,
+            },
+            [],
+        )
+
+    monkeypatch.setattr(bench_module, "find_source", fake_find_source)
+    monkeypatch.setattr(bench_module, "run_scenario", fake_run_scenario)
+    args = [
+        "bench",
+        "--scenarios",
+        str(scenarios),
+        "--recordings",
+        str(recordings),
+        "--update-baseline",
+        "--note",
+        "add scenario with missing source",
+        "--json",
+    ]
+
+    exit_code = main(args)
+
+    captured = capsys.readouterr().out
+    output = json.loads(captured.split("\nbench:", maxsplit=1)[0])
+    assert exit_code == 1
+    assert output["gate"]["status"] == "fail"
+    assert output["gate"]["failures"] == [
+        "check regressed in guard: fire ['sc_deployed'] laps [3, 4]"
+    ]
+    assert output["gate"]["incomplete"] == [
+        "guard scenario guard skipped",
+        "scenario guard skipped",
+    ]
+    assert json.loads(baseline_path.read_text()) == baseline
+    assert not (scenarios / "history.jsonl").exists()
+
+    exit_code = main([*args[:-1], "--keep-missing", "--json"])
+
+    output = json.loads(capsys.readouterr().out)
+    expected_guard = {**old_guard, "reason": "kept from baseline: source not found"}
+    assert exit_code == 0
+    assert output["gate"]["status"] == "pass"
+    assert output["gate"]["kept"] == ["guard"]
+    assert output["scorecard"]["scenarios"]["guard"] == expected_guard
+    assert output["scorecard"]["metrics"]["guards_passed"] == 1
+    written_baseline = json.loads(baseline_path.read_text())
+    assert written_baseline["scenarios"]["guard"] == expected_guard
+    assert "new" in written_baseline["scenarios"]
+    history = (scenarios / "history.jsonl").read_text().splitlines()
+    assert json.loads(history[-1])["kept"] == ["guard"]
+
+    exit_code = main([*args[:-1], "--keep-missing"])
+
+    assert exit_code == 0
+    assert "kept: guard" in capsys.readouterr().out
 
 
 def test_scorecard_accuracy_deduplicates_session_call_pairs() -> None:
