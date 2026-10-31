@@ -592,8 +592,10 @@ class Snapshot:
     forecast_accuracy: int = 0
     rain_onset_min: int = 0
     rain_box_lap: int = -1
+    rain_box_tyre: str = ""
     rain_box_gain_s: float = 0.0
     field_wet_switches: int = 0
+    field_wet_tyre: str = ""
     weather_crossover: str = ""
     weather_crossover_pct: int = 0  # forecast rain chance driving the crossover
     weather_crossover_min: int = 0  # ... and how many minutes out
@@ -911,10 +913,12 @@ class SessionState:
         self.forecast_accuracy = 0
         self.rain_onset_min = 0
         self.rain_box_lap = -1
+        self.rain_box_tyre = ""
         self.rain_box_gain_s = 0.0
         self.field_wet_switches = 0
+        self.field_wet_tyre = ""
         self._field_previous_visual_compounds: dict[int, int] = {}
-        self._field_wet_switch_laps: dict[int, int] = {}
+        self._field_wet_switch_laps: dict[int, tuple[int, int]] = {}
         self.game_mode = 0
         self.num_active_cars = 0
         self.red_flag = False
@@ -1364,6 +1368,7 @@ class SessionState:
         self._gap_now = {}
         self._gap_lines = []
         self.field_wet_switches = 0
+        self.field_wet_tyre = ""
         self._field_previous_visual_compounds.clear()
         self._field_wet_switch_laps.clear()
         self._ahead_latch = (-1, math.inf)
@@ -2103,6 +2108,7 @@ class SessionState:
             )
         )
         self.rain_box_lap = -1
+        self.rain_box_tyre = ""
         self.rain_box_gain_s = 0.0
         laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps else 0
         best_lap_ms = self._best_laps.get(self._player_idx, 0)
@@ -2133,8 +2139,12 @@ class SessionState:
             lap_s * self._th("slick_wet_loss_pct", 15.0) / 100.0,
             lap_s * self._th("inter_dry_loss_pct", 6.0) / 100.0,
         )
-        if gain >= self._th("rain_preempt_margin_s", 2.0):
+        if stop_lap >= 0 and gain >= self._th("rain_preempt_margin_s", 2.0):
             self.rain_box_lap = stop_lap
+            max_rain_pct = max(int(sample.rain_percentage) for sample in samples)
+            self.rain_box_tyre = (
+                "wets" if max_rain_pct >= self._th("rain_wet_pct", 85.0) else "inters"
+            )
             self.rain_box_gain_s = round(gain, 1)
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
@@ -2289,15 +2299,22 @@ class SessionState:
                 compound = int(car.visual_tyre_compound)
                 previous = self._field_previous_visual_compounds.get(index)
                 if index != self._player_idx and previous in DRY and compound in (7, 8):
-                    self._field_wet_switch_laps[index] = self.lap_num
+                    self._field_wet_switch_laps[index] = (self.lap_num, compound)
                 self._field_previous_visual_compounds[index] = compound
 
         window = max(0, int(self._th("field_follow_window_laps", 3)))
-        self.field_wet_switches = sum(
-            index != self._player_idx
-            and compound in (7, 8)
-            and 0 <= self.lap_num - self._field_wet_switch_laps.get(index, -window) < window
-            for index, compound in self._field_previous_visual_compounds.items()
+        counted_compounds = [
+            switch_compound
+            for index, (switch_lap, switch_compound) in self._field_wet_switch_laps.items()
+            if index != self._player_idx
+            and self._field_previous_visual_compounds.get(index) in (7, 8)
+            and 0 <= self.lap_num - switch_lap < window
+        ]
+        self.field_wet_switches = len(counted_compounds)
+        wet_count = counted_compounds.count(8)
+        inter_count = counted_compounds.count(7)
+        self.field_wet_tyre = (
+            "wets" if wet_count > inter_count else "inters" if counted_compounds else ""
         )
 
     def _ers_prune(self) -> None:
@@ -2737,8 +2754,10 @@ class SessionState:
             forecast_accuracy=self.forecast_accuracy,
             rain_onset_min=self.rain_onset_min,
             rain_box_lap=self.rain_box_lap,
+            rain_box_tyre=self.rain_box_tyre,
             rain_box_gain_s=self.rain_box_gain_s,
             field_wet_switches=self.field_wet_switches,
+            field_wet_tyre=self.field_wet_tyre,
             weather_crossover=self._weather_crossover,
             weather_crossover_pct=self._weather_crossover_pct,
             weather_crossover_min=self._weather_crossover_min,

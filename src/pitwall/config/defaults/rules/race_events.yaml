@@ -257,8 +257,8 @@ rules:
     supersedes: [weather_to_inter]
     requires: [lap_data]
     say:
-      - "Box this lap for inters. Rain in {rain_onset_min} minutes."
-      - "Box, box. Inters, rain due in {rain_onset_min} minutes."
+      - "Box this lap for {rain_box_tyre}. Rain in {rain_onset_min} minutes."
+      - "Box, box for {rain_box_tyre}. Rain due in {rain_onset_min} minutes."
   - id: rain_stay_out
     sessions: [race]
     priority: 2
@@ -280,8 +280,8 @@ rules:
     supersedes: [rain_stay_out]
     requires: [lap_data]
     say:
-      - "{field_wet_switches} cars on inters. Box with them."
-      - "Cars are switching to inters. Box this lap."
+      - "{field_wet_switches} cars on {field_wet_tyre}. Box with them."
+      - "Cars are switching to {field_wet_tyre}. Box this lap."
   - id: sc_deployed
     sessions: [race]
     priority: 1
