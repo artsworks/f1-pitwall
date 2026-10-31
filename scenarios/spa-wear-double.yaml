@@ -1,0 +1,13 @@
+id: spa-wear-double
+title: Tyres wear twice as fast in a short race, stop before lap 8
+status: target
+source:
+  session_uid: "0x80842282d0647991"
+  sha256: "11e4366889d5c5e1e9ff6ac31e547b9d64377a022a02efbf77c2776a2d27a402"
+  where: "Spa race, 8 Oct 2026, 11 laps, one stop on lap 8. session_80842282d0647991_1791463015.f1bin.zst"
+mutations:
+  wear_scale: 2
+expect:
+  fire:
+    - {rule: [tyre_life, box_now, box_in_n], laps: [3, 7]}
+why: With doubled wear the first set has no life left before lap 8. Pitwall must warn or call the stop earlier than the recorded stop.

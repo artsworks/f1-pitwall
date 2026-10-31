@@ -1,0 +1,13 @@
+id: imola-wear-double
+title: Tyres wear twice as fast, stop before lap 10
+status: target
+source:
+  session_uid: "0xa0548b236a00d328"
+  sha256: "48c799db8107239412a5b7dfba2162f074aebd260f9f84f6d83495fc08897252"
+  where: "Imola race, 29 Oct 2026, 16 laps, one stop on lap 10. session_a0548b236a00d328_1793274908.f1bin.zst"
+mutations:
+  wear_scale: 2
+expect:
+  fire:
+    - {rule: [tyre_life, box_now, box_in_n], laps: [5, 9]}
+why: With doubled wear the first set has no life left well before lap 10. Pitwall must warn or call the stop earlier than the recorded stop.

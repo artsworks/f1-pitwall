@@ -1,0 +1,15 @@
+id: brazil4-sc-real
+title: Brazil race 15 Oct as recorded, full safety car on laps 14 to 16
+status: target
+source:
+  session_uid: "0x26e3212c1d4e442d"
+  sha256: "7cf8b03a1a5642dda3f4613a0e7c49ee6c338b849ad74992286150971ceb1b48"
+  where: "Brazil race, 15 Oct 2026, 18 laps, one stop on lap 7, real full safety car on laps 14 to 16. session_26e3212c1d4e442d_1792065409.f1bin.zst"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [14, 15]}
+    - {rule: sc_ending, laps: [15, 16]}
+    - {rule: sc_restart, laps: [16, 17]}
+  absent:
+    - {rule: [vsc_deployed, vsc_ending, vsc_restart], laps: [1, 18]}
+why: The recording holds a real full safety car late in the race. The safety car calls must fire in order and the VSC calls must stay silent.

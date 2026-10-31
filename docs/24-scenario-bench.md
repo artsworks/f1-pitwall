@@ -139,7 +139,7 @@ Rival stops, weather changes and red flags need a real recording or a generator.
 
 ## Starter scenarios
 
-All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car.
+The `brazil-*` scenarios from `brazil-race-real` to `brazil-double-stack` use the Brazil race from 6 Oct 2026: track 16, 17 laps, one stop on lap 11, no safety car. `brazil-quali-fuel-out` uses a Brazil short qualifying from 13 Oct 2026. Every other scenario names its source recording by session UID inside the file. The bench finds it in the `--recordings` folders.
 
 | Scenario | Status | Checks |
 |---|---|---|
@@ -153,18 +153,34 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-penalty` | guard | Corner-cutting penalty call on lap 5 |
 | `brazil-double-stack` | guard | Teammate pit call on lap 11, not on lap 10 |
 | `brazil-quali-fuel-out` | target | Box at the line when fuel is short after a cool lap |
-
+| `brazil-overcut` | target | Stay out when the rival ahead pits on lap 6 |
+| `mexico-undercut` | target | Box call with the car ahead inside 3 seconds |
+| `brazil2-sc-lap-1` | target | No stop call under a safety car on laps 1 and 2 |
+| `brazil3-penalty` | target | Corner-cutting penalty call on lap 8 |
+| `brazil3-race-real` | target | Plan announced on lap 1, no safety car calls |
+| `brazil3-sc-early` | target | Safety car calls on laps 2 to 5 |
+| `brazil3-vsc-early` | target | VSC calls, never full safety car calls |
+| `brazil4-sc-real` | target | Real safety car calls on laps 14 to 17 |
+| `austin-vsc-real` | target | Real VSC call on lap 11, no safety car calls |
+| `imola-race-real` | target | Plan on lap 1, window open and a stop call before lap 10, no safety car calls |
+| `imola-sc-last-laps` | target | No stop call under a safety car on laps 14 to 16 |
+| `imola-wear-double` | target | Tyre-life or stop call on laps 5 to 9 with doubled wear |
+| `imola-late-penalty` | target | Penalty, cost, covered and finish calls on lap 16 |
+| `mexico-vsc-real` | target | Real VSC call on laps 12 and 13, no safety car calls |
+| `mexico2-vsc-real` | target | Real VSC calls on laps 12 and 13, no safety car calls |
+| `silverstone-sc-real` | target | Real safety car calls on laps 8 to 11, no VSC calls |
+| `spa-wear-double` | target | Tyre-life or stop call on laps 3 to 7 with doubled wear |
+| `zandvoort-race-real` | target | Plan on lap 1, window open and a stop call before lap 7, no safety car calls |
 ## Backlog
 
-- A safety car on lap 1 or 2, before any stop makes sense.
-- A safety car in the last 3 laps. Pitwall must not call a stop.
-- A VSC inside the window. The stop saves less time than under a full safety car.
+- A VSC inside the window. The stop saves less time than under a full safety car. A stop call depends on tyre wear, position risk and laps left, so write the check against the rule inputs.
 - Two safety cars in one race.
-- Wear twice as fast, so that Plan B with two stops is faster.
-- A penalty in the last 3 laps, for the penalty cost and penalty covered calls.
+- Recheck the two targets `brazil-overcut` and `mexico-undercut`. In a local run on 30 Oct 2026, before the 0.42.0 merge, `overcut_stay_out` did not fire on laps 6 to 7 and `box_now` did not fire on laps 5 to 8.
+- Recheck the two targets `imola-race-real` and `zandvoort-race-real`. In a local run on 31 Oct 2026, `plan_window_open` never fired in the Imola race, and no stop call fired in the Zandvoort race.
+- Wear twice as fast, so that Plan B with two stops is faster. The Imola and Spa scenarios check tyre-life and stop calls, not Plan B.
 
 ## Limits
 
 - CI cannot run the bench, because recordings stay out of git. Run it on a machine that has the recordings, and put the output in the PR.
-- The starter set has one real race. `real_accuracy` stays empty until real scenarios give 5 or more graded outcomes. Add real races with a safety car and two stops.
+- The starter set has 9 real scenarios, but the last run graded 1 outcome. `real_accuracy` stays empty until real scenarios give 5 or more graded outcomes.
 - Scenarios use default priors. Calls with learned priors can be different.

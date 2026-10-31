@@ -1,0 +1,15 @@
+id: silverstone-sc-real
+title: Silverstone race as recorded, full safety car on laps 8 to 10
+status: target
+source:
+  session_uid: "0x6d8f24db49275410"
+  sha256: "fc2619a040e2be3e668fa96cdcd84456b69fcce69353d61485f38e9a6299be4a"
+  where: "Silverstone race, 29 Oct 2026, 13 laps, stops on laps 7 and 8, full safety car on laps 8 to 10. session_6d8f24db49275410_1793276841.f1bin.zst"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [8, 9]}
+    - {rule: sc_ending, laps: [9, 10]}
+    - {rule: sc_restart, laps: [10, 11]}
+  absent:
+    - {rule: [vsc_deployed, vsc_ending, vsc_restart], laps: [1, 13]}
+why: The recording holds a real full safety car. The safety car calls must fire in order and the VSC calls must stay silent.

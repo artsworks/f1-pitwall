@@ -1,0 +1,13 @@
+id: brazil3-race-real
+title: Brazil race 12 Oct as recorded, one stop on lap 5
+status: target
+source:
+  session_uid: "0x91c601aa0fcd7754"
+  sha256: "cc98ef6da212c247e803590dde5c17d0deffa346654bbe66f7079acb287e3134"
+  where: "Brazil race, 12 Oct 2026, 18 laps, one stop on lap 5, no safety car. session_91c601aa0fcd7754_1791844243.f1bin.zst"
+expect:
+  fire:
+    - {rule: plan_announce, laps: [1, 1]}
+  absent:
+    - {rule: [sc_deployed, vsc_deployed, sc_ending, vsc_ending, sc_restart, vsc_restart], laps: [1, 18]}
+why: The real race had no safety car. A plan must be announced on lap 1.
