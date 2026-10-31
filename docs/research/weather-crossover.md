@@ -48,7 +48,7 @@ No team video explainer was transcribed for this note. The Ferrari strategist in
 | Weather now | Session `m_weather` | Available (`Snapshot.weather_now`) |
 | Track temperature now | Session `m_trackTemperature` | Available, not used by these calls |
 | Track temperature trend | Session `m_weatherForecastSamples[].m_trackTemperatureChange` (0 up, 1 down, 2 no change) | Parsed, not read by `SessionState` |
-| Forecast accuracy | Session `m_forecastAccuracy` (0 perfect, 1 approximate) | Parsed, not read by `SessionState` |
+| Forecast accuracy | Session `m_forecastAccuracy` (0 perfect, 1 approximate) | Available (`Snapshot.forecast_accuracy`), picks the softer forecast wording |
 | Rival tyre compound | Car Status `m_visualTyreCompound` for each car | Available. Not checked in a restricted online session |
 | Rival tyre age | Car Status `m_tyresAgeLaps` for each car | Available |
 | Rival last lap | Lap Data `m_lastLapTimeInMS` for each car | Available |
@@ -102,8 +102,8 @@ Each rule has four or five variants. ADR 0008 rotation applies. Percent and minu
 | `track_drier` | "Track drying. Field 2.0 seconds quicker last lap" | "Tyres are still improving" |
 | `compound_crossover_close` | "Crossover in 3.0 laps. Field on slicks 3.0 seconds off, closing a second a lap" | "Lap times are still for slicks. Inters is one minute 40" |
 
-## Decisions for the owner
+## Owner decisions
 
-- Bring back the reverted heavy-rain gate on `to_wet` (needs a forecast sample with weather 4 or 5), or leave `to_wet` on rain chance alone.
-- `forecast_accuracy` is parsed but unused. Pitwall could add "forecast approximate" to the forecast calls when it is 1. The parallel dry-to-wet crossover work adds a `forecast_accuracy` Snapshot field and reports 0 (perfect) in every Interlagos recording it checked, so the qualifier would rarely be spoken.
-- The bench scenario `brazil-weather-crossover` is a dry guard with absent checks only. Fire checks need a mixed-weather race recording.
+- The reverted heavy-rain gate on `to_wet` stays out. `to_wet` keeps using the rain chance alone.
+- Pitwall reads Session `m_forecastAccuracy` into `Snapshot.forecast_accuracy`. When it is 1 (approximate), `weather_rain_soon` and `weather_to_*` switch to a softer `severity` pool ("Rain possible in 10 minutes, 40 percent"). When it is 0 (perfect), they keep the firm wording. The parallel dry-to-wet work found 0 in every Interlagos recording it checked, so the softer pool will rarely be heard.
+- The bench scenario `brazil-weather-crossover` stays a dry guard with absent checks only, because no mixed-weather race recording exists yet.
