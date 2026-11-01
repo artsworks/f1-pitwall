@@ -424,7 +424,6 @@ def test_cover_box_rule_fires_and_respects_minimum_laps() -> None:
 @pytest.mark.parametrize(
     ("rule_id", "phase", "flag"),
     [
-        ("vsc_ending_box", "vsc", "sc_ending"),
         ("sc_escalated_box", "sc", "sc_escalated"),
     ],
 )
@@ -454,7 +453,6 @@ def test_neutralisation_pit_rules_fire(rule_id: str, phase: str, flag: str) -> N
 @pytest.mark.parametrize(
     ("rule_id", "phase", "flag"),
     [
-        ("vsc_ending_box", "vsc", "sc_ending"),
         ("sc_escalated_box", "sc", "sc_escalated"),
     ],
 )
@@ -483,7 +481,6 @@ def test_neutralisation_pit_rules_respect_stop_gates(rule_id: str, phase: str, f
 @pytest.mark.parametrize(
     ("rule_id", "phase", "flag"),
     [
-        ("vsc_ending_box", "vsc", "sc_ending"),
         ("sc_escalated_box", "sc", "sc_escalated"),
     ],
 )

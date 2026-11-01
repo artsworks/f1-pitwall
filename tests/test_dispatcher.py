@@ -152,7 +152,7 @@ def test_cooldown_and_dedupe() -> None:
     assert len(d.drain(31.0)) == 1
 
 
-def test_box_now_suppresses_vsc_ending_box_inside_pit_cooldown() -> None:
+def test_box_now_suppresses_sc_escalated_box_inside_pit_cooldown() -> None:
     engine = _battle_engine()
     dispatcher, _, buf = _dispatcher(min_gap_s=0.0)
     shared = {
@@ -178,20 +178,20 @@ def test_box_now_suppresses_vsc_ending_box_inside_pit_cooldown() -> None:
     dispatcher.submit([box_now], box_snapshot)
     assert [call.rule_id for call in dispatcher.drain(0.0)] == ["box_now"]
 
-    ending_snapshot = _battle_snapshot(
+    escalation_snapshot = _battle_snapshot(
         20.0,
-        **(shared | {"phase": "vsc", "sc_ending": True, "sc_escalated": False}),
+        **(shared | {"phase": "sc", "sc_escalated": True}),
     )
-    ending_call = next(
+    escalation_call = next(
         candidate
-        for candidate in engine.evaluate(ending_snapshot).candidates
-        if candidate.rule.id == "vsc_ending_box"
+        for candidate in engine.evaluate(escalation_snapshot).candidates
+        if candidate.rule.id == "sc_escalated_box"
     )
-    assert ending_call.rule.defn.cooldown_group == "pit"
-    dispatcher.submit([ending_call], ending_snapshot)
+    assert escalation_call.rule.defn.cooldown_group == "pit"
+    dispatcher.submit([escalation_call], escalation_snapshot)
     assert dispatcher.drain(20.0) == []
     assert any(
-        row["rule_id"] == "vsc_ending_box"
+        row["rule_id"] == "sc_escalated_box"
         and row["outcome"] == "suppressed"
         and row["suppressed_by"] == "cooldown"
         for row in _log(buf)

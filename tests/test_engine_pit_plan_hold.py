@@ -8,6 +8,58 @@ from pitwall.state.session import Snapshot
 from pitwall.strategy.pitwindow import NO_PLAN
 
 
+def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> None:
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+    )
+    fit = DegFit(90_000.0, 150.0, 30.0, 20, 0.0, 0.9, "prior")
+    engine.deg_fit = fit
+    engine._fresh_prior = fit
+    engine._green_pit_loss_s = 22.0
+    engine._sc_pit_loss_s = 12.0
+    updates: list[bool] = []
+    original_update = engine.plan_tracker.update
+
+    def record_update(*args, **kwargs):
+        updates.append(kwargs["neutralised"])
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(engine.plan_tracker, "update", record_update)
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        phase="vsc",
+        race_phase="vsc",
+        safety_car_status=2,
+        lap_num=10,
+        laps_remaining=20,
+        tyre_age_laps=10,
+        tyre_visual=17,
+        wear_mean_pct=50.0,
+        laps_of_pace=20.0,
+        pit_loss_s=12.0,
+        pit_loss_source="session",
+        is_sprint=True,
+        _ages={"lap_data": 0.1, "car_status": 0.1},
+    )
+
+    vsc = engine._plan(snap)
+    assert vsc.pit_plan == "cheap_stop"
+    assert "box_now" in {
+        candidate.rule.id for candidate in engine.rule_engine.evaluate(vsc).candidates
+    }
+
+    ending = engine._plan(dataclasses.replace(snap, sc_ending=True))
+
+    assert ending.pit_plan != "cheap_stop"
+    assert "box_now" not in {
+        candidate.rule.id for candidate in engine.rule_engine.evaluate(ending).candidates
+    }
+    assert updates == [True, False]
+
+
 def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> None:
     engine = build_engine(
         isolated=True,

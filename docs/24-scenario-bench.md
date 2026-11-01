@@ -151,7 +151,7 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 | `brazil-sc-restart` | target | SC in this lap and green flag calls, one per step |
 | `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
-| `brazil-vsc-in-window` | target | VSC-ending call and box call on the last VSC lap |
+| `brazil-vsc-in-window` | target | Box call on the first VSC lap, no cheap stop once VSC ending shows |
 | `brazil-vsc-to-sc` | target | VSC-to-SC escalation call on lap 11 |
 | `brazil-vsc-early` | guard | VSC calls, never full safety car calls |
 | `brazil-worn-tyres` | guard | Tyre-life warning and a box call in the window |

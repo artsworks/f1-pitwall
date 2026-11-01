@@ -12,8 +12,7 @@ expect:
   fire:
     - {rule: vsc_deployed, laps: [10, 10]}
     - {rule: vsc_ending, laps: [11, 11]}
-    - {rule: [plan_sc_box, box_now], laps: [10, 11]}
-    - {rule: vsc_ending_box, laps: [11, 11]}
+    - {rule: [plan_sc_box, box_now], laps: [10, 10]}
   absent:
     - {rule: [sc_deployed, sc_ending, sc_restart, sc_escalated_box], laps: [1, 17]}
-why: The stop is still owed in the window. A VSC saves less than a full safety car but still makes the stop worthwhile. The VSC-ending call is the last chance to box before green.
+why: The stop is still owed in the window. The VSC makes the stop cheap on lap 10. Once VSC ending shows on lap 11, a stop costs the green pit loss, so there is no cheap stop call.

@@ -3622,7 +3622,7 @@ class SessionState:
         if 0 <= self._player_idx < len(cars):
             owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
             stop_pit_s = pit_s
-            if self.safety_car_status != 0:
+            if self.safety_car_status != 0 and not (self.race_phase == "vsc" and self.sc_ending):
                 stop_pit_s = (
                     model.sc_pit_loss_s
                     if model.sc_pit_loss_s > 0
