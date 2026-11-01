@@ -430,8 +430,8 @@ rules:
       - "VSC ending. Stay on the delta until it goes green"
       - "VSC ending. Prepare to race when it goes green"
       - "Virtual safety car ending. Hold the delta until green"
-  # Red flag: a tyre change in the pit lane is free. With a stop left in the
-  # plan the change covers it, otherwise it is a fresh set.
+  # Red flag: a tyre change in the pit lane is free. With a stop left the call
+  # names the planned compound, otherwise it suggests a fresh set.
   - id: red_flag_tyres
     sessions: [race]
     priority: 2
@@ -439,8 +439,8 @@ rules:
     clear_when: "not red_flag"
     requires: [lap_data]
     say:
-      - "Tyre change is free under the red flag. Fit the {plan_next_compound}s, that's our stop"
-      - "Free tyre change under the red flag. Take the {plan_next_compound}s, no stop needed"
+      - "Tyre change is free under the red flag. Fit the {plan_next_compound}s"
+      - "Free tyre change under the red flag. Take the {plan_next_compound}s"
       - "Red flag gives us a free stop. {plan_next_compound}s for the restart"
   - id: red_flag_fresh_tyres
     sessions: [race]
