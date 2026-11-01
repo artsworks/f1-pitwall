@@ -363,7 +363,8 @@ class RedFlag:
             status.add("red")
             extra.append(_event_from(payload, b"RDFL", b""))
         if header.packet_id == PacketId.SESSION:
-            rewritten[SESSION_SAFETY_CAR_STATUS_OFFSET] = 0
+            if ctx.player_lap <= self.end_lap:
+                rewritten[SESSION_SAFETY_CAR_STATUS_OFFSET] = 0
             if rewritten[SESSION_RED_FLAG_PERIODS_OFFSET] == 0:
                 rewritten[SESSION_RED_FLAG_PERIODS_OFFSET] = 1
         elif (
