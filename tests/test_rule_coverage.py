@@ -31,8 +31,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "fastest_lap_mine",
         "fastest_lap_taken",
         "floor_damage",
-        "fuel_marginal",
-        "fuel_short",
         "gearbox_damage",
         "grid_penalty",
         "lap_deleted",

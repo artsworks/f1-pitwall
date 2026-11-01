@@ -1,0 +1,11 @@
+id: brazil-lift-and-coast
+title: Brazil thermal and fuel false-alarm guard
+status: guard
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+expect:
+  absent:
+    - {rule: [engine_temp_high, brake_temp_high, pu_wear_high, fuel_short], laps: [1, 17]}
+why: Synthetic replay tests cover fuel-short, dirty-air and clean-air sequences because the bench has no fuel or temperature mutation.

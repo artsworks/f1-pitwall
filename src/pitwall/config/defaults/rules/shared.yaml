@@ -152,6 +152,72 @@ rules:
       - "Engine {damage.engine} percent damage. Short-shift"
       - "Engine is {damage.engine} percent damaged. Lift and coast"
       - "Damage to the engine, {damage.engine} percent. Short-shift"
+  # Lift and coast / PU thermal management
+  - id: engine_temp_high
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and engine_temp_c >= th.engine_temp_warn_c"
+    clear_when: "engine_temp_c < th.engine_temp_clear_c"
+    still_true: "phase != 'garage' and engine_temp_c >= th.engine_temp_clear_c"
+    cooldown_s: 180
+    requires: [car_telemetry, lap_data]
+    say:
+      - "Engine {engine_temp_c:.1f} degrees. Lift and coast to cool it"
+      - "Engine at {engine_temp_c:.1f} degrees. Lift and coast for cooling"
+      - "Engine temperature {engine_temp_c:.1f} degrees. Lift and coast"
+      - "Engine hot at {engine_temp_c:.1f} degrees. Lift and coast"
+    severity:
+      - when: "0 < gap_ahead_s <= th.pu_dirty_air_gap_s and rival_ahead_name != ''"
+        say:
+          - "Engine {engine_temp_c:.1f} degrees, {gap_ahead_s:.1f} behind {rival_ahead_name}. Drop out of the tow to cool it"
+          - "Engine {engine_temp_c:.1f} degrees, {rival_ahead_name} {gap_ahead_s:.1f} ahead. Find clean air"
+          - "Engine hot at {engine_temp_c:.1f}, {gap_ahead_s:.1f} behind {rival_ahead_name}. Drop back to cool"
+          - "Engine {engine_temp_c:.1f} degrees. {gap_ahead_s:.1f} to {rival_ahead_name}, get clean air"
+      - when: "0 < gap_ahead_s <= th.pu_dirty_air_gap_s"
+        say:
+          - "Engine {engine_temp_c:.1f} degrees, {gap_ahead_s:.1f} behind. Drop out of the tow to cool it"
+          - "Engine {engine_temp_c:.1f} degrees, gap {gap_ahead_s:.1f}. Find clean air"
+          - "Engine hot at {engine_temp_c:.1f} degrees, {gap_ahead_s:.1f} behind. Drop back to cool"
+          - "Engine {engine_temp_c:.1f} degrees, {gap_ahead_s:.1f} to the car ahead. Get clean air"
+  - id: brake_temp_high
+    sessions: [practice, qualifying, race]
+    priority: 2
+    when: "phase != 'garage' and brake_temp_max_c >= th.brake_temp_warn_c"
+    clear_when: "brake_temp_max_c < th.brake_temp_clear_c"
+    still_true: "phase != 'garage' and brake_temp_max_c >= th.brake_temp_clear_c"
+    cooldown_s: 180
+    requires: [car_telemetry, lap_data]
+    say:
+      - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees. Lift earlier, cool them"
+      - "{brake_temp_corner} brake at {brake_temp_max_c:.1f} degrees. Lift and coast"
+      - "{brake_temp_corner} brake hot, {brake_temp_max_c:.1f} degrees. Lift earlier"
+      - "{brake_temp_corner} brake temperature {brake_temp_max_c:.1f} degrees. Lift and coast"
+    severity:
+      - when: "0 < gap_ahead_s <= th.pu_dirty_air_gap_s and rival_ahead_name != ''"
+        say:
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees, {gap_ahead_s:.1f} behind {rival_ahead_name}. Drop out of the tow"
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees. {rival_ahead_name} {gap_ahead_s:.1f} ahead, find clean air"
+          - "{brake_temp_corner} brake hot at {brake_temp_max_c:.1f}, {gap_ahead_s:.1f} behind {rival_ahead_name}. Drop back to cool"
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees. {gap_ahead_s:.1f} to {rival_ahead_name}, get clean air"
+      - when: "0 < gap_ahead_s <= th.pu_dirty_air_gap_s"
+        say:
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees, {gap_ahead_s:.1f} behind. Drop out of the tow"
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees, gap {gap_ahead_s:.1f}. Find clean air"
+          - "{brake_temp_corner} brake hot at {brake_temp_max_c:.1f} degrees, {gap_ahead_s:.1f} behind. Drop back to cool"
+          - "{brake_temp_corner} brake {brake_temp_max_c:.1f} degrees, {gap_ahead_s:.1f} to the car ahead. Get clean air"
+  - id: pu_wear_high
+    sessions: [race]
+    priority: 2
+    when: "phase == 'racing' and pu_wear_pct >= th.pu_wear_warn_pct"
+    clear_when: "pu_wear_pct < th.pu_wear_clear_pct"
+    still_true: "phase == 'racing' and pu_wear_pct >= th.pu_wear_clear_pct"
+    cooldown_s: 600
+    requires: [car_damage]
+    say:
+      - "{pu_wear_component} wear {pu_wear_pct:.1f} percent. Lift and coast to save it"
+      - "{pu_wear_component} at {pu_wear_pct:.1f} percent wear. Lift and coast"
+      - "{pu_wear_component} wear is {pu_wear_pct:.1f} percent. Lift earlier"
+      - "{pu_wear_component} worn {pu_wear_pct:.1f} percent. Lift and coast"
   - id: drs_fault
     sessions: [practice, qualifying, race]
     priority: 2

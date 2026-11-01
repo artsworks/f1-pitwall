@@ -139,20 +139,26 @@ rules:
     contradicts: [battle_manage]
     requires: [car_status]
     say:
-      - "Fuel {fuel_short_laps:.1f} laps short. Lift and coast"
-      - "We're {fuel_short_laps:.1f} laps short on fuel. Start lifting"
-      - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast now"
-      - "Fuel short by {fuel_short_laps:.1f} laps. Lift and coast now"
-      - "Short on fuel by {fuel_short_laps:.1f} laps. Lift and coast"
-      - "Fuel {fuel_short_laps:.1f} laps short. Lift on the straights"
+      - "Fuel {fuel_short_laps:.1f} laps short. Save {fuel_save_kg_per_lap:.1f} kg a lap, lift and coast"
+      - "We're {fuel_short_laps:.1f} laps short on fuel. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+      - "Fuel critical, {fuel_short_laps:.1f} laps short. Lift and coast, save {fuel_save_kg_per_lap:.1f} kg a lap"
+      - "Fuel short by {fuel_short_laps:.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+      - "Short on fuel by {fuel_short_laps:.1f} laps. Lift and coast for {fuel_save_kg_per_lap:.1f} kg a lap"
+      - "Fuel {fuel_short_laps:.1f} laps short. Lift on the straights, save {fuel_save_kg_per_lap:.1f} kg a lap"
     severity:
+      - when: "energy_mode == 'over' and lap_num * 2 >= total_laps"
+        say:
+          - "Energy {energy_lap_delta_mj:+.1f} MJ over, fuel short by {fuel_short_laps:.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap, lift and coast"
+          - "Fuel {fuel_short_laps:.1f} laps short, energy {energy_lap_delta_mj:+.1f} MJ over. Lift and coast, save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Energy {energy_lap_delta_mj:+.1f} MJ over, fuel {fuel_short_laps:.1f} laps short. Lift and coast for {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel short {fuel_short_laps:.1f} laps, energy {energy_lap_delta_mj:+.1f} MJ over. Lift and coast, save {fuel_save_kg_per_lap:.1f} kg a lap"
       - when: "lap_num * 2 < total_laps"
         priority: 2
         say:
-          - "Fuel {fuel_short_laps:.1f} laps short. Lift and coast"
-          - "{fuel_short_laps:.1f} laps short on fuel. Lift into the big stops"
-          - "Short on fuel by {fuel_short_laps:.1f} laps. Lift and coast"
-          - "Fuel deficit {fuel_short_laps:.1f} laps. Lift into the big stops"
+          - "Fuel {fuel_short_laps:.1f} laps short. Lift and coast, save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "{fuel_short_laps:.1f} laps short on fuel. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Short on fuel by {fuel_short_laps:.1f} laps. Lift and coast for {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel deficit {fuel_short_laps:.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap"
   - id: fuel_marginal
     sessions: [race]
     priority: 2
@@ -174,16 +180,16 @@ rules:
       - when: "fuel_margin_laps < 0 and lap_num * 2 >= total_laps"
         priority: 1
         say:
-          - "Fuel short now, {fuel_margin_r:+.1f} laps. Lift every straight"
-          - "Fuel {fuel_margin_r:+.1f} laps. Save now, lift before big stops"
-          - "Fuel deficit {fuel_margin_r:+.1f} laps. Lift on every straight"
-          - "Short on fuel, {fuel_margin_r:+.1f} laps. Lift before the big stops"
+          - "Fuel short now, {fuel_margin_r:+.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel {fuel_margin_r:+.1f} laps. Lift before big stops, save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel deficit {fuel_margin_r:+.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Short on fuel, {fuel_margin_r:+.1f} laps. Lift for {fuel_save_kg_per_lap:.1f} kg a lap"
       - when: "fuel_margin_laps < 0"
         say:
-          - "Fuel {fuel_margin_r:+.1f} laps. Early days, save a little"
-          - "Fuel a touch short, {fuel_margin_r:+.1f}. Bit of lift and coast"
-          - "Fuel margin {fuel_margin_r:+.1f} laps. Save a little now"
-          - "Just short on fuel, {fuel_margin_r:+.1f}. Lift and coast a bit"
+          - "Fuel {fuel_margin_r:+.1f} laps. Early days, save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel a touch short, {fuel_margin_r:+.1f} laps. Lift and coast for {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Fuel margin {fuel_margin_r:+.1f} laps. Save {fuel_save_kg_per_lap:.1f} kg a lap"
+          - "Short on fuel, {fuel_margin_r:+.1f} laps. Lift and coast for {fuel_save_kg_per_lap:.1f} kg a lap"
       - when: "battle_mode in ('attacking', 'catching')"
         priority: 3
         say:

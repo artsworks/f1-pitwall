@@ -71,10 +71,11 @@ from pitwall.state.race import (
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
-from pitwall.strategy.pace import pace_words_self
+from pitwall.strategy.pace import amount_words, pace_words_self
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.weather import (
     best_rain_stop,
+    crossover_projection,
     default_pit_loss_s,
     switch_net_s,
     wet_by_lap,
@@ -200,6 +201,11 @@ class Damage:
     engine: int = 0
     drs_fault: int = 0
     ers_fault: int = 0
+    ice_wear: int = 0
+    mguk_wear: int = 0
+    es_wear: int = 0
+    ce_wear: int = 0
+    tc_wear: int = 0
 
 
 _ZERO_DAMAGE = Damage()
@@ -378,6 +384,7 @@ class Snapshot:
     tyre_surface: Corners = _ZERO_CORNERS
     tyre_inner: Corners = _ZERO_CORNERS
     brake_temp: Corners = _ZERO_CORNERS
+    engine_temp_c: float = 0.0
     tyre_surface_ema_fast: Corners = _ZERO_CORNERS
     tyre_surface_ema_slow: Corners = _ZERO_CORNERS
     tyre_inner_ema_fast: Corners = _ZERO_CORNERS
@@ -638,6 +645,18 @@ class Snapshot:
     weather_crossover: str = ""
     weather_crossover_pct: int = 0  # forecast rain chance driving the crossover
     weather_crossover_min: int = 0  # ... and how many minutes out
+    # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
+    rain_soon_pct: int = 0
+    rain_soon_min: int = 0
+    field_lap_trend_s: float = 0.0
+    field_lap_trend: str = ""
+    field_trend_cars: int = 0
+    crossover_to: str = ""
+    crossover_gap_s: float = 0.0
+    crossover_rate_s: float = 0.0
+    crossover_laps: float = 0.0
+    crossover_gap: str = ""
+    crossover_rate: str = ""
     pit_plan: str = ""
     pit_plan_lap: int = 0
     # Driver menu opinion (docs/12): "understeer" | "oversteer" | "" while it holds.
@@ -877,6 +896,53 @@ class Snapshot:
         return max(0.0, -self.fuel_margin_laps)
 
     @property
+    def fuel_save_kg_per_lap(self) -> float:
+        if self.fuel_short_laps <= 0:
+            return 0.0
+        done = (
+            min(1.0, max(0.0, self.lap_distance / self.track_length_m))
+            if self.track_length_m > 0
+            else 0.0
+        )
+        to_go = max(0.1, self.laps_remaining - done)
+        return max(0.1, self.fuel_short_laps * self.fuel_per_lap_kg / to_go)
+
+    @property
+    def brake_temp_max_c(self) -> float:
+        return float(max(self.brake_temp.as_tuple()))
+
+    @property
+    def brake_temp_corner(self) -> str:
+        return _CORNER_WORDS[
+            self.brake_temp.as_tuple().index(max(self.brake_temp.as_tuple()))
+        ].capitalize()
+
+    @property
+    def pu_wear_pct(self) -> float:
+        return float(
+            max(
+                self.damage.ice_wear,
+                self.damage.mguk_wear,
+                self.damage.es_wear,
+                self.damage.ce_wear,
+                self.damage.tc_wear,
+            )
+        )
+
+    @property
+    def pu_wear_component(self) -> str:
+        return max(
+            (
+                ("ICE", self.damage.ice_wear),
+                ("MGU-K", self.damage.mguk_wear),
+                ("ES", self.damage.es_wear),
+                ("CE", self.damage.ce_wear),
+                ("TC", self.damage.tc_wear),
+            ),
+            key=lambda item: item[1],
+        )[0]
+
+    @property
     def energy_prev_under_mj(self) -> float:
         return max(0.0, -self.energy_prev_lap_delta_mj)
 
@@ -998,6 +1064,7 @@ class SessionState:
         self.tyre_surface = _ZERO_CORNERS
         self.tyre_inner = _ZERO_CORNERS
         self.brake_temp = _ZERO_CORNERS
+        self.engine_temp_c = 0.0
         self.run_temps = RunTemps()
         self.run_seq = 0
         self.hot_lap_fuel_base: tuple[int, float] | None = None
@@ -1199,8 +1266,15 @@ class SessionState:
         self._weather_crossover = ""
         self._weather_crossover_pct = 0
         self._weather_crossover_min = 0
+        self._rain_soon_pct = 0
+        self._rain_soon_min = 0
         self._wet_to_dry_passes: dict[int, frozenset[str]] = {}
         self._held_gains: list[float] = [0.0, 0.0]
+        self._gain_hist: dict[int, list[float | None]] = {}
+        self._field_lap_records: dict[int, tuple[int, int, int, bool]] = {}
+        self._field_lap_deltas: list[tuple[int, float]] = []
+        self._field_lap_trend_s = 0.0
+        self._field_trend_cars = 0
         # First lap on which each car's last lap is fully green again.
         self._green_from_lap: dict[int, int] = {}
         self._await_green = [False, False]
@@ -1438,6 +1512,11 @@ class SessionState:
         self._last_pit_status.clear()
         self._wet_to_dry_passes.clear()
         self._held_gains = [0.0, 0.0]
+        self._gain_hist.clear()
+        self._field_lap_records.clear()
+        self._field_lap_deltas.clear()
+        self._field_lap_trend_s = 0.0
+        self._field_trend_cars = 0
         self._green_from_lap.clear()
         self._await_green = [False, False]
         self._gap_now = {}
@@ -1547,6 +1626,8 @@ class SessionState:
             self._last_pit_status[i] = c.pit_status
             if i != self._player_idx and c.pit_status != 0:
                 self._cars_pitted_this_lap.add(i)
+        self.lap_num = car.current_lap_num
+        self._update_field_lap_trend(pkt.cars)
         length = self.track_length_m
         line_after_flag = self.chequered and (
             self._flag_as_leader
@@ -1556,7 +1637,6 @@ class SessionState:
                 and 0 <= car.lap_distance < 0.2 * length
             )
         )
-        self.lap_num = car.current_lap_num
         self.lap_distance = car.lap_distance
         if car.sector == 2 and self.sector != 2:
             self.s3_entry_coldest_c = min(self._ema_or_zero(self.tyre_inner_fast).as_tuple())
@@ -2189,6 +2269,18 @@ class SessionState:
             and 5 <= f.time_offset
             and (f.time_offset <= horizon or f.time_offset <= 10)
         ]
+        rain_heads_up = min(
+            (
+                (pct, offset)
+                for pct, offset in ahead
+                if offset <= horizon
+                and offset <= self._th("rain_heads_up_max_min", 15.0)
+                and pct >= self._th("rain_heads_up_pct", 40.0)
+            ),
+            key=lambda sample: sample[1],
+            default=(0, 0),
+        )
+        self._rain_soon_pct, self._rain_soon_min = rain_heads_up
         rain, rain_min = max(ahead, default=(0, 0))
         self._weather_crossover_pct, self._weather_crossover_min = rain, rain_min
         wet = self._th("rain_wet_pct", 85.0)
@@ -2220,6 +2312,56 @@ class SessionState:
             if first is not None:
                 self._weather_crossover_pct, self._weather_crossover_min = first
         self._weather_crossover = cand
+
+    def _update_field_lap_trend(self, cars: Sequence[CarLap]) -> None:
+        status = self.cars_status
+        pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
+        for i, car in enumerate(cars):
+            if i == self._player_idx:
+                continue
+            completed = car.current_lap_num - 1
+            if car.last_lap_time_ms <= 0:
+                continue
+            previous = self._field_lap_records.get(i)
+            if previous is not None and previous[0] == completed:
+                continue
+            compound = (
+                int(status[i].visual_tyre_compound) if status is not None and i < len(status) else 0
+            )
+            clean = (
+                car.result_status == 2
+                and car.pit_status == PitStatus.NONE
+                and i not in pitted
+                and status is not None
+                and i < len(status)
+                and status[i].tyres_age_laps >= 3
+                and self._car_lap_sc.get(i, {}).get(completed, 0) == 0
+                and car.current_lap_num >= self._green_from_lap.get(i, 0)
+            )
+            current = (completed, car.last_lap_time_ms, compound, clean)
+            if (
+                previous is not None
+                and previous[0] == completed - 1
+                and previous[3]
+                and clean
+                and previous[2] == compound
+            ):
+                self._field_lap_deltas.append(
+                    (completed, (car.last_lap_time_ms - previous[1]) / 1000.0)
+                )
+            self._field_lap_records[i] = current
+
+        self._field_lap_deltas = [d for d in self._field_lap_deltas if d[0] >= self.lap_num - 2]
+        if not self._field_lap_deltas:
+            self._field_lap_trend_s = 0.0
+            self._field_trend_cars = 0
+            return
+        newest_lap = max(lap for lap, _delta in self._field_lap_deltas)
+        self._field_lap_deltas = [d for d in self._field_lap_deltas if d[0] >= newest_lap - 1]
+        recent = [delta for _lap, delta in self._field_lap_deltas]
+        self._field_trend_cars = len(recent)
+        minimum_cars = int(self._th("track_trend_min_cars", 3.0))
+        self._field_lap_trend_s = round(median(recent), 2) if len(recent) >= minimum_cars else 0.0
 
     def _update_dry_to_wet(self) -> None:
         samples = [
@@ -2344,6 +2486,7 @@ class SessionState:
             car.tyres_inner_temperature.as_tuple(), car.tyres_surface_temperature.as_tuple()
         )
         self.brake_temp = car.brakes_temperature
+        self.engine_temp_c = float(car.engine_temperature)
         self.speed_kmh = float(car.speed)
         offs_before = self.off_track.count
         self.off_track.update_surface(st, car.surface_type.as_tuple())
@@ -2541,6 +2684,11 @@ class SessionState:
             engine=car.engine_damage,
             drs_fault=car.drs_fault,
             ers_fault=car.ers_fault,
+            ice_wear=car.engine_ice_wear,
+            mguk_wear=car.engine_mguk_wear,
+            es_wear=car.engine_es_wear,
+            ce_wear=car.engine_ce_wear,
+            tc_wear=car.engine_tc_wear,
         )
 
     def _damage_parts(self) -> dict[str, int]:
@@ -2907,6 +3055,13 @@ class SessionState:
             weather_crossover=self._weather_crossover,
             weather_crossover_pct=self._weather_crossover_pct,
             weather_crossover_min=self._weather_crossover_min,
+            rain_soon_pct=self._rain_soon_pct,
+            rain_soon_min=self._rain_soon_min,
+            field_lap_trend_s=self._field_lap_trend_s,
+            field_lap_trend=(
+                amount_words(self._field_lap_trend_s) if self._field_lap_trend_s != 0.0 else ""
+            ),
+            field_trend_cars=self._field_trend_cars,
             since_rewind_s=(
                 math.inf if self._last_rewind_t is None else max(0.0, st - self._last_rewind_t)
             ),
@@ -2964,6 +3119,7 @@ class SessionState:
             tyre_surface=self.tyre_surface,
             tyre_inner=self.tyre_inner,
             brake_temp=self.brake_temp,
+            engine_temp_c=self.engine_temp_c,
             tyre_surface_ema_fast=self._ema_or_zero(self.tyre_surface_fast),
             tyre_surface_ema_slow=self._ema_or_zero(self.tyre_surface_slow),
             tyre_inner_ema_fast=inner,
@@ -3655,6 +3811,45 @@ class SessionState:
             self._compound_gain(cars, (7,), (16, 17, 18)),
             self._compound_gain(cars, (8,), (7,)),
         )
+        crossover_to = ""
+        crossover_gap_s = 0.0
+        crossover_rate_s = 0.0
+        crossover_laps = 0.0
+        crossover_gap = ""
+        crossover_rate = ""
+        if self.race_phase == "racing":
+            lap_gains = self._gain_hist.setdefault(self.lap_num, [None, None])
+            for k in (0, 1):
+                if measured[k] != 0.0:
+                    lap_gains[k] = measured[k]
+            while self._gain_hist and min(self._gain_hist) < self.lap_num - 4:
+                del self._gain_hist[min(self._gain_hist)]
+            previous = self._gain_hist.get(self.lap_num - 2)
+            current = self._gain_hist.get(self.lap_num - 1)
+            directions: list[tuple[str, int, float]] = []
+            if self.tyre_compound == 7:
+                directions = [("slicks", 0, 1.0), ("wets", 1, -1.0)]
+            elif self.tyre_compound == 8:
+                directions = [("inters", 1, 1.0)]
+            elif self.tyre_compound in (16, 17, 18, 19, 20, 21, 22):
+                directions = [("inters", 0, -1.0)]
+            if previous is not None and current is not None:
+                for target, component, sign in directions:
+                    gain_prev = previous[component]
+                    gain_now = current[component]
+                    if gain_prev is None or gain_now is None:
+                        continue
+                    projection = crossover_projection(
+                        sign * gain_prev,
+                        sign * gain_now,
+                        self._th("crossover_rate_min_s", 0.3),
+                    )
+                    if projection is not None:
+                        crossover_to = target
+                        crossover_gap_s, crossover_rate_s, crossover_laps = projection
+                        crossover_gap = amount_words(crossover_gap_s)
+                        crossover_rate = amount_words(crossover_rate_s)
+                        break
         gains = [measured[0], measured[1]]
         fresh_sample = False
         if self.race_phase in ("sc", "vsc"):
@@ -3751,6 +3946,12 @@ class SessionState:
             inter_gain_s=inter_gain,
             tyre_switch_to=switch_to,
             tyre_switch_net_s=switch_net,
+            crossover_to=crossover_to,
+            crossover_gap_s=crossover_gap_s,
+            crossover_rate_s=crossover_rate_s,
+            crossover_laps=crossover_laps,
+            crossover_gap=crossover_gap,
+            crossover_rate=crossover_rate,
             slip_trend=slip_trend,
             penalty_position=pen_pos,
             penalty_margin_s=pen_margin,

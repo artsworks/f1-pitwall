@@ -10,6 +10,61 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.50.0 (2026-11-01)
+
+### Bug Fixes
+
+- **rules**: No weather radar call over the dry-to-wet rain calls
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **rules**: Weather radar guards yield only to rain calls that can fire
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **state**: Drop stale field lap deltas ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **state**: No rain heads-up after the flag
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+### Documentation
+
+- **research**: Record owner weather decisions
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **research**: Weather radar and crossover findings; prune field lap deltas
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+### Features
+
+- **rules**: Softer forecast wording when forecast accuracy is approximate
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **rules**: Weather radar heads-up, track wetter/drier and crossover projection calls
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+
+## v0.49.0 (2026-10-31)
+
+### Bug Fixes
+
+- **rules**: Fuel save target counts the lap driven and never reads 0.0
+  ([#163](https://github.com/artsworks/f1-pitwall/pull/163),
+  [`a165070`](https://github.com/artsworks/f1-pitwall/commit/a16507014f285ffd93fd6546884de4641ba784f7))
+
+### Features
+
+- **rules**: Lift-and-coast and PU thermal management calls
+  ([#163](https://github.com/artsworks/f1-pitwall/pull/163),
+  [`a165070`](https://github.com/artsworks/f1-pitwall/commit/a16507014f285ffd93fd6546884de4641ba784f7))
+
+
 ## v0.48.0 (2026-10-31)
 
 ### Bug Fixes
