@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
+from pitwall.config.loader import ConfigStore
 from pitwall.ingest import Ingest
-from pitwall.state.session import SessionState
+from pitwall.rules.expr import Predicate, make_namespace
+from pitwall.state.session import SessionState, Snapshot
 from pitwall.strategy.weather import crossover_projection
 
 from .race_synth import RaceSpec, race_stream, replay_race
@@ -17,6 +21,18 @@ def _fired_row(rows: list[dict], rule_id: str) -> dict:
     return next(
         row for row in rows if row.get("rule_id") == rule_id and row.get("outcome") == "fired"
     )
+
+
+def _default_rule_when(settings, rule_id: str, snapshot: Snapshot) -> bool:
+    rule = next(rule for rule in settings.rules if rule.id == rule_id)
+    namespace = make_namespace(
+        snapshot,
+        thresholds=settings.thresholds,
+        mode=settings.resolved_mindset(),
+        staleness_age=lambda _: 0.0,
+        staleness_limit=lambda name: settings.engine.staleness_s.get(name, 1.0),
+    )
+    return bool(Predicate(rule.when)(namespace))
 
 
 def _lap_extra(
@@ -124,8 +140,87 @@ def test_rain_heads_up_uses_nearest_qualifying_forecast(tmp_path) -> None:
     assert "45 percent" in text
 
 
+@pytest.mark.parametrize(
+    ("overrides", "expected", "replacement_rule_parts"),
+    [
+        ({"rain_onset_min": 10, "rain_box_lap": 2}, True, None),
+        ({"rain_box_lap": 0, "forecast_accuracy": 1}, True, None),
+        ({"rain_onset_min": 0, "rain_box_lap": -1, "rain_soon_pct": 45}, True, None),
+        ({"rain_box_lap": 0, "forecast_accuracy": 0}, False, ("rain_box", "now")),
+        ({"lap_num": 3, "rain_onset_min": 10, "rain_box_lap": -1}, False, ("rain_stay", "out")),
+    ],
+)
+def test_weather_rain_soon_yields_only_when_a_rain_call_can_fire(
+    overrides: dict[str, int],
+    expected: bool,
+    replacement_rule_parts: tuple[str, str] | None,
+) -> None:
+    settings = ConfigStore(isolated=True).current()
+    base = Snapshot(
+        now=0.0,
+        session_kind="race",
+        phase="racing",
+        lap_num=5,
+        laps_remaining=10,
+        rain_soon_pct=45,
+        weather_crossover="",
+        weather_now=0,
+        tyre_compound=16,
+        forecast_accuracy=0,
+        rain_onset_min=0,
+        rain_box_lap=-1,
+    )
+    snapshot = replace(base, **overrides)
+
+    assert _default_rule_when(settings, "weather_rain_soon", snapshot) is expected
+    if replacement_rule_parts is not None:
+        assert _default_rule_when(settings, "_".join(replacement_rule_parts), snapshot)
+
+
+@pytest.mark.parametrize(
+    (
+        "tyre_compound",
+        "field_wet_switches",
+        "rain_onset_min",
+        "weather_now",
+        "expected",
+        "replacement_parts",
+    ),
+    [
+        (7, 3, 0, 3, True, None),
+        (16, 3, 5, 0, False, ("rain_follow", "field")),
+    ],
+)
+def test_compound_crossover_yields_only_when_rain_follow_can_fire(
+    tyre_compound: int,
+    field_wet_switches: int,
+    rain_onset_min: int,
+    weather_now: int,
+    expected: bool,
+    replacement_parts: tuple[str, str] | None,
+) -> None:
+    settings = ConfigStore(isolated=True).current()
+    snapshot = Snapshot(
+        now=0.0,
+        session_kind="race",
+        phase="racing",
+        lap_num=5,
+        laps_remaining=10,
+        weather_now=weather_now,
+        tyre_compound=tyre_compound,
+        tyre_switch_to="",
+        crossover_laps=2.0,
+        field_wet_switches=field_wet_switches,
+        rain_onset_min=rain_onset_min,
+    )
+
+    assert _default_rule_when(settings, "compound_crossover_close", snapshot) is expected
+    if replacement_parts is not None:
+        assert _default_rule_when(settings, "_".join(replacement_parts), snapshot)
+
+
 @pytest.mark.replay
-def test_rain_heads_up_silent_when_forecast_has_rain_weather_type(tmp_path) -> None:
+def test_rain_heads_up_fires_when_no_dry_to_wet_rule_can_fire(tmp_path) -> None:
     spec = RaceSpec(
         laps=8,
         rain_lap=2,
@@ -158,8 +253,12 @@ def test_rain_heads_up_silent_when_forecast_has_rain_weather_type(tmp_path) -> N
     assert onset_snapshot is not None
     assert onset_snapshot.rain_onset_min > 0
 
+    settings = ConfigStore(isolated=True).current()
+    assert not _default_rule_when(settings, "rain_box_" + "now", onset_snapshot)
+    assert not _default_rule_when(settings, "rain_stay_" + "out", onset_snapshot)
+
     _, rows = replay_race(tmp_path, spec)
-    assert "weather_rain_soon" not in _fired(rows)
+    assert "weather_rain_soon" in _fired(rows)
 
 
 @pytest.mark.replay
