@@ -126,6 +126,7 @@ def plan_agreement(
     cover_gap_s: float = math.inf,
     stack_s: float = 0.0,
     damage_pace_ms: float = 0.0,
+    traffic_penalties_s: Sequence[float] = (),
 ) -> McResult | None:
     raw_th_sims = _f(th, "plan_mc_sims", 500)
     sims = 0 if raw_th_sims <= 0 else min(int(_f(mode, "plan_mc_sims", raw_th_sims)), 2000)
@@ -178,6 +179,12 @@ def plan_agreement(
         th=th,
     )
     deltas -= (laps_remaining - np.arange(candidate_count))[None, :] * damage_pace_ms / 1000.0
+    if traffic_penalties_s:
+        penalties = np.zeros(candidate_count)
+        penalties[: min(len(traffic_penalties_s), candidate_count)] = np.asarray(
+            traffic_penalties_s[:candidate_count], dtype=float
+        )
+        deltas += penalties[None, :]
     deltas[:, 0] += stack_s
     q = np.quantile(deltas, risk_quantile(th), axis=0)
     k = int(np.argmin(q))
