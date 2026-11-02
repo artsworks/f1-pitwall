@@ -1,0 +1,13 @@
+id: brazil3-penalty
+title: Five second corner-cutting penalty on lap 8
+status: target
+source:
+  session_uid: "0x91c601aa0fcd7754"
+  sha256: "cc98ef6da212c247e803590dde5c17d0deffa346654bbe66f7079acb287e3134"
+  where: "Brazil race, 12 Oct 2026, 18 laps, one stop on lap 5, no safety car. session_91c601aa0fcd7754_1791844243.f1bin.zst"
+mutations:
+  penalty: 8
+expect:
+  fire:
+    - {rule: penalty_corner_cut, laps: [8, 8]}
+why: The derived PENA event is a 5 s time penalty for corner cutting (infringement 7) on lap 8.

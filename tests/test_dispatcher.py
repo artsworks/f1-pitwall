@@ -978,7 +978,7 @@ def test_rule_reply_and_longer_response_window() -> None:
     )
     d.submit([cand], make_snapshot(0.0))
     d.drain(0.0)
-    d.on_press(Press("neg", 16.0), make_snapshot(16.0))  # past the default 8 s window
+    d.on_press(Press("neg", 16.0), make_snapshot(16.0))  # past the default 6 s window
     assert d.quiet_until is None
     assert [c.text for c in d.drain(16.0)] == ["Your call, push on"]
 

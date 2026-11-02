@@ -1,0 +1,15 @@
+id: imola-sc-last-laps
+title: Safety car on laps 14 and 15, after the only stop
+status: target
+source:
+  session_uid: "0xa0548b236a00d328"
+  sha256: "48c799db8107239412a5b7dfba2162f074aebd260f9f84f6d83495fc08897252"
+  where: "Imola race, 29 Oct 2026, 16 laps, one stop on lap 10. session_a0548b236a00d328_1793274908.f1bin.zst"
+mutations:
+  inject_sc: "14-15"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [14, 14]}
+  absent:
+    - {rule: [box_now, plan_sc_box], laps: [14, 16]}
+why: The car stopped on lap 10 and 2 laps remain. A second stop under the safety car loses more than it gains.

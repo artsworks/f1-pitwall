@@ -140,7 +140,9 @@ def optimise(
     # The fresh stint uses the current fit's base (compound priors differ in
     # absolute pace from one car to the next) with the fresh prior's slope.
     fresh_fit = _fresh_fit(fit, fresh)
-    cur_cliff = tyre_age + laps_of_pace
+    # Under one lap of pace the current lap is already past the cliff, so a lap
+    # on this set must not look free against the next lap's fresh-tyre gain.
+    cur_cliff = tyre_age + laps_of_pace - max(0.0, 1.0 - laps_of_pace)
 
     def total(k: int | None) -> float:
         return race_time_s(
@@ -208,7 +210,11 @@ def optimise(
                 + damage_pace_ms
                 - (fresh_fit.base_ms + fresh_fit.deg_ms_per_lap * j)
             ) / 1000.0
-        overcut_s = round(_f(th, "outlap_warmup_s", 0.8) - lost, 2)
+        # The rival is back on track behind us after its stop. We lose the same pit loss at our own
+        # stop, so we rejoin ahead of it only by what we gain on pace. Its warm-up out-lap falls
+        # inside the stay-out laps and ours falls after them, so the two warm-ups cancel. The gap
+        # we had to the rival before it pitted is the margin we must beat.
+        overcut_s = round(-lost - (gap_ahead_s if math.isfinite(gap_ahead_s) else 0.0), 2)
 
     cover_s = 0.0
     if (
