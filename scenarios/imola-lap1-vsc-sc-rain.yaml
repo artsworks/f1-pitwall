@@ -1,0 +1,18 @@
+id: imola-lap1-vsc-sc-rain
+title: VSC then safety car on laps 1 to 3, two stops, rain arrives on lap 8
+status: guard
+source:
+  session_uid: "0xf97d81f602d8116a"
+  sha256: "d384ea51d2921078c60b27cc0b38e1931acab5a6061aa23176aedba350bd93c7"
+  where: "Imola race, 16 laps, VSC on lap 1, SC on laps 1 to 3, stops on laps 2 and 9, light rain from lap 8. session_f97d81f602d8116a_1792672189.f1bin.zst"
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [1, 1]}
+    - {rule: sc_deployed, laps: [1, 2]}
+    - {rule: [sc_ending, sc_ending_tyres_cold], laps: [3, 3]}
+    - {rule: [weather_to_inter, rain_box_now, rain_follow_field], laps: [6, 9]}
+    - {rule: weather_to_wet, laps: [14, 16]}
+  absent:
+    - {rule: weather_to_wet, laps: [1, 9]}
+    - {rule: sc_deployed, laps: [4, 16]}
+why: The safety car starts on lap 1 and ends on lap 3. Light rain starts on lap 8 and the rain chance reaches 75 percent, so pitwall must prepare inters before the stop on lap 9. From lap 14 the forecast shows a storm within 10 minutes, so pitwall must point to full wets late in the race and not before the inter stop.

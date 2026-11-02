@@ -1,0 +1,17 @@
+id: silverstone-sc-double-stop
+title: Safety car on laps 8 to 10 right after the player's first stop
+status: guard
+source:
+  session_uid: "0x6d8f24db49275410"
+  sha256: "fc2619a040e2be3e668fa96cdcd84456b69fcce69353d61485f38e9a6299be4a"
+  where: "Silverstone race, 13 laps, stops on laps 8 and 9, SC on laps 8 to 10. session_6d8f24db49275410_1793276841.f1bin.zst"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [8, 9]}
+    - {rule: [sc_ending, sc_ending_tyres_cold], laps: [10, 10]}
+    - {rule: sc_restart, laps: [10, 11]}
+  absent:
+    - {rule: sc_deployed, laps: [1, 7]}
+    - {rule: sc_deployed, laps: [11, 13]}
+    - {rule: [box_now, plan_sc_box], laps: [12, 13]}
+why: The safety car comes out on lap 8 and goes in on lap 10, so pitwall must announce the deployment, the ending and the green flag. No stop pays in the last two laps.

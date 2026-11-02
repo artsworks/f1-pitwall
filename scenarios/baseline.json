@@ -1,28 +1,240 @@
 {
-  "created_at": "2026-10-30T13:07:46.109217+00:00",
+  "created_at": "2026-11-02T00:48:29.987855+00:00",
   "metrics": {
-    "by_rule": {},
-    "check_pass_rate": 0.9565217391304348,
-    "checks_passed": 22,
-    "checks_total": 23,
-    "guards_passed": 8,
-    "guards_total": 8,
+    "by_rule": {
+      "plan_target_lap": {
+        "good": 0,
+        "wrong": 1
+      }
+    },
+    "check_pass_rate": 0.9912280701754386,
+    "checks_passed": 113,
+    "checks_total": 114,
+    "guards_passed": 17,
+    "guards_total": 17,
     "laps_of_pace_mae": null,
-    "real_accuracy": null,
+    "real_accuracy": 0.0,
     "real_good": 0,
-    "real_graded": 0,
-    "score": 95.7,
-    "stop_cost_mae_s": null,
-    "targets_passed": 1,
-    "targets_total": 2
+    "real_graded": 1,
+    "score": 99.1,
+    "stop_cost_mae_s": 4.58,
+    "targets_passed": 20,
+    "targets_total": 21
   },
   "scenarios": {
+    "austin-vsc-real": {
+      "checks": [
+        {
+          "found": [
+            11
+          ],
+          "laps": [
+            11,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            14
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "sc_ending",
+            "sc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Austin race as recorded, virtual safety car on lap 11"
+    },
+    "austria-track-limits": {
+      "checks": [
+        {
+          "found": [
+            2
+          ],
+          "laps": [
+            2,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "track_limit_warning"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "track_limit_second_warning"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            4
+          ],
+          "laps": [
+            4,
+            4
+          ],
+          "ok": true,
+          "rules": [
+            "track_limit_last_warning"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_track_limits"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            4
+          ],
+          "laps": [
+            1,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "track_limit_last_warning"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            2,
+            3,
+            4
+          ],
+          "laps": [
+            5,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "track_limit_warning",
+            "track_limit_second_warning",
+            "track_limit_last_warning"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Track-limit warnings at one, two and three before a penalty"
+    },
+    "brazil-double-stack": {
+      "checks": [
+        {
+          "found": [
+            11
+          ],
+          "laps": [
+            11,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "double_stack"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            11
+          ],
+          "laps": [
+            1,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "double_stack"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Teammate stops ahead on the player's in-lap"
+    },
+    "brazil-dry-to-wet": {
+      "checks": [
+        {
+          "found": [
+            2
+          ],
+          "laps": [
+            2,
+            8
+          ],
+          "ok": true,
+          "rules": [
+            "rain_stay_out"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "rain_box_now"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Brazil race with a strong rain forecast"
+    },
     "brazil-lap1-damage": {
       "checks": [
         {
           "found": [
             1,
-            13
+            13,
+            17
           ],
           "laps": [
             1,
@@ -47,6 +259,22 @@
             "plan_target_lap"
           ],
           "type": "fire"
+        },
+        {
+          "found": [
+            1,
+            13,
+            17
+          ],
+          "laps": [
+            3,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "plan_invalid"
+          ],
+          "type": "absent"
         }
       ],
       "kind": "synthetic",
@@ -54,6 +282,143 @@
       "result": "pass",
       "status": "guard",
       "title": "Lap 1 wing damage and position loss"
+    },
+    "brazil-late-sc-no-stop": {
+      "checks": [
+        {
+          "found": [
+            14
+          ],
+          "laps": [
+            14,
+            15
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            16
+          ],
+          "laps": [
+            16,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending",
+            "sc_ending_tyres_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            17
+          ],
+          "laps": [
+            17,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            14,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "plan_sc_box"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            14
+          ],
+          "laps": [
+            1,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Safety car on laps 14 to 17 of 18, no second stop"
+    },
+    "brazil-lift-and-coast": {
+      "checks": [
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "engine_temp_high",
+            "brake_temp_high",
+            "pu_wear_high",
+            "fuel_short"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Brazil thermal and fuel false-alarm guard"
+    },
+    "brazil-overcut": {
+      "checks": [
+        {
+          "found": [],
+          "laps": [
+            6,
+            7
+          ],
+          "ok": false,
+          "rules": [
+            "overcut_stay_out"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            6,
+            7
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "cover_box"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "fail",
+      "status": "target",
+      "title": "Rival ahead pits on lap 6, stay out for the overcut"
     },
     "brazil-penalty": {
       "checks": [
@@ -77,6 +442,55 @@
       "result": "pass",
       "status": "guard",
       "title": "Five second corner-cutting penalty on lap 5"
+    },
+    "brazil-penalty-escalation": {
+      "checks": [
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_pit"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            11
+          ],
+          "laps": [
+            11,
+            12
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_served_drive_through"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "penalty"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Drive-through on lap 5, served at the lap 11 pit visit"
     },
     "brazil-q1-cool-push-check": {
       "checks": [
@@ -133,6 +547,7 @@
         },
         {
           "found": [
+            2,
             3
           ],
           "laps": [
@@ -158,6 +573,145 @@
       "status": "target",
       "title": "No push call when fuel runs out in qualifying"
     },
+    "brazil-race-end": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "formation_tyres_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "formation_brakes_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "formation_grid_slot"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "last_lap"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "finish_gained"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "race_cool_down"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "finish_classified"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            1,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "finish_gained",
+            "finish_classified",
+            "race_cool_down"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            2,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "formation_tyres_cold",
+            "formation_brakes_cold",
+            "formation_grid_slot"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Formation preparation, player finish and confirmed classification"
+    },
     "brazil-race-real": {
       "checks": [
         {
@@ -176,7 +730,7 @@
         },
         {
           "found": [
-            9
+            7
           ],
           "laps": [
             7,
@@ -211,6 +765,85 @@
       "result": "pass",
       "status": "guard",
       "title": "Brazil race as recorded"
+    },
+    "brazil-red-flag": {
+      "checks": [
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "red_flag"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "red_flag_tyres"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            6,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "red_restart_warmup"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            6,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "plan_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart",
+            "vsc_restart",
+            "red_flag_fresh_tyres"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Red flag on lap 5, standing restart on lap 6"
     },
     "brazil-sc-early": {
       "checks": [
@@ -308,12 +941,14 @@
           "type": "fire"
         },
         {
-          "found": [],
+          "found": [
+            10
+          ],
           "laps": [
             10,
             11
           ],
-          "ok": false,
+          "ok": true,
           "rules": [
             "plan_sc_box",
             "box_now"
@@ -323,9 +958,109 @@
       ],
       "kind": "synthetic",
       "reason": "",
-      "result": "fail",
+      "result": "pass",
       "status": "target",
       "title": "Safety car on laps 10 and 11, inside the window"
+    },
+    "brazil-sc-restart": {
+      "checks": [
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            8,
+            8
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            9
+          ],
+          "laps": [
+            9,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending",
+            "sc_ending_tyres_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            10
+          ],
+          "laps": [
+            10,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed",
+            "vsc_ending",
+            "vsc_ending_tyres_cold",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Safety car on laps 8 and 9, restart on lap 10"
+    },
+    "brazil-team-orders": {
+      "checks": [
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "teammate_strategy_split"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            14
+          ],
+          "ok": true,
+          "rules": [
+            "teammate_hold"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Teammate one-stop a lap apart, no team-order calls"
     },
     "brazil-vsc-early": {
       "checks": [
@@ -378,6 +1113,30 @@
       "status": "guard",
       "title": "Virtual safety car on laps 6 and 7"
     },
+    "brazil-weather-crossover": {
+      "checks": [
+        {
+          "found": [],
+          "laps": [
+            1,
+            17
+          ],
+          "ok": true,
+          "rules": [
+            "weather_rain_soon",
+            "track_wetter",
+            "track_drier",
+            "compound_crossover_close"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Dry race: no rain heads-up, track-trend or crossover calls"
+    },
     "brazil-worn-tyres": {
       "checks": [
         {
@@ -398,8 +1157,7 @@
         },
         {
           "found": [
-            8,
-            16
+            8
           ],
           "laps": [
             7,
@@ -440,6 +1198,801 @@
       "result": "pass",
       "status": "guard",
       "title": "No second stop with two laps left"
+    },
+    "brazil2-sc-lap-1": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "plan_sc_box"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Safety car on laps 1 and 2, before any stop makes sense"
+    },
+    "brazil3-penalty": {
+      "checks": [
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            8,
+            8
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_corner_cut"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Five second corner-cutting penalty on lap 8"
+    },
+    "brazil3-race-real": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "plan_announce"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "vsc_deployed",
+            "sc_ending",
+            "vsc_ending",
+            "sc_restart",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Brazil race 12 Oct as recorded, one stop on lap 5"
+    },
+    "brazil3-sc-early": {
+      "checks": [
+        {
+          "found": [
+            2
+          ],
+          "laps": [
+            2,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            4
+          ],
+          "laps": [
+            4,
+            4
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            5
+          ],
+          "laps": [
+            5,
+            5
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed",
+            "vsc_ending",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Safety car on laps 2 to 4, before the recorded stop"
+    },
+    "brazil3-vsc-early": {
+      "checks": [
+        {
+          "found": [
+            2
+          ],
+          "laps": [
+            2,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "sc_ending",
+            "sc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Virtual safety car on laps 2 and 3"
+    },
+    "imola-lap1-vsc-sc-rain": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            2
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            3
+          ],
+          "laps": [
+            3,
+            3
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending",
+            "sc_ending_tyres_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1,
+            8
+          ],
+          "laps": [
+            6,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "weather_to_inter",
+            "rain_box_now",
+            "rain_follow_field"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            15
+          ],
+          "laps": [
+            14,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "weather_to_wet"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            15
+          ],
+          "laps": [
+            1,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "weather_to_wet"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            4,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "VSC then safety car on laps 1 to 3, two stops, rain arrives on lap 8"
+    },
+    "imola-late-penalty": {
+      "checks": [
+        {
+          "found": [
+            16
+          ],
+          "laps": [
+            16,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_corner_cut"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            16
+          ],
+          "laps": [
+            16,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_cost"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            16
+          ],
+          "laps": [
+            16,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "penalty_covered"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            16
+          ],
+          "laps": [
+            16,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "finish_penalty"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Five second corner-cutting penalty on the last lap"
+    },
+    "imola-race-real": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "plan_announce"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            6,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "plan_window_open"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            9
+          ],
+          "laps": [
+            6,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "plan_target_lap",
+            "box_now",
+            "box_in_n"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "vsc_deployed",
+            "sc_ending",
+            "vsc_ending",
+            "sc_restart",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Imola race as recorded, one stop on lap 10, no safety car"
+    },
+    "imola-sc-last-laps": {
+      "checks": [
+        {
+          "found": [
+            14
+          ],
+          "laps": [
+            14,
+            14
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            14,
+            16
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "plan_sc_box"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Safety car on laps 14 and 15, after the only stop"
+    },
+    "imola-wear-double": {
+      "checks": [
+        {
+          "found": [
+            6
+          ],
+          "laps": [
+            5,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "tyre_life",
+            "box_now",
+            "box_in_n"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Tyres wear twice as fast, stop before lap 10"
+    },
+    "mexico-undercut": {
+      "checks": [
+        {
+          "found": [
+            7
+          ],
+          "laps": [
+            5,
+            8
+          ],
+          "ok": true,
+          "rules": [
+            "box_now"
+          ],
+          "type": "fire"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Worn tyres with the car ahead inside 3 seconds, undercut on offer"
+    },
+    "mexico-vsc-real": {
+      "checks": [
+        {
+          "found": [
+            12
+          ],
+          "laps": [
+            12,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "sc_ending",
+            "sc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Mexico race as recorded, virtual safety car on lap 12"
+    },
+    "mexico2-vsc-real": {
+      "checks": [
+        {
+          "found": [
+            1,
+            12
+          ],
+          "laps": [
+            12,
+            12
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            1,
+            13
+          ],
+          "laps": [
+            13,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_ending"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "sc_ending",
+            "sc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Mexico race 22 Oct as recorded, virtual safety car on lap 12"
+    },
+    "silverstone-sc-double-stop": {
+      "checks": [
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            8,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            10
+          ],
+          "laps": [
+            10,
+            10
+          ],
+          "ok": true,
+          "rules": [
+            "sc_ending",
+            "sc_ending_tyres_cold"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            10
+          ],
+          "laps": [
+            10,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "sc_restart"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            1,
+            7
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            8
+          ],
+          "laps": [
+            11,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [
+            8,
+            9
+          ],
+          "laps": [
+            12,
+            13
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "plan_sc_box"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Safety car on laps 8 to 10 right after the player's first stop"
+    },
+    "spa-wet-start-drying": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "vsc_deployed"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            4,
+            5,
+            6
+          ],
+          "laps": [
+            6,
+            9
+          ],
+          "ok": true,
+          "rules": [
+            "weather_to_inter"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "rain_box_now",
+            "weather_to_wet"
+          ],
+          "type": "absent"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            11
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "pass",
+      "status": "guard",
+      "title": "Wet start with a lap 1 VSC, light rain from lap 6, switch to inters on lap 9"
     }
   },
   "version": 1
