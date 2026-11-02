@@ -481,6 +481,7 @@ class Snapshot:
     grid_position: int = 0
     positions_gained: int = 0  # grid slot minus current position (+ = gained)
     sc_ending: bool = False  # SC in this lap / VSC ending (SCAR event)
+    sc_escalated: bool = False
     neutral_ended_s: float = math.inf  # since the last SC/VSC ended
     neutral_ended_kind: str = ""  # 'sc' | 'vsc'
     puncture_corner: str = ""  # e.g. "rear left"; tyre damage far above wear
@@ -3532,6 +3533,7 @@ class SessionState:
                 else math.inf
             ),
             sc_ending=self.sc_ending and self.race_phase in ("sc", "vsc"),
+            sc_escalated=self._race.escalated and self.race_phase == "sc",
             **self._fastest_lap_view(st, field_best),
             neutral_ended_s=max(0.0, (self._last_session_time or 0.0) - self._race.neutral_end_t),
             neutral_ended_kind=self._race.neutral_end_kind,
@@ -3717,11 +3719,22 @@ class SessionState:
         if 0 <= self._player_idx < len(cars):
             owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
             stop_pit_s = pit_s
-            if self.safety_car_status != 0:
+            if self.race_phase == "vsc" and self.sc_ending:
+                stop_pit_s = (
+                    model.green_pit_loss_s
+                    if model.green_pit_loss_s > 0
+                    else default_pit_loss_s(self._thresholds, 0)
+                )
+            elif self.safety_car_status != 0:
                 stop_pit_s = (
                     model.sc_pit_loss_s
                     if model.sc_pit_loss_s > 0
-                    else self._th("pit_loss_sc_default_s", 8.0)
+                    else self._th(
+                        "pit_loss_vsc_default_s"
+                        if self.safety_car_status == 2
+                        else "pit_loss_sc_default_s",
+                        12.0 if self.safety_car_status == 2 else 8.0,
+                    )
                 )
             fresh = stop_adjusted_gaps(
                 cars, self._player_idx, self.track_length_m, ref_speed, owed, stop_pit_s

@@ -1707,7 +1707,12 @@ class Engine:
                 else []
             )
             sc = current_pit_loss(
-                self.db, state.session_uid, track_id, 1, overlay, settings.thresholds
+                self.db,
+                state.session_uid,
+                track_id,
+                2 if state.safety_car_status == 2 else 1,
+                overlay,
+                settings.thresholds,
             )
             self._sc_pit_loss_s = sc.value / 1000.0
             self._compound_priors.clear()
@@ -1847,6 +1852,7 @@ class Engine:
                     self.pit_loss_prior.source if self.pit_loss_prior is not None else ""
                 ),
                 sc_pit_loss_s=self._sc_pit_loss_s,
+                green_pit_loss_s=self._green_pit_loss_s,
                 fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
                 fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
                 run_fuel_per_lap_kg=(
@@ -1949,6 +1955,12 @@ class Engine:
         mode = self.mode()
         used = frozenset(c for c in self._used_compounds | {snap.tyre_visual} if c)
         _, damage_pace_ms, wing_loss_s = self._plan_damage(snap, fit)
+        vsc_ending = snap.race_phase == "vsc" and snap.sc_ending
+        pit_loss_s = snap.pit_loss_s + wing_loss_s
+        sc_status = snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0
+        if vsc_ending:
+            pit_loss_s = (self._green_pit_loss_s or snap.pit_loss_s) + wing_loss_s
+            sc_status = 0
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -1957,11 +1969,11 @@ class Engine:
             fit=fit,
             fresh=self._fresh_prior,
             laps_of_pace=snap.laps_of_pace,
-            pit_loss_s=snap.pit_loss_s + wing_loss_s,
+            pit_loss_s=pit_loss_s,
             damage_pace_ms=damage_pace_ms,
             pit_loss_source=snap.pit_loss_source,
             green_pit_loss_s=self._green_pit_loss_s,
-            sc_status=snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0,
+            sc_status=sc_status,
             rival_ahead=ahead,
             rival_behind=behind,
             gap_ahead_s=snap.gap_ahead_s,
@@ -2146,13 +2158,13 @@ class Engine:
             self._plan_key = None
         if phase in ("racing", "sc", "vsc") and snap.tyre_visual and snap.laps_remaining > 0:
             self._used_compounds.add(snap.tyre_visual)
-            neutral = phase in ("sc", "vsc")
+            neutral = phase in ("sc", "vsc") and not (phase == "vsc" and snap.sc_ending)
             cheap = pit.plan == "cheap_stop"
             invalidate, damage_pace_ms, wing_loss_s = self._plan_damage(snap, cur)
             key = (
                 snap.lap_num,
                 self._stops_done,
-                neutral,
+                phase if neutral else "",
                 cheap,
                 snap.tyre_visual,
                 self.mindset,

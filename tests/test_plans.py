@@ -373,6 +373,23 @@ def test_reactive_plan_c_boxes_now_at_neutralised_loss() -> None:
     assert c.race_time_s < green.race_time_s
 
 
+def test_tracker_reprices_stored_plan_c_when_neutralised_loss_changes() -> None:
+    inp = inputs(lap_num=20, laps_remaining=31, tyre_age=19, sc_loss_s=12.0)
+    tracker = PlanTracker()
+    before = tracker.update(inp, TH, stops_done=0, neutralised=True, cheap_stop=True)
+    assert before.active == "C"
+    c_before = next(plan for plan in before.plans if plan.id == "C")
+
+    updated_inp = dataclasses.replace(inp, sc_loss_s=8.0)
+    after = tracker.update(updated_inp, TH, stops_done=0, neutralised=True, cheap_stop=True)
+    c_after = next(plan for plan in after.plans if plan.id == "C")
+    green = evaluate(updated_inp, tracker.seqs["C"][1], TH, stop_now=True)
+
+    assert c_before.race_time_s - c_after.race_time_s == pytest.approx(4.0, abs=0.01)
+    assert green is not None
+    assert c_after.race_time_s < green.race_time_s
+
+
 def test_tracker_sets_a_and_b_and_announces() -> None:
     tr = PlanTracker()
     st = tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)

@@ -129,6 +129,20 @@ def _run(
     return engine, engine.state, db
 
 
+def test_sc_pit_loss_uses_vsc_default_for_vsc_status() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    engine.state.session_uid = 1
+    engine.state.track_id = 7
+
+    for status, expected in ((2, 12.0), (1, 8.0), (0, 8.0)):
+        engine.state.safety_car_status = status
+        engine._update_model()
+        assert engine._sc_pit_loss_s == expected
+
+    db.close()
+
+
 def _run_synth_spec(tmp_path: Path, spec: RaceSpec) -> tuple[object, Database]:
     rec = write_packet_stream(
         tmp_path / "race-synth.f1bin",

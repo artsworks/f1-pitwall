@@ -1,0 +1,20 @@
+id: brazil-vsc-to-sc
+title: VSC on lap 10 turns into a safety car on laps 11 and 12
+status: target
+source:
+  session_uid: "0x2188302d49bba3bb"
+  sha256: "cd3d036fdd5fbf9ee19a2325f3e6d16a0c92421b8ec418a89daaf2cd5091c2b0"
+  where: "Brazil race, 6 Oct 2026, 17 laps, one stop on lap 11. session_2188302d49bba3bb_1791291787.f1bin.zst"
+mutations:
+  inject_sc: "10-12"
+  vsc: true
+  escalate_sc: 11
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [10, 10]}
+    - {rule: sc_deployed, laps: [11, 11]}
+    - {rule: sc_escalated_box, laps: [11, 11]}
+    - {rule: sc_ending, laps: [12, 12]}
+  absent:
+    - {rule: vsc_ending, laps: [1, 17]}
+why: The VSC becomes a full safety car on lap 11, so pitwall should call the cheaper stop.

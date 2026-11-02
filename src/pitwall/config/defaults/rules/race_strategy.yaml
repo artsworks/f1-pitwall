@@ -290,7 +290,7 @@ rules:
     clear_when: "pit_plan != 'box_in_n'"
     still_true: "pit_plan == 'box_in_n'"
     cooldown_s: 60
-    cooldown_group: pit
+    cooldown_group: pit_forecast
     requires: [lap_data, car_status]
     say:
       - "Plan is box lap {pit_plan_lap}. Window {pit_window_start} to {pit_window_end}"

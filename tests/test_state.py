@@ -11,6 +11,7 @@ from pitwall.protocol.header import PacketId
 from pitwall.protocol.layouts import Corners
 from pitwall.state.ema import Ema
 from pitwall.state.lap import LapAccumulator
+from pitwall.state.model_view import ModelView
 from pitwall.state.session import (
     CarLap,
     Damage,
@@ -155,6 +156,59 @@ def _state() -> tuple[Ingest, SessionState]:
 
 def _send(ingest: Ingest, pkt: bytes, t: float) -> None:
     ingest.on_datagram(pkt, t)
+
+
+@pytest.mark.parametrize(
+    ("race_phase", "sc_ending", "safety_car_status", "green_pit_loss_s", "expected_loss"),
+    [
+        ("vsc", True, 2, 22.0, 22.0),
+        ("vsc", False, 2, 22.0, 12.0),
+        ("sc", True, 1, 22.0, 12.0),
+        ("vsc", True, 2, 0.0, 22.0),
+    ],
+)
+def test_stop_adjusted_gaps_use_green_loss_when_vsc_ending(
+    monkeypatch,
+    race_phase: str,
+    sc_ending: bool,
+    safety_car_status: int,
+    green_pit_loss_s: float,
+    expected_loss: float,
+) -> None:
+    from pitwall.state import session as session_module
+
+    losses: list[float] = []
+    monkeypatch.setattr(
+        session_module,
+        "stop_adjusted_gaps",
+        lambda cars, player_idx, track_length_m, ref_speed, owed, stop_pit_s: (
+            losses.append(stop_pit_s) or {}
+        ),
+    )
+    state = SessionState()
+    state.session_type = 15
+    state.race_phase = race_phase
+    state.sc_ending = sc_ending
+    state.safety_car_status = safety_car_status
+    state._player_idx = 0
+    state.position = 2
+    state.lap_distance = 3000.0
+    state.track_length_m = 5000.0
+    state.cars_lap = (
+        CarLap(
+            lap_distance=3000.0,
+            total_distance=100_000.0,
+            car_position=2,
+            result_status=2,
+        ),
+    )
+    state.set_model(
+        ModelView(pit_loss_s=12.0, sc_pit_loss_s=12.0, green_pit_loss_s=green_pit_loss_s)
+    )
+
+    state.snapshot(0.0)
+
+    assert losses == [expected_loss]
 
 
 def _lap_tick(
