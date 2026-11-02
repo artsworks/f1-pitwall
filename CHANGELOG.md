@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.51.1 (2026-11-02)
+
+### Bug Fixes
+
+- **input**: Raise the response window to 6 s
+  ([#170](https://github.com/artsworks/f1-pitwall/pull/170),
+  [`e6099a7`](https://github.com/artsworks/f1-pitwall/commit/e6099a77d7a41dc4c62aa46ce337aa4dbbc435e7))
+
+
 ## v0.51.0 (2026-11-02)
 
 ### Bug Fixes
