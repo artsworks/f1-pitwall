@@ -226,7 +226,12 @@ def test_fuel_save_counts_lap_done_and_never_zero():
 
 @pytest.mark.parametrize(
     "source,margin,fires",
-    [("mfd", -0.25, False), ("default", -0.25, False), ("session", -0.25, True), ("mfd", -0.8, True)],
+    [
+        ("mfd", -0.25, False),
+        ("default", -0.25, False),
+        ("session", -0.25, True),
+        ("mfd", -0.8, True),
+    ],
 )
 def test_fuel_short_needs_measured_burn_for_small_deficit(source, margin, fires):
     """The game's own estimate read 0.2 laps short on lap 1 of a race that had 1.5 spare."""
