@@ -1,36 +1,29 @@
 # Status
 
-What f1-pitwall does today on `main`, what comes next, and the known gaps. The
-[roadmap](05-roadmap.md) has the forward plan.
-
-_Last updated: v0.34.0, 24 Oct 2026._
+What f1-pitwall covers today on `main`, what comes next, and the known gaps. The
+[changelog](../CHANGELOG.md) lists every release, and the [roadmap](05-roadmap.md) has the
+forward plan.
 
 ## What works today
 
+This list names areas, not individual calls. Each area grows with every release, so
+check the changelog for what a given version added.
+
 - **Install and update:** one-line installers for Windows, macOS and Linux, and
   `pitwall update` ([install guide](https://pitwall.arthurku.com/install.html)).
-- **Qualifying:** traffic-aware release advice, abort guidance, a push/cool/box/push-now
-  run plan, fuel and battery reminders, and tyre-pressure advice.
-- **Race strategy:** Plans A/B/C with Monte Carlo confidence, pit windows, undercut and
-  overcut calls, cover and defend against the car behind, safety-car and VSC stop advice,
-  wet-weather pit calls, and plan updates after a stop.
-- **Battles:** gap and tyre calls for the cars ahead and behind, the true rival across pit
-  cycles, and a let-by call when defending is hopeless.
-- **Mindset:** balanced and aggressive mindsets change plans and rules, switchable from the
-  dashboard.
-- **Tyres, fuel and ERS:** tyre life is the minimum of worst-corner wear life and
-  pace-cliff life. Fuel and ERS calls use live budgets.
-- **Setup advice:** tyre-pressure and setup recommendations from YAML rule tables, shown on
-  the garage screen (`22-setup-advisor.md`).
-- **Driver rating:** a learned per-track and global score that scales pit advice
-  (`26-driver-rating.md`).
-- **Learning:** session grading, `pitwall calibrate`, `pitwall evaluate`, `pitwall propose`,
-  and `pitwall stats --learned`. Upkeep runs on each `pitwall start` and refits track
-  priors and rule cooldowns.
-- **Debrief:** standalone HTML export and an editable `/debrief/<uid>` page.
-- **Dashboard:** second-monitor screen with rival tyres and track-limit warning counts.
-- **Voice and phone:** Piper speech with a phrase cache, OmniVoice as an option, menu
-  voice requests and the `V` listen key, and a phone radio PWA.
+- **Qualifying:** release and traffic advice, abort guidance, a run plan, and fuel, battery
+  and tyre-pressure advice.
+- **Race strategy:** Plans A/B/C, pit windows, undercut and overcut calls, and stop advice
+  for safety cars, VSCs, red flags and weather.
+- **Race events:** battles, penalties, track limits, formation lap and race end.
+- **Car management:** tyres, fuel, ERS, damage and thermal limits, with setup advice
+  (`22-setup-advisor.md`).
+- **Mindset and driver rating:** balanced and aggressive mindsets, and a learned driver
+  score (`26-driver-rating.md`).
+- **Learning and debrief:** session grading, `pitwall calibrate`, `pitwall evaluate`,
+  `pitwall propose`, `pitwall stats --learned`, and an HTML debrief.
+- **Dashboard, voice and phone:** a second-monitor dashboard, Piper or OmniVoice speech,
+  menu voice requests, and a phone radio PWA.
 - **Recovery:** the watchdog restarts a failed or stalled engine while the recorder continues.
 
 ## Next
@@ -65,7 +58,8 @@ _Last updated: v0.34.0, 24 Oct 2026._
 - The later 25% race fixes were reverted at the owner's request. Mixed-weather
   calls, stop summaries and early-race pace need a separate follow-up. Drive-through
   tyre calls are back with a test, see [penalty escalation](research/penalty-escalation.md).
-  The numbered menu remains removed.
+  The numbered terminal menu for a bare `pitwall` command remains removed. The driver
+  menu on the wheel and dashboard is unaffected.
 - CI runs lint, formatting and type checks on Linux. Pull requests also run the fast
   tests (`pytest -m "not slow"`) and the replay determinism check. Pushes to `main` run
   the full suite. Tests that need real recordings or Windows still skip in CI.

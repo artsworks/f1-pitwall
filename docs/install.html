@@ -41,14 +41,26 @@ h1 span{color:var(--accent)}
 code{background:var(--code);padding:1px 5px;border-radius:4px;font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
 .pick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0 8px}
 .pick a{display:block;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel);color:var(--fg);text-decoration:none}
-.pick a:hover{border-color:var(--accent)}
-.pick em{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-style:normal;font-weight:700;margin-bottom:6px}
+.pick em{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;color:#fff;font-style:normal;font-weight:700;margin-bottom:6px}
 .pick b{display:block;font-size:17px}
 .pick span{font-size:14px;color:var(--muted)}
 .pick svg{display:block;width:100%;height:auto;margin-top:10px}
-section.path{margin-top:44px;padding-top:12px;border-top:3px solid var(--accent)}
+#windows,.pick a:nth-child(1){--p:#0b62c4}
+#mac,.pick a:nth-child(2){--p:#7e3ff2}
+#linux,.pick a:nth-child(3){--p:#0f766e}
+@media (prefers-color-scheme:dark){#windows,.pick a:nth-child(1){--p:#6cb2ff}#mac,.pick a:nth-child(2){--p:#b794f6}#linux,.pick a:nth-child(3){--p:#2dd4bf}.pick em{color:#111}}
+.pick a{border-top:4px solid var(--p)}
+.pick a:hover{border-color:var(--p)}
+.pick em{background:var(--p)}
+section.path{margin-top:44px;padding:12px 0 0 18px;border-top:3px solid var(--p);border-left:6px solid var(--p)}
 section.path>h2{font-size:28px;margin:6px 0 4px}
-section.path>h2 small{display:block;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+section.path>h2 small{display:block;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--p)}
+section.path ol.steps>li::before{border-color:var(--p);color:var(--p)}
+section.path .variant{border-color:var(--p)}
+body.focus ol.steps>li{opacity:.55;transition:opacity .25s ease}
+body.focus ol.steps>li.cur,body.focus ol.steps>li:focus-within{opacity:1}
+@media (prefers-reduced-motion:reduce){body.focus ol.steps>li{transition:none}}
+@media print{body.focus ol.steps>li{opacity:1}}
 section.path>.lede{font-size:16px}
 .diagram{max-width:760px;margin:12px 0 4px}
 .diagram svg{display:block;width:100%;height:auto}
@@ -342,6 +354,12 @@ document.querySelectorAll(".cmd button").forEach(b => b.addEventListener("click"
     setTimeout(() => { b.textContent = "Copy"; }, 1500);
   });
 }));
+if ("IntersectionObserver" in window) {
+  const steps = document.querySelectorAll("ol.steps>li");
+  document.body.classList.add("focus");
+  const io = new IntersectionObserver(es => es.forEach(e => e.target.classList.toggle("cur", e.isIntersecting)), { rootMargin: "-40% 0px -40% 0px" });
+  steps.forEach(s => io.observe(s));
+}
 </script>
 </body>
 </html>
