@@ -140,7 +140,9 @@ def optimise(
     # The fresh stint uses the current fit's base (compound priors differ in
     # absolute pace from one car to the next) with the fresh prior's slope.
     fresh_fit = _fresh_fit(fit, fresh)
-    cur_cliff = tyre_age + laps_of_pace
+    # Under one lap of pace the current lap is already past the cliff, so a lap
+    # on this set must not look free against the next lap's fresh-tyre gain.
+    cur_cliff = tyre_age + laps_of_pace - max(0.0, 1.0 - laps_of_pace)
 
     def total(k: int | None) -> float:
         return race_time_s(

@@ -85,7 +85,7 @@ def test_teammate_stack_penalises_only_a_stop_this_lap() -> None:
     kwargs = dict(
         tyre_age=20,
         laps_of_pace=0.0,
-        fit=fit(280),
+        fit=fit(220),
         fresh=fit(80),
     )
     base = run(**kwargs)
@@ -693,3 +693,18 @@ def test_plan_pick_gain_selects_higher_gain_plan_under_aggressive() -> None:
     assert bal.plan == "cover"
     assert aggr.plan == "undercut"
     assert aggr.gain_s > bal.gain_s
+
+
+def test_tyres_past_the_cliff_box_now_even_on_a_flat_fit() -> None:
+    """With no laps of pace left the current lap is already past the cliff."""
+    p = run(
+        lap_num=7,
+        laps_remaining=12,
+        tyre_age=6,
+        laps_of_pace=0.0,
+        fit=fit(80),
+        fresh=fit(80),
+        pit_loss_s=22.0,
+    )
+    assert p.plan == "box_now"
+    assert p.reason == "Tyres are done"
