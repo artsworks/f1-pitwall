@@ -446,10 +446,10 @@ def test_overcut_after_rival_pits() -> None:
     rival = RivalView(1, "NORRIS", 90_000, True)
     p = run(
         rival_ahead=rival,
-        gap_ahead_s=20.0,
+        gap_ahead_s=0.5,
         laps_of_pace=8.0,
         fit=fit(10),
-        fresh=fit(10),
+        fresh=fit(1000),
         tyre_age=2,
         mode=AGGRESSIVE,
     )
@@ -457,10 +457,10 @@ def test_overcut_after_rival_pits() -> None:
     assert p.plan == "overcut"
     balanced = run(
         rival_ahead=rival,
-        gap_ahead_s=20.0,
+        gap_ahead_s=0.5,
         laps_of_pace=8.0,
         fit=fit(10),
-        fresh=fit(10),
+        fresh=fit(1000),
         tyre_age=2,
     )
     assert balanced.plan != "overcut"
@@ -557,10 +557,10 @@ def test_overcut_requires_more_than_its_delay(laps_remaining: int) -> None:
         laps_remaining=laps_remaining,
         th={**TH, "overcut_laps": 4},
         rival_ahead=RivalView(1, "NORRIS", 90_000, True),
-        gap_ahead_s=20.0,
+        gap_ahead_s=0.5,
         laps_of_pace=3.0,
         fit=fit(10),
-        fresh=fit(10),
+        fresh=fit(3000),
         tyre_age=2,
         mode={**AGGRESSIVE, "pit_gain_min_s": 0.0},
     )
@@ -708,3 +708,17 @@ def test_tyres_past_the_cliff_box_now_even_on_a_flat_fit() -> None:
     )
     assert p.plan == "box_now"
     assert p.reason == "Tyres are done"
+
+
+def test_overcut_margin_is_pace_gain_minus_gap() -> None:
+    rival = RivalView(1, "NORRIS", 90_000, True)
+    slow_fresh = fit(3000)  # the fresh set degrades fast
+    kw = dict(rival_ahead=rival, laps_of_pace=8.0, fit=fit(10), tyre_age=2, mode=AGGRESSIVE)
+    # Over two laps the old tyres gain 2.95 s on the fresh set and start 0.5 s behind.
+    ahead = run(**kw, fresh=slow_fresh, gap_ahead_s=0.5)  # type: ignore[arg-type]
+    assert ahead.overcut_s == pytest.approx(2.95 - 0.5, abs=0.1)
+    assert ahead.plan == "overcut"
+    # Same pace as fresh tyres: nothing to gain, the gap is the loss.
+    level = run(**kw, fresh=fit(10), gap_ahead_s=0.5)  # type: ignore[arg-type]
+    assert level.overcut_s < 0
+    assert level.plan != "overcut"
