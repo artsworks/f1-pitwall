@@ -1,0 +1,13 @@
+id: mexico-vsc-real
+title: Mexico race as recorded, virtual safety car on lap 12
+status: target
+source:
+  session_uid: "0xc356d841fd4d0af7"
+  sha256: "418384404dedbfb2df8b57d0f8ca7f612949f6ed736b8d6002ab63b18f233e5b"
+  where: "Mexico race, 18 laps, one stop on lap 8, real VSC on lap 12. session_c356d841fd4d0af7_1793270788.f1bin.zst"
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [12, 13]}
+  absent:
+    - {rule: [sc_deployed, sc_ending, sc_restart], laps: [1, 18]}
+why: The recording holds a real VSC. It must give VSC calls and never full safety car calls.

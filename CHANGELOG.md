@@ -10,6 +10,99 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.51.0 (2026-11-02)
+
+### Bug Fixes
+
+- **derive**: Red flag keeps safety car status after the restart
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **rules**: Fuel_short needs a larger deficit until burn is measured
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **rules**: Fuel_short starts on lap 3 ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **rules**: Plan_window_open no longer shares the plan cooldown
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **rules**: Red flag tyre call no longer claims the stops are done
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **strategy**: Call the stop when tyres have under one lap of pace left
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **strategy**: Overcut margin is pace gain minus the gap
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+### Chores
+
+- **bench**: Add 16 real scenarios and update the baseline
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+- **bench**: Add spa-wear-double and zandvoort-race-real targets
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+### Code Style
+
+- **tests**: Ruff format ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+### Features
+
+- Red flag tyre change, restart warmup and plan rebuild calls
+  ([#161](https://github.com/artsworks/f1-pitwall/pull/161),
+  [`e873790`](https://github.com/artsworks/f1-pitwall/commit/e873790d87a33888754c0a94f071ae06e7a6574e))
+
+
+## v0.50.0 (2026-11-01)
+
+### Bug Fixes
+
+- **rules**: No weather radar call over the dry-to-wet rain calls
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **rules**: Weather radar guards yield only to rain calls that can fire
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **state**: Drop stale field lap deltas ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **state**: No rain heads-up after the flag
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+### Documentation
+
+- **research**: Record owner weather decisions
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **research**: Weather radar and crossover findings; prune field lap deltas
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+### Features
+
+- **rules**: Softer forecast wording when forecast accuracy is approximate
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+- **rules**: Weather radar heads-up, track wetter/drier and crossover projection calls
+  ([#167](https://github.com/artsworks/f1-pitwall/pull/167),
+  [`5ddef94`](https://github.com/artsworks/f1-pitwall/commit/5ddef940e928fbb6b80120973a644c127c5abf22))
+
+
 ## v0.49.0 (2026-10-31)
 
 ### Bug Fixes

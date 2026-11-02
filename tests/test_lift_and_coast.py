@@ -222,3 +222,16 @@ def test_fuel_save_counts_lap_done_and_never_zero():
     tiny = replace(half, fuel_margin_laps=-0.01, laps_remaining=10, lap_distance=0.0)
     assert tiny.fuel_save_kg_per_lap == pytest.approx(0.1)
     assert replace(half, fuel_margin_laps=0.2).fuel_save_kg_per_lap == 0.0
+
+
+@pytest.mark.parametrize("lap,fires", [(1, False), (2, False), (3, True)])
+def test_fuel_short_is_silent_on_laps_one_and_two(lap, fires):
+    """The game's lap-1 burn estimate is unreliable, so the call starts on lap 3."""
+    snapshot = _replay_snapshot(
+        {},
+        {},
+        lap=lap,
+        model=ModelView(fuel_margin_laps=-0.8, fuel_per_lap_kg=1.04),
+    )
+    call = _call(_rules("fuel_short"), snapshot, "fuel_short")
+    assert (call is not None) is fires

@@ -1142,3 +1142,11 @@ def test_aggressive_suppresses_battle_patience_and_manage_and_prioritises_attack
     )
     cands = {c.rule.id: c for c in aggr_engine.evaluate(fight_snap).candidates}
     assert cands["battle_attack"].priority < cands["tyre_overheat"].priority
+
+
+def test_plan_window_open_is_not_blocked_by_plan_status() -> None:
+    """A plan_status call a lap before the window opens must not eat the window-open call."""
+    from pitwall.config.loader import ConfigStore
+
+    defs = {r.id: r for r in ConfigStore().current().rules}
+    assert defs["plan_window_open"].cooldown_group != defs["plan_status"].cooldown_group

@@ -1,0 +1,16 @@
+id: brazil-late-sc-no-stop
+title: Safety car on laps 14 to 17 of 18, no second stop
+status: guard
+source:
+  session_uid: "0x26e3212c1d4e442d"
+  sha256: "7cf8b03a1a5642dda3f4613a0e7c49ee6c338b849ad74992286150971ceb1b48"
+  where: "Brazil race, 18 laps, one stop on lap 8, SC on laps 14 to 17. session_26e3212c1d4e442d_1792065409.f1bin.zst"
+expect:
+  fire:
+    - {rule: sc_deployed, laps: [14, 15]}
+    - {rule: [sc_ending, sc_ending_tyres_cold], laps: [16, 17]}
+    - {rule: sc_restart, laps: [17, 18]}
+  absent:
+    - {rule: [box_now, plan_sc_box], laps: [14, 18]}
+    - {rule: sc_deployed, laps: [1, 13]}
+why: The car has the required stop done and its hard tyres are 6 laps old when the safety car comes out. Only 4 laps remain, so a stop loses places and pitwall must not call one.

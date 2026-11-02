@@ -35,9 +35,10 @@ expect:
 why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 ```
 
-- `mutations` accepts `inject_sc`, `vsc`, `escalate_sc`, `wear_scale`, `penalty`, `drive_through`, `damage`, `teammate_pit`, `inject_rival_pit` and `weather` keys. The bench applies them during replay.
+- `mutations` accepts `inject_sc`, `vsc`, `escalate_sc`, `wear_scale`, `penalty`, `drive_through`, `damage`, `teammate_pit`, `inject_rival_pit`, `weather` and `red_flag` keys. The bench applies them during replay.
 - `escalate_sc: LAP` changes a VSC to a full safety car on that lap. It requires `vsc: true` and a lap inside the `inject_sc` window.
 - `weather` takes an optional `accuracy` and an ordered `timeline` of `{at_min, weather, rain_pct}` keyframes. Keyframes change current weather and matching-session forecast samples. Lap times stay as recorded.
+- `red_flag: "START[-END]"` adds an `RDFL` event on the player's lap `START` and an `LGOT` restart at the start of lap `END + 1`. `END` defaults to `START`.
 - `inject_rival_pit: "LAP[:ahead|behind]"` sets the pit status of the car directly ahead (default) or behind the player on that lap. Positions and gaps do not change.
 - The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
@@ -137,8 +138,9 @@ See [Synthetic recordings](23-synthetic-recordings.md) for the full audit.
 | `penalty` | Penalty calls and the penalty total | Finish-position calls, which use real gaps |
 | `drive_through` | Drive-through issue and served calls | Pace and position after the visit, because the recorded visit is a real stop |
 | `inject_rival_pit` | The rival-pitted flag that feeds `overcut`, `cover` and `defend` plans | Rival pace and gaps, which stay as recorded |
+| `red_flag` | Red flag, free tyre change, restart and plan rebuild calls | Lap times, tyres and positions, because the car keeps racing and keeps its tyres |
 
-Rival stops and red flags need a real recording or a generator. The `weather` mutation changes forecast and session weather, but lap times stay as recorded.
+Rival stops need a real recording or a generator. The `weather` mutation changes forecast and session weather, but lap times stay as recorded.
 
 ## Starter scenarios
 
@@ -148,7 +150,9 @@ All starter scenarios use the Brazil race from 6 Oct 2026: track 16, 17 laps, on
 |---|---|---|
 | `brazil-race-real` | guard | Plan and window calls, no safety car calls |
 | `brazil-sc-early` | guard | Safety car calls on laps 6 to 9 |
+| `brazil-red-flag` | guard | Red flag on lap 5, free tyre change, restart calls on lap 6 |
 | `brazil-sc-restart` | target | SC in this lap and green flag calls, one per step |
+| `brazil-weather-crossover` | guard | No weather radar or crossover calls in a dry race |
 | `brazil-lap1-damage` | guard | A 100% lost wing on lap 1 rebuilds the plans and moves the target stop to now |
 | `brazil-sc-in-window` | target | A box call when the safety car comes out inside the window |
 | `brazil-vsc-in-window` | target | Box call on the first VSC lap, no cheap stop once VSC ending shows |

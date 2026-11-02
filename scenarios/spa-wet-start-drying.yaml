@@ -1,0 +1,15 @@
+id: spa-wet-start-drying
+title: Wet start with a lap 1 VSC, light rain from lap 6, switch to inters on lap 9
+status: guard
+source:
+  session_uid: "0x80842282d0647991"
+  sha256: "11e4366889d5c5e1e9ff6ac31e547b9d64377a022a02efbf77c2776a2d27a402"
+  where: "Spa race, 11 laps, storm at the start on wets, VSC on lap 1, light rain from lap 6, stop to inters on lap 9. session_80842282d0647991_1791463015.f1bin.zst"
+expect:
+  fire:
+    - {rule: vsc_deployed, laps: [1, 1]}
+    - {rule: weather_to_inter, laps: [6, 9]}
+  absent:
+    - {rule: [rain_box_now, weather_to_wet], laps: [1, 11]}
+    - {rule: sc_deployed, laps: [1, 11]}
+why: The race starts at 91 percent rain on full wets and the rain eases to light rain on lap 6. The track is drying, so pitwall must point to inters. The car is already wet-shod, so a call to go to wets or to box before rain is wrong.

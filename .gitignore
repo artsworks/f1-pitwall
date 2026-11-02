@@ -22,3 +22,4 @@ decisions/
 voices/
 *.onnx
 *.decisions.jsonl
+recordings-bench/

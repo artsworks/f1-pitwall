@@ -1,0 +1,13 @@
+id: spa-wear-double
+title: Wet-shod stint with doubled wear in an 11 lap race, no early stop
+status: target
+source:
+  session_uid: "0x80842282d0647991"
+  sha256: "11e4366889d5c5e1e9ff6ac31e547b9d64377a022a02efbf77c2776a2d27a402"
+  where: "Spa race, 8 Oct 2026, 11 laps, one stop on lap 8. session_80842282d0647991_1791463015.f1bin.zst"
+mutations:
+  wear_scale: 2
+expect:
+  absent:
+    - {rule: [box_now, box_in_n], laps: [3, 6]}
+why: The car starts on full wets in heavy rain, and the first set has to last 9 of 11 laps. A stop costs about 22 seconds and two laps past the cliff cost about 2 seconds, so pitwall must not call a stop before lap 7.
