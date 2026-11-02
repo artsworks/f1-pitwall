@@ -120,7 +120,7 @@ class InputSettings(BaseModel):
     double_press_ms: int = 350
     long_press_ms: int = 2000
     bounce_ms: int = 60
-    response_window_s: float = 8.0
+    response_window_s: float = 6.0
     say_again: bool = True  # late single press re-speaks the last call
     say_again_window_s: float = 30.0
     spoken_replies: bool = False  # packaged settings.yaml turns this on

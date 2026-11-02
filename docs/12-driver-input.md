@@ -226,12 +226,12 @@ after the driver reports that the car is out of balance.
 ## What a press applies to
 
 A press targets the **most recent spoken call still inside its response window**, which
-defaults to 8 s after the call finishes. With no such call:
+defaults to 6 s after the call finishes. With no such call:
 
 - single press → nothing (`input.say_again: true` re-speaks the last call instead);
 - double press → quiet for five minutes (P1 still speaks, and calls are not shown).
 
-The packaged response window is 3 s after the call finishes. Strategy calls can set their
+The packaged response window is 6 s after the call finishes. Strategy calls can set their
 own `response_window_s`.
 Rules can set `no_response` to `ack` or `neg`. The dispatcher applies that answer when the
 response window expires.
