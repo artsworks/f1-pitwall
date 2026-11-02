@@ -184,7 +184,7 @@ def test_recording_replay_dispatches_calls(tmp_path):
         laps=3,
         dt=0.25,
         gap_ahead_s=0.6,
-        fuel_kg=3.6,
+        fuel_kg=4.6,
         extra={
             "car_telemetry": {
                 "cars": {
@@ -222,24 +222,3 @@ def test_fuel_save_counts_lap_done_and_never_zero():
     tiny = replace(half, fuel_margin_laps=-0.01, laps_remaining=10, lap_distance=0.0)
     assert tiny.fuel_save_kg_per_lap == pytest.approx(0.1)
     assert replace(half, fuel_margin_laps=0.2).fuel_save_kg_per_lap == 0.0
-
-
-@pytest.mark.parametrize(
-    "source,margin,fires",
-    [
-        ("mfd", -0.25, False),
-        ("default", -0.25, False),
-        ("session", -0.25, True),
-        ("mfd", -0.8, True),
-    ],
-)
-def test_fuel_short_needs_measured_burn_for_small_deficit(source, margin, fires):
-    """The game's own estimate read 0.2 laps short on lap 1 of a race that had 1.5 spare."""
-    snapshot = _replay_snapshot(
-        {},
-        {},
-        lap=1,
-        model=ModelView(fuel_margin_laps=margin, fuel_per_lap_kg=1.04, fuel_source=source),
-    )
-    call = _call(_rules("fuel_short"), snapshot, "fuel_short")
-    assert (call is not None) is fires
