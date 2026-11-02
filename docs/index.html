@@ -356,14 +356,32 @@ function markActive() {
 function overview() {
   document.title = "f1-pitwall · a race engineer for F1 26";
   const calls = [
-    ["Qualifying run plan", "Tells you when the pit exit is clear, when to abort a lap, and whether to push, cool or box. It also reminds you about fuel and battery.",
-      ["Traffic at exit. Hold 4 seconds", "Abort, 0.4 off the cut. Save the set", "Battery 38, need 60. One more cool lap"]],
+    ["Safety and flags", "Calls a puncture, a red flag and yellows ahead. After a spin, it checks for traffic behind before you rejoin.",
+      ["Puncture, front left. Box, box. Steady", "Red flag. Red flag. Slow, back to pits", "Yellow, sector 2. Lift, hold position.", "Hold. Car in 2.5 seconds."]],
+    ["Qualifying release and traffic", "Tells you to go or hold in the garage, warns about cars at the pit-exit merge, and prepares you for traffic on the out-lap.",
+      ["Pit exit clear. Go now", "Traffic at exit. Hold 4 seconds", "Watch the merge, car 2.1 behind.", "Push lap behind. Let it by."]],
+    ["Run plan and cut-off", "At the line it calls push, cool or box. It also tells you to abort a lap that will miss the cut, and when you are safe.",
+      ["Go again. Battery 62, tyres are fine", "Abort, 0.4 off the cut. Save the set", "You're through. No need to push", "Box, box. You're 0.6 clear, save the set"]],
     ["Race strategy", "Keeps Plans A, B and C up to date, calls the pit window, warns about undercuts and overcuts, and tells you when a safety car or VSC makes a stop cheap.",
-      ["Norris has boxed. Stay out and push, overcut is on", "Safety car, safety car. Delta positive, stay above it", "Plan C, box box. Hards, cheap stop"]],
-    ["Tyres, fuel and ERS", "Estimates tyre life from the most worn corner and the pace cliff. Fuel and energy calls use the live budgets.",
-      ["About 6 laps left in the tyres", "Fuel 0.4 laps short. Lift and coast", "Battery spare, 0.8 MJ. Deploy"]],
-    ["Driving events", "Calls wing damage, boost left on, yellow flags, lock-ups, spins and slides. If you repeat a mistake, the tone gets drier.",
-      ["Same lock-up as last lap. Brake earlier there.", "Yellow, sector 2. Lift, hold position.", "Boost. You know the drill."]]
+      ["Pit window is open. Plan B, target lap 24", "Norris has boxed. Stay out and push, overcut is on", "Cover the undercut. Box, box", "Plan C, box box. Hards, cheap stop"]],
+    ["Tyres, fuel and energy", "Warns when one corner wears faster than the rest. It also counts tyre life, fuel margin and energy, and tells you when boost is still on.",
+      ["Front left wearing 1.4 times faster. Less entry speed, right-handers", "About 6 laps left in the tyres", "Fuel 0.4 laps short. Save 0.3 kg a lap, lift and coast", "Boost still on. Turn it off for the exit."]],
+    ["Coaching with a memory", "Remembers lock-ups at the same corner and slides you saved. If you repeat a mistake, the tone gets drier.",
+      ["Same lock-up as last lap. Brake earlier there.", "Another lock-up, 3 in ten minutes.", "You know what I'm going to say.", "Oh, nearly lost it there. Good catch"]]
+  ];
+  const listens = [
+    ["Accept or decline", "Press UDP Action 1 once to accept a call, or twice to decline it. The engineer replies to either, for example \"Copy, back it off. Recharge and go again\" or \"Understood, keep going. Make it count\"."],
+    ["Driver menu", "Scroll the menu with the wheel and confirm with UDP Action 1. Ask about tyres, the pit, the fight or fuel, or report understeer or oversteer. Answers come from YAML templates, with no LLM."],
+    ["Voice commands", "With voice.enabled set to true, a local Windows speech recogniser listens while the menu is open, or after you press V. It matches a fixed list of phrases such as \"tyres\" or \"copy\"."],
+    ["Phone as a second radio", "A phone PWA plays the same calls. Open the /radio page and arm it with the button on the race page."]
+  ];
+  const quiet = [
+    "<b>Priority queue.</b> Every rule has a priority from 1 to 3 and an urgency class. Safety calls are queued ahead of tactical and coaching calls.",
+    "<b>Red flag.</b> The red-flag rule has <code>flushes_queue</code>. It drops queued calls that are not safety or replies, and it replaces queued safety-car and VSC calls.",
+    "<b>Hysteresis.</b> A rule has a <code>when</code> condition and a separate <code>clear_when</code> condition. The rule fires again only after the clear condition holds, so a value on the edge does not flip the call.",
+    "<b>Cooldowns.</b> Each rule has its own <code>cooldown_s</code>. Rules in one <code>cooldown_group</code> share one clock, so only one release or fuel call speaks in the window.",
+    "<b>No contradictions.</b> If two queued calls contradict each other, the one with the higher priority speaks. The other is dropped. Rules can declare this with <code>contradicts</code>.",
+    "<b>Escalation.</b> A repeated mistake moves to a new pool of lines after a set count, for example after 3 and then 6 front lock-ups."
   ];
   const flow = [
     ["Ingest", "F1 26 UDP on port 20777, parsed and recorded"],
@@ -390,10 +408,6 @@ function overview() {
       ["race-duel", "Battle", "The battle card lists the cars ahead and behind, each with its state, gap and gap rail."],
       ["race-box-call", "Box call", "The safety car is active. The right zone shows the box call and pit window."]
     ]],
-    ["On the phone", [
-      ["phone-race", "Phone race page", "The race page on a phone shows the call, tyres, fuel and strategy, plus the button that arms phone radio."],
-      ["phone-radio", "Phone radio", "The /radio page on a phone during a box call, with the latest calls."]
-    ]],
     ["Debrief and review", [
       ["review-transport", "Review bar", "In review mode a bar at the bottom steps through laps and shows every call on a strip."],
       ["debrief-summary", "Debrief", "The report after a session. Lap times use the tyre colours, and a dashed line marks the stop."],
@@ -419,9 +433,19 @@ function overview() {
     </section>
 
     <section class="reveal">
-    <h2>What it calls on the radio</h2>
-    <p class="lede">Every call is a rule in YAML. Each rule has a pool of phrasings, and the tone gets drier if you repeat a mistake.</p>
+    <h2>What your engineer calls, and when</h2>
+    <p class="lede">Every call is a rule in YAML with its own trigger and a pool of phrasings. The examples are lines from those pools, with sample numbers filled in.</p>
     <div class="calls">${calls.map(([t, d, ex]) => `<div><b>${t}</b><p>${d}</p>${ex.map((x, i) => `<div class="radio" style="--i:${i}">${x}</div>`).join("")}</div>`).join("")}</div>
+    </section>
+
+    <section class="reveal">
+    <h2>It talks, and it listens</h2>
+    <div class="pillars">${listens.map(([t, d]) => `<div><b>${t}</b>${d}</div>`).join("")}</div>
+    </section>
+
+    <section class="reveal">
+    <h2>It knows when not to talk</h2>
+    <ul class="works">${quiet.map(q => `<li>${q}</li>`).join("")}</ul>
     </section>
 
     <section class="reveal">
