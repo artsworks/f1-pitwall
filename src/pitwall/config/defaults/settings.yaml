@@ -202,6 +202,7 @@ thresholds:
   fuel_hysteresis_laps: 0.1
   fuel_tight_laps: 0.1          # fuel margin at or below this = 'fuel is tight'
   fuel_spare_laps: 1.0
+  fuel_unmeasured_slack_laps: 0.5  # extra deficit fuel_short needs while the burn is the game's estimate, not measured laps
   gap_hysteresis_s: 0.3
   warnings_warn: 3
   pit_exit_traffic_s: 1.5
