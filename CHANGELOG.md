@@ -10,6 +10,33 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.52.0 (2026-11-02)
+
+### Bug Fixes
+
+- Drop confidence gate from neutralisation box calls
+  ([#166](https://github.com/artsworks/f1-pitwall/pull/166),
+  [`c40e162`](https://github.com/artsworks/f1-pitwall/commit/c40e162dab3c0c7e9751ea3957fcee4f4706de51))
+
+- Gate neutralization pit calls and reprice Plan C
+  ([#166](https://github.com/artsworks/f1-pitwall/pull/166),
+  [`c40e162`](https://github.com/artsworks/f1-pitwall/commit/c40e162dab3c0c7e9751ea3957fcee4f4706de51))
+
+- Price stops at green loss once VSC ending shows
+  ([#166](https://github.com/artsworks/f1-pitwall/pull/166),
+  [`c40e162`](https://github.com/artsworks/f1-pitwall/commit/c40e162dab3c0c7e9751ea3957fcee4f4706de51))
+
+### Features
+
+- Handle VSC endings and safety car escalation
+  ([#166](https://github.com/artsworks/f1-pitwall/pull/166),
+  [`c40e162`](https://github.com/artsworks/f1-pitwall/commit/c40e162dab3c0c7e9751ea3957fcee4f4706de51))
+
+- Price VSC stops correctly and call the cheap stop when a VSC turns into a safety car
+  ([#166](https://github.com/artsworks/f1-pitwall/pull/166),
+  [`c40e162`](https://github.com/artsworks/f1-pitwall/commit/c40e162dab3c0c7e9751ea3957fcee4f4706de51))
+
+
 ## v0.51.1 (2026-11-02)
 
 ### Bug Fixes
