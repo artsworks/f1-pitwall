@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-11-02T00:48:29.987855+00:00",
+  "created_at": "2026-11-02T01:47:20.260049+00:00",
   "metrics": {
     "by_rule": {
       "plan_target_lap": {
@@ -7,19 +7,19 @@
         "wrong": 1
       }
     },
-    "check_pass_rate": 0.9912280701754386,
-    "checks_passed": 113,
-    "checks_total": 114,
+    "check_pass_rate": 0.9831932773109243,
+    "checks_passed": 117,
+    "checks_total": 119,
     "guards_passed": 17,
     "guards_total": 17,
     "laps_of_pace_mae": null,
     "real_accuracy": 0.0,
     "real_good": 0,
     "real_graded": 1,
-    "score": 99.1,
+    "score": 98.3,
     "stop_cost_mae_s": 4.58,
-    "targets_passed": 20,
-    "targets_total": 21
+    "targets_passed": 21,
+    "targets_total": 23
   },
   "scenarios": {
     "austin-vsc-real": {
@@ -1930,6 +1930,28 @@
       "status": "guard",
       "title": "Safety car on laps 8 to 10 right after the player's first stop"
     },
+    "spa-wear-double": {
+      "checks": [
+        {
+          "found": [],
+          "laps": [
+            3,
+            6
+          ],
+          "ok": true,
+          "rules": [
+            "box_now",
+            "box_in_n"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "synthetic",
+      "reason": "",
+      "result": "pass",
+      "status": "target",
+      "title": "Wet-shod stint with doubled wear in an 11 lap race, no early stop"
+    },
     "spa-wet-start-drying": {
       "checks": [
         {
@@ -1993,6 +2015,74 @@
       "result": "pass",
       "status": "guard",
       "title": "Wet start with a lap 1 VSC, light rain from lap 6, switch to inters on lap 9"
+    },
+    "zandvoort-race-real": {
+      "checks": [
+        {
+          "found": [
+            1
+          ],
+          "laps": [
+            1,
+            1
+          ],
+          "ok": true,
+          "rules": [
+            "plan_announce"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [
+            7
+          ],
+          "laps": [
+            3,
+            7
+          ],
+          "ok": true,
+          "rules": [
+            "plan_window_open"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            7,
+            11
+          ],
+          "ok": false,
+          "rules": [
+            "plan_target_lap",
+            "box_now",
+            "box_in_n"
+          ],
+          "type": "fire"
+        },
+        {
+          "found": [],
+          "laps": [
+            1,
+            18
+          ],
+          "ok": true,
+          "rules": [
+            "sc_deployed",
+            "vsc_deployed",
+            "sc_ending",
+            "vsc_ending",
+            "sc_restart",
+            "vsc_restart"
+          ],
+          "type": "absent"
+        }
+      ],
+      "kind": "real",
+      "reason": "",
+      "result": "fail",
+      "status": "target",
+      "title": "Zandvoort race as recorded, stops on laps 7 and 17"
     }
   },
   "version": 1
