@@ -60,6 +60,21 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
     assert updates == [True, False]
 
 
+def test_model_view_carries_green_pit_loss(tmp_path) -> None:
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+    )
+    engine._update_model()
+    engine._green_pit_loss_s = 22.0
+    engine._sc_pit_loss_s = 12.0
+    engine._update_model()
+
+    assert engine.state.model.green_pit_loss_s == 22.0
+    assert engine.state.model.sc_pit_loss_s == 12.0
+
+
 def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> None:
     engine = build_engine(
         isolated=True,

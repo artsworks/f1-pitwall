@@ -198,6 +198,63 @@ def test_box_now_suppresses_sc_escalated_box_inside_pit_cooldown() -> None:
     )
 
 
+def test_box_in_n_does_not_suppress_sc_escalated_box() -> None:
+    engine = _battle_engine()
+    shared = {
+        "pit_plan_confidence": 0.9,
+        "pit_plan_risk": 0.0,
+        "pit_plan_gain_s": 2.0,
+        "pit_plan_reason": "cheap stop",
+        "plan_next_compound": "soft",
+        "active_plan": "A",
+        "pit_status": 0,
+        "laps_of_pace": 2,
+        "laps_remaining": 10,
+        "_ages": {"car_telemetry": 0.1, "car_status": 0.1, "lap_data": 0.1},
+    }
+    forecast_snapshot = _battle_snapshot(
+        0.0, **(shared | {"phase": "racing", "pit_plan": "box_in_n"})
+    )
+    box_in_n = next(
+        candidate
+        for candidate in engine.evaluate(forecast_snapshot).candidates
+        if candidate.rule.id == "box_in_n"
+    )
+    assert box_in_n.rule.defn.cooldown_group == "pit_forecast"
+
+    dispatcher, _, _ = _dispatcher(min_gap_s=0.0)
+    dispatcher.submit([box_in_n], forecast_snapshot)
+    assert [call.rule_id for call in dispatcher.drain(0.0)] == ["box_in_n"]
+
+    escalation_snapshot = _battle_snapshot(
+        20.0,
+        **(shared | {"phase": "sc", "sc_escalated": True, "pit_plan": "cheap_stop"}),
+    )
+    escalation_call = next(
+        candidate
+        for candidate in engine.evaluate(escalation_snapshot).candidates
+        if candidate.rule.id == "sc_escalated_box"
+    )
+    dispatcher.submit([escalation_call], escalation_snapshot)
+    assert [call.rule_id for call in dispatcher.drain(20.0)] == ["sc_escalated_box"]
+
+    # sc_escalated_box and box_now share the pit group, so check box_now on a
+    # fresh dispatcher and engine where only the forecast call has run.
+    dispatcher2, _, _ = _dispatcher(min_gap_s=0.0)
+    dispatcher2.submit([box_in_n], forecast_snapshot)
+    assert [call.rule_id for call in dispatcher2.drain(0.0)] == ["box_in_n"]
+    box_now_snapshot = _battle_snapshot(
+        20.0, **(shared | {"phase": "racing", "pit_plan": "cheap_stop"})
+    )
+    box_now = next(
+        candidate
+        for candidate in _battle_engine().evaluate(box_now_snapshot).candidates
+        if candidate.rule.id == "box_now"
+    )
+    dispatcher2.submit([box_now], box_now_snapshot)
+    assert [call.rule_id for call in dispatcher2.drain(20.0)] == ["box_now"]
+
+
 def test_budget_and_p1_exempt() -> None:
     d, sink, _ = _dispatcher(calls_per_lap=1, min_gap_s=0.0)
     d.submit([_cand("a"), _cand("b")], make_snapshot(0.0))

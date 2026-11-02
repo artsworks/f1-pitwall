@@ -159,15 +159,21 @@ def _send(ingest: Ingest, pkt: bytes, t: float) -> None:
 
 
 @pytest.mark.parametrize(
-    ("race_phase", "sc_ending", "safety_car_status", "expected_loss"),
+    ("race_phase", "sc_ending", "safety_car_status", "green_pit_loss_s", "expected_loss"),
     [
-        ("vsc", True, 2, 22.0),
-        ("vsc", False, 2, 12.0),
-        ("sc", True, 1, 12.0),
+        ("vsc", True, 2, 22.0, 22.0),
+        ("vsc", False, 2, 22.0, 12.0),
+        ("sc", True, 1, 22.0, 12.0),
+        ("vsc", True, 2, 0.0, 22.0),
     ],
 )
 def test_stop_adjusted_gaps_use_green_loss_when_vsc_ending(
-    monkeypatch, race_phase: str, sc_ending: bool, safety_car_status: int, expected_loss: float
+    monkeypatch,
+    race_phase: str,
+    sc_ending: bool,
+    safety_car_status: int,
+    green_pit_loss_s: float,
+    expected_loss: float,
 ) -> None:
     from pitwall.state import session as session_module
 
@@ -196,7 +202,9 @@ def test_stop_adjusted_gaps_use_green_loss_when_vsc_ending(
             result_status=2,
         ),
     )
-    state.set_model(ModelView(pit_loss_s=22.0, sc_pit_loss_s=12.0))
+    state.set_model(
+        ModelView(pit_loss_s=12.0, sc_pit_loss_s=12.0, green_pit_loss_s=green_pit_loss_s)
+    )
 
     state.snapshot(0.0)
 
