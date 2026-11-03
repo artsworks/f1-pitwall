@@ -112,6 +112,7 @@ thresholds:
   deg_max_ms_per_lap: 600      # clamp on fitted deg/fuel slopes
   deg_rmse_bad_ms: 800         # rmse at which fit confidence floors at 0.2
   deg_default_ms_per_lap: 80   # cold-start deg slope when nothing is known
+  race_full_distance_km: 305   # full-race km the default deg slope is scaled from for short races
   learn_base_min_ms: 40000     # stint base lap time outside these bounds never becomes a prior
   learn_base_max_ms: 200000
   fuel_ms_per_lap_default: 30  # pace gained per lap of fuel burn, default

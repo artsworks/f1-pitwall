@@ -245,6 +245,26 @@ def test_deg_prior_uses_clean_session_lap_median() -> None:
     assert prior.base_ms != 95_000
 
 
+def test_default_deg_prior_scales_with_short_race_distance() -> None:
+    db = Database(":memory:")
+    engine, _, _ = _deg_prior_engine(db)
+    engine.store.set_track(13)  # Suzuka: no deg overlay, so the default applies
+    engine.state.track_length_m = 5807.0
+    settings = engine.store.current()
+    assert settings.track is None
+
+    engine.state.total_laps = 53
+    assert engine._deg_prior(13, 17, settings).deg_ms_per_lap == pytest.approx(80.0)  # noqa: SLF001
+
+    engine.state.total_laps = 12
+    prior = engine._deg_prior(13, 17, settings)  # noqa: SLF001
+    assert prior.source == "default"
+    assert prior.deg_ms_per_lap == pytest.approx(80.0 * 53 / 12)
+
+    engine.state.session_type = 10
+    assert engine._deg_prior(13, 17, settings).deg_ms_per_lap == pytest.approx(80.0)  # noqa: SLF001
+
+
 def test_deg_prior_keeps_learned_base_ahead_of_session_laps() -> None:
     db = Database(":memory:")
     engine, uid, settings = _deg_prior_engine(db)

@@ -1468,6 +1468,16 @@ class Engine:
                 self._weekend_prior_cache[cache_key] = weekend
             if weekend[1] >= self._th("weekend_min_laps", 6):
                 deg_p = Prior(weekend[0], float(weekend[1]), "weekend")
+        # The default deg slope is calibrated for a full-distance race; a
+        # shorter race compresses wear into fewer laps, so scale it up.
+        race_laps = self._race_laps()
+        if race_laps > 0 and self.state.track_length_m > 0:
+            full_laps = math.ceil(
+                self._th("race_full_distance_km", 305) * 1000 / self.state.track_length_m
+            )
+            deg_default = self._th("deg_default_ms_per_lap", 80) * max(1.0, full_laps / race_laps)
+        else:
+            deg_default = self._th("deg_default_ms_per_lap", 80)
         if deg_p is None:
             deg_p = resolve_prior(
                 self.db,
@@ -1477,7 +1487,7 @@ class Engine:
                 overlay_value=(
                     overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
                 ),
-                default=self._th("deg_default_ms_per_lap", 80),
+                default=deg_default,
                 min_weight=min_w,
             )
         base_p = resolve_prior(
@@ -1509,7 +1519,7 @@ class Engine:
             trust = min(deg_p.weight / full, 1.0) if full > 0 else 1.0
             fallback = overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
             if fallback is None:
-                fallback = self._th("deg_default_ms_per_lap", 80)
+                fallback = deg_default
             deg = trust * deg + (1.0 - trust) * float(fallback)
             confidence = 0.2 + (confidence - 0.2) * trust
         if base_p.source == "default" and self.db is not None and uid is not None:
