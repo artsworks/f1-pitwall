@@ -59,14 +59,12 @@ def _race_time_s(c: Any, leader: Any, speed_mps: float, is_leader: bool) -> floa
     return float(max(0, c.delta_to_race_leader_ms)) / 1000.0
 
 
-def stop_adjusted_gaps(
-    cars: Sequence[Any],
-    player_idx: int,
-    track_m: float,
-    speed_mps: float,
-    owed: Sequence[int],
-    pit_loss_s: float,
+def race_time_gaps(
+    cars: Sequence[Any], player_idx: int, track_m: float, speed_mps: float
 ) -> dict[int, float]:
+    """Race-time gap of each classified car to the player, penalties included
+    (negative = ahead). The same base as stop_adjusted_gaps without the
+    owed-stop pit-loss term."""
     if not (0 <= player_idx < len(cars)):
         return {}
     me = cars[player_idx]
@@ -80,8 +78,7 @@ def stop_adjusted_gaps(
         )
     )
     leader = next((cars[i] for pos, i in road if pos == 1), me)
-    race_me = _race_time_s(me, leader, speed_mps, me.car_position == 1)
-    me_total = race_me + me.penalties
+    me_total = _race_time_s(me, leader, speed_mps, me.car_position == 1) + me.penalties
     rel: dict[int, float] = {}
     for i, c in enumerate(cars):
         if (
@@ -92,8 +89,20 @@ def stop_adjusted_gaps(
         ):
             continue
         race_i = _race_time_s(c, leader, speed_mps, c.car_position == 1)
-        rel[i] = race_i + c.penalties - me_total + (owed[i] - owed[player_idx]) * pit_loss_s
+        rel[i] = race_i + c.penalties - me_total
     return rel
+
+
+def stop_adjusted_gaps(
+    cars: Sequence[Any],
+    player_idx: int,
+    track_m: float,
+    speed_mps: float,
+    owed: Sequence[int],
+    pit_loss_s: float,
+) -> dict[int, float]:
+    rel = race_time_gaps(cars, player_idx, track_m, speed_mps)
+    return {i: gap + (owed[i] - owed[player_idx]) * pit_loss_s for i, gap in rel.items()}
 
 
 def true_neighbours(

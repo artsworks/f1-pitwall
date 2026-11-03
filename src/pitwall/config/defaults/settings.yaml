@@ -183,6 +183,9 @@ thresholds:
   pit_min_laps_left: 2         # no stop inside the last N laps
   cliff_ms_per_lap: 1000       # extra pace loss per lap past the tyre cliff
   outlap_warmup_s: 0.8         # cold-tyre cost on the out-lap
+  traffic_dirty_air_gap_s: 1.5 # rejoin gap to the car ahead that counts as dirty air
+  traffic_pace_penalty_ms: 400 # per-lap pace cost while rejoining in dirty air
+  traffic_penalty_laps: 3      # fresh-tyre laps the traffic penalty applies for
   undercut_laps: 2
   undercut_max_gap_s: 3.0
   overcut_laps: 2

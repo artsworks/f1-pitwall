@@ -430,6 +430,10 @@ class PitPlan:
     projections: tuple[tuple[int, float], ...]   # (candidate_lap, race_time_delta_s) for review
     mc_lap: int = 0
     mc_agree: float = 1.0
+    rejoin_pos: int | None = None            # projected position at the chosen stop lap
+    rejoin_ahead_name: str | None = None     # car directly ahead at the rejoin
+    rejoin_gap_s: float | None = None        # margin to that car
+    traffic_penalties_s: tuple[float, ...] = ()  # dirty-air cost per candidate lap
 
 @dataclass(frozen=True, slots=True)
 class McResult:
@@ -488,6 +492,20 @@ waiting gains). Decisions:
 The optimiser sets `undercut_s` and `overcut_s` to zero when their remaining-lap requirements fail.
 When no stop is possible, the optimiser returns `no_stop` with both values at zero.
 The snapshot therefore excludes tyre gains that cannot affect the finish.
+
+When the snapshot carries `field_cars`, the optimiser projects a rejoin position for each
+candidate stop lap. `field_cars` holds a `FieldCar` for every classified car within a lap of
+the player: name, signed race-time gap with penalties but no owed-stop term, recent pace, and our
+deg slope as the rival estimate. A rival counts as ahead at the rejoin when its projected race
+time stays below ours once the pit loss and out-lap warm-up are added. The projection ignores
+stops the rivals may take inside the horizon. A rejoin within `th.traffic_dirty_air_gap_s`
+(1.5) of the car ahead is in dirty air. That candidate pays `th.traffic_pace_penalty_ms` (400)
+per lap for up to `th.traffic_penalty_laps` (3) fresh-tyre laps. The reason text appends the
+rejoin outcome to stop plans, for example "rejoin P7 in traffic behind Norris".
+`PitPlan.rejoin_pos`, `rejoin_ahead_name` and `rejoin_gap_s` report the chosen lap's
+projection. `plan_agreement` adds `traffic_penalties_s` to its deltas, so Monte Carlo scores
+the same objective. The engine keys the penalties into the agreement cache. An empty
+`field_cars` leaves every output unchanged.
 
 `deterministic_confidence = fit.confidence * (restricted_factor if restricted else 1) * pit_loss_conf` where
 `pit_loss_conf = 1.0 learned/this-session, 0.8 overlay, 0.6 default`.

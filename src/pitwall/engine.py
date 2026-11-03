@@ -1997,6 +1997,7 @@ class Engine:
             mode=mode,
             th=settings.thresholds,
             teammate_pitting=snap.teammate_stacking,
+            field=snap.field_cars,
         )
         if snap.safety_car_status == 0:
             session_uid = self.state.session_uid
@@ -2014,6 +2015,7 @@ class Engine:
                 threshold(mode, "pit_gain_min_s", 1.0),
                 damage_pace_ms,
                 wing_loss_s,
+                plan.traffic_penalties_s,
                 plan.plan,
                 plan.rival_idx,
                 snap.teammate_stacking,
@@ -2046,6 +2048,7 @@ class Engine:
                     rng=rng,
                     plan_name=plan.plan,
                     cover_gap_s=behind_gap_s,
+                    traffic_penalties_s=plan.traffic_penalties_s,
                 )
             plan = scale_plan(plan, self._plan_mc_cache[key], lap_num=snap.lap_num)
         plan, self._held_plan = _hold_cover_plan(

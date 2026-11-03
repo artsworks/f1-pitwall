@@ -6,12 +6,13 @@ record it and review can re-run it."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from pitwall.config.thresholds import threshold as _f
 from pitwall.model.deg import DegFit, cliff_age
 from pitwall.model.driver import NEUTRAL, DriverScale, is_aggressive_mode
+from pitwall.strategy.rejoin import FieldCar, Rejoin, rejoin_position
 
 AGGRESSIVE_PLANS = ("undercut", "overcut", "cover", "defend")
 
@@ -44,6 +45,10 @@ class PitPlan:
     mc_agree: float = 1.0
     mc_risk_lap: int = 0
     risky: bool = False
+    rejoin_pos: int | None = None
+    rejoin_ahead_name: str | None = None
+    rejoin_gap_s: float | None = None
+    traffic_penalties_s: tuple[float, ...] = ()
 
 
 NO_PLAN = PitPlan("", 0, 0.0, 0.0, 0.0, -1, "", "", (0, 0), 0.0, 0.0, ())
@@ -131,6 +136,7 @@ def optimise(
     th: Mapping[str, object],
     teammate_pitting: bool = False,
     damage_pace_ms: float = 0.0,
+    field: Sequence[FieldCar] = (),
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
@@ -144,6 +150,34 @@ def optimise(
     # on this set must not look free against the next lap's fresh-tyre gain.
     cur_cliff = tyre_age + laps_of_pace - max(0.0, 1.0 - laps_of_pace)
 
+    # Rejoin projection per candidate stop lap: a rejoin inside the dirty-air
+    # gap costs traffic_pace_penalty_ms for the first fresh-tyre laps.
+    rejoins: list[Rejoin] = []
+    traffic_penalties: list[float] = []
+    if field:
+        cliff_pen = _f(th, "cliff_ms_per_lap", 1000)
+        dirty_gap_s = _f(th, "traffic_dirty_air_gap_s", 1.5)
+        pen_s = _f(th, "traffic_pace_penalty_ms", 400) / 1000.0
+        pen_laps = _f(th, "traffic_penalty_laps", 3)
+        warmup_s = _f(th, "outlap_warmup_s", 0.8)
+
+        def our_lap_ms(j: int) -> float:
+            return _lap_ms(fit, tyre_age + j, cur_cliff, cliff_pen) + damage_pace_ms
+
+        for k in range(last_k + 1):
+            rejoin = rejoin_position(
+                field,
+                k=k,
+                our_lap_ms=our_lap_ms,
+                pit_loss_s=pit_loss_s + (stack_s if k == 0 else 0.0),
+                warmup_s=warmup_s,
+                dirty_air_gap_s=dirty_gap_s,
+            )
+            rejoins.append(rejoin)
+            traffic_penalties.append(
+                pen_s * min(laps_remaining - k, pen_laps) if rejoin.in_traffic else 0.0
+            )
+
     def total(k: int | None) -> float:
         return race_time_s(
             stop_after=k,
@@ -155,7 +189,7 @@ def optimise(
             pit_loss_s=pit_loss_s + (stack_s if k == 0 else 0.0),
             th=th,
             damage_pace_ms=damage_pace_ms,
-        )
+        ) + (traffic_penalties[k] if k is not None and k < len(traffic_penalties) else 0.0)
 
     no_stop = total(None)
     projections = (
@@ -278,6 +312,15 @@ def optimise(
             if risky is not None
             else (stop_plan and plan_risk > safe_risk_max and risk_max > safe_risk_max)
         )
+        k = lap - lap_num
+        rejoin = rejoins[k] if 0 <= k < len(rejoins) else None
+        if rejoin is not None and name in ("box_now", "box_in_n", "free_stop", "undercut"):
+            if rejoin.position == 1:
+                reason += ", rejoin P1"
+            elif rejoin.in_traffic:
+                reason += f", rejoin P{rejoin.position} in traffic behind {rejoin.ahead_name}"
+            else:
+                reason += f", rejoin P{rejoin.position} in clear air"
         annotated_reason = (
             f"{reason}, traffic risk" if is_risky and "traffic" not in reason.lower() else reason
         )
@@ -295,6 +338,10 @@ def optimise(
             overcut_s,
             projections,
             risky=is_risky,
+            rejoin_pos=rejoin.position if rejoin is not None else None,
+            rejoin_ahead_name=rejoin.ahead_name if rejoin is not None else None,
+            rejoin_gap_s=rejoin.gap_to_ahead_s if rejoin is not None else None,
+            traffic_penalties_s=tuple(traffic_penalties),
         )
 
     if (
