@@ -10,6 +10,38 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.53.0 (2026-11-03)
+
+### Chores
+
+- **mypy**: Check as linux so winsound ignores match CI
+  ([#172](https://github.com/artsworks/f1-pitwall/pull/172),
+  [`a2b01f0`](https://github.com/artsworks/f1-pitwall/commit/a2b01f015c1fa566236de1a00d22b439f469c5b3))
+
+### Documentation
+
+- Bring status.md up to v0.52.0 ([#171](https://github.com/artsworks/f1-pitwall/pull/171),
+  [`240565b`](https://github.com/artsworks/f1-pitwall/commit/240565b4d431277c260b099c6fc4fb6ea3af5c3b))
+
+- Revamp landing and install pages, update status.md
+  ([#171](https://github.com/artsworks/f1-pitwall/pull/171),
+  [`240565b`](https://github.com/artsworks/f1-pitwall/commit/240565b4d431277c260b099c6fc4fb6ea3af5c3b))
+
+- Revamp landing capability sections and distinguish install paths
+  ([#171](https://github.com/artsworks/f1-pitwall/pull/171),
+  [`240565b`](https://github.com/artsworks/f1-pitwall/commit/240565b4d431277c260b099c6fc4fb6ea3af5c3b))
+
+- Trim status.md to capability areas and link the changelog
+  ([#171](https://github.com/artsworks/f1-pitwall/pull/171),
+  [`240565b`](https://github.com/artsworks/f1-pitwall/commit/240565b4d431277c260b099c6fc4fb6ea3af5c3b))
+
+### Features
+
+- **strategy**: Predict rejoin position and traffic per candidate pit lap
+  ([#172](https://github.com/artsworks/f1-pitwall/pull/172),
+  [`a2b01f0`](https://github.com/artsworks/f1-pitwall/commit/a2b01f015c1fa566236de1a00d22b439f469c5b3))
+
+
 ## v0.52.0 (2026-11-02)
 
 ### Bug Fixes
