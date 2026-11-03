@@ -363,6 +363,33 @@ def test_high_deg_prefers_two_stop() -> None:
     assert len(derive(hot, TH)[0].compounds) == 3
 
 
+def test_short_race_deg_prior_stops_near_half_distance() -> None:
+    # 12-lap Suzuka on the scaled default prior (80 * 53 / 12 = 353 ms/lap):
+    # the soft must be off the car around mid-race, not near the end.
+    deg = 353.0
+    inp = inputs(
+        lap_num=1,
+        laps_remaining=12,
+        tyre_age=0,
+        current=S,
+        cur=dataclasses.replace(fit(deg), base_ms=94_138.0),
+        cur_cliff_age=1500.0 / deg,
+        compounds=(
+            CompoundModel(S, 94_138.0, deg, 2),
+            CompoundModel(M, 94_538.0, deg / 1.6, 2),
+            CompoundModel(H, 94_938.0, deg * 0.6 / 1.6, 2),
+        ),
+        used=frozenset({S}),
+        green_loss_s=22.0,
+        sc_loss_s=10.0,
+    )
+
+    result = evaluate(inp, (S, M), {})
+
+    assert result is not None
+    assert result.stop_laps[0] <= 7
+
+
 def test_reactive_plan_c_boxes_now_at_neutralised_loss() -> None:
     inp = inputs(lap_num=20, laps_remaining=31, tyre_age=19)
     c = reactive(inp, TH)

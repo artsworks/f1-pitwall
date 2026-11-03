@@ -77,6 +77,15 @@ def test_traffic_laps_are_excluded() -> None:
     assert fit.deg_ms_per_lap == pytest.approx(100.0)
 
 
+def test_traffic_laps_are_used_when_too_few_clean_laps() -> None:
+    laps = [replace(_lap(a, 90_000 + 100 * a), traffic=1) for a in range(6)]
+
+    fit = fit_stint(laps, PRIOR, min_laps=3, fuel_coeff_fixed=30.0)
+
+    assert fit.n == 6
+    assert fit.deg_ms_per_lap == pytest.approx(100.0)
+
+
 def test_overheated_laps_are_excluded() -> None:
     laps = [
         replace(
