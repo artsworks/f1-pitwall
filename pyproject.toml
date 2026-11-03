@@ -68,6 +68,7 @@ select = ["E", "F", "I", "UP", "B", "BLE"]
 
 [tool.mypy]
 python_version = "3.12"
+platform = "linux"
 strict = true
 mypy_path = "src"
 
