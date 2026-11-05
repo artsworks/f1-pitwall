@@ -73,6 +73,35 @@ def test_live_volume_scales_cached_audio_and_stream(percent: int) -> None:
         speaker.close()
 
 
+@pytest.mark.parametrize("sample_width", [1, 2, 3, 4])
+def test_volume_preserves_wav_params(sample_width: int) -> None:
+    player = FakePlayer()
+    speaker = WavSpeaker(FakeRenderer(), player)
+    frames = bytes([10, 20]) * (sample_width * 4)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as writer:
+        writer.setnchannels(2)
+        writer.setsampwidth(sample_width)
+        writer.setframerate(22050)
+        writer.writeframes(frames)
+    original = buf.getvalue()
+    try:
+        speaker.set_volume(40)
+        speaker._play(make_call("params"), original, 0.01, speaker._gen)
+        with (
+            wave.open(io.BytesIO(original), "rb") as before,
+            wave.open(io.BytesIO(player.played[0]), "rb") as after,
+        ):
+            assert after.getparams() == before.getparams()
+            if sample_width == 2:
+                expected = (np.frombuffer(frames, dtype="<i2").astype(float) * 0.4).astype("<i2")
+                assert after.readframes(after.getnframes()) == expected.tobytes()
+            else:
+                assert player.played[0] == original
+    finally:
+        speaker.close()
+
+
 def test_p1_preempts_and_jumps_queue() -> None:
     renderer = FakeRenderer(duration_s=1.0)
     player = FakePlayer()

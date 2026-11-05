@@ -521,16 +521,16 @@ class WavSpeaker:
             try:
                 if self._gain != 1.0:
                     with wave.open(io.BytesIO(wav), "rb") as reader:
-                        rate = reader.getframerate()
-                        samples = np.frombuffer(reader.readframes(reader.getnframes()), dtype="<i2")
-                    scaled = np.clip(samples.astype(np.float64) * self._gain, -32768, 32767)
-                    buf = io.BytesIO()
-                    with wave.open(buf, "wb") as writer:
-                        writer.setnchannels(1)
-                        writer.setsampwidth(2)
-                        writer.setframerate(rate)
-                        writer.writeframes(scaled.astype("<i2").tobytes())
-                    wav = buf.getvalue()
+                        params = reader.getparams()
+                        frames = reader.readframes(params.nframes)
+                    if params.sampwidth == 2:
+                        samples = np.frombuffer(frames, dtype="<i2")
+                        scaled = np.clip(samples.astype(np.float64) * self._gain, -32768, 32767)
+                        buf = io.BytesIO()
+                        with wave.open(buf, "wb") as writer:
+                            writer.setparams(params)
+                            writer.writeframes(scaled.astype("<i2").tobytes())
+                        wav = buf.getvalue()
                 self._player.play(wav)
             except Exception as exc:  # noqa: BLE001 - report playback failure and drop the call
                 log.warning("%s playback failed: %s", self.name, exc)
