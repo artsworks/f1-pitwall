@@ -141,7 +141,7 @@ only. Holding a key may not hold the game key, so assign one action to each key.
 | 7 | `0x04000000` | `input.shortcuts: {item: push}` | Stream Deck tap | asks "Push or save?" | same, closes the menu first |
 | 8 | `0x08000000` | `input.shortcuts: {item: fight}` | Stream Deck tap | asks "Fight" | same, closes the menu first |
 | 9 | `0x10000000` | `input.shortcuts: {item: understeer}` | Stream Deck tap | records understeer | same, closes the menu first |
-| 10 | `0x20000000` | `input.shortcuts: {item: oversteer}` | Stream Deck tap | records oversteer | same, closes the menu first |
+| 10 | `0x20000000` | `input.volume_cycle_bit` | Stream Deck tap | cycles speech volume | same, keeps the menu open |
 | 11 | `0x40000000` | `input.shortcuts: {item: budget}` | Stream Deck tap | cycles radio calls per lap | same, closes the menu first |
 | 12 | `0x80000000` | `input.shortcuts: {item: mindset}` | Stream Deck tap | changes mindset | same, closes the menu first |
 

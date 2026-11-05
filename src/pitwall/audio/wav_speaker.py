@@ -247,6 +247,7 @@ class WavSpeaker:
         self.busy_until = 0.0
         self._renderer = renderer
         self._player = player
+        self._gain = 1.0
         self._cache_dir = cache_dir
         self._fallback = fallback
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
@@ -507,11 +508,29 @@ class WavSpeaker:
                 except Exception:  # noqa: BLE001 - report callback failures and finish cleanup
                     log.exception("%s dropped callback failed", self.name)
 
+    def set_volume(self, percent: int) -> None:
+        self._gain = percent / 100
+        setter = getattr(self._fallback, "set_volume", None)
+        if callable(setter):
+            setter(percent)
+
     def _play(self, call: Call, wav: bytes, seconds: float, generation: int) -> None:
         with self._state_lock:
             if not self._current(generation) or call.id in self._cancelled:
                 return
             try:
+                if self._gain != 1.0:
+                    with wave.open(io.BytesIO(wav), "rb") as reader:
+                        rate = reader.getframerate()
+                        samples = np.frombuffer(reader.readframes(reader.getnframes()), dtype="<i2")
+                    scaled = np.clip(samples.astype(np.float64) * self._gain, -32768, 32767)
+                    buf = io.BytesIO()
+                    with wave.open(buf, "wb") as writer:
+                        writer.setnchannels(1)
+                        writer.setsampwidth(2)
+                        writer.setframerate(rate)
+                        writer.writeframes(scaled.astype("<i2").tobytes())
+                    wav = buf.getvalue()
                 self._player.play(wav)
             except Exception as exc:  # noqa: BLE001 - report playback failure and drop the call
                 log.warning("%s playback failed: %s", self.name, exc)

@@ -44,6 +44,35 @@ def test_wav_speaker_contract() -> None:
         speaker.close()
 
 
+@pytest.mark.parametrize("percent", [0, 40, 70, 100, 150])
+def test_live_volume_scales_cached_audio_and_stream(percent: int) -> None:
+    player = FakePlayer()
+    speaker = WavSpeaker(FakeRenderer(), player)
+    original = np.array([-30000, -1000, 1000, 30000], dtype="<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as writer:
+        writer.setnchannels(1)
+        writer.setsampwidth(2)
+        writer.setframerate(24000)
+        writer.writeframes(original.tobytes())
+    streamed: list[bytes] = []
+    speaker.on_audio = lambda _id, _priority, wav: streamed.append(wav)
+    try:
+        speaker.set_volume(percent)
+        call = make_call("gain")
+        speaker._cache[speaker._key(call.text, call.priority)] = (buf.getvalue(), 0.01)
+        speaker.speak(call)
+        _wait_for(lambda: bool(streamed))
+        assert streamed == player.played
+        with wave.open(io.BytesIO(player.played[0]), "rb") as reader:
+            actual = np.frombuffer(reader.readframes(4), dtype="<i2")
+        expected = np.clip(original.astype(float) * percent / 100, -32768, 32767).astype("<i2")
+        np.testing.assert_array_equal(actual, expected)
+        assert_pitwall_wav(streamed[0])
+    finally:
+        speaker.close()
+
+
 def test_p1_preempts_and_jumps_queue() -> None:
     renderer = FakeRenderer(duration_s=1.0)
     player = FakePlayer()

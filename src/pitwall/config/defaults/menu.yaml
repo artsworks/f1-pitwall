@@ -162,7 +162,6 @@ menu:
         no_bias: ["Copy, understeer. Try bias back one.", "Understeer noted.", "Understood. Move brake bias back one.", "Understeer, copy. Try one step back on bias."]
     - id: oversteer
       label: "Oversteer"
-      shortcut_only: true
       kind: opinion
       topic: balance
       replies:

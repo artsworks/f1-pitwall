@@ -209,6 +209,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Mindset pill | `mindset` | `BALANCED` dim outline; `AGGRESSIVE` orange filled |
 | Driver rating chip | `driver.{rating,confidence,source,neutral}` | `DRV 62 global`; green at or above `neutral` (0.5), amber below; hidden when `driver` is null; tooltip shows confidence |
 | Verbosity / quiet | `verbosity`, `quiet` | Small text right of the pill; `QUIET` in amber when true |
+| Volume | `volume.label`, `volume.pct` | LOW, NORMAL or MAX with an icon. The title shows the percentage. |
 | Current / previous radio | latest `call` frames (P1/P2/P3), keyed by `id`; `spoken`/`cancel` events | Show most recent dispatched call large; after the next one arrives, the last audio-started call becomes the dim previous line. Cancel before audio start → remove current and retain last audio-started call |
 | Banner age | envelope `t` of the `call` frame relative to a server timestamp + local monotonic elapsed time | `8 s ago`, updated once per second; resumed calls need their original timestamp from the server without assuming clocks are synchronized |
 | Call evidence | **planned** optional evidence captured with the call (e.g. `FL inner 112° · HOT`) | One line beneath current call; hidden if no call-specific evidence. Do not present changed live telemetry as if it justified an older call |

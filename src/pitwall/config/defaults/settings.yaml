@@ -75,6 +75,8 @@ speech:
   warm_phrases: 150       # phrases pre-rendered by 'pitwall voice warm'; lower it to save disk space
   rate: 0
   volume: 100
+  # The cycle wraps, returning to normal between each extreme.
+  volume_steps: [70, 40, 70, 100]
   radio_click: true # soft radio blip before each call
   # Delivery by priority (Piper): speed multiplier and expression (pitch/energy variation).
   tone_urgent_speed: 1.1      # P1: quicker, more urgent
@@ -308,6 +310,7 @@ input:
   silent_keeps_p1: true     # urgent (P1) calls still speak while silent
   mindset_toggle_bit: 0x01000000  # UDP Action 5 (stick left): balanced <-> aggressive; 0 disables
   page_cycle_bit: 0x00800000      # UDP Action 4 (stick right): reset to the first page; 0 disables
+  volume_cycle_bit: 0x20000000  # UDP Action 10: cycle speech volume
   # Driver menu (docs/12, menu.yaml): Up/Down open + scroll, Action 1 confirms while open.
   menu_up_bit: 0x00200000         # UDP Action 2 (stick up); 0 disables
   menu_down_bit: 0x00400000       # UDP Action 3 (stick down); 0 disables
@@ -320,7 +323,6 @@ input:
     - {bit: 0x04000000, item: push}       # UDP Action 7: push or save
     - {bit: 0x08000000, item: fight}      # UDP Action 8: fight + pace briefing
     - {bit: 0x10000000, item: understeer} # UDP Action 9: understeer
-    - {bit: 0x20000000, item: oversteer}  # UDP Action 10: oversteer
     - {bit: 0x40000000, item: budget}     # UDP Action 11: radio calls
     - {bit: 0x80000000, item: mindset}    # UDP Action 12: mindset
   negative_mute_laps: 3
