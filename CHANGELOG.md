@@ -10,6 +10,14 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.54.0 (2026-11-05)
+
+### Features
+
+- **bench**: Move source recordings to recordings-bench/ and keep them out of cleanup
+  ([`4c9dcf7`](https://github.com/artsworks/f1-pitwall/commit/4c9dcf7c5f99287a63f926f7fce45dd65e3594f4))
+
+
 ## v0.53.0 (2026-11-03)
 
 ### Chores
