@@ -15,6 +15,7 @@ from pitwall.cli import main
 from pitwall.learning.bench import (
     ScenarioCheck,
     _scenario_ops,
+    adopt_source,
     build_recording_index,
     build_scorecard,
     compare,
@@ -22,6 +23,7 @@ from pitwall.learning.bench import (
     find_source,
     load_scenarios,
     parse_scenario,
+    scenario_source_uids,
     trend,
 )
 from pitwall.net.derive import ops_from_options
@@ -963,3 +965,120 @@ def test_find_source_hashes_each_file_once(tmp_path: Path, monkeypatch: pytest.M
     assert find_source(scenarios[0], index, digests) == (source, "")
     assert find_source(scenarios[1], index, digests) == (source, "")
     assert calls == 1
+
+
+def test_adopt_source_moves_recording_and_index(tmp_path: Path) -> None:
+    recordings = tmp_path / "recordings"
+    bench_dir = tmp_path / "recordings-bench"
+    recordings.mkdir()
+    source = recordings / "session_00000000000000aa_1.f1bin"
+    source.write_bytes(b"data")
+    index = recordings / "session_00000000000000aa_1.f1idx"
+    index.write_bytes(b"idx")
+
+    moved = adopt_source(source, recordings, bench_dir)
+
+    assert moved == bench_dir / source.name
+    assert moved.read_bytes() == b"data"
+    assert (bench_dir / index.name).read_bytes() == b"idx"
+    assert not source.exists()
+    assert not index.exists()
+
+
+def test_adopt_source_leaves_other_folders_alone(tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    source = other / "session_00000000000000aa_1.f1bin"
+    source.write_bytes(b"data")
+
+    assert adopt_source(source, tmp_path / "recordings", tmp_path / "bench") == source
+    assert source.exists()
+    assert not (tmp_path / "bench").exists()
+
+
+def test_adopt_source_keeps_original_when_destination_exists(tmp_path: Path) -> None:
+    recordings = tmp_path / "recordings"
+    bench_dir = tmp_path / "recordings-bench"
+    bench_dir.mkdir(parents=True)
+    source = recordings / "session_00000000000000aa_1.f1bin"
+    recordings.mkdir()
+    source.write_bytes(b"data")
+    (bench_dir / source.name).write_bytes(b"other")
+
+    assert adopt_source(source, recordings, bench_dir) == source
+    assert source.exists()
+
+
+def test_adopt_source_keeps_original_on_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recordings = tmp_path / "recordings"
+    recordings.mkdir()
+    source = recordings / "session_00000000000000aa_1.f1bin"
+    source.write_bytes(b"data")
+
+    def fail(*args: object) -> None:
+        raise OSError("file in use")
+
+    monkeypatch.setattr("pitwall.learning.bench.shutil.move", fail)
+
+    assert adopt_source(source, recordings, tmp_path / "bench") == source
+    assert source.exists()
+
+
+def test_scenario_source_uids(tmp_path: Path) -> None:
+    assert scenario_source_uids(tmp_path / "missing") == set()
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    _write_scenario(scenarios, _scenario_data(id="case"))
+    (scenarios / "broken.yaml").write_text("not: [valid")
+    (scenarios / "grades.yaml").write_text(yaml.safe_dump({"kind": "radio-grades"}))
+
+    assert scenario_source_uids(scenarios) == {0x1234}
+
+
+def test_bench_moves_sources_to_bench_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import pitwall.learning.bench as bench_module
+
+    home = tmp_path / "home"
+    recordings = home / "recordings"
+    recordings.mkdir(parents=True)
+    monkeypatch.setenv("PITWALL_HOME", str(home))
+    uid = 0x1234_5678_9ABC_DEF0
+    source = write_packet_stream(
+        recordings / "source.f1bin",
+        race_stream(RaceSpec(laps=2, dt=1.0, session_uid=uid)),
+        session_uid=uid,
+        metadata={"synthetic": False},
+    )
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    _write_scenario(
+        scenarios,
+        {
+            **_scenario_data(id="case"),
+            "source": {"session_uid": hex(uid), "sha256": digest},
+        },
+    )
+    captured: dict[str, list[Path]] = {}
+    real_index = bench_module.build_recording_index
+
+    def capture_index(directories):  # type: ignore[no-untyped-def]
+        captured["dirs"] = list(directories)
+        return real_index(directories)
+
+    monkeypatch.setattr(bench_module, "build_recording_index", capture_index)
+    _patch_bench_run(monkeypatch)
+
+    exit_code = main(["bench", "--scenarios", str(scenarios)])
+
+    output = capsys.readouterr()
+    assert exit_code == 0, output.err
+    assert captured["dirs"] == [recordings, home / "recordings-bench"]
+    moved = home / "recordings-bench" / source.name
+    assert moved.exists()
+    assert not source.exists()
+    assert "moved 1 source recording(s)" in output.err

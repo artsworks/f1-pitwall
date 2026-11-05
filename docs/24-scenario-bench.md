@@ -43,11 +43,21 @@ why: The mediums are 9 laps old and the window is open, so the stop is cheap.
 - The `damage` mutation clears the wing damage at the player's next pit stop.
 - A `fire` check passes if one of its rules fires on a lap inside `laps`. The lap range includes both ends.
 - An `absent` check passes if none of its rules fires inside `laps`.
-- The bench finds the source by session UID in `--recordings` folders and checks its
+- The bench finds the source by session UID in the search folders and checks its
   sha256. If the file is missing, the scenario is `skipped`.
 
 Each scenario runs in its own empty database with default priors. Results do not depend on
 scenario order or previously learned values.
+
+## Source recordings
+
+By default the bench searches the recordings folder and `recordings-bench/`. Use `--recordings` to search other folders.
+
+The bench moves each source it uses from the recordings folder into `recordings-bench/`. After the move, replay the file by its full path.
+
+`pitwall cleanup` never deletes a scenario source. It skips every recording whose session UID a scenario file names.
+
+`recordings-bench/` is not in git. The files are large, over 1 GB in total and some over GitHub's 100 MB limit, and the repo is public. Back the folder up and copy it by hand to run the bench on another machine.
 
 ## Scorecard
 
@@ -101,7 +111,7 @@ When the trend is stagnant, add new targets or new real recordings. Do not keep 
 1. Choose a gap from the backlog below or from a real session.
 2. Find a real source recording with the right shape. Read its UID with `pitwall recordings` and its hash with `sha256sum`.
 3. Write the scenario file. Write the expectations from race logic, not from the calls pitwall makes today.
-4. Run `pitwall bench --only <id> --recordings <dir>`. Read the failed checks and the laps where the rules fired.
+4. Run `pitwall bench --only <id>`. If the source is not in the default folders, add `--recordings <dir>`. Read the failed checks and the laps where the rules fired.
 5. If pitwall fails the scenario, set `status: target`. Set `status: guard` only if pitwall passes it and the expectations are correct.
 6. Open a PR with the scenario file only. The repo owner approves the expectations before anyone changes rules against the scenario.
 

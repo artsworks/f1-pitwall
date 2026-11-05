@@ -3,8 +3,9 @@
 Only files Pitwall can rebuild or no longer needs are listed. Dated learning
 packs and old temporary pack files can be listed, but `learning-latest.json`
 and `track_ledger.jsonl` are never touched. Recordings not yet learned are
-only listed with `--include-unlearned`. The database, profile, track overlays
-and voice models are never touched."""
+only listed with `--include-unlearned`. Recordings used as bench scenario
+sources are never listed. The database, profile, track overlays and voice
+models are never touched."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ import io
 import math
 import re
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Set
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,7 @@ class Plan:
     delete: list[Candidate]
     kept_unlearned: int  # old recordings kept because they are not in the database yet
     kept_no_uid: int = 0
+    kept_bench: int = 0  # recordings kept because a bench scenario uses them as source
 
     @property
     def total_bytes(self) -> int:
@@ -115,6 +117,7 @@ def plan_cleanup(
     recording_imports: Mapping[Path, float] | None = None,
     learnings_dir: Path | None = None,
     include_unlearned: bool = False,
+    protected_uids: Set[int] = frozenset(),
 ) -> Plan:
     now = time.time() if now is None else now
     recent = now - _RECENT_S
@@ -122,6 +125,7 @@ def plan_cleanup(
     out: list[Candidate] = []
     kept = 0
     kept_no_uid = 0
+    kept_bench = 0
 
     def add(p: Path, reason: str) -> None:
         stat = p.stat()
@@ -141,6 +145,11 @@ def plan_cleanup(
         m = _SESSION.match(p.name)
         if m is None:
             continue
+        uid = int(m.group(1), 16)
+        if uid in protected_uids:
+            if m.group(2) != "idx" and p.stat().st_mtime <= cutoff:
+                kept_bench += 1
+            continue
         mtime = p.stat().st_mtime
         if mtime > recent:
             continue
@@ -159,7 +168,6 @@ def plan_cleanup(
                 continue
         if mtime > cutoff:
             continue
-        uid = int(m.group(1), 16)
         if uid == 0 or uid not in learned_uids:
             if include_unlearned:
                 add(p, "old recording (unlearned, forced)")
@@ -206,7 +214,7 @@ def plan_cleanup(
     for p in _files(voices_dir / ".phrases", "*.wav"):
         if p.stat().st_mtime <= recent:
             add(p, "speech cache, rebuilt when needed")
-    return Plan(out, kept, kept_no_uid)
+    return Plan(out, kept, kept_no_uid, kept_bench)
 
 
 def apply(plan: Plan) -> tuple[int, int]:

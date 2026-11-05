@@ -385,6 +385,8 @@ def cmd_bench(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
     from pitwall.learning.bench import (
+        BENCH_RECORDINGS,
+        adopt_source,
         build_recording_index,
         build_scorecard,
         compare,
@@ -414,15 +416,31 @@ def cmd_bench(args: argparse.Namespace) -> int:
         scenario_ids = {scenario.id for scenario in all_scenarios}
         scenarios = load_scenarios(scenarios_dir, args.only)
         settings = ConfigStore(rules_dir=rules_dir, isolated=True).current()
+        rec_dir = storage_path(ConfigStore().current().recording.directory)
+        bench_dir = storage_path(BENCH_RECORDINGS)
         if args.recordings:
             recording_dirs = [Path(directory).expanduser() for directory in args.recordings]
         else:
-            recording_dirs = [storage_path(ConfigStore().current().recording.directory)]
+            recording_dirs = [rec_dir, bench_dir]
         index = build_recording_index(recording_dirs)
         jobs = args.jobs or os.cpu_count() or 1
         digests: dict[Path, str] = {}
         results: list[tuple[dict[str, Any], list[dict[str, Any]]] | None] = [None] * len(scenarios)
         sources = [find_source(scenario, index, digests) for scenario in scenarios]
+        adopted: dict[Path, Path] = {}
+        moved = 0
+        for i, (source, reason) in enumerate(sources):
+            if source is None:
+                continue
+            if source not in adopted:
+                adopted[source] = adopt_source(source, rec_dir, bench_dir)
+                moved += adopted[source] != source
+            sources[i] = (adopted[source], reason)
+        if moved:
+            print(
+                f"bench: moved {moved} source recording(s) to {bench_dir}",
+                file=sys.stderr,
+            )
         pending = [(i, source) for i, (source, _) in enumerate(sources) if source is not None]
         done = 0
         if jobs == 1 or len(pending) <= 1:
