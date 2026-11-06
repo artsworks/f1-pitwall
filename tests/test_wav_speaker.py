@@ -13,6 +13,7 @@ import pytest
 from pitwall.audio.dispatcher import Call
 from pitwall.audio.wav_speaker import (
     InvalidWav,
+    WarmProcess,
     WavSpeaker,
     pcm_to_wav,
     wav_info,
@@ -23,6 +24,8 @@ from tests.audio_contract import (
     assert_pitwall_wav,
     check_speaker_contract,
     make_call,
+    warm_test_init,
+    warm_test_render,
 )
 
 
@@ -202,6 +205,180 @@ def test_non_priority_renderer_uses_one_cache_slot(tmp_path: Path) -> None:
     try:
         assert speaker.warm([("same", 1), ("same", 2)]) == 1
         assert len(renderer.calls) == 1
+    finally:
+        speaker.close()
+
+
+def test_warm_thread_parallelism_renders_uncached_phrases_concurrently(
+    tmp_path: Path,
+) -> None:
+    class ThreadRenderer(FakeRenderer):
+        warm_parallelism = "thread"
+        warm_workers = 4
+
+        def __init__(self) -> None:
+            super().__init__(delay_s=0.05)
+            self._lock = threading.Lock()
+            self.in_flight = 0
+            self.max_in_flight = 0
+
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            with self._lock:
+                self.in_flight += 1
+                self.max_in_flight = max(self.max_in_flight, self.in_flight)
+            try:
+                return super().render(text, priority, background=background)
+            finally:
+                with self._lock:
+                    self.in_flight -= 1
+
+    renderer = ThreadRenderer()
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
+    try:
+        phrases = [(f"line {i}", 2) for i in range(6)]
+        assert speaker.warm(phrases) == 6
+        assert renderer.max_in_flight >= 2
+        assert len(renderer.calls) == 6
+        assert all(background for _, _, background in renderer.calls)
+        assert len(list(tmp_path.glob("*.wav"))) == 6
+
+        renderer.calls.clear()
+        assert speaker.warm(phrases) == 6
+        assert renderer.calls == []
+    finally:
+        speaker.close()
+
+
+def test_warm_process_parallelism_uses_worker_processes(tmp_path: Path) -> None:
+    class ProcessRenderer(FakeRenderer):
+        warm_parallelism = "process"
+        warm_workers = 2
+
+        def __init__(self, spec: WarmProcess) -> None:
+            super().__init__()
+            self.warm_process = spec
+
+    log_path = tmp_path / "workers.log"
+    renderer = ProcessRenderer(
+        WarmProcess(warm_test_init, (str(log_path),), warm_test_render, min_batch=1)
+    )
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path / "cache")
+    try:
+        phrases = [(f"line {i}", priority) for i, priority in enumerate((1, 2, 3, 1))]
+        assert speaker.warm(phrases) == 4
+        pids = {line.strip() for line in log_path.read_text().splitlines()}
+        assert len(pids) == 2
+        assert len(list((tmp_path / "cache").glob("*.wav"))) == 4
+        for text, priority in phrases:
+            assert speaker._cached((priority, text)) is not None
+    finally:
+        speaker.close()
+
+
+def test_warm_process_mode_without_spec_renders_sequentially(tmp_path: Path) -> None:
+    renderer = FakeRenderer()
+    renderer.warm_parallelism = "process"
+    renderer.warm_workers = 4
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
+    try:
+        assert speaker.warm([("a", 2), ("b", 2), ("c", 2)]) == 3
+        assert len(renderer.calls) == 3
+        assert all(background for _, _, background in renderer.calls)
+    finally:
+        speaker.close()
+
+
+def test_warm_process_small_batch_renders_in_process(tmp_path: Path) -> None:
+    class ProcessRenderer(FakeRenderer):
+        warm_parallelism = "process"
+        warm_workers = 2
+
+        def __init__(self, spec: WarmProcess) -> None:
+            super().__init__()
+            self.warm_process = spec
+
+    log_path = tmp_path / "workers.log"
+    renderer = ProcessRenderer(WarmProcess(warm_test_init, (str(log_path),), warm_test_render))
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path / "cache")
+    try:
+        phrases = [(f"line {i}", 2) for i in range(4)]
+        assert speaker.warm(phrases) == 4
+        assert len(renderer.calls) == 4
+        assert all(background for _, _, background in renderer.calls)
+        assert not log_path.exists()
+    finally:
+        speaker.close()
+
+
+def test_warm_reports_progress_for_sequential_render(tmp_path: Path) -> None:
+    renderer = FakeRenderer()
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
+    try:
+        assert speaker.warm([("cached", 2)]) == 1
+        calls: list[tuple[int, int, int]] = []
+        count = speaker.warm(
+            [("cached", 2), ("new a", 2), ("new b", 2)],
+            progress=lambda done, total, cached: calls.append((done, total, cached)),
+        )
+        assert count == 3
+        assert calls == [(0, 2, 1), (1, 2, 1), (2, 2, 1)]
+    finally:
+        speaker.close()
+
+
+def test_warm_reports_progress_for_thread_render(tmp_path: Path) -> None:
+    class ThreadRenderer(FakeRenderer):
+        warm_parallelism = "thread"
+        warm_workers = 4
+
+    renderer = ThreadRenderer(delay_s=0.02)
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
+    try:
+        calls: list[tuple[int, int, int]] = []
+        phrases = [(f"line {i}", 2) for i in range(6)]
+        count = speaker.warm(
+            phrases,
+            progress=lambda done, total, cached: calls.append((done, total, cached)),
+        )
+        assert count == 6
+        assert calls[0] == (0, 6, 0)
+        assert calls[-1] == (6, 6, 0)
+        dones = [done for done, _, _ in calls]
+        assert dones == sorted(set(dones))
+    finally:
+        speaker.close()
+
+
+def test_warm_failure_cancels_pending_and_caches_successes(tmp_path: Path) -> None:
+    class FailingRenderer(FakeRenderer):
+        warm_parallelism = "thread"
+        warm_workers = 2
+
+        def __init__(self) -> None:
+            super().__init__(delay_s=0.05)
+
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if text == "line 1":
+                self.calls.append((text, priority, background))
+                raise RuntimeError("boom")
+            return super().render(text, priority, background=background)
+
+    renderer = FailingRenderer()
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path)
+    try:
+        phrases = [(f"line {i}", 2) for i in range(12)]
+        with pytest.raises(RuntimeError, match="boom"):
+            speaker.warm(phrases)
+        calls = [text for text, _, _ in renderer.calls]
+        assert len(calls) < 12
+        successes = len([text for text in calls if text != "line 1"])
+        assert len(list(tmp_path.glob("*.wav"))) == successes
+        if "line 0" in calls:
+            assert speaker._cached(speaker._key("line 0", 2)) is not None
     finally:
         speaker.close()
 

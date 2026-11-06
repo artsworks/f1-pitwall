@@ -157,6 +157,8 @@ Each `audio` frame carries one complete WAV in base64. The WAV is RIFF, mono, 16
 
 A renderer can also give `provisional(text, priority)`. On a cache miss, `WavSpeaker` first waits for `render(..., background=False)`. If that render fails or times out, `WavSpeaker` plays the provisional audio and queues `render(..., background=True)` to fill the cache. OmniVoice waits up to `omnivoice_wait_s` and uses Piper as its provisional audio. The age check runs after the wait, so a call that passes `max_age_s` while it waits is dropped.
 
+A renderer can also set `warm_parallelism` (`"thread"` or `"process"`), `warm_workers` and, for process mode, a `WarmProcess` spec, so `warm()` renders phrases in parallel. Renderers without them warm sequentially. Process mode renders batches smaller than `WarmProcess.min_batch` (default 16) in-process, because starting workers costs more. If a render fails, `warm()` cancels the phrases that have not started, caches the ones that finished and raises the first error.
+
 **Mixing with game audio:** the radio shares the game headset. Give it a separate volume
 setting and play a short radio "click" before each call. Do not duck game audio. If calls
 are hard to hear, lower the in-game volume or send the radio to another device.

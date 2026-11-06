@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +23,7 @@ from pitwall.audio.speaker import (
     NullSpeaker,
     make_speaker,
 )
-from pitwall.audio.wav_speaker import WavSpeaker
+from pitwall.audio.wav_speaker import WarmProcess, WavSpeaker, default_warm_workers
 from pitwall.config.models import SpeechSettings
 from tests.audio_contract import FakePlayer
 
@@ -143,3 +144,69 @@ def test_piper_renderer_uses_priority_specific_tones() -> None:
     assert renderer.render("x", 3)[0] == b"calm:x"
     assert renderer.render("x", 1)[0] == b"urgent:x"
     assert used == ["calm", "urgent"]
+
+
+def test_piper_renderer_warm_process_attributes() -> None:
+    def synth(text: str) -> tuple[bytes, float]:
+        return b"wav", 0.0
+
+    renderer = PiperRenderer({2: synth}, synth, "piper-test", "key")
+    assert renderer.warm_parallelism is None
+    assert renderer.warm_workers == default_warm_workers()
+    assert renderer.warm_process is None
+
+    spec = WarmProcess(lambda _settings: None, (), lambda _task: (b"wav", 0.0))
+    configured = PiperRenderer(
+        {2: synth},
+        synth,
+        "piper-test",
+        "key",
+        warm_workers=4,
+        warm_process=spec,
+    )
+    assert configured.warm_parallelism == "process"
+    assert configured.warm_workers == 4
+    assert configured.warm_process is spec
+
+
+def test_piper_warm_render_uses_loaded_tones(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pitwall.audio.piper_tts as piper_module
+
+    wav = to_wav(np.zeros(160), 16_000)
+    tones = {
+        1: lambda _text: (wav, 0.01),
+        2: lambda _text: (wav, 0.02),
+        3: lambda _text: (wav, 0.03),
+    }
+    monkeypatch.setattr(piper_module, "_WARM_TONES", tones)
+
+    assert piper_module._warm_render(("line", 1)) == (wav, 0.01)
+    assert piper_module._warm_render(("line", 3)) == (wav, 0.03)
+    assert piper_module._warm_render(("line", 9)) == (wav, 0.02)
+
+
+def test_default_warm_workers_halves_cores(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    assert default_warm_workers() == 8
+    assert default_warm_workers(cap=4) == 4
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)
+    assert default_warm_workers() == 1
+    assert default_warm_workers(cap=4) == 1
+
+
+def test_piper_warm_init_loads_single_threaded_tones(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pitwall.audio.piper_tts as piper_module
+
+    monkeypatch.setattr(piper_module, "_WARM_TONES", None)
+    recorded: dict[str, int | None] = {}
+
+    def fake_make(
+        settings: SpeechSettings, *, ort_threads: int | None = None
+    ) -> dict[int, Callable[[str], tuple[bytes, float]]]:
+        recorded["ort_threads"] = ort_threads
+        return {2: lambda _text: (b"wav", 0.0)}
+
+    monkeypatch.setattr(piper_module, "make_piper_tone_synths", fake_make)
+    piper_module._warm_init(SpeechSettings())
+    assert recorded["ort_threads"] == 1
+    assert piper_module._WARM_TONES == {2: piper_module._WARM_TONES[2]}
