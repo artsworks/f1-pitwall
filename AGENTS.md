@@ -7,7 +7,7 @@ Each skill is a `SKILL.md` file under `.agents/skills/`.
 - `engineering-principles`: coding rules for every change in this repo.
 - `testing-dashboard`: browser checks of the dashboard and radio pages with real replay recordings.
 - `tts-engine-contract`: the speech engine contract, capability wiring, WAV rules and required tests. Read it before you change `src/pitwall/audio/` or speaker wiring.
-- `track-overlay-sync`: promote learned values from `~/.pitwall/tracks/*.yaml` or `learning-latest.json` into `src/pitwall/config/defaults/tracks/`.
+- `track-overlay-sync`: promote learned values from `~/.pitwall/tracks/*.yaml` or `learning-latest.json` into `src/pitwall/config/defaults/tracks/` by running `scripts/sync_track_overlays.py`.
 
 ## Speech engines
 
