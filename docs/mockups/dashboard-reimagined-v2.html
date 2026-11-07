@@ -927,7 +927,7 @@ body.diffs [data-diff]::before {
     <span id="ov" class="chip ov active">OV 3.2s</span>
     <span id="sm" class="chip sm on">SM</span>
   </span>
-  <span id="verbosity" class="dim"></span>
+  <span id="verbosity" class="dim"><span class="v-chip vol" title="volume 70%"><svg class="ico"><use href="#ico-quiet"/></svg>NORMAL</span></span>
   <span id="voice" class="voice" hidden><span class="v1-only">● LISTENING </span><svg class="ico v2-only"><use href="#ico-speak"/></svg>2s</span>
   <span id="drv" class="chip drv ok" title="driver rating 62 (global)"><span class="v1-only">DRV 62 <span class="dim">global</span></span><span class="v2-only"><svg class="ico"><use href="#ico-wheel"/></svg> 62 <svg class="ico src"><use href="#ico-globe"/></svg></span></span>
   <span id="limits-v1" class="chip limits warn v1-only">CUT 1 · TL 1</span>
@@ -1379,7 +1379,7 @@ body.diffs [data-diff]::before {
     posEl.className = "";
     lapEl.innerHTML = '<span class="v1-only">LAP </span><span class="v2-only">L</span>24/57';
     lapEl.className = "";
-    verbEl.innerHTML = "";
+    verbEl.innerHTML = '<span class="v-chip vol" title="volume 70%"><svg class="ico"><use href="#ico-quiet"/></svg>NORMAL</span>';
     voiceEl.hidden = true;
     document.getElementById("live").textContent = "LIVE";
     document.getElementById("age").innerHTML = '<span class="v1-only">age </span>42 ms';
@@ -1425,7 +1425,7 @@ body.diffs [data-diff]::before {
       lapEl.innerHTML = '<span class="v1-only">LAP </span><span class="v2-only">L</span>27/57';
       lapEl.className = "tick";
       verbEl.innerHTML = '<span class="v1-only">MINIMAL <span class="quiet">QUIET 0:45</span> <span class="silent">✕ SILENT</span></span>' +
-        '<span class="v2-only"><span class="v-chip" title="verbosity: minimal"><svg class="ico"><use href="#ico-vol"/></svg>MIN</span> ' +
+        '<span class="v2-only"><span class="v-chip vol" title="volume 70%"><svg class="ico"><use href="#ico-quiet"/></svg>NORMAL</span> <span class="v-chip" title="verbosity: minimal"><svg class="ico"><use href="#ico-vol"/></svg>MIN</span> ' +
         '<span class="v-chip quiet" title="quiet mode"><svg class="ico"><use href="#ico-quiet"/></svg>0:45</span> ' +
         '<span class="v-chip silent" title="radio muted"><svg class="ico"><use href="#ico-mute"/></svg></span></span>';
       voiceEl.hidden = false;

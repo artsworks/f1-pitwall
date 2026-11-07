@@ -115,6 +115,7 @@ def test_state_broadcast_logs_status_and_prints_pin_once_after_first_packet(
         metrics=SimpleNamespace(note_packet_to_ws=lambda *_args: None),
         dispatcher=SimpleNamespace(silent=False, quiet_until=None),
         mindset=None,
+        volume_pct=70,
         page=None,
         menu_payload=lambda _now: {},
         voice_payload=lambda _now: {"available": False, "listening": False},

@@ -1021,6 +1021,12 @@ class Dispatcher:
             related_rules=related_rules or [],
         )
 
+    def set_volume(self, percent: int) -> None:
+        for sink in self.sinks:
+            setter = getattr(sink, "set_volume", None)
+            if callable(setter):
+                setter(percent)
+
     def cancel_menu_prompt(self) -> None:
         kept = [q for q in self._queue if "menu" not in q.call.tags]
         if len(kept) != len(self._queue):

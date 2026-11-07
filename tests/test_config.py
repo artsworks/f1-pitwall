@@ -9,8 +9,20 @@ from pydantic import ValidationError
 
 from pitwall.config import loader
 from pitwall.config.loader import ConfigStore
-from pitwall.config.models import MenuSettings, Settings, TrackOverlay, call_budget, resolve_mindset
+from pitwall.config.models import (
+    MenuSettings,
+    Settings,
+    SpeechSettings,
+    TrackOverlay,
+    call_budget,
+    resolve_mindset,
+)
 from pitwall.learning.calibrate import write_overlays
+
+
+def test_volume_steps_clamp() -> None:
+    assert SpeechSettings(volume_steps=[-1, 70, 151]).volume_steps == [0, 70, 150]
+    assert SpeechSettings().volume_steps == [70, 40, 70, 100]
 
 
 def test_defaults_load() -> None:

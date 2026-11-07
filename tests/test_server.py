@@ -15,8 +15,9 @@ from pitwall.audio.dispatcher import Call
 from pitwall.audio.speaker import NullSpeaker
 from pitwall.config.loader import ConfigStore
 from pitwall.metrics import Metrics
-from pitwall.server.app import create_app
+from pitwall.server.app import create_app, state_payload
 from pitwall.server.hub import Hub
+from pitwall.state.session import Snapshot
 
 from .factories import make_snapshot, make_state
 
@@ -63,9 +64,11 @@ def test_websocket_hello_and_state_shape() -> None:
         assert hello["payload"]["protocol"] == 1
         assert hello["payload"]["config_hash"]
         assert hello["payload"]["audio"] is False
+        assert hello["payload"]["volume"] == {"label": "normal", "pct": 70}
         ws.send_json({"type": "hello", "v": 1, "last_seq": 7})
         snap = ws.receive_json()
         assert snap["type"] == "snapshot"
+        assert snap["payload"]["volume"] == {"label": "normal", "pct": 70}
         assert snap["payload"]["driver"] is None
         assert set(snap["payload"]["latency"]) == {
             "queue_count",
@@ -87,6 +90,18 @@ def test_websocket_hello_and_state_shape() -> None:
                 "status",
             }
         assert "calls" in snap["payload"]
+
+
+@pytest.mark.parametrize("percent,label", [(40, "low"), (70, "normal"), (100, "max")])
+def test_volume_payload_live_override(percent: int, label: str) -> None:
+    payload = state_payload(
+        Snapshot(now=1.0),
+        settings=ConfigStore().current(),
+        metrics=Metrics(),
+        quiet=False,
+        volume_pct=percent,
+    )
+    assert payload["volume"] == {"label": label, "pct": percent}
 
 
 def test_websocket_audio_subscription_is_removed_on_disconnect() -> None:

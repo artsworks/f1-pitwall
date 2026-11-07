@@ -87,6 +87,10 @@ The OmniVoice server owns the voice, seed, temperatures and steps. Pitwall sends
 
 All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` sets how many phrases `pitwall voice warm` renders. A new engine registers its id with `register_engine()`. See `.agents/skills/tts-engine-contract/SKILL.md`.
 
+`input.volume_cycle_bit` binds the speech volume cycle to UDP Action 10 by default. Set the bit to `0` to disable it.
+`speech.volume_steps` defaults to `[70, 40, 70, 100]`. Each step is clamped to 0–150 percent. A value of 100 means a Piper multiplier of 1.0.
+The cycle wraps and returns to normal between low and max. The live gain affects local and browser WAV playback without changing `speech.volume`.
+
 **Verbosity presets** let one control replace six separate settings:
 
 | Preset | Speaks | Budget/lap | Typical use |

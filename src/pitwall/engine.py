@@ -121,6 +121,7 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
     return {
         "mindset": int(inp.mindset_toggle_bit),
         "page": int(inp.page_cycle_bit),
+        "volume": int(inp.volume_cycle_bit),
         "menu_up": int(inp.menu_up_bit),
         "menu_down": int(inp.menu_down_bit),
         "menu_close": int(inp.menu_close_bit),
@@ -404,6 +405,10 @@ class Engine:
         # Live overrides owned by the backend and pushed to every client.
         self.mindset_override: str | None = None
         self.budget_live: float | None = None  # driver-menu calls-per-lap override
+        self._volume_index = 0
+        steps = self.store.current().speech.volume_steps
+        self.volume_pct = steps[0] if steps else 100
+        self.dispatcher.set_volume(self.volume_pct)
         pages = store.current().ui.pages
         self.page = pages[0] if pages else "race"
         self.last_snapshot: Snapshot | None = None  # latest processed tick snapshot
@@ -692,6 +697,20 @@ class Engine:
         snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
         self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
+
+    def cycle_volume(self, now: float) -> None:
+        steps = self.store.current().speech.volume_steps
+        if not steps:
+            return
+        self._volume_index = (self._volume_index + 1) % len(steps)
+        self.volume_pct = steps[self._volume_index]
+        self.dispatcher.set_volume(self.volume_pct)
+        label = self.store.current().speech.volume_label(self.volume_pct)
+        snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
+        self.dispatcher.menu_reply(f"Volume {label}.", "volume", dataclasses.replace(snap, now=now))
+        self.dispatcher.log.write(
+            {"t": now, "outcome": "volume", "rule_id": None, "text": label, "pct": self.volume_pct}
+        )
 
     def cycle_budget(self) -> float:
         """Next driver-menu calls-per-lap step; overrides the mindset's budget."""
@@ -2526,6 +2545,9 @@ class Engine:
             snapshot = dataclasses.replace(snapshot, driver_balance=balance)
         self.last_snapshot = snapshot
         for p in self._press_queue:
+            if p.kind == "volume":
+                self.cycle_volume(p.t)
+                continue
             if self._menu_press(p, snapshot):
                 continue
             if p.kind == "mindset":
