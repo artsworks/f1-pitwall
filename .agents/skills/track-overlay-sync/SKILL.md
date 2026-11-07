@@ -20,6 +20,8 @@ The goal is one PR that updates `src/pitwall/config/defaults/tracks/<id>.yaml`.
 
 ## Rules
 
+`scripts/sync_track_overlays.py` carries out these rules. Run it instead of editing the YAML by hand.
+
 - Skip the `"-1"` entry. It is the bucket for unknown tracks.
 - Skip a track that has no overlay entry. Leave its packaged file unchanged.
 - Sync only `fuel_kg_per_lap` and the `thresholds` block.
@@ -40,20 +42,18 @@ The goal is one PR that updates `src/pitwall/config/defaults/tracks/<id>.yaml`.
 
 ## Steps
 
-1. Compare each learned file with its packaged file. Print the keys that change.
-2. Edit the packaged files. Keep the existing one-line flow style for maps.
-3. Run this check. It prints `True` for each file when every learned key matches the packaged file.
-
-   ```
-   uv run python -c "
-   import glob, os, yaml
-   for f in sorted(glob.glob('<upload dir>/*.yaml')):
-       u = yaml.safe_load(open(f)); p = yaml.safe_load(open('src/pitwall/config/defaults/tracks/' + os.path.basename(f)))
-       print(os.path.basename(f), all(p.get(k) == v for k, v in u.items() if k != 'deg_ms_per_lap'))
-   "
-   ```
-
-4. Run `uv run pytest -q tests/test_config.py tests/test_track_overlay.py tests/test_calibrate.py`.
-   `test_track_thresholds_apply_only_after_selecting_track` checks the packaged Silverstone (track 7) fuel.
-   If 7.yaml fuel changes, update that assertion to the new value.
-5. Open one PR with a `feat(tracks):` title. List the old and new value for each changed key.
+1. Do not edit `src/pitwall/config/defaults/tracks/*.yaml` by hand.
+   Run the script so the format and merge rules stay consistent.
+2. Save the uploaded pack to `learnings/learning-latest.json`, or pass its path with `--pack`.
+   Put uploaded YAML files in a directory and pass it with `--overlay-dir`.
+3. Run `uv run python scripts/sync_track_overlays.py --dry-run`. Read the change table and every `WARN:` line.
+4. Stop and ask the repo owner when any of these happen:
+   - the script warns about `deg_ms_per_lap`
+   - the script warns about a home/pack mismatch
+   - a track id has no name
+   - a temperature moved by more than 5 C, or energy by more than 100000 J
+5. Run the script without `--dry-run` on a clean tree.
+   Pass `--yes` only in a fresh session or after the owner approves.
+6. In a cloud session the agent opens PRs through its own tool. Run the script with `--no-pr`.
+   Then open the PR with the script's table as the body.
+7. Do not run the bench.

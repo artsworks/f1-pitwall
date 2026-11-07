@@ -53,16 +53,25 @@ def test_call_budget_and_menu_steps() -> None:
 
 
 def test_track_thresholds_apply_only_after_selecting_track() -> None:
+    tracks_dir = loader.DEFAULTS_DIR / "tracks"
+    silverstone = yaml.safe_load((tracks_dir / "7.yaml").read_text())
+    interlagos = yaml.safe_load((tracks_dir / "16.yaml").read_text())
     store = ConfigStore()
 
     assert store.current().track is None
     assert store.current().thresholds["energy_over_tolerance_j"] == 400_000
     assert store.set_track(7) is True
-    assert store.current().thresholds["energy_over_tolerance_j"] == 600_000
+    assert (
+        store.current().thresholds["energy_over_tolerance_j"]
+        == silverstone["thresholds"]["energy_over_tolerance_j"]
+    )
     assert store.current().track is not None
-    assert store.current().track.fuel_kg_per_lap == 1.2746
+    assert store.current().track.fuel_kg_per_lap == silverstone["fuel_kg_per_lap"]
     assert store.set_track(16) is True
-    assert store.current().thresholds["energy_over_tolerance_j"] == 430_000
+    assert (
+        store.current().thresholds["energy_over_tolerance_j"]
+        == interlagos["thresholds"]["energy_over_tolerance_j"]
+    )
 
 
 def test_mindset_inherits() -> None:
