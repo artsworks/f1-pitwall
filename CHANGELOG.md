@@ -10,6 +10,20 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.56.0 (2026-11-07)
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#175](https://github.com/artsworks/f1-pitwall/pull/175),
+  [`e0518de`](https://github.com/artsworks/f1-pitwall/commit/e0518dec7a6806424d40fb103ef973212a9c84da))
+
+### Features
+
+- **tracks**: Promote learned overlays from the 2026-11-05 pack
+  ([#177](https://github.com/artsworks/f1-pitwall/pull/177),
+  [`aedc616`](https://github.com/artsworks/f1-pitwall/commit/aedc616be93cad92c12ac105f2bd54d9f1abb142))
+
+
 ## v0.55.0 (2026-11-07)
 
 ### Features
