@@ -10,6 +10,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.55.0 (2026-11-07)
+
+### Features
+
+- **tracks**: Add script to promote learned track overlays without an agent session
+  ([#176](https://github.com/artsworks/f1-pitwall/pull/176),
+  [`d567d43`](https://github.com/artsworks/f1-pitwall/commit/d567d4338fc9d521e30910d9ebd7ed8429a25b30))
+
+
 ## v0.54.0 (2026-11-05)
 
 ### Features
