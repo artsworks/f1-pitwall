@@ -1,17 +1,8 @@
-from pitwall.engine.core import (
-    Engine as Engine,
-)
-from pitwall.engine.core import (
-    _hold_cover_plan as _hold_cover_plan,
-)
-from pitwall.engine.core import (
-    _PendingPitLoss as _PendingPitLoss,
-)
-from pitwall.engine.core import (
+from pitwall.engine.battle import (
     _rival_pace as _rival_pace,
 )
 from pitwall.engine.core import (
-    _true_behind_view as _true_behind_view,
+    Engine as Engine,
 )
 from pitwall.engine.core import (
     action_bits as action_bits,
@@ -27,4 +18,13 @@ from pitwall.engine.core import (
 )
 from pitwall.engine.core import (
     run_replay as run_replay,
+)
+from pitwall.engine.persistence import (
+    _PendingPitLoss as _PendingPitLoss,
+)
+from pitwall.engine.planning import (
+    _hold_cover_plan as _hold_cover_plan,
+)
+from pitwall.engine.planning import (
+    _true_behind_view as _true_behind_view,
 )

@@ -291,10 +291,10 @@ def test_engine_stores_weekend_structure_arriving_after_upsert() -> None:
     engine.state.session_uid = 0xF1262009
     engine.state.track_id = 7
     engine.state.session_type = 15
-    engine._upsert_session(0xF1262009)  # noqa: SLF001
+    engine.writer._upsert_session(0xF1262009)  # noqa: SLF001
     assert db.session_row(0xF1262009)["weekend_structure"] == ""
 
     engine.state.weekend_structure = (1, 10, 15, 5, 16)
-    engine._write_laps()  # noqa: SLF001
+    engine.writer._write_laps()  # noqa: SLF001
 
     assert db.session_row(0xF1262009)["weekend_structure"] == "1,10,15,5,16"

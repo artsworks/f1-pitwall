@@ -347,14 +347,14 @@ def _engine_with_setup_change(uid: int, session_type: int, lockups_rear: int) ->
 
 def test_garage_setup_change_drops_stale_advice_without_a_new_lap() -> None:
     engine = _engine_with_setup_change(111, session_type=1, lockups_rear=2)
-    engine._write_laps()
+    engine.writer._write_laps()
     assert engine.state.setup_advice == ()
     assert len(engine.db.setup_changes_for_session(111)) == 1
 
 
 def test_race_setup_change_refreshes_advice_without_a_new_lap() -> None:
     engine = _engine_with_setup_change(112, session_type=15, lockups_rear=2)
-    engine._write_laps()
+    engine.writer._write_laps()
     assert engine.state.setup_advice
     assert all(rec.mode in ("race", "race_stop") for rec in engine.state.setup_advice)
 
@@ -366,9 +366,9 @@ def test_new_session_resets_parc_ferme_written() -> None:
         db=Database(":memory:"),
         decision_log_fp=io.StringIO(),
     )
-    engine._parc_ferme_written = 1
+    engine.writer._parc_ferme_written = 1
     engine._on_new_session(113)
-    assert engine._parc_ferme_written is None
+    assert engine.writer._parc_ferme_written is None
 
 
 def test_delete_setup_changes_after_rewind_time() -> None:

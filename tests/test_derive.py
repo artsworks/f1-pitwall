@@ -186,9 +186,9 @@ def test_engine_damage_signal_excludes_transient_laps(transient: dict[str, objec
     lap = LapSummary(2, 95_000, 30_000, 30_000, 17, 2, 10.0, True)
     snap = Snapshot(now=1.0, race_phase="racing", lap_num=3, tyre_age_laps=3)
     engine.state.laps.append(dataclasses.replace(lap, **transient))
-    assert engine._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
     engine.state.laps[-1] = lap
-    assert engine._plan_damage(snap, fit) == ("pace", 4800.0, 0.0)
+    assert engine.planner._plan_damage(snap, fit) == ("pace", 4800.0, 0.0)
     db.close()
 
 
@@ -209,15 +209,15 @@ def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
         position=5,
         grid_position=5,
     )
-    engine._plan(snap)
+    engine.planner._plan(snap)
     damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
-    result = engine._plan(damaged)
+    result = engine.planner._plan(damaged)
     assert result.plan_switch_reason == "invalid"
     assert result.plan_switched_from == "A"
     assert result.active_plan == "B"
-    assert engine._plan_damage(damaged, engine.ctx.fresh_prior) == ("damage", 1200.0, 5.0)
+    assert engine.planner._plan_damage(damaged, engine.ctx.fresh_prior) == ("damage", 1200.0, 5.0)
     repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
-    assert engine._plan_damage(repaired, engine.ctx.fresh_prior) == ("", 0.0, 0.0)
+    assert engine.planner._plan_damage(repaired, engine.ctx.fresh_prior) == ("", 0.0, 0.0)
     db.close()
 
 
@@ -235,13 +235,13 @@ def test_engine_worsening_damage_recomputes_without_invalid_switch(monkeypatch) 
         pit_loss_s=20.0,
         pit_loss_source="default",
     )
-    engine._plan(snap)
+    engine.planner._plan(snap)
     damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
-    initial = engine._plan(damaged)
-    count = engine.plan_tracker.state.switch_count
-    key = engine._plan_key
+    initial = engine.planner._plan(damaged)
+    count = engine.planner.plan_tracker.state.switch_count
+    key = engine.planner._plan_key
     calls = []
-    tracker_type = type(engine.plan_tracker)
+    tracker_type = type(engine.planner.plan_tracker)
     original = tracker_type.update
 
     def capture(self, inp, th, **kwargs):
@@ -249,14 +249,16 @@ def test_engine_worsening_damage_recomputes_without_invalid_switch(monkeypatch) 
         return original(self, inp, th, **kwargs)
 
     monkeypatch.setattr(tracker_type, "update", capture)
-    worsened = engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=100)))
-    assert engine._plan_key != key
+    worsened = engine.planner._plan(
+        dataclasses.replace(snap, damage=DamageView(front_left_wing=100))
+    )
+    assert engine.planner._plan_key != key
     assert len(calls) == 1
     assert calls[0].damage_pace_ms == 2000.0
     assert calls[0].wing_change_s == 5.0
-    assert engine.plan_tracker.state.switch_count == count
+    assert engine.planner.plan_tracker.state.switch_count == count
     assert worsened.active_plan == initial.active_plan
-    engine._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=99)))
+    engine.planner._plan(dataclasses.replace(snap, damage=DamageView(front_left_wing=99)))
     assert len(calls) == 1
     db.close()
 
@@ -880,11 +882,11 @@ def test_persist_episode_skips_battle_param_folds_for_synthetic_session() -> Non
     )
 
     engine.state.session_uid = derived_uid(SOURCE_UID, ["inject_sc=3-4"])
-    engine._persist_episode(snapshot, episode)
+    engine.battle._persist_episode(snapshot, episode)
     assert db.params_for_track(7) == []
 
     engine.state.session_uid = SOURCE_UID
-    engine._persist_episode(snapshot, episode)
+    engine.battle._persist_episode(snapshot, episode)
     params = db.params_for_track(7)
     assert len(params) == 1
     assert params[0].name == "battle_hold"

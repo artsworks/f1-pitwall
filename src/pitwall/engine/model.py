@@ -282,6 +282,56 @@ class SessionModel:
             self._run_fuel_deltas = []
             self._run_fuel_last_kg = None
 
+    def _fit_closed_stint(
+        self, tail: list[LapRow], track_id: int, settings: Any, fuel_fixed: float | None
+    ) -> DegFit:
+        prior = self._deg_prior(track_id, tail[0].compound, settings)
+        return fit_stint(
+            tail,
+            prior,
+            min_laps=int(self.ctx.th("deg_min_laps", 3)),
+            fuel_coeff_fixed=fuel_fixed,
+            deg_max_ms_per_lap=self.ctx.th("deg_max_ms_per_lap", 600),
+            deg_rmse_bad_ms=self.ctx.th("deg_rmse_bad_ms", 800),
+            thermal_hi_c=self._thermal_hi_c(track_id, tail[0].compound, settings),
+        )
+
+    def _fit_player_stint(self, tail: list[LapRow], track_id: int, settings: Any) -> DegFit:
+        compound = tail[0].compound
+        fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
+        fuel_param = self.ctx.db.get_param(track_id, compound, fuel_name)
+        fuel_fixed = (
+            fuel_param.value
+            if fuel_param is not None and fuel_param.weight >= self.ctx.th("prior_min_weight", 2)
+            else None
+        )
+        fit = self._fit_current_stint(tail, track_id, settings, fuel_fixed)
+        if fit.deg2_ms_per_lap2 > 0:
+            return self._fit_closed_stint(tail, track_id, settings, fuel_fixed)
+        return fit
+
+    def _fold_lap_fuel(self, uid: int, lap: LapSummary, track_id: int) -> None:
+        if lap.valid and lap.fuel_kg > 0:
+            if self._fuel_last_kg is not None:
+                delta = self._fuel_last_kg - lap.fuel_kg
+                if (
+                    track_id >= 0
+                    and not self.ctx.synthetic_session(uid)
+                    and self.ctx.th("fuel_delta_min_kg", 0)
+                    < delta
+                    < self.ctx.th("fuel_delta_max_kg", 10)
+                ):
+                    self.ctx.db.fold_param(
+                        track_id,
+                        0,
+                        "fuel_kg_per_lap",
+                        delta,
+                        param_weight_cap=self.ctx.th("param_weight_cap", 50),
+                    )
+            self._fuel_last_kg = lap.fuel_kg
+        elif lap.fuel_kg > 0:
+            self._fuel_last_kg = lap.fuel_kg
+
     def _note_session_fuel(self, lap: LapSummary) -> None:
         """Burn per lap measured this session; pit, SC and flashback laps break the chain."""
         self._sync_run_fuel()

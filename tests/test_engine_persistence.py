@@ -217,7 +217,7 @@ def _flush_pit_loss_sample(inlap_slow_ms: int, neutralised: int) -> tuple[Databa
         _insert_deg_prior_lap(db, uid, lap_num, lap_time_ms, lap_num)
     laps = db.laps_for(uid, 0)
     by_num = {lap.lap_num: lap for lap in laps}
-    engine._pending_pit_loss = _PendingPitLoss(
+    engine.writer._pending_pit_loss = _PendingPitLoss(
         session_uid=uid,
         track_id=7,
         in_lap=by_num[8],
@@ -227,7 +227,7 @@ def _flush_pit_loss_sample(inlap_slow_ms: int, neutralised: int) -> tuple[Databa
         neutralised=neutralised,
     )
 
-    engine._flush_pending_pit_loss(uid, laps, force=True)
+    engine.writer._flush_pending_pit_loss(uid, laps, force=True)
     return db, uid
 
 
@@ -659,7 +659,7 @@ def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
                 uid, car_idx, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True)
             )
 
-    engine._write_laps()
+    engine.writer._write_laps()
     assert [lap.sc_status for lap in db.laps_for(uid, 1)] == [0, 0, 0, 1, 1, 1]
     for lap_num, lap_time in enumerate((90_000, 90_000, 90_000), start=1):
         db.insert_lap(uid, 0, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True))
@@ -708,7 +708,7 @@ def test_rival_history_without_lap_data_uses_unknown_sc_and_is_excluded() -> Non
 
     for lap_num in range(1, 4):
         db.insert_lap(uid, 0, LapSummary(lap_num, 90_000, 30_000, 30_000, 17, 1, 10, True))
-    engine._write_laps()
+    engine.writer._write_laps()
     assert [lap.sc_status for lap in db.laps_for(uid, 3)] == [SC_UNKNOWN, SC_UNKNOWN]
     engine.model._fold_driver(uid)
 
