@@ -16,9 +16,9 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
     )
     fit = DegFit(90_000.0, 150.0, 30.0, 20, 0.0, 0.9, "prior")
     engine.deg_fit = fit
-    engine._fresh_prior = fit
-    engine._green_pit_loss_s = 22.0
-    engine._sc_pit_loss_s = 12.0
+    engine.ctx.fresh_prior = fit
+    engine.ctx.green_pit_loss_s = 22.0
+    engine.ctx.sc_pit_loss_s = 12.0
     updates: list[bool] = []
     original_update = engine.plan_tracker.update
 
@@ -66,10 +66,10 @@ def test_model_view_carries_green_pit_loss(tmp_path) -> None:
         decision_log_path=tmp_path / "decisions.jsonl",
         sinks=[],
     )
-    engine._update_model()
-    engine._green_pit_loss_s = 22.0
-    engine._sc_pit_loss_s = 12.0
-    engine._update_model()
+    engine.model._update_model()
+    engine.ctx.green_pit_loss_s = 22.0
+    engine.ctx.sc_pit_loss_s = 12.0
+    engine.model._update_model()
 
     assert engine.state.model.green_pit_loss_s == 22.0
     assert engine.state.model.sc_pit_loss_s == 12.0
@@ -82,7 +82,7 @@ def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> No
         sinks=[],
     )
     engine.deg_fit = DegFit(90_000.0, 100.0, 30.0, 20, 0.0, 0.9, "prior")
-    engine._fresh_prior = DegFit(90_000.0, 300.0, 30.0, 20, 0.0, 0.9, "prior")
+    engine.ctx.fresh_prior = DegFit(90_000.0, 300.0, 30.0, 20, 0.0, 0.9, "prior")
     snap = Snapshot(
         now=1.0,
         phase="racing",

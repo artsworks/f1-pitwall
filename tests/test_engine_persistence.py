@@ -137,8 +137,8 @@ def test_sc_pit_loss_uses_vsc_default_for_vsc_status() -> None:
 
     for status, expected in ((2, 12.0), (1, 8.0), (0, 8.0)):
         engine.state.safety_car_status = status
-        engine._update_model()
-        assert engine._sc_pit_loss_s == expected
+        engine.model._update_model()
+        assert engine.ctx.sc_pit_loss_s == expected
 
     db.close()
 
@@ -238,7 +238,7 @@ def test_deg_prior_uses_clean_session_lap_median() -> None:
     for lap_num, (lap_time_ms, age) in enumerate(clean, start=1):
         _insert_deg_prior_lap(db, uid, lap_num, lap_time_ms, age)
 
-    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, settings)  # noqa: SLF001
     expected = median(lap_time_ms - prior.deg_ms_per_lap * age for lap_time_ms, age in clean)
 
     assert prior.base_ms == expected
@@ -249,10 +249,10 @@ def test_deg_prior_keeps_learned_base_ahead_of_session_laps() -> None:
     db = Database(":memory:")
     engine, uid, settings = _deg_prior_engine(db)
     _insert_deg_prior_lap(db, uid, 1, 112_618, 1)
-    name = engine._learned_name(7, 17, "base_ms")  # noqa: SLF001
+    name = engine.model._learned_name(7, 17, "base_ms")  # noqa: SLF001
     db.set_param(7, 17, name, 110_000.0, weight=3.0)
 
-    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, settings)  # noqa: SLF001
 
     assert prior.base_ms == 110_000.0
 
@@ -263,7 +263,7 @@ def test_deg_prior_uses_fallback_without_clean_session_laps() -> None:
     _insert_deg_prior_lap(db, uid, 1, 127_038, 1, valid=False)
     _insert_deg_prior_lap(db, uid, 2, 127_038, 2, sc_status=1)
 
-    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, settings)  # noqa: SLF001
 
     assert prior.base_ms == 95_000
 
@@ -274,7 +274,7 @@ def test_learned_thermal_window_widens_the_degradation_cutoff() -> None:
     db.set_param(7, 17, "thermal_lo_c", 95.0, weight=2.0)
     db.set_param(7, 17, "thermal_hi_c", 100.0, weight=2.0)
 
-    assert engine._thermal_hi_c(7, 17, settings) == 105.0
+    assert engine.model._thermal_hi_c(7, 17, settings) == 105.0
 
 
 def test_player_laps_carry_wear_fuel_ers(tmp_path: Path) -> None:
@@ -498,16 +498,16 @@ def test_fuel_kg_per_lap_folded(tmp_path: Path) -> None:
 
 def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(1, 90_000, 30_000, 30_000, 17, 1, 10.0, False, ["first_lap"], fuel_kg=20.0)
     )
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(2, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=18.0)
     )
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(3, 100_000, 30_000, 30_000, 17, 1, 10.0, False, ["pitted"], fuel_kg=17.0)
     )
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(
             4,
             100_000,
@@ -521,17 +521,17 @@ def test_run_fuel_excludes_out_laps_and_resets_on_next_run() -> None:
             fuel_kg=16.0,
         )
     )
-    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([2.0])
+    assert [delta for _, delta in engine.model._run_fuel_deltas] == pytest.approx([2.0])
 
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(5, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=14.38)
     )
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(6, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=12.76)
     )
-    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([2.0, 1.62, 1.62])
+    assert [delta for _, delta in engine.model._run_fuel_deltas] == pytest.approx([2.0, 1.62, 1.62])
 
-    engine._run_fuel_deltas[:] = [(1.0, 1.5), (2.0, 1.6)]
+    engine.model._run_fuel_deltas[:] = [(1.0, 1.5), (2.0, 1.6)]
     engine.ingest.on_datagram(
         pack_packet(PacketId.LAP_DATA, {"cars": {0: {"driver_status": 3, "pit_status": 0}}}),
         1.0,
@@ -549,18 +549,18 @@ def test_run_fuel_drops_laps_a_flashback_erased() -> None:
 
     def lap(num: int, fuel_kg: float, at_s: float) -> None:
         state.last_packet_t = at_s
-        engine._note_session_fuel(
+        engine.model._note_session_fuel(
             LapSummary(num, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=fuel_kg)
         )
 
     lap(1, 20.0, 90.0)
     lap(2, 18.5, 180.0)
     lap(3, 16.8, 270.0)
-    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([1.5, 1.7])
+    assert [delta for _, delta in engine.model._run_fuel_deltas] == pytest.approx([1.5, 1.7])
 
     for listener in state.rewind_listeners:
         listener(170.0)
-    assert engine._run_fuel_deltas == []
+    assert engine.model._run_fuel_deltas == []
 
     lap(2, 18.6, 180.0)
     lap(3, 16.6, 270.0)
@@ -577,14 +577,14 @@ def test_session_fuel_median_drops_laps_a_flashback_erased() -> None:
 
     def lap(num: int, fuel_kg: float, at_s: float) -> None:
         state.last_packet_t = at_s
-        engine._note_session_fuel(
+        engine.model._note_session_fuel(
             LapSummary(num, 90_000, 30_000, 30_000, 17, 1, 10.0, True, fuel_kg=fuel_kg)
         )
 
     lap(1, 20.0, 90.0)
     lap(2, 18.5, 180.0)
     lap(3, 16.8, 270.0)
-    assert engine._fuel_per_lap(10) == pytest.approx((1.6, "session"))
+    assert engine.model._fuel_per_lap(10) == pytest.approx((1.6, "session"))
 
     for listener in state.rewind_listeners:
         listener(170.0)
@@ -592,7 +592,7 @@ def test_session_fuel_median_drops_laps_a_flashback_erased() -> None:
     lap(2, 18.6, 180.0)
     lap(3, 16.6, 270.0)
     lap(4, 14.6, 360.0)
-    assert engine._fuel_per_lap(10) == pytest.approx((2.0, "session"))
+    assert engine.model._fuel_per_lap(10) == pytest.approx((2.0, "session"))
 
 
 def test_rival_laps_persisted(tmp_path: Path) -> None:
@@ -663,7 +663,7 @@ def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
     assert [lap.sc_status for lap in db.laps_for(uid, 1)] == [0, 0, 0, 1, 1, 1]
     for lap_num, lap_time in enumerate((90_000, 90_000, 90_000), start=1):
         db.insert_lap(uid, 0, LapSummary(lap_num, lap_time, 30_000, 30_000, 17, 1, 10, True))
-    engine._fold_driver(uid)
+    engine.model._fold_driver(uid)
 
     assert db.get_param(7, 0, "driver_pace_delta_ms").value == -5_000
 
@@ -710,7 +710,7 @@ def test_rival_history_without_lap_data_uses_unknown_sc_and_is_excluded() -> Non
         db.insert_lap(uid, 0, LapSummary(lap_num, 90_000, 30_000, 30_000, 17, 1, 10, True))
     engine._write_laps()
     assert [lap.sc_status for lap in db.laps_for(uid, 3)] == [SC_UNKNOWN, SC_UNKNOWN]
-    engine._fold_driver(uid)
+    engine.model._fold_driver(uid)
 
     assert db.get_param(7, 0, "driver_pace_delta_ms") is None
 
@@ -790,12 +790,12 @@ def test_only_clean_fits_on_known_tracks_fold_into_priors() -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), db=db)
     clean = DegFit(90_000.0, 80.0, 30.0, 8, 150.0, 0.9, "fit")
-    engine._fold_fit(-1, 18, clean)
-    engine._fold_fit(7, 18, DegFit(55_520.0, 600.0, 0.0, 7, 7_992.0, 0.2, "fit"))
-    engine._fold_fit(7, 18, DegFit(90_000.0, 80.0, 30.0, 4, 150.0, 0.5, "blend"))
+    engine.model._fold_fit(-1, 18, clean)
+    engine.model._fold_fit(7, 18, DegFit(55_520.0, 600.0, 0.0, 7, 7_992.0, 0.2, "fit"))
+    engine.model._fold_fit(7, 18, DegFit(90_000.0, 80.0, 30.0, 4, 150.0, 0.5, "blend"))
     assert db.get_param(-1, 18, "deg_ms_per_lap") is None
     assert db.get_param(7, 18, "deg_ms_per_lap") is None
-    engine._fold_fit(7, 18, clean)
+    engine.model._fold_fit(7, 18, clean)
     p = db.get_param(7, 18, "deg_ms_per_lap")
     assert p is not None and p.value == 80.0
 
@@ -825,19 +825,19 @@ def test_run_fuel_counts_hot_lap_that_began_at_the_out_lap_crossing() -> None:
     state.fuel_in_tank = 4.966
     lap_data(1, 1)
     assert state.hot_lap_fuel_base == (1, pytest.approx(4.966))
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(
             1, 71_498, 20_000, 25_000, 17, 1, 10.0, True, ["first_lap", "pitted"], fuel_kg=4.016
         )
     )
-    assert [delta for _, delta in engine._run_fuel_deltas] == pytest.approx([0.95])
+    assert [delta for _, delta in engine.model._run_fuel_deltas] == pytest.approx([0.95])
 
     lap_data(2, 3)
     state.fuel_in_tank = 3.9
     lap_data(2, 1)
     lap_data(2, 2, pit_status=1)
     assert state.hot_lap_fuel_base is None
-    engine._note_session_fuel(
+    engine.model._note_session_fuel(
         LapSummary(2, 80_000, 20_000, 25_000, 17, 1, 10.0, False, ["pitted"], fuel_kg=3.0)
     )
-    assert engine._run_fuel_deltas == []
+    assert engine.model._run_fuel_deltas == []

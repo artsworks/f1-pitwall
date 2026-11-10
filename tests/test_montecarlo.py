@@ -455,9 +455,9 @@ def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -
 
     engine = build_engine(clock=VirtualClock(), sinks=[])
     engine.deg_fit = _fit(150.0)
-    engine._fresh_prior = _fit(80.0)
-    engine._green_pit_loss_s = 21.0
-    engine._sc_pit_loss_s = 9.0
+    engine.ctx.fresh_prior = _fit(80.0)
+    engine.ctx.green_pit_loss_s = 21.0
+    engine.ctx.sc_pit_loss_s = 9.0
     engine.state.session_uid = 42
     calls = 0
     orig = montecarlo.plan_agreement
@@ -467,7 +467,7 @@ def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -
         calls += 1
         return orig(**kw)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr("pitwall.engine.core.plan_agreement", counted)
     monkeypatch.setattr(engine, "mode", lambda: {**MODE, "mc_every_n_laps": 2, "plan_mc_sims": 500})
 
     snap1 = Snapshot(
@@ -510,7 +510,7 @@ def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
 
     engine = build_engine(clock=VirtualClock(), sinks=[])
     engine.deg_fit = _fit(150.0)
-    engine._fresh_prior = _fit(80.0)
+    engine.ctx.fresh_prior = _fit(80.0)
     thresholds: list[object] = []
     mode = {**MODE, "plan_mc_sims": 500}
     original = montecarlo.plan_agreement
@@ -519,7 +519,7 @@ def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
         thresholds.append(kwargs["mode"]["pit_gain_min_s"])  # type: ignore[index]
         return original(**kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr("pitwall.engine.core.plan_agreement", counted)
     monkeypatch.setattr(engine, "mode", lambda: mode)
     snap = Snapshot(
         now=1.0,
@@ -547,14 +547,14 @@ def test_mc_stack_status_invalidates_cache_and_passes_cost(
 
     engine = build_engine(clock=VirtualClock(), sinks=[])
     engine.deg_fit = _fit(0.0)
-    engine._fresh_prior = _fit(0.0)
+    engine.ctx.fresh_prior = _fit(0.0)
     costs: list[object] = []
 
     def counted(**kwargs: object) -> McResult:
         costs.append(kwargs["stack_s"])
         return McResult(None, 1.0, 1)
 
-    monkeypatch.setattr("pitwall.engine.plan_agreement", counted)
+    monkeypatch.setattr("pitwall.engine.core.plan_agreement", counted)
     monkeypatch.setattr(engine, "mode", lambda: {**MODE, "plan_mc_sims": 100})
     snap = Snapshot(
         now=1.0,

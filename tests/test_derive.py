@@ -195,7 +195,7 @@ def test_engine_damage_signal_excludes_transient_laps(transient: dict[str, objec
 def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
-    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    engine.ctx.fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
     snap = Snapshot(
         now=1.0,
         race_phase="racing",
@@ -215,16 +215,16 @@ def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
     assert result.plan_switch_reason == "invalid"
     assert result.plan_switched_from == "A"
     assert result.active_plan == "B"
-    assert engine._plan_damage(damaged, engine._fresh_prior) == ("damage", 1200.0, 5.0)
+    assert engine._plan_damage(damaged, engine.ctx.fresh_prior) == ("damage", 1200.0, 5.0)
     repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
-    assert engine._plan_damage(repaired, engine._fresh_prior) == ("", 0.0, 0.0)
+    assert engine._plan_damage(repaired, engine.ctx.fresh_prior) == ("", 0.0, 0.0)
     db.close()
 
 
 def test_engine_worsening_damage_recomputes_without_invalid_switch(monkeypatch) -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
-    engine._fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    engine.ctx.fresh_prior = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
     snap = Snapshot(
         now=1.0,
         race_phase="racing",

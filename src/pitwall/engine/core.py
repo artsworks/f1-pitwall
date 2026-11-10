@@ -17,7 +17,6 @@ import time
 import traceback
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from statistics import median
 from typing import Any
 
 import numpy as np
@@ -35,41 +34,26 @@ from pitwall.config.models import (
 )
 from pitwall.config.paths import storage_path
 from pitwall.config.thresholds import threshold
+from pitwall.engine.context import EngineContext
+from pitwall.engine.model import SessionModel
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu, ReplyPicker, answer
 from pitwall.input.press import Press, PressDetector
 from pitwall.learning.hindsight import grade_and_store
 from pitwall.learning.tune import load_cooldown_mults
 from pitwall.metrics import Metrics
-from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
+from pitwall.model.budget import EnergyBudget, FuelBudget
 from pitwall.model.deg import (
-    DEG_FUEL_REF,
     DegFit,
     Prior,
     cliff_age,
-    corner_wear_life,
-    fit_is_clean,
-    fit_laps,
     fit_stint,
-    fuel_adjusted_deg,
-    laps_of_pace,
     planning_fit,
-    resolve_prior,
-    scoped,
-    session_base_ms,
     usable_laps,
 )
 from pitwall.model.driver import (
-    DRIVER_COMPOUND,
-    GLOBAL_TRACK_ID,
-    PARAM_NAMES,
-    RATING,
-    DriverInputs,
     DriverScale,
     advice_scale,
-    compute_profile,
-    fold_weight,
-    learned_rating,
 )
 from pitwall.model.pitloss import current_pit_loss, measure, ref_pace_after_ms, ref_pace_ms
 from pitwall.net.recording import RecordingReader
@@ -80,9 +64,8 @@ from pitwall.setup.advisor import SetupAdvisor
 from pitwall.setup.states import majority_state
 from pitwall.state.lap import LapSummary
 from pitwall.state.model_view import ModelView
-from pitwall.state.session import ErsLapTotals, SessionState, Snapshot, thermal_window, widen_window
+from pitwall.state.session import SessionState, Snapshot
 from pitwall.store.db import LapRow, lap_row_from_summary
-from pitwall.store.uids import is_synthetic_uid
 from pitwall.strategy.battle import (
     HOLD,
     PASS_COMPOUND,
@@ -93,7 +76,6 @@ from pitwall.strategy.battle import (
     BattleRates,
     BattleTracker,
     Episode,
-    shrink,
 )
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pace import pace_words
@@ -160,7 +142,6 @@ def _with_plan[T: (ModelView, Snapshot)](obj: T, f: PlanFields) -> T:
     )
 
 
-_NON_GREEN_REASONS = frozenset({"first_lap", "pitted", "after_in_lap", "safety_car", "flashback"})
 # Pit plans that end in a stop. "stay" and "no_stop" are plans too, but the
 # wing change at the stop only makes sense when a stop is coming.
 _STOP_PLANS = frozenset(
@@ -208,14 +189,6 @@ def _rival_pace(snap: Snapshot, idx: int, closing_s: float) -> str:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class _EnergyLapLatch:
-    lap_num: int
-    start_store_j: float
-    start_laps_remaining: int
-    gradable: bool
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class _PendingPitLoss:
     session_uid: int
     track_id: int
@@ -224,133 +197,6 @@ class _PendingPitLoss:
     ref_pace_ms: int
     lane_ms: int
     neutralised: int
-
-
-class _EnergyLapTracker:
-    def __init__(self) -> None:
-        self._latch: _EnergyLapLatch | None = None
-        self._finishing: _EnergyLapLatch | None = None
-        self._graded_seq: int | None = None
-        self._partial_next_latch = False
-        self.prev_lap: EnergyBudget | None = None
-
-    def reset(self) -> None:
-        self._latch = None
-        self._finishing = None
-        self._graded_seq = None
-        self._partial_next_latch = True
-        self.prev_lap = None
-
-    def _start_latch(
-        self,
-        lap_num: int,
-        laps_remaining: int,
-        store_j: float,
-        *,
-        gradable: bool,
-    ) -> None:
-        self._latch = _EnergyLapLatch(lap_num, store_j, laps_remaining, gradable)
-        self._partial_next_latch = False
-
-    def _grade(
-        self,
-        lap: _EnergyLapLatch,
-        counters: tuple[float, float],
-        *,
-        store_j: float,
-        store_capacity_j: float,
-        soc_floor_pct: float,
-        over_tolerance_j: float,
-        attack_ok: bool,
-    ) -> None:
-        self.prev_lap = None
-        if not lap.gradable:
-            return
-        deployed_j, harvested_j = counters
-        self.prev_lap = energy_budget(
-            store_j=store_j,
-            allowance_store_j=lap.start_store_j,
-            store_capacity_j=store_capacity_j,
-            laps_remaining=lap.start_laps_remaining,
-            deployed_this_lap_j=deployed_j,
-            harvested_this_lap_j=harvested_j,
-            soc_floor_pct=soc_floor_pct,
-            over_tolerance_j=over_tolerance_j,
-            attack_ok=attack_ok,
-        )
-
-    def observe(
-        self,
-        lap_num: int,
-        laps_remaining: int,
-        store_j: float,
-        dep: float,
-        harv: float,
-        *,
-        counters_current: bool,
-        finished: ErsLapTotals | None,
-        store_capacity_j: float,
-        soc_floor_pct: float,
-        over_tolerance_j: float,
-        attack_ok: bool,
-    ) -> tuple[float, float, float | None, int]:
-        if lap_num < 1:
-            if self._latch is not None or self._finishing is not None:
-                self.reset()
-            live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
-            return live_dep, live_harv, None, laps_remaining
-
-        if self._latch is None:
-            self._start_latch(
-                lap_num,
-                laps_remaining,
-                store_j,
-                gradable=lap_num == 1 and not self._partial_next_latch,
-            )
-        elif lap_num == self._latch.lap_num + 1:
-            self._finishing = self._latch
-            self.prev_lap = None
-            self._start_latch(lap_num, laps_remaining, store_j, gradable=True)
-        elif lap_num != self._latch.lap_num:
-            self._finishing = None
-            self.prev_lap = None
-            self._start_latch(lap_num, laps_remaining, store_j, gradable=False)
-
-        if finished is not None and finished.seq != self._graded_seq:
-            finishing = self._finishing
-            if finishing is not None and finished.lap_num == finishing.lap_num:
-                self._grade(
-                    finishing,
-                    (finished.deployed_j, finished.harvested_j),
-                    store_j=store_j,
-                    store_capacity_j=store_capacity_j,
-                    soc_floor_pct=soc_floor_pct,
-                    over_tolerance_j=over_tolerance_j,
-                    attack_ok=attack_ok,
-                )
-                self._finishing = None
-            self._graded_seq = finished.seq
-
-        return self._live_values(
-            laps_remaining,
-            dep,
-            harv,
-            counters_current=counters_current,
-        )
-
-    def _live_values(
-        self,
-        laps_remaining: int,
-        dep: float,
-        harv: float,
-        *,
-        counters_current: bool,
-    ) -> tuple[float, float, float | None, int]:
-        live_dep, live_harv = (dep, harv) if counters_current else (0.0, 0.0)
-        lap = self._latch
-        if lap is not None and lap.gradable:
-            return live_dep, live_harv, lap.start_store_j, lap.start_laps_remaining
-        return live_dep, live_harv, None, laps_remaining
 
 
 def budget_label(v: float) -> str:
@@ -372,24 +218,26 @@ class Engine:
         dispatcher: Dispatcher,
         synthetic_source: bool = False,
     ) -> None:
-        self.store = store
+        self.ctx = EngineContext(store, clock, state, dispatcher)
+        self.ctx.mode_source = lambda: self.mode()
+        self.ctx.store = store
         settings = store.current()
         self.setup_advisor = SetupAdvisor(state, settings.setup_rules)
-        self.clock = clock
+        self.ctx.clock = clock
         self.ingest = ingest
-        self.state = state
-        self.synthetic_source = synthetic_source
+        self.ctx.state = state
+        self.ctx.synthetic_source = synthetic_source
         self.rule_engine = rule_engine
-        self.dispatcher = dispatcher
-        self.dispatcher.on_response = self._on_dispatcher_response
+        self.ctx.dispatcher = dispatcher
+        self.ctx.dispatcher.on_response = self._on_dispatcher_response
         self.metrics = dispatcher.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
-        self.voice: VoiceChannel | None = None
+        self.ctx.voice = None
         self._voice_worker: VoiceWorker | None = None
         self._voice_closed: list[ChannelRecord] = []
-        self.on_voice_event: Callable[[dict[str, Any]], None] | None = None
-        self.on_session_end: Callable[[int], None] | None = None
+        self.ctx.on_voice_event = None
+        self.ctx.on_session_end = None
         self._paused = False
         inp = store.current().input
         self.detector = PressDetector(
@@ -402,30 +250,30 @@ class Engine:
         state.toggle_listeners.append(lambda t: self._press_queue.append(Press("silent", t)))
         state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         # Live overrides owned by the backend and pushed to every client.
-        self.mindset_override: str | None = None
-        self.budget_live: float | None = None  # driver-menu calls-per-lap override
+        self.ctx.mindset_override = None
+        self.ctx.budget_live = None  # driver-menu calls-per-lap override
         pages = store.current().ui.pages
-        self.page = pages[0] if pages else "race"
-        self.last_snapshot: Snapshot | None = None  # latest processed tick snapshot
+        self.ctx.page = pages[0] if pages else "race"
+        self.ctx.last_snapshot = None  # latest processed tick snapshot
         # Driver -> pit wall menu (docs/12); opinions bias advice for a few laps.
-        self.menu = DriverMenu()
+        self.ctx.menu = DriverMenu()
         self._menu_replies = ReplyPicker()
         self._menu_signal_names: dict[str, frozenset[str]] = {}
-        self._menu_signal_hash = self.store.hash
-        self.opinions: dict[str, tuple[str, int]] = {}  # topic -> (item id, lap)
-        self.db: Any = dispatcher.log.db
-        self.driver_db: Any = self.db
-        self._driver_rating = (0.5, 0.0, "")
+        self._menu_signal_hash = self.ctx.store.hash
+        self.ctx.opinions = {}  # topic -> (item id, lap)
+        self.ctx.db = dispatcher.log.db
+        self.ctx.driver_db = self.ctx.db
+        self.model = SessionModel(self.ctx, self._apply_mode, lambda: self._laps_written)
         self._apply_mode()
         # Crash recovery (docs/18): heartbeat to SQLite; on restart replay the
         # recording tail with the rules muted.
         self.recording_path_source: Any = None  # callable -> Path | None
         self._last_heartbeat: float | None = None
-        self.recovering = False
+        self.ctx.recovering = False
         self.alive_path: Path | None = None  # touched each live loop for the supervisor
         self._alive_t = -math.inf
         self._rule_errors_logged: set[tuple[str, str]] = set()
-        self.dispatcher.tuned_cooldown = load_cooldown_mults(self.db)
+        self.ctx.dispatcher.tuned_cooldown = load_cooldown_mults(self.ctx.db)
         self._laps_written = 0
         self._session_upserted: int | None = None
         self._parc_ferme_written: int | None = None
@@ -435,14 +283,14 @@ class Engine:
         self._session_ended_written = False
         # M3 model outputs, exposed on the engine until H2 moves them into
         # the snapshot.
-        self.deg_fit: DegFit | None = None
-        self.pit_loss_prior: Prior | None = None
-        self.pit_plan: PitPlan = NO_PLAN
+        self.ctx.deg_fit = None
+        self.ctx.pit_loss_prior = None
+        self.ctx.pit_plan = NO_PLAN
         self._held_plan: tuple[PitPlan, int] | None = None
-        self._fresh_prior: DegFit | None = None
-        self._green_pit_loss_s = 0.0
-        self._green_pit_samples_s: list[float] = []
-        self._sc_pit_loss_s = 0.0
+        self.ctx.fresh_prior = None
+        self.ctx.green_pit_loss_s = 0.0
+        self.ctx.green_pit_samples_s = []
+        self.ctx.sc_pit_loss_s = 0.0
         self._plan_mc_cache: dict[tuple[Any, ...], McResult | None] = {}
         # Named strategy plans (docs/03 "Strategy plans").
         self.plan_tracker = PlanTracker()
@@ -456,46 +304,20 @@ class Engine:
         self._stop_check: tuple[str, str, int, float] | None = None
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
-        self._compound_priors: dict[int, DegFit] = {}
         # Battle state + learned pass model (docs/18 Battle state).
         self.battle_tracker = BattleTracker()
-        self._battle_rates: tuple[int, BattleRates] | None = None
-        self.fuel_budget: FuelBudget | None = None
-        self.energy_budget: EnergyBudget | None = None
-        self.energy_prev_lap: EnergyBudget | None = None
-        self._energy_lap_tracker = _EnergyLapTracker()
+        self.ctx.fuel_budget = None
+        self.ctx.energy_budget = None
+        self.ctx.energy_prev_lap = None
         self._pit_in_lap: LapSummary | None = None
         self._pending_pit_loss: _PendingPitLoss | None = None
         self._folded_stints: set[tuple[int, int]] = set()
-        self._weekend_prior_cache: dict[tuple[int, int], tuple[float, int]] = {}
-        self._fuel_last_kg: float | None = None
-        self._session_fuel_last_kg: float | None = None
-        # (session time at the line, kg burned) per green lap this session.
-        self._session_fuel_deltas: list[tuple[float, float]] = []
-        self._run_fuel_seq = state.run_seq
-        # (session time at the line, kg burned) per green lap of this run.
-        self._run_fuel_deltas: list[tuple[float, float]] = []
-        self._run_fuel_last_kg: float | None = None
-        self._stint_fuel_ref = 0.0
-        self._stint_fuel_ref_laps = 0.0
-        self._stint_laps: list[LapRow] = []
-        self._model_key: tuple[int | None, int, int, int] | None = None
-        self._fuel_prior = Prior(0.0, 0.0, "default")
-        self._wear_per_lap = 0.0
-        self._stint_wear0: tuple[float, ...] = ()
-        self._stint_age0 = 0.0
-        self._stint_compound0 = -1
+        self.ctx.stint_fuel_ref = 0.0
+        self.ctx.stint_laps = []
 
         def _on_rewind(t: float) -> None:
             dispatcher.purge(reason="flashback", now=t)
-            # state.lap_num still holds the pre-rewind lap here, so match on session time.
-            self._run_fuel_deltas = [entry for entry in self._run_fuel_deltas if entry[0] <= t]
-            self._run_fuel_last_kg = None
-            self._session_fuel_deltas = [
-                entry for entry in self._session_fuel_deltas if entry[0] <= t
-            ]
-            self._session_fuel_last_kg = None
-            self._reset_energy_lap_tracking()
+            self.model.rewind(t)
             self._held_plan = None
             self._stop_expect = None
             self._prev_pit_status = -1  # -1: pit state unknown until the next tick
@@ -506,13 +328,200 @@ class Engine:
         state.session_listeners.append(self._on_new_session)
         state.session_end_listeners.append(self.fold_session_end)
 
+    def battle_rates(self, track_id: int) -> BattleRates:
+        return self.model.battle_rates(track_id)
+
+    @property
+    def store(self) -> ConfigStore:
+        return self.ctx.store
+
+    @store.setter
+    def store(self, value: ConfigStore) -> None:
+        self.ctx.store = value
+
+    @property
+    def clock(self) -> Clock:
+        return self.ctx.clock
+
+    @clock.setter
+    def clock(self, value: Clock) -> None:
+        self.ctx.clock = value
+
+    @property
+    def state(self) -> SessionState:
+        return self.ctx.state
+
+    @state.setter
+    def state(self, value: SessionState) -> None:
+        self.ctx.state = value
+
+    @property
+    def dispatcher(self) -> Dispatcher:
+        return self.ctx.dispatcher
+
+    @dispatcher.setter
+    def dispatcher(self, value: Dispatcher) -> None:
+        self.ctx.dispatcher = value
+
+    @property
+    def db(self) -> Any:
+        return self.ctx.db
+
+    @db.setter
+    def db(self, value: Any) -> None:
+        self.ctx.db = value
+
+    @property
+    def driver_db(self) -> Any:
+        return self.ctx.driver_db
+
+    @driver_db.setter
+    def driver_db(self, value: Any) -> None:
+        self.ctx.driver_db = value
+
+    @property
+    def synthetic_source(self) -> bool:
+        return self.ctx.synthetic_source
+
+    @synthetic_source.setter
+    def synthetic_source(self, value: bool) -> None:
+        self.ctx.synthetic_source = value
+
+    @property
+    def recovering(self) -> bool:
+        return self.ctx.recovering
+
+    @recovering.setter
+    def recovering(self, value: bool) -> None:
+        self.ctx.recovering = value
+
+    @property
+    def deg_fit(self) -> DegFit | None:
+        return self.ctx.deg_fit
+
+    @deg_fit.setter
+    def deg_fit(self, value: DegFit | None) -> None:
+        self.ctx.deg_fit = value
+
+    @property
+    def pit_loss_prior(self) -> Prior | None:
+        return self.ctx.pit_loss_prior
+
+    @pit_loss_prior.setter
+    def pit_loss_prior(self, value: Prior | None) -> None:
+        self.ctx.pit_loss_prior = value
+
+    @property
+    def pit_plan(self) -> PitPlan:
+        return self.ctx.pit_plan
+
+    @pit_plan.setter
+    def pit_plan(self, value: PitPlan) -> None:
+        self.ctx.pit_plan = value
+
+    @property
+    def fuel_budget(self) -> FuelBudget | None:
+        return self.ctx.fuel_budget
+
+    @fuel_budget.setter
+    def fuel_budget(self, value: FuelBudget | None) -> None:
+        self.ctx.fuel_budget = value
+
+    @property
+    def energy_budget(self) -> EnergyBudget | None:
+        return self.ctx.energy_budget
+
+    @energy_budget.setter
+    def energy_budget(self, value: EnergyBudget | None) -> None:
+        self.ctx.energy_budget = value
+
+    @property
+    def energy_prev_lap(self) -> EnergyBudget | None:
+        return self.ctx.energy_prev_lap
+
+    @energy_prev_lap.setter
+    def energy_prev_lap(self, value: EnergyBudget | None) -> None:
+        self.ctx.energy_prev_lap = value
+
+    @property
+    def mindset_override(self) -> str | None:
+        return self.ctx.mindset_override
+
+    @mindset_override.setter
+    def mindset_override(self, value: str | None) -> None:
+        self.ctx.mindset_override = value
+
+    @property
+    def budget_live(self) -> float | None:
+        return self.ctx.budget_live
+
+    @budget_live.setter
+    def budget_live(self, value: float | None) -> None:
+        self.ctx.budget_live = value
+
+    @property
+    def page(self) -> str:
+        return self.ctx.page
+
+    @page.setter
+    def page(self, value: str) -> None:
+        self.ctx.page = value
+
+    @property
+    def menu(self) -> DriverMenu:
+        return self.ctx.menu
+
+    @menu.setter
+    def menu(self, value: DriverMenu) -> None:
+        self.ctx.menu = value
+
+    @property
+    def opinions(self) -> dict[str, tuple[str, int]]:
+        return self.ctx.opinions
+
+    @opinions.setter
+    def opinions(self, value: dict[str, tuple[str, int]]) -> None:
+        self.ctx.opinions = value
+
+    @property
+    def voice(self) -> VoiceChannel | None:
+        return self.ctx.voice
+
+    @voice.setter
+    def voice(self, value: VoiceChannel | None) -> None:
+        self.ctx.voice = value
+
+    @property
+    def on_voice_event(self) -> Callable[[dict[str, Any]], None] | None:
+        return self.ctx.on_voice_event
+
+    @on_voice_event.setter
+    def on_voice_event(self, value: Callable[[dict[str, Any]], None] | None) -> None:
+        self.ctx.on_voice_event = value
+
+    @property
+    def on_session_end(self) -> Callable[[int], None] | None:
+        return self.ctx.on_session_end
+
+    @on_session_end.setter
+    def on_session_end(self, value: Callable[[int], None] | None) -> None:
+        self.ctx.on_session_end = value
+
+    @property
+    def last_snapshot(self) -> Snapshot | None:
+        return self.ctx.last_snapshot
+
+    @last_snapshot.setter
+    def last_snapshot(self, value: Snapshot | None) -> None:
+        self.ctx.last_snapshot = value
+
     def _on_dispatcher_response(self, rule_id: str, answer: str, _snapshot: Snapshot) -> None:
         if rule_id == "cool_push_check":
-            self.state.answer_push_check(answer == "ack")
+            self.ctx.state.answer_push_check(answer == "ack")
 
     @property
     def tick_period(self) -> float:
-        return 1.0 / self.store.current().engine.tick_hz
+        return 1.0 / self.ctx.store.current().engine.tick_hz
 
     def _on_press_edge(self, t: float, down: bool) -> None:
         press = self.detector.edge(t, down)
@@ -520,7 +529,7 @@ class Engine:
             self._press_queue.append(press)
 
     def setup_voice(self) -> str | None:
-        voice = self.store.current().voice
+        voice = self.ctx.store.current().voice
         if not voice.enabled:
             return None
         if sys.platform != "win32":
@@ -542,16 +551,16 @@ class Engine:
         return f"{rec.recognizer_desc}, mic {rec.device_desc}"
 
     def enable_voice(self, worker: VoiceWorker) -> None:
-        settings = self.store.current().voice
+        settings = self.ctx.store.current().voice
         grammar = VoiceGrammar.from_mapping(settings.intents)
         self._voice_worker = worker
-        self.voice = VoiceChannel(
+        self.ctx.voice = VoiceChannel(
             worker,
             grammar.intent_for,
             max_open_s=settings.max_open_s,
             confidence_min=settings.confidence_min,
         )
-        self.voice.on_close = self._voice_closed.append
+        self.ctx.voice.on_close = self._voice_closed.append
 
     def close_voice(self) -> None:
         if self._voice_worker is not None:
@@ -559,19 +568,19 @@ class Engine:
             self._voice_worker = None
 
     def _voice_open(self, t: float, via: str, max_open_s: float | None = None) -> None:
-        channel = self.voice
+        channel = self.ctx.voice
         if channel is None:
             return
         cap_s = max_open_s or channel.max_open_s
-        if channel.open(t, via=via, max_open_s=cap_s) and self.on_voice_event is not None:
-            self.on_voice_event({"state": "listening", "via": via, "cap_s": cap_s})
+        if channel.open(t, via=via, max_open_s=cap_s) and self.ctx.on_voice_event is not None:
+            self.ctx.on_voice_event({"state": "listening", "via": via, "cap_s": cap_s})
 
     def _voice_close(self, t: float, reason: str) -> None:
-        if self.voice is not None:
-            self.voice.close(t, reason)
+        if self.ctx.voice is not None:
+            self.ctx.voice.close(t, reason)
 
     def _voice_tick(self, now: float, snapshot: Snapshot) -> None:
-        channel = self.voice
+        channel = self.ctx.voice
         worker = self._voice_worker
         if channel is not None and worker is not None:
             for name, text, confidence, _ in worker.drain():
@@ -588,10 +597,10 @@ class Engine:
             self._voice_done(record, snapshot)
 
     def _voice_done(self, record: ChannelRecord, snapshot: Snapshot) -> None:
-        items = self.store.current().menu.items
+        items = self.ctx.store.current().menu.items
         item = next((entry for entry in items if entry.id == record.intent), None)
-        if self.on_voice_event is not None:
-            self.on_voice_event(
+        if self.ctx.on_voice_event is not None:
+            self.ctx.on_voice_event(
                 {
                     "state": "closed",
                     "reason": record.reason,
@@ -604,20 +613,20 @@ class Engine:
         if record.reason != "recognised" or record.intent is None:
             return
         if item is not None:
-            if self.menu.open:
-                self.menu.close()
-                self.dispatcher.cancel_menu_prompt()
+            if self.ctx.menu.open:
+                self.ctx.menu.close()
+                self.ctx.dispatcher.cancel_menu_prompt()
                 self._menu_log(record.closed_t, snapshot, "menu_close", None, "voice")
             self._menu_answer(item, record.closed_t, snapshot, via="voice")
         elif record.intent in ("ack", "neg"):
-            self.dispatcher.on_press(Press(record.intent, record.closed_t), snapshot)
+            self.ctx.dispatcher.on_press(Press(record.intent, record.closed_t), snapshot)
         elif record.intent in ("mindset_aggressive", "mindset_balanced"):
             self.set_mindset(record.intent.removeprefix("mindset_"), record.closed_t)
         elif record.intent == "page":
             self.reset_page(record.closed_t)
 
     def voice_payload(self, now: float) -> dict[str, Any]:
-        channel = self.voice
+        channel = self.ctx.voice
         if channel is None or not channel.is_open or channel.current is None:
             return {
                 "available": channel is not None,
@@ -632,23 +641,23 @@ class Engine:
             "listening": True,
             "via": channel.current.via,
             "left_s": max(0.0, channel.current.cap_s - elapsed),
-            "warn": elapsed >= self.store.current().voice.open_warn_s,
+            "warn": elapsed >= self.ctx.store.current().voice.open_warn_s,
         }
 
     # -- live overrides: mindset (UDP Action 2) and dashboard page (Action 4) --
 
     @property
     def mindset(self) -> str:
-        return self.mindset_override or self.store.current().mindset.active
+        return self.ctx.mindset_override or self.ctx.store.current().mindset.active
 
     def _driver_scale(
         self,
         settings: Settings | None = None,
         raw_mode: Mapping[str, Any] | None = None,
     ) -> DriverScale:
-        cfg = self.store.current() if settings is None else settings
+        cfg = self.ctx.store.current() if settings is None else settings
         base_mode = resolve_mindset(cfg.mindsets, self.mindset) if raw_mode is None else raw_mode
-        rating, conf, source = self._driver_rating
+        rating, conf, source = self.ctx.driver_rating
         return advice_scale(
             rating,
             conf,
@@ -659,7 +668,7 @@ class Engine:
         )
 
     def mode(self) -> dict[str, Any]:
-        settings = self.store.current()
+        settings = self.ctx.store.current()
         resolved = resolve_mindset(settings.mindsets, self.mindset)
         if self.mindset == "aggressive":
             drv = self._driver_scale(settings, resolved)
@@ -672,41 +681,43 @@ class Engine:
 
     def _apply_mode(self) -> None:
         mode = self.mode()
-        self.state.set_mode_offsets(
+        self.ctx.state.set_mode_offsets(
             thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0),
             sector_loss_call_ms=float(mode.get("sector_loss_call_ms", 100) or 100),
         )
         if self.rule_engine is not None:
             self.rule_engine.mode = mode
         budget = (
-            self.budget_live if self.budget_live is not None else mode.get("call_budget_per_lap")
+            self.ctx.budget_live
+            if self.ctx.budget_live is not None
+            else mode.get("call_budget_per_lap")
         )
-        self.dispatcher.budget_override = call_budget(budget)
-        self.dispatcher.log.mindset = self.mindset
+        self.ctx.dispatcher.budget_override = call_budget(budget)
+        self.ctx.dispatcher.log.mindset = self.mindset
 
     def set_mindset(self, name: str, now: float) -> bool:
-        if name not in self.store.current().mindsets or name == self.mindset:
+        if name not in self.ctx.store.current().mindsets or name == self.mindset:
             return False
-        self.mindset_override = name
+        self.ctx.mindset_override = name
         self._apply_mode()
-        snap = self.dispatcher.latest_snapshot or self.state.snapshot(now)
-        self.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
+        snap = self.ctx.dispatcher.latest_snapshot or self.ctx.state.snapshot(now)
+        self.ctx.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
 
     def cycle_budget(self) -> float:
         """Next driver-menu calls-per-lap step; overrides the mindset's budget."""
-        raw_steps = self.store.current().menu.budget_steps or [0, 15, "unlimited"]
+        raw_steps = self.ctx.store.current().menu.budget_steps or [0, 15, "unlimited"]
         steps = [budget for step in raw_steps if (budget := call_budget(step)) is not None]
-        cur = self.dispatcher.budget_override
+        cur = self.ctx.dispatcher.budget_override
         nxt = next((s for s in steps if cur is None or s > cur), steps[0])
-        self.budget_live = nxt
+        self.ctx.budget_live = nxt
         self._apply_mode()
         if nxt == 0:
-            self.dispatcher.drop_budgeted()
+            self.ctx.dispatcher.drop_budgeted()
         return nxt
 
     def cycle_mindset(self, now: float) -> None:
-        cycle = [m for m in self.store.current().input.mindset_cycle if m]
+        cycle = [m for m in self.ctx.store.current().input.mindset_cycle if m]
         if not cycle:
             return
         cur = self.mindset
@@ -714,27 +725,27 @@ class Engine:
         self.set_mindset(nxt, now)
 
     def set_page(self, name: str, now: float, *, manual: bool = True) -> bool:
-        if name not in self.store.current().ui.pages:
+        if name not in self.ctx.store.current().ui.pages:
             return False
-        if name == self.page:
+        if name == self.ctx.page:
             return False
-        self.page = name
-        self.dispatcher.log.write(
+        self.ctx.page = name
+        self.ctx.dispatcher.log.write(
             {"t": now, "outcome": "page", "rule_id": None, "text": name, "manual": manual}
         )
         return True
 
     def reset_page(self, now: float) -> None:
-        pages = self.store.current().ui.pages
+        pages = self.ctx.store.current().ui.pages
         self.set_page(pages[0] if pages else "race", now)
 
     def _auto_page(self, snap: Snapshot, now: float) -> None:
         """Contextual page (off by default). A page never changes under a
         fresh call banner."""
-        ui = self.store.current().ui
+        ui = self.ctx.store.current().ui
         if not ui.auto_page:
             return
-        last = self.dispatcher.last_call_t
+        last = self.ctx.dispatcher.last_call_t
         if last is not None and now - last < ui.auto_page_call_hold_s:
             return
         gap = ui.auto_page_battle_gap_s
@@ -753,14 +764,14 @@ class Engine:
         """Dashboard control messages: {"type":"mindset","name"},
         {"type":"page","name"} (no name resets to the first page) and
         {"type":"menu","op":"up"|"down"|"confirm"|"close"} or {"type":"voice"}."""
-        now = self.clock.now()
+        now = self.ctx.clock.now()
         if msg.get("type") == "voice":
-            if self.voice is None:
+            if self.ctx.voice is None:
                 return
-            if self.voice.is_open:
+            if self.ctx.voice.is_open:
                 self._voice_close(now, "tap")
             else:
-                self._voice_open(now, "key", self.store.current().voice.key_max_open_s)
+                self._voice_open(now, "key", self.ctx.store.current().voice.key_max_open_s)
         elif msg.get("type") == "mindset":
             name = msg.get("name")
             if isinstance(name, str):
@@ -781,17 +792,17 @@ class Engine:
 
     def client_press(self, down: bool) -> None:
         """WebSocket/spacebar press path (docs/12): feed the same detector."""
-        self._on_press_edge(self.clock.now(), down)
+        self._on_press_edge(self.ctx.clock.now(), down)
 
     # -- driver menu (docs/12) -------------------------------------------------
 
     def menu_payload(self, now: float) -> dict[str, object]:
-        return self.menu.payload(self.store.current().menu, now)
+        return self.ctx.menu.payload(self.ctx.store.current().menu, now)
 
     def _menu_press(self, p: Press, snapshot: Snapshot) -> bool:
         """Route a press through the menu. False: not a menu press; the
         caller handles it as usual."""
-        settings = self.store.current().menu
+        settings = self.ctx.store.current().menu
         kind = p.kind
         if kind.startswith("item:"):
             item = next((i for i in settings.items if i.id == kind[5:]), None)
@@ -799,14 +810,14 @@ class Engine:
                 self._menu_close(p.t, snapshot, "shortcut")
                 self._menu_answer(item, p.t, snapshot, "shortcut")
             return True
-        if self.menu.open and kind in ("page", "mindset"):
-            remap = self.store.current().input.menu_open_actions
+        if self.ctx.menu.open and kind in ("page", "mindset"):
+            remap = self.ctx.store.current().input.menu_open_actions
             op = remap.page if kind == "page" else remap.mindset
             if op:
                 kind = f"menu_{op}"
         if kind in ("menu_up", "menu_down"):
-            was_open = self.menu.open
-            item = self.menu.step(
+            was_open = self.ctx.menu.open
+            item = self.ctx.menu.step(
                 settings, -1 if kind == "menu_up" else 1, p.t, self._menu_ns(snapshot)
             )
             if item is None:
@@ -815,12 +826,12 @@ class Engine:
                 self._menu_log(p.t, snapshot, "menu_open", None, "")
                 self._voice_open(p.t, "menu")
             if settings.speak_on_scroll:
-                self.dispatcher.menu_prompt(item.label, snapshot)
+                self.ctx.dispatcher.menu_prompt(item.label, snapshot)
             return True
         if kind == "menu_close":
             self._menu_close(p.t, snapshot, "close")
             return True
-        if not self.menu.open:
+        if not self.ctx.menu.open:
             return kind == "menu_confirm"
         if kind in ("ack", "menu_confirm"):
             self._menu_confirm(p.t, snapshot)
@@ -831,13 +842,13 @@ class Engine:
         return False
 
     def _plan_thresholds(self, snap: Snapshot) -> Mapping[str, object]:
-        th: dict[str, object] = {**self.store.current().thresholds, **self.mode()}
+        th: dict[str, object] = {**self.ctx.store.current().thresholds, **self.mode()}
         if not snap.is_sprint:
             return th
         return {**th, "plan_two_compound_rule": 0}  # no mandatory stop in a sprint
 
     def _menu_ns(self, snapshot: Snapshot) -> dict[str, Any]:
-        cfg = self.store.current()
+        cfg = self.ctx.store.current()
         limits = cfg.engine.staleness_s
         ns = namespace_data(
             snapshot,
@@ -849,11 +860,11 @@ class Engine:
         return ns
 
     def _menu_close(self, t: float, snapshot: Snapshot, reason: str) -> None:
-        if not self.menu.open:
+        if not self.ctx.menu.open:
             return
         self._voice_close(t, "menu")
-        self.menu.close()
-        self.dispatcher.cancel_menu_prompt()
+        self.ctx.menu.close()
+        self.ctx.dispatcher.cancel_menu_prompt()
         self._menu_log(t, snapshot, "menu_close", None, reason)
 
     def _menu_log(
@@ -865,7 +876,7 @@ class Engine:
         text: str,
         inputs: dict[str, Any] | None = None,
     ) -> None:
-        self.dispatcher.log.write(
+        self.ctx.dispatcher.log.write(
             {
                 "t": t,
                 "session_time": snapshot.session_time,
@@ -887,22 +898,22 @@ class Engine:
 
     def _menu_confirm(self, t: float, snapshot: Snapshot) -> None:
         self._voice_close(t, "menu")
-        item = self.menu.selected(self.store.current().menu)
-        self.menu.close()
-        self.dispatcher.cancel_menu_prompt()
+        item = self.ctx.menu.selected(self.ctx.store.current().menu)
+        self.ctx.menu.close()
+        self.ctx.dispatcher.cancel_menu_prompt()
         if item is not None:
             self._menu_answer(item, t, snapshot, "menu")
 
     def _menu_signal_values(
         self, item: MenuItemModel, snapshot: Snapshot
     ) -> dict[str, int | float]:
-        current_hash = self.store.hash
+        current_hash = self.ctx.store.hash
         if self._menu_signal_hash != current_hash:
             self._menu_signal_names.clear()
             self._menu_signal_hash = current_hash
         names = self._menu_signal_names.get(item.id)
         if names is None:
-            rules = {rule.id: rule for rule in self.store.current().rules}
+            rules = {rule.id: rule for rule in self.ctx.store.current().rules}
             names = frozenset(
                 name
                 for rule_id in item.related_rules
@@ -938,20 +949,20 @@ class Engine:
             inputs["signals"] = self._menu_signal_values(item, snap)
         self._menu_log(t, snap, "driver_input", item, text, inputs)
         if item.kind == "opinion" and item.topic:
-            self.opinions[item.topic] = (item.id, snapshot.lap_num)
+            self.ctx.opinions[item.topic] = (item.id, snapshot.lap_num)
         if item.action == "mindset":
             self.cycle_mindset(t)
         elif item.action == "silent":
-            self.dispatcher.toggle_silent(snap)
+            self.ctx.dispatcher.toggle_silent(snap)
         elif item.action == "page":
             self.reset_page(t)
         if text:
-            self.dispatcher.menu_reply(text, f"menu:{item.id}", snap, item.related_rules)
+            self.ctx.dispatcher.menu_reply(text, f"menu:{item.id}", snap, item.related_rules)
 
     def driver_balance(self, lap: int) -> str:
         """Latest balance opinion while it still holds (docs/12 advice bias)."""
-        held = self.opinions.get("balance")
-        hold = self.store.current().menu.opinion_hold_laps
+        held = self.ctx.opinions.get("balance")
+        hold = self.ctx.store.current().menu.opinion_hold_laps
         if held is None or lap - held[1] > hold:
             return ""
         return held[0]
@@ -959,50 +970,40 @@ class Engine:
     def _on_new_session(self, uid: int) -> None:
         pending = self._pending_pit_loss
         if pending is not None:
-            if self.db is None:
+            if self.ctx.db is None:
                 self._pending_pit_loss = None
             else:
                 try:
-                    laps = self.db.laps_for(pending.session_uid, 0)
+                    laps = self.ctx.db.laps_for(pending.session_uid, 0)
                     self._flush_pending_pit_loss(pending.session_uid, laps, force=True)
                 except sqlite3.Error:
                     self._pending_pit_loss = None
-        self.dispatcher.reset_session(uid)
+        self.ctx.dispatcher.reset_session(uid)
         self._held_plan = None
         self._rule_errors_logged.clear()
-        self._reset_energy_lap_tracking()
-        self.menu.close()
-        self._voice_close(self.clock.now(), "session")
+        self.model._reset_energy_lap_tracking()
+        self.ctx.menu.close()
+        self._voice_close(self.ctx.clock.now(), "session")
         self._menu_replies.reset()
-        self.opinions.clear()
-        self._laps_written = len(self.state.laps)
+        self.ctx.opinions.clear()
+        self._laps_written = len(self.ctx.state.laps)
         self._session_ended_written = False
         self._pit_in_lap = None
         self._folded_stints.clear()
-        self._weekend_prior_cache.clear()
-        self._fuel_last_kg = None
-        self._session_fuel_last_kg = None
-        self._session_fuel_deltas = []
-        self._run_fuel_seq = self.state.run_seq
-        self._run_fuel_deltas = []
-        self._run_fuel_last_kg = None
-        self.deg_fit = None
+        self.model.reset()
+        self.ctx.deg_fit = None
         self.plan_tracker.reset()
         self._plan_key = None
         self._damage_pace_ms = 0.0
         self._damage_stops = 0
         self._plan_mc_cache.clear()
         self.battle_tracker.reset()
-        self._battle_rates = None
         self._stops_done = 0
         self._red_restart = False
         self._prev_pit_status = 0
         self._stop_expect = None
         self._stop_check = None
-        self._stint_wear0 = ()
-        self._stint_compound0 = -1
-        self._stint_fuel_ref = 0.0
-        self._stint_fuel_ref_laps = 0.0
+        self.ctx.stint_fuel_ref = 0.0
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self.session_origin_started_at = None
@@ -1011,30 +1012,29 @@ class Engine:
         self.setup_advisor.reset(uid)
 
     def _evaluate_live_setup(self, uid: int) -> None:
-        self.setup_advisor.evaluate_live(self.db, uid, self.store.current(), mindset=self.mode())
+        self.setup_advisor.evaluate_live(
+            self.ctx.db, uid, self.ctx.store.current(), mindset=self.mode()
+        )
 
     def _store_debrief_setup(self, uid: int) -> None:
-        if self.db is None:
+        if self.ctx.db is None:
             return
-        self.setup_advisor.store_debrief(self.db, uid, self.store.current(), mindset=self.mode())
+        self.setup_advisor.store_debrief(
+            self.ctx.db, uid, self.ctx.store.current(), mindset=self.mode()
+        )
 
     def _update_setup_stop_wing(self) -> None:
-        self.setup_advisor.update_stop_wing(self.pit_plan.plan in _STOP_PLANS)
+        self.setup_advisor.update_stop_wing(self.ctx.pit_plan.plan in _STOP_PLANS)
 
     def _synthetic_session(self, uid: int | None = None) -> bool:
-        session_uid = self.state.session_uid if uid is None else uid
-        return self.synthetic_source or (session_uid is not None and is_synthetic_uid(session_uid))
-
-    def _reset_energy_lap_tracking(self) -> None:
-        self._energy_lap_tracker.reset()
-        self.energy_prev_lap = None
+        return self.ctx.synthetic_session(uid)
 
     def _upsert_session(self, uid: int) -> None:
-        if self.db is None:
+        if self.ctx.db is None:
             return
         self._session_upserted = uid
-        snap = self.state.snapshot(self.clock.now())
-        self.db.upsert_session(
+        snap = self.ctx.state.snapshot(self.ctx.clock.now())
+        self.ctx.db.upsert_session(
             uid,
             track_id=snap.track_id,
             session_type=snap.session_type,
@@ -1043,14 +1043,15 @@ class Engine:
                 if self.session_origin_started_at is not None
                 else time.time()
             ),
-            config_hash=self.store.hash,
+            config_hash=self.ctx.store.hash,
             weather=snap.weather,
             game_mode=snap.game_mode,
             weekend_link=snap.weekend_link,
             weekend_structure=snap.weekend_structure,
             calls_mode=(
                 "off"
-                if self.store.current().policy.quiet or not self.store.current().speech.enabled
+                if self.ctx.store.current().policy.quiet
+                or not self.ctx.store.current().speech.enabled
                 else "on"
             ),
             parc_ferme=snap.parc_ferme if snap.parc_ferme >= 0 else None,
@@ -1060,64 +1061,66 @@ class Engine:
         self._weekend_structure_written = tuple(snap.weekend_structure)
 
     def _write_laps(self) -> None:
-        if self.state.session_uid is None:
+        if self.ctx.state.session_uid is None:
             return
-        uid = self.state.session_uid
-        if self.db is None:
-            new_laps = self.state.laps[self._laps_written :]
-            self._laps_written = len(self.state.laps)
+        uid = self.ctx.state.session_uid
+        if self.ctx.db is None:
+            new_laps = self.ctx.state.laps[self._laps_written :]
+            self._laps_written = len(self.ctx.state.laps)
             for lap in new_laps:
                 self._on_player_lap(uid, lap)
             return
-        if self.recovering:
+        if self.ctx.recovering:
             # Rebuilt laps are already committed; don't insert or fold twice.
-            self.state.rival_laps.clear()
-            self.state.setup_changes.clear()
-            self._laps_written = len(self.state.laps)
+            self.ctx.state.rival_laps.clear()
+            self.ctx.state.setup_changes.clear()
+            self._laps_written = len(self.ctx.state.laps)
             return
-        parc_ferme = self.state.parc_ferme_rules
+        parc_ferme = self.ctx.state.parc_ferme_rules
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
-            self.db.set_session_parc_ferme(uid, parc_ferme)
+            self.ctx.db.set_session_parc_ferme(uid, parc_ferme)
             self._parc_ferme_written = parc_ferme
-        structure = tuple(self.state.weekend_structure)
+        structure = tuple(self.ctx.state.weekend_structure)
         if structure and structure != self._weekend_structure_written:
-            self.db.set_weekend_structure(uid, structure)
+            self.ctx.db.set_weekend_structure(uid, structure)
             self._weekend_structure_written = structure
-        if self.state.setup_rewind_t is not None:
-            self.db.delete_setup_changes_after(uid, self.state.setup_rewind_t)
-            self.state.setup_rewind_t = None
-        setup_changed = bool(self.state.setup_changes)
-        for change in self.state.setup_changes:
-            to_id = self.db.setup_state_id(change.to_hash, change.fields)
-            from_id = self.db.setup_state_id(change.from_hash) if change.from_hash else None
-            self.db.insert_setup_change(
+        if self.ctx.state.setup_rewind_t is not None:
+            self.ctx.db.delete_setup_changes_after(uid, self.ctx.state.setup_rewind_t)
+            self.ctx.state.setup_rewind_t = None
+        setup_changed = bool(self.ctx.state.setup_changes)
+        for change in self.ctx.state.setup_changes:
+            to_id = self.ctx.db.setup_state_id(change.to_hash, change.fields)
+            from_id = self.ctx.db.setup_state_id(change.from_hash) if change.from_hash else None
+            self.ctx.db.insert_setup_change(
                 uid,
                 change.lap_num,
                 change.session_time,
                 from_id,
                 to_id,
             )
-        self.state.setup_changes.clear()
-        for car_idx, lap in self.state.rival_laps:
-            self.db.insert_lap(uid, car_idx, lap)
-        self.state.rival_laps.clear()
-        new_laps = self.state.laps[self._laps_written :]
+        self.ctx.state.setup_changes.clear()
+        for car_idx, lap in self.ctx.state.rival_laps:
+            self.ctx.db.insert_lap(uid, car_idx, lap)
+        self.ctx.state.rival_laps.clear()
+        new_laps = self.ctx.state.laps[self._laps_written :]
         for lap in new_laps:
-            self.db.insert_lap(
+            self.ctx.db.insert_lap(
                 uid,
                 0,
                 lap,
-                setup_state_id=self.db.setup_state_id(lap.setup_hash) if lap.setup_hash else None,
+                setup_state_id=self.ctx.db.setup_state_id(lap.setup_hash)
+                if lap.setup_hash
+                else None,
             )
-        self._laps_written = len(self.state.laps)
-        if new_laps and self.state.total_laps > 0:
-            self.db.set_session_total_laps(uid, self.state.total_laps)
+        self._laps_written = len(self.ctx.state.laps)
+        if new_laps and self.ctx.state.total_laps > 0:
+            self.ctx.db.set_session_total_laps(uid, self.ctx.state.total_laps)
         for lap in new_laps:
             self._on_player_lap(uid, lap)
         if new_laps or setup_changed:
             if uid != self.setup_advisor.session_uid:
                 self.setup_advisor.reset(uid)
-            if new_laps or session_kind(self.state.session_type) == "race":
+            if new_laps or session_kind(self.ctx.state.session_type) == "race":
                 self._evaluate_live_setup(uid)
             else:
                 # Garage advice was built on the setup the driver just changed.
@@ -1127,19 +1130,21 @@ class Engine:
     def _on_player_lap(self, uid: int, lap: LapSummary) -> None:
         """M3 persistence hooks (docs/18): refit the stint, measure pit loss
         when an out-lap completes, fold fuel-burn deltas."""
-        self._note_session_fuel(lap)
-        db = self.db
-        settings = self.store.current()
-        track_id = self.state.track_id
+        self.model._note_session_fuel(lap)
+        db = self.ctx.db
+        settings = self.ctx.store.current()
+        track_id = self.ctx.state.track_id
         if db is None:
             rows_by_lap = {
                 row.lap_num: row
-                for row in (lap_row_from_summary(uid, 0, summary) for summary in self.state.laps)
+                for row in (
+                    lap_row_from_summary(uid, 0, summary) for summary in self.ctx.state.laps
+                )
             }
             rows = sorted(rows_by_lap.values(), key=lambda row: row.lap_num)
-            in_memory_tail = self._stint_rows(rows)
+            in_memory_tail = self.model._stint_rows(rows)
             if in_memory_tail:
-                self._fit_current_stint(in_memory_tail, track_id, settings, None)
+                self.model._fit_current_stint(in_memory_tail, track_id, settings, None)
             return
         th = settings.thresholds
         all_laps = db.laps_for(uid, 0)
@@ -1157,12 +1162,12 @@ class Engine:
 
         if len(tail) < len(all_laps):
             # A stint just closed; fold its fitted params exactly once.
-            prev = self._stint_rows(all_laps[: len(all_laps) - len(tail)])
+            prev = self.model._stint_rows(all_laps[: len(all_laps) - len(tail)])
             key = (uid, prev[0].lap_num) if prev else (uid, tail[0].lap_num)
             if key not in self._folded_stints:
                 self._folded_stints.add(key)
                 if prev:
-                    prior = self._deg_prior(track_id, prev[0].compound, settings)
+                    prior = self.model._deg_prior(track_id, prev[0].compound, settings)
                     fit = fit_stint(
                         prev,
                         prior,
@@ -1170,24 +1175,24 @@ class Engine:
                         fuel_coeff_fixed=None,
                         deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                         deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-                        thermal_hi_c=self._thermal_hi_c(track_id, prev[0].compound, settings),
+                        thermal_hi_c=self.model._thermal_hi_c(track_id, prev[0].compound, settings),
                     )
-                    self._fold_fit(track_id, prev[0].compound, fit)
-                    self._weekend_prior_cache.pop((uid, prev[0].compound), None)
+                    self.model._fold_fit(track_id, prev[0].compound, fit)
+                    self.model._weekend_prior_cache.pop((uid, prev[0].compound), None)
 
         if tail:
             compound = tail[0].compound
-            fuel_name = self._learned_name(track_id, compound, "fuel_ms_per_lap")
+            fuel_name = self.model._learned_name(track_id, compound, "fuel_ms_per_lap")
             fuel_param = db.get_param(track_id, compound, fuel_name)
             fuel_fixed = (
                 fuel_param.value
                 if fuel_param is not None and fuel_param.weight >= self._th("prior_min_weight", 2)
                 else None
             )
-            fit = self._fit_current_stint(tail, track_id, settings, fuel_fixed)
+            fit = self.model._fit_current_stint(tail, track_id, settings, fuel_fixed)
             persist_fit = fit
             if fit.deg2_ms_per_lap2 > 0:
-                prior = self._deg_prior(track_id, compound, settings)
+                prior = self.model._deg_prior(track_id, compound, settings)
                 persist_fit = fit_stint(
                     tail,
                     prior,
@@ -1195,7 +1200,7 @@ class Engine:
                     fuel_coeff_fixed=fuel_fixed,
                     deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
                     deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-                    thermal_hi_c=self._thermal_hi_c(track_id, compound, settings),
+                    thermal_hi_c=self.model._thermal_hi_c(track_id, compound, settings),
                 )
             db.upsert_stint(
                 uid,
@@ -1229,7 +1234,7 @@ class Engine:
                         in_lap=in_row,
                         out_lap=out_row,
                         ref_pace_ms=ref,
-                        lane_ms=self.state.pit_lane_time_ms,
+                        lane_ms=self.ctx.state.pit_lane_time_ms,
                         neutralised=neutralised,
                     )
         elif "pitted" in lap.invalid_reasons:
@@ -1244,8 +1249,8 @@ class Engine:
 
         # Fuel burn per lap: fold each consecutive-valid-lap delta.
         if lap.valid and lap.fuel_kg > 0:
-            if self._fuel_last_kg is not None:
-                delta = self._fuel_last_kg - lap.fuel_kg
+            if self.model._fuel_last_kg is not None:
+                delta = self.model._fuel_last_kg - lap.fuel_kg
                 if (
                     track_id >= 0
                     and not self._synthetic_session(uid)
@@ -1258,11 +1263,11 @@ class Engine:
                         delta,
                         param_weight_cap=self._th("param_weight_cap", 50),
                     )
-            self._fuel_last_kg = lap.fuel_kg
+            self.model._fuel_last_kg = lap.fuel_kg
         elif lap.fuel_kg > 0:
-            self._fuel_last_kg = lap.fuel_kg
+            self.model._fuel_last_kg = lap.fuel_kg
 
-        self.pit_loss_prior = current_pit_loss(
+        self.ctx.pit_loss_prior = current_pit_loss(
             db,
             uid,
             track_id,
@@ -1270,43 +1275,6 @@ class Engine:
             settings.track,
             th,
         )
-
-    def _fit_current_stint(
-        self,
-        tail: list[LapRow],
-        track_id: int,
-        settings: Any,
-        fuel_fixed: float | None,
-    ) -> DegFit:
-        self._stint_laps = tail
-        compound = tail[0].compound
-        prior = self._deg_prior(track_id, compound, settings)
-        thermal_hi_c = self._thermal_hi_c(track_id, compound, settings)
-        min_laps = int(self._th("deg_min_laps", 3))
-        usable = fit_laps(tail, thermal_hi_c, min_laps)
-        if usable and all(lap.fuel_kg > 0 for lap in usable):
-            self._stint_fuel_ref = max(lap.fuel_kg for lap in usable)
-            self._stint_fuel_ref_laps = 0.0
-        elif usable:
-            self._stint_fuel_ref = 0.0
-            self._stint_fuel_ref_laps = max(lap.fuel_remaining_laps for lap in usable)
-        else:
-            self._stint_fuel_ref = max((lap.fuel_kg for lap in tail), default=0.0)
-            self._stint_fuel_ref_laps = 0.0
-        fit = fit_stint(
-            tail,
-            prior,
-            min_laps=min_laps,
-            fuel_coeff_fixed=fuel_fixed,
-            deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
-            deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-            thermal_hi_c=thermal_hi_c,
-            quadratic=True,
-            quad_min_laps=int(self._th("deg_quad_min_laps", 8)),
-            quad_min_t=self._th("deg_quad_min_t", 2.0),
-        )
-        self.deg_fit = fit
-        return fit
 
     def _flush_pending_pit_loss(
         self,
@@ -1321,7 +1289,7 @@ class Engine:
         if pending.session_uid != uid:
             self._pending_pit_loss = None
             return
-        if self.db is None:
+        if self.ctx.db is None:
             self._pending_pit_loss = None
             return
         ref_laps = max(1, int(self._th("pit_ref_after_laps", 3)))
@@ -1350,7 +1318,7 @@ class Engine:
             "pit_inlap_slow_max_ms", 10_000
         ):
             return
-        self.db.insert_pit_event(
+        self.ctx.db.insert_pit_event(
             pending.session_uid,
             0,
             pending.in_lap.lap_num,
@@ -1363,7 +1331,7 @@ class Engine:
         )
         suffix = {0: "green", 1: "sc", 2: "vsc"}.get(pending.neutralised, "green")
         if pending.track_id >= 0 and not self._synthetic_session(pending.session_uid):
-            self.db.fold_param(
+            self.ctx.db.fold_param(
                 pending.track_id,
                 0,
                 f"pit_loss_{suffix}_ms",
@@ -1371,179 +1339,24 @@ class Engine:
                 param_weight_cap=self._th("param_weight_cap", 50),
             )
 
-    def _sync_run_fuel(self) -> None:
-        if self._run_fuel_seq != self.state.run_seq:
-            self._run_fuel_seq = self.state.run_seq
-            self._run_fuel_deltas = []
-            self._run_fuel_last_kg = None
-
-    def _note_session_fuel(self, lap: LapSummary) -> None:
-        """Burn per lap measured this session; pit, SC and flashback laps break the chain."""
-        self._sync_run_fuel()
-        if lap.fuel_kg <= 0:
-            return
-        last = self._session_fuel_last_kg
-        green = lap.sc_status == 0 and not set(lap.invalid_reasons) & _NON_GREEN_REASONS
-        t = self.state.last_packet_t or 0.0
-        if green and last is not None and 0.0 < last - lap.fuel_kg < 10.0:
-            self._session_fuel_deltas.append((t, last - lap.fuel_kg))
-        self._session_fuel_last_kg = lap.fuel_kg if green else None
-        # A run counts from the end of its out lap. When the out lap is not a counted
-        # lap, the hot lap carries its pit flags, so start it from the crossing fuel.
-        run_last, run_green = self._run_fuel_last_kg, green
-        hot_base = self.state.hot_lap_fuel_base
-        if hot_base is not None and hot_base[0] == lap.lap_num:
-            run_last = hot_base[1]
-            run_green = lap.sc_status == 0 and not set(lap.invalid_reasons) & (
-                _NON_GREEN_REASONS - {"first_lap", "pitted"}
-            )
-        if run_green and run_last is not None and 0.0 < run_last - lap.fuel_kg < 10.0:
-            self._run_fuel_deltas.append((t, run_last - lap.fuel_kg))
-        self._run_fuel_last_kg = lap.fuel_kg
-
-    def _fuel_per_lap(self, laps_remaining: int) -> tuple[float, str]:
-        """This session's measured burn, else the game's own MFD estimate, else the prior."""
-        deltas = self._session_fuel_deltas
-        if len(deltas) >= int(self._th("fuel_session_min_laps", 2)):
-            return median(delta for _, delta in deltas[-8:]), "session"
-        state = self.state
-        laps_in_tank = laps_remaining + state.fuel_remaining_laps
-        if laps_remaining > 0 and state.fuel_in_tank > 0 and laps_in_tank > 0.5:
-            per_lap = state.fuel_in_tank / laps_in_tank
-            if 0.2 <= per_lap <= 5.0:
-                return per_lap, "mfd"
-        return self._fuel_prior.value, self._fuel_prior.source
-
-    def _stint_rows(self, laps: list[LapRow]) -> list[LapRow]:
-        """Trailing contiguous stint (same compound, increasing tyre age)."""
-        tail: list[LapRow] = []
-        for row in reversed(laps):
-            if tail and (
-                row.compound != tail[-1].compound or row.tyre_age_laps >= tail[-1].tyre_age_laps
-            ):
-                break
-            tail.append(row)
-        tail.reverse()
-        return tail
-
-    def _deg_prior(self, track_id: int, compound: int, settings: Any) -> DegFit:
-        overlay = settings.track
-        min_w = self._th("prior_min_weight", 2)
-        uid = self.state.session_uid
-        fuel_p = resolve_prior(
-            self.db,
-            track_id,
-            compound,
-            self._learned_name(track_id, compound, "fuel_ms_per_lap"),
-            overlay_value=None,
-            default=self._th("fuel_ms_per_lap_default", 30),
-            min_weight=min_w,
-        )
-        deg_p: Prior | None = None
-        if self.db is not None and uid is not None:
-            cache_key = (uid, compound)
-            weekend = self._weekend_prior_cache.get(cache_key)
-            if weekend is None:
-                rmse_bad = self._th("deg_rmse_bad_ms", 800)
-                stints = [
-                    stint
-                    for stint in self.db.weekend_stints(uid, track_id, compound)
-                    if stint.rmse_ms <= rmse_bad
-                ]
-                n = sum(stint.n_valid_laps for stint in stints)
-                if n:
-                    value = (
-                        sum(
-                            fuel_adjusted_deg(
-                                stint.deg_ms_per_lap, stint.fuel_ms_per_lap, fuel_p.value
-                            )
-                            * stint.n_valid_laps
-                            for stint in stints
-                        )
-                        / n
-                    )
-                else:
-                    value = 0.0
-                weekend = (value, n)
-                self._weekend_prior_cache[cache_key] = weekend
-            if weekend[1] >= self._th("weekend_min_laps", 6):
-                deg_p = Prior(weekend[0], float(weekend[1]), "weekend")
-        if deg_p is None:
-            deg_p = resolve_prior(
-                self.db,
-                track_id,
-                compound,
-                self._learned_name(track_id, compound, "deg_ms_per_lap"),
-                overlay_value=(
-                    overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
-                ),
-                default=self._th("deg_default_ms_per_lap", 80),
-                min_weight=min_w,
-            )
-        base_p = resolve_prior(
-            self.db,
-            track_id,
-            compound,
-            self._learned_name(track_id, compound, "base_ms"),
-            overlay_value=(
-                float(overlay.base_pace_ms)
-                if overlay is not None and overlay.base_pace_ms > 0
-                else None
-            ),
-            default=self._th("release_fallback_lap_s", 95.0) * 1000.0,
-            min_weight=min_w,
-        )
-        deg = deg_p.value
-        if deg_p.source == "learned" and self.db is not None:
-            deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap")
-            suffix = deg_name.removeprefix("deg_ms_per_lap")
-            ref = self.db.get_param(track_id, compound, DEG_FUEL_REF + suffix)
-            deg = fuel_adjusted_deg(
-                deg, ref.value if ref is not None and ref.weight >= min_w else None, fuel_p.value
-            )
-        confidence = {"weekend": 0.45, "learned": 0.5, "overlay": 0.35}.get(deg_p.source, 0.2)
-        if deg_p.source == "learned":
-            # A thin learned prior (few folded laps) is pulled toward the
-            # overlay/default so one steep stint cannot set the plan alone.
-            full = self._th("prior_full_weight", 12)
-            trust = min(deg_p.weight / full, 1.0) if full > 0 else 1.0
-            fallback = overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
-            if fallback is None:
-                fallback = self._th("deg_default_ms_per_lap", 80)
-            deg = trust * deg + (1.0 - trust) * float(fallback)
-            confidence = 0.2 + (confidence - 0.2) * trust
-        if base_p.source == "default" and self.db is not None and uid is not None:
-            seeded = session_base_ms(self.db.laps_for(uid, 0), deg)
-            if seeded > 0:
-                base_p = Prior(seeded, 0.0, "session")
-        return DegFit(
-            base_ms=base_p.value,
-            deg_ms_per_lap=deg,
-            fuel_ms_per_lap=fuel_p.value,
-            n=0,
-            rmse_ms=0.0,
-            confidence=confidence,
-            source=deg_p.source,
-        )
-
     def fold_open_stint(self) -> None:
         """Persist the current tail stint when a session closes."""
-        if self.db is None or self.state.session_uid is None:
+        if self.ctx.db is None or self.ctx.state.session_uid is None:
             self._pending_pit_loss = None
             return
         self._write_laps()
-        uid = self.state.session_uid
-        rows = self.db.laps_for(uid, 0)
+        uid = self.ctx.state.session_uid
+        rows = self.ctx.db.laps_for(uid, 0)
         self._flush_pending_pit_loss(uid, rows, force=True)
-        stint = self._stint_rows(rows)
+        stint = self.model._stint_rows(rows)
         if not stint:
             return
         key = (uid, stint[0].lap_num)
         if key in self._folded_stints:
             return
         self._folded_stints.add(key)
-        settings = self.store.current()
-        prior = self._deg_prior(self.state.track_id, stint[0].compound, settings)
+        settings = self.ctx.store.current()
+        prior = self.model._deg_prior(self.ctx.state.track_id, stint[0].compound, settings)
         fit = fit_stint(
             stint,
             prior,
@@ -1551,9 +1364,11 @@ class Engine:
             fuel_coeff_fixed=None,
             deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
             deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-            thermal_hi_c=self._thermal_hi_c(self.state.track_id, stint[0].compound, settings),
+            thermal_hi_c=self.model._thermal_hi_c(
+                self.ctx.state.track_id, stint[0].compound, settings
+            ),
         )
-        self.db.upsert_stint(
+        self.ctx.db.upsert_stint(
             uid,
             0,
             stint[0].compound,
@@ -1562,322 +1377,18 @@ class Engine:
             fit,
             setup_state_id=majority_state(stint),
         )
-        self._weekend_prior_cache.pop((uid, stint[0].compound), None)
-        self._fold_fit(self.state.track_id, stint[0].compound, fit)
+        self.model._weekend_prior_cache.pop((uid, stint[0].compound), None)
+        self.model._fold_fit(self.ctx.state.track_id, stint[0].compound, fit)
 
     def fold_session_end(self) -> None:
-        uid = self.state.session_uid
-        if self.db is None or uid is None:
+        uid = self.ctx.state.session_uid
+        if self.ctx.db is None or uid is None:
             return
         self.fold_open_stint()
-        self._fold_driver(uid)
-
-    def _fold_fit(self, track_id: int, compound: int, fit: DegFit) -> None:
-        """Fold a stint fit into the learned priors when it is a clean fit on
-        an identified track; noisy stints stay in `stints` only."""
-        if (
-            self.db is None
-            or track_id < 0
-            or self._synthetic_session()
-            or not fit_is_clean(
-                fit,
-                deg_max_ms_per_lap=self._th("deg_max_ms_per_lap", 600),
-                deg_rmse_bad_ms=self._th("deg_rmse_bad_ms", 800),
-                base_min_ms=self._th("learn_base_min_ms", 40_000),
-                base_max_ms=self._th("learn_base_max_ms", 200_000),
-            )
-        ):
-            return
-        race_laps = self._race_laps()
-        params = [
-            ("deg_ms_per_lap", fit.deg_ms_per_lap),
-            (DEG_FUEL_REF, fit.fuel_ms_per_lap),
-            ("base_ms", fit.base_ms),
-        ]
-        if fit.fuel_fitted:
-            params.append(("fuel_ms_per_lap", fit.fuel_ms_per_lap))
-        for name, value in params:
-            self.db.fold_param(
-                track_id,
-                compound,
-                scoped(name, race_laps),
-                value,
-                weight=float(fit.n),
-                param_weight_cap=self._th("param_weight_cap", 50),
-            )
-
-    def _learned_name(self, track_id: int, compound: int, name: str, *, db: Any = None) -> str:
-        """The race-distance prior once it has weight, else the practice one."""
-        source_db = self.db if db is None else db
-        name_at = scoped(name, self._race_laps())
-        if name_at == name or source_db is None:
-            return name
-        p = source_db.get_param(track_id, compound, name_at)
-        return name_at if p is not None and p.weight >= self._th("prior_min_weight", 2) else name
-
-    def _thermal_hi_c(self, track_id: int, compound: int, settings: Any) -> float:
-        learned_hi = (
-            self.db.get_param(track_id, compound, "thermal_hi_c") if self.db is not None else None
-        )
-        min_weight = self._th("prior_min_weight", 2)
-        if learned_hi is not None and learned_hi.weight >= min_weight:
-            learned_lo = self.db.get_param(track_id, compound, "thermal_lo_c")
-            if learned_lo is not None and learned_lo.weight >= min_weight:
-                return widen_window(
-                    float(learned_lo.value),
-                    float(learned_hi.value),
-                    self._th("tyre_window_min_width_c", 15.0),
-                )[1]
-            return float(learned_hi.value)
-        return thermal_window(settings.thresholds, compound)[1]
-
-    def _race_laps(self) -> int:
-        """Race distance the stint-derived priors are scoped to; 0 outside races."""
-        kind = session_kind(self.state.session_type)
-        return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
+        self.model._fold_driver(uid)
 
     def _th(self, name: str, default: float) -> float:
-        return threshold(self.store.current().thresholds, name, default)
-
-    def _refresh_driver_rating(self, track_id: int) -> None:
-        if self.driver_db is None:
-            self._driver_rating = (0.5, 0.0, "")
-        else:
-            self._driver_rating = learned_rating(
-                self.driver_db.params_for_track(track_id),
-                self.driver_db.params_for_track(GLOBAL_TRACK_ID),
-                self.store.current().thresholds,
-            )
-        self._apply_mode()
-
-    def _lap_fraction(self) -> float:
-        state = self.state
-        if state.track_length_m <= 0:
-            return 0.0
-        return min(max(state.lap_distance / state.track_length_m, 0.0), 1.0)
-
-    def _update_model(self) -> None:
-        """Refresh priors (once per lap) and budgets (every tick), then hand
-        the whole model view to SessionState for the rules-facing snapshot."""
-        state = self.state
-        settings = self.store.current()
-        mode = self.mode()
-        state.set_mode_offsets(
-            thermal_warn_offset_c=float(mode.get("thermal_warn_offset_c", 0) or 0),
-            sector_loss_call_ms=float(mode.get("sector_loss_call_ms", 100) or 100),
-        )
-        track_id = state.track_id
-        overlay = settings.track
-        key = (
-            state.session_uid,
-            self._laps_written,
-            state.lap_num,
-            state.safety_car_status,
-        )
-        if key != self._model_key:
-            self._model_key = key
-            self.pit_loss_prior = current_pit_loss(
-                self.db,
-                state.session_uid,
-                track_id,
-                state.safety_car_status,
-                overlay,
-                settings.thresholds,
-            )
-            self._fuel_prior = resolve_prior(
-                self.db,
-                track_id,
-                0,
-                "fuel_kg_per_lap",
-                overlay_value=(
-                    overlay.fuel_kg_per_lap
-                    if overlay is not None and overlay.fuel_kg_per_lap > 0
-                    else None
-                ),
-                default=self._th("fuel_kg_per_lap_default", 1.7),
-                min_weight=self._th("prior_min_weight", 2),
-            )
-            green = current_pit_loss(
-                self.db, state.session_uid, track_id, 0, overlay, settings.thresholds
-            )
-            self._green_pit_loss_s = green.value / 1000.0
-            self._green_pit_samples_s = (
-                [event.loss_ms / 1000.0 for event in self.db.pit_events_for_track(track_id, 0)]
-                if self.db is not None
-                else []
-            )
-            sc = current_pit_loss(
-                self.db,
-                state.session_uid,
-                track_id,
-                2 if state.safety_car_status == 2 else 1,
-                overlay,
-                settings.thresholds,
-            )
-            self._sc_pit_loss_s = sc.value / 1000.0
-            self._compound_priors.clear()
-            self._fresh_prior = self._deg_prior(track_id, state.tyre_compound, settings)
-            # Wear rate this stint: median of positive consecutive deltas.
-            wear_deltas = [
-                b.wear_pct - a.wear_pct
-                for a, b in zip(self._stint_laps, self._stint_laps[1:], strict=False)
-                if a.wear_pct > 0 and b.wear_pct > a.wear_pct
-            ]
-            self._wear_per_lap = (
-                median(wear_deltas) if wear_deltas else self._th("wear_per_lap_default_pct", 2.5)
-            )
-
-        laps_remaining = max(0, state.total_laps - state.lap_num + 1) if state.total_laps > 0 else 0
-        lap_num = state.lap_num
-        deployed_j = state.ers_deployed_this_lap_j
-        harvested_j = state.ers_harvested_mguk_j + state.ers_harvested_mguh_j
-        energy_capacity_j = self._th("ers_store_capacity_j", 4_000_000)
-        energy_floor_pct = float(mode.get("ers_soc_floor_pct", 0) or 0)
-        energy_over_tolerance_j = self._th("energy_over_tolerance_j", 400_000)
-        energy_attack_ok = mode.get("ers_policy") == "attack_rival"
-        (
-            live_deployed_j,
-            live_harvested_j,
-            allowance_store_j,
-            live_laps_remaining,
-        ) = self._energy_lap_tracker.observe(
-            lap_num,
-            laps_remaining,
-            state.ers_store_energy_j,
-            deployed_j,
-            harvested_j,
-            counters_current=state.ers_counters_current,
-            finished=state.ers_finished_lap,
-            store_capacity_j=energy_capacity_j,
-            soc_floor_pct=energy_floor_pct,
-            over_tolerance_j=energy_over_tolerance_j,
-            attack_ok=energy_attack_ok,
-        )
-        self.energy_prev_lap = self._energy_lap_tracker.prev_lap
-        per_lap_kg, fuel_source = self._fuel_per_lap(laps_remaining)
-        self.fuel_budget = fuel_budget(
-            laps_remaining=laps_remaining,
-            fuel_in_tank_kg=state.fuel_in_tank,
-            per_lap_kg=per_lap_kg,
-            source=fuel_source,
-            lap_done=(
-                state.lap_distance / state.track_length_m if state.track_length_m > 0 else 0.0
-            ),
-        )
-        self.energy_budget = energy_budget(
-            store_j=state.ers_store_energy_j,
-            store_capacity_j=energy_capacity_j,
-            laps_remaining=live_laps_remaining,
-            deployed_this_lap_j=live_deployed_j,
-            harvested_this_lap_j=live_harvested_j,
-            allowance_store_j=allowance_store_j,
-            soc_floor_pct=energy_floor_pct,
-            over_tolerance_j=energy_over_tolerance_j,
-            attack_ok=energy_attack_ok,
-        )
-
-        fit = self.deg_fit
-        wear = state.tyres_wear.as_tuple()
-        age = state.tyre_age_laps
-        if (
-            not self._stint_wear0
-            or state.tyre_compound != self._stint_compound0
-            or age < self._stint_age0
-            or any(w < w0 - 1.0 for w, w0 in zip(wear, self._stint_wear0, strict=True))
-        ):
-            self._stint_wear0 = wear
-            self._stint_age0 = age + self._lap_fraction()
-            self._stint_compound0 = state.tyre_compound
-        lop = corner_wear_life(
-            wear,
-            self._stint_wear0,
-            age + self._lap_fraction() - self._stint_age0,
-            wear_cliff_pct=self._th("wear_cliff_pct", 70),
-            default_rate_pct=self._wear_per_lap,
-        )
-        predicted = 0
-        pace_forecast = 0
-        if fit is not None:
-            lop = min(
-                lop,
-                laps_of_pace(
-                    planning_fit(fit, self._fresh_prior, self._th("deg_rmse_bad_ms", 800))
-                    if self._fresh_prior is not None
-                    else fit,
-                    age,
-                    max(wear),
-                    cliff_ms=self._th("tyre_cliff_ms", 1500),
-                    wear_cliff_pct=self._th("wear_cliff_pct", 70),
-                    wear_per_lap=0.0,
-                ),
-            )
-            per_lap = self.fuel_budget.per_lap_kg if self.fuel_budget is not None else 0.0
-            if self._stint_fuel_ref_laps > 0:
-                burned = max(0.0, self._stint_fuel_ref_laps - state.fuel_remaining_laps)
-            else:
-                burned = (
-                    max(0.0, self._stint_fuel_ref - state.fuel_in_tank) / per_lap
-                    if per_lap > 0 and self._stint_fuel_ref > 0
-                    else 0.0
-                )
-            predicted = int(
-                fit.base_ms
-                + fit.deg_ms_per_lap * (state.tyre_age_laps + 1)
-                + fit.deg2_ms_per_lap2 * (state.tyre_age_laps + 1) ** 2
-                - fit.fuel_ms_per_lap * (burned + 1)
-            )
-            pace_forecast = int(
-                fit.base_ms
-                + fit.deg_ms_per_lap * state.tyre_age_laps
-                + fit.deg2_ms_per_lap2 * state.tyre_age_laps**2
-                - fit.fuel_ms_per_lap * max(0.0, burned + 1 - self._lap_fraction())
-            )
-        eb = self.energy_budget
-        fb = self.fuel_budget
-        state.set_model(
-            ModelView(
-                driver_rating=self._driver_rating[0],
-                driver_confidence=self._driver_rating[1],
-                driver_rating_source=self._driver_rating[2],
-                deg_fit_source=fit.source if fit is not None else "",
-                deg_ms_per_lap=fit.deg_ms_per_lap if fit is not None else 0.0,
-                deg_confidence=fit.confidence if fit is not None else 0.0,
-                base_pace_ms=fit.base_ms if fit is not None else 0.0,
-                laps_of_pace=lop,
-                wear_per_lap_pct=self._wear_per_lap,
-                pit_loss_s=(
-                    self.pit_loss_prior.value / 1000.0 if self.pit_loss_prior is not None else 0.0
-                ),
-                pit_loss_source=(
-                    self.pit_loss_prior.source if self.pit_loss_prior is not None else ""
-                ),
-                sc_pit_loss_s=self._sc_pit_loss_s,
-                green_pit_loss_s=self._green_pit_loss_s,
-                fuel_margin_laps=fb.margin_laps if fb is not None else 0.0,
-                fuel_per_lap_kg=fb.per_lap_kg if fb is not None else 0.0,
-                run_fuel_per_lap_kg=(
-                    sum(delta for _, delta in self._run_fuel_deltas) / len(self._run_fuel_deltas)
-                    if self._run_fuel_deltas
-                    else 0.0
-                ),
-                run_fuel_laps=len(self._run_fuel_deltas),
-                fuel_source=fb.source if fb is not None else "",
-                energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
-                energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
-                energy_prev_lap_delta_mj=(
-                    self.energy_prev_lap.lap_delta_j / 1e6
-                    if self.energy_prev_lap is not None
-                    else 0.0
-                ),
-                energy_prev_lap_mode=(
-                    self.energy_prev_lap.mode if self.energy_prev_lap is not None else ""
-                ),
-                energy_laps_to_floor=eb.laps_to_floor if eb is not None else math.inf,
-                energy_mode=eb.mode if eb is not None else "",
-                predicted_lap_ms=predicted,
-                pace_forecast_ms=pace_forecast,
-            )
-        )
+        return self.ctx.th(name, default)
 
     def _plan_damage(self, snap: Snapshot, fit: DegFit) -> tuple[str, float, float]:
         if snap.num_pit_stops != self._damage_stops:
@@ -1888,13 +1399,13 @@ class Engine:
         wing_pct = max(snap.damage.front_left_wing, snap.damage.front_right_wing)
         wing = wing_pct >= self._th("plan_damage_wing_pct", 15)
         tyre = bool(snap.puncture_corner)
-        last = self.state.laps[-1] if self.state.laps else None
+        last = self.ctx.state.laps[-1] if self.ctx.state.laps else None
         measured = None
         if (
             last is not None
             and usable_laps(
                 [lap_row_from_summary(snap.session_uid, 0, last)],
-                self._thermal_hi_c(snap.track_id, last.compound, self.store.current()),
+                self.model._thermal_hi_c(snap.track_id, last.compound, self.ctx.store.current()),
             )
             and last.lap_num > 1
             and last.sc_status == 0
@@ -1930,15 +1441,15 @@ class Engine:
     def _plan(self, snap: Snapshot) -> Snapshot:
         """Run the pit-window optimiser on the fresh snapshot and fold the
         plan into both the snapshot and the next ModelView."""
-        fit = self.deg_fit
-        if not snap.race_phase or self._fresh_prior is None:
+        fit = self.ctx.deg_fit
+        if not snap.race_phase or self.ctx.fresh_prior is None:
             return snap
         if fit is None:
-            if self._plan_damage(snap, self._fresh_prior)[1] <= 0:
-                return self._plans(snap, self._fresh_prior, NO_PLAN)
-            fit = self._fresh_prior
-        fit = planning_fit(fit, self._fresh_prior, self._th("deg_rmse_bad_ms", 800))
-        settings = self.store.current()
+            if self._plan_damage(snap, self.ctx.fresh_prior)[1] <= 0:
+                return self._plans(snap, self.ctx.fresh_prior, NO_PLAN)
+            fit = self.ctx.fresh_prior
+        fit = planning_fit(fit, self.ctx.fresh_prior, self._th("deg_rmse_bad_ms", 800))
+        settings = self.ctx.store.current()
         ahead = (
             RivalView(
                 snap.rival_ahead_idx,
@@ -1959,7 +1470,7 @@ class Engine:
         pit_loss_s = snap.pit_loss_s + wing_loss_s
         sc_status = snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0
         if vsc_ending:
-            pit_loss_s = (self._green_pit_loss_s or snap.pit_loss_s) + wing_loss_s
+            pit_loss_s = (self.ctx.green_pit_loss_s or snap.pit_loss_s) + wing_loss_s
             sc_status = 0
         plan = optimise(
             lap_num=snap.lap_num,
@@ -1967,12 +1478,12 @@ class Engine:
             tyre_age=snap.tyre_age_laps,
             wear_mean=snap.wear_mean_pct,
             fit=fit,
-            fresh=self._fresh_prior,
+            fresh=self.ctx.fresh_prior,
             laps_of_pace=snap.laps_of_pace,
             pit_loss_s=pit_loss_s,
             damage_pace_ms=damage_pace_ms,
             pit_loss_source=snap.pit_loss_source,
-            green_pit_loss_s=self._green_pit_loss_s,
+            green_pit_loss_s=self.ctx.green_pit_loss_s,
             sc_status=sc_status,
             rival_ahead=ahead,
             rival_behind=behind,
@@ -1990,7 +1501,7 @@ class Engine:
             field=snap.field_cars,
         )
         if snap.safety_car_status == 0:
-            session_uid = self.state.session_uid
+            session_uid = self.ctx.state.session_uid
             raw_cadence = mode.get("mc_every_n_laps", 1)
             mc_every = max(1, int(raw_cadence) if isinstance(raw_cadence, int | float) else 1)
             raw_sims = mode.get("plan_mc_sims", settings.thresholds.get("plan_mc_sims", 500))
@@ -2021,7 +1532,7 @@ class Engine:
                     laps_remaining=snap.laps_remaining,
                     tyre_age=snap.tyre_age_laps,
                     fit=fit,
-                    fresh=self._fresh_prior,
+                    fresh=self.ctx.fresh_prior,
                     cur_cliff_age=snap.tyre_age_laps + snap.laps_of_pace,
                     pit_loss_s=snap.pit_loss_s + wing_loss_s,
                     damage_pace_ms=damage_pace_ms,
@@ -2030,8 +1541,8 @@ class Engine:
                         if snap.teammate_stacking
                         else 0.0
                     ),
-                    pit_loss_samples_s=self._green_pit_samples_s,
-                    sc_pit_loss_s=self._sc_pit_loss_s,
+                    pit_loss_samples_s=self.ctx.green_pit_samples_s,
+                    sc_pit_loss_s=self.ctx.sc_pit_loss_s,
                     plan_lap=plan.lap,
                     mode=mode,
                     th=settings.thresholds,
@@ -2044,10 +1555,10 @@ class Engine:
         plan, self._held_plan = _hold_cover_plan(
             self._held_plan, plan, snap, self._th("pit_min_laps_left", 2)
         )
-        self.pit_plan = plan
-        self.state.set_model(
+        self.ctx.pit_plan = plan
+        self.ctx.state.set_model(
             dataclasses.replace(
-                self.state.model,
+                self.ctx.state.model,
                 pit_plan=plan.plan,
                 pit_plan_lap=plan.lap,
                 pit_plan_gain_s=plan.gain_s,
@@ -2085,7 +1596,7 @@ class Engine:
         """Fresh-set pace per dry compound: learned/overlay deg for the set's
         actual compound when known, else the current slope scaled by the
         per-compound factor; sets left from the Tyre Sets packet."""
-        settings = self.store.current()
+        settings = self.ctx.store.current()
         current = snap.tyre_visual
         names = {16: "soft", 17: "medium", 18: "hard"}
         out: list[CompoundModel] = []
@@ -2100,10 +1611,10 @@ class Engine:
                 / self._th(f"plan_deg_factor_{names.get(current, 'medium')}", 1.0)
             )
             if actual:
-                prior = self._compound_priors.get(actual)
+                prior = self.model._compound_priors.get(actual)
                 if prior is None:
-                    prior = self._deg_prior(snap.track_id, actual, settings)
-                    self._compound_priors[actual] = prior
+                    prior = self.model._deg_prior(snap.track_id, actual, settings)
+                    self.model._compound_priors[actual] = prior
                 if prior.source in ("learned", "overlay"):
                     deg = prior.deg_ms_per_lap
                     deg_sd = 0.0
@@ -2196,8 +1707,8 @@ class Engine:
                         cur_cliff_age=cur_cliff_age,
                         compounds=self._compound_models(snap, cur),
                         used=frozenset(self._used_compounds),
-                        green_loss_s=self._green_pit_loss_s or snap.pit_loss_s,
-                        sc_loss_s=self._sc_pit_loss_s or snap.pit_loss_s,
+                        green_loss_s=self.ctx.green_pit_loss_s or snap.pit_loss_s,
+                        sc_loss_s=self.ctx.sc_pit_loss_s or snap.pit_loss_s,
                         wing_change_s=wing_loss_s,
                         damage_pace_ms=damage_pace_ms,
                     ),
@@ -2216,7 +1727,7 @@ class Engine:
         if not st.active:
             return snap
         fields = view_fields(st, snap.lap_num)
-        self.state.set_model(_with_plan(self.state.model, fields))
+        self.ctx.state.set_model(_with_plan(self.ctx.state.model, fields))
         return _with_plan(snap, fields)
 
     def _persist_plan_event(self, snap: Snapshot, ev: PlanEvent, st: PlanState) -> None:
@@ -2246,27 +1757,9 @@ class Engine:
             "plans": plans,
             "off_prob": st.off_prob,
         }
-        self.dispatcher.log.write(record)
-        if self.db is not None and self.state.session_uid is not None:
-            self.db.insert_plan_event(self.state.session_uid, record)
-
-    def battle_rates(self, track_id: int) -> BattleRates:
-        """Per-track pass / hold rates from model_params, shrunk to the priors."""
-        if self._battle_rates is not None and self._battle_rates[0] == track_id:
-            return self._battle_rates[1]
-        w = self._th("battle_prior_weight", 4.0)
-        priors = {
-            PASS_OT: self._th("battle_pass_overtake_prior", 0.6),
-            PASS_NO_OT: self._th("battle_pass_no_overtake_prior", 0.6),
-            HOLD: self._th("battle_hold_prior", 0.7),
-        }
-        vals: dict[str, float] = {}
-        for name, prior in priors.items():
-            p = self.db.get_param(track_id, PASS_COMPOUND, name) if self.db else None
-            vals[name] = shrink(p.value if p else None, p.weight if p else 0.0, prior, w)
-        rates = BattleRates(vals[PASS_OT], vals[PASS_NO_OT], vals[HOLD])
-        self._battle_rates = (track_id, rates)
-        return rates
+        self.ctx.dispatcher.log.write(record)
+        if self.ctx.db is not None and self.ctx.state.session_uid is not None:
+            self.ctx.db.insert_plan_event(self.ctx.state.session_uid, record)
 
     def _battle(self, snap: Snapshot) -> Snapshot:
         """Battle mode + attack/defend episodes; episode outcomes fold into
@@ -2307,7 +1800,7 @@ class Engine:
             driver=drv,
         )
         tracker = self.battle_tracker
-        th = self.store.current().thresholds
+        th = self.ctx.store.current().thresholds
         b: Battle = tracker.update(inp, th, self.battle_rates(snap.track_id))
         for ep in tracker.drain():
             self._persist_episode(snap, ep)
@@ -2341,7 +1834,7 @@ class Engine:
         )
 
     def _persist_episode(self, snap: Snapshot, ep: Episode) -> None:
-        self.dispatcher.log.write(
+        self.ctx.dispatcher.log.write(
             {
                 "t": snap.now,
                 "session_time": snap.session_time,
@@ -2355,11 +1848,11 @@ class Engine:
                 "result": ep.result,
             }
         )
-        if self.db is None or snap.track_id < 0 or self._synthetic_session():
+        if self.ctx.db is None or snap.track_id < 0 or self._synthetic_session():
             return
         name = HOLD if ep.kind == "defend" else PASS_OT if ep.overtake else PASS_NO_OT
         cap = self._th("param_weight_cap", 50.0)
-        self.db.fold_param(
+        self.ctx.db.fold_param(
             snap.track_id,
             PASS_COMPOUND,
             name,
@@ -2367,164 +1860,58 @@ class Engine:
             1.0,
             param_weight_cap=cap,
         )
-        self._battle_rates = None
+        self.model._battle_rates = None
 
     def _end_session(self, uid: int, now: float) -> None:
-        assert self.db is not None
+        assert self.ctx.db is not None
         self.fold_open_stint()
-        self._fold_driver(uid)
+        self.model._fold_driver(uid)
         self._store_debrief_setup(uid)
         self._session_ended_written = True
-        self.db.end_session(uid, now)
-        grade_and_store(self.db, uid, self.store.current().thresholds)
-        self.db.mark_graded(uid)
-
-    def _fold_driver(self, uid: int) -> None:
-        if (
-            self.db is None
-            or self.driver_db is None
-            or self.state.track_id < 0
-            or self._synthetic_session(uid)
-            or self.driver_db.driver_folded(uid)
-        ):
-            return
-        th = self.store.current().thresholds
-        weight = fold_weight(self.state.session_type, th)
-        if weight == 0:
-            return
-        event_warnings = self.state.infringement_warnings
-        if self.state.cars_lap is not None and self.state.warnings < event_warnings:
-            log.debug(
-                "LapData total warnings %d below event infringement warnings %d",
-                self.state.warnings,
-                event_warnings,
-            )
-        track_id = self.state.track_id
-        player_laps = [
-            lap
-            for lap in self.db.laps_for(uid, 0)
-            if lap.valid == 1 and lap.sc_status == 0 and lap.lap_time_ms > 0 and lap.traffic == 0
-        ]
-        field_lap_times = []
-        for car_idx in range(1, 22):
-            clean = [
-                lap.lap_time_ms
-                for lap in self.db.laps_for(uid, car_idx)
-                if lap.valid == 1
-                and lap.sc_status == 0
-                and lap.lap_time_ms > 0
-                and lap.traffic == 0
-            ]
-            if len(clean) >= self._th("driver_min_laps", 3):
-                field_lap_times.append(float(median(clean)))
-
-        compound = (
-            collections.Counter(lap.compound for lap in player_laps).most_common(1)[0][0]
-            if player_laps
-            else 0
-        )
-        base_name = self._learned_name(track_id, compound, "base_ms", db=self.driver_db)
-        base_param = self.driver_db.get_param(track_id, compound, base_name)
-        base_ms = float(base_param.value) if base_param is not None else None
-        stints = [stint for stint in self.db.stints_for_session(uid) if stint.n_valid_laps > 0]
-        stint_laps = sum(stint.n_valid_laps for stint in stints)
-        deg_ms_per_lap = (
-            sum(stint.deg_ms_per_lap * stint.n_valid_laps for stint in stints) / stint_laps
-            if stint_laps
-            else None
-        )
-        deg_name = self._learned_name(track_id, compound, "deg_ms_per_lap", db=self.driver_db)
-        deg_param = self.driver_db.get_param(track_id, compound, deg_name)
-        deg_prior = float(deg_param.value) if deg_param is not None else None
-        profile = compute_profile(
-            DriverInputs(
-                lap_times_ms=tuple(lap.lap_time_ms for lap in player_laps),
-                field_lap_times_ms=tuple(int(value) for value in field_lap_times),
-                base_ms=base_ms,
-                deg_ms_per_lap=deg_ms_per_lap,
-                deg_prior_ms_per_lap=deg_prior,
-                laps=max((lap.lap_num for lap in self.db.laps_for(uid, 0)), default=0),
-                lockups=self.state.incident_lockups,
-                spins=self.state.incident_spins,
-                offs=self.state.incident_offs,
-                contacts=self.state.incident_contacts,
-                grid_position=self.state.grid_position,
-                finish_position=self.state.position,
-                overtakes_made=(
-                    self.state.overtakes.made if self.state.event_telemetry_seen else None
-                ),
-                overtakes_lost=(
-                    self.state.overtakes.lost if self.state.event_telemetry_seen else None
-                ),
-                warnings=(
-                    self.state.infringement_warnings if self.state.event_telemetry_seen else None
-                ),
-                penalties=(
-                    self.state.infringement_penalties if self.state.event_telemetry_seen else None
-                ),
-            ),
-            th,
-        )
-        if profile is None:
-            return
-        values = [
-            (PARAM_NAMES[name], value)
-            for name in PARAM_NAMES
-            if (value := getattr(profile, name)) is not None
-        ]
-        values.append((RATING, profile.rating))
-        cap = self._th("param_weight_cap", 50)
-        for target_track in (track_id, GLOBAL_TRACK_ID):
-            for name, value in values:
-                self.driver_db.fold_param(
-                    target_track,
-                    DRIVER_COMPOUND,
-                    name,
-                    value,
-                    weight,
-                    param_weight_cap=cap,
-                )
-        self.driver_db.mark_driver_folded(uid)
-        self._refresh_driver_rating(track_id)
+        self.ctx.db.end_session(uid, now)
+        grade_and_store(self.ctx.db, uid, self.ctx.store.current().thresholds)
+        self.ctx.db.mark_graded(uid)
 
     def tick(self, now: float) -> list[Call]:
-        self._sync_run_fuel()
-        self.store.poll(now)
-        self.setup_advisor.refresh_rules(self.store.current().setup_rules)
-        if self.state.track_id != self._track_loaded:
-            self._track_loaded = self.state.track_id
-            self.store.set_track(self.state.track_id if self.state.track_id >= 0 else None)
-            self._refresh_driver_rating(self.state.track_id)
+        self.model._sync_run_fuel()
+        self.ctx.store.poll(now)
+        self.setup_advisor.refresh_rules(self.ctx.store.current().setup_rules)
+        if self.ctx.state.track_id != self._track_loaded:
+            self._track_loaded = self.ctx.state.track_id
+            self.ctx.store.set_track(
+                self.ctx.state.track_id if self.ctx.state.track_id >= 0 else None
+            )
+            self.model._refresh_driver_rating(self.ctx.state.track_id)
         if (
-            self.db is not None
-            and self.state.session_uid is not None
-            and self.state.track_id >= 0
-            and self.state.session_type > 0
-            and self._session_upserted != self.state.session_uid
+            self.ctx.db is not None
+            and self.ctx.state.session_uid is not None
+            and self.ctx.state.track_id >= 0
+            and self.ctx.state.session_type > 0
+            and self._session_upserted != self.ctx.state.session_uid
         ):
-            self._upsert_session(self.state.session_uid)
+            self._upsert_session(self.ctx.state.session_uid)
         self._write_laps()
-        self._update_model()
-        snapshot = self._battle(self._plan(self.state.snapshot(now)))
+        self.model._update_model()
+        snapshot = self._battle(self._plan(self.ctx.state.snapshot(now)))
         self._update_setup_stop_wing()
         snapshot = dataclasses.replace(snapshot, **self.setup_advisor.snapshot_fields())
-        uid = self.state.session_uid
+        uid = self.ctx.state.session_uid
         if (
             snapshot.session_ended
             and not self._session_ended_written
-            and self.db is not None
+            and self.ctx.db is not None
             and uid is not None
         ):
             self._end_session(uid, now)
-            if self.on_session_end is not None:
-                self.on_session_end(uid)
+            if self.ctx.on_session_end is not None:
+                self.ctx.on_session_end(uid)
         press = self.detector.tick(now)
         if press is not None:
             self._press_queue.append(press)
         balance = self.driver_balance(snapshot.lap_num)
         if balance != snapshot.driver_balance:
             snapshot = dataclasses.replace(snapshot, driver_balance=balance)
-        self.last_snapshot = snapshot
+        self.ctx.last_snapshot = snapshot
         for p in self._press_queue:
             if self._menu_press(p, snapshot):
                 continue
@@ -2533,25 +1920,25 @@ class Engine:
             elif p.kind == "page":
                 self.reset_page(p.t)
             else:
-                self.dispatcher.on_press(p, snapshot)
+                self.ctx.dispatcher.on_press(p, snapshot)
         self._press_queue.clear()
-        if self.menu.expired(self.store.current().menu, now):
+        if self.ctx.menu.expired(self.ctx.store.current().menu, now):
             self._menu_close(now, snapshot, "timeout")
         self._voice_tick(now, snapshot)
         self._auto_page(snapshot, now)
-        if self.state.last_recv_wall is not None:
-            self.metrics.note_packet_to_snapshot(self.state.last_recv_wall, now)
+        if self.ctx.state.last_recv_wall is not None:
+            self.metrics.note_packet_to_snapshot(self.ctx.state.last_recv_wall, now)
         if snapshot.paused != self._paused:
-            self.dispatcher.log.write(
+            self.ctx.dispatcher.log.write(
                 {"t": now, "outcome": "paused" if snapshot.paused else "resumed"}
             )
             if snapshot.paused:
-                self.dispatcher.purge(reason="paused", now=now)
+                self.ctx.dispatcher.purge(reason="paused", now=now)
             self._paused = snapshot.paused
         if snapshot.paused:
             return []
         self._heartbeat(now)
-        if self.recovering:
+        if self.ctx.recovering:
             if self.rule_engine is not None:
                 # Arm/disarm edges on the rebuilt state so conditions already
                 # true before the crash don't all fire on the first live tick.
@@ -2566,7 +1953,7 @@ class Engine:
                 if key in self._rule_errors_logged:
                     continue
                 self._rule_errors_logged.add(key)
-                self.dispatcher.log.write(
+                self.ctx.dispatcher.log.write(
                     {
                         "t": now,
                         "outcome": "rule_error",
@@ -2574,23 +1961,23 @@ class Engine:
                         "text": f"{suppressed.rule.id} {suppressed.reason}: {suppressed.detail}",
                     }
                 )
-            self.dispatcher.submit(result.candidates, snapshot)
-        return self.dispatcher.drain(now)
+            self.ctx.dispatcher.submit(result.candidates, snapshot)
+        return self.ctx.dispatcher.drain(now)
 
     def _heartbeat(self, now: float) -> None:
-        period = self.store.current().engine.heartbeat_s
-        if self.db is None or self.state.session_uid is None or period <= 0:
+        period = self.ctx.store.current().engine.heartbeat_s
+        if self.ctx.db is None or self.ctx.state.session_uid is None or period <= 0:
             return
         if self._last_heartbeat is not None and now - self._last_heartbeat < period:
             return
         self._last_heartbeat = now
         path = self.recording_path_source() if self.recording_path_source is not None else None
-        self.db.write_heartbeat(
-            self.state.session_uid,
-            float(self.state.last_packet_t or 0.0),
+        self.ctx.db.write_heartbeat(
+            self.ctx.state.session_uid,
+            float(self.ctx.state.last_packet_t or 0.0),
             time.time(),
             str(path or ""),
-            self.state.lap_num,
+            self.ctx.state.lap_num,
         )
 
     def recover(self, wall_now: float | None = None) -> str | None:
@@ -2599,10 +1986,10 @@ class Engine:
         recorder, rules muted) so EMAs, laps and phase are rebuilt; the model
         reads its lap history from the committed SQLite rows. Returns a short
         description, or None when there is nothing to recover."""
-        if self.db is None:
+        if self.ctx.db is None:
             return None
-        hb = self.db.read_heartbeat()
-        eng = self.store.current().engine
+        hb = self.ctx.db.read_heartbeat()
+        eng = self.ctx.store.current().engine
         wall_now = time.time() if wall_now is None else wall_now
         if hb is None or not hb.recording_path or wall_now - hb.wall_t > eng.recovery_max_age_s:
             return None
@@ -2622,7 +2009,7 @@ class Engine:
         if not tail:
             return None
         recorder, self.ingest.recorder = self.ingest.recorder, None
-        self.recovering = True
+        self.ctx.recovering = True
         period = self.tick_period
         try:
             next_tick = tail[0][0] / 1e6
@@ -2633,27 +2020,27 @@ class Engine:
                     self.tick(next_tick)
                     next_tick += period
         finally:
-            self.recovering = False
+            self.ctx.recovering = False
             self.ingest.recorder = recorder
-            self.dispatcher.purge(reason="recovery", now=self.clock.now())
-        if self.state.session_uid is not None and self.state.session_uid != hb.session_uid:
+            self.ctx.dispatcher.purge(reason="recovery", now=self.ctx.clock.now())
+        if self.ctx.state.session_uid is not None and self.ctx.state.session_uid != hb.session_uid:
             return None
-        self._session_upserted = self.state.session_uid
-        self.dispatcher.log.write(
+        self._session_upserted = self.ctx.state.session_uid
+        self.ctx.dispatcher.log.write(
             {
-                "t": self.clock.now(),
+                "t": self.ctx.clock.now(),
                 "outcome": "recovered",
                 "rule_id": None,
-                "text": f"{path.name} tail {len(tail)} datagrams, lap {self.state.lap_num}",
+                "text": f"{path.name} tail {len(tail)} datagrams, lap {self.ctx.state.lap_num}",
             }
         )
-        return f"recovered lap {self.state.lap_num} from {path.name} ({len(tail)} datagrams)"
+        return f"recovered lap {self.ctx.state.lap_num} from {path.name} ({len(tail)} datagrams)"
 
     def rejoin_text(self) -> str:
         """Spoken after a successful recover()."""
         from pitwall.audio.speaker import REJOIN_OPENER
 
-        st = self.state
+        st = self.ctx.state
         parts = [REJOIN_OPENER]
         if st.lap_num > 0:
             parts.append(f"Lap {st.lap_num}" + (f", P{st.position}." if st.position else "."))
@@ -2671,17 +2058,17 @@ class Engine:
                 with contextlib.suppress(OSError):
                     self.alive_path.touch()
             try:
-                self.tick(self.clock.now())
+                self.tick(self.ctx.clock.now())
             except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race
-                self.dispatcher.log.write(
+                self.ctx.dispatcher.log.write(
                     {
-                        "t": self.clock.now(),
+                        "t": self.ctx.clock.now(),
                         "outcome": "tick_error",
                         "rule_id": None,
                         "text": traceback.format_exc(limit=3),
                     }
                 )
-            await self.clock.sleep(period)
+            await self.ctx.clock.sleep(period)
 
 
 class _ReplaySink:
