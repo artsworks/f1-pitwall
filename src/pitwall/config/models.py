@@ -313,9 +313,9 @@ class SpeechSettings(BaseModel):
         steps = self.volume_steps
         if not steps:
             return "normal"
-        if percent == min(steps):
+        if percent < steps[0]:
             return "low"
-        if percent == max(steps):
+        if percent > steps[0]:
             return "max"
         return "normal"
 

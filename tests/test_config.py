@@ -25,6 +25,27 @@ def test_volume_steps_clamp() -> None:
     assert SpeechSettings().volume_steps == [70, 40, 70, 100]
 
 
+@pytest.mark.parametrize(
+    ("steps", "percent", "label"),
+    [
+        ([70, 40, 70, 100], 70, "normal"),
+        ([70, 40, 70, 100], 40, "low"),
+        ([70, 40, 70, 100], 100, "max"),
+        ([70, 70, 100], 70, "normal"),
+        ([70, 70, 100], 100, "max"),
+        ([70, 40], 70, "normal"),
+        ([70, 40], 40, "low"),
+        ([100], 100, "normal"),
+        ([], 70, "normal"),
+        ([70, 70, 40, 40, 70, 100, 100], 70, "normal"),
+        ([70, 70, 40, 40, 70, 100, 100], 40, "low"),
+        ([70, 70, 40, 40, 70, 100, 100], 100, "max"),
+    ],
+)
+def test_volume_label_relative_to_first_step(steps: list[int], percent: int, label: str) -> None:
+    assert SpeechSettings(volume_steps=steps).volume_label(percent) == label
+
+
 def test_defaults_load() -> None:
     store = ConfigStore()
     s = store.current()

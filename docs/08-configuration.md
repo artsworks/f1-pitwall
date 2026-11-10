@@ -89,7 +89,7 @@ All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` se
 
 `input.volume_cycle_bit` binds the speech volume cycle to UDP Action 10 by default. Set the bit to `0` to disable it.
 `speech.volume_steps` defaults to `[70, 40, 70, 100]`. Each step is clamped to 0–150 percent. A value of 100 means a Piper multiplier of 1.0.
-The cycle wraps and returns to normal between low and max. The live gain affects local and browser WAV playback without changing `speech.volume`.
+The first step is normal. A lower step is labelled low and a higher step is labelled max. The cycle wraps after the last step. The live gain affects local and browser WAV playback without changing `speech.volume`.
 
 **Verbosity presets** let one control replace six separate settings:
 
