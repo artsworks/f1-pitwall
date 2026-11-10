@@ -117,6 +117,22 @@ def test_invalid_override_keeps_last_good(tmp_path: Path, monkeypatch) -> None: 
     assert store.current().policy.calls_per_lap == 2  # last good kept
 
 
+def test_profile_action10_shortcut_keeps_binding(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("input:\n  shortcuts:\n    - {bit: 0x20000000, item: oversteer}\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    s = ConfigStore().current()
+    assert [(sc.bit, sc.item) for sc in s.input.shortcuts] == [(0x20000000, "oversteer")]
+    assert s.input.volume_cycle_bit == 0
+
+    profile.write_text(
+        "input:\n  volume_cycle_bit: 0x20000000\n"
+        "  shortcuts:\n    - {bit: 0x20000000, item: oversteer}\n"
+    )
+    store = ConfigStore()
+    assert store.last_error is not None and "share bit" in store.last_error
+
+
 def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing.yaml"))
     assert ConfigStore().current().speech.warm_phrases == 150
