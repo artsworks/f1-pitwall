@@ -16,17 +16,17 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
     )
     fit = DegFit(90_000.0, 150.0, 30.0, 20, 0.0, 0.9, "prior")
     engine.deg_fit = fit
-    engine._fresh_prior = fit
-    engine._green_pit_loss_s = 22.0
-    engine._sc_pit_loss_s = 12.0
+    engine.ctx.fresh_prior = fit
+    engine.ctx.green_pit_loss_s = 22.0
+    engine.ctx.sc_pit_loss_s = 12.0
     updates: list[bool] = []
-    original_update = engine.plan_tracker.update
+    original_update = engine.planner.plan_tracker.update
 
     def record_update(*args, **kwargs):
         updates.append(kwargs["neutralised"])
         return original_update(*args, **kwargs)
 
-    monkeypatch.setattr(engine.plan_tracker, "update", record_update)
+    monkeypatch.setattr(engine.planner.plan_tracker, "update", record_update)
     snap = Snapshot(
         now=1.0,
         session_kind="race",
@@ -45,13 +45,13 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
         _ages={"lap_data": 0.1, "car_status": 0.1},
     )
 
-    vsc = engine._plan(snap)
+    vsc = engine.planner._plan(snap)
     assert vsc.pit_plan == "cheap_stop"
     assert "box_now" in {
         candidate.rule.id for candidate in engine.rule_engine.evaluate(vsc).candidates
     }
 
-    ending = engine._plan(dataclasses.replace(snap, sc_ending=True))
+    ending = engine.planner._plan(dataclasses.replace(snap, sc_ending=True))
 
     assert ending.pit_plan != "cheap_stop"
     assert "box_now" not in {
@@ -66,10 +66,10 @@ def test_model_view_carries_green_pit_loss(tmp_path) -> None:
         decision_log_path=tmp_path / "decisions.jsonl",
         sinks=[],
     )
-    engine._update_model()
-    engine._green_pit_loss_s = 22.0
-    engine._sc_pit_loss_s = 12.0
-    engine._update_model()
+    engine.model._update_model()
+    engine.ctx.green_pit_loss_s = 22.0
+    engine.ctx.sc_pit_loss_s = 12.0
+    engine.model._update_model()
 
     assert engine.state.model.green_pit_loss_s == 22.0
     assert engine.state.model.sc_pit_loss_s == 12.0
@@ -82,7 +82,7 @@ def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> No
         sinks=[],
     )
     engine.deg_fit = DegFit(90_000.0, 100.0, 30.0, 20, 0.0, 0.9, "prior")
-    engine._fresh_prior = DegFit(90_000.0, 300.0, 30.0, 20, 0.0, 0.9, "prior")
+    engine.ctx.fresh_prior = DegFit(90_000.0, 300.0, 30.0, 20, 0.0, 0.9, "prior")
     snap = Snapshot(
         now=1.0,
         phase="racing",
@@ -105,11 +105,11 @@ def test_pitted_true_rival_cover_keeps_confidence_above_mode_min(tmp_path) -> No
         true_rival_behind_pitted=True,
     )
 
-    planned = engine._plan(snap)
+    planned = engine.planner._plan(snap)
 
     assert planned.pit_plan == "cover"
     assert planned.pit_plan_confidence >= 0.70
-    assert next(iter(engine._plan_mc_cache))[-4:] == ("cover", 2, False, 500)
+    assert next(iter(engine.planner._plan_mc_cache))[-4:] == ("cover", 2, False, 500)
 
 
 def test_held_cover_plan_survives_until_next_racing_lap() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import shutil
 import tempfile
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
@@ -19,12 +20,14 @@ from pitwall.config.models import Settings
 from pitwall.config.thresholds import finite_number
 from pitwall.learning.tune import AUTO_SKIP_METRICS
 from pitwall.net.derive import MutationOp, derive_recording, ops_from_options
-from pitwall.net.recording import RecordingReader
+from pitwall.net.recording import RecordingReader, index_path_for
 from pitwall.store.db import Database
 
 log = logging.getLogger(__name__)
 
 CheckType = Literal["fire", "absent"]
+
+BENCH_RECORDINGS = "recordings-bench"
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +286,43 @@ def load_scenarios(directory: Path, only: Sequence[str] | None = None) -> list[S
     if missing:
         raise ValueError(f"{directory}: scenario id not found: {', '.join(missing)}")
     return [scenario for scenario in scenarios if scenario.id in requested]
+
+
+def scenario_source_uids(directory: Path) -> set[int]:
+    uids: set[int] = set()
+    if not directory.is_dir():
+        return uids
+    for path in directory.glob("*.yaml"):
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(raw, dict) and raw.get("kind") == "radio-grades":
+            continue
+        try:
+            uids.add(parse_scenario(path).source_uid)
+        except ValueError:
+            continue
+    return uids
+
+
+def adopt_source(path: Path, recordings_dir: Path, bench_dir: Path) -> Path:
+    if path.resolve().parent != recordings_dir.resolve():
+        return path
+    destination = bench_dir / path.name
+    if destination.exists():
+        log.warning("bench: %s already exists, keeping %s", destination, path)
+        return path
+    try:
+        bench_dir.mkdir(parents=True, exist_ok=True)
+        index = index_path_for(path)
+        if index.exists():
+            shutil.move(str(index), bench_dir / index.name)
+        shutil.move(str(path), destination)
+    except OSError as exc:
+        log.warning("bench: could not move %s to %s: %s", path, bench_dir, exc)
+        return path
+    return destination
 
 
 def build_recording_index(directories: Sequence[Path]) -> dict[int, list[Path]]:

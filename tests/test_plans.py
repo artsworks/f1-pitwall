@@ -611,14 +611,14 @@ def test_engine_reseeds_plans_only_on_mindset_change(monkeypatch: pytest.MonkeyP
 
     def fake_update(*_args: object, reseed: bool = False, **_kw: object) -> object:
         calls.append(reseed)
-        return engine.plan_tracker.state
+        return engine.planner.plan_tracker.state
 
-    monkeypatch.setattr(engine.plan_tracker, "update", fake_update)
+    monkeypatch.setattr(engine.planner.plan_tracker, "update", fake_update)
     pit = SimpleNamespace(plan="stay")
     snap = make_snapshot(race_phase="racing", tyre_visual=M, laps_remaining=20, lap_num=5)
-    engine._plans(snap, fit(100.0), pit)  # type: ignore[arg-type]
-    engine._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
+    engine.planner._plans(snap, fit(100.0), pit)  # type: ignore[arg-type]
+    engine.planner._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
     engine.mindset_override = "aggressive"
-    engine._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
-    engine._plans(dataclasses.replace(snap, lap_num=7), fit(100.0), pit)  # type: ignore[arg-type]
+    engine.planner._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
+    engine.planner._plans(dataclasses.replace(snap, lap_num=7), fit(100.0), pit)  # type: ignore[arg-type]
     assert calls == [False, False, True, False]

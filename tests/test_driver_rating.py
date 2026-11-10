@@ -250,7 +250,7 @@ def _finish_session(
                 car_idx,
                 LapSummary(lap_num, lap_time, 30_000, 30_000, 17, lap_num, 10.0, True),
             )
-    engine._end_session(uid, 1.0)  # noqa: SLF001
+    engine.writer._end_session(uid, 1.0)  # noqa: SLF001
 
 
 def _open_driver_session(db: Database, uid: int):

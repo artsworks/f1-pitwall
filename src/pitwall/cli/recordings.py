@@ -436,6 +436,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_cleanup(args: argparse.Namespace) -> int:
     """List old files that are safe to delete; delete them after confirmation."""
+    from pitwall.learning.bench import scenario_source_uids
     from pitwall.ops.cleanup import apply, learnable_recordings, plan_cleanup
 
     settings = ConfigStore().current()
@@ -473,6 +474,7 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
             recording_imports=db.ingested_recordings() if db is not None else {},
             learnings_dir=storage_path(settings.learning.pack_dir),
             include_unlearned=args.include_unlearned,
+            protected_uids=scenario_source_uids(storage_path("scenarios")),
         )
     except ValueError as exc:
         print(f"cleanup: {exc}")
@@ -486,6 +488,8 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
                 f"  {plan.kept_no_uid} have no session UID "
                 "(session_0000000000000000_*), only --include-unlearned removes them"
             )
+    if plan.kept_bench:
+        print(f"keeping {plan.kept_bench} recording(s) used by pitwall bench")
     if not plan.delete:
         print("cleanup: nothing to delete")
         if failures:

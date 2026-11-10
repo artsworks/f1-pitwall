@@ -10,6 +10,37 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.56.0 (2026-11-07)
+
+### Chores
+
+- **deps**: Bump astral-sh/setup-uv ([#175](https://github.com/artsworks/f1-pitwall/pull/175),
+  [`e0518de`](https://github.com/artsworks/f1-pitwall/commit/e0518dec7a6806424d40fb103ef973212a9c84da))
+
+### Features
+
+- **tracks**: Promote learned overlays from the 2026-11-05 pack
+  ([#177](https://github.com/artsworks/f1-pitwall/pull/177),
+  [`aedc616`](https://github.com/artsworks/f1-pitwall/commit/aedc616be93cad92c12ac105f2bd54d9f1abb142))
+
+
+## v0.55.0 (2026-11-07)
+
+### Features
+
+- **tracks**: Add script to promote learned track overlays without an agent session
+  ([#176](https://github.com/artsworks/f1-pitwall/pull/176),
+  [`d567d43`](https://github.com/artsworks/f1-pitwall/commit/d567d4338fc9d521e30910d9ebd7ed8429a25b30))
+
+
+## v0.54.0 (2026-11-05)
+
+### Features
+
+- **bench**: Move source recordings to recordings-bench/ and keep them out of cleanup
+  ([`4c9dcf7`](https://github.com/artsworks/f1-pitwall/commit/4c9dcf7c5f99287a63f926f7fce45dd65e3594f4))
+
+
 ## v0.53.0 (2026-11-03)
 
 ### Chores

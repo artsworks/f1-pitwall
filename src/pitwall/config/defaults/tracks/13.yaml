@@ -1,0 +1,4 @@
+track_id: 13
+name: suzuka
+fuel_kg_per_lap: 1.3044
+thresholds: {energy_over_tolerance_j: 600000, tyre_inner_cold_by_compound_c: {18: 95.0, 20: 100.0}, tyre_inner_hot_by_compound_c: {18: 100.0, 20: 105.0}}

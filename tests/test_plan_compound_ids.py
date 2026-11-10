@@ -26,6 +26,6 @@ def test_compound_models_use_visual_ids_when_actual_ids_overlap() -> None:
     )
     fit = DegFit(90_000.0, 100.0, 30.0, 10, 100.0, 0.9, "fit")
 
-    models = engine._compound_models(snapshot, fit)
+    models = engine.planner._compound_models(snapshot, fit)
 
     assert tuple(model.visual for model in models) == (16, 17, 18)

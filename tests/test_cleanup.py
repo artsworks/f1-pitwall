@@ -708,3 +708,94 @@ def test_cleanup_keeps_recent_uncompressed_copy(tmp_path: Path) -> None:
 
     assert raw.absolute() not in {candidate.path for candidate in plan.delete}
     assert compressed.absolute() not in {candidate.path for candidate in plan.delete}
+
+
+def test_protected_uid_is_kept_with_and_without_unlearned(tmp_path: Path) -> None:
+    rec = tmp_path / "rec"
+    uid = 0xDB913A6A1919407E
+    protected = _touch(rec / f"session_{uid:016x}_1.f1bin.zst", 40)
+    _touch(rec / f"session_{uid:016x}_1.f1idx", 40)
+    other_uid = 0xDB913A6A1919408F
+    other = _touch(rec / f"session_{other_uid:016x}_1.f1bin.zst", 40)
+
+    for include_unlearned in (False, True):
+        plan = plan_cleanup(
+            rec,
+            tmp_path / "home",
+            tmp_path / "voices",
+            {uid, other_uid},
+            5,
+            now=NOW,
+            include_unlearned=include_unlearned,
+            protected_uids={uid},
+        )
+        assert {candidate.path for candidate in plan.delete} == {other.absolute()}
+        assert plan.kept_bench == 1
+        assert protected.exists()
+
+
+def test_protected_uncompressed_copy_is_kept(tmp_path: Path) -> None:
+    raw, compressed = _recording_pair(tmp_path / "rec", 0xAB, b"raw recording data")
+    _set_pair_age((raw, compressed), 40)
+
+    plan = plan_cleanup(
+        tmp_path / "rec",
+        tmp_path / "home",
+        tmp_path / "voices",
+        {0xAB},
+        5,
+        now=NOW,
+        protected_uids={0xAB},
+    )
+
+    assert plan.delete == []
+    assert plan.kept_bench == 2
+
+
+def test_cleanup_cli_keeps_bench_sources(tmp_path: Path, capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from pitwall.cli import main
+
+    _make_cleanup_profile(tmp_path, monkeypatch)
+    monkeypatch.setenv("PITWALL_HOME", str(tmp_path))
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    (scenarios / "case.yaml").write_text(
+        "id: case\n"
+        "title: Case\n"
+        "status: guard\n"
+        "source:\n"
+        "  session_uid: '0xab'\n"
+        "  sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"
+        "expect:\n"
+        "  fire:\n"
+        "    - rule: sc_deployed\n"
+        "      laps: [1, 2]\n",
+        encoding="utf-8",
+    )
+    (scenarios / "broken.yaml").write_text("not: [valid", encoding="utf-8")
+    rec = tmp_path / "rec"
+    protected = _touch(rec / "session_00000000000000ab_1.f1bin.zst", 0)
+    unprotected = _touch(rec / "session_00000000000000cd_1.f1bin.zst", 0)
+    old_mtime = time.time() - 40 * DAY
+    for path in (protected, unprotected):
+        os.utime(path, (old_mtime, old_mtime))
+
+    assert (
+        main(
+            [
+                "cleanup",
+                "--recordings",
+                str(rec),
+                "--db",
+                str(tmp_path / "pitwall.sqlite"),
+                "--include-unlearned",
+                "--yes",
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "keeping 1 recording(s) used by pitwall bench" in output
+    assert protected.exists()
+    assert not unprotected.exists()

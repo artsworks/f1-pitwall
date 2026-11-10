@@ -343,7 +343,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         metavar="DIR",
-        help="recording directory to search (repeatable)",
+        help=(
+            "recording directory to search "
+            "(repeatable, default: recordings dir and recordings-bench/)"
+        ),
     )
     bench.add_argument("--rules", type=Path, default=None, help="rules directory")
     bench.add_argument("--only", nargs="+", default=None, metavar="ID")

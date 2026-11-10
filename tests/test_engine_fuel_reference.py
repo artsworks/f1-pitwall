@@ -33,7 +33,7 @@ def test_fuel_forecast_reference_uses_fit_laps_fallback(tmp_path, monkeypatch) -
         decision_log_path=tmp_path / "decisions.jsonl",
         sinks=[],
     )
-    monkeypatch.setattr(engine, "_thermal_hi_c", lambda *args: 90.0)
+    monkeypatch.setattr(engine.model, "_thermal_hi_c", lambda *args: 90.0)
     tail = [
         _lap(1, 30.0, 100.0),
         _lap(2, 29.0, 80.0),
@@ -42,6 +42,6 @@ def test_fuel_forecast_reference_uses_fit_laps_fallback(tmp_path, monkeypatch) -
         _lap(5, 26.0, 100.0),
     ]
 
-    engine._fit_current_stint(tail, 7, engine.store.current(), None)
+    engine.model._fit_current_stint(tail, 7, engine.store.current(), None)
 
-    assert engine._stint_fuel_ref == 30.0
+    assert engine.ctx.stint_fuel_ref == 30.0

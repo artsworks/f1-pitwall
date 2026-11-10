@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-import pitwall.engine as engine_mod
+import pitwall.engine.model as engine_mod
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
 from pitwall.model.pitloss import current_pit_loss

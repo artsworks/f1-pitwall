@@ -231,7 +231,7 @@ def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
     item = engine.store.current().menu.items[0]
     snapshot = make_snapshot(now=1.0, lap_num=3, fuel_remaining_laps=4.2)
 
-    engine._menu_answer(item, 1.0, snapshot, "test")
+    engine.menu_controller._menu_answer(item, 1.0, snapshot, "test")
     engine.store.set_override(
         ("rules",),
         [
@@ -243,7 +243,7 @@ def test_question_signals_refresh_after_config_change(tmp_path: Path) -> None:
             }
         ],
     )
-    engine._menu_answer(engine.store.current().menu.items[0], 2.0, snapshot, "test")
+    engine.menu_controller._menu_answer(engine.store.current().menu.items[0], 2.0, snapshot, "test")
     engine.dispatcher.log.close()
 
     rows = [json.loads(line) for line in log_path.read_text().splitlines()]
@@ -292,7 +292,7 @@ def test_budget_silence_drops_queued_p3_and_keeps_reply() -> None:
     budget_item = next(
         item for item in engine.store.current().menu.items if item.action == "budget"
     )
-    engine._menu_answer(budget_item, 2.0, snapshot, "test")
+    engine.menu_controller._menu_answer(budget_item, 2.0, snapshot, "test")
 
     assert engine.dispatcher.budget_override == 0
     spoken = engine.dispatcher.drain(2.0)
@@ -484,9 +484,9 @@ def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
             engine.tick(tick_t)
             tick_t += 0.01
         if kind == "a1":
-            engine._on_press_edge(t, down)
+            engine.controls._on_press_edge(t, down)
         elif down:
-            engine._press_queue.append(Press(kind, t))
+            engine.controls._press_queue.append(Press(kind, t))
         engine.tick(t)
         if kind == "menu_up" and down:
             assert "Radio silent" not in engine.menu_payload(t)["items"]
@@ -507,7 +507,7 @@ def test_real_race_edges_never_toggle_silent_from_menu(tmp_path: Path) -> None:
             while tick_t < t:
                 engine.tick(tick_t)
                 tick_t += 0.01
-            engine._on_press_edge(t, down)
+            engine.controls._on_press_edge(t, down)
             engine.tick(t)
             previous = t
         tick_t = previous + 0.01

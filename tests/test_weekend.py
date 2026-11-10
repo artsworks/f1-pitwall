@@ -104,7 +104,7 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
     engine.state.session_uid = race_uid
     engine.state.track_id = 7
 
-    prior = engine._deg_prior(7, 17, settings)  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, settings)  # noqa: SLF001
 
     assert prior.source == "weekend"
     assert prior.deg_ms_per_lap == pytest.approx(140.0, abs=0.01)  # float32 fuel kg
@@ -137,7 +137,7 @@ def test_different_weekend_link_and_utc_day_do_not_match(tmp_path) -> None:
         )
         engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
         engine.state.session_uid = current_uid
-        prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+        prior = engine.model._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
 
         assert prior.source != "weekend"
         assert db.weekend_stints(current_uid, 7, 17) == []
@@ -152,7 +152,7 @@ def test_noisy_practice_fit_is_not_a_weekend_prior() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
     engine.state.session_uid = current_uid
 
-    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
 
     assert prior.source != "weekend"
 
@@ -224,7 +224,7 @@ def test_sprint_stint_is_a_weekend_prior_for_the_main_race() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
     engine.state.session_uid = race_uid
 
-    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
 
     assert prior.source == "weekend"
 
@@ -254,7 +254,7 @@ def test_noisy_sprint_fit_is_not_a_weekend_prior() -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
     engine.state.session_uid = race_uid
 
-    prior = engine._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
+    prior = engine.model._deg_prior(7, 17, ConfigStore().current())  # noqa: SLF001
 
     assert prior.source != "weekend"
 
@@ -291,10 +291,10 @@ def test_engine_stores_weekend_structure_arriving_after_upsert() -> None:
     engine.state.session_uid = 0xF1262009
     engine.state.track_id = 7
     engine.state.session_type = 15
-    engine._upsert_session(0xF1262009)  # noqa: SLF001
+    engine.writer._upsert_session(0xF1262009)  # noqa: SLF001
     assert db.session_row(0xF1262009)["weekend_structure"] == ""
 
     engine.state.weekend_structure = (1, 10, 15, 5, 16)
-    engine._write_laps()  # noqa: SLF001
+    engine.writer._write_laps()  # noqa: SLF001
 
     assert db.session_row(0xF1262009)["weekend_structure"] == "1,10,15,5,16"
