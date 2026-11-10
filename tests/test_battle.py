@@ -346,7 +346,7 @@ def test_engine_folds_episodes_into_pass_model(tmp_path: Path) -> None:
     snap = dataclasses.replace(Snapshot(now=0.0), track_id=7)
     prior = engine.battle_rates(7).pass_overtake
     for _ in range(4):
-        engine._persist_episode(snap, Episode("attack", 1, 3, 4, True, "passed"))
+        engine.battle._persist_episode(snap, Episode("attack", 1, 3, 4, True, "passed"))
     p = db.get_param(7, PASS_COMPOUND, PASS_OT)
     assert p is not None and p.value == 1.0
     assert engine.battle_rates(7).pass_overtake > prior
@@ -517,13 +517,13 @@ def test_swap_count_within_window() -> None:
 
 def test_engine_battle_swaps_land_on_snapshot(tmp_path: Path) -> None:
     engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=tmp_path / "d.jsonl")
-    engine.battle_tracker._announce(
+    engine.battle.battle_tracker._announce(
         Episode("attack", 1, 3, 4, True, "passed"),
         0.0,
         {"battle_swap_window_s": 120.0},
     )
     snap = dataclasses.replace(Snapshot(now=10.0), session_kind="race", race_phase="racing")
-    assert engine._battle(snap).battle_swaps == 1
+    assert engine.battle._battle(snap).battle_swaps == 1
 
 
 def test_engine_does_not_defend_against_rival_in_pit_lane(tmp_path: Path) -> None:
@@ -541,7 +541,7 @@ def test_engine_does_not_defend_against_rival_in_pit_lane(tmp_path: Path) -> Non
         def swap_count(self, _now: float, _th: object) -> int:
             return 0
 
-    engine.battle_tracker = CaptureTracker()  # type: ignore[assignment]
+    engine.battle.battle_tracker = CaptureTracker()  # type: ignore[assignment]
     snap = dataclasses.replace(
         Snapshot(now=10.0),
         session_kind="race",
@@ -550,7 +550,7 @@ def test_engine_does_not_defend_against_rival_in_pit_lane(tmp_path: Path) -> Non
         gap_behind_s=0.7,
         rival_behind_in_pit_lane=True,
     )
-    engine._battle(snap)
+    engine.battle._battle(snap)
 
     assert received[0].behind_idx == -1
     assert received[0].gap_behind_s == math.inf

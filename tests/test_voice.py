@@ -250,7 +250,7 @@ def test_engine_recognised_menu_intent_answers_and_closes_menu(
     engine.enable_voice(worker)
     answers: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        engine,
+        engine.menu_controller,
         "_menu_answer",
         lambda item, _t, _snapshot, via: answers.append((item.id, via)),
     )
@@ -272,7 +272,7 @@ def test_engine_miss_closes_voice_but_leaves_menu_open() -> None:
     engine.tick(0.5)
     assert not engine.voice.is_open
     assert engine.menu.open
-    assert engine._voice_closed == []
+    assert engine.voice_controller._voice_closed == []
 
 
 def test_engine_v_toggle_has_two_second_cap() -> None:
@@ -302,8 +302,8 @@ def test_action_1_press_still_reaches_dispatcher_with_voice_enabled(
         "on_press",
         lambda press, _snapshot: presses.append(press.kind),
     )
-    engine._on_press_edge(0.0, True)
-    engine._on_press_edge(0.1, False)
+    engine.controls._on_press_edge(0.0, True)
+    engine.controls._on_press_edge(0.1, False)
     engine.tick(0.45)
     assert presses == ["ack"]
     assert worker.calls == []

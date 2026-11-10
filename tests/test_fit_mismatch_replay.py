@@ -37,14 +37,14 @@ def _replay(tmp: Path, spec: RaceSpec) -> list[ReplayTick]:
         decision_log_path=tmp / "decisions.jsonl",
     )
     snapshots: list[Snapshot] = []
-    original = engine._plans
+    original = engine.planner._plans
 
     def capture(snap: Snapshot, cur: Any, pit: Any) -> Snapshot:
         result = original(snap, cur, pit)
         snapshots.append(result)
         return result
 
-    engine._plans = capture
+    engine.planner._plans = capture
     asyncio.run(run_replay(path, engine, None))
     ticks: list[ReplayTick] = []
     for snapshot in snapshots:
@@ -205,7 +205,7 @@ def _plan_snapshot(t: float, pit_status: int, tyre_visual: int, phase: str = "in
 
 def _fit_mismatch(engine: Any, snap: Snapshot) -> dict[str, str] | None:
     prior = DegFit(90_000.0, 80.0, 30.0, 10, 100.0, 0.9, "fit")
-    result = engine._plans(snap, prior, NO_PLAN)
+    result = engine.planner._plans(snap, prior, NO_PLAN)
     payload = strategy_payload(result)
     assert payload is not None
     return payload["fit_mismatch"]

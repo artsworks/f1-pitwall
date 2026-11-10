@@ -160,15 +160,15 @@ def test_race_priors_do_not_mix_race_distances() -> None:
     state = engine.state
     state.session_type = 15
     state.total_laps = 13
-    assert engine._learned_name(7, 17, "deg_ms_per_lap") == scoped("deg_ms_per_lap", 13)  # noqa: SLF001
+    assert engine.model._learned_name(7, 17, "deg_ms_per_lap") == scoped("deg_ms_per_lap", 13)  # noqa: SLF001
     state.total_laps = 52
-    assert engine._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
-    engine._fold_fit(7, 17, DegFit(90_000.0, 90.0, 30.0, 20, 100.0, 0.9, "fit"))  # noqa: SLF001
+    assert engine.model._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
+    engine.model._fold_fit(7, 17, DegFit(90_000.0, 90.0, 30.0, 20, 100.0, 0.9, "fit"))  # noqa: SLF001
     assert db.get_param(7, 17, scoped("deg_ms_per_lap", 52)).value == 90.0  # type: ignore[union-attr]
     assert db.get_param(7, 17, scoped("deg_ms_per_lap", 13)).value == 250.0  # type: ignore[union-attr]
-    assert engine._learned_name(7, 17, "deg_ms_per_lap") == scoped("deg_ms_per_lap", 52)  # noqa: SLF001
+    assert engine.model._learned_name(7, 17, "deg_ms_per_lap") == scoped("deg_ms_per_lap", 52)  # noqa: SLF001
     state.session_type = 1
-    assert engine._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
+    assert engine.model._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
 
 
 def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> None:
@@ -178,20 +178,20 @@ def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> No
     deg_max = float(TH["deg_max_ms_per_lap"])
 
     # A fit pinned at the slope clamp is a clamp, not a measurement.
-    engine._fold_fit(10, 19, DegFit(110_967.0, deg_max, 30.0, 6, 744.0, 0.9, "fit"))  # noqa: SLF001
+    engine.model._fold_fit(10, 19, DegFit(110_967.0, deg_max, 30.0, 6, 744.0, 0.9, "fit"))  # noqa: SLF001
     assert db.get_param(10, 19, "deg_ms_per_lap") is None
-    assert engine._deg_prior(10, 19, settings).source == "default"  # noqa: SLF001
+    assert engine.model._deg_prior(10, 19, settings).source == "default"  # noqa: SLF001
 
     # Six folded laps of a steep slope: halfway between it and the default.
     db.fold_param(10, 17, "deg_ms_per_lap", 500.0, weight=6)
-    thin = engine._deg_prior(10, 17, settings)  # noqa: SLF001
+    thin = engine.model._deg_prior(10, 17, settings)  # noqa: SLF001
     default = float(TH["deg_default_ms_per_lap"])
     assert thin.source == "learned"
     assert thin.deg_ms_per_lap == pytest.approx(0.5 * 500.0 + 0.5 * default)
     assert 0.2 < thin.confidence < 0.5
 
     db.fold_param(10, 17, "deg_ms_per_lap", 500.0, weight=12)
-    full = engine._deg_prior(10, 17, settings)  # noqa: SLF001
+    full = engine.model._deg_prior(10, 17, settings)  # noqa: SLF001
     assert full.deg_ms_per_lap == pytest.approx(500.0)
     assert full.confidence == pytest.approx(0.5)
 
