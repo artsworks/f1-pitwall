@@ -468,7 +468,9 @@ def test_mc_mindset_sims_override_and_cadence(monkeypatch: pytest.MonkeyPatch) -
         return orig(**kw)  # type: ignore[arg-type]
 
     monkeypatch.setattr("pitwall.engine.planning.plan_agreement", counted)
-    monkeypatch.setattr(engine, "mode", lambda: {**MODE, "mc_every_n_laps": 2, "plan_mc_sims": 500})
+    monkeypatch.setattr(
+        engine.controls, "mode", lambda: {**MODE, "mc_every_n_laps": 2, "plan_mc_sims": 500}
+    )
 
     snap1 = Snapshot(
         now=1.0,
@@ -520,7 +522,7 @@ def test_mc_same_lap_mindset_gain_threshold_invalidates_cache(
         return original(**kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr("pitwall.engine.planning.plan_agreement", counted)
-    monkeypatch.setattr(engine, "mode", lambda: mode)
+    monkeypatch.setattr(engine.controls, "mode", lambda: mode)
     snap = Snapshot(
         now=1.0,
         session_kind="race",
@@ -555,7 +557,7 @@ def test_mc_stack_status_invalidates_cache_and_passes_cost(
         return McResult(None, 1.0, 1)
 
     monkeypatch.setattr("pitwall.engine.planning.plan_agreement", counted)
-    monkeypatch.setattr(engine, "mode", lambda: {**MODE, "plan_mc_sims": 100})
+    monkeypatch.setattr(engine.controls, "mode", lambda: {**MODE, "plan_mc_sims": 100})
     snap = Snapshot(
         now=1.0,
         session_kind="race",
