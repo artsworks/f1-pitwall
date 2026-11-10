@@ -46,10 +46,17 @@ class Controls:
         ctx.state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         pages = ctx.store.current().ui.pages
         ctx.page = pages[0] if pages else "race"
+        self._volume_steps: list[int] = []
+        self.sync_volume_steps(force=True)
+
+    def sync_volume_steps(self, force: bool = False) -> None:
+        steps = self.ctx.store.current().speech.volume_steps
+        if not force and steps == self._volume_steps:
+            return
+        self._volume_steps = list(steps)
         self._volume_index = 0
-        steps = ctx.store.current().speech.volume_steps
-        ctx.volume_pct = steps[0] if steps else 100
-        ctx.dispatcher.set_volume(ctx.volume_pct)
+        self.ctx.volume_pct = steps[0] if steps else 100
+        self.ctx.dispatcher.set_volume(self.ctx.volume_pct)
 
     def reset(self) -> None:
         pass

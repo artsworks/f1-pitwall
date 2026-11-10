@@ -604,6 +604,27 @@ def test_empty_volume_cycle() -> None:
     assert engine.volume_pct == 100
 
 
+def test_volume_steps_reload_resets_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.audio.dispatcher import Dispatcher
+
+    gains: list[int] = []
+    monkeypatch.setattr(Dispatcher, "set_volume", lambda self, pct: gains.append(pct))
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    for t in (1.0, 2.0, 3.0):
+        engine.cycle_volume(t)
+    assert engine.volume_pct == 100
+    settings = engine.store.current()
+    engine.store._settings = settings.model_copy(
+        update={"speech": settings.speech.model_copy(update={"volume_steps": [20, 60]})}
+    )
+    gains.clear()
+    engine.tick(4.0)
+    assert engine.volume_pct == 20
+    assert gains == [20]
+    engine.cycle_volume(5.0)
+    assert engine.volume_pct == 60
+
+
 def _packaged_item(item_id: str) -> MenuItemModel:
     settings = build_engine(clock=VirtualClock(), sinks=[]).store.current()
     return next(i for i in settings.menu.items if i.id == item_id)

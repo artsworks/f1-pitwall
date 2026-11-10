@@ -461,6 +461,7 @@ class Engine:
     def tick(self, now: float) -> list[Call]:
         self.model._sync_run_fuel()
         self.ctx.store.poll(now)
+        self.controls.sync_volume_steps()
         self.setup_advisor.refresh_rules(self.ctx.store.current().setup_rules)
         if self.ctx.state.track_id != self._track_loaded:
             self._track_loaded = self.ctx.state.track_id
