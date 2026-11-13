@@ -372,6 +372,37 @@ def test_finish_texts_say_whole_positions_and_places():
     assert "P3" in penalty["finish_penalty"]
 
 
+@pytest.mark.parametrize(
+    ("winner", "loser", "position", "grid"),
+    [
+        ("finish_podium", "finish_lost", 2, 1),
+        ("finish_podium", "finish_gained", 3, 5),
+        ("finish_podium", "finish_held", 3, 3),
+        ("finish_win", "finish_gained", 1, 3),
+        ("finish_win", "finish_held", 1, 1),
+    ],
+)
+def test_podium_and_win_replace_grid_change_finish_call(winner, loser, position, grid):
+    snap = Snapshot(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="finished",
+        result_status=3,
+        position=position,
+        grid_position=grid,
+        positions_gained=grid - position,
+        _ages={"lap_data": 0.1},
+    )
+    candidates = _engine(FINISH).evaluate(snap).candidates
+    assert {c.rule.id for c in candidates} == {winner, loser}
+    policy = ConfigStore(isolated=True).current().policy.model_copy(update={"min_gap_s": 0.0})
+    dispatcher = Dispatcher(policy, VirtualClock(), sinks=[])
+    dispatcher.submit(candidates, snap)
+    assert dispatcher.queue_status(0.0)[0] == 1
+    assert [c.rule_id for c in dispatcher.drain(0.0)] == [winner]
+
+
 def test_cool_down_only_after_player_finish_while_moving():
     ingest, state = _setup()
     engine = _engine({"race_cool_down"})

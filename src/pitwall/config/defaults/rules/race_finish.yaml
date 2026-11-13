@@ -267,6 +267,7 @@ rules:
     priority: 1
     urgency: info
     flushes_queue: true
+    supersedes: [finish_held, finish_gained, finish_lost]
     when: "phase == 'finished' and result_status == 3 and final_position == 0 and position == 1 and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
@@ -279,6 +280,7 @@ rules:
     priority: 1
     urgency: info
     flushes_queue: true
+    supersedes: [finish_held, finish_gained, finish_lost]
     when: "phase == 'finished' and result_status == 3 and final_position == 0 and position in (2, 3) and penalty_places == 0"
     max_per_stint: 1
     requires: [lap_data]
