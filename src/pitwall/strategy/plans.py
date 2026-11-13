@@ -232,7 +232,8 @@ def evaluate(
     t_best, ks = per_k1[k_best]
     slack = _f(th, "plan_window_s", 1.5) * 1000.0
     lo = hi = k_best
-    while lo - 1 in per_k1 and per_k1[lo - 1][0] - t_best <= slack:
+    first_k = mn - 1 - inp.tyre_age  # the window opens once this set has done a minimum stint
+    while lo - 1 in per_k1 and lo > first_k and per_k1[lo - 1][0] - t_best <= slack:
         lo -= 1
     while hi + 1 in per_k1 and per_k1[hi + 1][0] - t_best <= slack:
         hi += 1
@@ -412,7 +413,13 @@ class PlanTracker:
             self.invalidated.add(self.pending_invalid)
             self.pending_invalid = ""
         reseed = reseed or (restart and bool(self.seqs))
-        if invalid and self.seqs and not reseed:
+        # No stop left before or after a rebuild: keep the letter, nothing to call.
+        settled = (
+            len(ranked[0].compounds) == 1
+            and self.active in self.seqs
+            and len(self._remaining(self.active, stops_done)) <= 1
+        )
+        if invalid and self.seqs and not reseed and not settled:
             to = "B" if self.active != "B" else "A"
             other_slot = "A" if to == "B" else "B"
             a = ranked[0]
@@ -472,10 +479,12 @@ class PlanTracker:
                 to = min(valid)[1]
                 self._switch(to, "invalid", lap, 0.0, evals[to])
             elif not neutralised:
-                to = "B" if self.active != "B" else "A"
+                keep = settled and self.active != "C"  # Plan C is listed from c_now
+                to = self.active if keep else "B" if self.active != "B" else "A"
                 self._set(to, "alternative", stops_done, best)
                 evals[to] = best
-                self._switch(to, "invalid", lap, 0.0, evals[to])
+                if not keep:
+                    self._switch(to, "invalid", lap, 0.0, evals[to])
         elif not neutralised:
             gap = cur.race_time_s - best.race_time_s
             if gap > off_s:

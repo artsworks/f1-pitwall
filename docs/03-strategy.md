@@ -221,6 +221,7 @@ unlimited), the mandatory two-dry-compound rule (`plan_two_compound_rule`), and
 degradation model and pit loss. Fresh-set pace per compound uses a learned prior or the
 current slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`. The window
 includes each first-stop lap within `plan_window_s` of the best.
+The window does not open before the fitted set completes `plan_min_stint_laps`, unless the best stop lap is earlier.
 
 - **Plan A** = fastest sequence at race start; **Plan B** = downside hedge, ranked by
   race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
@@ -232,6 +233,7 @@ includes each first-stop lap within `plan_window_s` of the best.
   Current-set laps include the measured deficit or `damage_pace_ms_per_wing_pct`, whichever is larger.
   Tyre damage without a measurement uses `damage_tyre_pace_ms`. A wing repair adds `pit_wing_change_s` to pit loss.
   A stop clears the penalty after the out lap.
+  When no stop remains before or after a rebuild, the active plan keeps its letter and no switch is logged.
   A mindset change rebuilds A and B from the new ranking. Stops already made stay done.
   When degradation spread is known, the engine switches after `plan_off_s` when the
   probability that the best plan is faster exceeds `plan_switch_prob`.
