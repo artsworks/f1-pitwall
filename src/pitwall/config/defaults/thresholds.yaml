@@ -115,6 +115,7 @@ thresholds:
   cool_ers_need_max_pct: 70  # cap on the learned battery need
   # Interlagos quali recordings: hot laps burn 0.92-1.01 laps. Cool laps
   # burn 0.87-0.95. Require fuel for one hot lap or cool + hot at the line.
+  plan_no_stop_max_laps: 5  # races this short have no mandatory stop
   plan_damage_wing_pct: 15  # wing damage that rebuilds strategy plans
   plan_damage_pace_ms: 1500 # valid green lap deficit that rebuilds plans
   plan_rebuild_max_lap: 2   # last lap for incident position-loss rebuilds

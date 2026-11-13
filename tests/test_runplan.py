@@ -917,3 +917,15 @@ def test_cool_mistakes_fires_with_zero_sector_gate(mistake: str) -> None:
     )
     cands = _rules(sector_loss_call_ms=0).evaluate(snap).candidates
     assert "cool_mistakes" in {c.rule.defn.id for c in cands}
+
+
+def test_abort_lap_is_silent_on_a_cool_lap() -> None:
+    abort = {"abort_advised": True, "abort_deficit_s": 5.6}
+    assert "abort_lap" in _ids(_qsnap(run_lap_kind="hot", **abort))
+    assert "abort_lap" not in _ids(_qsnap(cool_lap=True, run_lap_kind="cool", **abort))
+
+
+def test_cool_hot_mode_is_silent_when_through() -> None:
+    prep = {"cool_lap": True, "cool_prep": True, "fuel_for_hot_lap": True}
+    assert "cool_hot_mode" in _ids(_qsnap(**prep))
+    assert "cool_hot_mode" not in _ids(_qsnap(quali_through=True, **prep))

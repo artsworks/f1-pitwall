@@ -661,7 +661,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Front left tyre wear"
-    when: "wear_hot_corner == 'front left'"
+    when: "wear_hot_corner == 'front left' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'front left'"
     cooldown_s: 300
     requires: [car_damage, lap_data]
@@ -677,7 +677,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Front right tyre wear"
-    when: "wear_hot_corner == 'front right'"
+    when: "wear_hot_corner == 'front right' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'front right'"
     cooldown_s: 300
     requires: [car_damage, lap_data]
@@ -693,7 +693,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Rear left tyre wear"
-    when: "wear_hot_corner == 'rear left'"
+    when: "wear_hot_corner == 'rear left' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'rear left'"
     cooldown_s: 300
     requires: [car_damage, lap_data]
@@ -709,7 +709,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Rear right tyre wear"
-    when: "wear_hot_corner == 'rear right'"
+    when: "wear_hot_corner == 'rear right' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'rear right'"
     cooldown_s: 300
     requires: [car_damage, lap_data]
@@ -725,7 +725,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Front tyre wear report"
-    when: "wear_hot_corner == 'fronts'"
+    when: "wear_hot_corner == 'fronts' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'fronts'"
     cooldown_s: 300
     requires: [car_damage, lap_data]
@@ -741,7 +741,7 @@ rules:
     priority: 2
     urgency: info
     brief: "Rear tyre wear report"
-    when: "wear_hot_corner == 'rears'"
+    when: "wear_hot_corner == 'rears' and laps_remaining != 1"
     clear_when: "wear_hot_corner != 'rears'"
     cooldown_s: 300
     requires: [car_damage, lap_data]

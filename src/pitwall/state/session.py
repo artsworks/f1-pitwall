@@ -427,6 +427,7 @@ class Snapshot:
     off_track_lost: int = 0  # places lost to the last trip off track, for a few seconds
     off_track_recovered: bool = False  # those places came back on the same lap
     is_sprint: bool = False  # race session with another race later in the weekend
+    short_race: bool = False  # race too short for the mandatory stop
     yellow_here: bool = False
     yellow_ahead_m: float = math.inf
     yellow_ahead_sector: int = 0
@@ -1856,6 +1857,10 @@ class SessionState:
         later = self.weekend_structure[self.weekend_structure.index(self.session_type) + 1 :]
         return any(session_kind(t) == "race" for t in later)
 
+    def _short_race(self) -> bool:
+        max_laps = self._th("plan_no_stop_max_laps", 5.0)
+        return self._kind() == "race" and 0 < self.total_laps <= max_laps
+
     def _kind(self) -> str:
         return session_kind(self.session_type)
 
@@ -3190,6 +3195,7 @@ class SessionState:
             off_track_lost=self.off_track.lost_recent(st),
             off_track_recovered=self.off_track.recovered_recent(st),
             is_sprint=self._is_sprint(),
+            short_race=self._short_race(),
             yellow_here=yellow.here,
             yellow_ahead_m=_round50(yellow.ahead_m),
             yellow_ahead_sector=yellow.ahead_sector,
@@ -3439,7 +3445,7 @@ class SessionState:
         return int(max(0, pkt.num_laps - prev_end))
 
     def _stops_owed(self, i: int, car: CarLap) -> int:
-        if self._is_sprint():
+        if self._is_sprint() or self._short_race():
             return 0
         if not self._th("plan_two_compound_rule", 1.0):
             return 0

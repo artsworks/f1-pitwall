@@ -205,6 +205,7 @@ class Controls:
 
     def _plan_thresholds(self, snap: Snapshot) -> Mapping[str, object]:
         th: dict[str, object] = {**self.ctx.store.current().thresholds, **self.mode()}
-        if not snap.is_sprint:
+        if not (snap.is_sprint or snap.short_race):
             return th
-        return {**th, "plan_two_compound_rule": 0}  # no mandatory stop in a sprint
+        # no mandatory stop in a sprint or a 5-lap race
+        return {**th, "plan_two_compound_rule": 0}

@@ -144,3 +144,15 @@ def test_held_cover_plan_survives_until_next_racing_lap() -> None:
     )
     assert after_phase_change == fresh
     assert cleared is None
+
+
+def test_five_lap_race_plans_without_a_mandatory_stop(tmp_path) -> None:
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+    )
+    thresholds = engine.controls._plan_thresholds
+
+    assert thresholds(Snapshot(now=1.0))["plan_two_compound_rule"] == 1
+    assert thresholds(Snapshot(now=1.0, short_race=True))["plan_two_compound_rule"] == 0
