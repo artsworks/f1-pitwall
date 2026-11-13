@@ -87,23 +87,38 @@ def test_damage_invalidation_flips_slots_and_latches() -> None:
     tracker = PlanTracker()
     kw = dict(stops_done=0, neutralised=False, cheap_stop=False)
     tracker.update(inputs(), TH, **kw)
-    state = tracker.update(inputs(), TH, invalidate="damage", **kw)
+    hurt = inputs(damage_pace_ms=3000.0)  # the best sequence changes from M-H to M-H-H
+    state = tracker.update(hurt, TH, invalidate="damage", **kw)
     assert (state.active, state.switched_from, state.switch_reason, state.switch_lap) == (
         "B",
         "A",
         "invalid",
         1,
     )
+    assert state.sequence == "M-H-H"
     count = state.switch_count
-    assert tracker.update(inputs(), TH, invalidate="damage", **kw).switch_count == count
+    assert tracker.update(hurt, TH, invalidate="damage", **kw).switch_count == count
     tracker.reset()
     tracker.update(inputs(), TH, **kw)
     state = tracker.update(
-        inputs(), TH, invalidate="damage", stops_done=0, neutralised=True, cheap_stop=False
+        hurt, TH, invalidate="damage", stops_done=0, neutralised=True, cheap_stop=False
     )
     assert state.active == "A"
-    state = tracker.update(inputs(lap_num=2), TH, **kw)
+    state = tracker.update(dataclasses.replace(hurt, lap_num=2), TH, **kw)
     assert (state.active, state.switch_reason, state.switch_lap) == ("B", "invalid", 2)
+
+
+def test_damage_rebuild_with_the_same_sequence_keeps_the_letter() -> None:
+    tracker = PlanTracker()
+    kw = dict(stops_done=0, neutralised=False, cheap_stop=False)
+    state = tracker.update(inputs(laps_remaining=11), TH, **kw)
+    assert (state.sequence, state.target_lap) == ("M-S", 6)
+    tracker.drain()
+    hurt = inputs(laps_remaining=11, damage_pace_ms=3000.0)
+    state = tracker.update(hurt, TH, invalidate="damage", **kw)
+    assert (state.active, state.sequence, state.switch_count) == ("A", "M-S", 0)
+    assert (state.switch_reason, state.target_lap, state.window[0]) == ("", 1, 1)
+    assert tracker.drain() == []
 
 
 def test_damage_penalty_only_applies_before_first_stop() -> None:
@@ -487,6 +502,43 @@ def test_tracker_off_plan_below_switch_threshold() -> None:
     )
     assert st.on_plan
     assert [e.kind for e in tr.drain()] == ["on"]
+
+
+def test_window_opens_only_after_a_minimum_first_stint() -> None:
+    # near-flat times early in an 11-lap race: every stop lap is within plan_window_s
+    inp = inputs(laps_remaining=11, cur=fit(50.0), compounds=models(80.0, 50.0, 30.0))
+    e = evaluate(inp, (M, S), TH)
+    assert e is not None and e.stop_laps == (5,)
+    assert e.window == (3, 9)
+    # damage still moves the target, and the window with it, to this lap
+    hurt = evaluate(dataclasses.replace(inp, damage_pace_ms=3000.0), (M, S), TH)
+    assert hurt is not None and hurt.stop_laps == (1,) and hurt.window[0] == 1
+
+
+def test_damage_rebuild_with_no_stop_left_keeps_the_plan() -> None:
+    tr = PlanTracker()
+    st = tr.update(inputs(laps_remaining=11), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    assert st.sequence == "M-S"
+    kw = dict(stops_done=1, neutralised=False, cheap_stop=False)
+    after_stop = dict(tyre_age=1, current=S, used=frozenset({M, S}))
+    tr.update(inputs(lap_num=7, laps_remaining=5, **after_stop), TH, **kw)
+    tr.drain()
+    late = inputs(lap_num=10, laps_remaining=2, **{**after_stop, "tyre_age": 4})
+    st = tr.update(late, TH, invalidate="damage", **kw)
+    assert (st.active, st.sequence, st.switch_count) == ("A", "S", 0)
+    assert tr.drain() == []
+
+
+def test_off_plan_tyre_with_no_stop_left_keeps_the_letter() -> None:
+    tr = PlanTracker()
+    st = tr.update(inputs(laps_remaining=16), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    assert st.sequence == "M-S"
+    tr.drain()
+    # the stop fitted hards, not the planned softs, and no stop remains either way
+    fitted = inputs(lap_num=8, laps_remaining=9, tyre_age=1, current=H, used=frozenset({M, H}))
+    st = tr.update(fitted, TH, stops_done=1, neutralised=False, cheap_stop=False)
+    assert (st.active, st.sequence, st.stops_left, st.switch_count) == ("A", "H", 0, 0)
+    assert tr.drain() == []
 
 
 def test_spoken_forms() -> None:

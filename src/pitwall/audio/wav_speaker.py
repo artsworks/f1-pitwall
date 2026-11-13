@@ -14,6 +14,8 @@ import time
 import wave
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -52,6 +54,19 @@ class WavRenderer(Protocol):
     def render(
         self, text: str, priority: int, *, background: bool = False
     ) -> tuple[bytes, float]: ...
+
+
+@dataclass(frozen=True)
+class WarmProcess:
+    """Child-process worker for WavSpeaker.warm: the initializer runs once per
+    spawned process and render maps (text, priority) to (wav, seconds) there.
+    Both must be module-level functions so spawn can pickle them. Smaller
+    batches render in-process because starting workers costs more."""
+
+    initializer: Callable[..., None]
+    initargs: tuple[Any, ...]
+    render: Callable[[tuple[str, int]], tuple[bytes, float]]
+    min_batch: int = 16
 
 
 class InvalidWav(ValueError):
@@ -96,6 +111,12 @@ class NullPlayer:
 
 def default_player() -> Player:
     return WinsoundPlayer() if sys.platform == "win32" else NullPlayer()
+
+
+def default_warm_workers(cap: int | None = None) -> int:
+    """Half the logical cores, so warming leaves CPU for the game and Windows."""
+    half = max(1, (os.cpu_count() or 2) // 2)
+    return half if cap is None else min(cap, half)
 
 
 def _blip_envelope(sample_count: int, sample_rate: int, tau_s: float) -> np.ndarray:
@@ -340,14 +361,105 @@ class WavSpeaker:
         self._remember(key, result, disk=True, disk_required=False)
         return result
 
-    def warm(self, phrases: list[tuple[str, int]]) -> int:
+    def warm(
+        self,
+        phrases: list[tuple[str, int]],
+        *,
+        progress: Callable[[int, int, int], None] | None = None,
+    ) -> int:
         unique = {self._key(text, priority): (text, priority) for text, priority in phrases}
-        for key, (text, priority) in unique.items():
-            if self._cached(key) is not None:
-                continue
+        todo = [
+            (key, text, priority)
+            for key, (text, priority) in unique.items()
+            if self._cached(key) is None
+        ]
+        total = len(todo)
+        cached = len(unique) - total
+        if progress is not None:
+            progress(0, total, cached)
+        done = 0
+
+        def on_done() -> None:
+            nonlocal done
+            done += 1
+            if progress is not None:
+                progress(done, total, cached)
+
+        self._warm_missing(todo, on_done if progress is not None else None)
+        return len(unique)
+
+    def _warm_missing(
+        self,
+        todo: list[tuple[tuple[int, str], str, int]],
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
+        workers = max(1, int(getattr(self._renderer, "warm_workers", 1) or 1))
+        if workers <= 1 or len(todo) <= 1:
+            self._warm_sequential(todo, on_done)
+            return
+        mode = getattr(self._renderer, "warm_parallelism", None)
+        if mode == "thread":
+            with ThreadPoolExecutor(max_workers=min(workers, len(todo))) as pool:
+                self._warm_collect(
+                    todo,
+                    lambda text, priority: pool.submit(
+                        self._renderer.render, text, priority, background=True
+                    ),
+                    on_done,
+                )
+        elif mode == "process":
+            spec = getattr(self._renderer, "warm_process", None)
+            if spec is None or len(todo) < spec.min_batch:
+                self._warm_sequential(todo, on_done)
+                return
+            with ProcessPoolExecutor(
+                max_workers=min(workers, len(todo)),
+                initializer=spec.initializer,
+                initargs=spec.initargs,
+            ) as pool:
+                self._warm_collect(
+                    todo,
+                    lambda text, priority: pool.submit(spec.render, (text, priority)),
+                    on_done,
+                )
+        else:
+            self._warm_sequential(todo, on_done)
+
+    def _warm_sequential(
+        self,
+        todo: list[tuple[tuple[int, str], str, int]],
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
+        for key, text, priority in todo:
             wav, _ = self._renderer.render(text, priority, background=True)
             self._remember(key, (wav, wav_info(wav)), disk=True)
-        return len(unique)
+            if on_done is not None:
+                on_done()
+
+    def _warm_collect(
+        self,
+        todo: list[tuple[tuple[int, str], str, int]],
+        submit: Callable[[str, int], Future[tuple[bytes, float]]],
+        on_done: Callable[[], None] | None = None,
+    ) -> None:
+        futures = {submit(text, priority): key for key, text, priority in todo}
+        error: BaseException | None = None
+        for future in as_completed(futures):
+            if future.cancelled():
+                continue
+            exc = future.exception()
+            if exc is not None:
+                if error is None:
+                    error = exc
+                    for pending in futures:
+                        pending.cancel()
+                continue
+            wav, _ = future.result()
+            self._remember(futures[future], (wav, wav_info(wav)), disk=True)
+            if on_done is not None:
+                on_done()
+        if error is not None:
+            raise error
 
     def queue_status(self) -> tuple[int, float]:
         now = time.monotonic()

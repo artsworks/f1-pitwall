@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import threading
 import time
 import wave
@@ -85,6 +86,20 @@ class FakeRenderer:
         count = max(1, round(16_000 * self.duration_s))
         samples = np.sin(np.arange(count) * 2 * np.pi * 440 / 16_000)
         return to_wav(samples, 16_000), count / 16_000
+
+
+def warm_test_init(log_path: str) -> None:
+    """ProcessPoolExecutor initializer for warm tests: one log line per worker."""
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write(f"{os.getpid()}\n")
+
+
+def warm_test_render(task: tuple[str, int]) -> tuple[bytes, float]:
+    """ProcessPoolExecutor render for warm tests: a valid WAV per (text, priority)."""
+    _text, priority = task
+    count = max(1, round(16_000 * 0.01 * priority))
+    wav = to_wav(np.zeros(count, dtype=np.float32), 16_000)
+    return wav, count / 16_000
 
 
 class FakePlayer:

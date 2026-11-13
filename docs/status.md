@@ -34,15 +34,11 @@ check the changelog for what a given version added.
 - Add more races until calibration reports `converged: true`.
 - Record calls-off sessions for an on/off comparison (`speech.enabled: false` silences the
   speaker and stamps `calls_mode: off`). Sessions stamped `off` before 6 Oct were spoken,
-  so ingest relabels them `on`.
-- Recheck the tuning backlog from the 6 Oct qualifying review:
-  - `release_go` fires on garage entry and flip-flops with `release_hold`.
-  - `cool_hot_mode` fires after `quali_through`.
-  - The cool-lap digest fires three lines at once.
-  - The fuel-laps estimate is one lap pessimistic.
-  - The race plan proposes one stop in a 5-lap race.
-  - Energy advice flips between under and over.
-  - Wear and energy advice fires on the final lap.
+  so ingest relabels them `on`. A database migration also relabels the sessions from
+  before the fix that have no recording.
+- Recheck `release_go` and `release_hold` in a busy qualifying session. The two calls
+  can still alternate every 30 s while cars pass the pit exit.
+- Confirm in a 5-lap race that the plan has no mandatory stop (`plan_no_stop_max_laps`).
 
 ## Known gaps
 

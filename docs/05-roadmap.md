@@ -15,7 +15,7 @@ These items come from the [status](status.md) "Next" list and the open exit crit
 - Build the tray app.
 - Record more races until calibration reports `converged: true`.
 - Record calls-off sessions so `pitwall evaluate` can compare calls on and off.
-- Clear the tuning backlog from the qualifying review (listed in [status](status.md)).
+- Recheck the two remaining tuning items from the qualifying review (listed in [status](status.md)).
 - Follow up the reverted 25% race fixes: mixed-weather calls, drive-through tyre calls,
   stop summaries and early-race pace.
 - Finish the voice-command dispatcher hold (`21-voice-command.md`).

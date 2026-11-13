@@ -73,6 +73,7 @@ speech:
   omnivoice_wait_s: 5.0    # cold line waits this long for OmniVoice before Piper plays; 0 = instant Piper
   voices_dir: "voices"
   warm_phrases: 150       # phrases pre-rendered by 'pitwall voice warm'; lower it to save disk space
+  warm_workers: null      # phrases rendered at once by 'voice warm'; null = half the cores (omnivoice at most 4)
   rate: 0
   volume: 100
   # The cycle wraps, returning to normal between each extreme.

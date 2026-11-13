@@ -211,7 +211,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     def format_evaluation(result: Any) -> None:
         for track in result["tracks"]:
             mode_status = "comparable" if track["comparable"] else "one mode only"
-            print(f"Track {track['track_id']}: {mode_status}")
+            print(f"Track {track['track_id']} {track['session_kind']}: {mode_status}")
             for mode, row in (("on", track["on"]), ("off", track["off"])):
                 print(
                     f"  calls {mode}: {row['sessions']} sessions, {row['completed_laps']} laps, "

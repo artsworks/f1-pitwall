@@ -57,7 +57,12 @@ class OutcomeSpeaker(Protocol):
 
 @runtime_checkable
 class WarmableSpeaker(Protocol):
-    def warm(self, phrases: list[tuple[str, int]]) -> int: ...
+    def warm(
+        self,
+        phrases: list[tuple[str, int]],
+        *,
+        progress: Callable[[int, int, int], None] | None = None,
+    ) -> int: ...
 
 
 @runtime_checkable

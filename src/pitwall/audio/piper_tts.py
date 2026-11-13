@@ -22,7 +22,9 @@ from pitwall.audio.wav_speaker import (
 from pitwall.audio.wav_speaker import (
     Player,
     Synth,
+    WarmProcess,
     WavSpeaker,
+    default_warm_workers,
 )
 from pitwall.audio.wav_speaker import (
     WinsoundPlayer as WinsoundPlayer,
@@ -73,7 +75,9 @@ def make_piper_synth(settings: SpeechSettings) -> Synth:
     return make_piper_tone_synths(settings)[2]
 
 
-def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
+def make_piper_tone_synths(
+    settings: SpeechSettings, *, ort_threads: int | None = None
+) -> dict[int, Synth]:
     """One synth per call priority, sharing a single loaded voice.
 
     P1 is the urgent read (quicker, more pitch/energy variation), P3 the calm
@@ -87,6 +91,15 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
             f"(run: pitwall voice get {settings.piper_voice})"
         )
     voice = PiperVoice.load(path)
+    if ort_threads is not None:
+        import onnxruntime  # type: ignore[import-untyped]
+
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = ort_threads
+        options.inter_op_num_threads = 1
+        voice.session = onnxruntime.InferenceSession(
+            str(path), sess_options=options, providers=["CPUExecutionProvider"]
+        )
     rate = max(-10, min(10, settings.rate))
     base_length = (1.0 - 0.04 * rate) / max(0.5, min(2.0, settings.piper_speed))
     volume = max(0, min(100, settings.volume)) / 100.0
@@ -115,16 +128,43 @@ def make_piper_tone_synths(settings: SpeechSettings) -> dict[int, Synth]:
     return {prio: make(speed, expr) for prio, (speed, expr) in tones.items()}
 
 
+_WARM_TONES: dict[int, Synth] | None = None
+
+
+def _warm_init(settings: SpeechSettings) -> None:
+    """ProcessPoolExecutor initializer: load the Piper voice once per worker."""
+    global _WARM_TONES
+    _WARM_TONES = make_piper_tone_synths(settings, ort_threads=1)
+
+
+def _warm_render(task: tuple[str, int]) -> tuple[bytes, float]:
+    text, priority = task
+    tones = _WARM_TONES
+    if tones is None:
+        raise RuntimeError("piper warm worker has no loaded voice")
+    return tones.get(priority, tones[2])(text)
+
+
 class PiperRenderer:
     per_priority = True
 
     def __init__(
-        self, tones: dict[int, Synth], synth: Synth, label: str, cache_identity: str
+        self,
+        tones: dict[int, Synth],
+        synth: Synth,
+        label: str,
+        cache_identity: str,
+        *,
+        warm_workers: int | None = None,
+        warm_process: WarmProcess | None = None,
     ) -> None:
         self.tones = tones
         self.synth = synth
         self.label = label
         self.cache_identity = cache_identity
+        self.warm_parallelism = "process" if warm_process is not None else None
+        self.warm_workers = warm_workers if warm_workers is not None else default_warm_workers()
+        self.warm_process = warm_process
 
     def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
         return self.tones.get(priority, self.synth)(text)
@@ -144,7 +184,14 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
         ).encode()
     ).hexdigest()
     label = f"piper ({settings.piper_voice})"
-    renderer = PiperRenderer(tones, tones[2], label, identity)
+    renderer = PiperRenderer(
+        tones,
+        tones[2],
+        label,
+        identity,
+        warm_workers=settings.warm_workers,
+        warm_process=WarmProcess(_warm_init, (settings,), _warm_render),
+    )
     return WavSpeaker(
         renderer,
         player or default_player(),

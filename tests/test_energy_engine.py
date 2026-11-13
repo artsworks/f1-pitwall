@@ -6,6 +6,7 @@ import pytest
 
 from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
+from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
 from pitwall.protocol.header import PacketId
 
@@ -290,3 +291,38 @@ def test_energy_tracker_resets_after_same_lap_flashback() -> None:
 
     race_lap(12.0, 6, 0, 0.0, frame=53, packet_time=6.0)
     assert engine.state.snapshot(12.0).energy_prev_lap_mode == ""
+
+
+def _race_rule_ids(**kw: object) -> set[str]:
+    from pitwall.rules.engine import RuleEngine
+    from pitwall.state.session import Snapshot
+
+    settings = ConfigStore().current()
+    rules = RuleEngine(list(settings.rules), thresholds=settings.thresholds, mode={})
+    base: dict[str, object] = {
+        "now": 0.0,
+        "session_kind": "race",
+        "session_type": 15,
+        "phase": "racing",
+        "lap_num": 6,
+        "laps_remaining": 5,
+        "_ages": {k: 0.1 for k in ("lap_data", "car_status", "car_damage")},
+    }
+    base.update(kw)
+    snap = Snapshot(**base)  # type: ignore[arg-type]
+    return {c.rule.defn.id for c in rules.evaluate(snap).candidates}
+
+
+def test_energy_over_grades_the_finished_lap_like_energy_under() -> None:
+    part_lap = _race_rule_ids(sector=2, energy_mode="over", energy_lap_delta_mj=0.6)
+    assert "energy_over" not in part_lap
+
+    over = {"energy_prev_lap_mode": "over", "energy_prev_lap_delta_mj": 0.6}
+    assert "energy_over" in _race_rule_ids(sector=0, **over)
+    assert "energy_over" not in _race_rule_ids(sector=0, laps_remaining=1, **over)
+
+
+def test_wear_advice_is_silent_on_the_final_lap() -> None:
+    hot = {"wear_hot_corner": "fronts", "wear_hot_ratio": 1.5}
+    assert "wear_fronts" in _race_rule_ids(**hot)
+    assert "wear_fronts" not in _race_rule_ids(laps_remaining=1, **hot)

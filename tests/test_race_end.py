@@ -21,7 +21,7 @@ from pitwall.learning.bench import evaluate_checks, parse_scenario
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.packets import parse
 from pitwall.rules.engine import RuleEngine
-from pitwall.state.session import SessionState
+from pitwall.state.session import SessionState, Snapshot
 
 from .synth import pack_packet, write_packet_stream
 
@@ -180,15 +180,15 @@ def test_formation_cadence_and_no_repeat():
     _frame(ingest, 1)
     calls = _calls(engine, state.snapshot(1))
     assert set(calls) == {"formation_tyres_cold"}
-    assert "60.0" in calls["formation_tyres_cold"]
+    assert "at 60 degrees" in calls["formation_tyres_cold"]
     _frame(ingest, 2, sector=1)
     calls = _calls(engine, state.snapshot(2))
     assert set(calls) == {"formation_brakes_cold"}
-    assert "150.0" in calls["formation_brakes_cold"]
+    assert "150 degrees" in calls["formation_brakes_cold"]
     _frame(ingest, 3, sector=2)
     calls = _calls(engine, state.snapshot(3))
     assert set(calls) == {"formation_grid_slot"}
-    assert "P6.0" in calls["formation_grid_slot"]
+    assert "P6 for the start" in calls["formation_grid_slot"]
     _frame(ingest, 4, sector=2)
     assert not _calls(engine, state.snapshot(4))
 
@@ -282,8 +282,8 @@ def test_final_classification_wire_result_gaps_and_fastest():
     assert set(calls) == {"finish_classified"}
     text = calls["finish_classified"]
     for fragment in (
-        "P3.0",
-        "Up 3.0",
+        "P3. ",
+        "Up 3 from the grid",
         "1.2 to the car ahead",
         "2.4 clear behind",
         "Fastest lap, 80.2 seconds",
@@ -346,7 +346,61 @@ def test_classification_gaps_omit_lapped_cars_and_include_penalties():
     ingest.on_datagram(_final(best_lap_time_ms=82000, grid_position=2), 30)
     details = state.snapshot(30).final_details
     assert "Fastest lap" not in details
-    assert "Down 1.0" in details
+    assert "Down 1 from the grid" in details
+
+
+def test_finish_texts_say_whole_positions_and_places():
+    base = dict(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="finished",
+        result_status=3,
+        position=2,
+        grid_position=1,
+        positions_gained=-1,
+        _ages={"lap_data": 0.1, "final_classification": 0.1},
+    )
+    road = _calls(_engine({"finish_lost", "finish_podium"}), Snapshot(**base))
+    assert set(road) == {"finish_lost", "finish_podium"}
+    assert "down 1 from the grid" in road["finish_lost"]
+    penalty = _calls(_engine({"finish_penalty"}), Snapshot(**base, penalty_position=3))
+    classified = _calls(_engine({"finish_classified"}), Snapshot(**base, final_position=2))
+    for text in (*road.values(), penalty["finish_penalty"], classified["finish_classified"]):
+        assert "P2" in text
+        assert ".0" not in text
+    assert "P3" in penalty["finish_penalty"]
+
+
+@pytest.mark.parametrize(
+    ("winner", "loser", "position", "grid"),
+    [
+        ("finish_podium", "finish_lost", 2, 1),
+        ("finish_podium", "finish_gained", 3, 5),
+        ("finish_podium", "finish_held", 3, 3),
+        ("finish_win", "finish_gained", 1, 3),
+        ("finish_win", "finish_held", 1, 1),
+    ],
+)
+def test_podium_and_win_replace_grid_change_finish_call(winner, loser, position, grid):
+    snap = Snapshot(
+        now=0.0,
+        session_kind="race",
+        session_type=15,
+        phase="finished",
+        result_status=3,
+        position=position,
+        grid_position=grid,
+        positions_gained=grid - position,
+        _ages={"lap_data": 0.1},
+    )
+    candidates = _engine(FINISH).evaluate(snap).candidates
+    assert {c.rule.id for c in candidates} == {winner, loser}
+    policy = ConfigStore(isolated=True).current().policy.model_copy(update={"min_gap_s": 0.0})
+    dispatcher = Dispatcher(policy, VirtualClock(), sinks=[])
+    dispatcher.submit(candidates, snap)
+    assert dispatcher.queue_status(0.0)[0] == 1
+    assert [c.rule_id for c in dispatcher.drain(0.0)] == [winner]
 
 
 def test_cool_down_only_after_player_finish_while_moving():
@@ -358,7 +412,7 @@ def test_cool_down_only_after_player_finish_while_moving():
     snap = state.snapshot(10)
     assert not _calls(_engine({"race_cool_down"}), replace(snap, speed_kmh=0))
     assert not _calls(_engine({"race_cool_down"}), replace(snap, session_ended=True))
-    assert "450.0" in _calls(engine, snap)["race_cool_down"]
+    assert "450 degrees" in _calls(engine, snap)["race_cool_down"]
     assert not _calls(engine, state.snapshot(10.1))
     ingest.on_datagram(_final(), 30)
     assert not _calls(_engine({"race_cool_down"}), state.snapshot(30))

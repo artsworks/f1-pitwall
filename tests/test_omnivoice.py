@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 import threading
 import time
 import wave
@@ -53,6 +54,9 @@ class FakeServerState:
     requests: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     speech_status: int = 200
     speech_delay_s: float = 0.0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    in_flight: int = 0
+    max_in_flight: int = 0
 
 
 @pytest.fixture
@@ -79,12 +83,19 @@ def fake_server() -> tuple[str, FakeServerState]:
             payload = json.loads(body)
             state.requests.append((self.path, payload))
             if self.path == "/v1/audio/speech":
-                if state.speech_delay_s:
-                    time.sleep(state.speech_delay_s)
-                if state.speech_status != 200:
-                    self._send(state.speech_status, b'{"error":"synthesis failed"}')
-                else:
-                    self._send(200, SMALL_WAV, "audio/wav")
+                with state.lock:
+                    state.in_flight += 1
+                    state.max_in_flight = max(state.max_in_flight, state.in_flight)
+                try:
+                    if state.speech_delay_s:
+                        time.sleep(state.speech_delay_s)
+                    if state.speech_status != 200:
+                        self._send(state.speech_status, b'{"error":"synthesis failed"}')
+                    else:
+                        self._send(200, SMALL_WAV, "audio/wav")
+                finally:
+                    with state.lock:
+                        state.in_flight -= 1
             else:
                 self._send(404, b'{"error":"not found"}')
 
@@ -378,6 +389,71 @@ def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, mon
         speaker.close()
 
 
+def test_omnivoice_warm_renders_phrases_in_parallel(fake_server, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    url, state = fake_server
+    state.speech_delay_s = 0.2
+    settings = _settings(url, tmp_path, warm_workers=4)
+    speaker = make_omnivoice_speaker(settings, FakePlayer())
+    try:
+        phrases = [(f"line {i}", 2) for i in range(6)]
+        assert speaker.warm(phrases) == 6
+        assert state.max_in_flight >= 2
+        speech = [path for path, _ in state.requests if path == "/v1/audio/speech"]
+        assert len(speech) == 6
+        cache = list((tmp_path / "voices" / ".phrases").glob("*.wav"))
+        assert len(cache) == 6
+        summary = render_stats_summary("background")
+        assert summary is not None and "n=6" in summary
+    finally:
+        speaker.close()
+
+
+def test_omnivoice_default_warm_workers_capped_at_four(
+    fake_server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url, _state = fake_server
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    settings = _settings(url, tmp_path)
+    renderer = OmniVoiceRenderer(settings, "model.gguf", fallback_tones=None)
+    assert renderer.warm_workers == 4
+
+
+def test_voice_warm_prints_progress_to_stderr(
+    fake_server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    url, _state = fake_server
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(
+        json.dumps(
+            {
+                "persistence": {"enabled": False},
+                "speech": {
+                    "engine": "omnivoice",
+                    "omnivoice_url": url,
+                    "omnivoice_timeout_s": 1.0,
+                    "voices_dir": str(tmp_path / "voices"),
+                    "radio_click": False,
+                    "warm_phrases": 6,
+                    "warm_workers": 2,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    monkeypatch.chdir(tmp_path)
+
+    import re
+
+    from pitwall.cli import main
+
+    assert main(["voice", "warm", "--engine", "omnivoice"]) == 0
+    captured = capsys.readouterr()
+    assert "voice warm: loading omnivoice" in captured.err
+    assert "already cached, rendering" in captured.err
+    assert re.search(r"voice warm: (\d+)/\1 rendered", captured.err)
+
+
 def test_omnivoice_cache_key_tracks_client_inputs_only() -> None:
     settings = SpeechSettings(radio_click=True)
     baseline = omnivoice_cache_key(settings, "model.gguf")
@@ -413,7 +489,7 @@ def test_voice_warm_auto_uses_configured_engine_and_explicit_engine(monkeypatch,
             self.closed = False
             self.phrases: list[tuple[str, int]] = []
 
-        def warm(self, phrases: list[tuple[str, int]]) -> int:
+        def warm(self, phrases: list[tuple[str, int]], *, progress=None) -> int:
             self.phrases = phrases
             return len(phrases)
 
@@ -497,7 +573,7 @@ def test_voice_warm_unreachable_omnivoice_does_not_warm_piper(
     class FakePiperSpeaker:
         name = "piper"
 
-        def warm(self, phrases: list[tuple[str, int]]) -> int:
+        def warm(self, phrases: list[tuple[str, int]], *, progress=None) -> int:
             cache_dir.mkdir(parents=True)
             (cache_dir / "cached.wav").write_bytes(b"wav")
             return len(phrases)
@@ -552,7 +628,7 @@ def test_voice_warm_auto_resolves_null_and_piper(monkeypatch, capsys) -> None:  
     class FakeSpeaker:
         name = "piper"
 
-        def warm(self, phrases: list[tuple[str, int]]) -> int:
+        def warm(self, phrases: list[tuple[str, int]], *, progress=None) -> int:
             warmed.append(phrases)
             return len(phrases)
 
@@ -725,7 +801,7 @@ def test_voice_warm_replays_deduplicated_calls_against_omnivoice(
     assert main(["voice", "warm", "--engine", "omnivoice", "--replay", str(recording)]) == 0
     speech = [payload["input"] for path, payload in state.requests if path == "/v1/audio/speech"]
 
-    assert speech == expected_texts
+    assert sorted(speech) == sorted(expected_texts)
     assert not (recording_dir / "decisions.jsonl").exists()
     assert not (tmp_path / "pitwall.sqlite").exists()
     output = capsys.readouterr().out
@@ -772,7 +848,7 @@ def test_startup_prerender_uses_omnivoice_audio_without_piper(
     speaker.close()
 
     speech = [payload["input"] for path, payload in state.requests if path == "/v1/audio/speech"]
-    assert speech == [text for _, text in STARTUP_LINES]
+    assert sorted(speech) == sorted(text for _, text in STARTUP_LINES)
     assert player.played == [SMALL_WAV, SMALL_WAV]
     assert all(wav != PIPER_WAV for wav in player.played)
     assert piper_calls == []

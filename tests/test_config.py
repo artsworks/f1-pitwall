@@ -156,11 +156,17 @@ def test_profile_action10_shortcut_keeps_binding(tmp_path: Path, monkeypatch) ->
 
 def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing.yaml"))
-    assert ConfigStore().current().speech.warm_phrases == 150
+    speech = ConfigStore().current().speech
+    assert speech.warm_phrases == 150
+    assert speech.warm_workers is None
     profile = tmp_path / "profile.yaml"
-    profile.write_text("speech:\n  warm_phrases: 50\n")
+    profile.write_text("speech:\n  warm_phrases: 50\n  warm_workers: 4\n")
     monkeypatch.setenv("PITWALL_PROFILE", str(profile))
-    assert ConfigStore().current().speech.warm_phrases == 50
+    speech = ConfigStore().current().speech
+    assert speech.warm_phrases == 50
+    assert speech.warm_workers == 4
+    with pytest.raises(ValidationError):
+        SpeechSettings(warm_workers=0)
 
 
 def test_isolated_config_skips_profile(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

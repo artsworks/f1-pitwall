@@ -179,6 +179,7 @@ def _voice_warm(args: argparse.Namespace) -> int:
     if engine not in ENGINES:
         print(f"unknown speech engine: {engine}")
         return 1
+    print(f"voice warm: loading {engine} ...", file=sys.stderr)
     try:
         speaker = ENGINES[engine].factory(speech)
     except Exception as exc:  # noqa: BLE001 - print the unavailable engine to the CLI
@@ -251,7 +252,45 @@ def _voice_warm(args: argparse.Namespace) -> int:
             phrases = common_phrases(speech.warm_phrases, extra)
         if args.replay and dropped_texts:
             print(f"voice warm: skipped {len(dropped_texts)} lines with names or measured values")
-        count = speaker.warm(phrases)
+        tty = sys.stderr.isatty()
+        started = time.monotonic()
+        last_step = -1
+        line_open = False
+
+        def _progress(done: int, total: int, cached: int) -> None:
+            nonlocal last_step, line_open
+            if done == 0:
+                if total == 0:
+                    print(
+                        f"voice warm: all {cached} phrases already cached",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"voice warm: {cached} already cached, rendering {total} new phrases ...",
+                        file=sys.stderr,
+                    )
+                return
+            if tty:
+                elapsed = time.monotonic() - started
+                eta = round(elapsed / done * (total - done))
+                sys.stderr.write(f"\rvoice warm: {done}/{total} rendered, about {eta}s left")
+                sys.stderr.flush()
+                line_open = done != total
+                if done == total:
+                    sys.stderr.write("\n")
+            else:
+                step = int(done / total * 100) // 10
+                if step > last_step or done == total:
+                    last_step = step
+                    print(f"voice warm: {done}/{total} rendered", file=sys.stderr)
+
+        try:
+            count = speaker.warm(phrases, progress=_progress)
+        except BaseException:
+            if line_open:
+                sys.stderr.write("\n")
+            raise
         print(f"cached {count} phrases for {speaker.name}")
         if engine == "omnivoice":
             from pitwall.audio.omnivoice_tts import render_stats_summary

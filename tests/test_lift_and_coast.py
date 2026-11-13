@@ -141,7 +141,7 @@ def test_wear_replay_hysteresis(component, label):
     key = f"engine_{component}_wear"
     hot = _replay_snapshot({}, {key: 62})
     call = _call(rules, hot, "pu_wear_high")
-    assert call is not None and label in call.text and "62.0" in call.text
+    assert call is not None and label in call.text and "62 percent" in call.text
     assert call.inputs.get("pu_wear_pct") == 62.0
     assert _call(rules, _replay_snapshot({}, {key: 58}), "pu_wear_high") is None
     assert _call(rules, hot, "pu_wear_high") is None

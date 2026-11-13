@@ -401,7 +401,7 @@ def test_lap_row_from_summary_matches_inserted_row() -> None:
 
 def test_migration_dedupes_laps_keeping_latest_row(tmp_path) -> None:
     path = tmp_path / "duplicate-laps.sqlite"
-    _seed_database(path, migration_count=len(MIGRATIONS) - 1)
+    _seed_database(path, migration_count=13)
     conn = sqlite3.connect(path)
     conn.executemany(
         "INSERT INTO laps(session_uid, car_idx, lap_num, lap_time_ms) VALUES(?,?,?,?)",

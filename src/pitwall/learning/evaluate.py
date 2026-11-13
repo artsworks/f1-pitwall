@@ -6,6 +6,7 @@ import statistics
 from collections import defaultdict
 from typing import TypedDict
 
+from pitwall.protocol.enums import session_kind
 from pitwall.store.db import Database
 
 
@@ -41,6 +42,7 @@ class _ModeResult(TypedDict):
 
 class _TrackResult(TypedDict):
     track_id: int
+    session_kind: str
     on: _ModeResult
     off: _ModeResult
     comparable: bool
@@ -65,9 +67,13 @@ def _percentile(values: list[float], fraction: float) -> float | None:
 
 def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
     """Summarise observed outcomes; call mode is session-level, not a causal treatment."""
-    groups: dict[int, dict[str, list[_SessionResult]]] = defaultdict(lambda: {"on": [], "off": []})
+    groups: dict[tuple[int, str], dict[str, list[_SessionResult]]] = defaultdict(
+        lambda: {"on": [], "off": []}
+    )
     unknown = 0
     for session in db.sessions(track_id):
+        if session.get("synthetic"):
+            continue
         mode = session.get("calls_mode")
         if mode not in ("on", "off"):
             unknown += 1
@@ -83,9 +89,11 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
         grade_count = sum(
             grade["grade"] in ("noise", "wrong", "too_late") for grade in db.grades_for_session(uid)
         )
-        groups[int(session["track_id"] if session["track_id"] is not None else -1)][
-            str(mode)
-        ].append(
+        key = (
+            int(session["track_id"] if session["track_id"] is not None else -1),
+            session_kind(int(session.get("session_type") or 0)),
+        )
+        groups[key][str(mode)].append(
             {
                 "uid": uid,
                 "clean": clean,
@@ -98,7 +106,7 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
             }
         )
     tracks: list[_TrackResult] = []
-    for track, modes in sorted(groups.items()):
+    for (track, kind), modes in sorted(groups.items()):
         by_mode: dict[str, _ModeResult] = {}
         for mode in ("on", "off"):
             sessions = modes[mode]
@@ -129,6 +137,7 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
         tracks.append(
             {
                 "track_id": track,
+                "session_kind": kind,
                 "on": by_mode["on"],
                 "off": by_mode["off"],
                 "comparable": bool(modes["on"] and modes["off"]),
@@ -141,6 +150,7 @@ def evaluate_corpus(db: Database, track_id: int | None = None) -> Evaluation:
             "Descriptive only: different sessions, weather, drivers and strategy can "
             "explain differences. Mistake rate counts invalid laps outside first, pit, "
             "safety-car and red-flag laps; all invalid laps are reported separately. "
-            "Negative call grades are reported separately. Compare within track, not across tracks."
+            "Negative call grades are reported separately. Compare within track and session "
+            "class, not across them."
         ),
     }

@@ -134,6 +134,40 @@ def test_previous_user_version_migrates_traffic_column(tmp_path: Path) -> None:
     db.close()
 
 
+def test_migration_relabels_unrecorded_calls_mode_off_before_the_fix(tmp_path: Path) -> None:
+    path = tmp_path / "stale-calls-mode.sqlite"
+    conn = sqlite3.connect(path)
+    for migration in MIGRATIONS[:-1]:
+        conn.executescript(migration)
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS) - 1}")
+    cutoff = 1791288660
+    conn.executemany(
+        "INSERT INTO sessions(uid, started_at, recording_path, calls_mode) VALUES(?,?,?,?)",
+        [
+            (1, cutoff - 1, None, "off"),
+            (2, cutoff - 1, "", "off"),
+            (3, cutoff, "", "off"),
+            (4, cutoff - 1, "session.f1bin.zst", "off"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    def modes(db: Database) -> list[str]:
+        rows = db._conn.execute("SELECT calls_mode FROM sessions ORDER BY uid")  # noqa: SLF001
+        return [row[0] for row in rows]
+
+    db = Database(path)
+    assert modes(db) == ["on", "on", "off", "off"]
+    db._conn.execute("UPDATE sessions SET calls_mode='off' WHERE uid=1")  # noqa: SLF001
+    db._conn.commit()  # noqa: SLF001
+    db.close()
+
+    reopened = Database(path)
+    assert modes(reopened) == ["off", "on", "off", "off"]
+    reopened.close()
+
+
 def test_reconcile_adds_traffic_column_to_edited_latest_database(tmp_path: Path) -> None:
     path = tmp_path / "edited-latest.sqlite"
     conn = sqlite3.connect(path)

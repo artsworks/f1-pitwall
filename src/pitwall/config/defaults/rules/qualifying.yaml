@@ -73,7 +73,7 @@ rules:
     priority: 2
     urgency: execution
     resolved_by: [quali_through]
-    when: "phase == 'flying' and abort_advised"
+    when: "phase == 'flying' and abort_advised and not cool_lap"
     still_true: "abort_advised"
     clear_when: "phase != 'flying'"
     cooldown_s: 90
@@ -526,7 +526,7 @@ rules:
     sessions: [qualifying]
     priority: 1
     urgency: execution
-    when: "cool_prep and not cool_extend and fuel_for_hot_lap"
+    when: "cool_prep and not cool_extend and fuel_for_hot_lap and not quali_through"
     clear_when: "not cool_lap"
     requires: [lap_data, car_status]
     say:
