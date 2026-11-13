@@ -87,23 +87,38 @@ def test_damage_invalidation_flips_slots_and_latches() -> None:
     tracker = PlanTracker()
     kw = dict(stops_done=0, neutralised=False, cheap_stop=False)
     tracker.update(inputs(), TH, **kw)
-    state = tracker.update(inputs(), TH, invalidate="damage", **kw)
+    hurt = inputs(damage_pace_ms=3000.0)  # the best sequence changes from M-H to M-H-H
+    state = tracker.update(hurt, TH, invalidate="damage", **kw)
     assert (state.active, state.switched_from, state.switch_reason, state.switch_lap) == (
         "B",
         "A",
         "invalid",
         1,
     )
+    assert state.sequence == "M-H-H"
     count = state.switch_count
-    assert tracker.update(inputs(), TH, invalidate="damage", **kw).switch_count == count
+    assert tracker.update(hurt, TH, invalidate="damage", **kw).switch_count == count
     tracker.reset()
     tracker.update(inputs(), TH, **kw)
     state = tracker.update(
-        inputs(), TH, invalidate="damage", stops_done=0, neutralised=True, cheap_stop=False
+        hurt, TH, invalidate="damage", stops_done=0, neutralised=True, cheap_stop=False
     )
     assert state.active == "A"
-    state = tracker.update(inputs(lap_num=2), TH, **kw)
+    state = tracker.update(dataclasses.replace(hurt, lap_num=2), TH, **kw)
     assert (state.active, state.switch_reason, state.switch_lap) == ("B", "invalid", 2)
+
+
+def test_damage_rebuild_with_the_same_sequence_keeps_the_letter() -> None:
+    tracker = PlanTracker()
+    kw = dict(stops_done=0, neutralised=False, cheap_stop=False)
+    state = tracker.update(inputs(laps_remaining=11), TH, **kw)
+    assert (state.sequence, state.target_lap) == ("M-S", 6)
+    tracker.drain()
+    hurt = inputs(laps_remaining=11, damage_pace_ms=3000.0)
+    state = tracker.update(hurt, TH, invalidate="damage", **kw)
+    assert (state.active, state.sequence, state.switch_count) == ("A", "M-S", 0)
+    assert (state.switch_reason, state.target_lap, state.window[0]) == ("", 1, 1)
+    assert tracker.drain() == []
 
 
 def test_damage_penalty_only_applies_before_first_stop() -> None:

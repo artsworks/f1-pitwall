@@ -227,7 +227,9 @@ The window does not open before the fitted set completes `plan_min_stint_laps`, 
   race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
   SC/VSC pit loss, re-derived every recompute until taken.
 - A and B are frozen as compound sequences; their timing is re-optimised every lap.
-  Damage rebuilds the plans and switches to the other letter once per cause per stint, after SC/VSC ends.
+  Damage rebuilds the plans once per cause per stint, after SC/VSC ends.
+  If the best tyre sequence changes, the active plan switches to the other letter.
+  If the sequence stays the same, the letter stays and only the target lap and the window move.
   Wing damage uses `plan_damage_wing_pct`, and a valid green lap deficit uses `plan_damage_pace_ms`.
   Early position loss uses `plan_rebuild_max_lap` and `plan_rebuild_positions_lost`.
   Current-set laps include the measured deficit or `damage_pace_ms_per_wing_pct`, whichever is larger.

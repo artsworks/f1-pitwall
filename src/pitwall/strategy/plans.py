@@ -419,7 +419,11 @@ class PlanTracker:
             and self.active in self.seqs
             and len(self._remaining(self.active, stops_done)) <= 1
         )
-        if invalid and self.seqs and not reseed and not settled:
+        # Same tyre sequence after a rebuild: keep the letter, the stop timing updates in place.
+        same = self.active in self.seqs and (
+            ranked[0].compounds == self._remaining(self.active, stops_done)
+        )
+        if invalid and self.seqs and not reseed and not settled and not same:
             to = "B" if self.active != "B" else "A"
             other_slot = "A" if to == "B" else "B"
             a = ranked[0]
