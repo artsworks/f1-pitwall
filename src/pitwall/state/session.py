@@ -72,6 +72,14 @@ from pitwall.state.race import (
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
+from pitwall.state.weather_state import (
+    rain_at,
+    update_dry_to_wet,
+    update_field_wet_switches,
+    update_weather_crossover,
+    weather_at,
+    wet_to_dry_confirmed,
+)
 from pitwall.state.zones import (
     aero_zone_ahead,
     drs_zone_ahead,
@@ -82,11 +90,9 @@ from pitwall.strategy.pace import amount_words, pace_words_self
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.rejoin import FieldCar
 from pitwall.strategy.weather import (
-    best_rain_stop,
     crossover_projection,
     default_pit_loss_s,
     switch_net_s,
-    wet_by_lap,
 )
 
 if TYPE_CHECKING:
@@ -1572,8 +1578,8 @@ class SessionState:
             pkt.active_aero_zones_full[: pkt.num_active_aero_zones_full]
             + pkt.active_aero_zones_partial[: pkt.num_active_aero_zones_partial]
         )
-        self._update_weather_crossover()
-        self._update_dry_to_wet()
+        update_weather_crossover(self)
+        update_dry_to_wet(self)
         zones = pkt.marshal_zones[: pkt.num_marshal_zones]
         self.yellows.update(
             [z.zone_start for z in zones],
@@ -1849,7 +1855,7 @@ class SessionState:
                 fuel_cool_short=self.fuel_remaining_laps < self._th("fuel_cool_need_laps", 3.0),
                 compound=self.tyre_compound,
             )
-        self._update_field_wet_switches()
+        update_field_wet_switches(self)
 
     def answer_push_check(self, push: bool) -> None:
         if push:
@@ -2265,71 +2271,6 @@ class SessionState:
         self.wear_hot_rate = rate
         self.wear_hot_pct = pct
 
-    def _race_horizon_min(self) -> float:
-        """Minutes of racing left, so forecast samples after the flag don't
-        drive a tyre call. 30 (the forecast's reach) when unknown."""
-        lap_ms = self._best_laps.get(self._player_idx, 0)
-        if self._kind() != "race" or self.total_laps <= 0 or lap_ms <= 0:
-            return 30.0
-        laps_left = max(0, self.total_laps - self.lap_num + 1)
-        return laps_left * lap_ms / 60_000.0
-
-    def _update_weather_crossover(self) -> None:
-        """Crossover direction from the forecast, with % hysteresis so it
-        doesn't flap around the thresholds. The reported minute is the first
-        forecast sample that crosses the band, not the wettest one."""
-        horizon = self._race_horizon_min()
-        ahead = [
-            (int(f.rain_percentage), int(f.time_offset))
-            for f in self._forecast_samples
-            if f.session_type == self.session_type
-            and 5 <= f.time_offset
-            and (f.time_offset <= horizon or f.time_offset <= 10)
-        ]
-        rain_heads_up = min(
-            (
-                (pct, offset)
-                for pct, offset in ahead
-                if offset <= horizon
-                and offset <= self._th("rain_heads_up_max_min", 15.0)
-                and pct >= self._th("rain_heads_up_pct", 40.0)
-            ),
-            key=lambda sample: sample[1],
-            default=(0, 0),
-        )
-        self._rain_soon_pct, self._rain_soon_min = rain_heads_up
-        rain, rain_min = max(ahead, default=(0, 0))
-        self._weather_crossover_pct, self._weather_crossover_min = rain, rain_min
-        wet = self._th("rain_wet_pct", 85.0)
-        inter = self._th("rain_inter_pct", 60.0)
-        dry = self._th("rain_dry_pct", 30.0)
-        hyst = self._th("rain_hysteresis_pct", 5.0)
-        cur = self._weather_crossover
-        # Wetter states need the forecast past the band edge; clearing a
-        # state needs it back below the band edge (hysteresis).
-        if rain >= wet + (0.0 if cur == "to_inter" else hyst):
-            cand = "to_wet"
-        elif rain >= inter + (0.0 if cur == "to_wet" else hyst):
-            cand = "to_inter"
-        elif (self.weather >= 3 or self.tyre_compound in (7, 8)) and rain < dry - (
-            0.0 if cur else hyst
-        ):
-            cand = "to_dry"
-        elif cur in ("to_inter", "to_wet") and rain < inter - hyst:
-            cand = ""
-        else:
-            cand = cur
-        if cand in ("to_inter", "to_wet"):
-            edge = wet if cand == "to_wet" else inter
-            first = min(
-                ((pct, m) for pct, m in ahead if pct >= edge),
-                key=lambda p: p[1],
-                default=None,
-            )
-            if first is not None:
-                self._weather_crossover_pct, self._weather_crossover_min = first
-        self._weather_crossover = cand
-
     def _update_field_lap_trend(self, cars: Sequence[CarLap]) -> None:
         status = self.cars_status
         pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
@@ -2379,58 +2320,6 @@ class SessionState:
         self._field_trend_cars = len(recent)
         minimum_cars = int(self._th("track_trend_min_cars", 3.0))
         self._field_lap_trend_s = round(median(recent), 2) if len(recent) >= minimum_cars else 0.0
-
-    def _update_dry_to_wet(self) -> None:
-        samples = [
-            sample for sample in self._forecast_samples if sample.session_type == self.session_type
-        ]
-        self.rain_onset_min = (
-            0
-            if self.weather >= 3
-            else min(
-                (int(sample.time_offset) for sample in samples if sample.weather >= 3),
-                default=0,
-            )
-        )
-        self.rain_box_lap = -1
-        self.rain_box_tyre = ""
-        self.rain_box_gain_s = 0.0
-        laps_remaining = max(0, self.total_laps - self.lap_num + 1) if self.total_laps else 0
-        best_lap_ms = self._best_laps.get(self._player_idx, 0)
-        if (
-            self._kind() != "race"
-            or self.tyre_visual in (7, 8)
-            or self.weather >= 3
-            or laps_remaining <= 1
-            or not samples
-            or best_lap_ms <= 0
-        ):
-            return
-        lap_s = best_lap_ms / 1000.0
-        lap_frac = (
-            min(1.0, max(0.0, self.lap_distance / self.track_length_m))
-            if self.track_length_m > 0
-            else 0.0
-        )
-        probabilities = wet_by_lap(
-            [(int(sample.time_offset), int(sample.rain_percentage)) for sample in samples],
-            lap_s,
-            lap_frac,
-            laps_remaining,
-        )
-        stop_lap, gain = best_rain_stop(
-            probabilities,
-            default_pit_loss_s(self._thresholds, self.safety_car_status),
-            lap_s * self._th("slick_wet_loss_pct", 15.0) / 100.0,
-            lap_s * self._th("inter_dry_loss_pct", 6.0) / 100.0,
-        )
-        if stop_lap >= 0 and gain >= self._th("rain_preempt_margin_s", 2.0):
-            self.rain_box_lap = stop_lap
-            max_rain_pct = max(int(sample.rain_percentage) for sample in samples)
-            self.rain_box_tyre = (
-                "wets" if max_rain_pct >= self._th("rain_wet_pct", 85.0) else "inters"
-            )
-            self.rain_box_gain_s = round(gain, 1)
 
     def _on_participants(self, pkt: ParticipantsPacket) -> None:
         self.num_active_cars = pkt.num_active_cars
@@ -2527,7 +2416,7 @@ class SessionState:
 
     def _on_car_status(self, pkt: CarStatusPacket, st: float) -> None:
         self.cars_status = pkt.cars
-        self._update_field_wet_switches(pkt)
+        update_field_wet_switches(self, pkt)
         car = pkt.cars[self._player_idx]
         self.front_brake_bias = car.front_brake_bias
         self.boost.update(st, car.ers_deploy_mode)
@@ -2578,30 +2467,6 @@ class SessionState:
         self.drs_allowed = car.drs_allowed
         self.vehicle_fia_flags = car.vehicle_fia_flags
         self.network_paused = bool(car.network_paused)
-
-    def _update_field_wet_switches(self, pkt: CarStatusPacket | None = None) -> None:
-        if pkt is not None:
-            for index, car in enumerate(pkt.cars):
-                compound = int(car.visual_tyre_compound)
-                previous = self._field_previous_visual_compounds.get(index)
-                if index != self._player_idx and previous in DRY and compound in (7, 8):
-                    self._field_wet_switch_laps[index] = (self.lap_num, compound)
-                self._field_previous_visual_compounds[index] = compound
-
-        window = max(0, int(self._th("field_follow_window_laps", 3)))
-        counted_compounds = [
-            switch_compound
-            for index, (switch_lap, switch_compound) in self._field_wet_switch_laps.items()
-            if index != self._player_idx
-            and self._field_previous_visual_compounds.get(index) in (7, 8)
-            and 0 <= self.lap_num - switch_lap < window
-        ]
-        self.field_wet_switches = len(counted_compounds)
-        wet_count = counted_compounds.count(8)
-        inter_count = counted_compounds.count(7)
-        self.field_wet_tyre = (
-            "wets" if wet_count > inter_count else "inters" if counted_compounds else ""
-        )
 
     def _ers_prune(self) -> None:
         if not self._ers_samples or self._ers_newest_session_time is None:
@@ -3057,11 +2922,11 @@ class SessionState:
             ),
             blue_flag=self.vehicle_fia_flags == 4,
             weather_now=self.weather,
-            rain_pct_now=self._rain_at(0),
-            rain_pct_in_10=self._rain_at(10),
-            rain_pct_in_30=self._rain_at(30),
-            weather_in_10=self._weather_at(10),
-            weather_in_30=self._weather_at(30),
+            rain_pct_now=rain_at(self, 0),
+            rain_pct_in_10=rain_at(self, 10),
+            rain_pct_in_30=rain_at(self, 30),
+            weather_in_10=weather_at(self, 10),
+            weather_in_30=weather_at(self, 30),
             forecast_accuracy=self.forecast_accuracy,
             rain_onset_min=self.rain_onset_min,
             rain_box_lap=self.rain_box_lap,
@@ -3408,29 +3273,6 @@ class SessionState:
             ),
         )
         return out
-
-    def _weather_at(self, offset_min: int) -> int:
-        """Forecast weather type of the nearest sample at time_offset >= offset_min."""
-        return next(
-            (
-                int(s.weather)
-                for s in self._forecast_samples
-                if s.session_type == self.session_type and s.time_offset >= offset_min
-            ),
-            -1,
-        )
-
-    def _rain_at(self, offset_min: int) -> int:
-        """Rain chance % of the nearest forecast sample for this session type at
-        time_offset >= offset_min (0 = current conditions sample)."""
-        return next(
-            (
-                int(s.rain_percentage)
-                for s in self._forecast_samples
-                if s.session_type == self.session_type and s.time_offset >= offset_min
-            ),
-            0,
-        )
 
     def _rival_age(self, car_idx: int) -> int | None:
         """Tyre age of the rival's current stint from its Session History."""
@@ -4150,19 +3992,10 @@ class SessionState:
         for to, net, wet_to_dry in candidates:
             if net is None or net <= 0:
                 continue
-            if wet_to_dry and not self._wet_to_dry_confirmed(to):
+            if wet_to_dry and not wet_to_dry_confirmed(self, to):
                 continue
             return to, net
         return "", 0.0
-
-    def _wet_to_dry_confirmed(self, to: str) -> bool:
-        """The direction's net test passed for wet_to_dry_confirm_laps in a
-        row; SC laps simply aren't entries, so confirmation carries through."""
-        need = int(self._th("wet_to_dry_confirm_laps", 2.0))
-        entries = [
-            passes for lap, passes in sorted(self._wet_to_dry_passes.items()) if lap <= self.lap_num
-        ][-need:]
-        return len(entries) >= need and all(to in passes for passes in entries)
 
     def _thermal(self) -> tuple[bool, bool]:
         """(overheat, graining) with hysteresis on the slow inner EMA."""
