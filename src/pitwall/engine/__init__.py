@@ -1,11 +1,11 @@
 from pitwall.engine.battle import (
     _rival_pace as _rival_pace,
 )
-from pitwall.engine.core import (
-    Engine as Engine,
+from pitwall.engine.controls import (
+    action_bits as action_bits,
 )
 from pitwall.engine.core import (
-    action_bits as action_bits,
+    Engine as Engine,
 )
 from pitwall.engine.core import (
     budget_label as budget_label,
