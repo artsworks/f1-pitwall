@@ -357,7 +357,8 @@ class SessionModel:
         self._run_fuel_last_kg = lap.fuel_kg
 
     def _fuel_per_lap(self, laps_remaining: int) -> tuple[float, str]:
-        """This session's measured burn, else the game's own MFD estimate, else the prior."""
+        """This session's measured burn, else the game's own MFD estimate, else the prior
+        (weekend, then learned, overlay, default)."""
         deltas = self._session_fuel_deltas
         if len(deltas) >= int(self.ctx.th("fuel_session_min_laps", 2)):
             return median(delta for _, delta in deltas[-8:]), "session"
@@ -368,6 +369,23 @@ class SessionModel:
             if 0.2 <= per_lap <= 5.0:
                 return per_lap, "mfd"
         return self._fuel_prior.value, self._fuel_prior.source
+
+    def _weekend_fuel_prior(self, track_id: int) -> Prior | None:
+        """Burn per lap of this weekend's earlier practice and Sprint stints, lap-weighted."""
+        uid = self.ctx.state.session_uid
+        if self.ctx.db is None or uid is None:
+            return None
+        lo = self.ctx.th("fuel_delta_min_kg", 0)
+        hi = self.ctx.th("fuel_delta_max_kg", 10)
+        burns = [
+            (stint.fuel_kg_per_lap, stint.n_valid_laps)
+            for stint in self.ctx.db.weekend_stints(uid, track_id, None)
+            if stint.fuel_kg_per_lap is not None and lo < stint.fuel_kg_per_lap < hi
+        ]
+        n = sum(laps for _, laps in burns)
+        if n == 0 or n < self.ctx.th("weekend_min_laps", 6):
+            return None
+        return Prior(sum(burn * laps for burn, laps in burns) / n, float(n), "weekend")
 
     def _stint_rows(self, laps: list[LapRow]) -> list[LapRow]:
         """Trailing contiguous stint (same compound, increasing tyre age)."""
@@ -590,7 +608,7 @@ class SessionModel:
                 overlay,
                 settings.thresholds,
             )
-            self._fuel_prior = resolve_prior(
+            self._fuel_prior = self._weekend_fuel_prior(track_id) or resolve_prior(
                 self.ctx.db,
                 track_id,
                 0,

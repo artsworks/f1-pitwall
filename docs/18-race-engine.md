@@ -136,6 +136,12 @@ Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`. `N
 session's total race laps. Weekend degradation uses earlier fitted practice stints on the
 same compound and track, with at least `weekend_min_laps` total.
 
+The fuel prior in kg per lap follows the same weekend rule on any compound. The engine takes
+the median burn of each fitted practice or Sprint stint from its stored laps. With at least
+`weekend_min_laps` laps, the lap-weighted mean precedes the learned value, the overlay and the
+default. The measured burn of the current session and the estimate from the game precede the
+fuel prior. The practice base lap time reaches the race as the learned unscoped `base_ms`.
+
 For other priors, `model_params` with weight at least `prior_min_weight` wins, then the track
 overlay, then the global default. Sources are reported as `weekend`, `learned`, `overlay`, or
 `default`.

@@ -12,6 +12,7 @@ from pitwall.engine import build_engine, run_replay
 from pitwall.ingest import ingest_recordings
 from pitwall.model.deg import DegFit
 from pitwall.net.recording import RecordingReader
+from pitwall.state.lap import LapSummary
 from pitwall.store.db import Database
 
 from .race_synth import RaceSpec, race_stream
@@ -108,6 +109,8 @@ def test_same_weekend_practice_fit_precedes_other_priors(tmp_path) -> None:
 
     assert prior.source == "weekend"
     assert prior.deg_ms_per_lap == pytest.approx(140.0, abs=0.01)  # float32 fuel kg
+    # The practice base lap time reaches the race prior as the learned base_ms.
+    assert prior.base_ms == pytest.approx(db.stints_for_session(practice_uid)[0].base_ms)
 
     asyncio.run(run_replay(race, engine))
     engine.fold_open_stint()
@@ -298,3 +301,51 @@ def test_engine_stores_weekend_structure_arriving_after_upsert() -> None:
     engine.writer._write_laps()  # noqa: SLF001
 
     assert db.session_row(0xF1262009)["weekend_structure"] == "1,10,15,5,16"
+
+
+def _fuel_engine(db: Database, *, laps: int, practice_link: int, race_link: int):
+    """A race engine after a practice stint that burned 2.1 kg per lap."""
+    day = datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp()
+    _prior_db(db, link=practice_link, started_at=day, laps=laps)
+    for n in range(laps + 1):
+        db.insert_lap(
+            0xF1262001,
+            0,
+            LapSummary(n, 90_000, 30_000, 30_000, 17, n, 0.0, n > 0, fuel_kg=40.0 - 2.1 * n),
+        )
+    race_uid = 0xF1262002
+    db.upsert_session(
+        race_uid, track_id=7, session_type=15, started_at=day + 3_600, weekend_link=race_link
+    )
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())
+    engine.state.session_uid = race_uid
+    engine.state.track_id = 7
+    engine.model._update_model()  # noqa: SLF001
+    return engine
+
+
+def test_weekend_practice_fuel_burn_seeds_the_race() -> None:
+    engine = _fuel_engine(Database(":memory:"), laps=8, practice_link=501, race_link=501)
+
+    per_lap, source = engine.model._fuel_per_lap(0)  # noqa: SLF001
+
+    assert source == "weekend"
+    assert per_lap == pytest.approx(2.1)
+
+
+def test_short_or_other_weekend_practice_fuel_burn_is_ignored() -> None:
+    default = ConfigStore().current().thresholds["fuel_kg_per_lap_default"]
+    short = _fuel_engine(Database(":memory:"), laps=5, practice_link=501, race_link=501)
+    assert short.model._fuel_per_lap(0) == (default, "default")  # noqa: SLF001
+
+    db = Database(":memory:")
+    db.fold_param(7, 0, "fuel_kg_per_lap", 1.9, weight=5.0)
+    other = _fuel_engine(db, laps=8, practice_link=501, race_link=502)
+    assert other.model._fuel_per_lap(0) == (1.9, "learned")  # noqa: SLF001
+
+
+def test_measured_race_fuel_burn_beats_the_weekend_value() -> None:
+    engine = _fuel_engine(Database(":memory:"), laps=8, practice_link=501, race_link=501)
+    engine.model._session_fuel_deltas = [(1.0, 1.5), (2.0, 1.5)]  # noqa: SLF001
+
+    assert engine.model._fuel_per_lap(0) == (1.5, "session")  # noqa: SLF001

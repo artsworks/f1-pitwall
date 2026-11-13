@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import median
 from typing import TYPE_CHECKING, Any, Literal
 
 from pitwall.protocol.enums import session_kind
@@ -483,6 +484,7 @@ class WeekendStint:
     deg_ms_per_lap: float
     fuel_ms_per_lap: float | None = None  # prior fuel slope the fit assumed; None if fitted
     rmse_ms: float = 0.0
+    fuel_kg_per_lap: float | None = None  # median burn over the stint's valid green laps
 
 
 # Decision-log outcomes that are persisted in `calls`; "bookmark" goes to
@@ -1431,8 +1433,10 @@ class Database:
         ).fetchall()
         return [self._stint_row(row) for row in rows]
 
-    def weekend_stints(self, uid: int, track_id: int, compound: int) -> list[WeekendStint]:
-        """Earlier fitted practice and Sprint stints in the same track weekend."""
+    def weekend_stints(self, uid: int, track_id: int, compound: int | None) -> list[WeekendStint]:
+        """Earlier fitted practice and Sprint stints in the same track weekend.
+
+        `compound=None` returns the stints on every compound."""
         current = self.session_row(uid)
         if current is None:
             return []
@@ -1441,9 +1445,9 @@ class Database:
         started_date = datetime.fromtimestamp(started_at, UTC).date()
         rows = self._conn.execute(
             "SELECT se.uid, se.started_at, se.weekend_link, se.session_type,"
-            " st.n_valid_laps, st.deg_params FROM stints st"
-            " JOIN sessions se ON se.uid=st.session_uid"
-            " WHERE se.track_id=? AND st.compound=? AND se.uid<>?"
+            " st.n_valid_laps, st.deg_params, st.car_idx, st.start_lap, st.end_lap"
+            " FROM stints st JOIN sessions se ON se.uid=st.session_uid"
+            " WHERE se.track_id=? AND st.compound=COALESCE(?, st.compound) AND se.uid<>?"
             " AND COALESCE(se.synthetic, 0)=0"
             " AND se.started_at<? ORDER BY se.started_at, st.start_lap",
             (track_id, compound, _uid_to_sql(uid), started_at),
@@ -1468,6 +1472,18 @@ class Database:
             params = json.loads(str(row["deg_params"] or "{}"))
             if params.get("source") != "fit":
                 continue
+            burns = [
+                float(burn[0])
+                for burn in self._conn.execute(
+                    "SELECT a.fuel_kg - b.fuel_kg FROM laps a JOIN laps b"
+                    " ON b.session_uid=a.session_uid AND b.car_idx=a.car_idx"
+                    " AND b.lap_num=a.lap_num+1"
+                    " WHERE a.session_uid=? AND a.car_idx=? AND b.lap_num BETWEEN ? AND ?"
+                    " AND b.valid=1 AND COALESCE(b.sc_status, 0)=0"
+                    " AND b.fuel_kg>0 AND a.fuel_kg>b.fuel_kg",
+                    (row["uid"], row["car_idx"], row["start_lap"], row["end_lap"]),
+                )
+            ]
             result.append(
                 WeekendStint(
                     session_uid=_uid_from_sql(int(row["uid"])),
@@ -1480,6 +1496,7 @@ class Database:
                         else None
                     ),
                     rmse_ms=float(params.get("rmse_ms", 0.0)),
+                    fuel_kg_per_lap=median(burns) if burns else None,
                 )
             )
         return result
