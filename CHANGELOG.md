@@ -10,6 +10,49 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.57.0 (2026-11-13)
+
+### Bug Fixes
+
+- **audio**: Keep WAV params when applying volume gain
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+- **config**: Ignore unknown _bit keys when yielding the volume bit
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+- **config**: Label volume steps relative to the first step
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+- **config**: Let profile Action 10 bindings disable the default volume cycle
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+- **engine**: Reset volume level when speech.volume_steps reloads
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+### Chores
+
+- **deps**: Bump amannn/action-semantic-pull-request
+  ([#179](https://github.com/artsworks/f1-pitwall/pull/179),
+  [`59e97eb`](https://github.com/artsworks/f1-pitwall/commit/59e97eb9d5ea4833d3f3370781e695e5bb1e9cfb))
+
+### Features
+
+- **input**: Cycle speech volume on UDP Action 10 with a status-bar chip
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+### Testing
+
+- **audio**: Include live volume in broadcaster fixture
+  ([#174](https://github.com/artsworks/f1-pitwall/pull/174),
+  [`3aac794`](https://github.com/artsworks/f1-pitwall/commit/3aac794fef6caf8044fdd72426dedfa35d84e53f))
+
+
 ## v0.56.0 (2026-11-07)
 
 ### Chores
