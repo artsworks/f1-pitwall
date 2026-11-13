@@ -8,6 +8,8 @@ to the log. Sample mockups live in `docs/mockups/` (`dashboard-reimagined-v2.htm
 no build step. Open them in a browser. Call evidence, fuel targets, and damage values
 illustrate planned backend fields.
 
+Dashboard v3 is the `/` page, with the layout in §3. The previous dashboard stays at `/v2` (see "`/v2` fallback" below).
+
 This doc supersedes the "Dashboard" section of `04-audio-ui.md` for layout. The runtime
 is unchanged; planned call-history additions are listed below.
 
@@ -61,71 +63,49 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 
 ## 3. Layout grid
 
-Use a landscape 16:9 layout with a fixed 12-column grid. Set the root font size from
-viewport width (`font-size: clamp(14px, 0.9vw, 24px)`) so 1080p and 1440p use nearly the
-same physical scale on a 27-inch panel. The live screen is one fixed page. Zones never
-reflow between sessions, and empty zones keep their space when values are absent.
-`docs/mockups/dashboard-reimagined-v2.html` is the approved visual reference (`docs/mockups/dashboard-reimagined.html` is kept as the v1 baseline).
+The live page is one fixed 16:9 screen. Rows, top to bottom: status bar (3 rem), banner (10 rem), main row, and footer (2 rem). The main row has three columns in the grid `3.6fr 4.6fr 3.8fr`. The root font size comes from the viewport width (`font-size: clamp(14px, 0.9vw, 24px)`), so 1080p and 1440p use nearly the same physical scale on a 27-inch panel. Zones never reflow between sessions. Empty zones keep their space when values are absent.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ A STATUS  ● LIVE 42 ms  ON TRACK │ RACE · BAHRAIN  LAP 24/57  P5  OV SM  BAL │ 3 rem
-├──────────────────────────────────────────────────────────────────────────────┤
-│ B CURRENT  "Car behind in range. Defend into turn 1."            L24 · 8 s   │
-│   WHY  gap 0.8 s · closing 0.3 s/lap      PREVIOUS  L23 "Fuel on target."    │ 12 rem
-├────────────────────────┬──────────────────┬──────────────────────────────────┤
-│ C TYRES  MED · 14 laps │ D FUEL   BATT    │ E CONTEXT (auto)                 │
-│   FL 103° ▲ │ FR 98° ▬ │   +0.4    62%    │   SAFETY    SC, red flag, rain   │
-│   wear 38%  │ wear 35% │ WEATHER now/10/30│   EXECUTION box now              │
-│   RL 94° ▼  │ RR 95° ▬ │   crossover ETA  │   REPLY     menu answer          │
-│   BB 56%  DIFF ON 60%  │ LAST LAPS        │   TACTICAL  battle, strategy     │
-│                        │ DAMAGE strip     │   INFO      rival pitted, penalty│
-├────────────────────────┴──────────────────┴──────────────────────────────────┤
-│ G FOOTER  update rate · voice queue · TTS · screen lag · ERS · SC             │ 2 rem
-└──────────────────────────────────────────────────────────────────────────────┘
-   ◄──── cols 1–4 ────►  ◄── cols 5–7 ──►   ◄──────── cols 8–12 ────────►
-```
+Dashboard v3 follows two locked references. [`docs/mockups/redesign-5-full.html`](mockups/redesign-5-full.html) gives the race screen and its safety-car frame. [`docs/mockups/redesign-4-quali-takeovers.html`](mockups/redesign-4-quali-takeovers.html) gives qualifying, cool-down and the pit board. The mockups define the design. Edit them only when the design changes.
+
+Columns, left to right:
+
+- Left column, captions PACE, TRACK and PLAN. PACE shows the last lap, the lap before it, the lap delta and one row of sector deltas. TRACK shows the weather, the crossover line and the limits card. PLAN shows one card per stop plan.
+- Centre column, caption CAR. Three cards show fuel, battery and damage. Below them, the tyre view shows four corners and the BB and DIFF strip.
+- Right column. The safety, box, reply and info cards come first, then caption RACE with the battle cards. In qualifying, the right column shows the qualifying zone instead.
 
 Zone rules:
 
-- **A status bar**: place freshness at the far left. Right-align session, lap and
-  position. The LIMITS chip follows the position and counts corner cuts and track
-  limits warnings. The OV chip lights when overtake mode is active or earned, and the SM chip
-  lights in straight mode. Verbosity, quiet and radio-silent chips each have an icon. The
-  DRV chip sits left of the mindset pill and shows a wheel icon, the learned driver rating
-  and a globe or track icon for its source. The compact mindset pill sits at the far right.
-- **B banner**: keep it full-width and fixed-height. It holds the current call, one
-  evidence line and one dim PREVIOUS line. The main screen has no radio log. With no
-  call, the banner says "— radio quiet —".
-- **C tyres**: draw a 2×2 grid as the car from above (FL top-left, RR bottom-right). Each
-  corner shows the inner temperature, a trend arrow, wear %, a meter for the 80 to 110 °C
-  window and the brake temperature. The arrow compares `inner` (fast EMA) with
-  `tyre_inner_ema_slow`: red ▲ heating, blue ▼ cooling, white ▬ steady. The status
-  word (`COLD`, `OK`, `HOT`) sits beside the arrow.
-  The hot-wear corner gets a HOT WEAR tag with the rate, and a locked wheel gets an
-  orange LOCKED border. The BB and DIFF groups sit under the grid, with no legend line.
-- **D fixed tiles**: fuel at the flag with kg per lap under it, battery with its budget
-  mode plus MJ per lap and laps to the floor, weather, and two LAST LAPS rows. The LAST
-  LAPS header shows the base pace. Each row shows the newer lap and time, then lap and sector deltas against
-  the lap before. Keep the last three laps so the oldest is the baseline. Damage stays at the bottom.
-  Weather shows an icon and rain chance for now, 10 and 30 min. The crossover slot gets
-  a marker, and a line under it gives the target compound and ETA.
-- **E contextual zone**: cards follow a fixed order: Safety, Execution, Reply, Tactical,
-  Info. Safety covers SC, VSC, red flag, blue flag and RAIN CROSSOVER when
-  `weather_crossover_min` is 5 or less. Tactical holds the battle card and the strategy
-  plans. A line under the plans shows PIT EXIT (clean, traffic or the rival and gap) and
-  the undercut and overcut deltas. In qualifying the zone shows the session phase, the
-  cut-off, a BENCHMARK table (POLE and MATE rows with S1, S2, S3 and LAP gaps) and the
-  current run.
-- **Battle card**: one rival as the single card. When `battle.ahead2` or
-  `battle.behind2` is set, or places swap, the card lists up to two cars each side
-  with a state word, gap and rail around a YOU divider. The direct rival's row word
-  comes from `battle.mode`, the same word the header shows; other rows read MANAGING,
-  or FREE AIR in free air. A second car within 1 s of the
-  car between shows IN TRAIN.
-- **Takeovers**: the pit board takes over the main row, and cool-down replaces the tyres
-  and tiles. The status bar, banner, contextual zone and footer stay.
-- **G footer**: show diagnostics only, in small type.
+- Status bar: freshness sits at the far left. The lap reads `LAP 27/57 · 30 LEFT` in a race. Position, driver rating, verbosity, voice and sound controls follow. The mindset pill shows the full word. The bar turns amber under a safety car.
+- Banner: the call banner holds the current call, the evidence line and one dim line for the previous call. With no call, it says "— radio quiet —".
+- PACE: the last lap time, `L26 VS L25`, the lap delta, and the S1, S2 and S3 deltas.
+- TRACK, weather: an icon and rain chance for now, 10 and 30 minutes. The icons show the game weather type. The card has no sky words. Beside it, the crossover compound, the lap it falls on and the time to it. No rain chance appears beside the crossover lap. Without a crossover, the card says "no crossover".
+- TRACK, limits: corner cuts and track limits warnings. Dots show the warnings left before the next penalty. The dots fill with `cuts % warn_at`, and all fill when a penalty is due. The penalty time shows at the right. On phone, the status bar chip shows the limits instead.
+- PLAN: one card per plan. The active plan has a thick border. Under a live SC or VSC, plan C comes first and takes the thick border from the active plan. The active card shows the plan letter, the compounds, ON PLAN or OFF PLAN, the box lap, the window and the exit row with the undercut and overcut deltas. Other plans show one dim line.
+- CAR, fuel: signed laps at the flag. Green from 0.5 laps, amber from 0 to 0.5, red when short.
+- CAR, battery: the charge, the budget mode icon and word, and the laps to the floor.
+- CAR, damage: front wings and floor as numbers. Other parts and the DRS and ERS faults follow on one line. The line reads "✓ none" when nothing is damaged.
+- CAR, tyres: the compound, the age and the pace left. Four corner cards follow. Each shows the brake temperature, the inner temperature, a trend arrow, the status word, a window meter with the band labels, the wear and the hot-wear rate. A hot, cold or locked corner has a thick border.
+- Safety card: SC or VSC with the lap and the pit loss, in yellow. Red flag in red. Blue flag and rain crossover in blue. The card shows only when a condition holds.
+- Box card: BOX or IN PIT LANE, the fitted compound, the pit loss and the exit state. A wrong tyre shows "FITTED x NOT y".
+- Reply card: the backend heading and sentence.
+- Info card: a rival pitted, or a penalty.
+- RACE: a train row appears when a second car is within 1 s of the car in front of it. Then the AHEAD and BEHIND cards follow. The active rival's card is bright, with a thick border. It shows the mode line, a gap rail, the closing rate, the last lap delta and a pass or hold ring. The other card is dim. A pass, hold or loss fills the bright card with the result for as long as the backend holds it, about 20 s.
+- Qualifying: the RACE group becomes the qualifying zone. It shows the phase strip, a projected lap card with GO, WAIT, STAY IN or ABORT, the cut-off card and a bench table with pole and teammate rows.
+- Cool-down takeover: replaces the left and centre columns. It shows the car behind card, the next lap cards for distance, fuel, battery and tyres, and the last run card.
+- Pit board: takes the whole main row in the garage. In a race pit stop it takes the left and centre columns, and the right column stays.
+- Footer: diagnostics only, in small type.
+
+Dropped in v3: surface temperature, kg per lap in the fuel card, the game marker on fuel, MJ per lap, sky words in the weather card, the second last-lap row, base pace, rain chance beside the crossover lap, and the GAP TO POLE tile. The pole gap now shows in the last run card. The pit board keeps kg per lap and its weather words.
+
+Rules the mockups do not show:
+
+- A thick border marks only the active plan, the active rival card and a tyre corner that is hot, cold or locked. No other card has a thick border.
+- When the right column overflows, the dim battle card shrinks to its car line.
+- Phone: one column in this order: banner, action cards, RACE, CAR and PLAN. PACE and TRACK are hidden.
+
+### `/v2` fallback
+
+`/v2` serves the previous dashboard from `web/v2/`. Those files are copies of the v2 `index.html`, `style.css` and `app.js`. Only the asset URLs change, to `/static/v2/`. Use `/v2` if v3 misbehaves during a session. The PIN gate and the WebSocket work the same on both pages.
 
 ### 1440p
 
@@ -136,7 +116,7 @@ Use the same grid. The root font scales ~1.33× to preserve text size on a 27-in
 Show only the status bar (freshness, lap), banner with previous-call subtitle, and log in
 ~1.6× type. The same `app.js` uses the `body.radio` class. On a screen 600 px wide or
 less (or with `?phone=1`), `/` adds `body.phone`: one column with the banner, context
-cards, tyres and an ARM PHONE RADIO button for browser speech.
+cards, tyres and an ARM PHONE RADIO button for browser speech. The phone order is in the rules above.
 
 ## 4. Colour and typography tokens
 
@@ -201,7 +181,7 @@ All fields are from `state_payload` in `src/pitwall/server/app.py` (WS `state` /
 | Compound + age | `tyre_visual`, `tyre_compound`, `tyre_age_laps` | Chip `MED · 14L old`; visual compound preferred, actual as tooltip |
 | Tyre tile temp | `tyres.{fl,fr,rl,rr}.inner` | Integer °C, coloured by `status` |
 | Tyre tile status | `tyres.*.status` | `COLD` blue / `OK` green / `HOT` red word under the temp |
-| Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `surf 110° · wear 38%`; wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
+| Tyre tile detail | `tyres.*.surface`, `tyres.*.wear` | `wear 38%` (v2 also shows `surf`, v3 does not); wear amber ≥ 50 %, red ≥ 70 % (thresholds from `/api/config` later) |
 | Fuel delta | **planned** backend `fuel_delta_laps` relative to a session-specific target | Signed `+0.4 laps`; green ≥ 0, amber −0.5..0, red < −0.5. Absent/null → show laps only; never infer a target in the client |
 | Fuel laps | `fuel_remaining_laps` (game MFD: laps spare or short at the flag, not laps in tank) | `+0.4 laps`, one decimal, shown when the backend delta is unavailable |
 | Damage list | `damage.{front_left_wing, front_right_wing, rear_wing, floor, diffuser, sidepod, gearbox, engine}`, `damage.drs_fault`, `damage.ers_fault` | Non-zero entries in a strip under the tiles; wraps only when needed; amber ≥ 5 %, red ≥ 25 %; smaller text past 3 entries; `✓ none` when all values and faults are zero |

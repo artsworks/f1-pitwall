@@ -9,10 +9,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=37">
+  <link rel="stylesheet" href="/static/style.css?v=38">
 </head>
-<!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, cool, quali, menu, sc,
-     redflag, stale, phone. Every value updates in place; nothing reflows. -->
+<!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, race-pit, cool, quali, menu, sc,
+     redflag, stale, phone, squeeze. Every value updates in place; nothing reflows. -->
 <body class="dash connecting">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <!-- weather icons, one per game weather type 0..5 -->
@@ -30,6 +30,36 @@
   <symbol id="ico-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM22 9l-6 6M16 9l6 6"/></symbol>
   <symbol id="ico-quiet" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7"/></symbol>
   <symbol id="ico-vol" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/></symbol>
+  <!-- card icons: docs/mockups/redesign-5-full.html and redesign-4-quali-takeovers.html -->
+  <symbol id="fuel" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="batt" viewBox="0 0 24 24"><path d="M2 8h17v8H2zM19 10.5h3v3h-3M11 9.5 8 12.5h4l-3 3"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></symbol>
+  <symbol id="lap" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M10 2.5h4M12 2.5V6"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="tyre" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="crown" viewBox="0 0 24 24"><path d="M3 19h18M4 15 3 6l5 4 4-6 4 6 5-4-1 9z"/></symbol>
+  <symbol id="mate" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5.5M21 20c0-2.5-1.5-4.5-4-5.5"/></symbol>
+  <symbol id="dmg" viewBox="0 0 24 24"><path d="M14.5 5.5a4.5 4.5 0 0 0 5.8 5.8L11 20.5a2.3 2.3 0 0 1-3.3-3.3l9.3-9.3"/></symbol>
+  <symbol id="floor" viewBox="0 0 24 24"><path d="M8 3h8l2 18H6zM9 9h6M8.5 15h7"/></symbol>
+  <symbol id="wingL" viewBox="0 0 12 24"><path d="M2 9h9v3H2zM4 12v5"/></symbol>
+  <symbol id="wingR" viewBox="0 0 12 24"><path d="M1 9h9v3H1zM8 12v5"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M4 8v13h16V8M12 2v11M8 9l4 4 4-4"/></symbol>
+  <symbol id="exit" viewBox="0 0 24 24"><path d="M3 12h12M11 7l5 5-5 5M20 4v16"/></symbol>
+  <symbol id="reply" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/></symbol>
+  <symbol id="attack" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="defend" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></symbol>
+  <symbol id="plan" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></symbol>
+  <symbol id="uc" viewBox="0 0 24 24"><path d="M4 5v6a6 6 0 0 0 6 6h9M15 13l4 4-4 4"/></symbol>
+  <symbol id="oc" viewBox="0 0 24 24"><path d="M4 19v-6a6 6 0 0 1 6-6h9M15 3l4 4-4 4"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M8 3h8l5 5v8l-5 5H8l-5-5V8zM12 8v8M8 12h8"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="no" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 4v15M5 12l7 7 7-7"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.5v.3"/></symbol>
+  <symbol id="tgt" viewBox="0 0 24 24"><path d="M5 21V4h13l-3 4 3 4H5"/></symbol>
+  <symbol id="rain2" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
 </svg>
   <header class="status">
     <span id="live" class="live">CONNECTING…</span>
@@ -38,13 +68,9 @@
     <span id="flag" class="flag" hidden></span>
     <span class="spacer"></span>
     <span id="session" class="sess">--</span>
-    <span id="lap">LAP --</span>
+    <span id="lap">LAP --</span><span id="lap-left" class="sess"></span>
     <span id="position">P--</span>
     <span id="limits" class="chip limits" hidden></span>
-    <span class="chips">
-      <span id="ov" class="chip ov" title="overtake mode">OV</span>
-      <span id="sm" class="chip sm" title="active aero in straight mode">SM</span>
-    </span>
     <span id="verbosity" class="dim"></span>
     <span id="voice" class="voice" hidden></span>
     <span id="drv" class="chip drv" title="driver rating" hidden></span>
@@ -66,201 +92,217 @@
     </div>
   </section>
 
-  <section class="zone tyres">
-    <div class="t-head">
-      <span class="t-fit"><span id="compound" class="comp">--</span><span id="tyre-age" class="age">--</span></span>
-      <span class="t-sep"></span>
-      <span id="t-pace" class="t-pace"></span>
-    </div>
-    <div class="car">
-      <div id="tyre-fl" class="corner"><div class="lbl"><span>FL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
-      <div id="tyre-fr" class="corner"><div class="lbl"><span>FR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
-      <div id="tyre-rl" class="corner"><div class="lbl"><span>RL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
-      <div id="tyre-rr" class="corner"><div class="lbl"><span>RR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter twin"><b></b><i></i></div><div class="det"><span class="wear">wear <b>--</b></span><span class="surf"></span></div><div class="tags"></div></div>
-    </div>
-    <div id="setup" class="setup">
-      <div class="setup-grp bb">
-        <span class="k">BB</span>
-        <span><span id="su-bb" class="v">--</span> <span id="su-bb-sug" class="sug none"></span></span>
-      </div>
-      <div class="setup-grp diff">
-        <span class="k">DIFF</span>
-        <span>ON <span id="su-on" class="v">--</span> <span id="su-on-sug" class="sug none"></span></span>
-        <span>OFF <span id="su-off" class="v">--</span></span>
-      </div>
-    </div>
-  </section>
-
-  <section class="zone tiles">
-    <div class="tile fuel">
-      <h2>FUEL AT FLAG</h2>
-      <div id="fuel" class="big">--</div>
-      <div id="fuel-sub" class="sub">--</div>
-      <div id="fuel-sub2" class="sub2" hidden></div>
-    </div>
-    <div id="batt" class="tile batt">
-      <h2>BATT</h2>
-      <div><span id="batt-pct" class="big">--</span></div>
-      <div id="batt-mode" class="mode">--</div>
-      <div id="batt-sub" class="sub2" hidden></div>
-    </div>
-    <div class="tile wide weather">
-      <h2>WEATHER</h2>
-      <div class="wx">
-        <div id="wxs-0"><div class="k">NOW</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
-        <div id="wxs-1"><div class="k">IN 10</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
-        <div id="wxs-2"><div class="k">IN 30</div><svg class="ico wxi"><use href="#wx-2"/></svg><span class="pct">--</span><div class="sky">--</div></div>
-      </div>
-      <div id="cross" class="cross">--</div>
-    </div>
-    <div id="lastlap" class="tile wide lastlap">
-      <div class="lap-head-row">
-        <h2>LAST LAPS</h2>
-        <span id="lap-base" class="base-ref" hidden></span>
-      </div>
-      <div class="lap-comparisons">
-        <div id="cmp-1" class="lap-comparison">
-          <div class="lap-comparison-header">
-            <span id="cmp-1-label" class="cmp-label">--</span>
-            <strong id="cmp-1-delta" class="cmp-delta">--</strong>
-          </div>
-          <div class="lap-sectors">
-            <div class="lap-sector"><span class="label">S1</span><strong id="cmp-1-s1" class="value">--</strong></div>
-            <div class="lap-sector"><span class="label">S2</span><strong id="cmp-1-s2" class="value">--</strong></div>
-            <div class="lap-sector"><span class="label">S3</span><strong id="cmp-1-s3" class="value">--</strong></div>
-          </div>
-        </div>
-        <div id="cmp-2" class="lap-comparison">
-          <div class="lap-comparison-header">
-            <span id="cmp-2-label" class="cmp-label">no lap yet</span>
-            <strong id="cmp-2-delta" class="cmp-delta">--</strong>
-          </div>
-          <div class="lap-sectors">
-            <div class="lap-sector"><span class="label">S1</span><strong id="cmp-2-s1" class="value">--</strong></div>
-            <div class="lap-sector"><span class="label">S2</span><strong id="cmp-2-s2" class="value">--</strong></div>
-            <div class="lap-sector"><span class="label">S3</span><strong id="cmp-2-s3" class="value">--</strong></div>
-          </div>
+  <main class="main">
+    <div class="col left">
+      <div class="pace-grp">
+        <div class="cap">PACE</div>
+        <div class="card pacecard">
+          <div class="row"><svg class="i dim"><use href="#lap"/></svg><span id="pace-last" class="big">--</span><span id="pace-vs" class="tagw"></span><span class="sp"></span><span id="pace-delta" class="big">--</span></div>
+          <div class="secs sub"><span class="tagw">S1</span><span class="tagw">S2</span><span class="tagw">S3</span></div>
+          <div class="secs mid sub"><span id="pace-s1">--</span><span id="pace-s2">--</span><span id="pace-s3">--</span></div>
         </div>
       </div>
+      <div class="track-grp">
+        <div class="cap">TRACK</div>
+        <div class="card wxcard">
+          <div class="row">
+            <div class="wx">
+              <div id="wxs-0"><div class="k">NOW</div><svg class="i l wxi"><use href="#wx-2"/></svg><span class="pct">--</span></div>
+              <div id="wxs-1"><div class="k">10 MIN</div><svg class="i l wxi"><use href="#wx-2"/></svg><span class="pct">--</span></div>
+              <div id="wxs-2"><div class="k">30 MIN</div><svg class="i l wxi"><use href="#wx-2"/></svg><span class="pct">--</span></div>
+            </div>
+            <span class="sp"></span>
+            <div id="cross" class="cross">--</div>
+          </div>
+        </div>
+        <div id="limits-card" class="card limitcard" hidden>
+          <svg class="i s warn lim-ico"><use href="#warn"/></svg>
+          <span id="lim-split"><span class="tagw">CUT</span> <b id="lim-cut" class="mid">0</b> <span class="tagw">LIMIT</span> <b id="lim-limit" class="mid">0</b></span>
+          <span id="lim-total"><span class="tagw">WARN</span> <b id="lim-warn" class="mid">0</b></span>
+          <span class="sp"></span>
+          <span id="lim-dots" class="dots"></span>
+          <b id="lim-pen" class="pen"></b>
+        </div>
+      </div>
+      <div class="plan-grp">
+        <div class="cap">PLAN</div>
+        <div id="plans" class="plans"></div>
+      </div>
     </div>
-    <div class="tile wide damage">
-      <h2>DAMAGE</h2>
-      <div id="damage" class="dmg"><span class="none">✓ none</span></div>
-    </div>
-  </section>
 
-  <!-- Contextual zone, auto-selected: safety › execution › reply › tactical › info.
-       Page input (UDP Action 4 / P) resets to this race layout; it does not cycle. -->
-  <section class="zone ctx">
-    <div class="ctx-head"><h2 class="h-race">RACE · AUTO</h2><h2 class="h-quali">QUALI · AUTO</h2><span class="how h-race">safety › box › reply › battle › info</span></div>
-    <div id="ctx-race" class="ctx-race">
-      <div id="c-safety" class="card safety" hidden><div class="rank">SAFETY</div><div class="head"></div><div class="line"></div></div>
-      <div id="c-exec" class="card exec" hidden><div class="rank">EXECUTION</div><div class="head"></div><div class="line"></div></div>
-      <div id="c-reply" class="card reply" hidden><div class="rank">REPLY</div><div class="head"></div><div class="line"></div></div>
-      <div id="c-battle" class="card battle calm" hidden></div>
-      <div id="c-strat" class="card strat"><div class="rank">STRATEGY</div><div id="c-plans"></div><div id="c-strat-meta" class="strat-meta" hidden></div></div>
-      <div id="c-info" class="card info" hidden></div>
+    <div class="col center">
+      <div class="cap">CAR</div>
+      <div class="carhead">
+        <div class="card carcard">
+          <div class="row"><svg class="i l ok"><use href="#fuel"/></svg><span id="fuel" class="hero">--</span></div>
+          <span class="tagw">LAPS AT FLAG</span>
+        </div>
+        <div id="batt" class="card carcard battcard">
+          <div class="row"><svg class="i"><use href="#batt"/></svg><span id="batt-pct" class="big">--</span></div>
+          <div class="row"><span id="batt-mode" class="mode">--</span><span id="batt-sub" class="tagw" hidden></span></div>
+        </div>
+        <div id="damage" class="card carcard dmgcard">
+          <div class="row"><svg class="i s dim"><use href="#dmg"/></svg><span class="wing"><b id="dm-fwl" class="mid">--</b><svg class="i h"><use href="#wingL"/></svg><svg class="i h"><use href="#wingR"/></svg><b id="dm-fwr" class="mid">--</b></span></div>
+          <div class="row sub"><svg class="i"><use href="#floor"/></svg><b id="dm-floor" class="mid">--</b></div>
+          <div id="dm-more" class="tagw"></div>
+        </div>
+      </div>
+      <div id="tyres" class="tyres">
+        <div class="row t-head">
+          <span id="compound" class="cmp">-</span>
+          <span id="tyre-age" class="mid">--</span>
+          <span class="sp"></span>
+          <span class="tagw">PACE LEFT</span>
+          <span id="t-pace" class="t-pace"></span>
+        </div>
+        <div class="tgrid">
+          <div id="tyre-fl" class="corner"><div class="lbl"><span>FL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter"><i></i><b></b></div><div class="mlab"><span class="lo"></span><span class="hi"></span></div><div class="det"><span class="wear">WEAR <b>--</b></span><span class="hw"></span></div><div class="tags"></div></div>
+          <div id="tyre-fr" class="corner"><div class="lbl"><span>FR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter"><i></i><b></b></div><div class="mlab"><span class="lo"></span><span class="hi"></span></div><div class="det"><span class="wear">WEAR <b>--</b></span><span class="hw"></span></div><div class="tags"></div></div>
+          <div id="tyre-rl" class="corner"><div class="lbl"><span>RL</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter"><i></i><b></b></div><div class="mlab"><span class="lo"></span><span class="hi"></span></div><div class="det"><span class="wear">WEAR <b>--</b></span><span class="hw"></span></div><div class="tags"></div></div>
+          <div id="tyre-rr" class="corner"><div class="lbl"><span>RR</span><span class="brk"></span></div><div class="temp">--</div><div class="word"><span class="st-word"></span><span class="trend"></span></div><div class="meter"><i></i><b></b></div><div class="mlab"><span class="lo"></span><span class="hi"></span></div><div class="det"><span class="wear">WEAR <b>--</b></span><span class="hw"></span></div><div class="tags"></div></div>
+        </div>
+        <div id="setup" class="setup card">
+          <span class="tagw">BB</span>
+          <span><span id="su-bb" class="v">--</span> <span id="su-bb-sug" class="sug none"></span></span>
+          <span class="sp"></span>
+          <span class="tagw">DIFF ON</span>
+          <span><span id="su-on" class="v">--</span> <span id="su-on-sug" class="sug none"></span></span>
+          <span class="sp"></span>
+          <span class="tagw">OFF</span>
+          <span><span id="su-off" class="v">--</span></span>
+        </div>
+      </div>
     </div>
-    <div class="qzone">
-      <div id="q-phase" class="qphase"><span data-ph="garage">GARAGE</span><span data-ph="out_lap">OUT LAP</span><span data-ph="flying">FLYING</span><span data-ph="in_lap">IN LAP</span></div>
-      <div class="card"><div class="qcut"><span>CUT-OFF</span><span id="q-pos" class="pos">P--</span>
-        <span id="q-badge" class="badge">--</span><span id="q-margin" class="m">--</span></div>
-        <div id="q-cut-line" class="line">--</div></div>
-      <div class="card"><div class="qcut"><span>BENCHMARK</span></div>
-        <table class="qbench"><thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
-          <tbody><tr id="q-gaps"><th>POLE<span id="q-pole-who" class="who">--</span></th><td></td><td></td><td></td><td></td></tr>
-            <tr id="q-mate-gaps"><th>MATE<span id="q-mate-who" class="who">--</span></th><td></td><td></td><td></td><td></td></tr></tbody></table></div>
-      <div id="q-run" class="card"><div class="rank">THIS RUN</div><div id="q-run-head" class="head">--</div><div id="q-run-line" class="line">--</div></div>
-    </div>
-  </section>
 
-  <section id="cool" class="zone coolzone" hidden>
-    <div class="cz-top">
-      <div class="tile"><h2>LAST LAP</h2><div id="cz-last" class="v">--</div></div>
-      <div class="tile"><h2>GAP TO POLE</h2><div id="cz-pole" class="v">--</div></div>
+    <div class="col right" id="ctx">
+      <div id="act-grp" class="act-grp">
+        <div id="c-safety" class="card act" hidden></div>
+        <div id="c-box" class="card act box" hidden></div>
+        <div id="c-reply" class="card act reply" hidden></div>
+        <div id="c-info" class="card info" hidden></div>
+      </div>
+      <div id="race-grp" class="race-grp" hidden>
+        <div class="cap">RACE</div>
+        <div id="train" class="train" hidden></div>
+        <div id="card-ahead" class="card bcard" hidden></div>
+        <div id="card-behind" class="card bcard" hidden></div>
+      </div>
+      <div id="qzone" class="qzone">
+        <div id="q-phase" class="qphase"><span data-ph="garage">GARAGE</span><span data-ph="out_lap">OUT LAP</span><span data-ph="flying">FLYING</span><span data-ph="in_lap">IN LAP</span></div>
+        <div id="q-run" class="card act proj"><div id="q-run-head" class="huge">--</div><div id="q-run-line" class="tagw">--</div></div>
+        <div class="cap">CUT</div>
+        <div class="card cutcard">
+          <div class="row"><span id="q-pos" class="huge">P--</span><span id="q-badge" class="badge">--</span><span class="sp"></span><span id="q-margin" class="big">--</span></div>
+          <div id="q-cut-line" class="qcut-grid">--</div>
+        </div>
+        <div class="cap">BENCH</div>
+        <div class="card">
+          <table class="qbench">
+            <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+            <tbody><tr id="q-gaps"><th>POLE<span id="q-pole-who" class="who">--</span></th><td></td><td></td><td></td><td></td></tr>
+              <tr id="q-mate-gaps"><th>MATE<span id="q-mate-who" class="who">--</span></th><td></td><td></td><td></td><td></td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <div id="c-behind" class="c-alert clear">NO HOT LAP BEHIND</div>
-    <div class="c-tiles">
-      <div id="c-ers-tile" class="c-tile">
-        <h2>BATTERY</h2>
-        <div id="c-ers" class="c-num">--</div>
-        <div class="bar"><div id="c-ers-bar" class="fill"></div><div id="c-ers-min" class="mark"></div></div>
-        <div id="c-mode" class="sub">--</div>
-      </div>
-      <div id="c-hot-tile" class="c-tile">
-        <h2>PUSH IN</h2>
-        <div id="c-hot" class="c-num">--</div>
-        <div id="c-plan" class="sub">--</div>
-      </div>
-      <div class="c-tile">
-        <h2>TYRES</h2>
-        <div class="c-tyres"><span id="c-fl">--</span><span id="c-fr">--</span><span id="c-rl">--</span><span id="c-rr">--</span></div>
-        <div id="c-hint" class="sub">--</div>
-      </div>
-    </div>
-    <div class="c-info">
-      <div id="c-pole" class="c-row">--</div>
-      <div id="c-sectors" class="c-sectors">
-        <div class="c-sec"><span class="k">S1</span><span class="t">--</span><span class="d"></span></div>
-        <div class="c-sec"><span class="k">S2</span><span class="t">--</span><span class="d"></span></div>
-        <div class="c-sec"><span class="k">S3</span><span class="t">--</span><span class="d"></span></div>
-      </div>
-      <div id="c-mis" class="c-row">--</div>
-      <div id="c-sub" class="c-row dim">--</div>
-    </div>
-  </section>
 
-  <section id="pitboard" class="zone pitboard" hidden>
-    <div class="pb-head">
-      <div id="pb-release" class="pb-release">--</div>
-      <div id="pb-release-sub" class="pb-release-sub dim">--</div>
-    </div>
-    <div class="pb-box pb-tyrebox">
-      <h2>TYRES <span id="pb-press-note" class="dim"></span></h2>
-      <div class="pb-tyres">
-        <div class="pb-corner" id="pb-fl"><div class="lbl">FL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
-        <div class="pb-corner" id="pb-fr"><div class="lbl">FR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
-        <div class="pb-corner" id="pb-rl"><div class="lbl">RL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
-        <div class="pb-corner" id="pb-rr"><div class="lbl">RR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+    <section id="cool" class="coolzone" hidden>
+      <div id="c-behind" class="card clear">NO HOT LAP BEHIND</div>
+      <div class="cap">NEXT LAP</div>
+      <div class="g4">
+        <div class="card col">
+          <div class="row"><svg class="i warn"><use href="#tgt"/></svg><span id="c-hot" class="hero">--</span></div>
+          <span id="c-plan" class="warn">--</span>
+        </div>
+        <div id="c-fuel-tile" class="card col">
+          <div class="row"><svg class="i ok"><use href="#fuel"/></svg><span id="c-fuel" class="huge">--</span></div>
+          <div class="gauge"><i id="c-fuel-bar"></i><b></b></div>
+          <span id="c-fuel-need" class="dim">--</span>
+        </div>
+        <div id="c-ers-tile" class="card col">
+          <div class="row"><svg class="i"><use href="#batt"/></svg><span id="c-ers" class="huge">--</span></div>
+          <div class="gauge"><i id="c-ers-bar"></i><b id="c-ers-min"></b></div>
+          <span id="c-mode" class="sub">--</span>
+        </div>
+        <div class="card col">
+          <div class="row"><svg class="i dim"><use href="#tyre"/></svg>
+            <div class="t4"><span id="c-fl">--</span><span id="c-fr">--</span><span id="c-rl">--</span><span id="c-rr">--</span></div>
+          </div>
+          <span id="c-hint" class="sub">--</span>
+        </div>
       </div>
-    </div>
-    <div class="pb-box pb-run">
-      <h2>LAST RUN</h2>
-      <div class="pb-tiles">
-        <div id="pb-runfuel" class="pb-tile"><div class="k">FUEL / LAP</div><div class="v">--</div><div class="s"></div></div>
-        <div id="pb-fuel" class="pb-tile"><div class="k">IN TANK</div><div class="v">--</div><div class="s"></div></div>
-        <div id="pb-ers" class="pb-tile"><div class="k">⚡ BATTERY</div><div class="v">--</div><div class="s"></div></div>
-        <div id="pb-plan" class="pb-tile" hidden><div class="k">PLAN</div><div class="v">--</div><div class="s"></div></div>
-        <div id="pb-time" class="pb-tile" hidden><div class="k">TIME LEFT</div><div class="v">--</div><div class="s"></div></div>
-        <div id="pb-pole" class="pb-tile" hidden><div class="k">VS CUT</div><div class="v">--</div><div class="s"></div></div>
+      <div class="cap">LAST RUN</div>
+      <div class="card col">
+        <div class="row"><svg class="i dim"><use href="#lap"/></svg><span id="cz-last" class="huge">--</span><span class="sp"></span><span id="c-pole" class="mid">--</span></div>
+        <div id="c-sectors" class="c-sectors">
+          <div class="c-sec"><span class="k">S1</span><span class="t">--</span><span class="d"></span></div>
+          <div class="c-sec"><span class="k">S2</span><span class="t">--</span><span class="d"></span></div>
+          <div class="c-sec"><span class="k">S3</span><span class="t">--</span><span class="d"></span></div>
+        </div>
+        <div id="c-mis" class="row">--</div>
+        <div id="c-sub" class="dim">--</div>
       </div>
-    </div>
-    <div class="pb-box pb-wx">
-      <h2>WEATHER</h2>
-      <ol id="pb-wx" class="pb-wxl"></ol>
-      <div id="pb-cross" class="cross">--</div>
-    </div>
-    <div class="pb-box pb-sectors">
-      <h2>SECTORS · BEST LAP</h2>
-      <table id="pb-sec" class="pb-sec">
-        <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
-        <tbody>
-          <tr id="pb-sec-me"><th>YOU</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
-          <tr id="pb-sec-lead"><th>LEADER<span id="pb-sec-lead-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
-          <tr id="pb-sec-mate"><th>TEAMMATE<span id="pb-sec-mate-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pb-box pb-setup">
-      <h2>SETUP CHANGES</h2>
-      <ol id="pb-change" class="pb-change"></ol>
-      <div id="pb-locked" class="pb-locked" hidden></div>
-    </div>
-    <div class="pb-box pb-cur">
-      <h2>CURRENT SETUP</h2>
-      <ol id="pb-setup" class="pb-ref"><li class="dim">no setup packet yet</li></ol>
-    </div>
-  </section>
+    </section>
+
+    <section id="pitboard" class="pitboard" hidden>
+      <div class="pb-head">
+        <div id="pb-release" class="pb-release">--</div>
+        <div id="pb-release-sub" class="pb-release-sub">--</div>
+      </div>
+      <div class="pb-col pb-c1">
+        <div class="pb-box pb-tyrebox">
+          <h2>TYRES <span id="pb-press-note" class="dim"></span></h2>
+          <div class="pb-tyres">
+            <div class="pb-corner" id="pb-fl"><div class="lbl">FL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+            <div class="pb-corner" id="pb-fr"><div class="lbl">FR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+            <div class="pb-corner" id="pb-rl"><div class="lbl">RL <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+            <div class="pb-corner" id="pb-rr"><div class="lbl">RR <b class="pb-temp">--</b></div><div class="pb-move">--</div><div class="pb-psi">--</div></div>
+          </div>
+        </div>
+        <div class="pb-tiles">
+          <div id="pb-runfuel" class="pb-tile"><div class="k">FUEL / LAP</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-fuel" class="pb-tile"><div class="k">IN TANK</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-ers" class="pb-tile"><div class="k">⚡ BATTERY</div><div class="v">--</div><div class="s"></div></div>
+        </div>
+      </div>
+      <div class="pb-col pb-c2">
+        <div class="pb-tiles">
+          <div id="pb-time" class="pb-tile" hidden><div class="k">TIME LEFT</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-pole" class="pb-tile" hidden><div class="k">VS CUT</div><div class="v">--</div><div class="s"></div></div>
+          <div id="pb-plan" class="pb-tile" hidden><div class="k">PLAN</div><div class="v">--</div><div class="s"></div></div>
+        </div>
+        <div class="pb-box pb-wx">
+          <h2>WEATHER</h2>
+          <ol id="pb-wx" class="pb-wxl"></ol>
+          <div id="pb-cross" class="cross">--</div>
+        </div>
+      </div>
+      <div class="pb-col pb-c3">
+        <div class="pb-box pb-sectors">
+          <h2>SECTORS · BEST LAP</h2>
+          <table id="pb-sec" class="pb-sec">
+            <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+            <tbody>
+              <tr id="pb-sec-me"><th>YOU</th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+              <tr id="pb-sec-lead"><th>LEADER<span id="pb-sec-lead-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+              <tr id="pb-sec-mate"><th>TEAMMATE<span id="pb-sec-mate-who" class="who" hidden></span></th><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pb-col pb-c4">
+        <div class="pb-box pb-setup">
+          <h2>SETUP CHANGES</h2>
+          <ol id="pb-change" class="pb-change"></ol>
+          <div id="pb-locked" class="pb-locked" hidden></div>
+        </div>
+        <div class="pb-box pb-cur">
+          <h2>CURRENT SETUP</h2>
+          <ol id="pb-setup" class="pb-ref"><li class="dim">no setup packet yet</li></ol>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <section id="transport" class="transport" hidden>
     <div class="row">
@@ -286,7 +328,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=41"></script>
+  <script src="/static/app.js?v=42"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

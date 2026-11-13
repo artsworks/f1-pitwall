@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall redesign, round 5: full race dashboard</title>
+<style>
+:root{--bg:#0a0a0c;--panel:#121216;--line:#2a2a30;--fg:#ececec;--dim:#8a8a92;--faint:#4a4a52;
+  --ok:#37e07a;--warn:#ffc233;--crit:#ff4d4d;--cold:#5cc8ff;--info:#b8b8ff;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;font-size:.9vw}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--fg);font-family:var(--font);font-variant-numeric:tabular-nums}
+.intro{padding:1.2rem 2rem}
+.intro h1{font-size:1.5rem;margin:0 0 .3rem}
+.intro h2{font-size:1.3rem;margin:0;color:var(--warn)}
+.intro p{color:var(--dim);margin:.3rem 0;max-width:80rem;font-size:.95rem;line-height:1.45}
+.i{width:1.5em;height:1.5em;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.35em;flex:none}
+.i.s{width:1.1em;height:1.1em;vertical-align:-.2em}
+.i.l{width:2.2em;height:2.2em}
+.i.h{width:1.1em;height:2.2em}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.crit{color:var(--crit)}.cold{color:var(--cold)}.dim{color:var(--dim)}
+.hero{font-size:4rem;font-weight:700;line-height:1}
+.huge{font-size:3rem;font-weight:700;line-height:1}
+.big{font-size:2.4rem;font-weight:700;line-height:1}
+.mid{font-size:1.5rem;font-weight:700}
+.tagw{font-size:.8rem;letter-spacing:.08em;color:var(--dim)}
+.cmp{display:inline-block;min-width:1.5em;text-align:center;border-radius:50%;border:.16em solid;font-weight:700;font-size:.9em;line-height:1.3}
+.cmp.M{color:#ffd23c}.cmp.H{color:#f2f2f2}.cmp.S{color:#ff4d4d}.cmp.I{color:#37e07a}
+.row{display:flex;align-items:center;gap:.6rem}
+.col{display:flex;flex-direction:column;gap:.55rem;min-width:0}
+.sp{flex:1}
+.alt{color:var(--dim);font-size:.95rem}
+.sub{padding-left:2.1rem}
+hr{border:none;border-top:1px solid var(--line);margin:.5rem 0;width:100%}
+
+/* one real screen: 16:9 at full window width */
+.screen{width:100vw;height:56.25vw;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;border-top:2px solid var(--warn);border-bottom:2px solid var(--warn)}
+.status{height:3rem;display:flex;align-items:center;gap:1.4rem;padding:0 1rem;font-size:1.4rem;border-bottom:1px solid var(--line);flex:none}
+.status .chip{border:1px solid var(--faint);border-radius:.3rem;padding:0 .4rem;font-size:1.1rem;color:var(--dim)}
+.status .pill{border:1px solid var(--dim);border-radius:1rem;padding:0 .8rem;font-size:1.1rem}
+.banner{height:10rem;display:flex;flex:none;border-bottom:1px solid var(--line)}
+.banner .barr{width:.8rem;background:var(--warn)}
+.banner .bd{padding:.9rem 1.2rem;display:flex;flex-direction:column;justify-content:space-between;flex:1}
+.banner .tx{font-size:3.4rem;font-weight:700;line-height:1.1}
+.banner .pv{font-size:1.3rem;color:var(--dim)}
+.footer{height:2rem;flex:none;display:flex;gap:2rem;align-items:center;padding:0 1rem;font-size:.9rem;color:var(--faint);border-top:1px solid var(--line)}
+.main{flex:1;display:grid;gap:2rem;padding:.8rem 1.2rem;min-height:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:.25rem;padding:.7rem .9rem}
+.cap{font-size:.75rem;letter-spacing:.25em;color:var(--dim);margin-top:.8rem}
+.col>.cap:first-child,.cap:first-child{margin-top:0}
+.act{border:none;color:#000}
+.act .dim,.act .tagw{color:rgba(0,0,0,.65)}
+.act .cmp{color:#000}
+.act.box{background:var(--warn)}.act.reply{background:var(--info)}
+.info{padding:.45rem .9rem;color:var(--dim)}
+.rail{position:relative;height:.35rem;background:var(--line);border-radius:.2rem;flex:1;min-width:5rem}
+.rail i{position:absolute;left:27%;top:-.25rem;width:.5rem;height:.85rem;background:var(--ok);border-radius:.15rem}
+.rail::before{content:"";position:absolute;left:0;width:33%;top:0;bottom:0;background:rgba(55,224,122,.3);border-radius:.2rem}
+.ring{width:1.5em;height:1.5em;border-radius:50%;background:conic-gradient(var(--ok) 62%,var(--line) 0);display:inline-block;vertical-align:-.35em;-webkit-mask:radial-gradient(circle,transparent 42%,#000 44%);mask:radial-gradient(circle,transparent 42%,#000 44%)}
+.tgt{display:flex;align-items:baseline;gap:.5rem}
+.far{opacity:.6}
+.wx{display:flex;gap:1.1rem;align-items:flex-end}
+.wx>div{text-align:center}
+.wing{display:inline-flex;align-items:center;gap:.35rem}
+.wing .i.h+.i.h{margin-left:-.25rem}
+.secs{display:flex;justify-content:space-between}
+
+/* tyres: content unchanged, drawn in the island style */
+.tyres{display:flex;flex-direction:column;gap:.55rem;min-height:0;height:100%}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:.55rem;flex:1;min-height:0}
+.corner{display:flex;flex-direction:column;justify-content:space-between}
+.corner .t{font-size:3.4rem;font-weight:700;line-height:1}
+.corner.hot{border:.2rem solid var(--crit)}
+.meter{height:.7rem;background:var(--line);border-radius:.2rem;position:relative}
+.meter u{position:absolute;left:28.6%;width:42.8%;top:0;bottom:0;background:rgba(55,224,122,.4);border-left:2px solid var(--ok);border-right:2px solid var(--ok)}
+.mlab{position:relative;height:1.1rem;font-size:.8rem;color:var(--dim);margin-top:.25rem}
+.mlab span{position:absolute;transform:translateX(-50%)}
+.meter b{position:absolute;top:-.25rem;margin-left:-.25rem;width:.5rem;height:1.2rem;border-radius:.15rem;background:currentColor}
+
+/* layouts */
+.LA{grid-template-columns:4fr 3fr 5fr}
+.LB{grid-template-columns:4fr 3fr 5fr;grid-template-rows:auto 1fr}
+.LB .now{grid-column:1/-1;display:grid;grid-template-columns:5fr 4fr 3fr;gap:.55rem}
+.LB .now .card{display:flex;align-items:center}
+.LB .race{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;align-content:start}
+.LB .race .cap{grid-column:1/-1}
+
+
+.LC{grid-template-columns:3fr 4.800fr 4.200fr}
+.LC .carhead{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem}
+.LC .carhead .card{display:flex;flex-direction:column;justify-content:center}
+.LC .carhead .hero{font-size:3.4rem}
+.LC1{grid-template-columns:3.6fr 4.6fr 3.8fr}
+.grow{flex:1;display:flex;flex-direction:column}
+.grow>.card{flex:1;display:flex;flex-direction:column;justify-content:space-around}
+.wxr{display:grid;grid-template-columns:3rem 2.6rem 1fr;align-items:center;gap:.6rem}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fuel" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="batt" viewBox="0 0 24 24"><path d="M2 8h17v8H2zM19 10.5h3v3h-3M11 9.5 8 12.5h4l-3 3"/></symbol>
+  <symbol id="save" viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3 4"/></symbol>
+  <symbol id="cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
+  <symbol id="rain1" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="rain2" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="lap" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M10 2.5h4M12 2.5V6"/></symbol>
+  <symbol id="dmg" viewBox="0 0 24 24"><path d="M14.5 5.5a4.5 4.5 0 0 0 5.8 5.8L11 20.5a2.3 2.3 0 0 1-3.3-3.3l9.300-9.300"/></symbol>
+  <symbol id="floor" viewBox="0 0 24 24"><path d="M8 3h8l2 18H6zM9 9h6M8.5 15h7"/></symbol>
+  <symbol id="wingL" viewBox="0 0 12 24"><path d="M2 9h9v3H2zM4 12v5"/></symbol>
+  <symbol id="wingR" viewBox="0 0 12 24"><path d="M1 9h9v3H1zM8 12v5"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M4 8v13h16V8M12 2v11M8 9l4 4 4-4"/></symbol>
+  <symbol id="exit" viewBox="0 0 24 24"><path d="M3 12h12M11 7l5 5-5 5M20 4v16"/></symbol>
+  <symbol id="reply" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/></symbol>
+  <symbol id="attack" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="plan" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></symbol>
+  <symbol id="uc" viewBox="0 0 24 24"><path d="M4 5v6a6 6 0 0 0 6 6h9M15 13l4 4-4 4"/></symbol>
+  <symbol id="oc" viewBox="0 0 24 24"><path d="M4 19v-6a6 6 0 0 1 6-6h9M15 3l4 4-4 4"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M8 3h8l5 5v8l-5 5H8l-5-5V8zM12 8v8M8 12h8"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 4v15M5 12l7 7 7-7"/></symbol>
+  <symbol id="defend" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.5v.3"/></symbol>
+  <symbol id="wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M3.5 10h17M9.5 14.2 5.5 19M14.5 14.2l4 4.8"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="tgt" viewBox="0 0 24 24"><path d="M5 21V4h13l-3 4 3 4H5"/></symbol>
+</svg>
+
+<!-- shared pieces -->
+<template id="t-status"><header class="status"><b class="ok">● LIVE</b><span class="dim">42 ms</span><span class="dim">ON TRACK</span><span class="sp"></span><span class="dim">RACE · BAHRAIN</span><span>LAP 27/57 <span class="dim">· 30 LEFT</span></span><b>P5</b><span class="chip" style="color:var(--ok);border-color:var(--ok)"><svg class="i s"><use href="#wheel"/></svg> 62 <svg class="i s"><use href="#globe"/></svg></span><span class="pill" style="border:.15rem solid var(--fg);font-weight:700">BALANCED</span></header></template>
+<template id="t-banner"><section class="banner"><div class="barr"></div><div class="bd"><div class="row"><span class="tx">Box this lap. Hards.</span><span class="sp"></span><span class="dim" style="font-size:1.3rem">L27 · 8 s</span></div><div class="pv">L26 · Car ahead in range. Attack into turn 1.</div></div></section></template>
+<template id="t-footer"><footer class="footer"><span>4 upd/s</span><span>voice queue 0</span><span>TTS p99 180 ms</span><span>screen lag 35 ms</span><span>TRACK GREEN</span></footer></template>
+
+<template id="t-tyres"><div class="tyres">
+  <div class="row"><span class="cmp M mid">M</span><span class="mid">14L</span><span class="tagw">OLD</span><span class="sp"></span><span class="tagw">PACE LEFT</span><b class="mid warn">~6L</b><svg class="i s warn"><use href="#down"/></svg><b class="warn">SHRINKING</b></div>
+  <div class="tgrid">
+    <div class="card corner hot"><div class="row"><span class="tagw">FL</span><span class="sp"></span><span class="alt">BRK 412°</span></div><div class="row crit"><span class="t">114°</span><svg class="i"><use href="#up"/></svg><b>HOT</b></div><div><div class="meter crit"><u></u><b style="left:77%"></b></div><div class="mlab"><span style="left:28.6%">80°</span><span style="left:71.4%">110°</span></div></div><div class="row"><span class="tagw">WEAR</span><span class="warn big">52%</span><span class="sp"></span><span class="tagw crit">+2.1% / LAP</span></div></div>
+    <div class="card corner"><div class="row"><span class="tagw">FR</span><span class="sp"></span><span class="alt">BRK 398°</span></div><div class="row ok"><span class="t">98°</span><b>OK</b></div><div><div class="meter ok"><u></u><b style="left:54%"></b></div><div class="mlab"><span style="left:28.6%">80°</span><span style="left:71.4%">110°</span></div></div><div class="row"><span class="tagw">WEAR</span><span class="big">41%</span></div></div>
+    <div class="card corner"><div class="row"><span class="tagw">RL</span><span class="sp"></span><span class="alt">BRK 355°</span></div><div class="row ok"><span class="t">94°</span><svg class="i cold"><use href="#down"/></svg><b>OK</b></div><div><div class="meter ok"><u></u><b style="left:48.6%"></b></div><div class="mlab"><span style="left:28.6%">80°</span><span style="left:71.4%">110°</span></div></div><div class="row"><span class="tagw">WEAR</span><span class="big">35%</span></div></div>
+    <div class="card corner"><div class="row"><span class="tagw">RR</span><span class="sp"></span><span class="alt">BRK 360°</span></div><div class="row ok"><span class="t">95°</span><b>OK</b></div><div><div class="meter ok"><u></u><b style="left:50%"></b></div><div class="mlab"><span style="left:28.6%">80°</span><span style="left:71.4%">110°</span></div></div><div class="row"><span class="tagw">WEAR</span><span class="big">36%</span></div></div>
+  </div>
+  <div class="card row" style="padding:.45rem .9rem"><span class="tagw">BB</span><b class="mid">56</b><span style="background:var(--warn);color:#000;border-radius:.2rem;padding:0 .4rem;font-weight:700">▼ 55</span><span class="sp"></span><span class="tagw">DIFF ON</span><b class="mid">60</b><span style="border:1px solid var(--info);color:var(--info);border-radius:.2rem;padding:0 .4rem;font-weight:700">▲ TRY 65</span><span class="sp"></span><span class="tagw">OFF</span><b class="mid">55</b></div>
+</div></template>
+
+<template id="t-fuelbatt"><div class="card row"><svg class="i l ok"><use href="#fuel"/></svg><span class="hero ok">+0.4</span><span class="sp"></span>
+  <div class="col" style="align-items:flex-end;gap:.3rem"><div class="row"><svg class="i"><use href="#batt"/></svg><span class="big">62%</span></div><div class="row warn"><svg class="i s"><use href="#save"/></svg>SAVE<span class="tagw">4L</span></div></div></div></template>
+<template id="t-fuel"><div class="card"><div class="row"><svg class="i ok"><use href="#fuel"/></svg><span class="hero ok">+0.4</span></div></div></template>
+<template id="t-batt"><div class="card col" style="gap:.3rem"><div class="row"><svg class="i"><use href="#batt"/></svg><span class="big">62%</span></div><div class="row warn"><svg class="i s"><use href="#save"/></svg>SAVE<span class="tagw">4L</span></div></div></template>
+<template id="t-dmg"><div class="card row"><svg class="i dim"><use href="#dmg"/></svg><span class="wing"><span class="warn mid">12</span><svg class="i h warn"><use href="#wingL"/></svg><svg class="i h ok"><use href="#wingR"/></svg><span class="ok mid">4</span></span><span class="sp"></span><svg class="i warn"><use href="#floor"/></svg><span class="warn mid">6</span></div></template>
+<template id="t-dmgcol"><div class="card col" style="gap:.3rem"><div class="row"><svg class="i s dim"><use href="#dmg"/></svg><span class="wing"><span class="warn mid">12</span><svg class="i h warn"><use href="#wingL"/></svg><svg class="i h ok"><use href="#wingR"/></svg><span class="ok mid">4</span></span></div><div class="row sub"><svg class="i warn"><use href="#floor"/></svg><span class="warn mid">6</span></div></div></template>
+<template id="t-wx"><div class="card row"><div class="wx"><div><svg class="i l"><use href="#cloud"/></svg><div>10%</div></div><div><svg class="i l cold"><use href="#rain1"/></svg><div class="cold">55%</div></div><div><svg class="i l cold"><use href="#rain2"/></svg><div class="cold">80%</div></div></div><span class="sp"></span><span class="cmp I mid">I</span><span class="big">L28</span></div></template>
+<template id="t-pace"><div class="card col" style="gap:.4rem"><div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="big">1:32.4</span><span class="sp"></span><span class="big ok">−0.2</span></div><div class="secs mid sub"><span class="ok">−.10</span><span class="warn">+.03</span><span class="ok">−.14</span></div></div></template>
+
+<template id="t-box"><div class="card act box row"><svg class="i l"><use href="#box"/></svg><span class="huge">BOX</span><span class="cmp H mid">H</span><span class="sp"></span><svg class="i s"><use href="#lap"/></svg><span class="mid">22s</span><svg class="i"><use href="#exit"/></svg><svg class="i"><use href="#ok"/></svg></div></template>
+<template id="t-reply"><div class="card act reply row"><svg class="i"><use href="#reply"/></svg><span class="mid">FRONTS 38%</span><span class="sp"></span><span class="mid">9L</span></div></template>
+<template id="t-info"><div class="card info row"><svg class="i s"><use href="#pen"/></svg>+5s</div></template>
+<template id="t-battle"><div class="card">
+  <div class="row"><svg class="i ok"><use href="#attack"/></svg><svg class="i s"><use href="#up"/></svg><span class="mid">P4 NOR</span><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="big">+0.8</span></div>
+  <div class="row sub" style="margin-top:.5rem"><div class="rail"><i></i></div><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3</span><span><span class="ring"></span> 62%</span></div>
+  <hr>
+  <div class="row sub far"><svg class="i s"><use href="#down"/></svg><span class="mid">P6 PIA</span><span class="cmp H">H</span><span class="dim">5L</span><span class="sp"></span><span class="mid">−2.4</span></div>
+</div></template>
+<template id="t-strat"><div class="card">
+  <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span><span class="tgt"><svg class="i warn"><use href="#tgt"/></svg><span class="big">L27</span><span class="dim">26–28</span></span><svg class="i ok"><use href="#ok"/></svg></div>
+  <div class="row sub alt" style="margin-top:.4rem"><b>B</b><span class="cmp M">M</span>›<span class="cmp H">H</span>›<span class="cmp S">S</span><span class="sp"></span>+3.1</div>
+  <hr>
+  <div class="row sub alt"><svg class="i s"><use href="#exit"/></svg><svg class="i s ok"><use href="#ok"/></svg><span class="sp"></span><svg class="i s"><use href="#uc"/></svg>+0.8<svg class="i s"><use href="#oc"/></svg>−0.4</div>
+</div></template>
+
+<template id="t-pace3"><div class="card col" style="gap:.4rem">
+  <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="big">1:32.4</span><span class="tagw">L26 VS L25</span><span class="sp"></span><span class="big ok">−0.2</span></div>
+  <div class="secs sub"><span class="tagw">S1</span><span class="tagw">S2</span><span class="tagw">S3</span></div>
+  <div class="secs mid sub"><span class="ok">−.10</span><span class="warn">+.03</span><span class="ok">−.14</span></div>
+</div></template>
+<template id="t-wx3"><div class="card col" style="gap:.4rem">
+  <div class="row"><div class="wx"><div><div class="tagw">NOW</div><svg class="i l"><use href="#cloud"/></svg><div>10%</div></div><div><div class="tagw">10 MIN</div><svg class="i l cold"><use href="#rain1"/></svg><div class="cold">55%</div></div><div><div class="tagw">30 MIN</div><svg class="i l cold"><use href="#rain2"/></svg><div class="cold">80%</div></div></div><span class="sp"></span>
+    <div class="col" style="align-items:flex-end;gap:.2rem"><div class="row"><span class="cmp I mid">I</span><span class="big">L28</span></div><span class="tagw">INTERS IN 9 MIN</span></div></div>
+</div>
+<div class="card row" style="padding:.45rem .9rem;border-color:var(--warn)"><svg class="i s warn"><use href="#warn"/></svg><span class="tagw">CUT</span><b class="mid warn">2</b><span class="tagw">LIMIT</span><b class="mid warn">1</b><span class="sp"></span><span class="warn"><span style="letter-spacing:.15em">●●<span style="opacity:.35">●</span></span></span><b class="crit">+5s</b></div></template>
+<template id="t-strat3"><div class="card" style="border:.2rem solid var(--fg)">
+  <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span><svg class="i ok"><use href="#ok"/></svg><span class="ok">ON PLAN</span></div>
+  <div class="row sub" style="margin-top:.5rem"><svg class="i warn"><use href="#tgt"/></svg><span class="tagw">BOX</span><span class="big">L27</span><span class="sp"></span><span class="tagw">WINDOW</span><span class="mid">26–28</span></div>
+  <hr>
+  <div class="row sub alt"><svg class="i s"><use href="#exit"/></svg><span class="ok">EXIT CLEAR</span><span class="sp"></span><svg class="i s"><use href="#uc"/></svg>UC +0.8<svg class="i s"><use href="#oc"/></svg>OC −0.4</div>
+</div>
+<div class="card" style="opacity:.5">
+  <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">B</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="dim">›</span><span class="cmp S">S</span><span class="sp"></span><span>2 STOPS</span><span class="mid">+3.1</span></div>
+</div></template>
+
+<template id="t-battle2"><div class="card info row far"><svg class="i s"><use href="#up"/></svg><span>P3 LECLERC</span><span class="cmp S">S</span><span class="sp"></span><span class="tagw">IN TRAIN</span><span>+1.5</span></div>
+<div class="card" style="border:.2rem solid var(--fg)">
+  <div class="row"><svg class="i ok"><use href="#attack"/></svg><b class="ok">ATTACKING</b><span class="tagw">3 LAPS</span></div>
+  <div class="row" style="margin-top:.4rem"><svg class="i s"><use href="#up"/></svg><span class="mid">P4 NORRIS</span><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="big">+0.8</span></div>
+  <div class="row" style="margin-top:.6rem"><div class="rail"><i></i></div></div>
+  <div class="row" style="margin-top:.6rem"><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3 / LAP</span><span class="sp"></span><span class="tagw">LAST</span><span class="ok">−0.2</span><span class="sp"></span><span class="ring"></span><span>62%</span><span class="tagw">PASS</span></div>
+</div>
+<div class="card" style="opacity:.55">
+  <div class="row"><svg class="i s"><use href="#down"/></svg><span class="mid">P6 PIASTRI</span><span class="cmp H">H</span><span class="dim">5L</span><span style="border:1px solid var(--crit);color:var(--crit);border-radius:.3rem;padding:0 .3rem;font-size:.85rem">OV</span><span class="sp"></span><span class="big">−2.4</span></div>
+  <div class="row" style="margin-top:.6rem"><div class="rail"><i style="left:80%;background:var(--fg)"></i></div></div>
+  <div class="row" style="margin-top:.6rem"><span><svg class="i s"><use href="#close"/></svg>0.1 / LAP</span><span class="sp"></span><span class="tagw">LAST</span><span class="warn">+0.1</span><span class="sp"></span><span class="ring" style="background:conic-gradient(var(--ok) 88%,var(--line) 0)"></span><span>88%</span><span class="tagw">HOLD</span></div>
+</div></template>
+<template id="t-status-sc"><header class="status" style="background:var(--warn);color:#000"><b>● LIVE</b><span>42 ms</span><span style="background:#000;color:var(--warn);border-radius:.3rem;padding:0 .6rem;font-weight:700"><svg class="i s"><use href="#warn"/></svg> SAFETY CAR</span><span class="sp"></span><span>RACE · BAHRAIN</span><span>LAP 27/57 · 30 LEFT</span><b>P5</b><span style="border:.12rem solid #000;border-radius:.3rem;padding:0 .4rem;font-size:1.1rem"><svg class="i s"><use href="#wheel"/></svg> 62 <svg class="i s"><use href="#globe"/></svg></span><span class="pill" style="border:.15rem solid #000;font-weight:700">BALANCED</span></header></template>
+<template id="t-banner-sc"><section class="banner"><div class="barr" style="background:var(--crit)"></div><div class="bd"><div class="row"><span class="tx">Safety car. Box now, cheap stop.</span><span class="sp"></span><span class="dim" style="font-size:1.3rem">L27 · 3 s</span></div><div class="pv">L26 · Car ahead in range. Attack into turn 1.</div></div></section></template>
+<template id="t-safety"><div class="card act row" style="background:#ffe600"><svg class="i l"><use href="#warn"/></svg><span class="huge">SC</span><span class="tagw">LAP 2</span><span class="sp"></span><span class="tagw">PIT LOSS</span><span class="big">12s</span></div></template>
+<template id="t-stratC"><div class="card" style="border:.2rem solid var(--warn)">
+  <div class="row"><svg class="i warn"><use href="#box"/></svg><b class="mid">C</b><b class="warn">BOX NOW</b><span class="cmp H">H</span><span class="sp"></span><span class="tagw">SAVES</span><span class="big ok">9.8s</span></div>
+</div>
+<div class="card">
+  <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span><svg class="i ok"><use href="#ok"/></svg><span class="ok">ON PLAN</span></div>
+  <div class="row sub" style="margin-top:.5rem"><svg class="i warn"><use href="#tgt"/></svg><span class="tagw">BOX</span><span class="big">L27</span><span class="sp"></span><span class="tagw">WINDOW</span><span class="mid">26–28</span></div>
+  <hr>
+  <div class="row sub alt"><svg class="i s"><use href="#exit"/></svg><span class="ok">EXIT CLEAR</span><span class="sp"></span><svg class="i s"><use href="#uc"/></svg>UC +0.8<svg class="i s"><use href="#oc"/></svg>OC −0.4</div>
+</div>
+<div class="card" style="opacity:.5">
+  <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">B</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="dim">›</span><span class="cmp S">S</span><span class="sp"></span><span>2 STOPS</span><span class="mid">+3.1</span></div>
+</div></template>
+<div class="intro">
+  <h1>Round 5, final check: layout C1 with a little more text</h1>
+  <p>Strategy sits in the left column as PLAN. The left column and the tyre section have a few short tags added. The center CAR head and the right column keep the icon-first style. The frame between the amber lines is one whole screen at real size when this window is 1920 px wide.</p>
+</div>
+<div class="screen">
+  <div data-fill="t-status"></div><div data-fill="t-banner"></div>
+  <div class="main LC LC1">
+    <div class="col"><div class="cap">PACE</div><div data-fill="t-pace3"></div><div class="cap">TRACK</div><div class="col" data-fill="t-wx3"></div><div class="cap">PLAN</div><div class="col" data-fill="t-strat3"></div></div>
+    <div class="col"><div class="cap">CAR</div><div class="carhead"><div data-fill="t-fuel" style="display:contents"></div><div data-fill="t-batt" style="display:contents"></div><div data-fill="t-dmgcol" style="display:contents"></div></div><div style="flex:1;min-height:0" data-fill="t-tyres"></div></div>
+    <div class="col"><div data-fill="t-box"></div><div data-fill="t-reply"></div><div class="cap">RACE</div><div class="col" data-fill="t-battle2"></div></div>
+  </div>
+  <div data-fill="t-footer"></div>
+</div>
+<div class="intro">
+  <h2>RACE card states that the frame cannot show at the same moment</h2>
+  <p>The first line of the bright card changes with the fight. For about 20 s after a fight ends, the result replaces it.</p>
+  <div class="row" style="flex-wrap:wrap;gap:1rem;margin-top:.6rem">
+    <div class="card row"><svg class="i ok"><use href="#attack"/></svg><b class="ok">CATCHING</b><span class="tagw">IN RANGE IN 2 LAPS</span></div>
+    <div class="card row"><svg class="i crit"><use href="#defend"/></svg><b class="crit">DEFENDING</b><span class="tagw">4 LAPS</span></div>
+    <div class="card row"><svg class="i crit"><use href="#defend"/></svg><b class="crit">UNDER THREAT</b><span class="tagw">IN RANGE IN 3 LAPS</span></div>
+    <div class="card row dim"><b>FREE AIR</b></div>
+    <div class="card act row" style="background:var(--ok)"><svg class="i"><use href="#ok"/></svg><b class="mid">PASSED NORRIS</b></div>
+    <div class="card act row" style="background:var(--ok)"><svg class="i"><use href="#defend"/></svg><b class="mid">HELD PIASTRI</b></div>
+    <div class="card act row" style="background:var(--crit)"><svg class="i"><use href="#down"/></svg><b class="mid">LOST TO PIASTRI</b></div>
+  </div>
+  <p>When you defend, the BEHIND card becomes the bright one and the AHEAD card dims. The IN TRAIN row appears only when a second car is within 1 s of the car between you.</p>
+</div>
+<div class="intro"><h2>The same screen under a safety car</h2><p>The status bar turns amber and names the safety car. A filled SAFETY card sits at the top of the right column, above the box card. Plan C appears as the first PLAN card with the time the cheap stop saves.</p></div>
+<div class="screen">
+  <div data-fill="t-status-sc"></div><div data-fill="t-banner-sc"></div>
+  <div class="main LC LC1">
+    <div class="col"><div class="cap">PACE</div><div data-fill="t-pace3"></div><div class="cap">TRACK</div><div class="col" data-fill="t-wx3"></div><div class="cap">PLAN</div><div class="col" data-fill="t-stratC"></div></div>
+    <div class="col"><div class="cap">CAR</div><div class="carhead"><div data-fill="t-fuel" style="display:contents"></div><div data-fill="t-batt" style="display:contents"></div><div data-fill="t-dmgcol" style="display:contents"></div></div><div style="flex:1;min-height:0" data-fill="t-tyres"></div></div>
+    <div class="col"><div data-fill="t-safety"></div><div data-fill="t-box"></div><div class="cap">RACE</div><div class="col" data-fill="t-battle2"></div></div>
+  </div>
+  <div data-fill="t-footer"></div>
+</div>
+<div class="intro">
+  <h2>SAFETY card states</h2>
+  <p>One card, always at the top of the right column. Safety car and VSC are yellow, as in the sport. The red flag is red. The blue flag and the rain crossover are blue.</p>
+  <div class="row" style="flex-wrap:wrap;gap:1rem;margin-top:.6rem">
+    <div class="card act row" style="background:#ffe600"><svg class="i l"><use href="#warn"/></svg><span class="huge">SC</span><span class="tagw">LAP 2</span><span class="tagw" style="margin-left:1.5rem">PIT LOSS</span><span class="big">12s</span></div>
+    <div class="card act row" style="background:#ffe600"><svg class="i l"><use href="#warn"/></svg><span class="huge">VSC</span><span class="tagw">LAP 1</span><span class="tagw" style="margin-left:1.5rem">PIT LOSS</span><span class="big">14s</span></div>
+    <div class="card act row" style="background:var(--crit)"><svg class="i l"><use href="#tgt"/></svg><span class="huge">RED FLAG</span><span class="mid" style="margin-left:1.5rem">BOX · FREE TYRES</span></div>
+    <div class="card act row" style="background:var(--cold)"><svg class="i l"><use href="#tgt"/></svg><span class="huge">BLUE</span><span class="mid" style="margin-left:1.5rem">LET LEADER BY</span></div>
+    <div class="card act row" style="background:var(--cold)"><svg class="i l"><use href="#rain2"/></svg><span class="cmp I huge" style="font-size:2rem">I</span><span class="huge">4 MIN</span><span class="big" style="margin-left:1.5rem">70%</span></div>
+  </div>
+</div><div class="intro">
+  <h2>Limits card and mindset pill</h2>
+  <p>The limits card sits in the TRACK group, under the weather. It counts corner cuts and track limits. The dots show how many warnings you have used before the next penalty. The mindset pill stays at the far right of the status bar.</p>
+  <div class="row" style="flex-wrap:wrap;gap:1rem;margin-top:.6rem;font-size:1.1rem">
+    <span class="card" style="padding:.2rem .6rem">CUT 0 · LIMIT 0 <span style="letter-spacing:.15em;opacity:.35">●●●</span></span>
+    <span class="card" style="padding:.2rem .6rem">CUT 1 · LIMIT 0 <span style="letter-spacing:.15em">●<span style="opacity:.35">●●</span></span></span>
+    <span class="card warn" style="padding:.2rem .6rem;border-color:var(--warn);font-weight:700"><svg class="i s"><use href="#warn"/></svg> CUT 2 · LIMIT 0 <span style="letter-spacing:.15em">●●<span style="opacity:.35">●</span></span></span>
+    <span class="card act" style="padding:.2rem .6rem;background:var(--crit);font-weight:700"><svg class="i s"><use href="#warn"/></svg> CUT 2 · LIMIT 1 ●●● +5s</span>
+    <span style="border:.15rem solid var(--fg);border-radius:1rem;padding:0 .8rem;font-weight:700">BALANCED</span>
+    <span style="background:#ff8a3d;color:#000;border-radius:1rem;padding:.15rem .8rem;font-weight:700">AGGRESSIVE</span>
+  </div>
+</div><script>
+document.querySelectorAll("[data-fill]").forEach(function (n) {
+  n.appendChild(document.getElementById(n.dataset.fill).content.cloneNode(true));
+});
+</script>
+</body>
+</html>

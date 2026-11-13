@@ -632,6 +632,7 @@ def quali_payload(
             "tyres": {"fl": inner.fl, "fr": inner.fr, "rl": inner.rl, "rr": inner.rr},
             "tyre_hint": snapshot.cool_tyre_hint,
             "fuel_laps": snapshot.fuel_remaining_laps,
+            "fuel_need_laps": th.get("fuel_push_need_laps", 0.9),
             "last_hot_ms": snapshot.last_hot.lap_time_ms if snapshot.last_hot else None,
             "mistakes": snapshot.last_hot_mistakes or None,
             "pole": pole,
@@ -946,6 +947,10 @@ def create_app(
     @app.get("/")
     async def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
+
+    @app.get("/v2")
+    async def index_v2() -> FileResponse:
+        return FileResponse(WEB_DIR / "v2" / "index.html")
 
     @app.get("/radio")
     async def radio() -> FileResponse:

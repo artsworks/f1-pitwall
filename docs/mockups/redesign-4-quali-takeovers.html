@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall redesign, round 4: qualifying zone, cool-down, pit board</title>
+<style>
+:root{--bg:#0a0a0c;--panel:#121216;--line:#2a2a30;--fg:#ececec;--dim:#8a8a92;--faint:#4a4a52;
+  --ok:#37e07a;--warn:#ffc233;--crit:#ff4d4d;--cold:#5cc8ff;--info:#b8b8ff;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;font-size:clamp(14px,.9vw,24px)}
+*{box-sizing:border-box}
+body{margin:0;padding:1.5rem 2rem 4rem;background:var(--bg);color:var(--fg);font-family:var(--font);font-variant-numeric:tabular-nums}
+h1{font-size:1.5rem;margin:0 0 .3rem}
+h2{font-size:1.2rem;margin:2.6rem 0 .3rem;color:var(--warn)}
+p.note{color:var(--dim);margin:.2rem 0 1rem;max-width:72rem;font-size:.95rem;line-height:1.45}
+.i{width:1.5em;height:1.5em;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.35em;flex:none}
+.i.s{width:1.1em;height:1.1em;vertical-align:-.2em}
+.i.l{width:2.2em;height:2.2em}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.crit{color:var(--crit)}.cold{color:var(--cold)}.dim{color:var(--dim)}
+.hero{font-size:4rem;font-weight:700;line-height:1}
+.huge{font-size:3rem;font-weight:700;line-height:1}
+.big{font-size:2.2rem;font-weight:700;line-height:1}
+.mid{font-size:1.5rem;font-weight:700}
+.tagw{font-size:.8rem;letter-spacing:.08em;color:var(--dim)}
+.cmp{display:inline-block;min-width:1.5em;text-align:center;border-radius:50%;border:.16em solid;font-weight:700;font-size:.9em;line-height:1.3}
+.cmp.I{color:#37e07a}.cmp.S{color:#ff4d4d}
+.row{display:flex;align-items:center;gap:.6rem}
+.col{display:flex;flex-direction:column;gap:.4rem}
+.sp{flex:1}
+.frames{display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+.opt{border:1px dashed var(--faint);border-radius:.5rem;padding:2.2rem .6rem .6rem;position:relative}
+.tag{position:absolute;top:.5rem;left:.8rem;font-weight:700;color:var(--warn)}
+.tag small{color:var(--dim);font-weight:400;margin-left:.6rem}
+.zone{display:flex;flex-direction:column;gap:.55rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:.7rem;padding:.7rem .9rem}
+.cap{font-size:.75rem;letter-spacing:.25em;color:var(--dim);margin-top:.3rem}
+.act{border:none;color:#000}
+.act .dim,.act .tagw{color:rgba(0,0,0,.65)}
+.act.go{background:var(--ok)}.act.wait{background:var(--warn)}.act.stop{background:var(--crit)}.act.proj{background:var(--info)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:.55rem}
+.alt{color:var(--dim);font-size:.95rem}
+.states{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.2rem}
+.states .card{padding:.35rem .7rem;font-weight:700}
+/* phase stepper */
+.steps{display:flex;align-items:center;gap:.5rem;color:var(--faint)}
+.steps .on{color:var(--fg);font-weight:700;display:flex;align-items:center;gap:.4rem}
+.steps u{flex:1;height:2px;background:var(--line)}
+/* tables */
+table{border-collapse:collapse;width:100%}
+td,th{text-align:right;padding:.25rem .4rem;font-weight:400}
+th:first-child{text-align:left;white-space:nowrap}
+thead th{color:var(--dim);font-size:.8rem}
+td.w{background:rgba(255,77,77,.18);color:var(--crit);border-radius:.3rem;font-weight:700}
+td.lapc{font-weight:700;font-size:1.25rem}
+/* battery bar with minimum mark */
+.bar{position:relative;height:.7rem;background:var(--line);border-radius:.3rem;margin-top:.4rem}
+.bar i{position:absolute;left:0;top:0;bottom:0;width:54%;background:var(--warn);border-radius:.3rem}
+.bar b{position:absolute;left:80%;top:-.3rem;bottom:-.3rem;width:.18rem;background:var(--fg)}
+/* tyre 2x2 */
+.t4{display:grid;grid-template-columns:1fr 1fr;gap:.3rem .9rem;font-size:1.5rem;font-weight:700}
+.t4 span:nth-child(odd){text-align:right}
+.t4.p{font-size:1.1rem;font-weight:400}
+.t4.p b{font-size:1.5rem}
+/* setup rows */
+.srow{display:grid;grid-template-columns:1fr auto;gap:.2rem .8rem;padding:.3rem 0;border-top:1px solid var(--line)}
+.srow:first-child{border-top:none}
+.srow .why{grid-column:1/-1}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fuel" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="batt" viewBox="0 0 24 24"><path d="M2 8h17v8H2zM19 10.5h3v3h-3M11 9.5 8 12.5h4l-3 3"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></symbol>
+  <symbol id="cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z"/></symbol>
+  <symbol id="rain1" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="rain2" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="lap" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M10 2.500h4M12 2.500V6"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="tyre" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="crown" viewBox="0 0 24 24"><path d="M3 19h18M4 15 3 6l5 4 4-6 4 6 5-4-1 9z"/></symbol>
+  <symbol id="mate" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.300 2.700-6 6-6s6 2.700 6 6M16 5.500a3 3 0 0 1 0 5.500M21 20c0-2.500-1.500-4.500-4-5.500"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="M5 15v-3l2-5h10l2 5v3M3 15h18v4H3zM7 12h10"/></symbol>
+  <symbol id="flag" viewBox="0 0 24 24"><path d="M5 21V4h13l-3 4 3 4H5"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.500v.300"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M4 12.500l5 5L20 6.500"/></symbol>
+  <symbol id="no" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="wrench" viewBox="0 0 24 24"><path d="M14.500 5.500a4.500 4.500 0 0 0 5.800 5.800L11 20.500a2.300 2.300 0 0 1-3.300-3.300l9.300-9.300"/></symbol>
+  <symbol id="left" viewBox="0 0 24 24"><path d="M20 12H5M12 5l-7 7 7 7"/></symbol>
+</svg>
+
+<h1>Round 4: qualifying zone, cool-down and pit board</h1>
+<p class="note">One proposal per screen, in the language you picked. Action cards are filled: green for go, amber for wait, red for stop, lilac for information. Named groups separate the rest. Comment on anything you want changed.</p>
+
+<div class="frames">
+
+  <div class="opt"><span class="tag">1<small>qualifying zone, right column, on a flying lap</small></span>
+    <div class="zone" style="width:46rem">
+      <div class="steps"><svg class="i s"><use href="#wrench"/></svg><u></u><svg class="i s"><use href="#car"/></svg><u></u><span class="on"><svg class="i"><use href="#bolt"/></svg>FLYING</span><u></u><svg class="i s"><use href="#left"/></svg></div>
+      <div class="card act proj row"><svg class="i l"><use href="#lap"/></svg><span class="huge">1:29.84</span><span class="sp"></span><span class="big">−0.12</span><span class="tagw">TO CUT</span></div>
+      <div class="col">
+        <span class="tagw">THE SAME CARD IN OTHER STATES</span>
+        <div class="states">
+          <div class="card act go row"><svg class="i s"><use href="#ok"/></svg>GO<svg class="i s"><use href="#car"/></svg>6<span class="dim">14s</span></div>
+          <div class="card act wait row"><svg class="i s"><use href="#clock"/></svg>12s<svg class="i s"><use href="#car"/></svg>9</div>
+          <div class="card act stop row"><svg class="i s"><use href="#no"/></svg>STAY IN</div>
+          <div class="card act stop row"><svg class="i s"><use href="#no"/></svg>ABORT</div>
+        </div>
+      </div>
+      <div class="cap">CUT</div>
+      <div class="card col">
+        <div class="row"><span class="huge">P8</span><svg class="i l ok"><use href="#ok"/></svg><span class="sp"></span><span class="big ok">−0.31</span></div>
+        <div class="g4" style="margin-top:.4rem">
+          <div class="row"><span class="tagw">CUT</span><span class="mid">1:29.96</span></div>
+          <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="mid">1:29.65</span></div>
+          <div class="row"><svg class="i dim"><use href="#clock"/></svg><span class="mid">6:42</span></div>
+          <div class="row"><svg class="i dim"><use href="#tyre"/></svg><span class="mid">×2</span></div>
+        </div>
+      </div>
+      <div class="cap">BENCH</div>
+      <div class="card">
+        <table>
+          <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th></th></tr></thead>
+          <tbody>
+            <tr><th><svg class="i s warn"><use href="#crown"/></svg> VER</th><td class="warn">+.08</td><td class="w">+.21</td><td class="ok">−.03</td><td class="lapc warn">+0.26</td></tr>
+            <tr><th><svg class="i s dim"><use href="#mate"/></svg> PIA</th><td class="ok">−.05</td><td class="warn">+.04</td><td class="w">+.10</td><td class="lapc warn">+0.09</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="opt"><span class="tag">2<small>cool-down takeover, replaces the tyre and center columns</small></span>
+    <div class="zone" style="width:60rem">
+      <div class="card act stop row"><svg class="i l"><use href="#warn"/></svg><svg class="i l"><use href="#car"/></svg><span class="huge">2.1s</span><span class="sp"></span><span class="big">MOVE OFF LINE</span></div>
+      <div class="col"><span class="tagw">WHEN NO CAR IS ON A HOT LAP BEHIND, THIS CARD IS A DIM LINE</span>
+        <div class="states"><div class="card row dim"><svg class="i s"><use href="#car"/></svg><svg class="i s ok"><use href="#ok"/></svg></div></div></div>
+      <div class="cap">NEXT LAP</div>
+      <div class="g4">
+        <div class="card col"><div class="row"><svg class="i warn"><use href="#flag"/></svg><span class="hero">1.2</span><span class="tagw">KM</span></div><span class="warn">+1 COOL LAP</span></div>
+        <div class="card col"><div class="row"><svg class="i ok"><use href="#fuel"/></svg><span class="huge ok">3.4L</span></div>
+          <div class="bar"><i style="width:68%;background:var(--ok)"></i><b style="left:50%"></b></div><div class="row ok"><svg class="i s"><use href="#ok"/></svg><span class="sp"></span><span class="dim">2.5L</span></div></div>
+        <div class="card col"><div class="row"><svg class="i"><use href="#batt"/></svg><span class="huge warn">54%</span></div>
+          <div class="bar"><i></i><b></b></div><div class="row ok"><svg class="i s"><use href="#plug"/></svg><svg class="i s"><use href="#ok"/></svg><span class="sp"></span><span class="dim">80%</span></div></div>
+        <div class="card col"><div class="row" style="align-items:flex-start"><svg class="i dim"><use href="#tyre"/></svg>
+          <div class="t4" style="flex:1"><span class="ok">92°</span><span class="ok">90°</span><span class="cold">78°</span><span class="ok">84°</span></div></div>
+          <span class="cold">REARS COLD</span></div>
+      </div>
+      <div class="cap">LAST RUN</div>
+      <div class="card col">
+        <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="huge">1:29.65</span><span class="sp"></span><svg class="i warn"><use href="#crown"/></svg><span class="mid">VER</span><span class="big warn">+0.26</span></div>
+        <table><tbody><tr><th class="dim">S1 S2 S3</th><td>28.4 <span class="warn">+.08</span></td><td class="w">33.1 +.21</td><td>28.1 <span class="ok">−.03</span></td></tr></tbody></table>
+        <div class="row warn"><svg class="i s"><use href="#warn"/></svg>LOCKUP T4</div>
+      </div>
+      <div class="row alt" style="padding:0 .9rem"><svg class="i s"><use href="#clock"/></svg>6:42<svg class="i s"><use href="#tyre"/></svg>×2</div>
+    </div>
+  </div>
+</div>
+
+<h2>3. Pit board, full main row, in the garage</h2>
+<p class="note">Revised after your feedback. The driver has time to read in the pit, so this screen keeps its labels, units and reasons, and the full current setup is back. It still uses the islands, the named groups and the filled release card, so it looks like the same product.</p>
+<style>
+.k{font-size:.85rem;letter-spacing:.08em;color:var(--dim)}
+.pb{display:grid;grid-template-columns:1.25fr 1fr 1.15fr 1.5fr;gap:.9rem;align-items:start}
+.tc{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.tc>div{border:1px solid var(--line);border-radius:.5rem;padding:.4rem .6rem}
+.tc b{font-size:1.5rem}
+.wxr{display:grid;grid-template-columns:5.5rem 2rem 1fr auto;align-items:center;gap:.5rem;padding:.2rem 0}
+.cur{display:grid;grid-template-columns:1fr auto;gap:.15rem 1rem}
+.cur span:nth-child(odd){color:var(--dim)}
+</style>
+<div class="opt"><span class="tag">3<small>pit board, with text</small></span>
+  <div class="zone">
+    <div class="card act go row"><svg class="i l"><use href="#ok"/></svg><span class="hero">GO</span><span class="big">TRACK CLEAR</span><span class="sp"></span><span class="mid">6 cars on track · 14 s clear ahead · 9 s behind</span></div>
+    <div class="pb">
+      <div class="col">
+        <div class="cap">CAR</div>
+        <div class="card col">
+          <div class="row"><svg class="i dim"><use href="#tyre"/></svg><span class="k">TYRES · average on flying laps · target 85–100°</span></div>
+          <div class="tc">
+            <div><span class="k">FL</span> <b class="crit">104°</b> <span class="crit">HOT</span><div class="warn">drop 0.2 psi</div><div class="alt">now 23.1 psi</div></div>
+            <div><span class="k">FR</span> <b class="ok">98°</b><div>keep</div><div class="alt">now 23.1 psi</div></div>
+            <div><span class="k">RL</span> <b class="ok">95°</b><div>keep</div><div class="alt">now 21.5 psi</div></div>
+            <div><span class="k">RR</span> <b class="ok">94°</b><div>keep</div><div class="alt">now 21.5 psi</div></div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="card col"><div class="row"><svg class="i ok"><use href="#fuel"/></svg><span class="k">FUEL IN TANK</span></div><span class="big ok">3.4 laps</span><span class="alt">a push lap needs 2.5</span><span class="alt">1.82 kg per lap, average of 3 laps</span></div>
+          <div class="card col"><div class="row"><svg class="i"><use href="#batt"/></svg><span class="k">BATTERY</span></div><span class="big warn">71%</span><span class="alt">a push lap wants 80%</span></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="cap">SESSION</div>
+        <div class="card col"><div class="row"><svg class="i dim"><use href="#clock"/></svg><span class="k">TIME LEFT</span></div><span class="big">6:42</span><span class="alt">2 fresh sets of tyres</span></div>
+        <div class="card col"><span class="k">GAP TO CUT-OFF</span><span class="big ok">−0.31 s</span><span class="alt">best lap 1:29.65 · through</span></div>
+        <div class="card col"><span class="k">PLAN</span><span class="big ok">PUSH</span><span class="alt">track is improving, one more run is worth it</span></div>
+        <div class="cap">TRACK</div>
+        <div class="card">
+          <div class="wxr"><span class="k">NOW</span><svg class="i"><use href="#cloud"/></svg><span>overcast</span><span>10%</span></div>
+          <div class="wxr"><span class="k">IN 10 MIN</span><svg class="i cold"><use href="#rain1"/></svg><span>light rain</span><span class="cold">55%</span></div>
+          <div class="wxr"><span class="k">IN 30 MIN</span><svg class="i cold"><use href="#rain2"/></svg><span>heavy rain</span><span class="cold">80%</span></div>
+          <div class="row warn" style="margin-top:.4rem"><span class="cmp I">I</span>Intermediates in about 9 min</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="cap">PACE</div>
+        <div class="card col">
+          <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="k">SECTORS · BEST LAP</span></div>
+          <table>
+            <thead><tr><th></th><th>S1</th><th>S2</th><th>S3</th><th>LAP</th></tr></thead>
+            <tbody>
+              <tr><th>YOU</th><td>28.4</td><td>33.1</td><td>28.1</td><td class="lapc">1:29.65</td></tr>
+              <tr><th><svg class="i s warn"><use href="#crown"/></svg> VER</th><td class="warn">+.08</td><td class="w">+.21</td><td class="ok">−.03</td><td class="lapc warn">+0.26</td></tr>
+              <tr><th><svg class="i s dim"><use href="#mate"/></svg> PIA</th><td class="ok">−.05</td><td class="warn">+.04</td><td class="w">+.10</td><td class="lapc warn">+0.09</td></tr>
+            </tbody>
+          </table>
+          <span class="alt">Most time lost to the leader in sector 2.</span>
+        </div>
+      </div>
+      <div class="col">
+        <div class="cap">SETUP</div>
+        <div class="card col">
+          <div class="row"><svg class="i dim"><use href="#wrench"/></svg><span class="k">CHANGES</span></div>
+          <div>
+            <div class="srow"><span class="mid">Front wing</span><span class="mid">6 › <span class="ok">7</span></span><span class="why alt">understeer in S2</span></div>
+            <div class="srow"><span class="mid">FL pressure</span><span class="mid">23.1 › <span class="ok">22.9</span></span><span class="why alt">FL above window</span></div>
+            <div class="srow"><span class="mid">Diff on</span><span class="mid">60 › <span class="ok">55</span>%</span><span class="why alt">experiment · rear slip on exit</span></div>
+          </div>
+        </div>
+        <div class="card col">
+          <span class="k">CURRENT SETUP</span>
+          <div class="cur"><span>Wing F / R</span><span>6 / 8</span><span>Diff on / off</span><span>60 / 55%</span><span>Brake bias</span><span>56%</span><span>Pressures F / R</span><span>23.1 / 21.5</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

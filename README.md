@@ -63,7 +63,8 @@ Then in F1 26, **Settings → Telemetry Settings**:
 | UDP Format | `2026` |
 
 Open `http://localhost:8000` on the second monitor (`/radio` is the compact
-log view). You should hear "Pit wall online." on start, and the dashboard goes
+log view). `/` is dashboard v3. `/v2` keeps the previous dashboard.
+You should hear "Pit wall online." on start, and the dashboard goes
 LIVE as soon as you are on track (the game sends nothing from the menus).
 
 ### Wheel buttons
@@ -222,7 +223,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/09-performance.md`](docs/09-performance.md) | Co-hosting with the game: stutter causes, budget, measurement |
 | [`docs/12-driver-input.md`](docs/12-driver-input.md) | Wheel button and spacebar: acknowledge / negative |
 | [`docs/13-league-multiplayer.md`](docs/13-league-multiplayer.md) | Friends-league target: restricted telemetry, league preset |
-| [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard design (implemented in `web/`) |
+| [`docs/15-dashboard-design.md`](docs/15-dashboard-design.md) | Second-monitor dashboard design, v3 (implemented in `web/`) |
 | [`docs/16-debrief-design.md`](docs/16-debrief-design.md) | Session debrief: built sections, grading and deferred work |
 | [`docs/17-quali-run-plan.md`](docs/17-quali-run-plan.md) | Qualifying run plan and coaching |
 | [`docs/18-race-engine.md`](docs/18-race-engine.md) | Race engine, tyre life, degradation priors and persistence |

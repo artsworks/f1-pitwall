@@ -15,6 +15,7 @@
   var ws = null, lastSeq = null, backoff = 500, mismatched = false;
   var SILENT = "data:audio/wav;base64," +
     "UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
@@ -25,7 +26,11 @@
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
   var soundOn = false, serverAudio = false, spokenIds = {}, cancelledIds = {}, audioQueue = [];
   var playingId = null, soundAttempt = 0, soundFailed = false;
   var voiceListening = false, voiceFlash = null, voiceFlashTimer = null;
@@ -308,7 +313,9 @@
     setClass("phase", "sess" + (p.phase === "out_lap" ? " warn" : ""));
     setText("session", (p.session_label || p.session_kind || "--").toUpperCase() + " · " +
       String(p.track || "--").toUpperCase());
-    setText("lap", "L" + (p.lap_num || "--") + (p.total_laps && p.session_kind === "race" ? "/" + p.total_laps : ""));
+    var total = p.total_laps && p.session_kind === "race" ? p.total_laps : null, left = lapsLeft(p, s);
+    setText("lap", "LAP " + (p.lap_num || "--") + (total ? "/" + total : ""));
+    setText("lap-left", left !== null ? "· " + left + " LEFT" : "");
     setText("position", p.position ? "P" + p.position : "P--");
     if (p.position && shownPos && p.position !== shownPos) {
       hold(p.position < shownPos ? "gain:pos" : "loss:pos", 1600);
@@ -321,8 +328,7 @@
     setClass("lap", mark("tick:lap"));
     var mind = el("mindset");
     if (mind) {
-      mind.textContent = p.mindset === "aggressive" ? "AGGR" : p.mindset === "balanced" ? "BAL" :
-        String(p.mindset || "--").slice(0, 4).toUpperCase();
+      mind.textContent = String(p.mindset || "--").toUpperCase();
       mind.className = "pill" + (p.mindset === "aggressive" ? " aggr" : "");
     }
     var drv = el("drv");
@@ -342,32 +348,7 @@
           '<svg class="ico src"><use href="' + srcIcon + '"/></svg>';
       }
     }
-    var limits = el("limits"), infringements = p.race && p.race.infringements;
-    if (limits) {
-      var limitsVisible = !!infringements &&
-        (p.session_kind === "race" || p.session_kind === "qualifying");
-      limits.hidden = !limitsVisible;
-      if (limitsVisible) {
-        var cuts = Number(infringements.corner_cuts) || 0;
-        var cutWarns = Number(infringements.cut_warns) || 0;
-        var limitWarns = Number(infringements.limit_warns) || 0;
-        var penalty = Number(infringements.penalty_s) || 0;
-        var warnAt = Number(infringements.warn_at);
-        var crit = penalty > 0 || (warnAt > 0 && cuts > 0 && cuts % warnAt === 0);
-        var warn = warnAt > 0 && cuts % warnAt === warnAt - 1;
-        var notice = !crit && !warn && cuts > 0;
-        var splitComplete = cutWarns + limitWarns >= cuts;
-        var prefix = (crit || warn) ? "⚠ " : "";
-        limits.className = "chip limits" + (crit ? " crit" : warn ? " warn" : notice ? " notice" : "");
-        limits.title = splitComplete ? cutWarns + " corner cuts · " + limitWarns + " track limits" : cuts + " warnings";
-        limits.textContent = prefix + (document.body.classList.contains("phone") ?
-          (splitComplete ? "C" + cutWarns + " T" + limitWarns : "W" + cuts) :
-          (splitComplete ? "C" + cutWarns + " · T" + limitWarns : "W" + cuts));
-        if (penalty > 0) {
-          limits.appendChild(span("+" + penalty + "s", "pen"));
-        }
-      }
-    }
+    renderLimits(p);
     var v = el("verbosity");
     if (v) {
       v.innerHTML = "";
@@ -411,12 +392,6 @@
     }
     document.body.classList.toggle("redflag", !!p.red_flag);
     document.body.classList.toggle("sc", !!sc);
-    var ov = el("ov");
-    if (ov) {
-      var otOn = !!(s && s.overtake), otNext = !!(s && s.overtake_earned);
-      ov.className = "chip ov" + (otOn ? " active" : otNext ? " avail" : "");
-    }
-    setClass("sm", "chip sm" + (s && s.aero_mode === 1 ? " on" : ""));
 
     var q = p.quali || null, cool = q ? q.cool : null;
     document.body.classList.toggle("quali", !!q && p.session_kind === "qualifying");
@@ -428,7 +403,7 @@
     renderSetupStrip(p);
     renderFuel(p, s);
     renderBatt(p, s);
-    renderLap(p);
+    renderPace(p);
     renderWeather(t, p);
     renderDamage(p.damage);
     renderCtx(p, s, t);
@@ -442,16 +417,63 @@
     }
   }
 
+  // Laps left in a race: the strategy's laps_remaining, else total minus the current lap.
+  function lapsLeft(p, s) {
+    if (p.session_kind !== "race") return null;
+    if (s && typeof s.laps_remaining === "number") return fmt(s.laps_remaining, 0);
+    return p.total_laps && p.lap_num ? String(Math.max(0, p.total_laps - p.lap_num)) : null;
+  }
+
+  // Limits: a card in the TRACK group (race and qualifying). Phone shows the status chip instead.
+  function renderLimits(p) {
+    var card = el("limits-card"), chip = el("limits"), inf = p.race && p.race.infringements;
+    var shown = !!inf && (p.session_kind === "race" || p.session_kind === "qualifying");
+    if (card) card.hidden = !shown;
+    if (chip) chip.hidden = !(shown && document.body.classList.contains("phone"));
+    if (!shown) return;
+    var cuts = Number(inf.corner_cuts) || 0;
+    var cutWarns = Number(inf.cut_warns) || 0;
+    var limitWarns = Number(inf.limit_warns) || 0;
+    var penalty = Number(inf.penalty_s) || 0;
+    var warnAt = Number(inf.warn_at);
+    var crit = penalty > 0 || (warnAt > 0 && cuts > 0 && cuts % warnAt === 0);
+    var warn = warnAt > 0 && cuts % warnAt === warnAt - 1;
+    var notice = !crit && !warn && cuts > 0;
+    var level = crit ? "crit" : warn ? "warn" : notice ? "notice" : "";
+    var splitComplete = cutWarns + limitWarns >= cuts;
+    if (chip) {
+      chip.className = "chip limits" + (level ? " " + level : "");
+      chip.title = splitComplete ? cutWarns + " corner cuts · " + limitWarns + " track limits" : cuts + " warnings";
+      chip.textContent = (crit || warn ? "⚠ " : "") +
+        (splitComplete ? "C" + cutWarns + " T" + limitWarns : "W" + cuts);
+      if (penalty > 0) chip.appendChild(span("+" + penalty + "s", "pen"));
+    }
+    if (!card) return;
+    card.className = "card limitcard " + level;
+    setText("lim-cut", String(cutWarns));
+    setText("lim-limit", String(limitWarns));
+    setText("lim-warn", String(cuts));
+    el("lim-split").hidden = !splitComplete;
+    el("lim-total").hidden = splitComplete;
+    var filled = warnAt > 0 ? (cuts > 0 && cuts % warnAt === 0 ? warnAt : cuts % warnAt) : 0;
+    setText("lim-dots", warnAt > 0 ? "●".repeat(filled) + "○".repeat(warnAt - filled) : "");
+    setText("lim-pen", penalty > 0 ? "+" + penalty + "s" : "");
+  }
+
   // Tyres: trend arrow from the fast EMA (inner) vs tyre_inner_ema_slow, wear %,
   // window meter on a 40..120 °C scale with the band from tyre_window_c, ⚠ tag above 120 °C,
-  // HOT WEAR / condition tags, LOCKED border.
+  // HOT WEAR rate, LOCKED border.
   var T_LO = 40, T_HI = 120, TREND_C = 0.5;
   function renderTyres(p, s) {
     var comp = COMPOUNDS[p.tyre_visual] || (p.tyre_visual ? "C" + p.tyre_visual : "--");
-    setText("compound", comp);
-    setClass("compound", "comp " + comp.toLowerCase());
+    var compEl = el("compound");
+    if (compEl) {
+      compEl.textContent = comp.charAt(0);
+      compEl.title = comp;
+      compEl.className = "cmp " + (/^[MHSIW]$/.test(comp.charAt(0)) ? comp.charAt(0) : "");
+    }
     setText("tyre-age", p.tyre_age_laps !== undefined && p.tyre_age_laps !== null ?
-      p.tyre_age_laps + (p.tyre_age_laps === 1 ? " lap" : " laps") : "--");
+      p.tyre_age_laps + "L OLD" : "--");
     var lop = s ? s.laps_of_pace : null, pace = el("t-pace");
     if (pace) {
       pace.innerHTML = "";
@@ -462,8 +484,8 @@
         var toGo = s.laps_remaining || 0;
         var cls = lop >= toGo || lop >= 10 ? "ok" : lop >= 4 ? "warn" : "crit";
         pace.className = "t-pace " + cls;
-        pace.appendChild(document.createTextNode("~" + fmt(lop, 0) + " laps of pace " + (cls === "ok" ? "▬ " : "▼ ")));
-        pace.appendChild(span(cls === "ok" ? "PLENTY" : cls === "warn" ? "SHRINKING" : "NEAR CLIFF", "", "small"));
+        pace.appendChild(document.createTextNode("~" + fmt(lop, 0) + "L " + (cls === "ok" ? "▬ " : "▼ ")));
+        pace.appendChild(span(cls === "ok" ? "PLENTY" : cls === "warn" ? "SHRINKING" : "NEAR CLIFF"));
       }
     }
     if (!p.tyres) return;
@@ -483,8 +505,7 @@
       tyreSt[k] = status;
       c.className = "corner " + status + mark("flip:" + k) + (t.lockup ? " locked" : "");
       c.querySelector(".temp").textContent = fmt(t.inner, 0) + "°";
-      var stWord = c.querySelector(".st-word");
-      if (stWord) stWord.textContent = String(t.status || "").toUpperCase();
+      c.querySelector(".st-word").textContent = String(t.status || "").toUpperCase();
       var d = t.inner !== null && t.tyre_inner_ema_slow !== null && t.tyre_inner_ema_slow !== undefined ?
         t.inner - t.tyre_inner_ema_slow : 0;
       var tr = c.querySelector(".trend");
@@ -492,23 +513,23 @@
       tr.textContent = d > TREND_C ? "▲" : d < -TREND_C ? "▼" : "▬";
       tr.title = d > TREND_C ? "heating" : d < -TREND_C ? "cooling" : "steady";
       var f = t.inner === null ? 0 : Math.max(0, Math.min(1, (t.inner - T_LO) / (T_HI - T_LO)));
-      c.querySelector(".meter i").style.setProperty("--f", f.toFixed(3));
-      var twin = c.querySelector(".twin"), band = twin.querySelector("b");
+      var meter = c.querySelector(".meter");
+      meter.querySelector("i").style.setProperty("--f", f.toFixed(3));
       if (win) {
-        band.style.setProperty("--band-left", (bandL * 100).toFixed(1) + "%");
-        band.style.setProperty("--band-width", ((bandR - bandL) * 100).toFixed(1) + "%");
+        c.style.setProperty("--band-left", (bandL * 100).toFixed(1) + "%");
+        c.style.setProperty("--band-width", ((bandR - bandL) * 100).toFixed(1) + "%");
       } else {
-        band.style.removeProperty("--band-left");
-        band.style.removeProperty("--band-width");
+        c.style.removeProperty("--band-left");
+        c.style.removeProperty("--band-width");
       }
+      c.querySelector(".lo").textContent = win ? fmt(win[0], 0) + "°" : "";
+      c.querySelector(".hi").textContent = win ? fmt(win[1], 0) + "°" : "";
       var over = t.inner !== null && t.inner > T_HI;
-      twin.classList.toggle("over", over);
-      var wearEl = c.querySelector(".wear");
-      if (wearEl) wearEl.className = "wear" + (t.wear >= 70 ? " crit" : t.wear >= 50 ? " warn" : "");
+      meter.classList.toggle("over", over);
+      c.querySelector(".wear").className = "wear" + (t.wear >= 70 ? " crit" : t.wear >= 50 ? " warn" : "");
       c.querySelector(".wear b").textContent = fmt(t.wear, 0) + "%";
-      var surfEl = c.querySelector(".surf");
-      surfEl.textContent = "surf " + fmt(t.surface, 0) + "°";
-      surfEl.className = "surf" + (win && t.surface > win[1] + 10 ? " hot" : win && t.surface > win[1] ? " warn" : "");
+      c.querySelector(".hw").textContent = st.wear_hot_corner === k ?
+        "HOT WEAR" + (st.wear_hot_rate ? " +" + fmt(st.wear_hot_rate, 1) + "%/lap" : "") : "";
       var brk = c.querySelector(".brk");
       if (brk) {
         var bv = p.brakes ? p.brakes[k] : null;
@@ -519,9 +540,6 @@
       tags.innerHTML = "";
       if (t.lockup) tags.appendChild(span("LOCKED", "tag lock"));
       if (over) tags.appendChild(span("⚠ >" + T_HI + "°", "tag crit"));
-      if (st.wear_hot_corner === k) {
-        tags.appendChild(span("HOT WEAR" + (st.wear_hot_rate ? " +" + fmt(st.wear_hot_rate, 1) + "%/lap" : ""), "tag crit"));
-      }
       if (k === worst) {
         if (st.overheat) tags.appendChild(span("OVERHEAT", "tag crit"));
         if (st.blister_max_pct >= 5) tags.appendChild(span("BLISTER " + fmt(st.blister_max_pct, 0) + "%", "tag warn"));
@@ -551,17 +569,12 @@
     one("su-off", "off_throttle", null);
   }
 
+  // Fuel at the flag: signed laps spare (+) or short (-).
   function renderFuel(p, s) {
     var fdl = s ? s.fuel_delta_laps : null, game = fdl === null || fdl === undefined;
     var d = game ? p.fuel_remaining_laps : fdl;
     setText("fuel", d === null || d === undefined ? "--" : (d >= 0 ? "+" : "−") + fmt(Math.abs(d), 1));
-    setClass("fuel", "big" + (d === null || d === undefined ? "" : d < 0 ? " crit" : d < 0.5 ? " warn" : " ok"));
-    setText("fuel-sub", "laps " + (d < 0 ? "SHORT" : "SPARE") + (game ? " · game" : ""));
-    var sub2 = el("fuel-sub2"), fpl = p.race && p.race.fuel_per_lap_kg;
-    if (sub2) {
-      sub2.hidden = !(fpl > 0);
-      if (fpl > 0) sub2.textContent = fmt(fpl, 2) + " kg/lap";
-    }
+    setClass("fuel", "hero" + (d === null || d === undefined ? "" : d < 0 ? " crit" : d < 0.5 ? " warn" : " ok"));
   }
 
   var BATT_WORDS = { on_budget: "ON BUDGET", over: "OVER · SAVE", under: "UNDER · CHARGING", attack_ok: "SPEND · ATTACK OK" };
@@ -570,7 +583,7 @@
     under: "M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" };
   function renderBatt(p, s) {
     var e = s && s.energy ? s.energy : null, mode = e ? e.mode : null;
-    setClass("batt", "tile batt" + (mode ? " " + mode : ""));
+    setClass("batt", "card carcard battcard" + (mode ? " " + mode : ""));
     setText("batt-pct", fmt(p.ers_pct, 0) + "%");
     var m = el("batt-mode");
     if (m && m.dataset.mode !== String(mode)) {
@@ -581,71 +594,40 @@
     }
     var sub = el("batt-sub");
     if (sub) {
-      var parts = [];
-      if (e && e.lap_delta_mj) parts.push((e.lap_delta_mj >= 0 ? "+" : "−") + fmt(Math.abs(e.lap_delta_mj), 1) + " MJ/lap");
-      if (e && e.laps_to_floor !== null && e.laps_to_floor !== undefined) parts.push("floor " + fmt(e.laps_to_floor, 0) + "L");
-      sub.hidden = !parts.length;
-      if (parts.length) sub.textContent = parts.join(" · ");
+      var floor = !!e && e.laps_to_floor !== null && e.laps_to_floor !== undefined;
+      sub.hidden = !floor;
+      if (floor) sub.textContent = "FLOOR " + fmt(e.laps_to_floor, 0) + "L";
     }
   }
 
-  function renderLap(p) {
+  // PACE: the newest lap against the one before, with the sector deltas.
+  function renderPace(p) {
     var r = p.race || {}, laps = Array.isArray(r.recent_laps) ? r.recent_laps : [];
-    var baseMs = r.base_pace_ms && r.base_pace_ms > 0 ? r.base_pace_ms : null;
-    var baseEl = el("lap-base");
-    if (baseEl) {
-      baseEl.hidden = !baseMs;
-      if (baseMs) {
-        baseEl.innerHTML = "";
-        baseEl.appendChild(document.createTextNode("base "));
-        baseEl.appendChild(span(lapTime(baseMs), "", "b"));
-      }
+    var newer = laps.length ? laps[laps.length - 1] : null;
+    var older = laps.length > 1 ? laps[laps.length - 2] : null;
+    setText("pace-last", newer ? lapTime(newer.time_ms) : "--");
+    setText("pace-vs", newer ? "L" + newer.lap + (older ? " VS L" + older.lap : "") : "no lap yet");
+    var lapDelta = older && newer ? newer.time_ms - older.time_ms : null;
+    setText("pace-delta", lapDelta === null ? "--" : signed(lapDelta));
+    setClass("pace-delta", "big" + (lapDelta < 0 ? " ok" : lapDelta > 0 ? " warn" : ""));
+    for (var sector = 0; sector < 3; sector++) {
+      var before = older && older.sectors_ms ? older.sectors_ms[sector] : null;
+      var after = newer && newer.sectors_ms ? newer.sectors_ms[sector] : null;
+      var delta = typeof before === "number" && before !== 0 &&
+        typeof after === "number" && after !== 0 ? after - before : null;
+      var id = "pace-s" + (sector + 1);
+      setText(id, delta === null ? "--" : signed(delta));
+      setClass(id, delta < 0 ? "ok" : delta > 0 ? "warn" : "");
     }
-    var recent = laps.slice(-3), offset = 3 - recent.length, slots = [null, null, null];
-    for (var i = 0; i < recent.length; i++) slots[offset + i] = recent[i];
-    [1, 2].forEach(function (row) {
-      var older = slots[row - 1], newer = slots[row];
-      var labelEl = el("cmp-" + row + "-label");
-      var lapDelta = older && newer ? newer.time_ms - older.time_ms : null;
-      if (labelEl) {
-        labelEl.innerHTML = "";
-        if (newer) {
-          labelEl.appendChild(document.createTextNode("L" + newer.lap + " " + lapTime(newer.time_ms)));
-          if (older) labelEl.appendChild(span(" vs L" + older.lap, "vs"));
-        } else {
-          labelEl.textContent = row === 2 && !recent.length ? "no lap yet" : "--";
-        }
-      }
-      var lapDeltaId = "cmp-" + row + "-delta", deltaEl = el(lapDeltaId);
-      if (deltaEl) {
-        deltaEl.innerHTML = "";
-        deltaEl.appendChild(document.createTextNode(lapDelta === null ? "--" : "Δ " + signed(lapDelta) + "s"));
-        if (newer && baseMs && lapDelta !== null) {
-          deltaEl.appendChild(span("base " + signed(newer.time_ms - baseMs) + "s", "base-d"));
-        }
-      }
-      setClass(lapDeltaId, "cmp-delta" +
-        (lapDelta < 0 ? " ok" : lapDelta > 0 ? " warn" : ""));
-      for (var sector = 0; sector < 3; sector++) {
-        var before = older && older.sectors_ms ? older.sectors_ms[sector] : null;
-        var after = newer && newer.sectors_ms ? newer.sectors_ms[sector] : null;
-        var delta = typeof before === "number" && before !== 0 &&
-          typeof after === "number" && after !== 0 ? after - before : null;
-        var id = "cmp-" + row + "-s" + (sector + 1);
-        setText(id, delta === null ? "--" : signed(delta) + "s");
-        setClass(id, "value" +
-          (delta < 0 ? " ok" : delta > 0 ? " warn" : ""));
-      }
-    });
   }
 
-  // Weather: icon + word per forecast slot, rain chance, crossover marker on the
-  // first slot at or after weather_crossover_min (slots are now / 10 / 30 min),
-  // plus predicted crossover lap (~L28) when lap and pace are known.
+  // Weather: icon + rain chance per forecast slot (now / 10 / 30 min). The crossover
+  // line names the compound and the lap it is expected on (lap and pace known).
   var WEATHER_WORDS = { 0: "CLEAR", 1: "LIGHT CLOUD", 2: "OVERCAST", 3: "LIGHT RAIN", 4: "HEAVY RAIN", 5: "STORM" };
   var CROSS = { to_inter: ["INTER", "inter", "warn"], to_wet: ["WET", "wet", "cold"], to_dry: ["SLICK", "medium", "warn"] };
+  var CROSS_PLURAL = { to_inter: "INTERS", to_wet: "WETS", to_dry: "SLICKS" };
   var SLOT_MIN = [0, 10, 30];
-  function crossChip(c, extra) { return span(CROSS[c][0] + (extra || ""), "comp " + CROSS[c][1] + " xs"); }
+  function crossChip(c) { return c === "to_dry" ? span("SLICK", "tagw") : compChip(CROSS[c][0]); }
   function crossoverLap(cm, p) {
     if (cm === null || cm === undefined || !p || !p.lap_num) return null;
     var baseMs = (p.race && p.race.base_pace_ms > 0 ? p.race.base_pace_ms : 90000);
@@ -669,121 +651,165 @@
       var w = wf[i], pct = r[i], known = w !== null && w !== undefined && w >= 0;
       n.className = (!known ? "" : w >= 4 ? "storm" : w >= 3 || pct >= 40 ? "wet" : "dry") +
         (i === slot ? " xo-" + CROSS[c][2] : "");
-      var k = n.querySelector(".k");
-      k.textContent = i === 0 ? "NOW" : "IN " + SLOT_MIN[i];
-      if (i === slot) {
-        k.appendChild(document.createTextNode(" "));
-        k.appendChild(crossChip(c, cLap ? " ~L" + cLap : ""));
-      }
+      n.querySelector(".k").textContent = i === 0 ? "NOW" : SLOT_MIN[i] + " MIN";
       n.querySelector("use").setAttribute("href", "#wx-" + (known ? w : 2));
       n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
-      n.querySelector(".sky").textContent = known ? WEATHER_WORDS[w] || "--" : "--";
     }
     var x = el("cross");
     if (!x) return;
     x.innerHTML = "";
     if (!c) { x.className = "cross"; x.textContent = "✓ no crossover"; return; }
     x.className = "cross " + CROSS[c][2];
-    x.appendChild(document.createTextNode("→ "));
     x.appendChild(crossChip(c));
-    var etaTxt = cLap ? " ~L" + cLap + (cm !== null && cm !== undefined ? " (in ~" + fmt(cm, 0) + " min)" : "") :
-      (cm !== null && cm !== undefined ? " in ~" + fmt(cm, 0) + " min" : " soon");
-    x.appendChild(document.createTextNode(etaTxt +
-      (t.weather_crossover_pct !== null && t.weather_crossover_pct !== undefined ? " · rain " + fmt(t.weather_crossover_pct, 0) + "%" : "")));
+    if (cLap) x.appendChild(span("~L" + cLap, "lap"));
+    x.appendChild(span(CROSS_PLURAL[c] + (cm !== null && cm !== undefined ? " IN " + fmt(cm, 0) + " MIN" : " SOON"), "tagw"));
   }
 
-  // Damage: amber from 5 %, red from 25 %. The number is what the engineer speaks.
-  var DMG_PARTS = [["front_left_wing", "FW L"], ["front_right_wing", "FW R"], ["rear_wing", "RW"],
-    ["floor", "Floor"], ["diffuser", "Diffuser"], ["sidepod", "Sidepod"], ["gearbox", "Gearbox"], ["engine", "Engine"]];
-  function renderDamage(d) {
-    var box = el("damage");
-    if (!box || !d) return;
-    box.innerHTML = "";
-    var count = 0;
-    DMG_PARTS.forEach(function (pair) {
-      var val = d[pair[0]];
-      if (!(val > 0)) return;
-      var row = span(pair[1] + " ", "");
-      row.appendChild(span(val + "%", "n" + (val >= 25 ? " crit" : val >= 5 ? " warn" : "")));
-      box.appendChild(row);
-      count += 1;
-    });
-    [["drs_fault", "DRS fault"], ["ers_fault", "ERS fault"]].forEach(function (pair) {
-      if (d[pair[0]]) {
-        box.appendChild(span(pair[1], "n crit"));
-        count += 1;
-      }
-    });
-    if (!box.childNodes.length) box.appendChild(span("✓ none", "none"));
-    box.className = "dmg" + (count > 3 ? " many" : "");
-  }
-
-  function card(id, show, cls, head, line, rank) {
+  // Damage: front wings and floor as numbers; other parts and faults in one compact line.
+  // Amber from 5 %, red from 25 %.
+  var DMG_MORE = [["rear_wing", "RW"], ["diffuser", "DIFF"], ["sidepod", "SIDEPOD"], ["gearbox", "GEARBOX"], ["engine", "ENGINE"]];
+  function dmgClass(v) { return v >= 25 ? "crit" : v >= 5 ? "warn" : "ok"; }
+  function dmgNum(id, v) {
     var n = el(id);
     if (!n) return;
-    n.hidden = !show;
-    if (!show) return;
-    if (cls !== null) n.className = cls;
-    if (rank) n.querySelector(".rank").textContent = rank;
-    var h = n.querySelector(".head");
-    h.innerHTML = "";
-    (Array.isArray(head) ? head : [head]).forEach(function (x) {
-      h.appendChild(typeof x === "string" ? document.createTextNode(x) : x);
+    n.textContent = v === null || v === undefined ? "--" : fmt(v, 0);
+    n.className = "mid " + (v === null || v === undefined ? "" : dmgClass(v));
+  }
+  function renderDamage(d) {
+    if (!d) return;
+    dmgNum("dm-fwl", d.front_left_wing);
+    dmgNum("dm-fwr", d.front_right_wing);
+    dmgNum("dm-floor", d.floor);
+    var more = el("dm-more");
+    if (!more) return;
+    more.innerHTML = "";
+    var parts = [];
+    DMG_MORE.forEach(function (pair) {
+      var val = d[pair[0]];
+      if (val > 0) parts.push(span(pair[1] + " " + fmt(val, 0) + "%", "n " + dmgClass(val)));
     });
-    n.querySelector(".line").innerHTML = line;
+    if (d.drs_fault) parts.push(span("DRS FAULT", "n crit"));
+    if (d.ers_fault) parts.push(span("ERS FAULT", "n crit"));
+    if (!parts.length) more.appendChild(span("✓ none", ""));
+    parts.forEach(function (x, i) {
+      if (i) more.appendChild(document.createTextNode("  "));
+      more.appendChild(x);
+    });
+  }
+
+  // Small DOM helpers for the contextual cards.
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  function icon(name, cls) {
+    var n = document.createElementNS(SVG_NS, "svg");
+    n.setAttribute("class", cls || "i");
+    var u = document.createElementNS(SVG_NS, "use");
+    u.setAttribute("href", "#" + name);
+    n.appendChild(u);
+    return n;
+  }
+  function node(cls, items) {
+    var n = span("", cls, "div");
+    (items || []).forEach(function (x) {
+      if (x) n.appendChild(typeof x === "string" ? document.createTextNode(x) : x);
+    });
+    return n;
+  }
+  function setCard(n, cls, items) {
+    n.className = cls;
+    n.innerHTML = "";
+    (items || []).forEach(function (x) {
+      if (x) n.appendChild(typeof x === "string" ? document.createTextNode(x) : x);
+    });
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (ch) { return "&#" + ch.charCodeAt(0) + ";"; }); }
+  function secSigned(v) { return (v >= 0 ? "+" : "−") + fmt(Math.abs(v), 1); }
 
-  // Contextual zone: Safety > Execution > Reply > Tactical > Info, fixed card order.
+  // Contextual column: safety, box, reply, info, then RACE (or the quali zone).
   function renderCtx(p, s, t) {
     var sc = p.safety_car || 0, scLive = sc === 1 || sc === 2, c = CROSS[t.weather_crossover] ? t.weather_crossover : null;
     var cm = t.weather_crossover_min;
-    if (p.red_flag) {
-      card("c-safety", true, "card safety red", "⚠ RED FLAG", "box this lap · tyres free to change", "SAFETY");
-    } else if (sc) {
-      card("c-safety", true, "card safety", "⚠ " + (SC_WORDS[sc] || "SAFETY CAR"),
-        (t.sc_laps ? "lap " + t.sc_laps + " under " + (sc === 2 ? "VSC" : "SC") + " · " : "") +
-        (s && s.pit_loss_s ? "<b>pit loss " + fmt(s.pit_loss_s, 1) + " s</b>" : ""), "SAFETY");
-    } else if (c && cm !== null && cm !== undefined && cm <= 5) {
-      card("c-safety", true, "card safety" + (c === "to_wet" ? " cold" : ""), ["☂ RAIN CROSSOVER → ", crossChip(c)],
-        (t.weather_crossover_pct !== null && t.weather_crossover_pct !== undefined ? "rain <b>" + fmt(t.weather_crossover_pct, 0) + "%</b> " : "") +
-        "in <b>~" + fmt(cm, 0) + " min</b>", "SAFETY");
-    } else if (t.blue_flag) {
-      card("c-safety", true, "card safety cold", "⚑ BLUE FLAG", "let the leader by", "SAFETY");
-    } else card("c-safety", false);
-
+    renderSafety(p, s, t, sc, c, cm);
     var ap = activePlan(s), lapNow = p.lap_num || 0, win = ap && ap.window;
     var inRacePit = !!(p.pit_board && !p.pit_board.show_release && p.phase !== "garage");
     var boxNow = !!(s && ((win && lapNow >= win[0] && lapNow <= win[1]) ||
       (s.plans || []).some(function (x) { return x.kind === "reactive" && scLive; })));
-    var exitHtml = "";
-    if (s && s.pit_exit) {
-      var ex = s.pit_exit;
-      if (ex.rival && ex.rival.name) {
-        var exGap = ex.rival.gap_s !== null && ex.rival.gap_s !== undefined ? " " + (ex.rival.gap_s >= 0 ? "+" : "−") + fmt(Math.abs(ex.rival.gap_s), 1) + " s" : "";
-        exitHtml = " · <span class=\"" + (ex.clean ? "exit-ok" : "exit-warn") + "\">" +
-          (ex.clean ? "✓ clear of " : "⚠ traffic ") + esc(ex.rival.name) + exGap + "</span>";
-      } else if (ex.clean === true) {
-        exitHtml = " · <span class=\"exit-ok\">✓ clean exit</span>";
-      }
-    }
-    // The MFD pit-menu tyre choice is not in telemetry, so the FIT chip is the planned
-    // tyre for the driver to cross-check. A wrong tyre shows only after the stop (fit_mismatch).
-    var fit = s && s.fit_mismatch, next = s && s.plan_next_compound;
-    var execHead = fit ? ["⚠ FITTED ", compChip(fit.fitted), " NOT ", compChip(fit.expected)] :
-      [inRacePit ? "IN PIT LANE" : "BOX NOW" + (ap ? " · PLAN " + ap.id : "")].concat(next ? [" · FIT ", compChip(next)] : []);
-    card("c-exec", (boxNow || inRacePit || !!fit) && !p.red_flag, null, execHead,
-      fit ? "Plan " + esc(fit.plan) + " expected " + esc(fit.expected.toLowerCase()) + " · new plan from next lap" :
-      s ? (win ? "window L" + win[0] + "–" + win[1] : "") + (s.pit_loss_s ? (win ? " · " : "") + "costs " + fmt(s.pit_loss_s, 0) + " s" : "") + exitHtml : "",
-      "EXECUTION");
+    renderBox(p, s, ap, inRacePit, boxNow);
     renderReplyCard();
     renderBattle(s, p.position);
     renderPlans(s, scLive);
-    var info = el("c-info"), msg = null;
-    if (s && s.ahead && s.ahead.pitted) msg = "◦ INFO · " + String(s.ahead.name || "car ahead") + " pitted";
-    else if (s && s.behind && s.behind.pitted) msg = "◦ INFO · " + String(s.behind.name || "car behind") + " pitted";
-    else if (t.penalty_s) msg = "◦ INFO · penalty +" + t.penalty_s + " s" + (t.unserved ? " · " + t.unserved + " unserved" : "");
-    if (info) { info.hidden = !msg; if (msg) info.textContent = msg; }
+    renderInfo(s, t);
+  }
+
+  // SAFETY: red flag, SC / VSC, rain crossover, blue flag (v2 priority order).
+  function renderSafety(p, s, t, sc, c, cm) {
+    var box = el("c-safety");
+    if (!box) return;
+    var rain = !!c && cm !== null && cm !== undefined && cm <= 5;
+    box.hidden = !(p.red_flag || sc || rain || t.blue_flag);
+    if (box.hidden) return;
+    if (p.red_flag) {
+      setCard(box, "card act stop", [icon("tgt", "i l"), span("RED FLAG", "huge"), span("BOX · FREE TYRES", "mid")]);
+    } else if (sc) {
+      setCard(box, "card act sc", [
+        icon("warn", "i l"),
+        span(sc === 1 ? "SC" : sc === 2 ? "VSC" : "FORMATION", "huge"),
+        t.sc_laps ? span("LAP " + t.sc_laps, "tagw") : null,
+        span("", "sp"),
+        s && s.pit_loss_s ? span("PIT LOSS", "tagw") : null,
+        s && s.pit_loss_s ? span(fmt(s.pit_loss_s, 0) + "s", "big") : null
+      ]);
+    } else if (rain) {
+      var pct = t.weather_crossover_pct;
+      setCard(box, "card act cold", [
+        icon("rain2", "i l"), crossChip(c), span(fmt(cm, 0) + " MIN", "huge"),
+        span("", "sp"),
+        pct !== null && pct !== undefined ? span(fmt(pct, 0) + "%", "big") : null
+      ]);
+    } else {
+      setCard(box, "card act cold", [icon("tgt", "i l"), span("BLUE", "huge"), span("LET LEADER BY", "mid")]);
+    }
+  }
+
+  // Exit reading after a stop: the rival name and gap, or clean.
+  function exitNode(ex) {
+    if (!ex) return null;
+    var gap = ex.rival && ex.rival.gap_s !== null && ex.rival.gap_s !== undefined ? " " + secSigned(ex.rival.gap_s) + " s" : "";
+    if (ex.rival && ex.rival.name) {
+      return span((ex.clean ? "✓ clear of " : "⚠ traffic ") + ex.rival.name + gap, ex.clean ? "ok" : "warn", "b");
+    }
+    if (ex.clean === true) return span("✓ clean exit", "ok", "b");
+    return null;
+  }
+  function ucOcNodes(s) {
+    var out = [];
+    if (s.undercut_s) out.push(icon("uc", "i s"), span("UC " + secSigned(s.undercut_s) + " s"));
+    if (s.overcut_s) out.push(icon("oc", "i s"), span("OC " + secSigned(s.overcut_s) + " s"));
+    return out;
+  }
+
+  // BOX: the stop window, the fitted compound, pit loss and the exit. A wrong tyre fitted
+  // shows only after the stop (fit_mismatch). The mock-up FIT chip is the planned tyre.
+  function renderBox(p, s, ap, inRacePit, boxNow) {
+    var box = el("c-box");
+    if (!box) return;
+    var fit = s && s.fit_mismatch, next = s && s.plan_next_compound;
+    var show = (boxNow || inRacePit || !!fit) && !p.red_flag;
+    box.hidden = !show;
+    if (!show) return;
+    var win = ap && ap.window;
+    var head = fit ? [span("FITTED "), compChip(fit.fitted), span(" NOT "), compChip(fit.expected)] :
+      [span(inRacePit ? "IN PIT LANE" : "BOX NOW" + (ap ? " · PLAN " + ap.id : ""), "huge")];
+    var line = fit ? "Plan " + fit.plan + " expected " + String(fit.expected).toLowerCase() + " · new plan from next lap" :
+      (win ? "WINDOW L" + win[0] + "–" + win[1] : "");
+    var lossed = s && s.pit_loss_s ? [icon("lap", "i s"), span(fmt(s.pit_loss_s, 0) + " s", "mid")] : null;
+    setCard(box, "card act " + (fit ? "stop" : "box"), [
+      icon("box", "i l"),
+      node("col", [node("row", head), span(line, "tagw")]),
+      span("", "sp"),
+      !fit && next ? compChip(next) : null,
+      lossed ? node("row", lossed) : null,
+      s ? exitNode(s.pit_exit) : null
+    ]);
   }
 
   function renderReplyCard() {
@@ -800,71 +826,99 @@
       replyCall.rule_id.slice(5) : "";
     var replyHead = showReply ? (replyCall.reply && replyCall.reply.head) ||
       MENU_HEADS[replyKey] || (replyKey ? replyKey.replace(/_/g, " ").toUpperCase() : "REPLY") : "";
-    var replyLine = showReply ? esc((replyCall.reply && replyCall.reply.line) || replyCall.text || "") : "";
-    card("c-reply", showReply, null, replyHead, replyLine, "REPLY");
+    var replyLine = showReply ? (replyCall.reply && replyCall.reply.line) || replyCall.text || "" : "";
+    var n = el("c-reply");
+    if (!n) return;
+    n.hidden = !showReply;
+    if (showReply) setCard(n, "card act reply", [icon("reply", "i"), node("col", [span(replyHead, "mid"), span(replyLine, "reply-line")])]);
+  }
+
+  function renderInfo(s, t) {
+    var info = el("c-info"), msg = null;
+    if (s && s.ahead && s.ahead.pitted) msg = "◦ INFO · " + String(s.ahead.name || "car ahead") + " pitted";
+    else if (s && s.behind && s.behind.pitted) msg = "◦ INFO · " + String(s.behind.name || "car behind") + " pitted";
+    else if (t.penalty_s) msg = "◦ INFO · penalty +" + t.penalty_s + " s" + (t.unserved ? " · " + t.unserved + " unserved" : "");
+    if (!info) return;
+    info.hidden = !msg;
+    if (msg) setCard(info, "card info", [icon("pen", "i s"), msg]);
   }
 
   // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
+  // Under live SC/VSC plan C comes first and takes the thick border from the active plan.
   function renderPlans(s, scLive) {
-    var box = el("c-plans"), meta = el("c-strat-meta");
+    var box = el("plans");
     if (!box) return;
     box.innerHTML = "";
-    var plans = (s ? s.plans || [] : []).filter(function (pl) { return pl.kind !== "reactive" || pl.active || scLive; });
+    var all = s ? s.plans || [] : [];
+    var react = all.filter(function (pl) { return pl.kind === "reactive" && (pl.active || scLive); });
+    var normal = all.filter(function (pl) { return pl.kind !== "reactive"; });
+    var plans = react.concat(normal);
+    var focusReactive = scLive && react.length > 0;
     if (!plans.length) {
-      box.appendChild(span(s ? s.stint_plan || "no stop planned" : "--", "line"));
-    } else {
-      plans.forEach(function (pl) {
-        var row = span("", "plan" + (pl.active ? "" : pl.kind === "reactive" ? " c" : " alt"));
-        row.appendChild(span("PLAN " + pl.id, "pid"));
-        if (pl.kind === "reactive") {
-          row.appendChild(span("BOX NOW", "boxnow"));
-          var saving = !pl.active && typeof pl.delta_s === "number" && pl.delta_s < 0;
-          row.appendChild(document.createTextNode(saving ? "cheap stop saves " + fmt(-pl.delta_s, 1) + " s" : "cheap stop"));
-          box.appendChild(row);
-          return;
-        }
-        var seq = span("", "seq");
-        (pl.compounds || []).forEach(function (cp, i) {
-          if (i) seq.appendChild(span(" → ", "arr"));
-          seq.appendChild(compChip(cp));
-        });
-        row.appendChild(seq);
-        if (pl.active) {
-          var w = pl.window;
-          row.appendChild(document.createTextNode(w ? "window L" + w[0] + "–" + w[1] : pl.stops === 0 ? "no stop" : ""));
-          row.appendChild(span(s.on_plan === false ? "✗ OFF PLAN " + fmt(s.plan_off_s, 1) + " s" : "✓ ON PLAN",
-            "onp" + (s.on_plan === false ? " off" : "")));
-        } else {
-          var d = pl.delta_s;
-          row.appendChild(document.createTextNode((pl.stops === 1 ? "1 stop" : pl.stops + " stops") +
-            (d === null || d === undefined ? "" : " · " + (d < 0 ? "−" : "+") + fmt(Math.abs(d), 1) + " s")));
-        }
-        box.appendChild(row);
+      box.appendChild(node("card dim1", [s ? s.stint_plan || "no stop planned" : "--"]));
+      return;
+    }
+    var ap = activePlan(s);
+    plans.forEach(function (pl) {
+      if (pl.kind === "reactive") {
+        var saving = typeof pl.delta_s === "number" && pl.delta_s < 0;
+        box.appendChild(node("card plan" + (focusReactive ? " focus" : ""), [
+          node("row", [
+            icon("box", "i s warn"), span(pl.id, "mid"), span("BOX NOW", "warn"),
+            pl.compounds && pl.compounds.length ? compChip(pl.compounds[0]) : null,
+            span("", "sp"),
+            saving ? span("SAVES", "tagw") : span("cheap stop", "tagw"),
+            saving ? span(fmt(-pl.delta_s, 1) + " s", "big ok") : null
+          ])
+        ]));
+        return;
+      }
+      var seq = node("seq", []);
+      (pl.compounds || []).forEach(function (cp, i) {
+        if (i) seq.appendChild(span("›", "arr"));
+        seq.appendChild(compChip(cp));
       });
-    }
-    if (meta) {
-      meta.innerHTML = "";
-      var hasExit = !!(s && s.pit_exit && (s.pit_exit.rival || s.pit_exit.clean !== undefined));
-      var hasUc = !!(s && (s.undercut_s || s.overcut_s));
-      meta.hidden = !(hasExit || hasUc);
-      if (hasExit) {
-        var exSpan = span("PIT EXIT ", "");
-        var ex = s.pit_exit;
-        if (ex.rival && ex.rival.name) {
-          var gTxt = ex.rival.gap_s !== null && ex.rival.gap_s !== undefined ? " " + (ex.rival.gap_s >= 0 ? "+" : "−") + fmt(Math.abs(ex.rival.gap_s), 1) + " s" : "";
-          exSpan.appendChild(span((ex.clean ? "✓ " : "⚠ ") + ex.rival.name + gTxt, ex.clean ? "ok" : "warn", "b"));
-        } else {
-          exSpan.appendChild(span(ex.clean ? "✓ CLEAN" : "⚠ TRAFFIC", ex.clean ? "ok" : "warn", "b"));
-        }
-        meta.appendChild(exSpan);
+      if (pl === ap) {
+        var target = s.plan_target_lap;
+        var w = pl.window;
+        box.appendChild(node("card plan" + (focusReactive ? "" : " active"), [
+          node("row", [
+            icon("plan", "i"), span(pl.id, "mid"), seq, span("", "sp"),
+            span(s.on_plan === false ? "✗ OFF PLAN " + fmt(s.plan_off_s, 1) + " s" : "✓ ON PLAN",
+              "onp" + (s.on_plan === false ? " off" : ""))
+          ]),
+          target || w ? node("row sub", [
+            icon("tgt", "i s warn"),
+            target ? span("BOX", "tagw") : null,
+            target ? span("L" + target, "big") : null,
+            span("", "sp"),
+            w ? span("WINDOW", "tagw") : null,
+            w ? span(w[0] + "–" + w[1], "mid") : null
+          ]) : null,
+          s.pit_exit || s.undercut_s || s.overcut_s ? node("row sub alt", [
+            icon("exit", "i s"), exitNode(s.pit_exit), span("", "sp")
+          ].concat(ucOcNodes(s))) : null
+        ]));
+        return;
       }
-      if (hasUc) {
-        var ucParts = [];
-        if (s.undercut_s) ucParts.push("UC " + (s.undercut_s >= 0 ? "+" : "−") + fmt(Math.abs(s.undercut_s), 1) + " s");
-        if (s.overcut_s) ucParts.push("OC " + (s.overcut_s >= 0 ? "+" : "−") + fmt(Math.abs(s.overcut_s), 1) + " s");
-        meta.appendChild(span(ucParts.join(" · "), ""));
-      }
+      var stops = pl.stops === 1 ? "1 STOP" : pl.stops + " STOPS";
+      box.appendChild(node("card plan dim1 row", [
+        icon("plan", "i s"), span(pl.id, "mid"), seq, span("", "sp"),
+        span(stops, "tagw"),
+        pl.delta_s === null || pl.delta_s === undefined ? null : span(secSigned(pl.delta_s), "mid")
+      ]));
+    });
+    var hasExit = !!(s && s.pit_exit && (s.pit_exit.rival || s.pit_exit.clean !== undefined));
+    var hasUc = !!(s && (s.undercut_s || s.overcut_s));
+    if (!ap && (hasExit || hasUc)) {
+      box.appendChild(node("card dim1 row", [icon("exit", "i s"), exitNode(s.pit_exit), span("", "sp")].concat(ucOcNodes(s))));
     }
+  }
+
+  function activePlan(s) {
+    var ps = s && s.plans ? s.plans : [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
+    return null;
   }
 
   function span(txt, cls, tag) {
@@ -873,27 +927,20 @@
     if (cls) n.className = cls;
     return n;
   }
+  // Compound circle: M, H, S, I, W. Other names (C-numbered slicks) show their label.
   function compChip(c) {
-    var w = String(c || "?");
-    return span(/^c\d/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase(), "comp " + compoundClass(c));
-  }
-  function compoundClass(c) {
-    var w = String(c || "").toLowerCase();
-    return /^c\d/.test(w) ? "slick" : w;
-  }
-  function activePlan(s) {
-    var ps = s && s.plans ? s.plans : [];
-    for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
-    return null;
+    var w = String(c || "?"), letter = /^c\d/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase();
+    return span(letter, "cmp " + (/^[MHSIW]$/.test(letter) ? letter : ""));
   }
 
-  // Battle card (docs/18): single rival or per-car rows (2 ahead, 2 behind) with a YOU divider.
-  // Persistent railCache / bcarCache + syncChildren keeps .rail .rc mounted in the DOM across
-  // 4 Hz updates so the CSS left transition glides instead of snapping.
-  var MODE_WORDS = { free_air: "FREE AIR", catching: "▶ CATCHING", attacking: "▶ ATTACKING",
-    defending: "◀ DEFENDING", under_threat: "◀ UNDER THREAT", managing: "MANAGING" };
+  // Battle (docs/18): the active rival is bright with a thick border, the other car dims.
+  // Defending or under threat makes BEHIND the bright card. A result (passed, held, lost)
+  // fills the bright card for as long as the backend keeps battle.result (about 20 s).
+  var MODE_WORDS = { free_air: "FREE AIR", catching: "CATCHING", attacking: "ATTACKING",
+    defending: "DEFENDING", under_threat: "UNDER THREAT", managing: "MANAGING" };
   var MODE_CLS = { catching: "catching", attacking: "attack", defending: "threat", under_threat: "threat" };
-  var railCache = {}, bcarCache = {};
+  var MODE_ICON = { catching: "attack", attacking: "attack", defending: "defend", under_threat: "defend" };
+  var railCache = {};
   function syncChildren(parent, kids) {
     for (var i = 0; i < kids.length; i++) {
       var cur = parent.childNodes[i], next = kids[i];
@@ -915,121 +962,98 @@
       r.appendChild(span("", "rc", "div"));
       if (key) railCache[key] = r;
     }
-    r.className = "rail " + side + (train ? " train" : g <= 1 ? " in" : "");
-    r.firstChild.textContent = train ? "" : "1 S";
+    r.className = "rail " + side + (train ? " train" : "");
     r.lastChild.style.setProperty("--g", Math.max(0, Math.min(1, g / 3)).toFixed(3));
     return r;
   }
-  function rvRow(sideTxt, name, ot, st, gap, r) {
-    var rv = span("", "rv", "div");
-    rv.appendChild(span(sideTxt, "side"));
-    var nm = span("", "name");
-    nm.appendChild(span(name, "nm"));
-    if (ot) nm.appendChild(span("OV", "tag crit"));
-    if (r && r.compound) {
-      nm.appendChild(compChip(r.compound));
-      nm.appendChild(span(r.tyre_age_known && typeof r.tyre_age === "number" ? r.tyre_age + "L" : "", "age"));
-    }
-    rv.appendChild(nm);
-    if (st !== null) rv.appendChild(span(st, "st"));
-    rv.appendChild(span(gap, "gap"));
-    return rv;
+  function carRow(label, r, gap, ot) {
+    return node("rv", [
+      node("name", [
+        span(label, "pos"), span(String(r.name || "--").toUpperCase(), "nm"),
+        r.compound ? compChip(r.compound) : null,
+        r.tyre_age_known && typeof r.tyre_age === "number" ? span(r.tyre_age + "L", "age") : null,
+        ot ? span("OV", "tag crit") : null
+      ]),
+      span(gap, "gap")
+    ]);
   }
   function paceRow(b, side, r) {
     var closing = side === "ahead" ? b.closing_ahead_s : b.closing_behind_s;
     var prob = side === "ahead" ? b.pass_prob : b.hold_prob;
     var ld = r && typeof r.last_lap_delta_s === "number" ? r.last_lap_delta_s : null;
     if (!closing && (prob === null || prob === undefined) && ld === null) return null;
-    var row = span("", "pace", "div");
-    row.appendChild(closing > 0 ? span((side === "ahead" ? "▶" : "▲") + " closing " + fmt(closing, 1) + " s/lap",
-      side === "ahead" ? "ok" : "crit") : span("", ""));
-    if (ld !== null) {
-      row.appendChild(span("last " + (ld < 0 ? "−" + fmt(Math.abs(ld), 1) + "s faster" : "+" + fmt(ld, 1) + "s slower"), "last-d"));
+    var items = [];
+    if (closing) items.push(icon("close", "i s"), span(fmt(closing, 1) + " / LAP", side === "ahead" ? "ok" : "crit"));
+    if (ld !== null) items.push(span("LAST", "tagw"), span((ld < 0 ? "−" : "+") + fmt(Math.abs(ld), 1), ld < 0 ? "ok" : "warn"));
+    if (prob !== null && prob !== undefined) {
+      var ring = span("", "ring", "span");
+      ring.style.setProperty("--p", (100 * prob).toFixed(0) + "%");
+      items.push(node("prob", [ring, span(fmt(100 * prob, 0) + "%"), span(side === "ahead" ? "PASS" : "HOLD", "tagw")]));
     }
-    if (prob !== null && prob !== undefined) row.appendChild(span((side === "ahead" ? "PASS " : "HOLD ") + fmt(100 * prob, 0) + "%", "prob"));
-    return row;
+    return node("pace", items);
   }
   function renderBattle(s, pos) {
-    var n = el("c-battle"), b = s && s.battle;
-    if (!n) return;
-    if (!b || !b.mode) { n.hidden = true; return; }
-    n.hidden = false;
-    var mode = b.mode, multi = !!(b.ahead2 || b.behind2 || /^(scrap|swap_)/.test(b.result || ""));
-    var cls = MODE_CLS[mode] || (mode === "managing" || mode === "free_air" ? "calm" : "");
-    var kids = [];
-    if (!multi) {
-      n.className = "card battle single " + cls;
-      var modeRow = span("", "mode-row", "div");
-      var word = span(MODE_WORDS[mode] || mode.toUpperCase(), "mode", "div");
-      var sub = mode === "catching" && b.catch_laps ? "in range in " + fmt(b.catch_laps, 0) + " laps" :
-        mode === "under_threat" && b.threat_laps ? "in range in " + fmt(b.threat_laps, 0) + " laps" :
-        b.mode_laps ? b.mode_laps + (b.mode_laps === 1 ? " lap" : " laps") : "";
-      if (sub) word.appendChild(span(" · " + sub, "sub"));
-      modeRow.appendChild(word);
-      if (s.undercut_s && s.undercut_s > 0) {
-        modeRow.appendChild(span("UNDERCUT +" + fmt(s.undercut_s, 1) + "s", "uc-pill"));
-      } else if (s.overcut_s && s.overcut_s > 0) {
-        modeRow.appendChild(span("OVERCUT +" + fmt(s.overcut_s, 1) + "s", "uc-pill"));
-      }
-      kids.push(modeRow);
-      var side = mode === "defending" || mode === "under_threat" ? "behind" : "ahead";
-      var r = s[side], other = s[side === "ahead" ? "behind" : "ahead"];
-      if (r) {
-        kids.push(rvRow(side === "ahead" ? "▲ AHEAD" : "▼ BEHIND", (r.pos ? "P" + r.pos + " " : "") +
-          String(r.name || "--").toUpperCase(), r.overtake && side === "behind", null, gapStr(r.gap_s, side), r));
-        if (r.gap_s !== null && r.gap_s <= 3) kids.push(rail(r.gap_s, side, false, "single"));
-        var pr = paceRow(b, side, r);
-        if (pr) kids.push(pr);
-      }
-      if (other) {
-        var o = rvRow(side === "ahead" ? "▼ BEHIND" : "▲ AHEAD", (other.pos ? "P" + other.pos + " " : "") +
-          String(other.name || "--").toUpperCase(), false, null,
-          gapStr(other.gap_s, side === "ahead" ? "behind" : "ahead"), other);
-        o.style.opacity = ".6";
-        kids.push(o);
-      }
-      syncChildren(n, kids);
-      return;
-    }
-    n.className = "card battle " + cls + (b.result === "scrap" ? " scrap" : "");
-    var swaps = b.swaps ? " · " + b.swaps + (b.swaps === 1 ? " swap" : " swaps") : "";
-    var cars = [[b.ahead2, "ahead", 2], [s.ahead, "ahead", 1], null, [s.behind, "behind", 1], [b.behind2, "behind", 2]];
-    var grp = span("", "grp" + (cls === "threat" ? " crit" : ""), "div");
-    if (b.result === "scrap") {
-      var ps = cars.filter(function (c) { return c && c[0] && c[0].pos; }).map(function (c) { return c[0].pos; }).concat(pos ? [pos] : []);
-      grp.appendChild(document.createTextNode("⇄ SCRAP "));
-      grp.appendChild(span(ps.length ? "· P" + Math.min.apply(null, ps) + " to P" + Math.max.apply(null, ps) + swaps : swaps, "sub"));
-    } else if (b.result === "swap_ahead" || b.result === "swap_behind") {
-      var who = b.result === "swap_ahead" ? s.ahead : s.behind;
-      grp.appendChild(document.createTextNode("⇄ TRADING PLACES "));
-      grp.appendChild(span("· " + (who ? who.name : "--") + swaps, "sub"));
-    } else {
-      grp.appendChild(document.createTextNode(MODE_WORDS[mode] || mode.toUpperCase()));
-    }
-    kids.push(grp);
-    cars.forEach(function (c) {
-      if (c === null) { kids.push(span("YOU · P" + (pos || "--"), "you", "div")); return; }
-      var r = c[0], side = c[1], slotKey = side + "-" + c[2];
-      if (!r) return;
-      var near = cars[side === "ahead" ? 1 : 3][0];
-      var train = c[2] === 2 && near && r.gap_s !== null && near.gap_s !== null && Math.abs(r.gap_s - near.gap_s) <= 1;
-      var direct = c[2] === 1 && (side === "ahead" ? mode === "attacking" || mode === "catching" :
-        mode === "defending" || mode === "under_threat");
-      var st = train ? "IN TRAIN" : direct ? MODE_WORDS[mode].slice(2) : mode === "free_air" ? "FREE AIR" : "MANAGING";
-      var calm = !train && !direct;
-      var row = bcarCache[slotKey] || (bcarCache[slotKey] = span("", "", "div"));
-      row.className = "bcar " + (train ? "train" : calm ? "calm" : side === "behind" ? "defend" : "attack");
-      var rKids = [rvRow((side === "ahead" ? "▲ P" : "▼ P") + (r.pos || "-"), String(r.name || "--").toUpperCase(),
-        r.overtake && side === "behind", st, gapStr(r.gap_s, side), r)];
-      if (r.gap_s !== null && r.gap_s <= 3 && !calm) rKids.push(rail(r.gap_s, side, train, slotKey));
-      if (direct) { var pr = paceRow(b, side, r); if (pr) rKids.push(pr); }
-      syncChildren(row, rKids);
-      kids.push(row);
+    var grp = el("race-grp"), train = el("train"), b = s && s.battle;
+    if (!grp) return;
+    grp.hidden = !(b && b.mode);
+    if (!b || !b.mode) return;
+    var mode = b.mode, result = b.result || "";
+    var resultSide = result === "lost" ? "ahead" : result === "passed" || result === "held" ? "behind" :
+      result === "swap_ahead" ? "ahead" : result === "swap_behind" ? "behind" : null;
+    var active = MODE_CLS[mode] ? (mode === "defending" || mode === "under_threat" ? "behind" : "ahead") : null;
+    var bright = resultSide || active || (result === "scrap" ? "ahead" : null);
+    var trains = [];
+    [["ahead", b.ahead2, s.ahead], ["behind", b.behind2, s.behind]].forEach(function (x) {
+      var far = x[1], near = x[2];
+      if (!far || !near || far.gap_s === null || near.gap_s === null || Math.abs(far.gap_s - near.gap_s) > 1) return;
+      trains.push(node("card far row", [
+        icon(x[0] === "ahead" ? "up" : "down", "i s"),
+        carRow(far.pos ? "P" + far.pos : "", far, gapStr(far.gap_s, x[0]), false),
+        span("IN TRAIN", "tagw")
+      ]));
     });
-    syncChildren(n, kids);
+    syncChildren(train, trains);
+    train.hidden = !trains.length;
+    var rivalName = resultSide && s[resultSide] ? String(s[resultSide].name || "--").toUpperCase() : "";
+    var swaps = b.swaps ? b.swaps + (b.swaps === 1 ? " SWAP" : " SWAPS") : "";
+    [["ahead", el("card-ahead")], ["behind", el("card-behind")]].forEach(function (x) {
+      var sd = x[0], n = x[1], r = s[sd];
+      n.hidden = !r;
+      if (!r) return;
+      var isBright = sd === bright;
+      var modeNode = null, filled = "";
+      if (isBright && (result === "passed" || result === "held" || result === "lost")) {
+        var word = result === "passed" ? "PASSED " : result === "held" ? "HELD " : "LOST TO ";
+        modeNode = node("mode-row", [icon(result === "lost" ? "down" : "defend", "i s"), span(word + rivalName)]);
+        filled = result === "lost" ? " filled-crit" : " filled-ok";
+      } else if (isBright && (result === "swap_ahead" || result === "swap_behind")) {
+        modeNode = node("mode-row", [span("TRADING PLACES"), span("· " + rivalName + " " + swaps, "sub")]);
+      } else if (isBright && result === "scrap") {
+        modeNode = node("mode-row", [span("SCRAP"), span(swaps, "sub")]);
+      } else if (isBright) {
+        var laps = mode === "catching" && b.catch_laps ? "IN RANGE IN " + fmt(b.catch_laps, 0) + " LAPS" :
+          mode === "under_threat" && b.threat_laps ? "IN RANGE IN " + fmt(b.threat_laps, 0) + " LAPS" :
+          b.mode_laps ? b.mode_laps + (b.mode_laps === 1 ? " LAP" : " LAPS") : "";
+        var uc = s.undercut_s && s.undercut_s > 0 ? "UNDERCUT " + secSigned(s.undercut_s) + " s" :
+          s.overcut_s && s.overcut_s > 0 ? "OVERCUT " + secSigned(s.overcut_s) + " s" : "";
+        modeNode = node("mode-row " + (MODE_CLS[mode] || ""), [
+          icon(MODE_ICON[mode] || "attack", "i s"), span(MODE_WORDS[mode] || mode.toUpperCase()),
+          laps ? span(laps, "sub") : null, uc ? span(uc, "uc-pill") : null
+        ]);
+      } else if (sd === "ahead" && (mode === "free_air" || mode === "managing")) {
+        modeNode = node("mode-row", [span(MODE_WORDS[mode])]);
+      }
+      var g = gapStr(r.gap_s, sd);
+      var kids = [modeNode, carRow(r.pos ? "P" + r.pos : "", r, g, r.overtake && sd === "behind")];
+      if (r.gap_s !== null && r.gap_s !== undefined && r.gap_s <= 3) kids.push(rail(r.gap_s, sd, false, sd));
+      kids.push(paceRow(b, sd, r));
+      n.className = "card bcard " + sd + (isBright ? " bright" : " dim") + filled +
+        (isBright && MODE_CLS[mode] ? " " + MODE_CLS[mode] : "");
+      syncChildren(n, kids.filter(function (k) { return k; }));
+    });
   }
 
-  // Qualifying contextual zone: phase strip, cut-off, pole / teammate sectors, this run.
+  // Qualifying zone: phase strip, cut-off, pole and teammate sectors, this run.
   function qRow(id, gaps, worst, lapGap) {
     var row = el(id);
     if (!row) return;
@@ -1054,7 +1078,7 @@
     setText("q-badge", q.margin_kind === "pole" ? (has && m > 0 ? "POLE" : "P2+") : through ? "THROUGH" : has ? "OUT" : "--");
     setClass("q-badge", "badge" + (has && !through ? " out" : ""));
     setText("q-margin", has ? signed(-m) : "--");
-    el("q-margin").style.color = has && !through ? "var(--crit)" : "";
+    setClass("q-margin", "big" + (has && !through ? " crit" : has ? " ok" : ""));
     var cutLine = el("q-cut-line");
     if (cutLine) {
       cutLine.className = "qcut-grid";
@@ -1079,20 +1103,22 @@
     var mate = q.teammate || null;
     setText("q-mate-who", mate && mate.driver ? mate.driver : "--");
     qRow("q-mate-gaps", mate ? mate.sector_gaps_ms : null, mate && mate.worst_sector ? mate.worst_sector - 1 : -1, mate ? mate.gap_ms : null);
-    var head = "--", line = "no run plan yet", lap = q.lap;
+    var head = "--", line = "no run plan yet", lap = q.lap, tone = "proj";
     var runCard = el("q-run");
-    if (runCard) runCard.className = "card" + (lap && lap.abort ? " abort" : "");
     if (q.release) {
       var r = q.release;
       head = r.time_for_out_lap === false ? "✗ STAY IN" : r.clean ? "✓ GO NOW" : r.wait_s !== null ? "WAIT " + fmt(r.wait_s, 0) + " s" : "⚠ TRAFFIC";
+      tone = r.time_for_out_lap === false ? "stop" : r.clean ? "go" : r.wait_s !== null ? "wait" : "stop";
       line = r.cars_on_track + " on track" + (r.gap_ahead_s !== null ? " · " + fmt(r.gap_ahead_s, 0) + " s clear ahead" : "");
     } else if (lap) {
       head = "PROJ " + lapTime(lap.projected_ms) + (lap.abort ? " · ✗ ABORT" : "");
+      tone = lap.abort ? "stop" : "proj";
       line = lap.delta_ms === null ? "no cut-off yet" : signed(lap.delta_ms) + " to cut";
     } else if (q.plan) {
       head = "PLAN " + String(q.plan.plan).toUpperCase();
       line = q.plan.reason || "";
     }
+    if (runCard) runCard.className = "card act " + tone;
     setText("q-run-head", head);
     setText("q-run-line", line);
   }
@@ -1381,7 +1407,6 @@
     x.innerHTML = "";
     if (!c) { x.className = "cross"; x.textContent = "✓ no tyre change due"; return; }
     x.className = "cross " + CROSS[c][2];
-    x.appendChild(document.createTextNode("→ "));
     x.appendChild(crossChip(c));
     x.appendChild(document.createTextNode(cm !== null && cm !== undefined ? " in ~" + fmt(cm, 0) + " min" : " soon"));
   }
@@ -1438,38 +1463,40 @@
     document.body.classList.toggle("cool", !!c);
     if (!c) return;
     setText("cz-last", lapTime(c.last_hot_ms));
-    var pg = c.pole ? c.pole.gap_ms : null;
-    setText("cz-pole", signed(pg));
-    setClass("cz-pole", "v" + (pg > 0 ? " crit" : pg < 0 ? " ok" : ""));
     var minPct = c.ers_min_pct, ready = c.ers_pct >= minPct;
     var ersTile = el("c-ers-tile");
-    if (ersTile) ersTile.className = "c-tile " + (ready ? "ok" : "warn");
+    if (ersTile) ersTile.className = "card col " + (ready ? "ok" : "warn");
     setText("c-ers", fmt(c.ers_pct, 0) + "%");
     var bar = el("c-ers-bar");
-    if (bar) bar.style.width = Math.max(0, Math.min(100, c.ers_pct)) + "%";
+    if (bar) bar.style.setProperty("--f", Math.max(0, Math.min(100, c.ers_pct)) + "%");
     var mark = el("c-ers-min");
-    if (mark) mark.style.left = minPct + "%";
+    if (mark) mark.style.setProperty("--m", minPct + "%");
     var mode = el("c-mode");
     if (mode) {
       mode.textContent = (c.recharging ? "✓ RECHARGING" : "⚠ SET RECHARGE") +
         " · need " + fmt(minPct, 0) + "%";
-      mode.className = "sub" + (c.recharging ? "" : " c-warn");
+      mode.className = "sub" + (c.recharging ? "" : " warn");
     }
-    var hotTile = el("c-hot-tile"), d = c.dist_to_hot_m;
-    setText("c-hot", d === null ? "--" : d >= 1000 ? fmt(d / 1000, 1) + " km" : fmt(d, 0) + " m");
-    if (hotTile) hotTile.className = "c-tile" + (d !== null && d < 300 ? " warn" : "");
-    setText("c-plan", c.extend ? "ONE MORE COOL LAP" : c.plan_reason ?
+    var need = c.fuel_need_laps, fuelOk = c.fuel_laps >= need;
+    var fuelTile = el("c-fuel-tile");
+    if (fuelTile) fuelTile.className = "card col " + (fuelOk ? "ok" : "warn");
+    setText("c-fuel", fmt(c.fuel_laps, 1) + " laps");
+    var fbar = el("c-fuel-bar");
+    if (fbar) fbar.style.setProperty("--f", (100 * Math.max(0, Math.min(1, (c.fuel_laps || 0) / (2 * need)))).toFixed(1) + "%");
+    setText("c-fuel-need", "push needs " + fmt(need, 1) + " laps");
+    var hot = c.dist_to_hot_m;
+    setText("c-hot", hot === null ? "--" : hot >= 1000 ? fmt(hot / 1000, 1) + " km" : fmt(hot, 0) + " m");
+    setText("c-plan", c.extend ? "+1 COOL LAP" : c.plan_reason ?
       "cooling: " + (PLAN_WORDS[c.plan_reason] || c.plan_reason) : "--");
     var behind = el("c-behind");
     if (behind) {
       var s = c.car_behind_s;
-      behind.className = "c-alert " + (s === null ? "clear" : s <= 3 ? "crit" : "warn");
-      behind.innerHTML = "";
       if (s === null) {
-        behind.textContent = "✓ NO HOT LAP BEHIND";
+        setCard(behind, "card clear", ["✓ NO HOT LAP BEHIND"]);
       } else {
-        behind.appendChild(document.createTextNode("⚠ HOT LAP " + fmt(s, 1) + " s BEHIND"));
-        behind.appendChild(span("MOVE OFF LINE", "act"));
+        setCard(behind, "card act " + (s <= 3 ? "stop flash" : "box"), [
+          icon("warn", "i l"), span("HOT LAP " + fmt(s, 1) + " s BEHIND", "big"), span("MOVE OFF LINE", "mid")
+        ]);
       }
     }
     var low = c.window_c[0], high = c.window_c[1];
@@ -1664,10 +1691,19 @@
     if (fresh) seenLog = fresh;
   }
 
+  // Dim battle card shrinks to one line when the right column overflows (docs/15 §3).
+  function fitRight() {
+    var col = el("ctx");
+    if (!col) return;
+    document.body.classList.remove("squeeze");
+    if (col.scrollHeight > col.clientHeight + 1) document.body.classList.add("squeeze");
+  }
+
   function render() {
     var stale = renderFreshness();
     renderRadio(stale);
     renderReplyCard();
+    fitRight();
   }
 
   // -- protocol -------------------------------------------------------------
