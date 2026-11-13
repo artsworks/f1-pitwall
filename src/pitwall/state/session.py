@@ -72,6 +72,12 @@ from pitwall.state.race import (
     true_neighbours,
 )
 from pitwall.state.runplan import COOL, HotLap, Plan, RunTracker, mistakes_text, run_plan
+from pitwall.state.zones import (
+    aero_zone_ahead,
+    drs_zone_ahead,
+    overtake_zone_ahead,
+    rival_overtake_active,
+)
 from pitwall.strategy.pace import amount_words, pace_words_self
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.rejoin import FieldCar
@@ -3616,10 +3622,10 @@ class SessionState:
             rival_data_restricted=self.rival_data_restricted,
             overheat=overheat,
             graining=graining,
-            aero_zone_ahead=self._aero_zone_ahead(),
-            overtake_zone_ahead=self._overtake_zone_ahead(),
+            aero_zone_ahead=aero_zone_ahead(self),
+            overtake_zone_ahead=overtake_zone_ahead(self),
             drs_zone_ahead=(
-                self._overtake_zone_ahead() if self.regulations_2026 else self._drs_zone_ahead()
+                overtake_zone_ahead(self) if self.regulations_2026 else drs_zone_ahead(self)
             ),
         )
         if kind != "race" or not cars or self.track_length_m <= 0:
@@ -3925,16 +3931,16 @@ class SessionState:
             gap_behind_s=gap_behind,
             rival_ahead_idx=ahead_i,
             rival_behind_idx=behind_i,
-            rival_ahead_overtake=self._rival_overtake_active(ahead_i),
-            rival_behind_overtake=self._rival_overtake_active(behind_i),
+            rival_ahead_overtake=rival_overtake_active(self, ahead_i),
+            rival_behind_overtake=rival_overtake_active(self, behind_i),
             rival_ahead2_pos=cars[ahead2_i].car_position if ahead2_i >= 0 else 0,
             rival_ahead2_name=name_of(ahead2_i),
             rival_ahead2_gap_s=gap_ahead2,
-            rival_ahead2_overtake=self._rival_overtake_active(ahead2_i),
+            rival_ahead2_overtake=rival_overtake_active(self, ahead2_i),
             rival_behind2_pos=cars[behind2_i].car_position if behind2_i >= 0 else 0,
             rival_behind2_name=name_of(behind2_i),
             rival_behind2_gap_s=gap_behind2,
-            rival_behind2_overtake=self._rival_overtake_active(behind2_i),
+            rival_behind2_overtake=rival_overtake_active(self, behind2_i),
             rival_pit_exit_idx=exit_i,
             true_rival_ahead_idx=true_ahead_i,
             true_rival_ahead_name=name_of(true_ahead_i),
@@ -4157,43 +4163,6 @@ class SessionState:
             passes for lap, passes in sorted(self._wet_to_dry_passes.items()) if lap <= self.lap_num
         ][-need:]
         return len(entries) >= need and all(to in passes for passes in entries)
-
-    def _drs_zone_ahead(self) -> bool:
-        """A legacy DRS zone starts within the lookahead distance."""
-        return self._zone_ahead(
-            self._drs_zones,
-            self._th("drs_zone_lookahead_m", 300.0),
-        )
-
-    def _aero_zone_ahead(self) -> bool:
-        if self.regulations_2026:
-            distance = self.active_aero_activation_distance_m
-            return 0 < distance <= self._th("aero_zone_lookahead_m", 250.0)
-        return self._zone_ahead(
-            self._aero_zones,
-            self._th("aero_zone_lookahead_m", 250.0),
-        )
-
-    def _overtake_zone_ahead(self) -> bool:
-        distance = self.overtake_activation_distance_m
-        return 0 < distance <= self._th("overtake_zone_lookahead_m", 300.0)
-
-    def _zone_ahead(self, zones: Sequence[Any], lookahead_m: float) -> bool:
-        if self.track_length_m <= 0:
-            return False
-        for zone in zones:
-            dist = (float(zone.zone_start) - self.lap_distance) % self.track_length_m
-            if 0 < dist <= lookahead_m:
-                return True
-        return False
-
-    def _rival_overtake_active(self, index: int) -> bool:
-        if index < 0 or self.cars_telemetry_2 is None:
-            return False
-        try:
-            return bool(self.cars_telemetry_2[index].overtake_active)
-        except IndexError:
-            return False
 
     def _thermal(self) -> tuple[bool, bool]:
         """(overheat, graining) with hysteresis on the slow inner EMA."""
