@@ -1009,16 +1009,26 @@ class SessionState:
         # Called with (kind, recv_time) on each press of a named action button
         # (e.g. "mindset" on UDP Action 2, "page" on UDP Action 4).
         self.action_listeners: list[Callable[[str, float], None]] = []
-        self._action_bits = {k: v for k, v in (action_bits or {}).items() if v}
-        self._action_down: dict[str, bool] = {}
+        self._button_status = 0
+        self.rebind_buttons(
+            press_bit=press_bit, toggle_bit=toggle_bit, action_bits=action_bits or {}
+        )
         self._ema_fast_s = ema_fast_s
         self._ema_slow_s = ema_slow_s
         self._straight_hold_s = straight_hold_s
-        self._press_bit = press_bit
-        self._toggle_bit = toggle_bit or None
-        self._toggle_down = False
         self._thresholds = dict(thresholds or {})
         self._reset_session()
+
+    def rebind_buttons(
+        self,
+        *,
+        press_bit: int | None,
+        toggle_bit: int | None,
+        action_bits: Mapping[str, int],
+    ) -> None:
+        self._press_bit = press_bit
+        self._toggle_bit = toggle_bit or None
+        self._action_bits = {k: v for k, v in action_bits.items() if v}
 
     def _reset_session(self) -> None:
         """(Re-)initialise all per-session state. Called from __init__ and on
@@ -1193,7 +1203,6 @@ class SessionState:
         self._best_lap_sectors: dict[int, tuple[int, int, int]] = {}  # sectors of that lap
         self._player_sectors: tuple[int, int, int] = (0, 0, 0)
         self._player_laps_completed = 0
-        self._press_down = False
         self._straight_since: float | None = None
         self._tyre_sets: tuple[Any, ...] = ()  # raw TyreSetData objects
         self._tyre_fitted_idx = 0
@@ -2098,24 +2107,20 @@ class SessionState:
                 self._last_penalty_served_st = pkt.header.session_time
         elif pkt.code == "BUTN":
             status = pkt.detail.get("button_status", 0) if isinstance(pkt.detail, dict) else 0
-            if self._press_bit is not None:
+            prev, self._button_status = self._button_status, status
+            changed = status ^ prev
+            pressed = status & ~prev
+            if self._press_bit is not None and changed & self._press_bit:
                 down = bool(status & self._press_bit)
-                if down != self._press_down:
-                    self._press_down = down
-                    for cb in self.press_listeners:
-                        cb(recv_time, down)
-            if self._toggle_bit is not None:
-                tdown = bool(status & self._toggle_bit)
-                if tdown and not self._toggle_down:
-                    for tcb in self.toggle_listeners:
-                        tcb(recv_time)
-                self._toggle_down = tdown
+                for cb in self.press_listeners:
+                    cb(recv_time, down)
+            if self._toggle_bit is not None and pressed & self._toggle_bit:
+                for tcb in self.toggle_listeners:
+                    tcb(recv_time)
             for kind, bit in self._action_bits.items():
-                adown = bool(status & bit)
-                if adown and not self._action_down.get(kind, False):
+                if pressed & bit:
                     for acb in self.action_listeners:
                         acb(kind, recv_time)
-                self._action_down[kind] = adown
 
     def _on_session_history(self, pkt: SessionHistoryPacket) -> None:
         self._histories[pkt.car_idx] = pkt

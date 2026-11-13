@@ -15,7 +15,13 @@ from pydantic import ValidationError
 
 from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
-from pitwall.config.models import InputSettings, MenuItemModel, MenuSettings, RuleDefModel
+from pitwall.config.models import (
+    InputSettings,
+    MenuItemModel,
+    MenuSettings,
+    RuleDefModel,
+    ShortcutBinding,
+)
 from pitwall.engine import Engine, build_engine, run_replay
 from pitwall.input.menu import (
     DriverMenu,
@@ -623,6 +629,82 @@ def test_volume_steps_reload_resets_level(monkeypatch: pytest.MonkeyPatch) -> No
     assert gains == [20]
     engine.cycle_volume(5.0)
     assert engine.volume_pct == 60
+
+
+def _rebind_volume_to_oversteer(engine: Engine) -> None:
+    settings = engine.store.current()
+    engine.store._settings = settings.model_copy(
+        update={
+            "input": settings.input.model_copy(
+                update={
+                    "volume_cycle_bit": 0,
+                    "shortcuts": [ShortcutBinding(bit=SD10, item="oversteer")],
+                }
+            )
+        }
+    )
+
+
+def _flushed_rows(engine: Engine, log: Path) -> list[dict[str, object]]:
+    engine.dispatcher.log.flush()
+    return [json.loads(x) for x in log.read_text().splitlines() if x]
+
+
+def test_button_bindings_follow_reload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.audio.dispatcher import Dispatcher
+
+    monkeypatch.setattr(Dispatcher, "set_volume", lambda self, pct: None)
+    log = tmp_path / "x.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log)
+
+    engine.ingest.on_datagram(_butn(SD10, 1.0), 1.0)
+    engine.tick(1.0)
+    engine.ingest.on_datagram(_butn(0, 1.1), 1.1)
+    engine.tick(1.1)
+    rows = _flushed_rows(engine, log)
+    assert [r["pct"] for r in rows if r["outcome"] == "volume"] == [40]
+    assert not _inputs(rows)
+
+    _rebind_volume_to_oversteer(engine)
+    engine.tick(1.2)
+    engine.ingest.on_datagram(_butn(SD10, 2.0), 2.0)
+    engine.tick(2.0)
+    engine.ingest.on_datagram(_butn(0, 2.1), 2.1)
+    engine.tick(2.1)
+    rows = _flushed_rows(engine, log)
+    assert [r["item_id"] for r in _inputs(rows)] == ["oversteer"]
+    assert [r["pct"] for r in rows if r["outcome"] == "volume"] == [40]
+    assert engine.volume_pct == 40
+
+
+def test_held_button_does_not_fire_after_rebind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pitwall.audio.dispatcher import Dispatcher
+
+    monkeypatch.setattr(Dispatcher, "set_volume", lambda self, pct: None)
+    log = tmp_path / "x.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log)
+
+    engine.ingest.on_datagram(_butn(SD10, 1.0), 1.0)
+    engine.tick(1.0)
+    _rebind_volume_to_oversteer(engine)
+    engine.tick(1.1)
+    engine.ingest.on_datagram(_butn(SD10 | 0x1, 2.0), 2.0)
+    engine.tick(2.0)
+    rows = _flushed_rows(engine, log)
+    assert not _inputs(rows)
+    assert [r["pct"] for r in rows if r["outcome"] == "volume"] == [40]
+
+    engine.ingest.on_datagram(_butn(0, 2.1), 2.1)
+    engine.tick(2.1)
+    engine.ingest.on_datagram(_butn(SD10, 3.0), 3.0)
+    engine.tick(3.0)
+    engine.ingest.on_datagram(_butn(0, 3.1), 3.1)
+    engine.tick(3.1)
+    rows = _flushed_rows(engine, log)
+    assert [r["item_id"] for r in _inputs(rows)] == ["oversteer"]
+    assert [r["pct"] for r in rows if r["outcome"] == "volume"] == [40]
 
 
 def _packaged_item(item_id: str) -> MenuItemModel:
