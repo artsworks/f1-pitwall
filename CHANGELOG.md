@@ -10,6 +10,19 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.57.1 (2026-11-13)
+
+### Bug Fixes
+
+- **engine**: Re-export action_bits from its new module
+  ([#181](https://github.com/artsworks/f1-pitwall/pull/181),
+  [`332207a`](https://github.com/artsworks/f1-pitwall/commit/332207a14c119fa95cbc18fa4970563106e22e9e))
+
+- **input**: Rebind UDP buttons on config reload
+  ([#181](https://github.com/artsworks/f1-pitwall/pull/181),
+  [`332207a`](https://github.com/artsworks/f1-pitwall/commit/332207a14c119fa95cbc18fa4970563106e22e9e))
+
+
 ## v0.57.0 (2026-11-13)
 
 ### Bug Fixes
