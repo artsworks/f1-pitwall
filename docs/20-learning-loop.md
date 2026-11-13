@@ -102,7 +102,8 @@ fold without a distance suffix.
 ## Calibration and review
 
 `pitwall calibrate` fits values from stored sessions. `pitwall stats --learned` shows
-values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by track.
+values and sources. `pitwall evaluate` reports calls-on and calls-off outcomes by track and session class
+(race, qualifying or practice). The report skips synthetic sessions.
 This report is descriptive, not a causal comparison. `pitwall propose` writes candidates
 for review without changing active settings. Run `pitwall calibrate` and `pitwall tune` to
 apply upkeep steps on demand. `pitwall tune` also folds A/B results from `pitwall diff`.

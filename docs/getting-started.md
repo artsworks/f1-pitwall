@@ -144,6 +144,10 @@ driver names or measured values, such as gaps and battery levels, because those 
 repeat. At startup, Pitwall renders the startup lines with the selected engine before it
 speaks them.
 
+`voice warm` renders phrases in parallel. `speech.warm_workers` sets how many at once.
+Unset, it uses half the logical cores, and at most 4 for OmniVoice.
+While it runs, `voice warm` prints its progress and an estimate of the time left.
+
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
 1.3. Try `voice say --speed 1.4`. `speech.rate` and `speech.volume` apply to both engines.
 Piper sets each call's tone by priority. P1 is urgent (`speech.tone_urgent_speed` /

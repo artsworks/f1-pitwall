@@ -218,20 +218,20 @@ rules:
       - "{fuel_margin_laps:.1f} laps spare on fuel. Push on"
   - id: energy_over
     sessions: [race]
-    min_lap: 3  # lap 1-2 spend the full launch charge
+    min_lap: 4  # grades the lap before; laps 1-2 spend the launch charge
     priority: 2
-    when: "phase == 'racing' and energy_mode == 'over' and sector == 2"
-    clear_when: "energy_mode != 'over'"
+    when: "phase == 'racing' and energy_prev_lap_mode == 'over' and sector == 0 and laps_remaining > 1"
+    clear_when: "sector != 0"
     cooldown_s: 120
     cooldown_group: energy
     requires: [car_status]
     say:
-      - "Energy {energy_lap_delta_mj:+.1f} MJ over. Harvest more"
-      - "{energy_lap_delta_mj:+.1f} MJ over this lap. Harvest"
-      - "Over energy budget, {energy_lap_delta_mj:+.1f} MJ. Harvest"
-      - "Energy use {energy_lap_delta_mj:+.1f} MJ over budget. Harvest more"
-      - "{energy_lap_delta_mj:+.1f} MJ over budget. Harvest"
-      - "Over by {energy_lap_delta_mj:+.1f} MJ. Recover more energy"
+      - "Energy {energy_prev_lap_delta_mj:+.1f} MJ over last lap. Harvest more"
+      - "{energy_prev_lap_delta_mj:+.1f} MJ over last lap. Harvest"
+      - "Over energy budget last lap, {energy_prev_lap_delta_mj:+.1f} MJ. Harvest"
+      - "Energy use {energy_prev_lap_delta_mj:+.1f} MJ over budget last lap. Harvest more"
+      - "{energy_prev_lap_delta_mj:+.1f} MJ over budget last lap. Harvest"
+      - "Over by {energy_prev_lap_delta_mj:+.1f} MJ last lap. Recover more energy"
   - id: energy_under
     sessions: [race]
     min_lap: 4  # grades the lap before; laps 1-2 spend the launch charge

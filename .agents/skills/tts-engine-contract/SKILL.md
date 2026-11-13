@@ -72,6 +72,7 @@ Build WAV engines on `WavSpeaker` in `wav_speaker.py`. `WavSpeaker` owns the que
 - `per_priority`: `True` if the audio depends on the call priority.
 - `render(text, priority, *, background=False)`: returns `(wav_bytes, seconds)`. Raise on failure.
 - `provisional(text, priority)` (optional): audio to play now while `render(..., background=True)` fills the cache.
+- `warm_parallelism`, `warm_workers`, `warm_process` (optional): let `warm()` render in parallel with `"thread"` or `"process"` workers. Use `default_warm_workers()` for the default count.
 
 If the vendor returns PCM or chunks, collect the chunks in order and call `pcm_to_wav(chunks, sample_rate, channels=..., dtype=...)`. Convert MP3 or Opus to PCM first. If a cancel or flush happens during rendering, `WavSpeaker` discards the result.
 

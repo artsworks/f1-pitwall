@@ -242,7 +242,7 @@ _CASES = [
         RaceSpec(
             laps=8,
             base_ms=12_000,
-            off_track_lap=3,
+            off_track_lap=5,
             off_track_position_changes=((0.35, 4),),
         ),
     ),

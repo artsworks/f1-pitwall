@@ -23,6 +23,7 @@ from pitwall.audio.wav_speaker import (
     Synth,
     WavSpeaker,
     default_player,
+    default_warm_workers,
     radio_blip,
     to_wav,
     wav_info,
@@ -183,6 +184,7 @@ def omnivoice_cache_key(settings: SpeechSettings, model_id: str) -> str:
 
 class OmniVoiceRenderer:
     per_priority = False
+    warm_parallelism = "thread"
 
     def __init__(
         self,
@@ -194,6 +196,11 @@ class OmniVoiceRenderer:
         self.cache_identity = omnivoice_cache_key(settings, model_id)
         self.fallback_tones = fallback_tones
         self._wait_s = settings.omnivoice_wait_s
+        self.warm_workers = (
+            settings.warm_workers
+            if settings.warm_workers is not None
+            else default_warm_workers(cap=4)
+        )
         # The foreground timeout is the playback grace period for cold lines, not the
         # health-check timeout.
         self._synth = make_omnivoice_synth(settings, timeout_s=self._wait_s)

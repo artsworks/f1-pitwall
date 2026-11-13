@@ -314,3 +314,13 @@ def test_true_rival_snapshot_defaults_and_payload_fields() -> None:
         "stops_owed": 0,
         "pitted": True,
     }
+
+
+def test_five_lap_race_without_history_owes_no_stop() -> None:
+    state = _session()
+    state._histories.pop(3)
+    car = replace(state.cars_lap[3], num_pit_stops=0)
+
+    assert state._stops_owed(3, car) == 1
+    state.total_laps = 5
+    assert state._stops_owed(3, car) == 0

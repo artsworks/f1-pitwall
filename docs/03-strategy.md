@@ -221,17 +221,21 @@ unlimited), the mandatory two-dry-compound rule (`plan_two_compound_rule`), and
 degradation model and pit loss. Fresh-set pace per compound uses a learned prior or the
 current slope scaled by `plan_deg_factor_*`, offset by `plan_pace_*_ms`. The window
 includes each first-stop lap within `plan_window_s` of the best.
+The window does not open before the fitted set completes `plan_min_stint_laps`, unless the best stop lap is earlier.
 
 - **Plan A** = fastest sequence at race start; **Plan B** = downside hedge, ranked by
   race time plus 0.84 standard deviations; **Plan C** = reactive: box this lap at the
   SC/VSC pit loss, re-derived every recompute until taken.
 - A and B are frozen as compound sequences; their timing is re-optimised every lap.
-  Damage rebuilds the plans and switches to the other letter once per cause per stint, after SC/VSC ends.
+  Damage rebuilds the plans once per cause per stint, after SC/VSC ends.
+  If the best tyre sequence changes, the active plan switches to the other letter.
+  If the sequence stays the same, the letter stays and only the target lap and the window move.
   Wing damage uses `plan_damage_wing_pct`, and a valid green lap deficit uses `plan_damage_pace_ms`.
   Early position loss uses `plan_rebuild_max_lap` and `plan_rebuild_positions_lost`.
   Current-set laps include the measured deficit or `damage_pace_ms_per_wing_pct`, whichever is larger.
   Tyre damage without a measurement uses `damage_tyre_pace_ms`. A wing repair adds `pit_wing_change_s` to pit loss.
   A stop clears the penalty after the out lap.
+  When no stop remains before or after a rebuild, the active plan keeps its letter and no switch is logged.
   A mindset change rebuilds A and B from the new ranking. Stops already made stay done.
   When degradation spread is known, the engine switches after `plan_off_s` when the
   probability that the best plan is faster exceeds `plan_switch_prob`.

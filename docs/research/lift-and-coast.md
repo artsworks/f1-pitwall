@@ -51,7 +51,7 @@ The owner must calibrate these thresholds from a recording, including transient 
 | Real line | Pitwall line |
 | --- | --- |
 | "Even small lift-and-coast is good" | "Fuel 0.4 laps short. Save 0.1 kg a lap, lift and coast" |
-| "front brakes are hot" | "Front left brake 1050.0 degrees. Lift earlier, cool them" |
-| "we need to cool the right-hand side of the car for engine temps" | "Engine 128.0 degrees, 0.6 behind Norris. Drop out of the tow to cool it" |
+| "front brakes are hot" | "Front left brake 1050 degrees. Lift earlier, cool them" |
+| "we need to cool the right-hand side of the car for engine temps" | "Engine 128 degrees, 0.6 behind Norris. Drop out of the tow to cool it" |
 
 The values in these examples are illustrative. Radio phrases rotate deterministically under ADR 0008.
