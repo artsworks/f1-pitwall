@@ -154,6 +154,13 @@ def test_profile_action10_shortcut_keeps_binding(tmp_path: Path, monkeypatch) ->
     assert store.last_error is not None and "share bit" in store.last_error
 
 
+def test_profile_unknown_bit_key_keeps_volume_cycle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("input:\n  volum_cycle_bit: 0x20000000\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    assert ConfigStore().current().input.volume_cycle_bit == 0x20000000
+
+
 def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing.yaml"))
     speech = ConfigStore().current().speech

@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from pitwall.config.models import Settings
+from pitwall.config.models import InputSettings, Settings
 
 DEFAULTS_DIR = Path(__file__).parent / "defaults"
 
@@ -80,7 +80,11 @@ def _yield_volume_bit(merged: dict[str, Any], profile: dict[str, Any]) -> None:
     bit = merged_in.get("volume_cycle_bit")
     if not bit or "volume_cycle_bit" in prof_in:
         return
-    owned = [k for k, v in prof_in.items() if k.endswith("_bit") and v == bit]
+    owned = [
+        k
+        for k, v in prof_in.items()
+        if k.endswith("_bit") and k in InputSettings.model_fields and v == bit
+    ]
     shortcuts = prof_in.get("shortcuts")
     if isinstance(shortcuts, list):
         owned += [
