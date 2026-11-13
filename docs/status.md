@@ -34,7 +34,8 @@ check the changelog for what a given version added.
 - Add more races until calibration reports `converged: true`.
 - Record calls-off sessions for an on/off comparison (`speech.enabled: false` silences the
   speaker and stamps `calls_mode: off`). Sessions stamped `off` before 6 Oct were spoken,
-  so ingest relabels them `on`.
+  so ingest relabels them `on`. A database migration also relabels the sessions from
+  before the fix that have no recording.
 - Recheck `release_go` and `release_hold` in a busy qualifying session. The two calls
   can still alternate every 30 s while cars pass the pit exit.
 - Confirm in a 5-lap race that the plan has no mandatory stop (`plan_no_stop_max_laps`).

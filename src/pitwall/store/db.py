@@ -335,6 +335,12 @@ MIGRATIONS: list[str] = [
         AND car_idx IS NOT NULL AND lap_num IS NOT NULL GROUP BY session_uid, car_idx, lap_num);
     CREATE UNIQUE INDEX laps_key ON laps(session_uid, car_idx, lap_num);
     """,
+    # 16: live sessions before commit fcdf5cb (6 Oct 2026) were stamped 'off' although
+    # calls were spoken. Ingest relabels recorded sessions; this covers unrecorded ones.
+    """
+    UPDATE sessions SET calls_mode='on' WHERE calls_mode='off' AND started_at < 1791288660
+        AND COALESCE(recording_path, '')='';
+    """,
 ]
 
 
