@@ -209,12 +209,16 @@ def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
         position=5,
         grid_position=5,
     )
-    engine.planner._plan(snap)
+    clean = engine.planner._plan(snap)
+    assert (clean.plan_label, clean.plan_target_lap) == ("1-stop M-S", 9)
     damaged = dataclasses.replace(snap, damage=DamageView(front_left_wing=60))
     result = engine.planner._plan(damaged)
-    assert result.plan_switch_reason == "invalid"
-    assert result.plan_switched_from == "A"
-    assert result.active_plan == "B"
+    # The rebuild keeps the M-S sequence, so the letter stays and the stop moves in place.
+    assert (result.plan_label, result.plan_target_lap) == ("1-stop M-S", 7)
+    assert result.plan_switch_reason == ""
+    assert result.plan_switched_from == ""
+    assert result.active_plan == "A"
+    assert engine.planner.plan_tracker.invalidated == {"damage"}
     assert engine.planner._plan_damage(damaged, engine.ctx.fresh_prior) == ("damage", 1200.0, 5.0)
     repaired = dataclasses.replace(snap, lap_num=3, num_pit_stops=1)
     assert engine.planner._plan_damage(repaired, engine.ctx.fresh_prior) == ("", 0.0, 0.0)
