@@ -57,6 +57,7 @@ def action_bits(inp: InputSettings) -> dict[str, int]:
     return {
         "mindset": int(inp.mindset_toggle_bit),
         "page": int(inp.page_cycle_bit),
+        "volume": int(inp.volume_cycle_bit),
         "menu_up": int(inp.menu_up_bit),
         "menu_down": int(inp.menu_down_bit),
         "menu_close": int(inp.menu_close_bit),
@@ -169,6 +170,9 @@ class Engine:
 
     def set_mindset(self, name: str, now: float) -> bool:
         return self.controls.set_mindset(name, now)
+
+    def cycle_volume(self, now: float) -> None:
+        return self.controls.cycle_volume(now)
 
     def cycle_budget(self) -> float:
         return self.controls.cycle_budget()
@@ -356,6 +360,10 @@ class Engine:
         self.ctx.budget_live = value
 
     @property
+    def volume_pct(self) -> int:
+        return self.ctx.volume_pct
+
+    @property
     def page(self) -> str:
         return self.ctx.page
 
@@ -453,6 +461,7 @@ class Engine:
     def tick(self, now: float) -> list[Call]:
         self.model._sync_run_fuel()
         self.ctx.store.poll(now)
+        self.controls.sync_volume_steps()
         self.setup_advisor.refresh_rules(self.ctx.store.current().setup_rules)
         if self.ctx.state.track_id != self._track_loaded:
             self._track_loaded = self.ctx.state.track_id
@@ -491,6 +500,9 @@ class Engine:
             snapshot = dataclasses.replace(snapshot, driver_balance=balance)
         self.ctx.last_snapshot = snapshot
         for p in self.controls._press_queue:
+            if p.kind == "volume":
+                self.controls.cycle_volume(p.t)
+                continue
             if self.menu_controller._menu_press(p, snapshot):
                 continue
             if p.kind == "mindset":

@@ -371,6 +371,15 @@
     var v = el("verbosity");
     if (v) {
       v.innerHTML = "";
+      if (p.volume) {
+        var volumeChip = span("", "v-chip vol");
+        var volumeIcon = p.volume.label === "low" ? "ico-mute" :
+          p.volume.label === "max" ? "ico-vol" : "ico-quiet";
+        volumeChip.title = "volume " + p.volume.pct + "%";
+        volumeChip.innerHTML = '<svg class="ico"><use href="#' + volumeIcon + '"/></svg>' +
+          esc(String(p.volume.label).toUpperCase());
+        v.appendChild(volumeChip);
+      }
       if (p.verbosity && p.verbosity !== "normal") {
         var vc = span("", "v-chip");
         vc.title = "verbosity: " + p.verbosity;

@@ -649,6 +649,7 @@ def state_payload(
     quiet_left_s: float | None = None,
     silent: bool = False,
     mindset: str | None = None,
+    volume_pct: int | None = None,
     page: str | None = None,
     menu: dict[str, object] | None = None,
     voice: dict[str, Any] | None = None,
@@ -722,6 +723,14 @@ def state_payload(
         else None,
         "page": page or (settings.ui.pages[0] if settings.ui.pages else "race"),
         "pages": list(settings.ui.pages),
+        "volume": {
+            "label": settings.speech.volume_label(
+                volume_pct if volume_pct is not None else (settings.speech.volume_steps or [100])[0]
+            ),
+            "pct": volume_pct
+            if volume_pct is not None
+            else (settings.speech.volume_steps or [100])[0],
+        },
         "verbosity": settings.policy.verbosity,
         "quiet": quiet or quiet_left_s is not None,
         "quiet_left_s": quiet_left_s,
@@ -851,6 +860,7 @@ def create_app(
     *,
     speaker_name: str = "null",
     latest_snapshot: Any = None,
+    live_volume: Any = None,
     on_client_press: Any = None,
     on_client_message: Any = None,
     review: Any = None,
@@ -1024,6 +1034,13 @@ def create_app(
                         "config_hash": settings_store.hash,
                         "mindset": settings.mindset.active,
                         "verbosity": settings.policy.verbosity,
+                        "volume": state_payload(
+                            snapshot_now(),
+                            settings=settings,
+                            metrics=metrics,
+                            quiet=False,
+                            volume_pct=live_volume() if live_volume else None,
+                        )["volume"],
                         "review": review is not None,
                         "audio": hub.streams_audio,
                     },
@@ -1041,6 +1058,7 @@ def create_app(
                 settings=settings_store.current(),
                 metrics=metrics,
                 quiet=settings_store.current().policy.quiet,
+                volume_pct=live_volume() if live_volume else None,
             )
             payload["calls"] = list(hub.recent_calls)
             await websocket.send_text(json.dumps(hub.frame("snapshot", payload)))

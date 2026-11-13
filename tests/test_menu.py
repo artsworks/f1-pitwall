@@ -195,7 +195,7 @@ def test_action_items_run_their_action(tmp_path: Path) -> None:
     engine, _, rows = _run(tmp_path, [(SD12, 20.0)])
     (rec,) = _inputs(rows)
     assert rec["item_id"] == "mindset" and engine.mindset == "aggressive"
-    engine2, _, rows2 = _run(tmp_path, [(UP, 20.0), (ACK, 21.0)], name="s")
+    engine2, _, rows2 = _run(tmp_path, [(UP, 20.0), (UP, 20.5), (ACK, 21.0)], name="s")
     assert engine2.dispatcher.silent is False
     assert [r["item_id"] for r in _inputs(rows2)] == ["push"]
     engine3, _, _ = _run(
@@ -410,6 +410,8 @@ def test_validate_and_duplicate_bits() -> None:
     assert any("needs a `topic`" in e for e in errors)
     with pytest.raises(ValidationError):
         InputSettings(menu_up_bit=0x00200000, mindset_toggle_bit=0x00200000)
+    with pytest.raises(ValidationError):
+        InputSettings(volume_cycle_bit=SD10, shortcuts=[{"bit": SD10, "item": "oversteer"}])
     InputSettings(menu_up_bit=0, mindset_toggle_bit=0)  # zeros never collide
 
 
@@ -425,13 +427,13 @@ def test_packaged_menu_is_valid() -> None:
         "fight",
         "rain",
         "push",
+        "oversteer",
     ]
     labels = [i.label for i in settings.menu.items]
     assert "Next page" not in labels
     assert all(len(label.split()) <= 3 for label in labels)
     assert {i.id for i in settings.menu.items if i.shortcut_only} == {
         "understeer",
-        "oversteer",
         "budget",
         "mindset",
         "silent",
@@ -552,7 +554,7 @@ def test_stream_deck_shortcuts_answer_directly(tmp_path: Path) -> None:
         db=db,
     )
     recs = _inputs(rows)
-    item_ids = ["pit", "push", "fight", "understeer", "oversteer", "budget", "mindset"]
+    item_ids = ["pit", "push", "fight", "understeer", "budget", "mindset"]
     assert [r["item_id"] for r in recs] == item_ids
     via_values = [dict(r["inputs"])["via"] for r in recs]  # type: ignore[call-overload]
     assert via_values == ["shortcut"] * len(recs)
@@ -570,6 +572,57 @@ def test_shortcut_while_menu_open_closes_it(tmp_path: Path) -> None:
     _, _, rows = _run(tmp_path, [(DOWN, 20.0), (SD7, 21.0)])
     assert [r["text"] for r in rows if r["outcome"] == "menu_close"] == ["shortcut"]
     assert [r["item_id"] for r in _inputs(rows)] == ["push"]
+
+
+@pytest.mark.replay
+def test_volume_cycle_with_menu_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.audio.dispatcher import Dispatcher
+
+    gains: list[int] = []
+    monkeypatch.setattr(Dispatcher, "set_volume", lambda self, pct: gains.append(pct))
+    engine, calls, rows = _run(
+        tmp_path, [(DOWN, 19.0), (SD10, 20.0), (SD10, 21.0), (SD10, 22.0), (SD10, 23.0)]
+    )
+    assert gains == [70, 40, 70, 100, 70]
+    assert engine.volume_pct == 70
+    assert [r["pct"] for r in rows if r["outcome"] == "volume"] == [40, 70, 100, 70]
+    assert [c.text for c in calls if c.rule_id == "volume"] == [
+        "Volume low.",
+        "Volume normal.",
+        "Volume max.",
+        "Volume normal.",
+    ]
+    assert not _inputs(rows)
+    assert not [r for r in rows if r["outcome"] == "menu_close" and r["text"] != "timeout"]
+
+
+def test_empty_volume_cycle() -> None:
+    engine = build_engine(
+        clock=VirtualClock(), sinks=[], overrides={"speech": {"volume_steps": []}}
+    )
+    engine.cycle_volume(1.0)
+    assert engine.volume_pct == 100
+
+
+def test_volume_steps_reload_resets_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pitwall.audio.dispatcher import Dispatcher
+
+    gains: list[int] = []
+    monkeypatch.setattr(Dispatcher, "set_volume", lambda self, pct: gains.append(pct))
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    for t in (1.0, 2.0, 3.0):
+        engine.cycle_volume(t)
+    assert engine.volume_pct == 100
+    settings = engine.store.current()
+    engine.store._settings = settings.model_copy(
+        update={"speech": settings.speech.model_copy(update={"volume_steps": [20, 60]})}
+    )
+    gains.clear()
+    engine.tick(4.0)
+    assert engine.volume_pct == 20
+    assert gains == [20]
+    engine.cycle_volume(5.0)
+    assert engine.volume_pct == 60
 
 
 def _packaged_item(item_id: str) -> MenuItemModel:

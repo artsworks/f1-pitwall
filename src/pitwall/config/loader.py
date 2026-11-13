@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -15,9 +16,11 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from pitwall.config.models import Settings
+from pitwall.config.models import InputSettings, Settings
 
 DEFAULTS_DIR = Path(__file__).parent / "defaults"
+
+log = logging.getLogger(__name__)
 
 # Must stay a safe loader (CSafeLoader or SafeLoader). Never switch to
 # yaml.Loader or yaml.CLoader: config comes from user-editable profile and
@@ -65,6 +68,33 @@ def profile_path() -> Path | None:
 def config_hash(settings: Settings) -> str:
     canonical = json.dumps(settings.model_dump(), sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()[:8]
+
+
+def _yield_volume_bit(merged: dict[str, Any], profile: dict[str, Any]) -> None:
+    """A profile that binds the default volume bit elsewhere, without setting
+    input.volume_cycle_bit itself, keeps its binding and turns volume cycle off."""
+    prof_in = profile.get("input")
+    merged_in = merged.get("input")
+    if not isinstance(prof_in, dict) or not isinstance(merged_in, dict):
+        return
+    bit = merged_in.get("volume_cycle_bit")
+    if not bit or "volume_cycle_bit" in prof_in:
+        return
+    owned = [
+        k
+        for k, v in prof_in.items()
+        if k.endswith("_bit") and k in InputSettings.model_fields and v == bit
+    ]
+    shortcuts = prof_in.get("shortcuts")
+    if isinstance(shortcuts, list):
+        owned += [
+            f"shortcuts[{i}]"
+            for i, sc in enumerate(shortcuts)
+            if isinstance(sc, dict) and sc.get("bit") == bit
+        ]
+    if owned:
+        merged_in["volume_cycle_bit"] = 0
+        log.warning("profile binds input.%s to %#010x; volume cycle disabled", owned[0], bit)
 
 
 class ConfigStore:
@@ -117,10 +147,9 @@ class ConfigStore:
             if custom_rules is not None:
                 merged["rules"] = custom_rules
         if not self._isolated and self._profile is not None and self._profile.exists():
-            merged = _deep_merge(
-                merged,
-                _load_yaml(self._profile.read_text(encoding="utf-8")) or {},
-            )
+            profile = _load_yaml(self._profile.read_text(encoding="utf-8")) or {}
+            merged = _deep_merge(merged, profile)
+            _yield_volume_bit(merged, profile)
         overlay = None if self._isolated else self._load_track_overlay()
         if overlay is not None:
             overlay_thresholds = overlay.get("thresholds")

@@ -20,6 +20,32 @@ from pitwall.config.models import (
 from pitwall.learning.calibrate import write_overlays
 
 
+def test_volume_steps_clamp() -> None:
+    assert SpeechSettings(volume_steps=[-1, 70, 151]).volume_steps == [0, 70, 150]
+    assert SpeechSettings().volume_steps == [70, 40, 70, 100]
+
+
+@pytest.mark.parametrize(
+    ("steps", "percent", "label"),
+    [
+        ([70, 40, 70, 100], 70, "normal"),
+        ([70, 40, 70, 100], 40, "low"),
+        ([70, 40, 70, 100], 100, "max"),
+        ([70, 70, 100], 70, "normal"),
+        ([70, 70, 100], 100, "max"),
+        ([70, 40], 70, "normal"),
+        ([70, 40], 40, "low"),
+        ([100], 100, "normal"),
+        ([], 70, "normal"),
+        ([70, 70, 40, 40, 70, 100, 100], 70, "normal"),
+        ([70, 70, 40, 40, 70, 100, 100], 40, "low"),
+        ([70, 70, 40, 40, 70, 100, 100], 100, "max"),
+    ],
+)
+def test_volume_label_relative_to_first_step(steps: list[int], percent: int, label: str) -> None:
+    assert SpeechSettings(volume_steps=steps).volume_label(percent) == label
+
+
 def test_defaults_load() -> None:
     store = ConfigStore()
     s = store.current()
@@ -110,6 +136,29 @@ def test_invalid_override_keeps_last_good(tmp_path: Path, monkeypatch) -> None: 
     assert store.reload() is False
     assert store.last_error is not None
     assert store.current().policy.calls_per_lap == 2  # last good kept
+
+
+def test_profile_action10_shortcut_keeps_binding(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("input:\n  shortcuts:\n    - {bit: 0x20000000, item: oversteer}\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    s = ConfigStore().current()
+    assert [(sc.bit, sc.item) for sc in s.input.shortcuts] == [(0x20000000, "oversteer")]
+    assert s.input.volume_cycle_bit == 0
+
+    profile.write_text(
+        "input:\n  volume_cycle_bit: 0x20000000\n"
+        "  shortcuts:\n    - {bit: 0x20000000, item: oversteer}\n"
+    )
+    store = ConfigStore()
+    assert store.last_error is not None and "share bit" in store.last_error
+
+
+def test_profile_unknown_bit_key_keeps_volume_cycle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("input:\n  volum_cycle_bit: 0x20000000\n")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    assert ConfigStore().current().input.volume_cycle_bit == 0x20000000
 
 
 def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

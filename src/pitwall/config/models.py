@@ -6,7 +6,7 @@ from __future__ import annotations
 import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from pitwall.net.profile import ProfileName
 
@@ -141,6 +141,7 @@ class InputSettings(BaseModel):
         }
     )
     page_cycle_bit: int = 0  # e.g. 0x00800000 = UDP Action 4; resets to the first page
+    volume_cycle_bit: int = 0
     # Driver menu (docs/12): up/down open and scroll; Action 1 confirms while open.
     menu_up_bit: int = 0  # e.g. 0x00200000 = UDP Action 2
     menu_down_bit: int = 0  # e.g. 0x00400000 = UDP Action 3
@@ -170,6 +171,7 @@ class InputSettings(BaseModel):
             "silent_toggle_bit": self.silent_toggle_bit,
             "mindset_toggle_bit": self.mindset_toggle_bit,
             "page_cycle_bit": self.page_cycle_bit,
+            "volume_cycle_bit": self.volume_cycle_bit,
             "menu_up_bit": self.menu_up_bit,
             "menu_down_bit": self.menu_down_bit,
             "menu_close_bit": self.menu_close_bit,
@@ -296,11 +298,28 @@ class SpeechSettings(BaseModel):
     warm_workers: int | None = Field(default=None, ge=1)
     rate: int = 0
     volume: int = 100
+    volume_steps: list[int] = Field(default_factory=lambda: [70, 40, 70, 100])
+
+    @field_validator("volume_steps")
+    @classmethod
+    def _clamp_volume_steps(cls, steps: list[int]) -> list[int]:
+        return [max(0, min(150, step)) for step in steps]
+
     radio_click: bool = True
     tone_urgent_speed: float = 1.1
     tone_urgent_expression: float = 1.2
     tone_calm_speed: float = 0.95
     tone_calm_expression: float = 0.85
+
+    def volume_label(self, percent: int) -> str:
+        steps = self.volume_steps
+        if not steps:
+            return "normal"
+        if percent < steps[0]:
+            return "low"
+        if percent > steps[0]:
+            return "max"
+        return "normal"
 
 
 class MindsetSettings(BaseModel):

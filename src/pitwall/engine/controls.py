@@ -46,6 +46,17 @@ class Controls:
         ctx.state.action_listeners.append(lambda k, t: self._press_queue.append(Press(k, t)))
         pages = ctx.store.current().ui.pages
         ctx.page = pages[0] if pages else "race"
+        self._volume_steps: list[int] = []
+        self.sync_volume_steps(force=True)
+
+    def sync_volume_steps(self, force: bool = False) -> None:
+        steps = self.ctx.store.current().speech.volume_steps
+        if not force and steps == self._volume_steps:
+            return
+        self._volume_steps = list(steps)
+        self._volume_index = 0
+        self.ctx.volume_pct = steps[0] if steps else 100
+        self.ctx.dispatcher.set_volume(self.ctx.volume_pct)
 
     def reset(self) -> None:
         pass
@@ -112,6 +123,28 @@ class Controls:
         snap = self.ctx.dispatcher.latest_snapshot or self.ctx.state.snapshot(now)
         self.ctx.dispatcher.announce_mindset(name, dataclasses.replace(snap, now=now))
         return True
+
+    def cycle_volume(self, now: float) -> None:
+        steps = self.ctx.store.current().speech.volume_steps
+        if not steps:
+            return
+        self._volume_index = (self._volume_index + 1) % len(steps)
+        self.ctx.volume_pct = steps[self._volume_index]
+        self.ctx.dispatcher.set_volume(self.ctx.volume_pct)
+        label = self.ctx.store.current().speech.volume_label(self.ctx.volume_pct)
+        snap = self.ctx.dispatcher.latest_snapshot or self.ctx.state.snapshot(now)
+        self.ctx.dispatcher.menu_reply(
+            f"Volume {label}.", "volume", dataclasses.replace(snap, now=now)
+        )
+        self.ctx.dispatcher.log.write(
+            {
+                "t": now,
+                "outcome": "volume",
+                "rule_id": None,
+                "text": label,
+                "pct": self.ctx.volume_pct,
+            }
+        )
 
     def cycle_budget(self) -> float:
         """Next driver-menu calls-per-lap step; overrides the mindset's budget."""

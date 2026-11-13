@@ -46,6 +46,7 @@ class EngineContext:
     driver_rating: tuple[float, float, str] = (0.5, 0.0, "")
     mindset_override: str | None = None
     budget_live: float | None = None
+    volume_pct: int = 100
     page: str = "race"
     menu: DriverMenu = field(default_factory=DriverMenu)
     opinions: dict[str, tuple[str, int]] = field(default_factory=dict)
