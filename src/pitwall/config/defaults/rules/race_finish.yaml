@@ -10,9 +10,9 @@ rules:
     requires: [final_classification]
     supersedes: [finish_penalty, finish_gained, finish_lost, finish_held, finish_win, finish_podium]
     say:
-      - "Confirmed P{final_position:.1f}. {final_details}"
-      - "Final result, P{final_position:.1f}. {final_details}"
-      - "Classified P{final_position:.1f}. {final_details}"
+      - "Confirmed P{final_position}. {final_details}"
+      - "Final result, P{final_position}. {final_details}"
+      - "Classified P{final_position}. {final_details}"
   - id: race_cool_down
     sessions: [race]
     priority: 2
@@ -23,9 +23,9 @@ rules:
     still_true: "phase == 'finished' and result_status == 3 and final_position == 0 and not session_ended and speed_kmh >= th.race_cool_down_min_speed_kmh"
     requires: [lap_data, car_telemetry]
     say:
-      - "Race complete. Hottest brake {brake_max_c:.1f} degrees. Cool the car"
-      - "Race complete. Brakes up to {brake_max_c:.1f} degrees, cool the car"
-      - "After the flag, keep the car cool. Hottest brake {brake_max_c:.1f} degrees"
+      - "Race complete. Hottest brake {brake_max_c:.0f} degrees. Cool the car"
+      - "Race complete. Brakes up to {brake_max_c:.0f} degrees, cool the car"
+      - "After the flag, keep the car cool. Hottest brake {brake_max_c:.0f} degrees"
   # End of lap 1: report against the grid slot.
   - id: lap1_gained
     sessions: [race]
@@ -223,9 +223,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag. P{position:.1f} on the road, projected P{penalty_position:.1f} after penalty. {finish_details}"
-      - "Chequered flag. P{position:.1f}, penalty projects P{penalty_position:.1f}. {finish_details}"
-      - "Crossed P{position:.1f}. Provisional P{penalty_position:.1f} with the penalty. {finish_details}"
+      - "Flag. P{position} on the road, projected P{penalty_position} after penalty. {finish_details}"
+      - "Chequered flag. P{position}, penalty projects P{penalty_position}. {finish_details}"
+      - "Crossed P{position}. Provisional P{penalty_position} with the penalty. {finish_details}"
   - id: finish_gained
     sessions: [race]
     priority: 2
@@ -235,9 +235,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag. P{position:.1f} on the road, up {positions_gained:.1f} from the grid. {finish_details}"
-      - "Chequered flag, P{position:.1f}. Gained {positions_gained:.1f} on track. {finish_details}"
-      - "Finished P{position:.1f} on track, from P{grid_position:.1f}. {finish_details}"
+      - "Flag. P{position} on the road, up {positions_gained} from the grid. {finish_details}"
+      - "Chequered flag, P{position}. Gained {positions_gained} on track. {finish_details}"
+      - "Finished P{position} on track, from P{grid_position}. {finish_details}"
   - id: finish_lost
     sessions: [race]
     priority: 2
@@ -247,9 +247,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Flag. P{position:.1f} on the road, down {positions_lost:.1f} from the grid. {finish_details}"
-      - "Chequered flag, P{position:.1f}. Started P{grid_position:.1f}. {finish_details}"
-      - "Finished P{position:.1f} on track, lost {positions_lost:.1f} from the grid. {finish_details}"
+      - "Flag. P{position} on the road, down {positions_lost} from the grid. {finish_details}"
+      - "Chequered flag, P{position}. Started P{grid_position}. {finish_details}"
+      - "Finished P{position} on track, lost {positions_lost} from the grid. {finish_details}"
   - id: finish_held
     sessions: [race]
     priority: 2
@@ -259,9 +259,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag. P{position:.1f} on the road. {finish_details}"
-      - "Flag, P{position:.1f} on track. {finish_details}"
-      - "Finished P{position:.1f} on the road. {finish_details}"
+      - "Chequered flag. P{position} on the road. {finish_details}"
+      - "Flag, P{position} on track. {finish_details}"
+      - "Finished P{position} on the road. {finish_details}"
   - id: finish_win
     sessions: [race]
     priority: 1
@@ -271,9 +271,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag, P{position:.1f} on the road. {finish_details}"
-      - "First across the line, P{position:.1f}. {finish_details}"
-      - "Flag, P{position:.1f} on track. {finish_details}"
+      - "Chequered flag, P{position} on the road. {finish_details}"
+      - "First across the line, P{position}. {finish_details}"
+      - "Flag, P{position} on track. {finish_details}"
   - id: finish_podium
     sessions: [race]
     priority: 1
@@ -283,9 +283,9 @@ rules:
     max_per_stint: 1
     requires: [lap_data]
     say:
-      - "Chequered flag, P{position:.1f} on the road. {finish_details}"
-      - "Across the line P{position:.1f} on track. {finish_details}"
-      - "Flag. P{position:.1f} on the road. {finish_details}"
+      - "Chequered flag, P{position} on the road. {finish_details}"
+      - "Across the line P{position} on track. {finish_details}"
+      - "Flag. P{position} on the road. {finish_details}"
   - id: pit_exit_traffic_race
     sessions: [race]
     priority: 2

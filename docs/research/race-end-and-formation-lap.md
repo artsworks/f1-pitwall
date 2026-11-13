@@ -80,13 +80,13 @@ New spoken numbers use one decimal. Missing gaps or grid changes produce no plac
 
 | Call | Example |
 | --- | --- |
-| Tyres | "Rear left at 60.0 degrees. Work the tyres before the start" |
-| Brakes | "Brakes need heat, lowest 150.0 degrees" |
-| Grid | "Your grid slot is P6.0 for the start" |
-| Road finish | "Flag. P4.0 on the road, up 2.0 from the grid. 1.2 to the car ahead. 2.4 clear behind." |
-| Penalty projection | "Crossed P4.0. Provisional P5.0 with the penalty." |
-| Confirmed result | "Confirmed P3.0. Up 3.0 from the grid. 1.2 to the car ahead. 2.4 clear behind. Fastest lap, 80.2 seconds." |
-| Cooling | "Race complete. Hottest brake 450.0 degrees. Cool the car" |
+| Tyres | "Rear left at 60 degrees. Work the tyres before the start" |
+| Brakes | "Brakes need heat, lowest 150 degrees" |
+| Grid | "Your grid slot is P6 for the start" |
+| Road finish | "Flag. P4 on the road, up 2 from the grid. 1.2 to the car ahead. 2.4 clear behind." |
+| Penalty projection | "Crossed P4. Provisional P5 with the penalty." |
+| Confirmed result | "Confirmed P3. Up 3 from the grid. 1.2 to the car ahead. 2.4 clear behind. Fastest lap, 80.2 seconds." |
+| Cooling | "Race complete. Hottest brake 450 degrees. Cool the car" |
 
 The confirmation may correct the road result after penalties. It is not another chequered-flag celebration.
 The fastest-lap report does not claim an extra championship point.

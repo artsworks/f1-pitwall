@@ -3495,11 +3495,11 @@ class SessionState:
         if car.grid_position > 0:
             gained = car.grid_position - car.position
             if gained > 0:
-                details.append(f"Up {gained:.1f} from the grid.")
+                details.append(f"Up {gained} from the grid.")
             elif gained < 0:
-                details.append(f"Down {-gained:.1f} from the grid.")
+                details.append(f"Down {-gained} from the grid.")
             else:
-                details.append(f"Held P{car.grid_position:.1f} from the grid.")
+                details.append(f"Held P{car.grid_position} from the grid.")
         total = car.total_race_time + car.penalties_time
         if math.isfinite(total) and total > 0:
             for offset, label in ((-1, "to the car ahead"), (1, "clear behind")):
