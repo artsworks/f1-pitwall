@@ -204,15 +204,23 @@ def test_vsc_ending_and_restart(runs) -> None:
 
 
 def test_lap1_and_finish_report_against_grid(runs) -> None:
-    calls, _ = runs["start_gained"]
+    # Both races finish P3, so finish_podium supersedes the grid-change finish call.
+    calls, rows = runs["start_gained"]
     ids = _ids(calls)
-    assert {"lap1_gained", "three_to_go", "last_lap", "finish_gained"} <= ids
-    assert not {"lap1_lost", "lap1_held", "finish_lost", "finish_held"} & ids
-    text = next(c.text for c in calls if c.rule_id == "finish_gained")
+    assert {"lap1_gained", "three_to_go", "last_lap", "finish_podium"} <= ids
+    assert not {"lap1_lost", "lap1_held", "finish_lost", "finish_held", "finish_gained"} & ids
+    assert any(
+        r.get("rule_id") == "finish_gained" and r.get("suppressed_by") == "superseded" for r in rows
+    )
+    text = next(c.text for c in calls if c.rule_id == "finish_podium")
     assert "P3" in text and ("3" in text)
     calls, rows = runs["start_lost"]
     ids = _ids(calls)
-    assert {"last_lap_defend", "finish_lost"} <= ids
+    assert {"last_lap_defend", "finish_podium"} <= ids
+    assert "finish_lost" not in ids
+    assert any(
+        r.get("rule_id") == "finish_lost" and r.get("suppressed_by") == "superseded" for r in rows
+    )
     assert "last_lap" not in ids
     # The rival behind is inside DRS range, so the battle call drops the lap one line.
     assert "lap1_lost" not in ids

@@ -31,7 +31,7 @@ def test_cold_sc_ending_replaces_plain_ending_call(tmp_path: Path) -> None:
 
     cold_call = next(call for call in calls if call.rule_id == "sc_ending_tyres_cold")
     assert cold_call.lap == 4
-    assert "55.0" in cold_call.text
+    assert "55" in cold_call.text and "55.0" not in cold_call.text
     assert "sc_ending" not in {call.rule_id for call in calls}
     assert any(
         row["rule_id"] == "sc_ending"
