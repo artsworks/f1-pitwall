@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from pitwall.config.models import (
+    InputSettings,
     Settings,
     call_budget,
     resolve_mindset,
@@ -27,6 +28,19 @@ _MENU_CLIENT_OPS = {
 }
 
 
+def action_bits(inp: InputSettings) -> dict[str, int]:
+    """Named UDP Action buttons beyond ack/silent (docs/12)."""
+    return {
+        "mindset": int(inp.mindset_toggle_bit),
+        "page": int(inp.page_cycle_bit),
+        "volume": int(inp.volume_cycle_bit),
+        "menu_up": int(inp.menu_up_bit),
+        "menu_down": int(inp.menu_down_bit),
+        "menu_close": int(inp.menu_close_bit),
+        **{f"item:{sc.item}": int(sc.bit) for sc in inp.shortcuts},
+    }
+
+
 class Controls:
     def __init__(
         self, ctx: EngineContext, rule_engine: RuleEngine | None, voice: VoiceController
@@ -35,6 +49,7 @@ class Controls:
         self.rule_engine = rule_engine
         self.voice = voice
         inp = ctx.store.current().input
+        self._input = inp
         self.detector = PressDetector(
             double_ms=inp.double_press_ms,
             long_ms=inp.long_press_ms,
@@ -57,6 +72,17 @@ class Controls:
         self._volume_index = 0
         self.ctx.volume_pct = steps[0] if steps else 100
         self.ctx.dispatcher.set_volume(self.ctx.volume_pct)
+
+    def sync_input(self) -> None:
+        inp = self.ctx.store.current().input
+        if inp is self._input:
+            return
+        self._input = inp
+        self.ctx.state.rebind_buttons(
+            press_bit=inp.udp_action_bit,
+            toggle_bit=inp.silent_toggle_bit,
+            action_bits=action_bits(inp),
+        )
 
     def reset(self) -> None:
         pass

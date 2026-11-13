@@ -87,7 +87,7 @@ The OmniVoice server owns the voice, seed, temperatures and steps. Pitwall sends
 
 All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` sets how many phrases `pitwall voice warm` renders, and `warm_workers` sets how many render at once. The default is half the logical cores, and at most 4 for OmniVoice, so the game keeps CPU. Each Piper worker uses one CPU thread. A new engine registers its id with `register_engine()`. See `.agents/skills/tts-engine-contract/SKILL.md`.
 
-`input.volume_cycle_bit` binds the speech volume cycle to UDP Action 10 by default. Set the bit to `0` to disable it. Pitwall reads the `input.*_bit` fields and `input.shortcuts` at startup. Restart Pitwall to apply a change to a button binding.
+`input.volume_cycle_bit` binds the speech volume cycle to UDP Action 10 by default. Set the bit to `0` to disable it. A change to an `input.*_bit` field or to `input.shortcuts` takes effect when Pitwall reloads the config. A button that you hold during the reload does not fire until you release it and press it again.
 `speech.volume_steps` defaults to `[70, 40, 70, 100]`. Each step is clamped to 0–150 percent. A value of 100 means a Piper multiplier of 1.0.
 The first step is normal. A lower step is labelled low and a higher step is labelled max. The cycle wraps after the last step. The live gain affects local and browser WAV playback without changing `speech.volume`.
 

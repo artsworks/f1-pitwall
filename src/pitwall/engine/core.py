@@ -20,13 +20,12 @@ from pitwall.audio.dispatcher import Call, CallSink, Dispatcher, LogSink
 from pitwall.clock import Clock, VirtualClock, WallClock
 from pitwall.config.loader import ConfigStore
 from pitwall.config.models import (
-    InputSettings,
     call_budget,
 )
 from pitwall.config.paths import storage_path
 from pitwall.engine.battle import BattleRunner
 from pitwall.engine.context import EngineContext
-from pitwall.engine.controls import Controls
+from pitwall.engine.controls import Controls, action_bits
 from pitwall.engine.menu import MenuController
 from pitwall.engine.model import SessionModel
 from pitwall.engine.persistence import SessionWriter
@@ -50,19 +49,6 @@ from pitwall.strategy.battle import (
 from pitwall.strategy.pitwindow import PitPlan
 from pitwall.voice.channel import VoiceChannel
 from pitwall.voice.worker import VoiceWorker
-
-
-def action_bits(inp: InputSettings) -> dict[str, int]:
-    """Named UDP Action buttons beyond ack/silent (docs/12)."""
-    return {
-        "mindset": int(inp.mindset_toggle_bit),
-        "page": int(inp.page_cycle_bit),
-        "volume": int(inp.volume_cycle_bit),
-        "menu_up": int(inp.menu_up_bit),
-        "menu_down": int(inp.menu_down_bit),
-        "menu_close": int(inp.menu_close_bit),
-        **{f"item:{sc.item}": int(sc.bit) for sc in inp.shortcuts},
-    }
 
 
 def budget_label(v: float) -> str:
@@ -462,6 +448,7 @@ class Engine:
         self.model._sync_run_fuel()
         self.ctx.store.poll(now)
         self.controls.sync_volume_steps()
+        self.controls.sync_input()
         self.setup_advisor.refresh_rules(self.ctx.store.current().setup_rules)
         if self.ctx.state.track_id != self._track_loaded:
             self._track_loaded = self.ctx.state.track_id
