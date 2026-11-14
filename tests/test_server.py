@@ -214,6 +214,13 @@ def test_dashboard_v3_and_v2_pages_load_their_assets() -> None:
         assert client.get(path).status_code == 200
 
 
+@pytest.mark.parametrize("path", ["/", "/v2", "/radio"])
+def test_page_element_ids_are_unique(path: str) -> None:
+    client, _ = _app()
+    ids = re.findall(r'\sid="([^"]+)"', client.get(path).text)
+    assert sorted({i for i in ids if ids.count(i) > 1}) == []
+
+
 def test_service_worker_precaches_dashboard_assets() -> None:
     client, _ = _app()
     sw = client.get("/sw.js").text

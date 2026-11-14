@@ -78,8 +78,8 @@ Zone rules:
 - Status bar: freshness sits at the far left. The lap reads `LAP 27/57 · 30 LEFT` in a race. Position, driver rating, verbosity, voice and sound controls follow. The mindset pill shows the full word. The bar turns amber under a safety car.
 - Banner: the call banner holds the current call, the evidence line and one dim line for the previous call. With no call, it says "— radio quiet —".
 - PACE: the last lap time, `L26 VS L25`, the lap delta, and the S1, S2 and S3 deltas.
-- TRACK, weather: an icon and rain chance for now, 10 and 30 minutes. The icons show the game weather type. The card has no sky words. Beside it, the crossover compound, the lap it falls on and the time to it. No rain chance appears beside the crossover lap. Without a crossover, the card says "no crossover".
-- TRACK, limits: corner cuts and track limits warnings. Dots show the warnings left before the next penalty. The dots fill with `cuts % warn_at`, and all fill when a penalty is due. The penalty time shows at the right. On phone, the status bar chip shows the limits instead.
+- TRACK, weather: an icon and rain chance for now, 10 and 30 minutes. Three icons show cloud, light rain and heavy rain. The card has no sky words. Beside it, the crossover compound, the lap it falls on and the time to it. No rain chance appears beside the crossover lap. Without a crossover, the card says "no crossover".
+- TRACK, limits: corner cuts and track limits warnings. Dots show the warnings left before the next penalty. The dots fill with `cuts % warn_at`, and all fill when a penalty is due. The penalty time shows at the right. The status bar chip shows the same counts. On phone, only the chip shows.
 - PLAN: one card per plan. The active plan has a thick border. Under a live SC or VSC, plan C comes first and takes the thick border from the active plan. The active card shows the plan letter, the compounds, ON PLAN or OFF PLAN, the box lap, the window and the exit row with the undercut and overcut deltas. Other plans show one dim line.
 - CAR, fuel: signed laps at the flag. Green from 0.5 laps, amber from 0 to 0.5, red when short.
 - CAR, battery: the charge, the budget mode icon and word, and the laps to the floor.
@@ -95,7 +95,7 @@ Zone rules:
 - Pit board: takes the whole main row in the garage. In a race pit stop it takes the left and centre columns, and the right column stays.
 - Footer: diagnostics only, in small type.
 
-Dropped in v3: surface temperature, kg per lap in the fuel card, the game marker on fuel, MJ per lap, sky words in the weather card, the second last-lap row, base pace, rain chance beside the crossover lap, and the GAP TO POLE tile. The pole gap now shows in the last run card. The pit board keeps kg per lap and its weather words.
+Dropped in v3: surface temperature, kg per lap in the fuel card, the game marker on fuel, MJ per lap, sky words in the weather card, the second last-lap row, base pace, rain chance beside the crossover lap, and the GAP TO POLE tile. The pole gap now shows in the last run card. The pit board also drops kg per lap. It keeps its weather words.
 
 Rules the mockups do not show:
 

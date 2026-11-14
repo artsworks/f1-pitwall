@@ -424,12 +424,12 @@
     return p.total_laps && p.lap_num ? String(Math.max(0, p.total_laps - p.lap_num)) : null;
   }
 
-  // Limits: a card in the TRACK group (race and qualifying). Phone shows the status chip instead.
+  // Limits: a card in the TRACK group and a status chip (race and qualifying). Phone shows the chip only.
   function renderLimits(p) {
     var card = el("limits-card"), chip = el("limits"), inf = p.race && p.race.infringements;
     var shown = !!inf && (p.session_kind === "race" || p.session_kind === "qualifying");
     if (card) card.hidden = !shown;
-    if (chip) chip.hidden = !(shown && document.body.classList.contains("phone"));
+    if (chip) chip.hidden = !shown;
     if (!shown) return;
     var cuts = Number(inf.corner_cuts) || 0;
     var cutWarns = Number(inf.cut_warns) || 0;
@@ -652,7 +652,7 @@
       n.className = (!known ? "" : w >= 4 ? "storm" : w >= 3 || pct >= 40 ? "wet" : "dry") +
         (i === slot ? " xo-" + CROSS[c][2] : "");
       n.querySelector(".k").textContent = i === 0 ? "NOW" : SLOT_MIN[i] + " MIN";
-      n.querySelector("use").setAttribute("href", "#wx-" + (known ? w : 2));
+      n.querySelector("use").setAttribute("href", "#wx-" + (!known || w < 3 ? 2 : w < 4 ? 3 : 4));
       n.querySelector(".pct").textContent = known && pct !== null && pct !== undefined ? pct + "%" : "--";
     }
     var x = el("cross");
@@ -801,7 +801,7 @@
       [span(inRacePit ? "IN PIT LANE" : "BOX NOW" + (ap ? " · PLAN " + ap.id : ""), "huge")];
     var line = fit ? "Plan " + fit.plan + " expected " + String(fit.expected).toLowerCase() + " · new plan from next lap" :
       (win ? "WINDOW L" + win[0] + "–" + win[1] : "");
-    var lossed = s && s.pit_loss_s ? [icon("lap", "i s"), span(fmt(s.pit_loss_s, 0) + " s", "mid")] : null;
+    var lossed = s && s.pit_loss_s ? [icon("ico-lap", "i s"), span(fmt(s.pit_loss_s, 0) + " s", "mid")] : null;
     setCard(box, "card act " + (fit ? "stop" : "box"), [
       icon("box", "i l"),
       node("col", [node("row", head), span(line, "tagw")]),
@@ -844,7 +844,7 @@
   }
 
   // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
-  // Under live SC/VSC plan C comes first and takes the thick border from the active plan.
+  // Under live SC/VSC plan C comes first with an amber border. The active plan keeps its thick border.
   function renderPlans(s, scLive) {
     var box = el("plans");
     if (!box) return;
@@ -881,7 +881,7 @@
       if (pl === ap) {
         var target = s.plan_target_lap;
         var w = pl.window;
-        box.appendChild(node("card plan" + (focusReactive ? "" : " active"), [
+        box.appendChild(node("card plan active", [
           node("row", [
             icon("plan", "i"), span(pl.id, "mid"), seq, span("", "sp"),
             span(s.on_plan === false ? "✗ OFF PLAN " + fmt(s.plan_off_s, 1) + " s" : "✓ ON PLAN",
@@ -940,7 +940,7 @@
     defending: "DEFENDING", under_threat: "UNDER THREAT", managing: "MANAGING" };
   var MODE_CLS = { catching: "catching", attacking: "attack", defending: "threat", under_threat: "threat" };
   var MODE_ICON = { catching: "attack", attacking: "attack", defending: "defend", under_threat: "defend" };
-  var railCache = {};
+  var railCache = {}, resultRival = { result: "", name: "" };
   function syncChildren(parent, kids) {
     for (var i = 0; i < kids.length; i++) {
       var cur = parent.childNodes[i], next = kids[i];
@@ -1014,7 +1014,10 @@
     });
     syncChildren(train, trains);
     train.hidden = !trains.length;
-    var rivalName = resultSide && s[resultSide] ? String(s[resultSide].name || "--").toUpperCase() : "";
+    var nowName = resultSide && s[resultSide] ? String(s[resultSide].name || "--").toUpperCase() : "";
+    if (resultRival.result !== result) resultRival = { result: result, name: nowName };
+    if (!resultRival.name) resultRival.name = nowName;
+    var rivalName = resultRival.name;
     var swaps = b.swaps ? b.swaps + (b.swaps === 1 ? " SWAP" : " SWAPS") : "";
     [["ahead", el("card-ahead")], ["behind", el("card-behind")]].forEach(function (x) {
       var sd = x[0], n = x[1], r = s[sd];
@@ -1103,7 +1106,7 @@
     var mate = q.teammate || null;
     setText("q-mate-who", mate && mate.driver ? mate.driver : "--");
     qRow("q-mate-gaps", mate ? mate.sector_gaps_ms : null, mate && mate.worst_sector ? mate.worst_sector - 1 : -1, mate ? mate.gap_ms : null);
-    var head = "--", line = "no run plan yet", lap = q.lap, tone = "proj";
+    var head = "--", line = "no run plan yet", lap = q.lap, tone = "proj", delta = "";
     var runCard = el("q-run");
     if (q.release) {
       var r = q.release;
@@ -1111,15 +1114,18 @@
       tone = r.time_for_out_lap === false ? "stop" : r.clean ? "go" : r.wait_s !== null ? "wait" : "stop";
       line = r.cars_on_track + " on track" + (r.gap_ahead_s !== null ? " · " + fmt(r.gap_ahead_s, 0) + " s clear ahead" : "");
     } else if (lap) {
-      head = "PROJ " + lapTime(lap.projected_ms) + (lap.abort ? " · ✗ ABORT" : "");
+      head = lap.abort ? "✗ ABORT" : "PROJ " + lapTime(lap.projected_ms);
       tone = lap.abort ? "stop" : "proj";
-      line = lap.delta_ms === null ? "no cut-off yet" : signed(lap.delta_ms) + " to cut";
+      delta = lap.delta_ms === null ? "" : signed(lap.delta_ms);
+      line = (lap.abort ? "PROJ " + lapTime(lap.projected_ms) : "") + (delta ? "" : (lap.abort ? " · " : "") + "no cut-off yet");
     } else if (q.plan) {
       head = "PLAN " + String(q.plan.plan).toUpperCase();
       line = q.plan.reason || "";
     }
     if (runCard) runCard.className = "card act " + tone;
     setText("q-run-head", head);
+    setText("q-run-delta", delta);
+    setText("q-run-tag", delta ? "TO CUT" : "");
     setText("q-run-line", line);
   }
   var SPEAK_ICON = '<svg class="ico"><use href="#ico-speak"/></svg>';
@@ -1360,9 +1366,6 @@
     setText("pb-press-note", b.has_advice || b.tyres.fl.avg_c !== null ? "· avg on flying laps" +
       (win ? " · target " + fmt(win[0], 0) + "–" + fmt(win[1], 0) + "°" : "") : "· no flying laps this run");
     CORNERS.forEach(function (k) { renderCorner(k, b.tyres[k], win); });
-    var runKg = b.run_fuel_per_lap_kg;
-    pbTile("pb-runfuel", true, "", runKg !== null && runKg !== undefined ? fmt(runKg, 2) + " kg" : "--",
-      b.run_fuel_laps ? "avg of " + b.run_fuel_laps + " lap" + (b.run_fuel_laps === 1 ? "" : "s") : "no green laps yet");
     var plan = q && q.plan && q.plan.plan;
     pbTile("pb-plan", !!plan, plan === "box" || plan === "cool" ? "warn" : "ok",
       PLAN_TEXT[plan] || String(plan).toUpperCase(), plan ? PLAN_WHY[q.plan.reason] || q.plan.reason : "");
@@ -1480,12 +1483,16 @@
     var need = c.fuel_need_laps, fuelOk = c.fuel_laps >= need;
     var fuelTile = el("c-fuel-tile");
     if (fuelTile) fuelTile.className = "card col " + (fuelOk ? "ok" : "warn");
-    setText("c-fuel", fmt(c.fuel_laps, 1) + " laps");
+    setText("c-fuel", fmt(c.fuel_laps, 1) + "L");
     var fbar = el("c-fuel-bar");
     if (fbar) fbar.style.setProperty("--f", (100 * Math.max(0, Math.min(1, (c.fuel_laps || 0) / (2 * need)))).toFixed(1) + "%");
     setText("c-fuel-need", "push needs " + fmt(need, 1) + " laps");
     var hot = c.dist_to_hot_m;
-    setText("c-hot", hot === null ? "--" : hot >= 1000 ? fmt(hot / 1000, 1) + " km" : fmt(hot, 0) + " m");
+    var hotEl = el("c-hot");
+    if (hotEl) {
+      hotEl.textContent = hot === null ? "--" : hot >= 1000 ? fmt(hot / 1000, 1) : fmt(hot, 0);
+      if (hot !== null) hotEl.appendChild(span(hot >= 1000 ? "KM" : "M", "tagw"));
+    }
     setText("c-plan", c.extend ? "+1 COOL LAP" : c.plan_reason ?
       "cooling: " + (PLAN_WORDS[c.plan_reason] || c.plan_reason) : "--");
     var behind = el("c-behind");
