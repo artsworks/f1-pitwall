@@ -3,7 +3,7 @@
 Status: **phases 1–6 implemented** in `web/`. M3 adds the zone F `strategy` block,
 backend-owned `fuel_delta_laps`, and the backend-owned page reset (§10). Call evidence awaits
 backend fields. The banner clears to "radio quiet" after 20 s / 30 s, then moves the call
-to the log. Sample mockups live in `docs/mockups/` (`dashboard-reimagined-v2.html`,
+to the log. Sample mockups live in `docs/mockups/` (`dashboard-reimagined-v3.html`, `dashboard-reimagined-v2.html`,
 `dashboard-reimagined.html`, `radio.html`). They use self-contained vanilla HTML/CSS with
 no build step. Open them in a browser. Call evidence, fuel targets, and damage values
 illustrate planned backend fields.
