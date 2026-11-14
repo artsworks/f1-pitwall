@@ -12,6 +12,21 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.58.0 (2026-11-14)
+
+### Bug Fixes
+
+- **dashboard**: Fix v3 findings from the replay pass
+  ([#182](https://github.com/artsworks/f1-pitwall/pull/182),
+  [`12bc560`](https://github.com/artsworks/f1-pitwall/commit/12bc56017e2ca54859332388e70708ca4b0268f3))
+
+### Features
+
+- **dashboard**: Add dashboard v3 at / and keep v2 at /v2
+  ([#182](https://github.com/artsworks/f1-pitwall/pull/182),
+  [`12bc560`](https://github.com/artsworks/f1-pitwall/commit/12bc56017e2ca54859332388e70708ca4b0268f3))
+
+
 ## v0.57.1 (2026-11-13)
 
 ### Bug Fixes
