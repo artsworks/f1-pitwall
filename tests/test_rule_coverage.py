@@ -54,7 +54,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "plan_push_now",
         "plan_switch",
         "plan_switch_no_stop",
-        "plan_target_lap",
         "practice_lap_invalid",
         "rain_box_now",
         "rain_follow_field",
