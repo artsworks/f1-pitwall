@@ -21,6 +21,14 @@ A speech engine (TTS) change must keep these working:
 
 Do not add engine-specific checks, such as `isinstance` on an engine class or a test on an engine name, to `src/pitwall/cli/serve.py`, `src/pitwall/cli/recordings.py` or `src/pitwall/server/`. Use the capability flags and `wire_speaker()` from `src/pitwall/audio/speaker.py`.
 
+## Tests
+
+A serial `uv run pytest` takes more than 60 minutes. Run pytest in parallel. The tests do not need real recordings.
+
+- After each change, run the fast tests: `uv run pytest -m "not slow and not replay" -n auto --dist loadfile`
+- Before you finish, run the full suite once: `uv run pytest -n auto --dist loadfile`
+- To debug one test, run it by node ID without `-n`.
+
 ## Do not commit
 
 These files are personal state or large local data. `.gitignore` covers most of them. Stage files by path and do not use `git add -A`.

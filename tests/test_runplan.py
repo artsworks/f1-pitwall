@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import math
 import os
 from pathlib import Path
 
 import pytest
 
+from pitwall.clock import VirtualClock
 from pitwall.config.loader import ConfigStore
+from pitwall.engine import build_engine, run_replay
 from pitwall.metrics import Metrics
 from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
@@ -15,6 +19,9 @@ from pitwall.server.app import quali_payload, state_payload
 from pitwall.state.quali import quali_margin_ms
 from pitwall.state.runplan import COOL, HOT, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.state.session import SessionState, Snapshot
+
+from .race_synth import RaceSpec, qualifying_stream
+from .synth import write_packet_stream
 
 PUSH = Plan("push", "ready")
 
@@ -764,6 +771,92 @@ def test_q2_recording_does_not_call_through_early(tmp_path: Path) -> None:
     asyncio.run(run_replay(Q2_THROUGH, engine, None))
     engine.dispatcher.log.flush()
     rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any(
+        row.get("rule_id") == "quali_through" and row.get("outcome") in {"queued", "fired"}
+        for row in rows
+    )
+
+
+def _replay_rows(tmp_path: Path, spec: RaceSpec) -> list[dict[str, object]]:
+    recording = write_packet_stream(tmp_path / "quali.f1bin", qualifying_stream(spec))
+    log = tmp_path / "decisions.jsonl"
+    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log)
+    asyncio.run(run_replay(recording, engine, None))
+    engine.dispatcher.log.flush()
+    return [json.loads(line) for line in log.read_text().splitlines() if line]
+
+
+def _battery_spec(battery_pct: tuple[float, ...], **overrides: object) -> RaceSpec:
+    """Out lap, then flying laps; battery in percent of the 4 MJ store, per lap."""
+    fields: dict[str, object] = {
+        "laps": len(battery_pct),
+        "session_type": 5,
+        "base_ms": 90_000,
+        "deg_ms": 0,
+        "dt": 0.25,
+        "lap_timer": True,
+        "session_time_left_s": 600,
+        "ers_store_by_lap": tuple(pct * 40_000.0 for pct in battery_pct),
+        "extra_by_lap": {
+            1: {"lap_data": {"cars": {0: {"driver_status": 3}}}},
+            2: {"lap_data": {"cars": {0: {"driver_status": 1}}}},
+        },
+    }
+    fields.update(overrides)
+    return RaceSpec(**fields)  # type: ignore[arg-type]
+
+
+def test_synthetic_q1_battery_profile_run_plan(tmp_path: Path) -> None:
+    # Q1 run 1 (2026-09-25): battery 2% and 6% at the line after the 31% read
+    rows = _replay_rows(tmp_path, _battery_spec((10.0, 60.0, 31.0, 2.0, 6.0, 6.0)))
+    fired = [
+        row["rule_id"]
+        for row in rows
+        if row.get("outcome") == "fired" and str(row.get("rule_id", "")).startswith("plan_")
+    ]
+    assert fired[:3] == ["plan_push", "plan_cool", "plan_cool"]
+
+
+def test_synthetic_wet_quali_battery_profile_run_plan(tmp_path: Path) -> None:
+    # Brazil wet quali on inters (2026-10-13): battery 37.5% and 34.5% at the line
+    spec = _battery_spec((10.0, 37.5, 34.5, 34.5), compound=7, tyre_inner_profile=(74.5,) * 4)
+    rows = _replay_rows(tmp_path, spec)
+    fired = [
+        row["rule_id"]
+        for row in rows
+        if row.get("outcome") == "fired" and str(row.get("rule_id", "")).startswith("plan_")
+    ]
+    assert fired[:2] == ["plan_push", "plan_push"]
+
+
+def test_synthetic_q2_does_not_call_through_early(tmp_path: Path) -> None:
+    # Early Q2 with the best lap 0.5 s inside the 10th place cut-off (fix in 0a12b2b)
+    spec = RaceSpec(
+        laps=2,
+        session_type=6,
+        base_ms=81_000,
+        deg_ms=0,
+        dt=0.25,
+        session_time_left_s=600,
+        qualifying_field_best_ms=(
+            80_500,
+            80_600,
+            80_700,
+            80_800,
+            80_900,
+            81_500,
+            82_000,
+            82_100,
+            82_200,
+            82_300,
+            82_400,
+            82_500,
+        ),
+        positions_by_lap=((9, 8, 10, 1),) * 2,
+        player_history=True,
+        extra_by_lap={1: {"lap_data": {"cars": {0: {"driver_status": 1}}}}},
+    )
+    rows = _replay_rows(tmp_path, spec)
     assert not any(
         row.get("rule_id") == "quali_through" and row.get("outcome") in {"queued", "fired"}
         for row in rows
