@@ -88,6 +88,13 @@ def test_pin_middleware_protects_http_but_allows_pin_and_static() -> None:
     assert client.get("/pin").status_code == 200
 
 
+def test_pin_protects_v2_dashboard() -> None:
+    client = _client(PinGate(pin="1234"))
+    redirect = client.get("/v2", follow_redirects=False)
+    assert redirect.status_code == 303
+    assert redirect.headers["location"] == "/pin?next=%2Fv2"
+
+
 def test_pin_protects_websocket_until_cookie_is_set() -> None:
     client = _client(PinGate(pin="1234"))
     with client.websocket_connect("/ws") as websocket:

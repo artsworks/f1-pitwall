@@ -11,7 +11,7 @@ from pitwall.metrics import Metrics
 from pitwall.protocol.enums import DriverStatus
 from pitwall.protocol.layouts import Corners
 from pitwall.rules.engine import RuleEngine
-from pitwall.server.app import state_payload
+from pitwall.server.app import quali_payload, state_payload
 from pitwall.state.quali import quali_margin_ms
 from pitwall.state.runplan import COOL, HOT, HotLap, Plan, RunTracker, mistakes_text, run_plan
 from pitwall.state.session import SessionState, Snapshot
@@ -613,10 +613,26 @@ def test_cool_payload_swaps_layout() -> None:
         "worst_sector": None,
     }
     assert cool["car_behind_s"] is None and cool["mistakes"] is None
+    assert cool["fuel_need_laps"] == settings.thresholds["fuel_push_need_laps"]
     assert q["plan"] == {"plan": "cool", "reason": "battery"}
     # hot-lap-mode point reached: normal layout returns
     assert "cool" not in payload(cool_lap=True, cool_prep=True, run_plan="cool")
     assert "cool" not in payload(cool_lap=False)
+
+
+def test_cool_fuel_need_follows_push_threshold() -> None:
+    snap = _qsnap(
+        cool_lap=True,
+        run_plan="cool",
+        run_plan_reason="battery",
+        ers_store_pct=12.0,
+        track_length_m=5000.0,
+        dist_to_hot_mode_m=1800.0,
+        tyre_inner_ema_fast=Corners(90.0, 105.0, 92.0, 93.0),
+    )
+    cool = quali_payload(snap, {"fuel_push_need_laps": 0.9})["cool"]
+    assert isinstance(cool, dict)
+    assert cool["fuel_need_laps"] == 0.9
 
 
 Q1 = Path(os.environ.get("PITWALL_Q1_RECORDING", "~/recordings/q1.f1bin.zst")).expanduser()

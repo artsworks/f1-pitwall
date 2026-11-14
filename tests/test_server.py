@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import io
+import json
+import re
 import threading
 import time
 
@@ -189,6 +191,45 @@ def test_api_health_and_config() -> None:
     assert c["ui"]["state_hz"] == 5
     assert client.get("/").status_code == 200
     assert client.get("/radio").status_code == 200
+
+
+DASHBOARD_ASSETS = [
+    "/static/app.js",
+    "/static/style.css",
+    "/static/v2/app.js",
+    "/static/v2/style.css",
+]
+
+
+def test_dashboard_v3_and_v2_pages_load_their_assets() -> None:
+    client, _ = _app()
+    root = client.get("/")
+    assert root.status_code == 200
+    assert "/static/app.js" in root.text and "/static/style.css" in root.text
+    v2 = client.get("/v2")
+    assert v2.status_code == 200
+    assert "/static/v2/app.js" in v2.text and "/static/v2/style.css" in v2.text
+    assert client.get("/radio").status_code == 200
+    for path in DASHBOARD_ASSETS:
+        assert client.get(path).status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/", "/v2", "/radio"])
+def test_page_element_ids_are_unique(path: str) -> None:
+    client, _ = _app()
+    ids = re.findall(r'\sid="([^"]+)"', client.get(path).text)
+    assert sorted({i for i in ids if ids.count(i) > 1}) == []
+
+
+def test_service_worker_precaches_dashboard_assets() -> None:
+    client, _ = _app()
+    sw = client.get("/sw.js").text
+    match = re.search(r"const ASSETS = (\[.*?\]);", sw, re.S)
+    assert match is not None
+    assets = json.loads(match.group(1))
+    assert set(DASHBOARD_ASSETS) <= set(assets)
+    for path in assets:
+        assert client.get(path).status_code == 200
 
 
 def test_websocket_voice_control_reaches_engine_callback() -> None:

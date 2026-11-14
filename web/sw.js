@@ -1,5 +1,5 @@
-const CACHE = "pitwall-static-v3";
-const ASSETS = ["/static/style.css", "/static/app.js", "/static/manifest.webmanifest"];
+const CACHE = "pitwall-static-v4";
+const ASSETS = ["/static/style.css", "/static/app.js", "/static/v2/style.css", "/static/v2/app.js", "/static/manifest.webmanifest"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
   self.skipWaiting();
