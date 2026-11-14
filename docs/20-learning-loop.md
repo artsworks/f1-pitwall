@@ -92,7 +92,8 @@ the refit and cooldown steps, so priors do not move mid-race.
 
 Upkeep is idempotent. A second run with no new data changes nothing. Database errors are
 logged and skipped. To run upkeep again, restart `pitwall start`. To skip the refit and
-cooldown steps, set `learning.auto_calibrate: false`.
+cooldown steps, set `learning.auto_calibrate: false`. Cooldown multipliers stay between
+`tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
 
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
 `deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value

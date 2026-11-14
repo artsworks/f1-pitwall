@@ -94,8 +94,9 @@ Settings: `input.long_press` (`silent` | `bookmark`, default `silent` in `settin
 (default `0`: a dedicated toggle button), `input.silent_on_replies`,
 `input.silent_off_replies`.
 
-The repo owner recorded a hold of about 1.1 s on UDP Action 1. The wheel reported down
-then up, and radio silent toggled.
+A hold toggles radio silent after `input.long_press_ms`, which is 2000 ms by default.
+The repo owner once recorded a hold of about 1.1 s on UDP Action 1 that toggled radio
+silent. The threshold was shorter then, so a hold of that length no longer toggles it.
 
 ## Mindset and page buttons (M3)
 

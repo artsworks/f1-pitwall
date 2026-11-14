@@ -25,6 +25,7 @@ commands in PowerShell:
 
 ```powershell
 winget install --id astral-sh.uv -e   # then reopen PowerShell
+winget install --id Git.Git -e        # skip if you already have Git
 git clone https://github.com/artsworks/f1-pitwall.git
 cd f1-pitwall
 uv sync
@@ -62,6 +63,7 @@ Open `http://localhost:8000` on the second monitor. You should hear "Pit wall on
 | Page | Shows |
 |---|---|
 | `/` | The one-screen dashboard: status bar, current call, tyres, fuel and battery, and the strategy or qualifying cards |
+| `/v2` | The previous dashboard. Use it if `/` misbehaves during a session |
 | `/radio` | The current call and a log of recent calls in large type |
 | `/debrief` | Stored sessions, each with a link to its review |
 
@@ -325,3 +327,11 @@ when it is missing or older than the recording.
 - **Doctor shows 0 datagrams**: set the in-game IP to `127.0.0.1`, restart the game after changing telemetry settings, and allow UDP 20777 through Windows Firewall (doctor prints the `netsh` commands).
 - If the dashboard says STALE, Pitwall has received no fresh telemetry for over 1 s.
   You may be in a menu, paused, or the game may not be sending.
+  Run `pitwall doctor --seconds 30` while you drive to check.
+- **`winget` is not recognised**: use Astral's installer for uv. Run
+  `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`.
+  `ByPass` applies to that one command only.
+- **`uv` is not recognised after the installation**: close and reopen PowerShell to load the new PATH.
+- **No speech**: run `pitwall voice say`, which prints the error. `--engine piper` uses the
+  downloaded voice, and `--engine omnivoice` uses the configured OmniVoice server.
+- **Robotic voice**: run `pitwall voice get`, then restart `pitwall start`.

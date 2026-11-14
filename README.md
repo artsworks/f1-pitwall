@@ -26,73 +26,19 @@ curl -LsSf https://raw.githubusercontent.com/artsworks/f1-pitwall/main/install/i
 
 Mac and Linux servers play speech in the dashboard browser tab only.
 
-### Manual install (Windows game PC)
+Set the game's UDP telemetry, then open `http://localhost:8000` on the second
+monitor. The dashboard goes LIVE when you are on track. Update with the Pitwall
+Update shortcut, or run `pitwall update`.
 
-You need Git and [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 for
-you, so nothing else is required. In PowerShell:
-
-```powershell
-# 1. Install uv and Git (skip either if you already have it), then close and reopen PowerShell
-winget install --id astral-sh.uv -e
-winget install --id Git.Git -e
-
-# 2. Get pitwall
-git clone https://github.com/artsworks/f1-pitwall.git
-cd f1-pitwall
-uv sync                      # creates .venv with Python 3.12 and all dependencies
-
-# 3. Optional: natural voice (~60 MB download into voices/, git-ignored)
-uv run pitwall voice get
-uv run pitwall voice warm    # optional: pre-render fixed phrases (speech.warm_phrases, default 150)
-
-# 4. Check the setup, then run
-uv run pitwall voice say     # radio check through your headset
-uv run pitwall doctor        # ports, wire format, packet rate, speech
-uv run pitwall start         # engine + speech + dashboard
-```
-
-Then in F1 26, **Settings → Telemetry Settings**:
-
-| Setting | Value |
-|---|---|
-| UDP Telemetry | On |
-| UDP Broadcast Mode | Off |
-| UDP IP Address | `127.0.0.1` |
-| UDP Port | `20777` |
-| UDP Send Rate | `30 Hz` |
-| UDP Format | `2026` |
-
-Open `http://localhost:8000` on the second monitor (`/radio` is the compact
-log view). `/` is dashboard v3. `/v2` keeps the previous dashboard.
-You should hear "Pit wall online." on start, and the dashboard goes
-LIVE as soon as you are on track (the game sends nothing from the menus).
+[docs/getting-started.md](docs/getting-started.md) has the manual installation, the
+game settings, the voice download and troubleshooting.
 
 ### Wheel buttons
 
-In the game's controls menu, bind a free wheel button to **UDP Action 1** (and
-optionally another to **UDP Action 3**). The pit wall answers every press by voice.
-
-| Press | Action |
-|---|---|
-| UDP 1 single | Acknowledge the last call ("Copy.") |
-| UDP 1 double | Negative ("Noted."); with no recent call, quiet for 5 minutes |
-| UDP 1 held ≥ 0.8 s | **Radio silent** on/off: no speech (urgent P1 calls still speak), dashboard keeps the radio |
-
-With `voice.enabled: true`, the wheel gestures stay the same. The mic listens while the driver menu is open, or for 2 s after you press `V` on the dashboard.
-
-Update with the Pitwall Update shortcut, or run `pitwall update`.
-
-### If something is off
-
-| Symptom | Fix |
-|---|---|
-| `winget` not recognised | Use Astral's installer instead: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (ByPass applies to that one command only) |
-| `uv` not recognised after install | Close and reopen PowerShell so the new PATH is picked up |
-| Dashboard says STALE | Run `pitwall doctor --seconds 30` *while driving*. `0 datagrams` → check the game settings above, restart the game after changing them, then allow UDP 20777 in Windows Firewall (doctor prints the `netsh` commands). |
-| No speech | `pitwall voice say` prints the error. `--engine piper` uses the downloaded voice, and `--engine omnivoice` uses the configured OmniVoice server. |
-| Robotic voice | `pitwall voice get`, then restart `pitwall start`. |
-
-More in [docs/getting-started.md](docs/getting-started.md).
+In the game's controls menu, bind a free wheel button to **UDP Action 1**. A single
+press acknowledges the last call, a double press is a negative, and a hold of 2 s
+turns radio silent on or off. [docs/12-driver-input.md](docs/12-driver-input.md)
+lists every input.
 
 ## What it says today
 
@@ -118,20 +64,11 @@ start. Optional review and learning commands are in
 
 ### Learning loop
 
-Pitwall grades each session when it ends, then refits pace, tyre wear, fuel, thermal
-and energy priors and adjusts rule cooldowns from the grades.
-The refit values also go to the per-track files in `~/.pitwall/tracks/`.
-Two steps stay manual by design: grading calls at `/debrief/latest` and applying the
-threshold YAML changes that `pitwall propose` writes. Your grades always override
-automatic ones. Rule thresholds never change without your review, and cooldown
-multipliers stay between `tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
-Set `learning.auto_calibrate: false` to turn off the refit and cooldown steps.
-
-#### Contributing your learnings
-
-To propose your learned per-track values for the packaged defaults, share only
-`learnings/learning-latest.json`. Do not share the SQLite database, digests, profile
-or certificates. See [Contributing your learnings](docs/20-learning-loop.md#contributing-your-learnings).
+Pitwall grades each session when it ends, then refits its track priors and adjusts
+rule cooldowns. Your grades override automatic ones, and rule thresholds change only
+after you review them. [docs/20-learning-loop.md](docs/20-learning-loop.md) has the
+details and explains how to
+[contribute your learned values](docs/20-learning-loop.md#contributing-your-learnings).
 
 ## Shape of the system
 
@@ -153,15 +90,9 @@ is tuned and tested offline against real sessions instead of by driving another 
 
 ## Recording and replay
 
-Every session is recorded under `recordings/` (local only, git-ignored).
-The default `lite` profile is about 35 MB per 3 hours; use `--record full`
-when you want a session for debugging.
-
-```powershell
-pitwall start --record full                      # everything at 30 Hz
-pitwall replay recordings\<file>.f1bin.zst --speed 10 --stats
-pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
-```
+Pitwall records every session under `recordings/`, which stays local and git-ignored.
+`pitwall replay` runs a recording through the same pipeline as a live session.
+[docs/07-replay-and-debug.md](docs/07-replay-and-debug.md) has the details.
 
 ## Commands
 
@@ -170,23 +101,13 @@ pitwall replay recordings\<file>.f1bin.zst --serve   # watch it on the dashboard
 | `pitwall start` | Run live: listens to game telemetry, makes calls, speaks them. | `pitwall start` |
 | `pitwall doctor` | Check your setup: tests the UDP port and shows which telemetry arrives. | `pitwall doctor --seconds 10` |
 | `pitwall update` | Update Pitwall: pull the latest code with git, then sync dependencies with uv. | `pitwall update` |
-| `pitwall cert` | Set up HTTPS for the phone radio page: makes a trusted certificate with mkcert. | `pitwall cert` |
-| `pitwall recordings` | List recordings newest first, with the # that other commands accept. | `pitwall recordings` |
-| `pitwall sessions` | List stored sessions newest first, to find a session uid. | `pitwall sessions --limit 5` |
 | `pitwall replay` | Rerun a recording through the engine to see the calls it makes. | `pitwall replay latest --speed 4 --serve` |
-| `pitwall stats` | Show what a recording holds, or what Pitwall has learned so far. | `pitwall stats --learned` |
-| `pitwall digest` | Learn from recordings: grades each session and writes its digest. | `pitwall digest recordings/` |
-| `pitwall debrief` | Export a session debrief as one HTML file you can open or share. | `pitwall debrief` |
-| `pitwall setup` | Suggest car setup changes from how a recorded run went. | `pitwall setup --mode garage` |
-| `pitwall evaluate` | Did the calls help? Compares calls-on vs calls-off outcomes. | `pitwall evaluate` |
-| `pitwall calibrate` | Fit track priors for pace, tyre wear and fuel from your sessions. | `pitwall calibrate --track 7 --dry-run` |
 | `pitwall voice` | Manage speech: list and download voices, pre-render phrases, test audio. | `pitwall voice say "Box this lap"` |
-| `pitwall cleanup` | Reclaim disk space and keep recordings not learned yet. | `pitwall cleanup --learn` |
-| `pitwall report` | Bundle a recording and its decision log into a zip for a bug report. | `pitwall report latest -o report.zip` |
+| `pitwall debrief` | Export a session debrief as one HTML file you can open or share. | `pitwall debrief` |
 
-Run `pitwall <command> -h` for its options and an example. Run `pitwall --help-all` to list
-the advanced commands for rule-engine work: `diff`, `bench`, `rules check`, `propose`,
-`tune`, `restore` and `trim`.
+Run `pitwall --help` to list every command and `pitwall <command> -h` for its options
+and an example. Run `pitwall --help-all` to list the advanced commands for rule-engine
+work: `diff`, `bench`, `rules check`, `propose`, `tune`, `restore` and `trim`.
 
 ## Why it is not just another dashboard
 
@@ -207,10 +128,11 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | Document | Contents |
 |---|---|
 | [`docs/status.md`](docs/status.md) | What works today, what is next, known gaps |
-| [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, after-session commands, recording profiles, replay |
+| [`docs/getting-started.md`](docs/getting-started.md) | Install, game settings, after-session commands, recording profiles, replay, troubleshooting |
 | [`docs/07-replay-and-debug.md`](docs/07-replay-and-debug.md) | Recording format, replay CLI, A/B diffing, live diagnostics |
 | [`docs/08-configuration.md`](docs/08-configuration.md) | Settings model, verbosity presets, balanced/aggressive mindset |
 | [`docs/20-learning-loop.md`](docs/20-learning-loop.md) | Automatic grading and upkeep, calibration, learned state |
+| [`docs/25-report-analysis-prompt.md`](docs/25-report-analysis-prompt.md) | Prompt that turns a `pitwall report` zip with bookmarks into issues, fixes and regression tests |
 
 **Design**
 
@@ -227,8 +149,12 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/16-debrief-design.md`](docs/16-debrief-design.md) | Session debrief: built sections, grading and deferred work |
 | [`docs/17-quali-run-plan.md`](docs/17-quali-run-plan.md) | Qualifying run plan and coaching |
 | [`docs/18-race-engine.md`](docs/18-race-engine.md) | Race engine, tyre life, degradation priors and persistence |
+| [`docs/19-guest-tower.md`](docs/19-guest-tower.md) | Guest timing tower at `/tower` for spectators (design only, not built) |
 | [`docs/21-voice-command.md`](docs/21-voice-command.md) | Voice-command design and implementation status |
 | [`docs/22-setup-advisor.md`](docs/22-setup-advisor.md) | Setup advisor proposal: parameter effects, parc fermé matrix, balance signals, rule tables, learning loop |
+| [`docs/23-synthetic-recordings.md`](docs/23-synthetic-recordings.md) | Spike: synthetic recordings from real sessions as rule-learning scenarios |
+| [`docs/24-scenario-bench.md`](docs/24-scenario-bench.md) | `pitwall bench`: replay scenarios, score the calls, compare with a baseline |
+| [`docs/26-driver-rating.md`](docs/26-driver-rating.md) | Driver rating from 0 to 1: components and where it appears |
 
 **Decisions and reference**
 
@@ -237,22 +163,9 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/adr/`](docs/adr/README.md) | Architecture decision records: what live sessions taught us |
 | [`docs/05-roadmap.md`](docs/05-roadmap.md) | Next work and later options; the finished M0–M4 plan as history |
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts |
+| [`docs/research/`](docs/research/) | Research notes: lift and coast, penalty escalation, race end and formation lap, safety-car restart, team orders, track limits, weather crossover |
+| [`docs/versioning.md`](docs/versioning.md) | Semantic Versioning, PR title rules and the release workflow |
 | [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md), [`06`](docs/06-direction-changes.md), [`10`](docs/10-angles-not-yet-considered.md), [`11`](docs/11-open-questions.md), [`14`](docs/14-adversarial-review.md) | History / early planning (kept for reference): review of the first plan, direction changes, open angles and questions, adversarial review |
-
-## Versioning
-
-The project follows [Semantic Versioning 2.0.0](https://semver.org). While the version is 0.x, a breaking change bumps MINOR instead of MAJOR. Moving to 1.0.0 is a manual decision.
-
-Pull requests are squash-merged, so the PR title becomes the commit on `main`. The PR title must be a [Conventional Commit](https://www.conventionalcommits.org), and CI checks it. On each push to `main`, the release workflow reads the title and bumps the version:
-
-| PR title | Bump on 0.x |
-|---|---|
-| `fix: ...`, `perf: ...` | PATCH |
-| `feat: ...` | MINOR |
-| `feat!: ...` or a `BREAKING CHANGE:` footer | MINOR |
-| `docs:`, `chore:`, `refactor:`, `test:`, `build:`, `ci:` | none |
-
-The workflow updates `pyproject.toml` and `uv.lock`, adds an entry to [`CHANGELOG.md`](CHANGELOG.md), and pushes a `vX.Y.Z` tag, then creates a GitHub Release with the same notes. Do not edit the version by hand.
 
 ## Licence
 
