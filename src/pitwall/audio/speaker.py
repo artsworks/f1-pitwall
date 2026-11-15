@@ -145,11 +145,18 @@ def _make_piper(settings: SpeechSettings) -> Speaker:
     return make_piper_speaker(settings)
 
 
+def _make_kokoro(settings: SpeechSettings) -> Speaker:
+    from pitwall.audio.kokoro_tts import make_kokoro_speaker
+
+    return make_kokoro_speaker(settings)
+
+
 def _make_null(settings: SpeechSettings) -> Speaker:
     return NullSpeaker()
 
 
 register_engine(EngineSpec("omnivoice", _make_omnivoice, "piper"))
+register_engine(EngineSpec("kokoro", _make_kokoro, "piper"))
 register_engine(EngineSpec("piper", _make_piper, "null"))
 register_engine(EngineSpec("null", _make_null, None))
 

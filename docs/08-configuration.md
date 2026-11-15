@@ -79,6 +79,7 @@ visual-only mode.
 | `auto` | none | Resolves to `piper` if the Piper voice file exists, else `null`. |
 | `piper` | `piper_voice`, `piper_speed`, `voices_dir`, `tone_urgent_speed`, `tone_urgent_expression`, `tone_calm_speed`, `tone_calm_expression` | `null` |
 | `omnivoice` | `omnivoice_url`, `omnivoice_timeout_s`, `omnivoice_wait_s`, and the Piper fields for cold lines | `piper` |
+| `kokoro` | `kokoro_voice`, `kokoro_lang`, `kokoro_speed`, `kokoro_device`, `voices_dir`, `tone_urgent_speed`, `tone_calm_speed` | `piper` |
 | `null` | none | none |
 
 The OmniVoice server owns the voice, seed, temperatures and steps. Pitwall sends only the text. Pitwall ignores the older `omnivoice_voice`, `omnivoice_seed`, `omnivoice_language`, `omnivoice_voice_version`, `omnivoice_ref_wav` and `omnivoice_ref_text` fields. The phrase cache key covers only the text, the server model id and `radio_click`. After you change the voice, seed or steps on the server, delete `voices_dir/.phrases`.

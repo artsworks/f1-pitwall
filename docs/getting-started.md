@@ -114,6 +114,7 @@ If the client sends another `v`, the server closes the socket with code 4001.
 |---|---|---|
 | `piper` | yes | yes |
 | `omnivoice` | yes | yes |
+| `kokoro` | yes | yes |
 | `null` | no | no |
 
 Mac and Linux servers play speech in the dashboard browser tab only. If an engine fails to load, Pitwall prints a warning and tries its fallback. An unknown engine id prints a warning, and Pitwall uses `auto`. [Configuration](08-configuration.md) lists the fallbacks and the fields for each engine.
@@ -192,6 +193,21 @@ Add `--log-level` before the command to print more detail. `--log-level info` pr
 The `voices/` directory is git-ignored. Copy `voices/.phrases` to friends who use the same server model and voice settings. Their Pitwall still needs a reachable OmniVoice server. Without one, Pitwall falls back to Piper.
 
 OmniVoice falls back to Piper, then `null`.
+
+## Natural voice (Kokoro, opt-in)
+
+Kokoro is a local neural voice. On Windows it runs on the NVIDIA GPU when one is available.
+
+1. Install the Kokoro extra with `uv sync --extra kokoro`.
+2. Download `kokoro-v1.0.onnx` and `voices-v1.0.bin` from https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1.
+3. Put both files in `voices/kokoro/`.
+4. Set `speech.engine` to `kokoro`.
+
+Run Pitwall with `uv run --extra kokoro pitwall ...`. A plain `uv run` removes the extra.
+
+Pick a voice with `speech.kokoro_voice`, default `bf_emma`. The voice list is at https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md. Set `speech.kokoro_lang` to the espeak language of the voice, default `en-gb`. Set speed with `speech.kokoro_speed`, default 1.0.
+
+Set `speech.kokoro_device` to `cpu` to force the CPU. The default `auto` uses the GPU when it is available. To switch back to Piper, set `speech.engine` to `piper`.
 
 ## Phone radio over HTTPS
 
