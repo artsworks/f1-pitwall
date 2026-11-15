@@ -33,6 +33,33 @@ Update shortcut, or run `pitwall update`.
 [docs/getting-started.md](docs/getting-started.md) has the manual installation, the
 game settings, the voice download and troubleshooting.
 
+### Kokoro voice (opt-in)
+
+Kokoro is a local neural voice. On Windows it runs on the NVIDIA GPU when one is available.
+[docs/getting-started.md](docs/getting-started.md#natural-voice-kokoro-opt-in) has the setup.
+
+Run these commands from the Pitwall folder:
+
+| Task | Command |
+|---|---|
+| Start with Kokoro | `uv run --extra kokoro pitwall start` |
+| Start with Kokoro and a full recording | `uv run --extra kokoro pitwall start --record full` |
+| Reinstall the Kokoro packages | `uv sync --extra kokoro --reinstall-package kokoro-onnx --reinstall-package onnxruntime-gpu` |
+
+A plain `uv run`, `uv sync` or `pitwall update` removes the Kokoro packages. Pitwall then
+falls back to Piper. The next command with `--extra kokoro` installs the packages again.
+
+To type less, add these functions to your PowerShell profile. Replace the path with your
+Pitwall folder.
+
+```powershell
+function pw { uv run pitwall $args }
+function pw-kokoro { uv run --extra kokoro pitwall $args }
+function pw-kokoro-reinstall { uv sync --project C:\path\to\f1-pitwall --extra kokoro --reinstall-package kokoro-onnx --reinstall-package onnxruntime-gpu }
+```
+
+After this step, `pw-kokoro start --record full` starts Pitwall with Kokoro and a full recording.
+
 ### Wheel buttons
 
 In the game's controls menu, bind a free wheel button to **UDP Action 1**. A single
