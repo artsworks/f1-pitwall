@@ -205,7 +205,7 @@ Kokoro is a local neural voice. On Windows it runs on the NVIDIA GPU when one is
 
 Run Pitwall with `uv run --extra kokoro pitwall ...`. A plain `uv run` removes the extra.
 
-Pick a voice with `speech.kokoro_voice`, default `bf_emma`. The voice list is at https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md. Set `speech.kokoro_lang` to the espeak language of the voice, default `en-gb`. Set speed with `speech.kokoro_speed`, default 1.0.
+Pick a voice with `speech.kokoro_voice`, default `af_heart`. The voice list is at https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md. Set `speech.kokoro_lang` to the espeak language of the voice, default `en-us`. Set speed with `speech.kokoro_speed`, default 1.0.
 
 Set `speech.kokoro_device` to `cpu` to force the CPU. The default `auto` uses the GPU when it is available. To switch back to Piper, set `speech.engine` to `piper`.
 

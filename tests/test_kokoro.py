@@ -26,7 +26,7 @@ from tests.audio_contract import (
 def kokoro_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     env = SimpleNamespace(
         dir=tmp_path / "voices",
-        voices={"bf_emma", "af_bella"},
+        voices={"af_heart", "af_bella"},
         creates=[],
         sessions=[],
         logger_severities=[],
@@ -116,15 +116,21 @@ def test_radio_click_is_prepended(kokoro_env: SimpleNamespace) -> None:
     without.close()
 
 
+def test_default_voice_is_american_english() -> None:
+    settings = SpeechSettings()
+    assert settings.kokoro_voice == "af_heart"
+    assert settings.kokoro_lang == "en-us"
+
+
 def test_create_gets_voice_lang_and_priority_speed(kokoro_env: SimpleNamespace) -> None:
     speaker = make_kokoro_speaker(
-        _settings(kokoro_env, kokoro_voice="af_bella", kokoro_lang="en-us"), FakePlayer()
+        _settings(kokoro_env, kokoro_voice="af_bella", kokoro_lang="en-gb"), FakePlayer()
     )
     kokoro_env.creates.clear()
     for priority in (1, 2, 3):
         speaker.render(f"line {priority}", priority)
     assert [c["voice"] for c in kokoro_env.creates] == ["af_bella"] * 3
-    assert {c["lang"] for c in kokoro_env.creates} == {"en-us"}
+    assert {c["lang"] for c in kokoro_env.creates} == {"en-gb"}
     assert [c["speed"] for c in kokoro_env.creates] == pytest.approx([1.1, 1.0, 0.95])
     speaker.close()
 
@@ -165,7 +171,7 @@ def test_cuda_session_uses_default_cudnn_search(kokoro_env: SimpleNamespace) -> 
     ]
     assert kokoro_env.preloads == [True]
     assert kokoro_env.logger_severities == [3]
-    assert speaker.name == "kokoro (bf_emma, cuda)"
+    assert speaker.name == "kokoro (af_heart, cuda)"
     speaker.close()
 
 
@@ -177,7 +183,7 @@ def test_cpu_session_when_cuda_is_forced_off_or_missing(
     speaker = make_kokoro_speaker(_settings(kokoro_env, kokoro_device=device), FakePlayer())
     assert kokoro_env.sessions[-1][1] == ["CPUExecutionProvider"]
     assert kokoro_env.preloads == []
-    assert speaker.name == "kokoro (bf_emma, cpu)"
+    assert speaker.name == "kokoro (af_heart, cpu)"
     speaker.close()
 
 
