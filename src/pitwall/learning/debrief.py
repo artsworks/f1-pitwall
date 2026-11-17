@@ -28,6 +28,7 @@ from pitwall.model.driver import (
 from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
+from pitwall.state.lap import SC_UNKNOWN
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, PitEventRow, StintRow
 from pitwall.store.uids import is_synthetic_uid
@@ -37,14 +38,13 @@ _STYLE = """<style>
   --bg:#0a0a0c; --panel:#121216; --panel2:#17171c; --line:#2a2a30;
   --fg:#ececec; --dim:#8a8a92; --faint:#4a4a52;
   --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff;
-  --soft:#c81e1e; --med:#e6b800; --hard:#e8e8e8; --inter:#2fbf4f; --wet:#2f6fd8;
+  --soft:#ff4d4d; --med:#ffd23c; --hard:#f2f2f2; --inter:#37e07a; --wet:#2f6fd8;
   --mono:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
-  --sans:system-ui,"Segoe UI",Roboto,sans-serif;
 }
 * { box-sizing:border-box; }
 html,body {
-  margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans);
-  font-size:16px; line-height:1.45;
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--mono);
+  font-variant-numeric:tabular-nums; font-size:16px; line-height:1.45;
 }
 body { display:grid; grid-template-columns:16rem minmax(0,1fr); min-height:100vh; }
 a { color:var(--info); }
@@ -77,7 +77,7 @@ main { padding:1.5rem 2.5rem 4rem; max-width:80rem; width:100%; }
 section { padding:1.6rem 0; border-bottom:1px solid var(--line); }
 section h2 {
   margin:0 0 .9rem; font-family:var(--mono); font-weight:normal;
-  letter-spacing:.12em; font-size:.95rem; color:var(--dim);
+  letter-spacing:.25em; font-size:.95rem; color:var(--dim);
 }
 section h2 .n { color:var(--faint); margin-right:.6rem; }
 p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
@@ -87,12 +87,14 @@ p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
 .cols-4 { grid-template-columns:repeat(4,1fr); }
 .row.stint-row { align-items:start; }
 .card {
-  background:var(--panel); border:1px solid var(--line); border-radius:.35rem;
-  padding:.9rem 1rem; min-width:0;
+  background:var(--panel); border:1px solid var(--line); border-radius:.25rem;
+  padding:.7rem .9rem; min-width:0;
 }
+section > .card + .card,section > .row + .card,section > .card + .row,
+section > .row + .row { margin-top:1rem; }
 .card h3 {
   margin:0 0 .5rem; font-family:var(--mono); font-weight:normal;
-  font-size:.8rem; letter-spacing:.1em; color:var(--dim);
+  font-size:.75rem; letter-spacing:.25em; color:var(--dim);
 }
 .card .src {
   color:var(--faint); font-size:.72rem; font-family:var(--mono);
@@ -103,19 +105,21 @@ header.session {
   padding-bottom:1.2rem; border-bottom:1px solid var(--line);
 }
 header.session h1 {
-  margin:0; font-family:var(--mono); font-size:1.6rem;
+  margin:0; font-family:var(--mono); font-size:1.5rem;
   font-weight:bold; letter-spacing:.02em;
 }
 header.session .meta { color:var(--dim); font-family:var(--mono); font-size:.9rem; }
 header.session .meta b { color:var(--fg); font-weight:normal; }
-.stat b { display:block; font-size:1.7rem; font-weight:bold; line-height:1.1; }
-.stat small { color:var(--dim); }
+.stat b { display:block; font-size:2.4rem; font-weight:700; line-height:1; }
+.stat small {
+  display:block; margin-top:.35rem; color:var(--dim); font-size:.8rem; letter-spacing:.08em;
+}
 .ok { color:var(--ok); } .warn { color:var(--warn); }
 .crit { color:var(--crit); } .cold { color:var(--cold); }
 .info { color:var(--info); } .dim { color:var(--dim); }
 .chip {
   display:inline-block; font-size:.72rem; padding:.05rem .45rem;
-  border-radius:.25rem; border:1px solid var(--line); color:var(--dim);
+  border-radius:.3rem; border:1px solid var(--faint); color:var(--dim);
   letter-spacing:.06em; white-space:nowrap;
 }
 .chip.soft { border-color:var(--soft); color:var(--soft); }
@@ -123,12 +127,19 @@ header.session .meta b { color:var(--fg); font-weight:normal; }
 .chip.hard { border-color:var(--hard); color:var(--hard); }
 .chip.inter { border-color:var(--inter); color:var(--inter); }
 .chip.wet { border-color:var(--wet); color:var(--wet); }
-.chip.p1 { border-color:var(--crit); color:var(--crit); }
-.chip.p2 { border-color:var(--warn); color:var(--warn); }
-.chip.p3 { border-color:var(--info); color:var(--info); }
-.chip.ok { border-color:var(--ok); color:var(--ok); }
-.chip.warn { border-color:var(--warn); color:var(--warn); }
+.chip.p1 { border-color:var(--crit); background:var(--crit); color:#000; font-weight:700; }
+.chip.p2 { border-color:var(--warn); background:var(--warn); color:#000; font-weight:700; }
+.chip.p3 { border-color:var(--info); background:var(--info); color:#000; font-weight:700; }
+.chip.ok { border-color:var(--ok); background:var(--ok); color:#000; font-weight:700; }
+.chip.warn { border-color:var(--warn); background:var(--warn); color:#000; font-weight:700; }
 .chip.sup { border-style:dashed; }
+tr.sup .chip { background:transparent; color:var(--faint); }
+.cmp {
+  display:inline-block; min-width:1.5em; text-align:center; border-radius:50%;
+  border:.16em solid; font-weight:700; font-size:.9em; line-height:1.3; font-family:var(--mono);
+}
+.cmp.soft { color:var(--soft); } .cmp.med { color:var(--med); } .cmp.hard { color:var(--hard); }
+.cmp.inter { color:var(--inter); } .cmp.wet { color:var(--wet); }
 .badge { font-size:.7rem; letter-spacing:.12em; padding:.1rem .5rem; border-radius:.25rem; }
 .badge.det { background:#173a25; color:var(--ok); }
 svg { display:block; width:100%; height:auto; }
@@ -158,10 +169,12 @@ svg { display:block; width:100%; height:auto; }
 .stint .lbl { fill:var(--bg); }
 .trace { fill:none; stroke-width:1.5; }
 .trace.me { stroke:var(--ok); stroke-width:2.2; }
+.trace.rival { stroke:var(--dim); stroke-width:1; opacity:.5; }
+.trace.mate { stroke:var(--info); stroke-width:2; }
 .scroll { overflow-x:auto; }
 table { width:100%; border-collapse:collapse; font-size:.86rem; }
 th {
-  text-align:left; color:var(--dim); font-weight:normal; letter-spacing:.06em;
+  text-align:left; color:var(--dim); font-weight:normal; letter-spacing:.08em;
   font-size:.74rem; padding:.35rem .5rem; border-bottom:1px solid var(--line);
 }
 td { padding:.4rem .5rem; border-bottom:1px solid #1c1c22; vertical-align:top; }
@@ -174,8 +187,12 @@ article { border-left:3px solid var(--ok); padding:.1rem 1rem; margin:.8rem 0; }
   color:var(--dim); background:transparent; padding:.05rem .4rem;
   border-radius:.2rem; cursor:pointer;
 }
-.grade button.on { border-color:var(--ok); color:var(--ok); }
-.grade button.on.bad { border-color:var(--crit); color:var(--crit); }
+.grade button.on { border-color:var(--ok); background:var(--ok); color:#000; }
+.grade button.on.bad { border-color:var(--crit); background:var(--crit); color:#000; }
+a.btn {
+  background:var(--info); color:#000; border-radius:1rem; padding:.1rem .8rem;
+  text-decoration:none; font-weight:700;
+}
 details { margin:.6rem 0; }
 details.why { margin-top:.25rem; font-size:.8rem; color:var(--dim); }
 details.why summary { cursor:pointer; color:var(--faint); }
@@ -184,8 +201,9 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 ol.actions { margin:0; padding-left:1.4rem; }
 ol.actions li { margin:.4rem 0; }
 body.index { display:block; min-height:100vh; }
-body.index main { margin:0 auto; max-width:80rem; }
-body.index .brand { font-family:var(--mono); color:var(--dim); letter-spacing:.12em; }
+body.index main { margin:0 auto; max-width:none; }
+body.index td,body.index th { white-space:nowrap; }
+details.hidden-sessions summary { cursor:pointer; color:var(--dim); font-size:.85rem; }
 @media (max-width:900px) {
   body { grid-template-columns:1fr; }
   nav.agenda { position:static; height:auto; }
@@ -262,15 +280,79 @@ _TRACK_NAMES = {
     40: "Austria reverse",
     41: "Zandvoort reverse",
 }
+_TEAMS = {
+    0: "Mercedes",
+    1: "Ferrari",
+    2: "Red Bull Racing",
+    3: "Williams",
+    4: "Aston Martin",
+    5: "Alpine",
+    6: "RB",
+    7: "Haas",
+    8: "McLaren",
+    9: "Sauber",
+    41: "F1 Generic",
+    104: "F1 Custom Team",
+    129: "Konnersport",
+    142: "APXGP",
+    154: "APXGP",
+    155: "Konnersport",
+    158: "Art GP",
+    159: "Campos",
+    160: "Rodin Motorsport",
+    161: "AIX Racing",
+    162: "DAMS",
+    163: "Hitech",
+    164: "MP Motorsport",
+    165: "Prema",
+    166: "Trident",
+    167: "Van Amersfoort Racing",
+    168: "Invicta",
+    185: "Mercedes",
+    186: "Ferrari",
+    187: "Red Bull Racing",
+    188: "Williams",
+    189: "Aston Martin",
+    190: "Alpine",
+    191: "RB",
+    192: "Haas",
+    193: "McLaren",
+    194: "Sauber",
+    465: "ART GP",
+    466: "Campos",
+    467: "Rodin Motorsport",
+    468: "AIX Racing",
+    469: "DAMS",
+    470: "Hitech",
+    471: "MP Motorsport",
+    472: "Prema",
+    473: "Trident",
+    474: "Van Amersfoort Racing",
+    475: "Invicta",
+    476: "Mercedes",
+    477: "Ferrari",
+    478: "Red Bull Racing",
+    479: "Williams",
+    480: "Aston Martin",
+    481: "Alpine",
+    482: "RB",
+    483: "Haas",
+    484: "McLaren",
+    485: "Audi",
+    486: "Cadillac",
+}
+_NO_TEAM = (255, 65535)
+_GREEN_SC = (0, SC_UNKNOWN)
 _SECTIONS = (
     ("summary", "00", "Summary"),
     ("pace", "01", "Pace and stints"),
-    ("sectors", "02", "Sectors"),
-    ("tyres", "03", "Tyres"),
-    ("strategy", "04", "Strategy calls"),
-    ("radio", "05", "Radio and decisions"),
-    ("incidents", "06", "Incidents and energy"),
-    ("actions", "07", "Actions"),
+    ("comparison", "02", "Comparison"),
+    ("sectors", "03", "Sectors"),
+    ("tyres", "04", "Tyres"),
+    ("strategy", "05", "Strategy calls"),
+    ("radio", "06", "Radio and decisions"),
+    ("incidents", "07", "Incidents and energy"),
+    ("actions", "08", "Actions"),
 )
 
 
@@ -313,6 +395,14 @@ def _compound_for_stint(stint: StintRow, laps: list[LapRow]) -> tuple[str, str]:
 
 def _chip(css_class: str, label: object) -> _Markup:
     return _Markup(f"<span class='chip {_esc(css_class)}'>{_esc(label)}</span>")
+
+
+def _compound_badge(css_class: str, label: str) -> _Markup:
+    if css_class == "unk":
+        return _chip(css_class, label)
+    return _Markup(
+        f"<span class='cmp {_esc(css_class)}' title='{_esc(label)}'>{_esc(label[:1])}</span>"
+    )
 
 
 def _cell(value: object) -> str:
@@ -580,9 +670,8 @@ def _stint_bars(laps: list[LapRow], stints: list[StintRow]) -> str:
 
 def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) -> str:
     timed = [lap for lap in laps if lap.lap_time_ms > 0]
-    svg = ["<svg id='racetrace' viewBox='0 0 460 200' role='img' aria-label='Race trace'>"]
     if not timed:
-        return "".join(svg) + "</svg>"
+        return _trace_chart("racetrace", "Race trace", [], laps, pit_laps)
     clean = [lap.lap_time_ms for lap in timed if lap.valid and lap.sc_status == 0]
     reference = statistics.median(clean or [lap.lap_time_ms for lap in timed])
     cumulative = 0.0
@@ -590,8 +679,24 @@ def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int])
     for lap in timed:
         cumulative += (lap.lap_time_ms - reference) / 1000
         trace.append((lap.lap_num, cumulative))
-    low = min(0.0, *(value for _, value in trace))
-    high = max(0.0, *(value for _, value in trace))
+    return _trace_chart("racetrace", "Race trace", [("me", "", trace)], laps, pit_laps)
+
+
+def _trace_chart(
+    svg_id: str,
+    label: str,
+    series: Sequence[tuple[str, str, list[tuple[int, float]]]],
+    laps: list[LapRow],
+    pit_laps: list[int],
+) -> str:
+    """Line chart over the player's lap range. Each series is (css class, title, points)."""
+    timed = [lap for lap in laps if lap.lap_time_ms > 0]
+    svg = [f"<svg id='{svg_id}' viewBox='0 0 460 200' role='img' aria-label='{_esc(label)}'>"]
+    if not timed:
+        return "".join(svg) + "</svg>"
+    values = [value for _, _, points in series for _, value in points]
+    low = min(0.0, *values)
+    high = max(0.0, *values)
     padding = max(1.0, (high - low) * 0.1)
     low -= padding
     high += padding
@@ -628,11 +733,13 @@ def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int])
         svg.append(
             f"<line class='pitline' x1='{pit_x:.1f}' x2='{pit_x:.1f}' y1='{top}' y2='{bottom}'/>"
         )
-    path = " ".join(
-        f"{'M' if index == 0 else 'L'}{x(lap_num):.1f} {y(value):.1f}"
-        for index, (lap_num, value) in enumerate(trace)
-    )
-    svg.append(f"<path class='trace me' d='{path}'/>")
+    for css_class, title, points in series:
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'}{x(lap_num):.1f} {y(value):.1f}"
+            for index, (lap_num, value) in enumerate(points)
+        )
+        title_tag = f"<title>{_esc(title)}</title>" if title else ""
+        svg.append(f"<path class='trace {css_class}' d='{path}'>{title_tag}</path>")
     lap_step = max(1, round(max(1, last - first) / 4))
     for lap_num in range(first, last + 1, lap_step):
         svg.append(
@@ -870,7 +977,7 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
         (
             lap.lap_num,
             _lap_time(lap.lap_time_ms) if lap.lap_time_ms > 0 else "—",
-            _chip(*_compound(lap.visual, lap.compound)),
+            _compound_badge(*_compound(lap.visual, lap.compound)),
             lap.tyre_age_laps,
             f"{lap.fuel_kg:.1f}",
             "valid"
@@ -890,7 +997,7 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
     )
     stint_rows = [
         (
-            _chip(*_compound_for_stint(stint, laps)),
+            _compound_badge(*_compound_for_stint(stint, laps)),
             f"{stint.start_lap}–{stint.end_lap}",
             f"{stint.deg_ms_per_lap:.1f}",
             stint.n_valid_laps,
@@ -919,6 +1026,127 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
     return _section("pace", "01", "Pace and stints", content)
 
 
+def _driver_labels(drivers: dict[int, dict[str, Any]]) -> dict[int, str]:
+    labels = {0: "You"}
+    human_numbers: Counter[int] = Counter()
+    for car_idx, driver in sorted(drivers.items()):
+        name = str(driver["name"])
+        if car_idx == 0:
+            labels[0] = name
+        elif driver["ai_controlled"] == 1:
+            labels[car_idx] = name
+        else:
+            team_id = int(driver["team_id"])
+            human_numbers[team_id] += 1
+            team = _TEAMS.get(team_id, f"Team {team_id}")
+            suffix = f" ({name})" if driver["show_online_names"] == 1 and name else ""
+            labels[car_idx] = f"{team} {human_numbers[team_id]}{suffix}"
+    return labels
+
+
+def _rival_pit_laps(laps: list[LapRow]) -> list[int]:
+    return [
+        before.lap_num
+        for before, lap in zip(laps, laps[1:], strict=False)
+        if lap.tyre_age_laps == 0
+    ]
+
+
+def _gap_points(player: list[LapRow], rival: list[LapRow]) -> list[tuple[int, float]]:
+    player_ms = {lap.lap_num: lap.lap_time_ms for lap in player if lap.lap_time_ms > 0}
+    rival_ms = {lap.lap_num: lap.lap_time_ms for lap in rival if lap.lap_time_ms > 0}
+    gap = 0.0
+    points: list[tuple[int, float]] = []
+    for lap_num in sorted(player_ms.keys() & rival_ms.keys()):
+        gap += (player_ms[lap_num] - rival_ms[lap_num]) / 1000
+        points.append((lap_num, gap))
+    return points
+
+
+def _comparison_section(
+    db: Database,
+    uid: int,
+    session: dict[str, Any],
+    laps: list[LapRow],
+    pit_laps: list[int],
+) -> str:
+    rival_laps = {car: car_laps for car, car_laps in db.laps_by_car(uid).items() if car != 0}
+    if not any(rival_laps.values()):
+        return _section(
+            "comparison",
+            "02",
+            "Comparison",
+            _card("DRIVERS", "<p>No other drivers were recorded for this session.</p>"),
+        )
+    all_laps = {0: laps, **rival_laps}
+    cars = [car for car in sorted(all_laps) if all_laps[car]]
+    drivers = db.drivers_for_session(uid)
+    labels = _driver_labels(drivers)
+    names = {car: labels.get(car, f"Car {car}") for car in cars}
+    player_team = drivers[0]["team_id"] if 0 in drivers else None
+
+    def is_mate(car: int) -> bool:
+        team = drivers.get(car, {}).get("team_id")
+        return car != 0 and player_team is not None and team == player_team and team not in _NO_TEAM
+
+    player_sc = {lap.lap_num for lap in laps if lap.sc_status not in _GREEN_SC}
+    rows: list[tuple[tuple[bool, int, int], tuple[object, ...]]] = []
+    for car in cars:
+        car_laps = all_laps[car]
+        pits = pit_laps if car == 0 else _rival_pit_laps(car_laps)
+        excluded = {lap for pit in pits for lap in (pit, pit + 1)}
+        valid_times = [lap.lap_time_ms for lap in car_laps if lap.valid and lap.lap_time_ms > 0]
+        clean = [
+            lap.lap_time_ms
+            for lap in car_laps
+            if lap.valid
+            and lap.lap_time_ms > 0
+            and lap.sc_status in _GREEN_SC
+            and (lap.sc_status != SC_UNKNOWN or lap.lap_num not in player_sc)
+            and lap.lap_num not in excluded
+        ]
+        best = min(valid_times, default=None)
+        compounds = dict.fromkeys(_compound(lap.visual, lap.compound) for lap in car_laps)
+        chips: list[str] = []
+        if car == 0:
+            chips.append(_chip("ok", "YOU"))
+        elif is_mate(car):
+            chips.append(_chip("info", "TEAMMATE"))
+        driver_cell = _Markup(" ".join([_esc(names[car]), *chips]))
+        rows.append(
+            (
+                (best is None, best or 0, car),
+                (
+                    driver_cell,
+                    _lap_time(best) if best is not None else "—",
+                    _lap_time(round(statistics.fmean(clean))) if clean else "—",
+                    sum(lap.lap_time_ms > 0 for lap in car_laps),
+                    _Markup("".join(_compound_badge(*shown) for shown in compounds)),
+                    ", ".join(f"L{pit}" for pit in pits) or "—",
+                ),
+            )
+        )
+    table = _table(
+        ("Driver", "Best lap", "Mean clean lap", "Laps", "Compounds", "Pit laps"),
+        [row for _, row in sorted(rows, key=lambda item: item[0])],
+        "laps · drivers",
+    )
+    content = _card("DRIVERS", table)
+    session_type = _as_int(session.get("session_type"))
+    if session_type is not None and session_kind(session_type) == "race":
+        gaps = [(car, _gap_points(laps, all_laps[car])) for car in cars if car != 0]
+        gaps = [(car, points) for car, points in gaps if len(points) >= 2]
+        series = [("rival", names[car], points) for car, points in gaps if not is_mate(car)]
+        series += [("mate", names[car], points) for car, points in gaps if is_mate(car)]
+        if series:
+            content += _card(
+                "GAP TO YOU · CUMULATIVE LAP TIME DIFFERENCE, s · ABOVE ZERO = FASTER THAN YOU",
+                _trace_chart("gaptrace", "Gap to you", series, laps, pit_laps),
+                "laps · your lap times are the reference",
+            )
+    return _section("comparison", "02", "Comparison", content)
+
+
 def _sector_section(laps: list[LapRow]) -> str:
     valid = [lap for lap in laps if lap.valid and lap.sc_status == 0 and lap.lap_time_ms > 0]
     rows = [
@@ -944,7 +1172,7 @@ def _sector_section(laps: list[LapRow]) -> str:
         "MEAN SECTOR TIMES",
         _table(("Sector", "Mean (s)", "Clean laps"), rows, "laps.s1_ms, s2_ms, lap_time_ms"),
     )
-    return _section("sectors", "02", "Sectors", card)
+    return _section("sectors", "03", "Sectors", card)
 
 
 def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
@@ -960,7 +1188,7 @@ def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
         visual = next((lap.visual for lap in group if lap.visual), 0)
         rows.append(
             (
-                _chip(*_compound(visual, compound)),
+                _compound_badge(*_compound(visual, compound)),
                 f"{green / len(group):.0%}",
                 len(group),
                 cold,
@@ -975,7 +1203,7 @@ def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
             "laps.tyre_inner_c and configured thresholds; lap means",
         ),
     )
-    return _section("tyres", "03", "Tyres", card)
+    return _section("tyres", "04", "Tyres", card)
 
 
 def _hindsight(automatic: list[dict[str, Any]] | None) -> str:
@@ -1051,7 +1279,7 @@ def _strategy_section(
             empty_message = "No pit stops."
         pit_content = f"<p>{_esc(empty_message)}</p>"
     pit = _card("PIT STOPS", pit_content, "pit_events")
-    return _section("strategy", "04", "Strategy calls", strategy + pit)
+    return _section("strategy", "05", "Strategy calls", strategy + pit)
 
 
 def _call_timeline(
@@ -1207,7 +1435,7 @@ def _radio_section(
     )
     return _section(
         "radio",
-        "05",
+        "06",
         "Radio and decisions",
         timeline + calls_card + input_card,
     )
@@ -1231,7 +1459,7 @@ def _incidents_section(laps: list[LapRow]) -> str:
             "laps; raw event details require the recording index",
         ),
     )
-    return _section("incidents", "06", "Incidents and energy", card)
+    return _section("incidents", "07", "Incidents and energy", card)
 
 
 def _setup_number(value: object) -> str:
@@ -1399,7 +1627,7 @@ def _actions_section(
     )
     return _section(
         "actions",
-        "07",
+        "08",
         "Actions",
         _card("SETUP", _setup_actions(db, uid, session, settings))
         + _card("ACTIONS FOR NEXT SESSION", content),
@@ -1475,6 +1703,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     sections = (
         _summary_section(db, session, laps, pits, pit_laps, calls, grades, quality, settings)
         + _pace_section(laps, stints, pit_laps)
+        + _comparison_section(db, uid, session, laps, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)
         + _strategy_section(calls, pits, pit_laps, grades, outcomes)
@@ -1497,10 +1726,14 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     )
 
 
+_INDEX_MIN_LAPS = 3
+
+
 def render_debrief_index(db: Database, *, limit: int = 100) -> str:
     """HTML list of stored sessions, newest first, each linking to its debrief."""
     rows = db.sessions()[::-1][:limit]
-    body_rows = []
+    body_rows: list[tuple[object, ...]] = []
+    hidden_rows: list[tuple[object, ...]] = []
     structures: dict[tuple[int, int, str], tuple[int, ...]] = {}
 
     def _structure(row: Mapping[str, Any]) -> tuple[int, ...]:
@@ -1519,6 +1752,7 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
         track = f"{_track_name(track_id)} · {track_id if track_id is not None else '—'}"
         path = str(row.get("recording_path") or "")
         recording = os.path.basename(path) if path else "not linked"
+        recording = recording.removesuffix(".f1bin.zst").removesuffix(".f1bin")
         start = (
             time.strftime("%Y-%m-%d %H:%M", time.localtime(row["started_at"]))
             if row.get("started_at")
@@ -1526,41 +1760,45 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
         )
         session_link = _Markup(f"<a href='/debrief/{_esc(uid)}'>{_esc(uid)}</a>")
         is_synthetic = bool(row.get("synthetic")) or is_synthetic_uid(uid)
+        laps = len(db.laps_for(uid))
         origin: object = "-"
         if is_synthetic:
             derived_from = str(row.get("derived_from") or "")
             origin = _Markup(
                 str(_chip("warn", "synthetic"))
-                + (f"<br>derived from {_esc(derived_from)}" if derived_from else "")
+                + (f" from {_esc(derived_from)}" if derived_from else "")
             )
-        body_rows.append(
-            (
-                session_link,
-                start,
-                track,
-                _session_label(row.get("session_type"), _structure(row)),
-                len(db.laps_for(uid)),
-                origin,
-                recording,
-            )
+        cells = (
+            session_link,
+            start,
+            track,
+            _session_label(row.get("session_type"), _structure(row)),
+            laps,
+            origin,
+            recording,
         )
-    table = (
-        _table(
-            ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording"),
-            body_rows,
-            "sessions and laps",
+        hidden = not is_synthetic and (
+            laps == 0 or (laps < _INDEX_MIN_LAPS and row.get("ended_at") is None)
         )
-        if rows
-        else "<p>No sessions stored yet.</p>"
-    )
-    content = _card("SESSIONS", table)
+        (hidden_rows if hidden else body_rows).append(cells)
+    headers = ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording")
+    table = _table(headers, body_rows, "sessions and laps") if body_rows else ""
+    hidden_block = ""
+    if hidden_rows:
+        count = len(hidden_rows)
+        noun = "session" if count == 1 else "sessions"
+        hidden_block = (
+            f"<details class='hidden-sessions'><summary>{count} {noun} without usable laps hidden"
+            "</summary>" + _table(headers, hidden_rows, "sessions and laps") + "</details>"
+        )
+    content = _card("SESSIONS", table + hidden_block if rows else "<p>No sessions stored yet.</p>")
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>Sessions · Pitwall debrief</title>{_STYLE}</head><body class='index'>"
-        "<main><header class='session'><div class='brand'><b>pitwall</b> · SESSIONS</div>"
+        "<main><header class='session'><h1>SESSIONS</h1>"
         "<div class='meta'>Newest first · "
-        "<a href='/debrief/latest'>Open the latest debrief</a></div></header>"
+        "<a class='btn' href='/debrief/latest'>Open the latest debrief</a></div></header>"
         + content
         + "</main></body></html>"
     )

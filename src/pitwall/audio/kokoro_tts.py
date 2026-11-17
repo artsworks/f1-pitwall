@@ -79,8 +79,8 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
     import onnxruntime  # type: ignore[import-untyped,import-not-found,unused-ignore]
 
     try:
-        from kokoro_onnx import (
-            Kokoro,  # type: ignore[import-untyped,import-not-found,unused-ignore]
+        from kokoro_onnx import (  # type: ignore[import-untyped,import-not-found,unused-ignore]
+            Kokoro,
         )
     except ModuleNotFoundError as exc:
         raise RuntimeError(

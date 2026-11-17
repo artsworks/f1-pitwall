@@ -11,6 +11,7 @@ from pitwall.cli import main
 from pitwall.config.loader import ConfigStore, config_hash
 from pitwall.learning.debrief import (
     _compound,
+    _compound_badge,
     _fit_points,
     _hindsight,
     _incidents_section,
@@ -295,6 +296,56 @@ def test_debrief_latest_404_and_empty_index() -> None:
     assert "No sessions stored yet" in client.get("/debrief").text
 
 
+def test_debrief_index_collapses_sessions_without_usable_laps() -> None:
+    db = Database(":memory:")
+    for uid, started_at, laps, ended in (
+        (9001, 1.0, 0, True),
+        (9002, 2.0, 2, False),
+        (9003, 3.0, 1, True),
+        (9004, 4.0, 3, False),
+    ):
+        db.upsert_session(uid, track_id=16, session_type=15, started_at=started_at)
+        for lap_num in range(1, laps + 1):
+            _insert_lap(db, uid, lap_num)
+        if ended:
+            db.end_session(uid, started_at + 0.5)
+    db.upsert_session(9005, track_id=16, session_type=15, started_at=5.0, synthetic=True)
+    db.set_session_origin(
+        9005, started_at=5.0, recording_path="", calls_mode="", synthetic=True, derived_from="9003"
+    )
+
+    index = render_debrief_index(db)
+    visible, _, hidden = index.partition("<details")
+
+    assert "2 sessions without usable laps hidden" in index
+    assert "<br>" not in index
+    assert "chip warn'>synthetic</span> from 9003" in index
+    for uid in (9001, 9002):
+        assert f"/debrief/{uid}'" in hidden
+        assert f"/debrief/{uid}'" not in visible
+    assert visible.index("/debrief/9005'") < visible.index("/debrief/9004'")
+    assert visible.index("/debrief/9004'") < visible.index("/debrief/9003'")
+
+
+def test_debrief_index_strips_recording_extension_and_shows_hidden_only_list() -> None:
+    db = Database(":memory:")
+    db.upsert_session(
+        9101,
+        track_id=16,
+        session_type=15,
+        started_at=1.0,
+        recording_path="/rec/2026-11-14_2031_brazil_race.f1bin.zst",
+    )
+
+    index = render_debrief_index(db)
+
+    assert "2026-11-14_2031_brazil_race</td>" in index
+    assert ".f1bin" not in index
+    assert "<details class='hidden-sessions'>" in index
+    assert "1 session without usable laps hidden" in index
+    assert "No sessions stored yet" not in index
+
+
 def test_compound_visual_and_actual_id_fallbacks() -> None:
     assert _compound(0, 19) == ("unk", "C2")
     assert _compound(0, 16) == ("unk", "C5")
@@ -497,7 +548,7 @@ def test_debrief_layout_hooks() -> None:
     }
     assert lap_y[6] < lap_y[1]
     assert "PIT L3" in report
-    assert "class='chip med'" in report
+    assert "<span class='cmp med' title='MEDIUM'>M</span>" in report
     assert "IntersectionObserver" in report
     assert "@media print" in report
     assert "<link" not in report
@@ -548,6 +599,26 @@ def test_summary_shows_track_and_global_driver_rating() -> None:
     assert "0.620" in report and "0.400" in report
 
 
+def test_debrief_style_uses_dashboard_font_and_spaces_stacked_cards() -> None:
+    index = render_debrief_index(Database(":memory:"))
+    assert "--sans" not in index
+    assert "font-family:var(--mono);\n  font-variant-numeric:tabular-nums;" in index
+    assert "section > .row + .card" in index
+
+    db = Database(":memory:")
+    db.upsert_session(167, track_id=7, session_type=15)
+    report = render_debrief(db, 167, ConfigStore().current())
+    assert "</div><div class='card'><h3>SESSION DETAILS</h3>" in report
+
+
+def test_debrief_uses_pit_board_style() -> None:
+    assert _compound_badge("unk", "C2") == "<span class='chip unk'>C2</span>"
+    assert _compound_badge("soft", "SOFT") == "<span class='cmp soft' title='SOFT'>S</span>"
+    index = render_debrief_index(Database(":memory:"))
+    assert "<a class='btn' href='/debrief/latest'>" in index
+    assert ".cmp {" in index and "a.btn {" in index and "--med:#ffd23c" in index
+
+
 def test_debrief_labels_from_stored_weekend_structure() -> None:
     db = Database(":memory:")
     db.upsert_session(
@@ -569,3 +640,143 @@ def test_debrief_labels_from_stored_weekend_structure() -> None:
     assert " · RACE · " in render_debrief(db, 165, settings)
     index = render_debrief_index(db)
     assert "<td>Sprint</td>" in index
+
+
+def _rival_lap(
+    db: Database,
+    uid: int,
+    car_idx: int,
+    lap_num: int,
+    lap_time_ms: int,
+    *,
+    valid: bool = True,
+    sc_status: int = 0,
+) -> None:
+    db.insert_lap(
+        uid,
+        car_idx,
+        LapSummary(
+            lap_num,
+            lap_time_ms,
+            30_000,
+            30_000,
+            17,
+            lap_num,
+            3.0,
+            valid,
+            [],
+            fuel_kg=5.0,
+            sc_status=sc_status,
+        ),
+    )
+
+
+def _comparison(report: str) -> str:
+    return report.split("<section id='comparison'", 1)[1].split("</section>", 1)[0]
+
+
+def test_comparison_labels_drivers_and_draws_gap_trace() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+        calls_mode="enabled",
+    )
+    db.upsert_drivers(
+        uid,
+        [
+            (0, "ME", 484, 0, 0),
+            (1, "NORRIS", 484, 1, 0),
+            (2, "tagA", 477, 0, 1),
+            (3, "Player", 477, 0, 0),
+            (5, "<script>x</script>", 8, 1, 0),
+        ],
+    )
+    for car_idx, pace in ((0, 90_000), (1, 89_500), (2, 90_400), (3, 90_800), (4, 91_000)):
+        for lap_num in range(1, 6):
+            _rival_lap(db, uid, car_idx, lap_num, pace + lap_num * 50)
+    _rival_lap(db, uid, 5, 1, 90_200)
+    report = render_debrief(db, uid, settings)
+    section = _comparison(report)
+    norris_row = next(row for row in section.split("<tr>") if "NORRIS" in row)
+    assert ">YOU</span>" in section
+    assert "TEAMMATE" in norris_row
+    assert "Ferrari 1 (tagA)" in section
+    assert "Ferrari 2" in section
+    assert "Ferrari 2 (Player)" not in report
+    assert "Car 4" in section
+    assert "&lt;script&gt;x&lt;/script&gt;" in section
+    assert "<script>x" not in section
+    assert "<span class='n'>02</span>Comparison" in report
+    assert "<span class='n'>08</span>Actions" in report
+    assert "id='gaptrace'" in section
+    assert section.count("class='trace mate'") == 1
+    assert "<title>NORRIS</title>" in section
+
+
+def test_comparison_empty_state_for_player_only_session() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    for lap_num in range(1, 4):
+        _rival_lap(db, uid, 0, lap_num, 90_000)
+    section = _comparison(render_debrief(db, uid, settings))
+    assert "No other drivers were recorded for this session." in section
+    assert "gaptrace" not in section
+
+
+def test_comparison_trusts_known_rival_sc_status() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    db.upsert_drivers(uid, [(1, "KNOWN", 8, 1, 0), (2, "UNKNOWN", 8, 1, 0)])
+    for lap_num, sc_status in ((1, 0), (2, 1), (3, 0)):
+        _rival_lap(db, uid, 0, lap_num, 95_000, sc_status=sc_status)
+    for lap_num, lap_time_ms, sc_status in ((1, 90_000, 0), (2, 80_000, 0), (3, 99_000, 1)):
+        _rival_lap(db, uid, 1, lap_num, lap_time_ms, sc_status=sc_status)
+    for lap_num, lap_time_ms in ((1, 90_000), (2, 99_000), (3, 70_000)):
+        _rival_lap(db, uid, 2, lap_num, lap_time_ms, sc_status=SC_UNKNOWN)
+    rows = _comparison(render_debrief(db, uid, settings)).split("<tr>")
+    known_row = next(row for row in rows if "KNOWN" in row and "UNKNOWN" not in row)
+    unknown_row = next(row for row in rows if "UNKNOWN" in row)
+    assert "<td>1:25.0</td>" in known_row
+    assert "<td>1:20.0</td>" in unknown_row
+
+
+def test_comparison_omits_gap_trace_outside_races() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=1,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    for car_idx in (0, 1):
+        for lap_num in range(1, 4):
+            _rival_lap(db, uid, car_idx, lap_num, 90_000 + car_idx * 300)
+    report = render_debrief(db, uid, settings)
+    section = _comparison(report)
+    assert "Car 1" in section
+    assert "gaptrace" not in report

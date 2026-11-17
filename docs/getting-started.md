@@ -253,8 +253,16 @@ learned values to SQLite quarantine with reasons such as `unknown_track` or
 `deg_clamped`. Upkeep also refits track priors and adjusts rule cooldowns.
 `pitwall doctor` reports the quarantine count.
 
-Open `http://localhost:8000/debrief` to list stored sessions. Each row links to its
-debrief, where you can grade calls. `/debrief/latest` opens the newest session.
+When a session ends in the game, Pitwall also writes the session digest to
+`~/.pitwall/digests/<uid>.json`. Then it prints the debrief URL in the terminal. If you
+stop Pitwall before the session ends, Pitwall does not write the digest or print the URL.
+
+Open `http://localhost:8000/debrief` to list stored sessions, newest first. Each row links
+to its debrief, where you can grade calls. `/debrief/latest` opens the newest session.
+
+The list collapses sessions without usable laps into one line below the table. Select that
+line to show them. A session has no usable laps when it has 0 laps, or when it has fewer
+than 3 laps and did not end in the game. Synthetic sessions always stay in the table.
 
 These commands are optional:
 
@@ -267,10 +275,11 @@ These commands are optional:
 | `pitwall evaluate` | Compare calls-on and calls-off sessions |
 | `pitwall propose` | Write threshold candidates for review |
 | `pitwall cleanup` | Delete old recordings, learning packs and caches. Lists them and asks first |
-| `pitwall digest` | Write a digest JSON or ingest external recordings |
+| `pitwall digest` | Write the digest for a session that did not end in the game, or ingest external recordings |
 
-Use `pitwall digest <paths...>` when importing recordings from elsewhere. You do not
-need to run it for a live session or edit SQLite.
+Use `pitwall digest <paths...>` when importing recordings from elsewhere. Use
+`pitwall digest --session <uid>` for a live session that you stopped before it ended. You
+do not need to edit SQLite.
 
 Cleanup lists files older than 5 days by default. Use `--days` to change the age.
 Cleanup keeps recordings until that exact file has been imported. Another file with

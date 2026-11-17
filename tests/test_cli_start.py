@@ -236,10 +236,75 @@ def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, 
     second_report = calls[1][1]
     assert lines[progress_index + 1] == f"learning: {second_report.summary()}"
     assert lines[progress_index + 2].startswith("learning pack: saved ")
+    assert any(line.startswith("digest: saved ") for line in lines)
+    debrief_url = (
+        f"http://localhost:8000/debrief/{uid}  (all sessions: http://localhost:8000/debrief)"
+    )
+    assert f"debrief: {debrief_url}" in lines
+
+    digest = json.loads((tmp_path / "digests" / f"{uid}.json").read_text(encoding="utf-8"))
+    assert digest["session"]["uid"] == uid
 
     session = Database(db_path).session_row(uid)
     assert session is not None and session["ended_at"] is not None
     assert Database(db_path).maintenance_version(f"graded:{_uid_to_sql(uid)}") == 1
+
+
+def test_start_session_end_digest_failure_still_prints_link(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    _make_profile(tmp_path, monkeypatch)
+    uid = 321
+    monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(uid))
+
+    import pitwall.learning.digest
+
+    def fail_build_digest(*args: Any, **kwargs: Any) -> Any:
+        raise sqlite3.OperationalError("boom")
+
+    monkeypatch.setattr(pitwall.learning.digest, "build_digest", fail_build_digest)
+
+    assert cli.cmd_start(_start_args()) == 0
+    lines = capsys.readouterr().out.splitlines()
+    skipped_index = lines.index("digest: skipped (boom)")
+    assert lines[skipped_index + 1] == (
+        f"debrief: http://localhost:8000/debrief/{uid}  (all sessions: http://localhost:8000/debrief)"
+    )
+
+
+def test_start_session_end_digest_uses_reloaded_thresholds(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    _make_profile(tmp_path, monkeypatch)
+    session_end = _fake_serve_session_end(987)
+
+    async def fake_serve(engine: Any, hub: Any, store: Any, live: Any, **kwargs: Any) -> None:
+        assert store.set_override(("thresholds", "hind_fuel_tol_laps"), 1.0)
+        await session_end(engine, hub, store, live, **kwargs)
+
+    monkeypatch.setattr(cli, "_serve", fake_serve)
+
+    import pitwall.learning.digest
+
+    real_build_digest = pitwall.learning.digest.build_digest
+    seen: list[Any] = []
+
+    def tracked_build_digest(db: Any, uid: int, th: Any, **kwargs: Any) -> Any:
+        seen.append(th["hind_fuel_tol_laps"])
+        return real_build_digest(db, uid, th, **kwargs)
+
+    monkeypatch.setattr(pitwall.learning.digest, "build_digest", tracked_build_digest)
+
+    assert cli.cmd_start(_start_args()) == 0
+    assert seen == [1.0]
+
+
+def test_local_url_uses_https_and_port() -> None:
+    def settings(host: str, cert: str, key: str) -> SimpleNamespace:
+        connection = SimpleNamespace(http_host=host, http_port=9443, https_cert=cert, https_key=key)
+        return SimpleNamespace(connection=connection)
+
+    assert cli._local_url(settings("0.0.0.0", "c.pem", "k.pem")) == "https://localhost:9443"
+    assert cli._local_url(settings("0.0.0.0", "c.pem", "")) == "http://localhost:9443"
+    assert cli._local_url(settings("192.168.1.5", "", "")) == "http://192.168.1.5:9443"
 
 
 def test_start_session_end_upkeep_failure_still_saves_pack(

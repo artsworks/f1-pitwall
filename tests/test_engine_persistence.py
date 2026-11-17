@@ -604,6 +604,49 @@ def test_rival_laps_persisted(tmp_path: Path) -> None:
     assert rival[0].lap_time_ms == 91_500 and rival[0].compound == 17
 
 
+def test_driver_rows_use_persisted_slots(tmp_path: Path) -> None:
+    stream = [
+        (
+            0.0,
+            pack_packet(
+                PacketId.SESSION,
+                {"session_type": 15, "track_id": 7, "total_laps": 12},
+                player=3,
+            ),
+        ),
+        (
+            0.033,
+            pack_packet(
+                PacketId.PARTICIPANTS,
+                {
+                    "num_active_cars": 2,
+                    "cars": {
+                        0: {"name": b"NORRIS", "team_id": 8},
+                        3: {"name": b"ME", "team_id": 484},
+                    },
+                },
+                player=3,
+            ),
+        ),
+    ]
+    # The engine ticks on stream time, so trailing packets give the writer a tick to run.
+    stream += [
+        (
+            1.0 + i * 0.1,
+            pack_packet(PacketId.SESSION, {"session_type": 15, "track_id": 7}, player=3),
+        )
+        for i in range(20)
+    ]
+    rec = write_packet_stream(tmp_path / "drivers.f1bin", stream)
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    asyncio.run(run_replay(rec, engine, None))
+    uid = engine.state.session_uid
+    assert uid is not None
+    drivers = db.drivers_for_session(uid)
+    assert {car: driver["name"] for car, driver in drivers.items()} == {0: "ME", 3: "NORRIS"}
+
+
 def test_rival_safety_car_laps_are_excluded_from_field_pace() -> None:
     uid = 801
     db = Database(":memory:")

@@ -96,7 +96,7 @@ rules on graded outcomes.
    ones, the dashboard may show the model's pick and reason in a panel labelled
    `GENERATED · <model>`, even while the type is in shadow. It is never spoken and never
    acted on. The panel is hidden if the reason contains a number or name that isn't in the
-   request's inputs (the same check as the §08 generated section in
+   request's inputs (the same check as the §09 generated section in
    `16-debrief-design.md`).
 10. **Config and privacy.** The provider sits behind `complete(system, user) -> text`
     (`16-debrief-design.md` §6). The key is optional, and config sets the exact model

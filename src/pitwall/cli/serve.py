@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import re
@@ -9,6 +10,7 @@ import sqlite3
 import sys
 import threading
 from collections.abc import Callable, Coroutine, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.decision_log import DecisionLog
@@ -119,6 +121,13 @@ def _lan_ip() -> str:
         return ip
     except OSError:
         return "127.0.0.1"
+
+
+def _local_url(settings: Settings) -> str:
+    host, port = settings.connection.http_host, settings.connection.http_port
+    scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
+    local = "localhost" if host in ("0.0.0.0", "::", "") else host
+    return f"{scheme}://{local}:{port}"
 
 
 def _banner(lines: list[BannerEntry]) -> str:
@@ -327,13 +336,12 @@ async def _serve(
         else None,
     )
     server = PitwallServer(config)
-    host, port = settings.connection.http_host, settings.connection.http_port
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
-    local = "localhost" if host in ("0.0.0.0", "::", "") else host
+    port = settings.connection.http_port
     entries = list(banner or [])
     entries.extend(
         [
-            ("dashboard", f"{scheme}://{local}:{port}"),
+            ("dashboard", _local_url(settings)),
             ("LAN", f"{scheme}://{_lan_ip()}:{port}"),
         ]
     )
@@ -485,6 +493,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     def on_session_end(uid: int) -> None:
         assert db is not None
+        from pitwall.learning.digest import build_digest
         from pitwall.learning.learnpack import write_pack
         from pitwall.learning.maintenance import maintain
 
@@ -505,6 +514,17 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"driver rating: {rating_text}", flush=True)
         except sqlite3.Error as e:
             print(f"driver rating: skipped ({e})", flush=True)
+        try:
+            current = store.current()
+            digest = build_digest(db, uid, current.thresholds, setup_rules=current.setup_rules)
+            path = Path(settings.persistence.path).expanduser().parent / "digests" / f"{uid}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(digest, indent=2, default=str), encoding="utf-8")
+            print(f"digest: saved {_folder_link(path)}", flush=True)
+        except (OSError, sqlite3.Error, ValueError) as e:
+            print(f"digest: skipped ({e})", flush=True)
+        url = _local_url(settings)
+        print(f"debrief: {url}/debrief/{uid}  (all sessions: {url}/debrief)", flush=True)
 
     if db is not None:
         engine.on_session_end = on_session_end
