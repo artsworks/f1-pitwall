@@ -264,7 +264,8 @@ def test_format_digest_uses_na_without_fired_calls() -> None:
     )
 
 
-def test_stats_quality_cli_prints_sessions_and_trend(tmp_path, capsys) -> None:
+def test_stats_quality_cli_prints_sessions_and_trend(tmp_path, capsys, monkeypatch) -> None:
+    monkeypatch.setenv("PITWALL_HOME", str(tmp_path))
     path = tmp_path / "quality.sqlite"
     db = Database(path)
     for uid, started_at, grade in ((81, 100.0, None), (82, 200.0, "good")):
@@ -290,7 +291,8 @@ def test_stats_quality_cli_prints_sessions_and_trend(tmp_path, capsys) -> None:
     assert "trend: good% 0.0 -> 100.0 (+100.0) over 2 sessions" in output
 
 
-def test_stats_quality_cli_json_includes_trend(tmp_path, capsys) -> None:
+def test_stats_quality_cli_json_includes_trend(tmp_path, capsys, monkeypatch) -> None:
+    monkeypatch.setenv("PITWALL_HOME", str(tmp_path))
     path = tmp_path / "quality-json.sqlite"
     db = Database(path)
     for uid, started_at in ((91, 100.0), (92, 200.0)):

@@ -205,7 +205,7 @@ def test_debrief_joins_calls_hindsight_grades_and_escapes_inputs(tmp_path) -> No
         )
         == 0
     )
-    assert (tmp_path / "debrief.html").read_text() == result
+    assert (tmp_path / "debrief.html").read_text(encoding="utf-8") == result
 
     client = TestClient(create_app(Hub(), ConfigStore(), Metrics(), db=db))
     assert client.get("/debrief/140").status_code == 200
