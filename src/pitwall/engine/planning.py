@@ -71,6 +71,22 @@ _STOP_PLANS = frozenset(
     {"box_now", "box_in_n", "cheap_stop", "free_stop", "undercut", "overcut", "cover"}
 )
 
+_NO_PIT_FIELDS: dict[str, Any] = {
+    "pit_plan": "",
+    "pit_plan_lap": 0,
+    "pit_plan_gain_s": 0.0,
+    "pit_plan_confidence": 0.0,
+    "pit_plan_risk": 0.0,
+    "pit_plan_risky": False,
+    "pit_plan_rival_idx": -1,
+    "pit_plan_rival_name": "",
+    "pit_plan_reason": "",
+    "pit_window_start": 0,
+    "pit_window_end": 0,
+    "undercut_s": 0.0,
+    "overcut_s": 0.0,
+}
+
 
 def _hold_cover_plan(
     held: tuple[PitPlan, int] | None,
@@ -115,6 +131,7 @@ class Planner:
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[Any, ...] | None = None
         self._damage_pace_ms = 0.0
+        self._slow_run: tuple[int, float, int] | None = None
         self._damage_stops = 0
         self._stops_done = 0
         self._red_restart = False
@@ -129,6 +146,7 @@ class Planner:
         self.plan_tracker.reset()
         self._plan_key = None
         self._damage_pace_ms = 0.0
+        self._slow_run = None
         self._damage_stops = 0
         self._plan_mc_cache.clear()
         self._stops_done = 0
@@ -141,6 +159,7 @@ class Planner:
 
     def rewind(self, t: float) -> None:
         self._held_plan = None
+        self._slow_run = None
         self._stop_expect = None
         self._prev_pit_status = -1  # -1: pit state unknown until the next tick
         if self._stop_check is not None and t < self._stop_check[3]:
@@ -149,6 +168,7 @@ class Planner:
     def _plan_damage(self, snap: Snapshot, fit: DegFit) -> tuple[str, float, float]:
         if snap.num_pit_stops != self._damage_stops:
             self._damage_pace_ms = 0.0
+            self._slow_run = None
             self._damage_stops = snap.num_pit_stops
         if snap.race_phase not in ("racing", "sc", "vsc"):
             return "", 0.0, 0.0
@@ -171,14 +191,24 @@ class Planner:
             age = last.tyre_age_laps
             predicted = fit.base_ms + fit.deg_ms_per_lap * age + fit.deg2_ms_per_lap2 * age**2
             measured = max(0.0, last.lap_time_ms - predicted)
-        pace = measured is not None and measured >= self.ctx.th("plan_damage_pace_ms", 1500)
+        lap = snap.lap_num - 1
+        if measured is None or measured < self.ctx.th("plan_damage_pace_ms", 1500):
+            self._slow_run = None
+        elif self._slow_run is None or self._slow_run[0] not in (lap, lap - 1):
+            self._slow_run = (lap, measured, 1)
+        elif self._slow_run[0] == lap - 1:
+            self._slow_run = (lap, min(self._slow_run[1], measured), self._slow_run[2] + 1)
+        run = self._slow_run
+        confirmed = run if run is not None and run[2] >= 2 else None
         positions = (
             0 < snap.lap_num <= self.ctx.th("plan_rebuild_max_lap", 2)
             and snap.grid_position > 0
             and snap.position > 0
             and snap.position - snap.grid_position >= self.ctx.th("plan_rebuild_positions_lost", 3)
         )
-        cause = "damage" if wing or tyre else "pace" if pace else "positions" if positions else ""
+        cause = (
+            "damage" if wing or tyre else "pace" if confirmed else "positions" if positions else ""
+        )
         penalty = 0.0
         if wing or tyre:
             penalty = max(
@@ -186,8 +216,8 @@ class Planner:
                 wing_pct * self.ctx.th("damage_pace_ms_per_wing_pct", 20) if wing else 0.0,
                 self.ctx.th("damage_tyre_pace_ms", 1500) if tyre and measured is None else 0.0,
             )
-        elif pace:
-            penalty = measured or 0.0
+        elif confirmed is not None:
+            penalty = confirmed[1]
         self._damage_pace_ms = max(self._damage_pace_ms, penalty)
         penalty = self._damage_pace_ms
         if not cause and penalty > 0:
@@ -221,7 +251,11 @@ class Planner:
         drv = self._driver_scale(settings, raw_mode)
         mode = self.ctx.mode()
         used = frozenset(c for c in self._used_compounds | {snap.tyre_visual} if c)
-        _, damage_pace_ms, wing_loss_s = self._plan_damage(snap, fit)
+        cause, damage_pace_ms, wing_loss_s = self._plan_damage(snap, fit)
+        if (snap.is_sprint or snap.short_race) and cause not in ("damage", "pace"):
+            self.ctx.pit_plan = NO_PLAN
+            self.ctx.state.set_model(dataclasses.replace(self.ctx.state.model, **_NO_PIT_FIELDS))
+            return self._plans(dataclasses.replace(snap, **_NO_PIT_FIELDS), fit, NO_PLAN)
         vsc_ending = snap.race_phase == "vsc" and snap.sc_ending
         pit_loss_s = snap.pit_loss_s + wing_loss_s
         sc_status = snap.safety_car_status if snap.race_phase in ("sc", "vsc") else 0

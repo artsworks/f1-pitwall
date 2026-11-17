@@ -403,6 +403,19 @@ class SessionModel:
         overlay = settings.track
         min_w = self.ctx.th("prior_min_weight", 2)
         uid = self.ctx.state.session_uid
+        race_laps = self._race_laps()
+        full_laps = self.ctx.full_race_laps()
+        scale = (
+            race_laps > 0
+            and full_laps > 0
+            and not (self.ctx.state._is_sprint() or self.ctx.state._short_race())
+        )
+        deg_cap = self.ctx.th("deg_max_ms_per_lap", 600)
+        track_deg = overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
+        default_deg = self.ctx.th("deg_default_ms_per_lap", 80)
+        if scale and track_deg is not None:
+            ref = overlay.deg_race_laps or full_laps
+            track_deg = min(track_deg * ref / race_laps, deg_cap)
         fuel_p = resolve_prior(
             self.ctx.db,
             track_id,
@@ -447,10 +460,8 @@ class SessionModel:
                 track_id,
                 compound,
                 self._learned_name(track_id, compound, "deg_ms_per_lap"),
-                overlay_value=(
-                    overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
-                ),
-                default=self.ctx.th("deg_default_ms_per_lap", 80),
+                overlay_value=track_deg,
+                default=default_deg,
                 min_weight=min_w,
             )
         base_p = resolve_prior(
@@ -480,9 +491,7 @@ class SessionModel:
             # overlay/default so one steep stint cannot set the plan alone.
             full = self.ctx.th("prior_full_weight", 12)
             trust = min(deg_p.weight / full, 1.0) if full > 0 else 1.0
-            fallback = overlay.deg_ms_per_lap.get(compound) if overlay is not None else None
-            if fallback is None:
-                fallback = self.ctx.th("deg_default_ms_per_lap", 80)
+            fallback = track_deg if track_deg is not None else default_deg
             deg = trust * deg + (1.0 - trust) * float(fallback)
             confidence = 0.2 + (confidence - 0.2) * trust
         if base_p.source == "default" and self.ctx.db is not None and uid is not None:

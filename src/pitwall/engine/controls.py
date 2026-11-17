@@ -267,4 +267,4 @@ class Controls:
         if not (snap.is_sprint or snap.short_race):
             return th
         # no mandatory stop in a sprint or a 5-lap race
-        return {**th, "plan_two_compound_rule": 0}
+        return {**th, "plan_two_compound_rule": 0, "plan_max_stops": 0}

@@ -329,6 +329,30 @@ def test_sc_cheap_stop_when_plan_owes_a_stop() -> None:
     assert run(**kw).plan != "cheap_stop"
 
 
+def test_sc_cheap_stop_in_short_race_when_early_stop_is_cheap() -> None:
+    # 15-lap race: the scaled deg prior is 75 * 58 / 15 ms per lap.
+    kw = dict(
+        lap_num=6,
+        laps_remaining=9,
+        tyre_age=6,
+        wear_mean=25.2,
+        fit=fit(75 * 58 / 15),
+        fresh=fit(75 * 58 / 15),
+        laps_of_pace=0.0,
+        pit_loss_s=8.0,
+        green_pit_loss_s=21.0,
+        sc_status=1,
+        stop_owed=True,
+        stop_mandatory=True,
+        gap_behind_s=1.0,
+    )
+    assert run(**kw).plan == "cheap_stop"
+    early = dict(kw, lap_num=3, laps_remaining=12, tyre_age=3, wear_mean=12.6)
+    assert run(**early).plan != "cheap_stop"
+    full = dict(kw, lap_num=25, laps_remaining=33, tyre_age=25, wear_mean=30.0)
+    assert run(**{**full, "fit": fit(75), "fresh": fit(75)}).plan != "cheap_stop"
+
+
 def test_aggressive_sc_stop_lower_wear() -> None:
     p = run(sc_status=2, wear_mean=30.0, pit_loss_s=11.0, mode=AGGRESSIVE)
     assert p.plan == "cheap_stop"

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
+import pitwall.engine.planning as planning
 from pitwall.engine import _hold_cover_plan, build_engine
 from pitwall.model.deg import DegFit
+from pitwall.state.session import Damage as DamageView
 from pitwall.state.session import Snapshot
 from pitwall.strategy.pitwindow import NO_PLAN
 
@@ -41,7 +45,6 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
         laps_of_pace=20.0,
         pit_loss_s=12.0,
         pit_loss_source="session",
-        is_sprint=True,
         _ages={"lap_data": 0.1, "car_status": 0.1},
     )
 
@@ -156,3 +159,119 @@ def test_five_lap_race_plans_without_a_mandatory_stop(tmp_path) -> None:
 
     assert thresholds(Snapshot(now=1.0))["plan_two_compound_rule"] == 1
     assert thresholds(Snapshot(now=1.0, short_race=True))["plan_two_compound_rule"] == 0
+    assert thresholds(Snapshot(now=1.0))["plan_max_stops"] != 0
+    assert thresholds(Snapshot(now=1.0, short_race=True))["plan_max_stops"] == 0
+    assert thresholds(Snapshot(now=1.0, is_sprint=True))["plan_max_stops"] == 0
+
+
+def _no_stop_snap(**kw) -> Snapshot:
+    base = dict(
+        now=1.0,
+        session_kind="race",
+        phase="racing",
+        race_phase="racing",
+        lap_num=2,
+        laps_remaining=3,
+        tyre_visual=17,
+        tyre_age_laps=1,
+        laps_of_pace=20.0,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+        _ages={"lap_data": 0.1, "car_status": 0.1},
+    )
+    return Snapshot(**{**base, **kw})
+
+
+def _no_stop_engine(tmp_path, monkeypatch, deg=217.0):
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+    )
+    fit = DegFit(90_000.0, deg, 30.0, 20, 0.0, 0.9, "prior")
+    engine.ctx.deg_fit = fit
+    engine.ctx.fresh_prior = fit
+    engine.ctx.green_pit_loss_s = 22.0
+    engine.ctx.sc_pit_loss_s = 12.0
+    calls: list[int] = []
+    original = planning.optimise
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(planning, "optimise", spy)
+    return engine, calls
+
+
+@pytest.mark.parametrize(
+    "snap",
+    [
+        _no_stop_snap(short_race=True, laps_remaining=4),
+        _no_stop_snap(is_sprint=True, laps_remaining=23),
+    ],
+    ids=["five-lap-race", "sprint"],
+)
+def test_no_stop_session_plans_no_stop_without_optimiser(tmp_path, monkeypatch, snap) -> None:
+    engine, calls = _no_stop_engine(tmp_path, monkeypatch)
+
+    planned = engine.planner._plan(snap)
+
+    assert calls == []
+    assert planned.plan_label.startswith("no-stop")
+    assert planned.plan_target_lap == 0
+    assert len(planned.plans) == 1
+    assert planned.pit_plan == ""
+
+
+def test_no_stop_session_under_safety_car_does_not_cheap_stop(tmp_path, monkeypatch) -> None:
+    engine, calls = _no_stop_engine(tmp_path, monkeypatch)
+    snap = _no_stop_snap(
+        is_sprint=True,
+        phase="sc",
+        race_phase="sc",
+        safety_car_status=1,
+        lap_num=10,
+        laps_remaining=14,
+        tyre_age_laps=9,
+        wear_mean_pct=40.0,
+    )
+
+    planned = engine.planner._plan(snap)
+
+    assert calls == []
+    assert planned.pit_plan != "cheap_stop"
+
+
+def test_no_stop_session_with_wing_damage_still_calls_a_stop(tmp_path, monkeypatch) -> None:
+    engine, calls = _no_stop_engine(tmp_path, monkeypatch, deg=60.0)
+    snap = _no_stop_snap(
+        is_sprint=True,
+        laps_remaining=23,
+        damage=DamageView(front_left_wing=60),
+    )
+
+    planned = engine.planner._plan(snap)
+
+    assert calls == [1]
+    assert planned.pit_plan in ("box_now", "box_in_n")
+
+
+def test_wet_crossover_still_calls_inters_in_a_sprint(tmp_path) -> None:
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+    )
+    dry = _no_stop_snap(
+        is_sprint=True,
+        weather_crossover="",
+        tyre_compound=17,
+        _ages={"session": 0.1},
+    )
+    engine.rule_engine.evaluate(dry)
+    snap = dataclasses.replace(dry, weather_crossover="to_inter")
+
+    assert "weather_to_inter" in {
+        candidate.rule.id for candidate in engine.rule_engine.evaluate(snap).candidates
+    }

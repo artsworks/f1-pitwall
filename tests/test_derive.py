@@ -188,7 +188,29 @@ def test_engine_damage_signal_excludes_transient_laps(transient: dict[str, objec
     engine.state.laps.append(dataclasses.replace(lap, **transient))
     assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
     engine.state.laps[-1] = lap
-    assert engine.planner._plan_damage(snap, fit) == ("pace", 4800.0, 0.0)
+    assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps.append(LapSummary(3, 95_000, 30_000, 30_000, 17, 3, 10.0, True))
+    snap = dataclasses.replace(snap, lap_num=4, tyre_age_laps=4)
+    assert engine.planner._plan_damage(snap, fit) == ("pace", 4700.0, 0.0)
+    db.close()
+
+
+def test_engine_damage_pace_restarts_after_a_clean_lap() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    fit = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    engine.state.laps.append(LapSummary(2, 95_000, 30_000, 30_000, 17, 2, 10.0, True))
+    snap = Snapshot(now=1.0, race_phase="racing", lap_num=3, tyre_age_laps=3)
+    assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps.append(LapSummary(3, 90_300, 30_000, 30_000, 17, 3, 10.0, True))
+    snap = dataclasses.replace(snap, lap_num=4, tyre_age_laps=4)
+    assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps.append(LapSummary(4, 95_000, 30_000, 30_000, 17, 4, 10.0, True))
+    snap = dataclasses.replace(snap, lap_num=5, tyre_age_laps=5)
+    assert engine.planner._plan_damage(snap, fit) == ("", 0.0, 0.0)
+    engine.state.laps.append(LapSummary(5, 95_000, 30_000, 30_000, 17, 5, 10.0, True))
+    snap = dataclasses.replace(snap, lap_num=6, tyre_age_laps=6)
+    assert engine.planner._plan_damage(snap, fit) == ("pace", 4500.0, 0.0)
     db.close()
 
 
@@ -1088,7 +1110,12 @@ def test_red_flag_keeps_safety_car_after_restart(tmp_path) -> None:
 @pytest.mark.replay
 def test_red_flag_restart_calls_tyres_warmup_and_new_plan(tmp_path) -> None:
     log_path = tmp_path / "red.jsonl"
-    engine = build_engine(clock=VirtualClock(), sinks=[], decision_log_path=log_path)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        decision_log_path=log_path,
+        overrides={"thresholds": {"race_distance_km": 0}},
+    )
     asyncio.run(run_replay(_red_flag_race(tmp_path, 6, 6), engine, None))
     engine.dispatcher.log.flush()
     rows = [json.loads(line) for line in log_path.read_text().splitlines() if line]

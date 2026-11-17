@@ -253,11 +253,13 @@ def replay_race(
     path = write_packet_stream(tmp / "race.f1bin", stream)
     log = tmp / "decisions.jsonl"
     replay_db = (db if db is not None else Database(":memory:")) if persist else None
+    # Synthetic races keep fixed degradation, so the deg prior is not scaled to race length.
     engine = build_engine(
         clock=VirtualClock(),
         sinks=[],
         db=replay_db,
         decision_log_path=log,
+        overrides={"thresholds": {"race_distance_km": 0}},
     )
     _, calls = asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()

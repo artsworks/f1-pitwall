@@ -9,6 +9,7 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 - `speech.engine: "sapi"` is removed. Pitwall prints an unknown-engine warning and resolves the engine with `auto` (Piper if its voice is installed, else null). `auto` no longer picks SAPI on Windows, and `speech.voice` is gone.
 - Dashboard v3 is the `/` page, with a new layout for the race, the safety car, qualifying, cool-down and the pit board. The previous dashboard stays at `/v2`.
 - The cool-down payload gains `cool.fuel_need_laps`, the fuel a push lap needs.
+- Short races plan the first stop near half distance on tracks whose track file has degradation values. Sprints and races of 5 laps or fewer plan no stop. Safety-car stops and spin laps no longer break the plan.
 
 <!-- version list -->
 
