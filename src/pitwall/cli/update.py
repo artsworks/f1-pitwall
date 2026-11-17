@@ -52,8 +52,11 @@ def _version(root: Path) -> str:
 def _wants_kokoro() -> bool:
     if find_spec("kokoro_onnx") is not None:
         return True
-    store = ConfigStore()
-    return store.last_error is None and store.current().speech.engine == "kokoro"
+    try:
+        store = ConfigStore()
+        return store.last_error is None and store.current().speech.engine == "kokoro"
+    except Exception:  # noqa: BLE001 - a broken profile must not stop the dependency sync
+        return False
 
 
 def _sync_command(uv: str) -> list[str]:
