@@ -11,6 +11,7 @@ from pitwall.cli import main
 from pitwall.config.loader import ConfigStore, config_hash
 from pitwall.learning.debrief import (
     _compound,
+    _compound_badge,
     _fit_points,
     _hindsight,
     _incidents_section,
@@ -547,7 +548,7 @@ def test_debrief_layout_hooks() -> None:
     }
     assert lap_y[6] < lap_y[1]
     assert "PIT L3" in report
-    assert "class='chip med'" in report
+    assert "<span class='cmp med' title='MEDIUM'>M</span>" in report
     assert "IntersectionObserver" in report
     assert "@media print" in report
     assert "<link" not in report
@@ -608,6 +609,14 @@ def test_debrief_style_uses_dashboard_font_and_spaces_stacked_cards() -> None:
     db.upsert_session(167, track_id=7, session_type=15)
     report = render_debrief(db, 167, ConfigStore().current())
     assert "</div><div class='card'><h3>SESSION DETAILS</h3>" in report
+
+
+def test_debrief_uses_pit_board_style() -> None:
+    assert _compound_badge("unk", "C2") == "<span class='chip unk'>C2</span>"
+    assert _compound_badge("soft", "SOFT") == "<span class='cmp soft' title='SOFT'>S</span>"
+    index = render_debrief_index(Database(":memory:"))
+    assert "<a class='btn' href='/debrief/latest'>" in index
+    assert ".cmp {" in index and "a.btn {" in index and "--med:#ffd23c" in index
 
 
 def test_debrief_labels_from_stored_weekend_structure() -> None:

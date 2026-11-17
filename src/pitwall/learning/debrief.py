@@ -37,7 +37,7 @@ _STYLE = """<style>
   --bg:#0a0a0c; --panel:#121216; --panel2:#17171c; --line:#2a2a30;
   --fg:#ececec; --dim:#8a8a92; --faint:#4a4a52;
   --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff;
-  --soft:#c81e1e; --med:#e6b800; --hard:#e8e8e8; --inter:#2fbf4f; --wet:#2f6fd8;
+  --soft:#ff4d4d; --med:#ffd23c; --hard:#f2f2f2; --inter:#37e07a; --wet:#2f6fd8;
   --mono:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
 }
 * { box-sizing:border-box; }
@@ -76,7 +76,7 @@ main { padding:1.5rem 2.5rem 4rem; max-width:80rem; width:100%; }
 section { padding:1.6rem 0; border-bottom:1px solid var(--line); }
 section h2 {
   margin:0 0 .9rem; font-family:var(--mono); font-weight:normal;
-  letter-spacing:.12em; font-size:.95rem; color:var(--dim);
+  letter-spacing:.25em; font-size:.95rem; color:var(--dim);
 }
 section h2 .n { color:var(--faint); margin-right:.6rem; }
 p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
@@ -86,14 +86,14 @@ p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
 .cols-4 { grid-template-columns:repeat(4,1fr); }
 .row.stint-row { align-items:start; }
 .card {
-  background:var(--panel); border:1px solid var(--line); border-radius:.35rem;
-  padding:.9rem 1rem; min-width:0;
+  background:var(--panel); border:1px solid var(--line); border-radius:.25rem;
+  padding:.7rem .9rem; min-width:0;
 }
 section > .card + .card,section > .row + .card,section > .card + .row,
 section > .row + .row { margin-top:1rem; }
 .card h3 {
   margin:0 0 .5rem; font-family:var(--mono); font-weight:normal;
-  font-size:.8rem; letter-spacing:.1em; color:var(--dim);
+  font-size:.75rem; letter-spacing:.25em; color:var(--dim);
 }
 .card .src {
   color:var(--faint); font-size:.72rem; font-family:var(--mono);
@@ -104,19 +104,21 @@ header.session {
   padding-bottom:1.2rem; border-bottom:1px solid var(--line);
 }
 header.session h1 {
-  margin:0; font-family:var(--mono); font-size:1.6rem;
+  margin:0; font-family:var(--mono); font-size:1.5rem;
   font-weight:bold; letter-spacing:.02em;
 }
 header.session .meta { color:var(--dim); font-family:var(--mono); font-size:.9rem; }
 header.session .meta b { color:var(--fg); font-weight:normal; }
-.stat b { display:block; font-size:1.7rem; font-weight:bold; line-height:1.1; }
-.stat small { color:var(--dim); }
+.stat b { display:block; font-size:2.4rem; font-weight:700; line-height:1; }
+.stat small {
+  display:block; margin-top:.35rem; color:var(--dim); font-size:.8rem; letter-spacing:.08em;
+}
 .ok { color:var(--ok); } .warn { color:var(--warn); }
 .crit { color:var(--crit); } .cold { color:var(--cold); }
 .info { color:var(--info); } .dim { color:var(--dim); }
 .chip {
   display:inline-block; font-size:.72rem; padding:.05rem .45rem;
-  border-radius:.25rem; border:1px solid var(--line); color:var(--dim);
+  border-radius:.3rem; border:1px solid var(--faint); color:var(--dim);
   letter-spacing:.06em; white-space:nowrap;
 }
 .chip.soft { border-color:var(--soft); color:var(--soft); }
@@ -124,12 +126,19 @@ header.session .meta b { color:var(--fg); font-weight:normal; }
 .chip.hard { border-color:var(--hard); color:var(--hard); }
 .chip.inter { border-color:var(--inter); color:var(--inter); }
 .chip.wet { border-color:var(--wet); color:var(--wet); }
-.chip.p1 { border-color:var(--crit); color:var(--crit); }
-.chip.p2 { border-color:var(--warn); color:var(--warn); }
-.chip.p3 { border-color:var(--info); color:var(--info); }
-.chip.ok { border-color:var(--ok); color:var(--ok); }
-.chip.warn { border-color:var(--warn); color:var(--warn); }
+.chip.p1 { border-color:var(--crit); background:var(--crit); color:#000; font-weight:700; }
+.chip.p2 { border-color:var(--warn); background:var(--warn); color:#000; font-weight:700; }
+.chip.p3 { border-color:var(--info); background:var(--info); color:#000; font-weight:700; }
+.chip.ok { border-color:var(--ok); background:var(--ok); color:#000; font-weight:700; }
+.chip.warn { border-color:var(--warn); background:var(--warn); color:#000; font-weight:700; }
 .chip.sup { border-style:dashed; }
+tr.sup .chip { background:transparent; color:var(--faint); }
+.cmp {
+  display:inline-block; min-width:1.5em; text-align:center; border-radius:50%;
+  border:.16em solid; font-weight:700; font-size:.9em; line-height:1.3; font-family:var(--mono);
+}
+.cmp.soft { color:var(--soft); } .cmp.med { color:var(--med); } .cmp.hard { color:var(--hard); }
+.cmp.inter { color:var(--inter); } .cmp.wet { color:var(--wet); }
 .badge { font-size:.7rem; letter-spacing:.12em; padding:.1rem .5rem; border-radius:.25rem; }
 .badge.det { background:#173a25; color:var(--ok); }
 svg { display:block; width:100%; height:auto; }
@@ -162,7 +171,7 @@ svg { display:block; width:100%; height:auto; }
 .scroll { overflow-x:auto; }
 table { width:100%; border-collapse:collapse; font-size:.86rem; }
 th {
-  text-align:left; color:var(--dim); font-weight:normal; letter-spacing:.06em;
+  text-align:left; color:var(--dim); font-weight:normal; letter-spacing:.08em;
   font-size:.74rem; padding:.35rem .5rem; border-bottom:1px solid var(--line);
 }
 td { padding:.4rem .5rem; border-bottom:1px solid #1c1c22; vertical-align:top; }
@@ -175,8 +184,12 @@ article { border-left:3px solid var(--ok); padding:.1rem 1rem; margin:.8rem 0; }
   color:var(--dim); background:transparent; padding:.05rem .4rem;
   border-radius:.2rem; cursor:pointer;
 }
-.grade button.on { border-color:var(--ok); color:var(--ok); }
-.grade button.on.bad { border-color:var(--crit); color:var(--crit); }
+.grade button.on { border-color:var(--ok); background:var(--ok); color:#000; }
+.grade button.on.bad { border-color:var(--crit); background:var(--crit); color:#000; }
+a.btn {
+  background:var(--info); color:#000; border-radius:1rem; padding:.1rem .8rem;
+  text-decoration:none; font-weight:700;
+}
 details { margin:.6rem 0; }
 details.why { margin-top:.25rem; font-size:.8rem; color:var(--dim); }
 details.why summary { cursor:pointer; color:var(--faint); }
@@ -315,6 +328,14 @@ def _compound_for_stint(stint: StintRow, laps: list[LapRow]) -> tuple[str, str]:
 
 def _chip(css_class: str, label: object) -> _Markup:
     return _Markup(f"<span class='chip {_esc(css_class)}'>{_esc(label)}</span>")
+
+
+def _compound_badge(css_class: str, label: str) -> _Markup:
+    if css_class == "unk":
+        return _chip(css_class, label)
+    return _Markup(
+        f"<span class='cmp {_esc(css_class)}' title='{_esc(label)}'>{_esc(label[:1])}</span>"
+    )
 
 
 def _cell(value: object) -> str:
@@ -872,7 +893,7 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
         (
             lap.lap_num,
             _lap_time(lap.lap_time_ms) if lap.lap_time_ms > 0 else "—",
-            _chip(*_compound(lap.visual, lap.compound)),
+            _compound_badge(*_compound(lap.visual, lap.compound)),
             lap.tyre_age_laps,
             f"{lap.fuel_kg:.1f}",
             "valid"
@@ -892,7 +913,7 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
     )
     stint_rows = [
         (
-            _chip(*_compound_for_stint(stint, laps)),
+            _compound_badge(*_compound_for_stint(stint, laps)),
             f"{stint.start_lap}–{stint.end_lap}",
             f"{stint.deg_ms_per_lap:.1f}",
             stint.n_valid_laps,
@@ -962,7 +983,7 @@ def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
         visual = next((lap.visual for lap in group if lap.visual), 0)
         rows.append(
             (
-                _chip(*_compound(visual, compound)),
+                _compound_badge(*_compound(visual, compound)),
                 f"{green / len(group):.0%}",
                 len(group),
                 cold,
@@ -1571,7 +1592,7 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
         f"<title>Sessions · Pitwall debrief</title>{_STYLE}</head><body class='index'>"
         "<main><header class='session'><h1>SESSIONS</h1>"
         "<div class='meta'>Newest first · "
-        "<a href='/debrief/latest'>Open the latest debrief</a></div></header>"
+        "<a class='btn' href='/debrief/latest'>Open the latest debrief</a></div></header>"
         + content
         + "</main></body></html>"
     )
