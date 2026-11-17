@@ -192,6 +192,14 @@ def test_missing_model_names_the_file(tmp_path: Path) -> None:
         make_kokoro_speaker(SpeechSettings(engine="kokoro", voices_dir=str(tmp_path)))
 
 
+def test_missing_kokoro_package_names_the_fix(
+    kokoro_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", None)
+    with pytest.raises(RuntimeError, match="uv sync --extra kokoro"):
+        make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+
+
 def test_missing_model_falls_back_to_piper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     sentinel = object()
     monkeypatch.setitem(ENGINES, "piper", EngineSpec("piper", lambda _s: sentinel, "null"))

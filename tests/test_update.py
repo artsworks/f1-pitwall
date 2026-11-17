@@ -170,8 +170,67 @@ def test_sync_command_keeps_kokoro_extra(monkeypatch) -> None:
 
 def test_sync_command_is_plain_without_kokoro(monkeypatch) -> None:
     monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
 
     assert _sync_command("uv") == ["uv", "sync"]
+
+
+def test_sync_command_adds_kokoro_extra_from_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("speech:\n  engine: kokoro\n", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    assert _sync_command("uv") == ["uv", "sync", "--extra", "kokoro"]
+
+
+def test_sync_command_is_plain_with_invalid_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("speech: [", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    assert _sync_command("uv") == ["uv", "sync"]
+
+
+def test_sync_command_is_plain_with_list_root_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("- speech: {engine: kokoro}\n", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    assert _sync_command("uv") == ["uv", "sync"]
+
+
+def test_sync_command_is_plain_with_non_utf8_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_bytes(b"\xff\xfe speech")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    assert _sync_command("uv") == ["uv", "sync"]
+
+
+def test_update_syncs_with_list_root_profile(tmp_path: Path, monkeypatch) -> None:
+    _, clone = _clone(tmp_path)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("- speech: {engine: kokoro}\n", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    marker = tmp_path / "synced"
+    if sys.platform == "win32":
+        uv = tmp_path / "uv.cmd"
+        uv.write_text('@echo off\r\ntype nul > "%MARKER%"\r\n', encoding="utf-8")
+    else:
+        uv = tmp_path / "uv"
+        uv.write_text('#!/bin/sh\n: > "$MARKER"\n', encoding="utf-8")
+        uv.chmod(0o755)
+    monkeypatch.setenv("UV", str(uv))
+    monkeypatch.setenv("MARKER", str(marker))
+    out = StringIO()
+
+    assert update(clone, out=out) == 0
+    assert marker.exists()
 
 
 def test_update_parser_uses_cmd_update() -> None:

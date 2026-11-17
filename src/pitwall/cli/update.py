@@ -11,6 +11,8 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import TextIO
 
+from pitwall.config.loader import ConfigStore
+
 
 def install_dir() -> Path:
     return Path(__file__).resolve().parents[3]
@@ -47,9 +49,19 @@ def _version(root: Path) -> str:
     return version
 
 
+def _wants_kokoro() -> bool:
+    if find_spec("kokoro_onnx") is not None:
+        return True
+    try:
+        store = ConfigStore()
+        return store.last_error is None and store.current().speech.engine == "kokoro"
+    except Exception:  # noqa: BLE001 - a broken profile must not stop the dependency sync
+        return False
+
+
 def _sync_command(uv: str) -> list[str]:
     command = [uv, "sync"]
-    if find_spec("kokoro_onnx") is not None:
+    if _wants_kokoro():
         command += ["--extra", "kokoro"]
     return command
 
