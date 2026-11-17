@@ -272,6 +272,31 @@ def test_start_session_end_digest_failure_still_prints_link(
     )
 
 
+def test_start_session_end_digest_uses_reloaded_thresholds(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    _make_profile(tmp_path, monkeypatch)
+    session_end = _fake_serve_session_end(987)
+
+    async def fake_serve(engine: Any, hub: Any, store: Any, live: Any, **kwargs: Any) -> None:
+        assert store.set_override(("thresholds", "hind_fuel_tol_laps"), 1.0)
+        await session_end(engine, hub, store, live, **kwargs)
+
+    monkeypatch.setattr(cli, "_serve", fake_serve)
+
+    import pitwall.learning.digest
+
+    real_build_digest = pitwall.learning.digest.build_digest
+    seen: list[Any] = []
+
+    def tracked_build_digest(db: Any, uid: int, th: Any, **kwargs: Any) -> Any:
+        seen.append(th["hind_fuel_tol_laps"])
+        return real_build_digest(db, uid, th, **kwargs)
+
+    monkeypatch.setattr(pitwall.learning.digest, "build_digest", tracked_build_digest)
+
+    assert cli.cmd_start(_start_args()) == 0
+    assert seen == [1.0]
+
+
 def test_local_url_uses_https_and_port() -> None:
     def settings(host: str, cert: str, key: str) -> SimpleNamespace:
         connection = SimpleNamespace(http_host=host, http_port=9443, https_cert=cert, https_key=key)

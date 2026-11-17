@@ -515,7 +515,8 @@ def cmd_start(args: argparse.Namespace) -> int:
         except sqlite3.Error as e:
             print(f"driver rating: skipped ({e})", flush=True)
         try:
-            digest = build_digest(db, uid, settings.thresholds, setup_rules=settings.setup_rules)
+            current = store.current()
+            digest = build_digest(db, uid, current.thresholds, setup_rules=current.setup_rules)
             path = Path(settings.persistence.path).expanduser().parent / "digests" / f"{uid}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(digest, indent=2, default=str), encoding="utf-8")
