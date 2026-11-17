@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from pitwall.cli.parser import build_parser
-from pitwall.cli.update import cmd_update, update
+from pitwall.cli.update import _sync_command, cmd_update, update
 
 
 def _git(*args: str, cwd: Path) -> str:
@@ -160,6 +160,18 @@ def test_update_reports_sync_failure(tmp_path: Path) -> None:
         == 1
     )
     assert "uv sync failed" in out.getvalue()
+
+
+def test_sync_command_keeps_kokoro_extra(monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: object())
+
+    assert _sync_command("uv") == ["uv", "sync", "--extra", "kokoro"]
+
+
+def test_sync_command_is_plain_without_kokoro(monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+
+    assert _sync_command("uv") == ["uv", "sync"]
 
 
 def test_update_parser_uses_cmd_update() -> None:

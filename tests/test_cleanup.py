@@ -481,7 +481,10 @@ def test_symlinked_folder_is_skipped(tmp_path: Path) -> None:
     (real / "a.json").write_text("{}")
     pw = tmp_path / "pw"
     pw.mkdir()
-    (pw / "digests").symlink_to(real)
+    try:
+        (pw / "digests").symlink_to(real)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
     plan = plan_cleanup(
         tmp_path / "rec", pw, tmp_path / "voices", set(), 0.0, now=time.time() + 1e6
     )
@@ -492,7 +495,10 @@ def test_symlinked_learnings_folder_is_skipped(tmp_path: Path) -> None:
     real = tmp_path / "elsewhere"
     _touch(real / "learning-2020-01-01.json", 40)
     link = tmp_path / "learnings"
-    link.symlink_to(real, target_is_directory=True)
+    try:
+        link.symlink_to(real, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
 
     plan = plan_cleanup(
         tmp_path / "rec",
@@ -540,14 +546,20 @@ def test_cleanup_skips_linked_ancestor_and_replaced_directory(tmp_path: Path) ->
     home = tmp_path / "home"
     file = _touch(home / "digests" / "1.json", 40)
     link = tmp_path / "linked-home"
-    link.symlink_to(home, target_is_directory=True)
+    try:
+        link.symlink_to(home, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
     assert (
         plan_cleanup(tmp_path / "rec", link, tmp_path / "voices", set(), 30, now=NOW).delete == []
     )
     plan = plan_cleanup(tmp_path / "rec", home, tmp_path / "voices", set(), 30, now=NOW)
     saved = home / "saved"
     file.parent.rename(saved)
-    (home / "digests").symlink_to(saved, target_is_directory=True)
+    try:
+        (home / "digests").symlink_to(saved, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
     assert apply(plan) == (0, 0)
     assert (saved / "1.json").exists()
 

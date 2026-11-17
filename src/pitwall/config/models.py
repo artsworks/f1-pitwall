@@ -292,6 +292,10 @@ class SpeechSettings(BaseModel):
     # How long a cold (uncached) line waits for OmniVoice WAV before Piper provisional
     # audio plays. 0 restores instant Piper.
     omnivoice_wait_s: float = 5.0
+    kokoro_voice: str = "af_heart"
+    kokoro_lang: str = "en-us"
+    kokoro_speed: float = 1.0
+    kokoro_device: Literal["auto", "cpu"] = "auto"
     voices_dir: str = "voices"
     warm_phrases: int = 150  # fixed phrases pre-rendered by `pitwall voice warm`
     # None -> engine default (half the cores; omnivoice at most 4)

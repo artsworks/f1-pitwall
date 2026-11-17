@@ -22,8 +22,8 @@ check the changelog for what a given version added.
   score (`26-driver-rating.md`).
 - **Learning and debrief:** session grading, `pitwall calibrate`, `pitwall evaluate`,
   `pitwall propose`, `pitwall stats --learned`, and an HTML debrief.
-- **Dashboard, voice and phone:** a second-monitor dashboard, Piper or OmniVoice speech,
-  menu voice requests, and a phone radio PWA.
+- **Dashboard, voice and phone:** a second-monitor dashboard, Piper, OmniVoice or Kokoro
+  speech, menu voice requests, and a phone radio PWA.
 - **Recovery:** the watchdog restarts a failed or stalled engine while the recorder continues.
 
 ## Next

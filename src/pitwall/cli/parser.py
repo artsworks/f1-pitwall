@@ -432,7 +432,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Pre-render common phrases so the first calls play without delay.",
         "pitwall voice warm --engine omnivoice --replay latest",
     )
-    warm.add_argument("--engine", choices=["auto", "piper", "omnivoice"], default="auto")
+    warm.add_argument("--engine", choices=["auto", "piper", "omnivoice", "kokoro"], default="auto")
     warm.add_argument(
         "--replay",
         default=None,
@@ -448,7 +448,7 @@ def build_parser() -> argparse.ArgumentParser:
     vsay.add_argument("text", nargs="?", default="Pit wall online. Radio check.")
     vsay.add_argument(
         "--engine",
-        choices=["auto", "piper", "null", "omnivoice"],
+        choices=["auto", "piper", "null", "omnivoice", "kokoro"],
         default=None,
         help="speech backend (default: configured speech.engine)",
     )

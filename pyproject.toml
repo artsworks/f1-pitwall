@@ -13,11 +13,18 @@ dependencies = [
     "numpy",
     "pydantic>=2",
     "pywin32; sys_platform == 'win32'",
+    "onnxruntime-gpu>=1.30,<2; sys_platform == 'win32'",
     "piper-tts>=1.7,<2",
     "pyyaml",
     "uvicorn",
     "websockets",
     "zstandard",
+]
+
+[project.optional-dependencies]
+kokoro = [
+    "kokoro-onnx>=0.6.1,<0.7",
+    "onnxruntime-gpu[cuda,cudnn]>=1.30,<2; sys_platform == 'win32'",
 ]
 
 [project.scripts]
@@ -33,6 +40,9 @@ dev = [
     "types-PyYAML",
     "python-semantic-release~=10.6.2",
 ]
+
+[tool.uv]
+override-dependencies = ["onnxruntime; sys_platform != 'win32'"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
