@@ -77,7 +77,15 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
         )
 
     import onnxruntime  # type: ignore[import-untyped,import-not-found,unused-ignore]
-    from kokoro_onnx import Kokoro  # type: ignore[import-untyped,import-not-found,unused-ignore]
+
+    try:
+        from kokoro_onnx import (
+            Kokoro,  # type: ignore[import-untyped,import-not-found,unused-ignore]
+        )
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "the Kokoro packages are not installed. Run `uv sync --extra kokoro`"
+        ) from exc
 
     providers: list[Any]
     if settings.kokoro_device == "auto" and "CUDAExecutionProvider" in (

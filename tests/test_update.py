@@ -170,6 +170,25 @@ def test_sync_command_keeps_kokoro_extra(monkeypatch) -> None:
 
 def test_sync_command_is_plain_without_kokoro(monkeypatch) -> None:
     monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    monkeypatch.delenv("PITWALL_PROFILE", raising=False)
+
+    assert _sync_command("uv") == ["uv", "sync"]
+
+
+def test_sync_command_adds_kokoro_extra_from_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("speech:\n  engine: kokoro\n", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+
+    assert _sync_command("uv") == ["uv", "sync", "--extra", "kokoro"]
+
+
+def test_sync_command_is_plain_with_invalid_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pitwall.cli.update.find_spec", lambda name: None)
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("speech: [", encoding="utf-8")
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
 
     assert _sync_command("uv") == ["uv", "sync"]
 
