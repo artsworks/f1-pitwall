@@ -117,7 +117,8 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
         return _error(out, f"git rev-parse HEAD failed: {head_before.stderr.strip()}")
 
     head_before_value = head_before.stdout.strip()
-    print(f"Updating Pitwall {version_before} in {root}", file=out, flush=True)
+    print(f"Updating Pitwall {version_before} in {root}", file=out)
+    print("update: pulling latest code from origin...", file=out, flush=True)
     try:
         pull = subprocess.run(
             ["git", "-C", str(root), "pull", "--ff-only"],
@@ -128,6 +129,30 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
     if pull.returncode != 0:
         return _error(out, "git pull failed (see above). Pitwall did not change.")
 
+    try:
+        head_after = _git_output(root, "rev-parse", "HEAD")
+    except OSError as exc:
+        return _error(out, f"git rev-parse HEAD failed: {exc}")
+    if head_after.returncode != 0:
+        return _error(out, f"git rev-parse HEAD failed: {head_after.stderr.strip()}")
+    head_after_value = head_after.stdout.strip()
+    short_sha = head_after_value[:7]
+    if head_after_value == head_before_value:
+        print(f"update: already on the latest commit {short_sha}", file=out)
+    else:
+        commit_range = f"{head_before_value}..HEAD"
+        try:
+            details = [
+                _git_output(root, "log", "--oneline", commit_range),
+                _git_output(root, "diff", "--shortstat", commit_range),
+            ]
+        except OSError:
+            details = []
+        for detail in details:
+            if detail.returncode == 0:
+                for line in detail.stdout.splitlines():
+                    print(f"update:   {line.strip()}", file=out)
+
     if sync_cmd is None:
         uv = os.environ.get("UV") or shutil.which("uv")
         if uv is None:
@@ -136,6 +161,7 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
     else:
         command = list(sync_cmd)
 
+    print("update: syncing dependencies with uv sync...", file=out, flush=True)
     try:
         sync = subprocess.run(command, cwd=root, check=False)
     except OSError as exc:
@@ -152,17 +178,16 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
             "then run the update again. `pitwall start` also finishes the sync.",
         )
 
+    print("update: dependencies synced.", file=out)
+
     try:
-        head_after = _git_output(root, "rev-parse", "HEAD")
         version_after = _version(root)
     except (OSError, tomllib.TOMLDecodeError, ValueError) as exc:
         return _error(out, f"could not read the updated Pitwall version: {exc}")
-    if head_after.returncode != 0:
-        return _error(out, f"git rev-parse HEAD failed: {head_after.stderr.strip()}")
-    if head_after.stdout.strip() == head_before_value:
-        print(f"Pitwall is up to date (version {version_before}).", file=out)
+    if head_after_value == head_before_value:
+        print(f"Pitwall is up to date (version {version_before}, {short_sha}).", file=out)
     else:
-        print(f"Updated Pitwall from {version_before} to {version_after}.", file=out)
+        print(f"Updated Pitwall from {version_before} to {version_after} ({short_sha}).", file=out)
     return 0
 
 

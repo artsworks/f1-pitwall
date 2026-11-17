@@ -57,8 +57,15 @@ def test_update_up_to_date(tmp_path: Path) -> None:
 
     assert update(clone, out=out, sync_cmd=_sync()) == 0
 
-    assert "up to date" in out.getvalue()
-    assert "0.1.0" in out.getvalue()
+    short_sha = _git("rev-parse", "HEAD", cwd=clone)[:7]
+    lines = out.getvalue().splitlines()
+    assert lines[1:] == [
+        "update: pulling latest code from origin...",
+        f"update: already on the latest commit {short_sha}",
+        "update: syncing dependencies with uv sync...",
+        "update: dependencies synced.",
+        f"Pitwall is up to date (version 0.1.0, {short_sha}).",
+    ]
 
 
 def test_update_pulls_new_version(tmp_path: Path) -> None:
@@ -68,8 +75,16 @@ def test_update_pulls_new_version(tmp_path: Path) -> None:
 
     assert update(clone, out=out, sync_cmd=_sync()) == 0
 
-    assert "0.1.0" in out.getvalue()
-    assert "0.2.0" in out.getvalue()
+    short_sha = _git("rev-parse", "HEAD", cwd=clone)[:7]
+    lines = out.getvalue().splitlines()
+    assert lines[1:] == [
+        "update: pulling latest code from origin...",
+        f"update:   {short_sha} version 0.2.0",
+        "update:   1 file changed, 1 insertion(+), 1 deletion(-)",
+        "update: syncing dependencies with uv sync...",
+        "update: dependencies synced.",
+        f"Updated Pitwall from 0.1.0 to 0.2.0 ({short_sha}).",
+    ]
     assert 'version = "0.2.0"' in (clone / "pyproject.toml").read_text(encoding="utf-8")
 
 
@@ -159,7 +174,9 @@ def test_update_reports_sync_failure(tmp_path: Path) -> None:
         )
         == 1
     )
+    assert "update: syncing dependencies with uv sync..." in out.getvalue()
     assert "uv sync failed" in out.getvalue()
+    assert "dependencies synced" not in out.getvalue()
 
 
 def test_sync_command_keeps_kokoro_extra(monkeypatch) -> None:
