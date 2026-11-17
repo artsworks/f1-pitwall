@@ -39,7 +39,7 @@ _STYLE = """<style>
   --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff;
   --soft:#c81e1e; --med:#e6b800; --hard:#e8e8e8; --inter:#2fbf4f; --wet:#2f6fd8;
   --mono:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
-  --sans:system-ui,"Segoe UI",Roboto,sans-serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 * { box-sizing:border-box; }
 html,body {
@@ -48,9 +48,10 @@ html,body {
 }
 body { display:grid; grid-template-columns:16rem minmax(0,1fr); min-height:100vh; }
 a { color:var(--info); }
-.mono,.num,td,th,.stat b,.badge,code,.chip {
+.mono,.num,.stat b,.badge,code,.chip {
   font-family:var(--mono); font-variant-numeric:tabular-nums;
 }
+td,th { font-family:var(--sans); font-variant-numeric:tabular-nums; }
 nav.agenda {
   position:sticky; top:0; height:100vh; border-right:1px solid var(--line);
   background:var(--panel); padding:1rem; display:flex; flex-direction:column;
@@ -184,8 +185,9 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 ol.actions { margin:0; padding-left:1.4rem; }
 ol.actions li { margin:.4rem 0; }
 body.index { display:block; min-height:100vh; }
-body.index main { margin:0 auto; max-width:80rem; }
-body.index .brand { font-family:var(--mono); color:var(--dim); letter-spacing:.12em; }
+body.index main { margin:0 auto; max-width:none; }
+body.index td,body.index th { white-space:nowrap; }
+details.hidden-sessions summary { cursor:pointer; color:var(--dim); font-size:.85rem; }
 @media (max-width:900px) {
   body { grid-template-columns:1fr; }
   nav.agenda { position:static; height:auto; }
@@ -1497,10 +1499,14 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     )
 
 
+_INDEX_MIN_LAPS = 3
+
+
 def render_debrief_index(db: Database, *, limit: int = 100) -> str:
     """HTML list of stored sessions, newest first, each linking to its debrief."""
     rows = db.sessions()[::-1][:limit]
-    body_rows = []
+    body_rows: list[tuple[object, ...]] = []
+    hidden_rows: list[tuple[object, ...]] = []
     structures: dict[tuple[int, int, str], tuple[int, ...]] = {}
 
     def _structure(row: Mapping[str, Any]) -> tuple[int, ...]:
@@ -1519,6 +1525,7 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
         track = f"{_track_name(track_id)} · {track_id if track_id is not None else '—'}"
         path = str(row.get("recording_path") or "")
         recording = os.path.basename(path) if path else "not linked"
+        recording = recording.removesuffix(".f1bin.zst").removesuffix(".f1bin")
         start = (
             time.strftime("%Y-%m-%d %H:%M", time.localtime(row["started_at"]))
             if row.get("started_at")
@@ -1526,39 +1533,43 @@ def render_debrief_index(db: Database, *, limit: int = 100) -> str:
         )
         session_link = _Markup(f"<a href='/debrief/{_esc(uid)}'>{_esc(uid)}</a>")
         is_synthetic = bool(row.get("synthetic")) or is_synthetic_uid(uid)
+        laps = len(db.laps_for(uid))
         origin: object = "-"
         if is_synthetic:
             derived_from = str(row.get("derived_from") or "")
             origin = _Markup(
                 str(_chip("warn", "synthetic"))
-                + (f"<br>derived from {_esc(derived_from)}" if derived_from else "")
+                + (f" from {_esc(derived_from)}" if derived_from else "")
             )
-        body_rows.append(
-            (
-                session_link,
-                start,
-                track,
-                _session_label(row.get("session_type"), _structure(row)),
-                len(db.laps_for(uid)),
-                origin,
-                recording,
-            )
+        cells = (
+            session_link,
+            start,
+            track,
+            _session_label(row.get("session_type"), _structure(row)),
+            laps,
+            origin,
+            recording,
         )
-    table = (
-        _table(
-            ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording"),
-            body_rows,
-            "sessions and laps",
+        hidden = not is_synthetic and (
+            laps == 0 or (laps < _INDEX_MIN_LAPS and row.get("ended_at") is None)
         )
-        if rows
-        else "<p>No sessions stored yet.</p>"
-    )
-    content = _card("SESSIONS", table)
+        (hidden_rows if hidden else body_rows).append(cells)
+    headers = ("Session", "Start", "Track", "Type", "Laps", "Origin", "Recording")
+    table = _table(headers, body_rows, "sessions and laps") if body_rows else ""
+    hidden_block = ""
+    if hidden_rows:
+        count = len(hidden_rows)
+        noun = "session" if count == 1 else "sessions"
+        hidden_block = (
+            f"<details class='hidden-sessions'><summary>{count} {noun} without usable laps hidden"
+            "</summary>" + _table(headers, hidden_rows, "sessions and laps") + "</details>"
+        )
+    content = _card("SESSIONS", table + hidden_block if rows else "<p>No sessions stored yet.</p>")
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>Sessions · Pitwall debrief</title>{_STYLE}</head><body class='index'>"
-        "<main><header class='session'><div class='brand'><b>pitwall</b> · SESSIONS</div>"
+        "<main><header class='session'><h1>SESSIONS</h1>"
         "<div class='meta'>Newest first · "
         "<a href='/debrief/latest'>Open the latest debrief</a></div></header>"
         + content

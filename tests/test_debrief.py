@@ -295,6 +295,56 @@ def test_debrief_latest_404_and_empty_index() -> None:
     assert "No sessions stored yet" in client.get("/debrief").text
 
 
+def test_debrief_index_collapses_sessions_without_usable_laps() -> None:
+    db = Database(":memory:")
+    for uid, started_at, laps, ended in (
+        (9001, 1.0, 0, True),
+        (9002, 2.0, 2, False),
+        (9003, 3.0, 1, True),
+        (9004, 4.0, 3, False),
+    ):
+        db.upsert_session(uid, track_id=16, session_type=15, started_at=started_at)
+        for lap_num in range(1, laps + 1):
+            _insert_lap(db, uid, lap_num)
+        if ended:
+            db.end_session(uid, started_at + 0.5)
+    db.upsert_session(9005, track_id=16, session_type=15, started_at=5.0, synthetic=True)
+    db.set_session_origin(
+        9005, started_at=5.0, recording_path="", calls_mode="", synthetic=True, derived_from="9003"
+    )
+
+    index = render_debrief_index(db)
+    visible, _, hidden = index.partition("<details")
+
+    assert "2 sessions without usable laps hidden" in index
+    assert "<br>" not in index
+    assert "chip warn'>synthetic</span> from 9003" in index
+    for uid in (9001, 9002):
+        assert f"/debrief/{uid}'" in hidden
+        assert f"/debrief/{uid}'" not in visible
+    assert visible.index("/debrief/9005'") < visible.index("/debrief/9004'")
+    assert visible.index("/debrief/9004'") < visible.index("/debrief/9003'")
+
+
+def test_debrief_index_strips_recording_extension_and_shows_hidden_only_list() -> None:
+    db = Database(":memory:")
+    db.upsert_session(
+        9101,
+        track_id=16,
+        session_type=15,
+        started_at=1.0,
+        recording_path="/rec/2026-11-14_2031_brazil_race.f1bin.zst",
+    )
+
+    index = render_debrief_index(db)
+
+    assert "2026-11-14_2031_brazil_race</td>" in index
+    assert ".f1bin" not in index
+    assert "<details class='hidden-sessions'>" in index
+    assert "1 session without usable laps hidden" in index
+    assert "No sessions stored yet" not in index
+
+
 def test_compound_visual_and_actual_id_fallbacks() -> None:
     assert _compound(0, 19) == ("unk", "C2")
     assert _compound(0, 16) == ("unk", "C5")

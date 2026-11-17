@@ -12,6 +12,7 @@ lists each race length.
 ```
 session ──► SQLite laps, stints, calls and plan events
         ──► grade at session end
+        ──► write the digest and print the debrief URL at session end
         ──► maintain at session end and at each start: rebuild clean stint
             priors, quarantine bad values, refit track priors, tune rule cooldowns
         ──► inspect learned state
@@ -52,8 +53,9 @@ only when nobody graded the call by hand. A human grade overrides the automatic 
 pitwall digest [PATHS...] [--calls-mode on|off] [--db PATH] [--session UID|latest] [--out DIR|-] [--json]
 ```
 
-Writes digest JSON to `~/.pitwall/digests/<uid>.json` and prints findings. With paths,
-it ingests recordings first. A digest is optional; live sessions are graded automatically.
+Writes digest JSON to `~/.pitwall/digests/<uid>.json` and prints findings. With paths, it
+ingests recordings first. A live session that ends in the game gets its digest
+automatically. Pitwall grades live sessions with or without a digest.
 
 - `session`: uid, track, type, mode, weather, config hash, laps
 - `pace`: valid green laps, best, median, stdev
@@ -148,10 +150,11 @@ Share only this file. Do not share the SQLite database, digests, profile or cert
 
 ## After a race
 
-No command is required. When a session ends, Pitwall grades it, refits pace, tyre
-wear, fuel, thermal, and energy priors, then adjusts rule cooldowns. Two steps remain
-manual: grade calls and apply threshold YAML changes from
-`pitwall propose`. Open `/debrief` to choose a session (`/debrief/latest` for the newest)
-and grade its calls. `pitwall sessions` lists the same sessions in the terminal.
-Thresholds never change without your review. Use `pitwall stats --learned` to inspect learned
-values. Use `pitwall digest` only to create digest JSON or ingest external recordings.
+No command is required. When a session ends, Pitwall grades it, refits pace, tyre wear,
+fuel, thermal, and energy priors, then adjusts rule cooldowns. Pitwall also writes the
+digest and prints the debrief URL. Two steps remain manual: grade calls and apply
+threshold YAML changes from `pitwall propose`. Open `/debrief` to choose a session
+(`/debrief/latest` for the newest) and grade its calls. `pitwall sessions` lists the same
+sessions in the terminal. Thresholds never change without your review. Use
+`pitwall stats --learned` to inspect learned values. Use `pitwall digest` only for a session
+that you stopped before it ended, or to ingest external recordings.
