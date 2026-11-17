@@ -12,6 +12,14 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.59.2 (2026-11-17)
+
+### Bug Fixes
+
+- **cli**: Print progress details during pitwall update
+  ([`15e7218`](https://github.com/artsworks/f1-pitwall/commit/15e7218adb7bf6817e411d4e1d4f794851b60b98))
+
+
 ## v0.59.1 (2026-11-17)
 
 ### Bug Fixes
