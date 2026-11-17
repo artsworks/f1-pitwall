@@ -598,6 +598,18 @@ def test_summary_shows_track_and_global_driver_rating() -> None:
     assert "0.620" in report and "0.400" in report
 
 
+def test_debrief_style_uses_dashboard_font_and_spaces_stacked_cards() -> None:
+    index = render_debrief_index(Database(":memory:"))
+    assert "--sans" not in index
+    assert "font-family:var(--mono);\n  font-variant-numeric:tabular-nums;" in index
+    assert "section > .row + .card" in index
+
+    db = Database(":memory:")
+    db.upsert_session(167, track_id=7, session_type=15)
+    report = render_debrief(db, 167, ConfigStore().current())
+    assert "</div><div class='card'><h3>SESSION DETAILS</h3>" in report
+
+
 def test_debrief_labels_from_stored_weekend_structure() -> None:
     db = Database(":memory:")
     db.upsert_session(

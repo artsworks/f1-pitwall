@@ -39,19 +39,17 @@ _STYLE = """<style>
   --ok:#37e07a; --warn:#ffc233; --crit:#ff4d4d; --cold:#5cc8ff; --info:#b8b8ff;
   --soft:#c81e1e; --med:#e6b800; --hard:#e8e8e8; --inter:#2fbf4f; --wet:#2f6fd8;
   --mono:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 * { box-sizing:border-box; }
 html,body {
-  margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans);
-  font-size:16px; line-height:1.45;
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--mono);
+  font-variant-numeric:tabular-nums; font-size:16px; line-height:1.45;
 }
 body { display:grid; grid-template-columns:16rem minmax(0,1fr); min-height:100vh; }
 a { color:var(--info); }
-.mono,.num,.stat b,.badge,code,.chip {
+.mono,.num,td,th,.stat b,.badge,code,.chip {
   font-family:var(--mono); font-variant-numeric:tabular-nums;
 }
-td,th { font-family:var(--sans); font-variant-numeric:tabular-nums; }
 nav.agenda {
   position:sticky; top:0; height:100vh; border-right:1px solid var(--line);
   background:var(--panel); padding:1rem; display:flex; flex-direction:column;
@@ -91,6 +89,8 @@ p.lede { margin:0 0 1rem; font-size:1.05rem; max-width:52rem; }
   background:var(--panel); border:1px solid var(--line); border-radius:.35rem;
   padding:.9rem 1rem; min-width:0;
 }
+section > .card + .card,section > .row + .card,section > .card + .row,
+section > .row + .row { margin-top:1rem; }
 .card h3 {
   margin:0 0 .5rem; font-family:var(--mono); font-weight:normal;
   font-size:.8rem; letter-spacing:.1em; color:var(--dim);
