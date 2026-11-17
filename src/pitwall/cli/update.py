@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Sequence
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TextIO
 
@@ -44,6 +45,13 @@ def _version(root: Path) -> str:
     if not isinstance(version, str):
         raise ValueError("pyproject.toml has no project version")
     return version
+
+
+def _sync_command(uv: str) -> list[str]:
+    command = [uv, "sync"]
+    if find_spec("kokoro_onnx") is not None:
+        command += ["--extra", "kokoro"]
+    return command
 
 
 def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None = None) -> int:
@@ -112,7 +120,7 @@ def update(root: Path, out: TextIO = sys.stdout, sync_cmd: Sequence[str] | None 
         uv = os.environ.get("UV") or shutil.which("uv")
         if uv is None:
             return _error(out, f"uv not found. Run `uv sync` in {root} yourself.")
-        command = [uv, "sync"]
+        command = _sync_command(uv)
     else:
         command = list(sync_cmd)
 

@@ -46,8 +46,9 @@ Run these commands from the Pitwall folder:
 | Start with Kokoro and a full recording | `uv run --extra kokoro pitwall start --record full` |
 | Reinstall the Kokoro packages | `uv sync --extra kokoro --reinstall-package kokoro-onnx --reinstall-package onnxruntime-gpu` |
 
-A plain `uv run`, `uv sync` or `pitwall update` removes the Kokoro packages. Pitwall then
-falls back to Piper. The next command with `--extra kokoro` installs the packages again.
+A plain `uv run` or `uv sync` removes the Kokoro packages. Pitwall then falls back to
+Piper. The next command with `--extra kokoro` installs the packages again.
+`pitwall update` keeps the Kokoro packages when they are installed.
 
 To type less, add these functions to your PowerShell profile. Replace the path with your
 Pitwall folder.
@@ -107,7 +108,7 @@ flowchart LR
     state --> rules[rules<br/>YAML, hysteresis]
     rules --> disp[dispatcher<br/>priority, cooldown, budget]
     disp --> log[(decision log<br/>.jsonl)]
-    disp --> speech[speech<br/>Piper / OmniVoice]
+    disp --> speech[speech<br/>Piper / OmniVoice / Kokoro]
     disp --> ws[WebSocket 8000] --> ui[dashboard<br/>2nd monitor]
     rec -.replay, same path.-> ingest
 ```
