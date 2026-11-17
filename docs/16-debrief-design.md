@@ -68,13 +68,14 @@ Translated to a solo sim driver with Pitwall's data, the debrief agenda is:
 |---|---------|---------------------|----------------|
 | 00 | Summary | What happened, in one paragraph and four numbers | derived from all below |
 | 01 | Pace & stints | How fast, how consistent, how did tyres fall off, what did rivals do | `laps`, `stints`, `pit_events`, Session History |
-| 02 | Sectors | Where on the lap the time went, and is it the same every session | `laps.sector*_ms` across the weekend |
-| 03 | Tyres | Deg per stint vs prior sessions, thermal window hit rate, wear at stop | `stints`, 10 Hz downsample (tyre temps) |
-| 04 | Strategy calls | Each pit/strategy call: inputs, projection, alternative, outcome, verdict | `calls`, decision log, `pit_events` |
-| 05 | Radio & decisions | Every call in order, exact text, audio fate, ACK/NEG, grade | decision log, `calls` |
-| 06 | Incidents & energy | Lock-ups, SC, damage, off-tracks with time cost; fuel and ERS use | event packets, `.f1idx`, 10 Hz downsample |
-| 07 | Actions | Deterministic "next session" list derived from 01–06 | rules over the above |
-| 08 | Engineer's notes | *Optional* generated prose and Q&A (item 21) | sections 00–07 only |
+| 02 | Comparison | How every car's best and mean pace, compounds and stops compare with yours, and the gap over the race | `laps` for every car, `drivers` (Participants packet) |
+| 03 | Sectors | Where on the lap the time went, and is it the same every session | `laps.sector*_ms` across the weekend |
+| 04 | Tyres | Deg per stint vs prior sessions, thermal window hit rate, wear at stop | `stints`, 10 Hz downsample (tyre temps) |
+| 05 | Strategy calls | Each pit/strategy call: inputs, projection, alternative, outcome, verdict | `calls`, decision log, `pit_events` |
+| 06 | Radio & decisions | Every call in order, exact text, audio fate, ACK/NEG, grade | decision log, `calls` |
+| 07 | Incidents & energy | Lock-ups, SC, damage, off-tracks with time cost; fuel and ERS use | event packets, `.f1idx`, 10 Hz downsample |
+| 08 | Actions | Deterministic "next session" list derived from 01–07 | rules over the above |
+| 09 | Engineer's notes | *Optional* generated prose and Q&A (item 21) | sections 00–08 only |
 
 ## 3. Layout
 
@@ -85,14 +86,14 @@ Translated to a solo sim driver with Pitwall's data, the debrief agenda is:
 │              │ [tag: keep] [open in review mode] [export HTML]         │
 │ 00 Summary   ├────────────────────────────────────────────────────────┤
 │ 01 Pace      │ 00 SUMMARY  [DETERMINISTIC]                             │
-│ 02 Sectors   │ one paragraph · 4 headline cards                        │
-│ 03 Tyres     ├────────────────────────────────────────────────────────┤
-│ 04 Strategy  │ 01 PACE & STINTS                                        │
-│ 05 Radio     │ lap-time scatter (full width) · stint bars | race trace │
-│ 06 Incidents ├────────────────────────────────────────────────────────┤
-│ 07 Actions   │ ...one section per agenda row, in order...              │
-│ 08 Notes GEN ├────────────────────────────────────────────────────────┤
-│              │ 08 ENGINEER'S NOTES  [GENERATED · model]  (dashed box)  │
+│ 02 Comparison│ one paragraph · 4 headline cards                        │
+│ 03 Sectors   ├────────────────────────────────────────────────────────┤
+│ 04 Tyres     │ 01 PACE & STINTS                                        │
+│ 05 Strategy  │ lap-time scatter (full width) · stint bars | race trace │
+│ 06 Radio     ├────────────────────────────────────────────────────────┤
+│ 07 Incidents │ ...one section per agenda row, in order...              │
+│ 08 Actions   ├────────────────────────────────────────────────────────┤
+│ 09 Notes GEN │ 09 ENGINEER'S NOTES  [GENERATED · model]  (dashed box)  │
 │ recording,   │ claims → §01 §02 … · ask box · hide toggle              │
 │ config hash  │                                                         │
 └──────────────┴────────────────────────────────────────────────────────┘
@@ -144,39 +145,46 @@ and the two cars finishing either side, from Session History; the engine's untak
 alternative shown dimmed. Beside them the race trace against the field median valid lap.
 SC laps are drawn neutral (the field bunches) so a stop's vertical drop stays legible.
 
-**02 Sectors.** Mean sector delta to the car ahead on valid laps, as a signed bar chart,
+**02 Comparison.** One row per car with laps: best valid lap, mean clean lap, lap count,
+compounds and pit laps. Rows sort by best lap, fastest first. Each car is labelled from the
+Participants packet. Human rivals show their team and a number, such as `McLaren 1`. Their
+online name follows only when they share it. Race sessions add a gap trace: cumulative lap
+time difference to you, where a value above zero means the rival is faster. Sessions stored
+before the `drivers` table existed show `Car N`.
+
+**03 Sectors.** Mean sector delta to the car ahead on valid laps, as a signed bar chart,
 and the same three numbers per session across the weekend so a recurring loss stands
 out. S3 is derived (lap − S1 − S2) until `LapSummary` grows a third sector. Corner-level
 splits are out of scope here (need a full recording; belong to review mode).
 
-**03 Tyres.** Per stint: fitted deg (s/lap per lap of age), the prior-session fit for the
+**04 Tyres.** Per stint: fitted deg (s/lap per lap of age), the prior-session fit for the
 same compound, laps used and R². Thermal: % of green laps with inner temperature cold /
 in window / hot per corner, from the 10 Hz downsample. Wear at stop and finish.
 
-**04 Strategy calls.** One card per strategy-class call (`pit_window`, `undercut`,
+**05 Strategy calls.** One card per strategy-class call (`pit_window`, `undercut`,
 `free_stop`, `extend`…) with five fixed rows: *called* (exact text, lap, confidence),
 *inputs* (gaps, deg, and pit loss read by the predicate), *alternative* (what the engine
 also projected), *outcome* (what actually happened, in seconds), *verdict*. This is the
 McLaren "decision → alternatives → impact" shape, computed deterministically from the
 decision log plus post-hoc pit-loss and gap measurements.
 
-**05 Radio & decision log.** A timeline strip of every call by lap (coloured by class),
+**06 Radio & decision log.** A timeline strip of every call by lap (coloured by class),
 then the list: lap, rule id, exact spoken text, audio fate (spoken / interrupted /
 dropped), driver ACK / NEG, and grade buttons. Each row expands to the predicate inputs
 and the suppression layer that fired for suppressed calls. Grades post to the backend
 and land in `calls.grade`; in the static export they are read-only.
 
-**06 Incidents & energy.** Event table (lock-up, off-track, slide, contact, damage,
+**07 Incidents & energy.** Event table (lock-up, off-track, slide, contact, damage,
 SC/VSC) with lap, corner where the recording has it, and estimated time cost against the
 stint fit. Fuel: laps remaining at start / finish vs target delta. ERS: Overtake Mode
 activations by lap and where deployment strategy changed.
 
-**07 Actions.** Short deterministic list generated by rules over sections 01–06 (e.g.
+**08 Actions.** Short deterministic list generated by rules over sections 01–07 (e.g.
 "S2 −0.3 s in every session → investigate in review mode"; "FL hot 23 % of stint 1 →
 manage FL from lap 3"; "rule X fired 4× and graded noise 3× → raise threshold"). Each
 action links to the section that produced it. This is the debrief's real output.
 
-**08 Engineer's notes (optional, generated).** See §6.
+**09 Engineer's notes (optional, generated).** See §6.
 
 ## 6. Deferred: generated section design
 
@@ -186,19 +194,19 @@ that tools like Z1 Analyzer and Coach Dave Delta already use (plain-English find
 beside the charts, each linking to its evidence) and the general convention that
 AI-generated content is labelled in a clear, distinguishable way:
 
-1. **One place.** Generated prose lives only in §08 (and, if built, the answers to the
+1. **One place.** Generated prose lives only in §09 (and, if built, the answers to the
    ask box). It never appears inside a deterministic panel, card or action.
 2. **Unmistakable container.** Dashed border, distinct tint, a `GENERATED · <model>`
    badge, and a header line listing the provider, the input sections, the token count and
    cost. The nav entry carries the same `GEN` badge.
 3. **Anchored claims.** Each paragraph ends with the sections it relied on (`§01 §04`),
    rendered as links that scroll to them. A claim with no anchor is a prompt bug.
-4. **Grounded inputs.** The model receives the structured stats behind §00–§07 and the
+4. **Grounded inputs.** The model receives the structured stats behind §00–§08 and the
    decision log. It never receives raw packets or the `.f1bin`. The context stays small.
    The page's own numbers are the only numbers the model can quote.
 5. **Advisory footer.** A fixed line: generated text never changes a decision, a grade or
    an action; the deterministic sections above are the record.
-6. **Hideable.** A "show generated text" toggle (persisted in `localStorage`) hides §08
+6. **Hideable.** A "show generated text" toggle (persisted in `localStorage`) hides §09
    and its nav entry entirely. Static exports honour the state at export time.
 7. **Absent by default.** With no API key configured the section is simply not rendered;
    nothing else on the page changes.
@@ -217,22 +225,28 @@ one line in the layered config (`08-configuration.md`) next to the optional API 
 ## 7. Current data and limits
 
 The report reads `sessions`, `laps`, `stints`, `pit_events`, `calls`, `call_grades`,
-`outcomes`, `driver_inputs` and learned state from SQLite. It shows a session summary,
-lap and stint pace, sector means, lap-mean inner temperatures, strategy calls and pit
-events, radio decisions, lap fuel and ERS values, and persisted learning.
+`outcomes`, `driver_inputs`, `drivers` and learned state from SQLite. It shows a session
+summary, lap and stint pace, the driver comparison, sector means, lap-mean inner
+temperatures, strategy calls and pit events, radio decisions, lap fuel and ERS values, and
+persisted learning.
+
+The comparison reads lap rows for every car and names and teams from `drivers`. The
+`drivers` table takes its rows from the Participants packet at each session write. It is
+not backfilled, so sessions stored before it existed show `Car N` labels.
 
 The thermal section compares lap-mean inner temperature with configured windows. It does
 not show 10 Hz traces or per-stint thermal fits. The incident section shows lap data, not
-the event detail from recordings. The report does not yet compare sessions or show rival
-race traces. Sector 3 is derived from lap time minus sectors 1 and 2.
+the event detail from recordings. The report compares drivers within one session, not
+across sessions. Rival race traces appear only as the gap to you in races. Sector 3 is
+derived from lap time minus sectors 1 and 2.
 
 ## 8. Phased plan
 
 | Phase | State | What is built |
 |-------|-------|----------------|
-| D1–D2 | Built, limited | Standalone HTML with sections 00–07 from persisted session data |
+| D1–D2 | Built, limited | Standalone HTML with sections 00–08 from persisted session data |
 | D3 | Built | `/debrief/<uid>` serves the report; call grades are saved through the API |
-| D4 | Partial | Section 07 lists rules with negative human grades and shows learned state; it is not a generated action list |
+| D4 | Partial | Section 08 lists rules with negative human grades and shows learned state; it is not a generated action list |
 | D5 | Deferred | LLM prose and the ask box (item 21) |
 
 Test each phase by rendering a recorded session (`07-replay-and-debug.md`) and diffing

@@ -719,7 +719,14 @@ def test_participants_reach_snapshot() -> None:
             PacketId.PARTICIPANTS,
             {
                 "num_active_cars": 20,
-                "cars": {0: {"name": b"VERSTAPPEN", "team_id": 1, "race_number": 1}},
+                "cars": {
+                    0: {
+                        "name": b"VERSTAPPEN",
+                        "team_id": 1,
+                        "race_number": 1,
+                        "show_online_names": 1,
+                    }
+                },
             },
         ),
         0.0,
@@ -729,6 +736,7 @@ def test_participants_reach_snapshot() -> None:
     assert len(snap.participants) == 24
     assert snap.participants[0].name == "VERSTAPPEN"
     assert snap.participants[0].race_number == 1
+    assert snap.participants[0].show_online_names == 1
 
 
 def test_cars_lap_all_slots() -> None:

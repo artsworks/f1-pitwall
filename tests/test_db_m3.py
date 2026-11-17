@@ -137,9 +137,9 @@ def test_previous_user_version_migrates_traffic_column(tmp_path: Path) -> None:
 def test_migration_relabels_unrecorded_calls_mode_off_before_the_fix(tmp_path: Path) -> None:
     path = tmp_path / "stale-calls-mode.sqlite"
     conn = sqlite3.connect(path)
-    for migration in MIGRATIONS[:-1]:
+    for migration in MIGRATIONS[:-2]:
         conn.executescript(migration)
-    conn.execute(f"PRAGMA user_version={len(MIGRATIONS) - 1}")
+    conn.execute(f"PRAGMA user_version={len(MIGRATIONS) - 2}")
     cutoff = 1791288660
     conn.executemany(
         "INSERT INTO sessions(uid, started_at, recording_path, calls_mode) VALUES(?,?,?,?)",

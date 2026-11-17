@@ -28,6 +28,7 @@ from pitwall.model.driver import (
 from pitwall.protocol.enums import session_kind, session_label
 from pitwall.setup.advisor import recommend_for_session
 from pitwall.setup.evaluate import explain
+from pitwall.state.lap import SC_UNKNOWN
 from pitwall.state.session import thermal_window
 from pitwall.store.db import Database, LapRow, PitEventRow, StintRow
 from pitwall.store.uids import is_synthetic_uid
@@ -168,6 +169,8 @@ svg { display:block; width:100%; height:auto; }
 .stint .lbl { fill:var(--bg); }
 .trace { fill:none; stroke-width:1.5; }
 .trace.me { stroke:var(--ok); stroke-width:2.2; }
+.trace.rival { stroke:var(--dim); stroke-width:1; opacity:.5; }
+.trace.mate { stroke:var(--info); stroke-width:2; }
 .scroll { overflow-x:auto; }
 table { width:100%; border-collapse:collapse; font-size:.86rem; }
 th {
@@ -277,15 +280,79 @@ _TRACK_NAMES = {
     40: "Austria reverse",
     41: "Zandvoort reverse",
 }
+_TEAMS = {
+    0: "Mercedes",
+    1: "Ferrari",
+    2: "Red Bull Racing",
+    3: "Williams",
+    4: "Aston Martin",
+    5: "Alpine",
+    6: "RB",
+    7: "Haas",
+    8: "McLaren",
+    9: "Sauber",
+    41: "F1 Generic",
+    104: "F1 Custom Team",
+    129: "Konnersport",
+    142: "APXGP",
+    154: "APXGP",
+    155: "Konnersport",
+    158: "Art GP",
+    159: "Campos",
+    160: "Rodin Motorsport",
+    161: "AIX Racing",
+    162: "DAMS",
+    163: "Hitech",
+    164: "MP Motorsport",
+    165: "Prema",
+    166: "Trident",
+    167: "Van Amersfoort Racing",
+    168: "Invicta",
+    185: "Mercedes",
+    186: "Ferrari",
+    187: "Red Bull Racing",
+    188: "Williams",
+    189: "Aston Martin",
+    190: "Alpine",
+    191: "RB",
+    192: "Haas",
+    193: "McLaren",
+    194: "Sauber",
+    465: "ART GP",
+    466: "Campos",
+    467: "Rodin Motorsport",
+    468: "AIX Racing",
+    469: "DAMS",
+    470: "Hitech",
+    471: "MP Motorsport",
+    472: "Prema",
+    473: "Trident",
+    474: "Van Amersfoort Racing",
+    475: "Invicta",
+    476: "Mercedes",
+    477: "Ferrari",
+    478: "Red Bull Racing",
+    479: "Williams",
+    480: "Aston Martin",
+    481: "Alpine",
+    482: "RB",
+    483: "Haas",
+    484: "McLaren",
+    485: "Audi",
+    486: "Cadillac",
+}
+_NO_TEAM = (255, 65535)
+_GREEN_SC = (0, SC_UNKNOWN)
 _SECTIONS = (
     ("summary", "00", "Summary"),
     ("pace", "01", "Pace and stints"),
-    ("sectors", "02", "Sectors"),
-    ("tyres", "03", "Tyres"),
-    ("strategy", "04", "Strategy calls"),
-    ("radio", "05", "Radio and decisions"),
-    ("incidents", "06", "Incidents and energy"),
-    ("actions", "07", "Actions"),
+    ("comparison", "02", "Comparison"),
+    ("sectors", "03", "Sectors"),
+    ("tyres", "04", "Tyres"),
+    ("strategy", "05", "Strategy calls"),
+    ("radio", "06", "Radio and decisions"),
+    ("incidents", "07", "Incidents and energy"),
+    ("actions", "08", "Actions"),
 )
 
 
@@ -603,9 +670,8 @@ def _stint_bars(laps: list[LapRow], stints: list[StintRow]) -> str:
 
 def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int]) -> str:
     timed = [lap for lap in laps if lap.lap_time_ms > 0]
-    svg = ["<svg id='racetrace' viewBox='0 0 460 200' role='img' aria-label='Race trace'>"]
     if not timed:
-        return "".join(svg) + "</svg>"
+        return _trace_chart("racetrace", "Race trace", [], laps, pit_laps)
     clean = [lap.lap_time_ms for lap in timed if lap.valid and lap.sc_status == 0]
     reference = statistics.median(clean or [lap.lap_time_ms for lap in timed])
     cumulative = 0.0
@@ -613,8 +679,24 @@ def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int])
     for lap in timed:
         cumulative += (lap.lap_time_ms - reference) / 1000
         trace.append((lap.lap_num, cumulative))
-    low = min(0.0, *(value for _, value in trace))
-    high = max(0.0, *(value for _, value in trace))
+    return _trace_chart("racetrace", "Race trace", [("me", "", trace)], laps, pit_laps)
+
+
+def _trace_chart(
+    svg_id: str,
+    label: str,
+    series: Sequence[tuple[str, str, list[tuple[int, float]]]],
+    laps: list[LapRow],
+    pit_laps: list[int],
+) -> str:
+    """Line chart over the player's lap range. Each series is (css class, title, points)."""
+    timed = [lap for lap in laps if lap.lap_time_ms > 0]
+    svg = [f"<svg id='{svg_id}' viewBox='0 0 460 200' role='img' aria-label='{_esc(label)}'>"]
+    if not timed:
+        return "".join(svg) + "</svg>"
+    values = [value for _, _, points in series for _, value in points]
+    low = min(0.0, *values)
+    high = max(0.0, *values)
     padding = max(1.0, (high - low) * 0.1)
     low -= padding
     high += padding
@@ -651,11 +733,13 @@ def _race_trace(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int])
         svg.append(
             f"<line class='pitline' x1='{pit_x:.1f}' x2='{pit_x:.1f}' y1='{top}' y2='{bottom}'/>"
         )
-    path = " ".join(
-        f"{'M' if index == 0 else 'L'}{x(lap_num):.1f} {y(value):.1f}"
-        for index, (lap_num, value) in enumerate(trace)
-    )
-    svg.append(f"<path class='trace me' d='{path}'/>")
+    for css_class, title, points in series:
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'}{x(lap_num):.1f} {y(value):.1f}"
+            for index, (lap_num, value) in enumerate(points)
+        )
+        title_tag = f"<title>{_esc(title)}</title>" if title else ""
+        svg.append(f"<path class='trace {css_class}' d='{path}'>{title_tag}</path>")
     lap_step = max(1, round(max(1, last - first) / 4))
     for lap_num in range(first, last + 1, lap_step):
         svg.append(
@@ -942,6 +1026,127 @@ def _pace_section(laps: list[LapRow], stints: list[StintRow], pit_laps: list[int
     return _section("pace", "01", "Pace and stints", content)
 
 
+def _driver_labels(drivers: dict[int, dict[str, Any]]) -> dict[int, str]:
+    labels = {0: "You"}
+    human_numbers: Counter[int] = Counter()
+    for car_idx, driver in sorted(drivers.items()):
+        name = str(driver["name"])
+        if car_idx == 0:
+            labels[0] = name
+        elif driver["ai_controlled"] == 1:
+            labels[car_idx] = name
+        else:
+            team_id = int(driver["team_id"])
+            human_numbers[team_id] += 1
+            team = _TEAMS.get(team_id, f"Team {team_id}")
+            suffix = f" ({name})" if driver["show_online_names"] == 1 and name else ""
+            labels[car_idx] = f"{team} {human_numbers[team_id]}{suffix}"
+    return labels
+
+
+def _rival_pit_laps(laps: list[LapRow]) -> list[int]:
+    return [
+        before.lap_num
+        for before, lap in zip(laps, laps[1:], strict=False)
+        if lap.tyre_age_laps == 0
+    ]
+
+
+def _gap_points(player: list[LapRow], rival: list[LapRow]) -> list[tuple[int, float]]:
+    player_ms = {lap.lap_num: lap.lap_time_ms for lap in player if lap.lap_time_ms > 0}
+    rival_ms = {lap.lap_num: lap.lap_time_ms for lap in rival if lap.lap_time_ms > 0}
+    gap = 0.0
+    points: list[tuple[int, float]] = []
+    for lap_num in sorted(player_ms.keys() & rival_ms.keys()):
+        gap += (player_ms[lap_num] - rival_ms[lap_num]) / 1000
+        points.append((lap_num, gap))
+    return points
+
+
+def _comparison_section(
+    db: Database,
+    uid: int,
+    session: dict[str, Any],
+    laps: list[LapRow],
+    pit_laps: list[int],
+) -> str:
+    rival_laps = {car: car_laps for car, car_laps in db.laps_by_car(uid).items() if car != 0}
+    if not any(rival_laps.values()):
+        return _section(
+            "comparison",
+            "02",
+            "Comparison",
+            _card("DRIVERS", "<p>No other drivers were recorded for this session.</p>"),
+        )
+    all_laps = {0: laps, **rival_laps}
+    cars = [car for car in sorted(all_laps) if all_laps[car]]
+    drivers = db.drivers_for_session(uid)
+    labels = _driver_labels(drivers)
+    names = {car: labels.get(car, f"Car {car}") for car in cars}
+    player_team = drivers[0]["team_id"] if 0 in drivers else None
+
+    def is_mate(car: int) -> bool:
+        team = drivers.get(car, {}).get("team_id")
+        return car != 0 and player_team is not None and team == player_team and team not in _NO_TEAM
+
+    player_sc = {lap.lap_num for lap in laps if lap.sc_status not in _GREEN_SC}
+    rows: list[tuple[tuple[bool, int, int], tuple[object, ...]]] = []
+    for car in cars:
+        car_laps = all_laps[car]
+        pits = pit_laps if car == 0 else _rival_pit_laps(car_laps)
+        excluded = {lap for pit in pits for lap in (pit, pit + 1)}
+        valid_times = [lap.lap_time_ms for lap in car_laps if lap.valid and lap.lap_time_ms > 0]
+        clean = [
+            lap.lap_time_ms
+            for lap in car_laps
+            if lap.valid
+            and lap.lap_time_ms > 0
+            and lap.sc_status in _GREEN_SC
+            and lap.lap_num not in player_sc
+            and lap.lap_num not in excluded
+        ]
+        best = min(valid_times, default=None)
+        compounds = dict.fromkeys(_compound(lap.visual, lap.compound) for lap in car_laps)
+        chips: list[str] = []
+        if car == 0:
+            chips.append(_chip("ok", "YOU"))
+        elif is_mate(car):
+            chips.append(_chip("info", "TEAMMATE"))
+        driver_cell = _Markup(" ".join([_esc(names[car]), *chips]))
+        rows.append(
+            (
+                (best is None, best or 0, car),
+                (
+                    driver_cell,
+                    _lap_time(best) if best is not None else "—",
+                    _lap_time(round(statistics.fmean(clean))) if clean else "—",
+                    sum(lap.lap_time_ms > 0 for lap in car_laps),
+                    _Markup("".join(_compound_badge(*shown) for shown in compounds)),
+                    ", ".join(f"L{pit}" for pit in pits) or "—",
+                ),
+            )
+        )
+    table = _table(
+        ("Driver", "Best lap", "Mean clean lap", "Laps", "Compounds", "Pit laps"),
+        [row for _, row in sorted(rows, key=lambda item: item[0])],
+        "laps · drivers",
+    )
+    content = _card("DRIVERS", table)
+    session_type = _as_int(session.get("session_type"))
+    if session_type is not None and session_kind(session_type) == "race":
+        gaps = [(car, _gap_points(laps, all_laps[car])) for car in cars if car != 0]
+        gaps = [(car, points) for car, points in gaps if len(points) >= 2]
+        series = [("rival", names[car], points) for car, points in gaps if not is_mate(car)]
+        series += [("mate", names[car], points) for car, points in gaps if is_mate(car)]
+        if series:
+            content += _card(
+                "GAP TO YOU · CUMULATIVE LAP TIME DIFFERENCE, s · ABOVE ZERO = FASTER THAN YOU",
+                _trace_chart("gaptrace", "Gap to you", series, laps, pit_laps),
+                "laps · your lap times are the reference",
+            )
+    return _section("comparison", "02", "Comparison", content)
+
+
 def _sector_section(laps: list[LapRow]) -> str:
     valid = [lap for lap in laps if lap.valid and lap.sc_status == 0 and lap.lap_time_ms > 0]
     rows = [
@@ -967,7 +1172,7 @@ def _sector_section(laps: list[LapRow]) -> str:
         "MEAN SECTOR TIMES",
         _table(("Sector", "Mean (s)", "Clean laps"), rows, "laps.s1_ms, s2_ms, lap_time_ms"),
     )
-    return _section("sectors", "02", "Sectors", card)
+    return _section("sectors", "03", "Sectors", card)
 
 
 def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
@@ -998,7 +1203,7 @@ def _tyres_section(laps: list[LapRow], settings: Settings) -> str:
             "laps.tyre_inner_c and configured thresholds; lap means",
         ),
     )
-    return _section("tyres", "03", "Tyres", card)
+    return _section("tyres", "04", "Tyres", card)
 
 
 def _hindsight(automatic: list[dict[str, Any]] | None) -> str:
@@ -1074,7 +1279,7 @@ def _strategy_section(
             empty_message = "No pit stops."
         pit_content = f"<p>{_esc(empty_message)}</p>"
     pit = _card("PIT STOPS", pit_content, "pit_events")
-    return _section("strategy", "04", "Strategy calls", strategy + pit)
+    return _section("strategy", "05", "Strategy calls", strategy + pit)
 
 
 def _call_timeline(
@@ -1230,7 +1435,7 @@ def _radio_section(
     )
     return _section(
         "radio",
-        "05",
+        "06",
         "Radio and decisions",
         timeline + calls_card + input_card,
     )
@@ -1254,7 +1459,7 @@ def _incidents_section(laps: list[LapRow]) -> str:
             "laps; raw event details require the recording index",
         ),
     )
-    return _section("incidents", "06", "Incidents and energy", card)
+    return _section("incidents", "07", "Incidents and energy", card)
 
 
 def _setup_number(value: object) -> str:
@@ -1422,7 +1627,7 @@ def _actions_section(
     )
     return _section(
         "actions",
-        "07",
+        "08",
         "Actions",
         _card("SETUP", _setup_actions(db, uid, session, settings))
         + _card("ACTIONS FOR NEXT SESSION", content),
@@ -1498,6 +1703,7 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
     sections = (
         _summary_section(db, session, laps, pits, pit_laps, calls, grades, quality, settings)
         + _pace_section(laps, stints, pit_laps)
+        + _comparison_section(db, uid, session, laps, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)
         + _strategy_section(calls, pits, pit_laps, grades, outcomes)

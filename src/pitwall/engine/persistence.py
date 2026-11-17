@@ -58,6 +58,7 @@ class SessionWriter:
         self._session_upserted: int | None = None
         self._parc_ferme_written: int | None = None
         self._weekend_structure_written: tuple[int, ...] = ()
+        self._drivers_written: tuple[int, int, tuple[Any, ...]] | None = None
         self.session_origin_started_at: float | None = None
         self._session_ended_written = False
         self._pit_in_lap: LapSummary | None = None
@@ -136,6 +137,27 @@ class SessionWriter:
             self.ctx.state.setup_changes.clear()
             self._laps_written = len(self.ctx.state.laps)
             return
+        player_idx = self.ctx.state._player_idx
+        participants = self.ctx.state.participants
+        drivers = (uid, player_idx, participants)
+        if participants and drivers != self._drivers_written:
+            # Persisted laps keep car_idx 0 for the player, so the player's and the
+            # game-slot-0 rival's entries are swapped to match (see _emit_rival_laps).
+            self.ctx.db.upsert_drivers(
+                uid,
+                [
+                    (
+                        0 if i == player_idx else player_idx if i == 0 else i,
+                        car.name,
+                        car.team_id,
+                        car.ai_controlled,
+                        car.show_online_names,
+                    )
+                    for i, car in enumerate(participants)
+                    if car.name
+                ],
+            )
+            self._drivers_written = drivers
         parc_ferme = self.ctx.state.parc_ferme_rules
         if parc_ferme >= 0 and parc_ferme != self._parc_ferme_written:
             self.ctx.db.set_session_parc_ferme(uid, parc_ferme)

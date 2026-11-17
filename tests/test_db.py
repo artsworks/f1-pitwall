@@ -634,3 +634,20 @@ def test_weekend_structure_upsert_and_set() -> None:
     assert db.session_row(211)["weekend_structure"] == "1,10,15"
     db.set_weekend_structure(211, (5, 15))
     assert db.session_row(211)["weekend_structure"] == "5,15"
+
+
+def test_drivers_upsert_overwrites_and_laps_group_by_car() -> None:
+    db = Database(":memory:")
+    db.upsert_drivers(16, [(0, "ME", 484, 0, 0), (1, "NORRIS", 484, 1, 0)])
+    db.upsert_drivers(16, [(1, "LANDO", 484, 1, 1)])
+    drivers = db.drivers_for_session(16)
+    assert sorted(drivers) == [0, 1]
+    assert drivers[1]["name"] == "LANDO" and drivers[1]["show_online_names"] == 1
+    db.insert_lap(16, 0, LapSummary(1, 91_000, 30_000, 30_000, 17, 1, 3.0, True, [], fuel_kg=5.0))
+    for lap_num in (1, 2):
+        db.insert_lap(
+            16, 1, LapSummary(lap_num, 90_000 + lap_num, 30_000, 30_000, 17, 1, 3.0, True, [])
+        )
+    by_car = db.laps_by_car(16)
+    assert sorted(by_car) == [0, 1]
+    assert [lap.lap_num for lap in by_car[1]] == [1, 2]

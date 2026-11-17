@@ -260,6 +260,7 @@ class Participant:
     team_id: int = 0
     ai_controlled: int = 0
     race_number: int = 0
+    show_online_names: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -2334,6 +2335,7 @@ class SessionState:
                 team_id=c.team_id,
                 ai_controlled=c.ai_controlled,
                 race_number=c.race_number,
+                show_online_names=c.show_online_names,
             )
             for c in pkt.cars
         )

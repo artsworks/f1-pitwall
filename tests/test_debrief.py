@@ -640,3 +640,118 @@ def test_debrief_labels_from_stored_weekend_structure() -> None:
     assert " · RACE · " in render_debrief(db, 165, settings)
     index = render_debrief_index(db)
     assert "<td>Sprint</td>" in index
+
+
+def _rival_lap(
+    db: Database,
+    uid: int,
+    car_idx: int,
+    lap_num: int,
+    lap_time_ms: int,
+    *,
+    valid: bool = True,
+    sc_status: int = 0,
+) -> None:
+    db.insert_lap(
+        uid,
+        car_idx,
+        LapSummary(
+            lap_num,
+            lap_time_ms,
+            30_000,
+            30_000,
+            17,
+            lap_num,
+            3.0,
+            valid,
+            [],
+            fuel_kg=5.0,
+            sc_status=sc_status,
+        ),
+    )
+
+
+def _comparison(report: str) -> str:
+    return report.split("<section id='comparison'", 1)[1].split("</section>", 1)[0]
+
+
+def test_comparison_labels_drivers_and_draws_gap_trace() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+        calls_mode="enabled",
+    )
+    db.upsert_drivers(
+        uid,
+        [
+            (0, "ME", 484, 0, 0),
+            (1, "NORRIS", 484, 1, 0),
+            (2, "tagA", 477, 0, 1),
+            (3, "Player", 477, 0, 0),
+            (5, "<script>x</script>", 8, 1, 0),
+        ],
+    )
+    for car_idx, pace in ((0, 90_000), (1, 89_500), (2, 90_400), (3, 90_800), (4, 91_000)):
+        for lap_num in range(1, 6):
+            _rival_lap(db, uid, car_idx, lap_num, pace + lap_num * 50)
+    _rival_lap(db, uid, 5, 1, 90_200)
+    report = render_debrief(db, uid, settings)
+    section = _comparison(report)
+    norris_row = next(row for row in section.split("<tr>") if "NORRIS" in row)
+    assert ">YOU</span>" in section
+    assert "TEAMMATE" in norris_row
+    assert "Ferrari 1 (tagA)" in section
+    assert "Ferrari 2" in section
+    assert "Ferrari 2 (Player)" not in report
+    assert "Car 4" in section
+    assert "&lt;script&gt;x&lt;/script&gt;" in section
+    assert "<script>x" not in section
+    assert "<span class='n'>02</span>Comparison" in report
+    assert "<span class='n'>08</span>Actions" in report
+    assert "id='gaptrace'" in section
+    assert section.count("class='trace mate'") == 1
+    assert "<title>NORRIS</title>" in section
+
+
+def test_comparison_empty_state_for_player_only_session() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    for lap_num in range(1, 4):
+        _rival_lap(db, uid, 0, lap_num, 90_000)
+    section = _comparison(render_debrief(db, uid, settings))
+    assert "No other drivers were recorded for this session." in section
+    assert "gaptrace" not in section
+
+
+def test_comparison_omits_gap_trace_outside_races() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=1,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    for car_idx in (0, 1):
+        for lap_num in range(1, 4):
+            _rival_lap(db, uid, car_idx, lap_num, 90_000 + car_idx * 300)
+    report = render_debrief(db, uid, settings)
+    section = _comparison(report)
+    assert "Car 1" in section
+    assert "gaptrace" not in report

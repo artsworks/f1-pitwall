@@ -234,7 +234,7 @@ tracks. Pace enters only at matched fuel and tyre age (§6.3).
 
 | Mode | When | Output | Change budget | Params in scope |
 |------|------|--------|---------------|-----------------|
-| **Debrief** | after a practice session (1–4), before the next; also after quali when parc fermé is off | ranked setup deltas in the debrief (§07 action rules of `16-debrief-design.md`) and `pitwall setup` CLI | one *primary* change per next run, up to two alternatives listed; linked pairs (e.g. front+rear springs) count as one | all with conf ≥ medium; low-confidence ones as "experiment" |
+| **Debrief** | after a practice session (1–4), before the next; also after quali when parc fermé is off | ranked setup deltas in the debrief (§08 action rules of `16-debrief-design.md`) and `pitwall setup` CLI | one *primary* change per next run, up to two alternatives listed; linked pairs (e.g. front+rear springs) count as one | all with conf ≥ medium; low-confidence ones as "experiment" |
 | **Garage** | `driver_status == IN_GARAGE` in 1–9 (and 10–14) | pit-board `SETUP` rows, with low-confidence advice marked TRY; one optional radio line | exactly one parameter | practice: all ≥ medium; quali: parc fermé matrix only (front wing, on-throttle, bias, pressures) |
 | **Race** | on track, 15–17 | radio calls and dashboard BB/DIFF arrows; low-confidence advice is marked TRY | one per call, rate-limited by rule cooldown and per-lap budget | brake bias, on-throttle diff; front wing only as a pit-stop request when a stop is already planned |
 
@@ -608,7 +608,7 @@ least well.
 | Free-form decision (the model proposes any param or delta) | **Rejected** | Could invent illegal or out-of-range changes; can't be graded against the tables |
 | Chooser among §4 candidates, rules veto | **Accepted under ADR 0009** | The model picks the primary change from the candidates that survived the mode, parc fermé, range and contraindication filters (the `alternatives` in the §4 record). Anything invalid or late falls back to the table order. Starts in shadow; promoted per decision type through the gate |
 | (a) Offline table synthesis | **Accepted** | Summarises guides and past digests into *candidate* rows for a human to review into `setup_rules.yaml` via PR + fixture + gate |
-| (b) Debrief narration | **Accepted, after the core ships** | Narrates the §4 records in the labelled §08 generated section of `16-debrief-design.md`; no number that isn't in the record |
+| (b) Debrief narration | **Accepted, after the core ships** | Narrates the §4 records in the labelled §09 generated section of `16-debrief-design.md`; no number that isn't in the record |
 | (c) Post-session Q&A | **Accepted, opt-in** | The item-21 ask box over `setup_states`, `setup_recs`, `outcomes`, stints |
 | Spoken phrasing | **Unchanged** | Garage and race lines stay YAML `say` pools (ADR 0008); the model's `reason` shows only on the dashboard |
 
@@ -638,9 +638,9 @@ tables and the model improve from the same outcomes.
 |-------|-------|------|
 | A1 | Store `parc_ferme_rules`, `next_front_wing_value`; `setup_states` / `setup_changes` / `stints.setup_state_id` migration; traction detector and `slip_balance` accumulator in `state/` | a recorded practice session produces runs keyed by setup state; replay test pins both detectors |
 | A2 | `setup_rules.yaml` + pure evaluator; `pitwall setup <session>` CLI prints recs with evidence; pressure advice moved in as one family | golden-output tests on recorded sessions; one fixture per rule |
-| A3 | Debrief §07 integration (practice), garage advice in the pit board's `SETUP` block (no separate setup page), race-mode bias/on-throttle/front-wing-at-stop calls through the dispatcher | first weekend (FP → Q → R) driven with it; parc fermé matrix confirmed or corrected |
+| A3 | Debrief §08 integration (practice), garage advice in the pit board's `SETUP` block (no separate setup page), race-mode bias/on-throttle/front-wing-at-stop calls through the dispatcher | first weekend (FP → Q → R) driven with it; parc fermé matrix confirmed or corrected |
 | A4 | Grading into `outcomes`, `fold_param` gains and baselines, `pitwall tune` / digest `setup` block | a second visit to a track re-ranks candidates from the first |
-| A5 (optional) | ADR 0009 chooser for `setup.debrief` / `setup.garage` in shadow; `llm_choices` log and replay; LLM narration in debrief §08 | behind the key, off by default; shadow picks graded next to the table's for ≥ `llm_promote_min_graded` decisions before any promotion |
+| A5 (optional) | ADR 0009 chooser for `setup.debrief` / `setup.garage` in shadow; `llm_choices` log and replay; LLM narration in debrief §09 | behind the key, off by default; shadow picks graded next to the table's for ≥ `llm_promote_min_graded` decisions before any promotion |
 
 ## 9. Open questions
 

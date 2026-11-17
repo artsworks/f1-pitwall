@@ -342,6 +342,11 @@ MIGRATIONS: list[str] = [
     UPDATE sessions SET calls_mode='on' WHERE calls_mode='off' AND started_at < 1791288660
         AND COALESCE(recording_path, '')='';
     """,
+    # 17: driver names and teams per session, from the participants list.
+    """
+    CREATE TABLE drivers(session_uid INT, car_idx INT, name TEXT, team_id INT, ai_controlled INT,
+        show_online_names INT, PRIMARY KEY(session_uid, car_idx));
+    """,
 ]
 
 
@@ -1013,6 +1018,29 @@ class Database:
             "SELECT * FROM plan_events WHERE session_uid=? ORDER BY id", (_uid_to_sql(uid),)
         )
 
+    def upsert_drivers(
+        self, session_uid: int, rows: Sequence[tuple[int, str, int, int, int]]
+    ) -> None:
+        """Store (car_idx, name, team_id, ai_controlled, show_online_names) per car."""
+        uid = _uid_to_sql(session_uid)
+        with self.transaction():
+            self._conn.executemany(
+                "INSERT INTO drivers(session_uid, car_idx, name, team_id, ai_controlled,"
+                " show_online_names) VALUES(?,?,?,?,?,?)"
+                " ON CONFLICT(session_uid, car_idx) DO UPDATE SET name=excluded.name,"
+                " team_id=excluded.team_id, ai_controlled=excluded.ai_controlled,"
+                " show_online_names=excluded.show_online_names",
+                [(uid, *row) for row in rows],
+            )
+
+    def drivers_for_session(self, session_uid: int) -> dict[int, dict[str, Any]]:
+        return {
+            int(row["car_idx"]): row
+            for row in self._rows(
+                "SELECT * FROM drivers WHERE session_uid=?", (_uid_to_sql(session_uid),)
+            )
+        }
+
     def replace_outcomes(self, session_uid: int, rows: list[dict[str, Any]]) -> None:
         """Replace a session's hindsight outcomes (recomputed as a whole)."""
         uid = _uid_to_sql(session_uid)
@@ -1268,6 +1296,17 @@ class Database:
             (_uid_to_sql(session_uid), car_idx),
         ).fetchall()
         return [self._lap_row(r) for r in rows]
+
+    def laps_by_car(self, session_uid: int) -> dict[int, list[LapRow]]:
+        rows = self._conn.execute(
+            "SELECT * FROM laps WHERE session_uid=? ORDER BY car_idx, lap_num, id",
+            (_uid_to_sql(session_uid),),
+        ).fetchall()
+        grouped: dict[int, list[LapRow]] = {}
+        for r in rows:
+            lap = self._lap_row(r)
+            grouped.setdefault(lap.car_idx, []).append(lap)
+        return grouped
 
     def track_minutes(self) -> dict[str, Any]:
         row = self._conn.execute(
