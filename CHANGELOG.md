@@ -12,6 +12,56 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.0 (2026-11-17)
+
+### Bug Fixes
+
+- **audio**: Put the kokoro_onnx type ignore on the line mypy reports
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **cli**: Grade the session-end digest with the current thresholds
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **debrief**: Trust a rival's known safety-car status in the clean lap mean
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **debrief**: Use the dashboard font and add gaps between stacked cards
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+### Documentation
+
+- **readme**: Acknowledge Devin ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+### Features
+
+- **debrief**: Add a driver comparison section with team labels for human rivals
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **debrief**: Restyle the debrief and index in the dashboard redesign language
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **debrief**: Session-end debrief link, pit-board restyle and driver comparison
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+- **debrief**: Write the digest and print the debrief URL at session end, collapse empty sessions in
+  the index ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+### Testing
+
+- **db**: Pin the calls_mode relabel test to its migration index
+  ([#188](https://github.com/artsworks/f1-pitwall/pull/188),
+  [`62f99d8`](https://github.com/artsworks/f1-pitwall/commit/62f99d852baaa00fc81a81f1ffa72d52eb7af8d8))
+
+
 ## v0.59.2 (2026-11-17)
 
 ### Bug Fixes
