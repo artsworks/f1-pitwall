@@ -737,6 +737,31 @@ def test_comparison_empty_state_for_player_only_session() -> None:
     assert "gaptrace" not in section
 
 
+def test_comparison_trusts_known_rival_sc_status() -> None:
+    db = Database(":memory:")
+    uid = 16
+    settings = ConfigStore().current()
+    db.upsert_session(
+        uid,
+        track_id=16,
+        session_type=15,
+        started_at=1_700_000_000,
+        config_hash=config_hash(settings),
+    )
+    db.upsert_drivers(uid, [(1, "KNOWN", 8, 1, 0), (2, "UNKNOWN", 8, 1, 0)])
+    for lap_num, sc_status in ((1, 0), (2, 1), (3, 0)):
+        _rival_lap(db, uid, 0, lap_num, 95_000, sc_status=sc_status)
+    for lap_num, lap_time_ms, sc_status in ((1, 90_000, 0), (2, 80_000, 0), (3, 99_000, 1)):
+        _rival_lap(db, uid, 1, lap_num, lap_time_ms, sc_status=sc_status)
+    for lap_num, lap_time_ms in ((1, 90_000), (2, 99_000), (3, 70_000)):
+        _rival_lap(db, uid, 2, lap_num, lap_time_ms, sc_status=SC_UNKNOWN)
+    rows = _comparison(render_debrief(db, uid, settings)).split("<tr>")
+    known_row = next(row for row in rows if "KNOWN" in row and "UNKNOWN" not in row)
+    unknown_row = next(row for row in rows if "UNKNOWN" in row)
+    assert "<td>1:25.0</td>" in known_row
+    assert "<td>1:20.0</td>" in unknown_row
+
+
 def test_comparison_omits_gap_trace_outside_races() -> None:
     db = Database(":memory:")
     uid = 16

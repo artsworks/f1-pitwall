@@ -1102,7 +1102,7 @@ def _comparison_section(
             if lap.valid
             and lap.lap_time_ms > 0
             and lap.sc_status in _GREEN_SC
-            and lap.lap_num not in player_sc
+            and (lap.sc_status != SC_UNKNOWN or lap.lap_num not in player_sc)
             and lap.lap_num not in excluded
         ]
         best = min(valid_times, default=None)
