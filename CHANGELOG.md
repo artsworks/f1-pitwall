@@ -12,6 +12,66 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.59.0 (2026-11-17)
+
+### Bug Fixes
+
+- **update**: Keep the kokoro extra on pitwall update
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+### Continuous Integration
+
+- **pages**: Grant actions: read to the Pages workflow
+  ([#185](https://github.com/artsworks/f1-pitwall/pull/185),
+  [`42b29e0`](https://github.com/artsworks/f1-pitwall/commit/42b29e005fcaa8e2532d4c4d9c4521c283e17f6d))
+
+- **pages**: Remove pages.yml, Pages deploys from the main branch /docs
+  ([#185](https://github.com/artsworks/f1-pitwall/pull/185),
+  [`42b29e0`](https://github.com/artsworks/f1-pitwall/commit/42b29e005fcaa8e2532d4c4d9c4521c283e17f6d))
+
+- **pages**: Remove the duplicate Pages workflow
+  ([#185](https://github.com/artsworks/f1-pitwall/pull/185),
+  [`42b29e0`](https://github.com/artsworks/f1-pitwall/commit/42b29e005fcaa8e2532d4c4d9c4521c283e17f6d))
+
+### Documentation
+
+- Slim the README and move details into docs
+  ([`f2d2706`](https://github.com/artsworks/f1-pitwall/commit/f2d2706d2b521879be054820181d27776588a338))
+
+- **mockup**: Add v2 vs v3 dashboard mockup and link it from the site
+  ([#184](https://github.com/artsworks/f1-pitwall/pull/184),
+  [`ade2898`](https://github.com/artsworks/f1-pitwall/commit/ade2898e041599ce0f87c921e5e82832180f23e3))
+
+- **readme**: Add kokoro start and reinstall commands
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+### Features
+
+- **audio**: Add kokoro speech engine with af_heart default
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+- **audio**: Add kokoro speech engine with CUDA on Windows
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+- **audio**: Default kokoro voice to af_heart with en-us
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+### Testing
+
+- Add learning guards, trace-seeded Brazil race and synthetic quali run-plan tests
+  ([#183](https://github.com/artsworks/f1-pitwall/pull/183),
+  [`ee4a7a5`](https://github.com/artsworks/f1-pitwall/commit/ee4a7a587ff605e36089efd880734d63a13f6cab))
+
+- Fix Windows-only and home-state test failures
+  ([#186](https://github.com/artsworks/f1-pitwall/pull/186),
+  [`64f5c19`](https://github.com/artsworks/f1-pitwall/commit/64f5c19deff6a64a2745f574e2d956968cad96b8))
+
+
 ## v0.58.0 (2026-11-14)
 
 ### Bug Fixes
