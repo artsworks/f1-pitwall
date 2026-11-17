@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall redesign, round 2: right section, race</title>
+<style>
+:root{--bg:#0a0a0c;--panel:#121216;--panel2:#191920;--line:#2a2a30;--fg:#ececec;--dim:#8a8a92;--faint:#4a4a52;
+  --ok:#37e07a;--warn:#ffc233;--crit:#ff4d4d;--cold:#5cc8ff;--info:#b8b8ff;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;font-size:clamp(14px,.9vw,24px)}
+*{box-sizing:border-box}
+body{margin:0;padding:1.5rem 2rem 4rem;background:var(--bg);color:var(--fg);font-family:var(--font);font-variant-numeric:tabular-nums}
+h1{font-size:1.5rem;margin:0 0 .3rem}
+h2{font-size:1.2rem;margin:2.6rem 0 .3rem;color:var(--warn)}
+p.note{color:var(--dim);margin:.2rem 0 1rem;max-width:70rem;font-size:.95rem;line-height:1.45}
+.i{width:1.5em;height:1.5em;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.35em;flex:none}
+.i.s{width:1.1em;height:1.1em;vertical-align:-.2em}
+.i.l{width:2.2em;height:2.2em}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.crit{color:var(--crit)}.cold{color:var(--cold)}.dim{color:var(--dim)}
+.huge{font-size:3rem;font-weight:700;line-height:1}
+.big{font-size:2.2rem;font-weight:700;line-height:1}
+.mid{font-size:1.5rem;font-weight:700}
+.tagw{font-size:.8rem;letter-spacing:.08em;color:var(--dim)}
+.cmp{display:inline-block;min-width:1.5em;text-align:center;border-radius:50%;border:.16em solid;font-weight:700;font-size:.9em;line-height:1.3}
+.cmp.M{color:#ffd23c}.cmp.H{color:#f2f2f2}.cmp.S{color:#ff4d4d}.cmp.I{color:#37e07a}
+.row{display:flex;align-items:center;gap:.7rem}
+.sp{flex:1}
+.ring{width:1.5em;height:1.5em;border-radius:50%;background:conic-gradient(var(--ok) 62%,var(--line) 0);display:inline-block;vertical-align:-.35em;-webkit-mask:radial-gradient(circle,transparent 42%,#000 44%);mask:radial-gradient(circle,transparent 42%,#000 44%)}
+
+.picks{display:flex;gap:1.6rem;flex-wrap:wrap}
+.pick{border:1px dashed var(--faint);border-radius:.5rem;padding:2.2rem 1rem 1rem;position:relative;min-width:17rem}
+.tag{position:absolute;top:.5rem;left:.8rem;font-weight:700;color:var(--warn)}
+.tag small{color:var(--dim);font-weight:400;margin-left:.6rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:.7rem;padding:.7rem .9rem}
+.car{width:3.4rem;height:5.4rem;flex:none}
+.car *{fill:var(--faint)}
+.car .h1{fill:var(--warn)}.car .h2{fill:var(--ok)}
+
+/* option frames: real width and height of the right column at 1920x1080 */
+.opts{display:flex;gap:2rem;flex-wrap:wrap}
+.opt{border:1px dashed var(--faint);border-radius:.5rem;padding:2.2rem .6rem .6rem;position:relative}
+.zone{width:46rem;min-height:38rem;display:flex;flex-direction:column;gap:.55rem}
+.cap{font-size:.75rem;letter-spacing:.25em;color:var(--dim);margin-top:.3rem}
+.act{border:none;color:#000}
+.act .dim,.act .tagw{color:rgba(0,0,0,.65)}
+.act .cmp{color:#000}
+.act.box{background:var(--warn)}
+.act.reply{background:var(--info)}
+.info{padding:.45rem .9rem;color:var(--dim)}
+.rail{position:relative;height:.35rem;background:var(--line);border-radius:.2rem;flex:1;min-width:5rem}
+.rail i{position:absolute;left:27%;top:-.25rem;width:.5rem;height:.85rem;background:var(--ok);border-radius:.15rem}
+.rail::before{content:"";position:absolute;left:0;width:33%;top:0;bottom:0;background:rgba(55,224,122,.3);border-radius:.2rem}
+.sub{padding-left:2.2rem}
+.far{opacity:.6}
+.tgt{display:flex;align-items:baseline;gap:.5rem}
+.alt{color:var(--dim);font-size:.95rem}
+hr{border:none;border-top:1px solid var(--line);margin:.5rem 0;width:100%}
+
+/* B: ladder and timeline */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+.ladder{display:grid;grid-template-columns:5rem 1fr;gap:1rem}
+.lad{position:relative;height:15rem}
+.lad::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:.3rem;margin-left:-.15rem;background:var(--line);border-radius:.2rem}
+.lad .z1{position:absolute;left:25%;right:25%;top:33.300%;height:33.400%;background:rgba(255,255,255,.06);border-radius:.4rem}
+.lad b{position:absolute;left:50%;transform:translate(-50%,-50%);width:1.5rem;height:1.5rem;border-radius:50%;background:var(--faint)}
+.lad .you{top:50%;background:var(--fg);width:2rem;height:2rem}
+.lad .ah{top:36.700%;background:var(--ok)}
+.lad .bh{top:90%}
+.lrows{position:relative;height:15rem}
+.lrows>div{position:absolute;left:0;right:0;transform:translateY(-50%)}
+.tl{position:relative;height:1.6rem;margin:1.3rem 0 1.6rem}
+.tl .st{position:absolute;top:0;bottom:0;border:.16rem solid;border-radius:.3rem;display:grid;place-items:center;font-weight:700}
+.tl .win{position:absolute;top:-.35rem;bottom:-.35rem;background:rgba(255,194,51,.35);border-radius:.2rem}
+.tl .t{position:absolute;top:-.5rem;bottom:-.5rem;width:.18rem;background:var(--warn)}
+.tl .t::after{content:attr(data-l);position:absolute;top:100%;left:50%;transform:translateX(-50%);font-weight:700;color:var(--warn);font-size:1.1rem}
+.tl .now{position:absolute;top:-1.25rem;transform:translateX(-50%);font-size:.9rem}
+.tl.thin{height:.8rem;margin:.5rem 0;opacity:.6}
+.tl.thin .st{font-size:0}
+
+/* C: two fixed lanes */
+.lanes{display:grid;grid-template-columns:.85fr 1.15fr;gap:.9rem;flex:1}
+.lane{display:flex;flex-direction:column;gap:.55rem}
+.lane.now{border-right:1px solid var(--line);padding-right:.9rem}
+.tall{padding:1.1rem .9rem;display:flex;flex-direction:column;gap:.7rem}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lap" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M10 2.5h4M12 2.5V6"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M4 8v13h16V8M12 2v11M8 9l4 4 4-4"/></symbol>
+  <symbol id="exit" viewBox="0 0 24 24"><path d="M3 12h12M11 7l5 5-5 5M20 4v16"/></symbol>
+  <symbol id="reply" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/></symbol>
+  <symbol id="attack" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="plan" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></symbol>
+  <symbol id="uc" viewBox="0 0 24 24"><path d="M4 5v6a6 6 0 0 0 6 6h9M15 13l4 4-4 4"/></symbol>
+  <symbol id="oc" viewBox="0 0 24 24"><path d="M4 19v-6a6 6 0 0 1 6-6h9M15 3l4 4-4 4"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M8 3h8l5 5v8l-5 5H8l-5-5V8zM12 8v8M8 12h8"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 4v15M5 12l7 7 7-7"/></symbol>
+  <symbol id="win" viewBox="0 0 24 24"><path d="M8 4H4v16h4M16 4h4v16h-4M9 12h6"/></symbol>
+  <symbol id="tgt" viewBox="0 0 24 24"><path d="M5 21V4h13l-3 4 3 4H5"/></symbol>
+  <symbol id="wingL" viewBox="0 0 12 24"><path d="M2 9h9v3H2zM4 12v5"/></symbol>
+  <symbol id="wingR" viewBox="0 0 12 24"><path d="M1 9h9v3H1zM8 12v5"/></symbol>
+</svg>
+
+<h1>Round 2: right section, race</h1>
+<p class="note">Language from round 1: icon, number and a short tag only when a state is not normal (1B), islands with filled action cards (2C). Sample moment: lap 27 of 57, P5, box call active, attacking P4.</p>
+
+<h2>Quick pick: damage on front left and front right</h2>
+<p class="note">Your question from round 1. In 1 the number sits on the side of the icon where the damage is, like the car seen from above, and each half of the wing takes its own colour. I recommend 1 because it needs no tag.</p>
+<div class="picks">
+  <div class="pick"><span class="tag">1<small>mirrored (recommended)</small></span>
+    <div class="card row"><span class="warn mid">12</span><svg class="i l warn" style="width:1.1em;margin-right:-.6rem"><use href="#wingL"/></svg><svg class="i l ok" style="width:1.1em"><use href="#wingR"/></svg><span class="ok mid">4</span></div>
+    <p class="note">Left only: number on the left, right half dim.</p>
+    <div class="card row"><span class="warn mid">12</span><svg class="i l warn" style="width:1.1em;margin-right:-.6rem"><use href="#wingL"/></svg><svg class="i l" style="width:1.1em;color:var(--faint)"><use href="#wingR"/></svg></div>
+  </div>
+  <div class="pick"><span class="tag">2<small>car from above</small></span>
+    <div class="card row"><span class="warn mid">12</span>
+      <svg class="car" viewBox="0 0 34 54"><rect class="h1" x="1" y="2" width="15" height="5" rx="1"/><rect class="h2" x="18" y="2" width="15" height="5" rx="1"/><rect x="14" y="7" width="6" height="12"/><rect x="9" y="19" width="16" height="22" rx="3"/><rect x="5" y="46" width="24" height="6" rx="1"/><rect x="14" y="41" width="6" height="5"/></svg>
+      <span class="ok mid">4</span></div>
+    <p class="note">Covers every part in one glyph. Takes more height.</p>
+  </div>
+  <div class="pick"><span class="tag">3<small>tags</small></span>
+    <div class="card row"><span class="warn mid">12%</span><span class="tagw">FW L</span><span class="ok mid">4%</span><span class="tagw">FW R</span></div>
+    <p class="note">Smallest, but the driver must read.</p>
+  </div>
+</div>
+
+<h2>Right section: pick A, B or C</h2>
+<p class="note">Each frame has the real size of the right column on a 1920 by 1080 screen. The target pit lap is the large number with the flag icon. The window is the small range beside it. Box cards are amber, reply cards are lilac, and safety cards will be red.</p>
+<div class="opts">
+
+  <div class="opt"><span class="tag">A<small>priority stack: actions on top, then race data</small></span>
+    <div class="zone">
+      <div class="card act box row"><svg class="i l"><use href="#box"/></svg><span class="huge">BOX</span><span class="cmp H mid">H</span><span class="sp"></span><svg class="i s"><use href="#lap"/></svg><span class="mid">22s</span><svg class="i"><use href="#exit"/></svg><svg class="i"><use href="#ok"/></svg></div>
+      <div class="card act reply row"><svg class="i"><use href="#reply"/></svg><span class="mid">FRONTS 38%</span><span class="sp"></span><span class="mid">9L</span></div>
+      <div class="cap">RACE</div>
+      <div class="card">
+        <div class="row"><svg class="i ok"><use href="#attack"/></svg><svg class="i s"><use href="#up"/></svg><span class="mid">P4 NOR</span><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="big">+0.8</span></div>
+        <div class="row sub" style="margin-top:.5rem"><div class="rail"><i></i></div><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3</span><span><span class="ring"></span> 62%</span></div>
+        <hr>
+        <div class="row sub far"><svg class="i s"><use href="#down"/></svg><span class="mid">P6 PIA</span><span class="cmp H">H</span><span class="dim">5L</span><span class="sp"></span><span class="mid">−2.4</span></div>
+      </div>
+      <div class="card">
+        <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span>
+          <span class="tgt"><svg class="i warn"><use href="#tgt"/></svg><span class="big">L27</span><span class="dim">26–28</span></span><svg class="i ok"><use href="#ok"/></svg></div>
+        <div class="row sub alt" style="margin-top:.4rem"><b>B</b><span class="cmp M">M</span>›<span class="cmp H">H</span>›<span class="cmp S">S</span><span class="sp"></span>+3.1</div>
+        <hr>
+        <div class="row sub alt"><svg class="i s"><use href="#exit"/></svg><svg class="i s ok"><use href="#ok"/></svg><span class="sp"></span><svg class="i s"><use href="#uc"/></svg>+0.8<svg class="i s"><use href="#oc"/></svg>−0.4</div>
+      </div>
+      <div class="card info row"><svg class="i s"><use href="#pen"/></svg>+5s</div>
+    </div>
+  </div>
+
+  <div class="opt"><span class="tag">B<small>graphic: gap ladder and stint timeline</small></span>
+    <div class="zone">
+      <div class="two">
+        <div class="card act box row"><svg class="i l"><use href="#box"/></svg><span class="huge">BOX</span><span class="cmp H mid">H</span></div>
+        <div class="card act reply row"><svg class="i"><use href="#reply"/></svg><span class="mid">FRONTS 38%</span><span class="sp"></span><span class="mid">9L</span></div>
+      </div>
+      <div class="cap">RACE</div>
+      <div class="card ladder">
+        <div class="lad"><div class="z1"></div><b class="ah"></b><b class="you"></b><b class="bh"></b></div>
+        <div class="lrows">
+          <div style="top:30%">
+            <div class="row"><svg class="i ok"><use href="#attack"/></svg><span class="mid">P4 NOR</span><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="big">+0.8</span></div>
+            <div class="row" style="margin-top:.3rem;padding-left:2.2rem"><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3</span><span><span class="ring"></span> 62%</span></div>
+          </div>
+          <div style="top:53%" class="row dim"><span class="tagw">P5 · 1 s ZONE SHADED</span></div>
+          <div style="top:90%" class="row far"><span class="mid" style="padding-left:2.2rem">P6 PIA</span><span class="cmp H">H</span><span class="dim">5L</span><span class="sp"></span><span class="mid">−2.4</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="sp"></span><svg class="i s"><use href="#lap"/></svg>22s<svg class="i s"><use href="#exit"/></svg><svg class="i s ok"><use href="#ok"/></svg><svg class="i ok"><use href="#ok"/></svg></div>
+        <div class="tl">
+          <div class="st" style="left:0;width:47.400%;color:#ffd23c">M</div>
+          <div class="st" style="left:47.400%;right:0;color:#f2f2f2">H</div>
+          <div class="win" style="left:43.900%;width:5.300%"></div>
+          <div class="t" style="left:47.400%" data-l="L27"></div>
+          <div class="now" style="left:47.400%">▼</div>
+        </div>
+        <div class="row alt"><b>B</b><div class="tl thin" style="flex:1">
+          <div class="st" style="left:0;width:35%;color:#ffd23c"></div><div class="st" style="left:35%;width:37%;color:#f2f2f2"></div><div class="st" style="left:72%;right:0;color:#ff4d4d"></div></div>+3.1</div>
+        <hr>
+        <div class="row alt"><svg class="i s"><use href="#uc"/></svg>+0.8<svg class="i s"><use href="#oc"/></svg>−0.4<span class="sp"></span><svg class="i s"><use href="#pen"/></svg>+5s</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="opt"><span class="tag">C<small>two fixed lanes: NOW on the left, RACE on the right</small></span>
+    <div class="zone">
+      <div class="lanes">
+        <div class="lane now">
+          <div class="cap">NOW</div>
+          <div class="card act box tall">
+            <div class="row"><svg class="i l"><use href="#box"/></svg><span class="huge">BOX</span></div>
+            <div class="row"><span class="cmp H big">H</span><span class="sp"></span><svg class="i"><use href="#exit"/></svg><svg class="i"><use href="#ok"/></svg></div>
+            <div class="row"><svg class="i s"><use href="#lap"/></svg><span class="mid">22s</span></div>
+          </div>
+          <div class="card act reply">
+            <div class="row"><svg class="i"><use href="#reply"/></svg><span class="mid">FRONTS</span></div>
+            <div class="row" style="margin-top:.3rem"><span class="big">38%</span><span class="sp"></span><span class="mid">9L</span></div>
+          </div>
+          <div class="card info row"><svg class="i s"><use href="#pen"/></svg>+5s</div>
+        </div>
+        <div class="lane">
+          <div class="cap">RACE</div>
+          <div class="card">
+            <div class="row"><svg class="i ok"><use href="#attack"/></svg><span class="mid">P4 NOR</span><span class="sp"></span><span class="big">+0.8</span></div>
+            <div class="row sub" style="margin-top:.4rem"><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3</span><span><span class="ring"></span> 62%</span></div>
+            <div class="row sub" style="margin-top:.6rem"><div class="rail"><i></i></div></div>
+            <hr>
+            <div class="row sub far"><span class="mid">P6 PIA</span><span class="cmp H">H</span><span class="dim">5L</span><span class="sp"></span><span class="mid">−2.4</span></div>
+          </div>
+          <div class="card">
+            <div class="row"><svg class="i"><use href="#plan"/></svg><b class="mid">A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span><svg class="i ok"><use href="#ok"/></svg></div>
+            <div class="row sub" style="margin-top:.4rem"><span class="tgt"><svg class="i warn"><use href="#tgt"/></svg><span class="big">L27</span><span class="dim">26–28</span></span></div>
+            <div class="row sub alt" style="margin-top:.5rem"><b>B</b><span class="cmp M">M</span>›<span class="cmp H">H</span>›<span class="cmp S">S</span><span class="sp"></span>+3.1</div>
+            <hr>
+            <div class="row sub alt"><svg class="i s"><use href="#uc"/></svg>+0.8<svg class="i s"><use href="#oc"/></svg>−0.4</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
