@@ -12,6 +12,19 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.59.1 (2026-11-17)
+
+### Bug Fixes
+
+- **update**: Install the kokoro extra when the profile selects kokoro
+  ([#187](https://github.com/artsworks/f1-pitwall/pull/187),
+  [`3df0886`](https://github.com/artsworks/f1-pitwall/commit/3df088678eb61b8ddb1033f889312c3d4991c77e))
+
+- **update**: Keep syncing when the profile cannot be loaded
+  ([#187](https://github.com/artsworks/f1-pitwall/pull/187),
+  [`3df0886`](https://github.com/artsworks/f1-pitwall/commit/3df088678eb61b8ddb1033f889312c3d4991c77e))
+
+
 ## v0.59.0 (2026-11-17)
 
 ### Bug Fixes
