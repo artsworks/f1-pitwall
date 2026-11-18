@@ -125,6 +125,30 @@ def test_teammate_stack_gates_owed_safety_car_cheap_stop() -> None:
     assert stacked.plan != "cheap_stop"
 
 
+def test_teammate_stack_not_counted_twice_in_owed_sc_cheap_stop() -> None:
+    # The k==0 projection already includes the 4 s stack loss, so comparing it
+    # against green - SC loss minus the stack again rejected this owed stop.
+    kw = dict(
+        lap_num=2,
+        laps_remaining=14,
+        tyre_age=1,
+        wear_mean=20.0,
+        fit=fit(50),
+        fresh=fit(50),
+        sc_status=1,
+        pit_loss_s=12.0,
+        green_pit_loss_s=22.0,
+        stop_owed=True,
+        teammate_pitting=True,
+    )
+    p = run(**kw)
+    assert p.window[0] > 2  # lap 2 is outside the normal window
+    assert p.projections[0][1] - min(d for _, d in p.projections) == pytest.approx(6.1)
+    assert p.plan == "cheap_stop"
+    assert p.lap == 2
+    assert p.gain_s == pytest.approx(22.0 - 12.0 - 4.0)
+
+
 def test_teammate_stack_disables_free_stop_without_enough_gap() -> None:
     kwargs = dict(
         tyre_age=20,
