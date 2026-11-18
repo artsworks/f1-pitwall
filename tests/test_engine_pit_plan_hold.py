@@ -255,6 +255,10 @@ def test_no_stop_session_with_wing_damage_still_calls_a_stop(tmp_path, monkeypat
 
     assert calls == [1]
     assert planned.pit_plan in ("box_now", "box_in_n")
+    active = engine.planner.plan_tracker.state.active_plan
+    assert active is not None and active.stops >= 1
+    assert planned.plan_next_compound
+    assert snap.lap_num < planned.plan_target_lap <= snap.lap_num + snap.laps_remaining
 
 
 def test_wet_crossover_still_calls_inters_in_a_sprint(tmp_path) -> None:

@@ -118,7 +118,7 @@ class Planner:
         ctx: EngineContext,
         model: SessionModel,
         driver_scale: Callable[[Settings, Mapping[str, Any]], DriverScale],
-        plan_thresholds: Callable[[Snapshot], Mapping[str, object]],
+        plan_thresholds: Callable[[Snapshot, bool], Mapping[str, object]],
         mindset: Callable[[], str],
     ) -> None:
         self.ctx = ctx
@@ -283,7 +283,7 @@ class Planner:
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
             stop_owed=self.plan_tracker.state.stops_left > 0,
-            stop_mandatory=compound_stop_owed(used, self._plan_thresholds(snap)),
+            stop_mandatory=compound_stop_owed(used, self._plan_thresholds(snap, False)),
             driver=drv,
             mode=mode,
             th=settings.thresholds,
@@ -504,7 +504,7 @@ class Planner:
                         wing_change_s=wing_loss_s,
                         damage_pace_ms=damage_pace_ms,
                     ),
-                    self._plan_thresholds(snap),
+                    self._plan_thresholds(snap, invalidate in ("damage", "pace")),
                     stops_done=self._stops_done,
                     neutralised=neutral,
                     cheap_stop=cheap,
