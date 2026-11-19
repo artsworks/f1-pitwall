@@ -351,23 +351,25 @@ class RuleDefModel(BaseModel):
 
     id: str
     sessions: list[str] = Field(default_factory=list)
-    priority: Literal[1, 2, 3]
+    priority: Literal[1, 2, 3]  # 1 critical, 2 tactical, 3 informational
     urgency: Literal["safety", "execution", "tactical", "info", "coaching"] | None = None
     urgency_by_priority: dict[
         Literal[1, 2, 3], Literal["safety", "execution", "tactical", "info", "coaching"]
     ] = Field(default_factory=dict)
-    when: str
+    when: str  # trigger predicate over the snapshot, `th.*` and `mode.*`
+    # Release predicate; a separate value from `when` gives hysteresis.
     clear_when: str | None = None
+    # Revalidated just before speaking; deliberately looser than `when`.
     still_true: str | None = None
     suppress_when: dict[str, str] = Field(default_factory=dict)  # log reason -> predicate
     retry_on_suppression: bool = False  # rearm after budget or focus suppression
-    cooldown_s: float = 0.0
+    cooldown_s: float = 0.0  # min seconds between calls of this rule
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
     conflict_group: str = ""  # queued calls in one group: only the one still true is kept
     supersedes: list[str] = Field(default_factory=list)  # rule ids this call replaces in the queue
-    contradicts: list[str] = Field(
-        default_factory=list
-    )  # rule ids that never speak alongside this call
+    # Rule ids that never speak alongside this call, declared on either rule. The higher
+    # priority speaks, then the higher urgency class, then the newest call.
+    contradicts: list[str] = Field(default_factory=list)
     decision_point: Literal["", "pit_entry", "line"] = ""
     outcome_score: str | None = None
     rotate_with: list[str] = Field(default_factory=list)
@@ -381,14 +383,17 @@ class RuleDefModel(BaseModel):
     location_ref: bool = False
     say_many: list[str] = Field(default_factory=list)
     brief: str = ""
-    max_per_stint: int | None = None
-    min_lap: int = 0
-    requires: list[str] = Field(default_factory=list)
+    max_per_stint: int | None = None  # cap on calls of this rule per tyre stint
+    min_lap: int = 0  # no call before this lap
+    requires: list[str] = Field(default_factory=list)  # packets that must be fresh, else skip
+    # Phrasing template, or variants rotated without repeats (the first call uses the first).
     say: str | list[str] = ""
+    # Other say pools once the call triggered N times within repeat_window_s; `{repeat}`
+    # in a phrase is the count (ADR 0008).
     escalate: list[EscalationModel] = Field(default_factory=list)
     severity: list[SeverityModel] = Field(default_factory=list)
-    repeat_window_s: float = 600.0
-    screen_only: bool = False
+    repeat_window_s: float = 600.0  # window that counts repeats for `escalate`
+    screen_only: bool = False  # shown on the dashboard, never spoken
     tags: list[str] = Field(default_factory=list)
     # Spoken reply when the driver acks / negs this call; generic replies if empty.
     on_ack: str | list[str] = ""

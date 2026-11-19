@@ -162,12 +162,12 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/08-configuration.md`](docs/08-configuration.md) | Settings model, verbosity presets, balanced/aggressive mindset |
 | [`docs/20-learning-loop.md`](docs/20-learning-loop.md) | Automatic grading and upkeep, calibration, learned state |
 | [`docs/25-report-analysis-prompt.md`](docs/25-report-analysis-prompt.md) | Prompt that turns a `pitwall report` zip with bookmarks into issues, fixes and regression tests |
+| [`docs/glossary.md`](docs/glossary.md) | Domain terms: call, urgency class, mindset, stint, phases, priors, upkeep, debrief |
 
 **Design**
 
 | Document | Contents |
 |---|---|
-| [`docs/01-architecture.md`](docs/01-architecture.md) | Layers, stack, cross-cutting decisions, repo layout |
 | [`docs/02-ingestion.md`](docs/02-ingestion.md) | Packets consumed, parser design, pause/flashback, recording format |
 | [`docs/03-strategy.md`](docs/03-strategy.md) | Rule format, pace and degradation model, pit loss, race and quali calls |
 | [`docs/04-audio-ui.md`](docs/04-audio-ui.md) | Priorities, suppression, speech constraints, WebSocket protocol |
@@ -194,7 +194,6 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts |
 | [`docs/research/`](docs/research/) | Research notes: lift and coast, penalty escalation, race end and formation lap, safety-car restart, team orders, track limits, weather crossover |
 | [`docs/versioning.md`](docs/versioning.md) | Semantic Versioning, PR title rules and the release workflow |
-| [`docs/00-review-of-v1.md`](docs/00-review-of-v1.md), [`06`](docs/06-direction-changes.md), [`10`](docs/10-angles-not-yet-considered.md), [`11`](docs/11-open-questions.md), [`14`](docs/14-adversarial-review.md) | History / early planning (kept for reference): review of the first plan, direction changes, open angles and questions, adversarial review |
 
 ## Licence
 

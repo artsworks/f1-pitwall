@@ -18,22 +18,9 @@ enabled rules for the current session type against the 10 Hz snapshot.
   still_true: "tyre_core_ema_slow.FL > th.core_overheat - 3"   # revalidated at speak time
 ```
 
-Fields:
-
-| Field | Purpose |
-|---|---|
-| `when` / `clear_when` | trigger and release predicates — separate values give hysteresis, which is what stops oscillating calls |
-| `suppress_when` | reason-to-predicate map: if `when` matches but a guard blocks the call, log the first matching reason once per lap without queueing it |
-| `priority` | 1 critical, 2 tactical, 3 informational |
-| `cooldown_s`, `max_per_stint`, `min_lap` | rate limiting per rule |
-| `conflict_group` | Keep only queued calls in the group whose current predicate still holds. |
-| `supersedes` | Drop queued calls for the listed rule ids when this rule arrives. |
-| `contradicts` | Never speak both. Of the two the higher priority speaks, then the higher urgency class, then the newest call. Declared on either rule. |
-| `requires` | packets that must be fresh; the rule is skipped (not fired on stale data) otherwise |
-| `say` | phrasing template, or a list of variants rotated without repeats (first call uses the first) |
-| `escalate`, `repeat_window_s` | `[{after: N, say: [...]}]`: a different pool once the call has triggered N times inside the window; `{repeat}` is the count (ADR 0008) |
-| `still_true` | revalidated immediately before speaking; deliberately looser than `when` |
-| `screen_only` | show on the dashboard without speaking |
+Each field's meaning is commented on `RuleDefModel` in `src/pitwall/config/models.py`, the
+schema every rule file is validated against. Terms such as *call* and *urgency class* are
+in the [glossary](glossary.md).
 
 Predicates are evaluated in a restricted expression environment exposing only the
 snapshot, thresholds (`th`), the active mindset's parameters (`mode`, see
@@ -78,8 +65,6 @@ lap_time_ms = base_ms
 - For `cover` and `defend`, agreement counts how often sampled cover math repeats the plan's decision.
 - Race priors are scoped by total race laps, so different race distances do not mix.
   Practice values are unscoped.
-- Degradation priors from a track file scale with race length, so a short race plans its
-  first stop near half distance. The default and learned values are not scaled.
 - Rival pace comes from Session History lap times, filtered the same way.
 
 Report results in driver currency: "about three laps of life left at this pace" or
@@ -155,8 +140,6 @@ The `rival_ahead_pitted` rule also stays silent at this limit.
 The mandatory two-dry-compound rule blocks tyre-based `no_stop` returns while another dry compound is owed.
 
 **Cover the undercut.** When the car behind pits, the optimiser compares its projected fresh-tyre gain with our gap. It calls us to box if the rival could jump us, or stay out when the gap is safe. Cover and defend use the true rival behind in a stop-adjusted order. The order adds one pit loss per owed stop, using the two-dry-compound minimum. The system holds gaps for cars in the pit lane and recomputes the order under SC/VSC with the SC pit loss. Cars on inter or wet tyres and sprint races owe no stop. The order excludes lapped cars.
-
-**No stop in short races.** Sprints and races of `plan_no_stop_max_laps` (5) laps or fewer plan no stop. Damage stops and weather calls still apply. Tyre stops and safety-car stops are not called in these races.
 
 **Free stop.** A position-neutral stop is available when the gap to the car behind exceeds
 measured pit loss.

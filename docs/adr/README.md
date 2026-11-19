@@ -21,3 +21,4 @@ PC and git-ignored. Record findings, not data.
 | [0008](0008-natural-phrasing-without-an-llm.md) | Natural phrasing without an LLM: variants, escalation, spins |
 | [0009](0009-llm-chooser-with-rule-veto.md) | LLM as a gated chooser with rule veto (supersedes 0008's decision part) |
 | [0010](0010-brazil-weekend-recording-review.md) | Brazil weekend recording review: rates, energy, boost and penalty calls |
+| [0011](0011-core-architecture-choices.md) | Core architecture choices: goal, non-goals, replay first, persistence, latency budget |

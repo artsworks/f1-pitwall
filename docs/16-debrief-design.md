@@ -6,7 +6,7 @@ illustrative. Each panel's source line names the real table or artifact behind i
 
 This doc designs the debrief page, while `15-dashboard-design.md` covers the live screen.
 The pages have different jobs and share only visual tokens. This doc also gives item 21 of
-`10-angles-not-yet-considered.md` (LLM-assisted debrief) a UI.
+[angles not yet considered](https://github.com/artsworks/f1-pitwall/blob/4b9a517/docs/10-angles-not-yet-considered.md) (LLM-assisted debrief) a UI.
 
 ## 1. Why a separate page
 

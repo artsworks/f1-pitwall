@@ -274,10 +274,10 @@ const GROUPS = [
     ["adr/0007-driving-event-signals", "ADR 0007 · Driving-event signals", "Lock-ups, boost, yellows, out-lap timing from live data."],
     ["adr/0008-natural-phrasing-without-an-llm", "ADR 0008 · Natural phrasing", "Variant pools and escalation instead of an LLM."],
     ["adr/0009-llm-chooser-with-rule-veto", "ADR 0009 · LLM chooser", "Optional: no key means fully deterministic. With a key, the model picks among rule-generated candidates, shadow first, promoted per decision type, and the rules veto and fall back."],
-    ["adr/0010-brazil-weekend-recording-review", "ADR 0010 · Brazil recording review", "Game sent 20 Hz, not 30. Fixes for energy, boost, penalty and pit-exit calls."]
+    ["adr/0010-brazil-weekend-recording-review", "ADR 0010 · Brazil recording review", "Game sent 20 Hz, not 30. Fixes for energy, boost, penalty and pit-exit calls."],
+    ["adr/0011-core-architecture-choices", "ADR 0011 · Core architecture", "Goal, non-goals and cross-cutting choices: replay first, persistence, latency budget, config over code."]
   ]],
   ["Core design", [
-    ["01-architecture", "Architecture", "Layers, cross-cutting decisions, stack and repository layout."],
     ["02-ingestion", "Ingestion", "Game settings, the F1 26-only parser, send-rate independence and recording."],
     ["03-strategy", "Strategy engine", "Rules as data, the pace and degradation model, pit windows and rivals."],
     ["17-quali-run-plan", "Qualifying run plan", "Qualifying push, cool and box decisions, release advice and coaching."],
@@ -302,14 +302,8 @@ const GROUPS = [
     ["09-performance", "Performance on the game PC", "CPU, GPU and disk budgets, and the frame-time A/B test."],
   ]],
   ["Reference", [
-    ["reference/f1-26-udp-notes", "F1 26 UDP notes", "Verified facts about packet format 2026."]
-  ]],
-  ["History / early planning", [
-    ["00-review-of-v1", "Review of plan v1", "Where the first plan disagreed with the F1 26 spec, and what changed."],
-    ["06-direction-changes", "Five changes of direction", "Each change with its cost, build plan, acceptance and rollback."],
-    ["10-angles-not-yet-considered", "Angles not yet considered", "Twenty further angles, from energy management to LAN security."],
-    ["11-open-questions", "Decisions and open questions", "What was settled before the build (public repo, GPLv3, F1 26 only, no LLM) and what was left open."],
-    ["14-adversarial-review", "Adversarial review", "Errors found before the first commit, what was kept, and assumptions to verify in the first session."]
+    ["reference/f1-26-udp-notes", "F1 26 UDP notes", "Verified facts about packet format 2026."],
+    ["glossary", "Glossary", "Domain terms: call, urgency class, mindset, stint, phases, priors, upkeep and debrief."]
   ]]
 ];
 const DOCS = GROUPS.flatMap(g => g[1]);
@@ -321,14 +315,13 @@ const grp = name => GROUPS.find(g => g[0] === name)[1];
 const NAV = [
   ["Project", [byId.status, byId["05-roadmap"], byId["adr/README"]]],
   ["Design", grp("Core design")],
-  ["Reference", [...grp("In depth"), ...grp("Reference")]],
-  ["History", grp("History / early planning")]
+  ["Reference", [...grp("In depth"), ...grp("Reference")]]
 ];
 const HERO = $("#content .hero").outerHTML;
 $("#content").replaceChildren();
 const motion = matchMedia("(prefers-reduced-motion: no-preference)").matches;
 const HUB_ONLY = new Set(["12-driver-input", "21-voice-command", "15-dashboard-design", "19-guest-tower", "22-setup-advisor", "16-debrief-design", "13-league-multiplayer",
-  "06-direction-changes", "23-synthetic-recordings", "25-report-analysis-prompt", "10-angles-not-yet-considered", "11-open-questions", "14-adversarial-review", "00-review-of-v1"]);
+  "23-synthetic-recordings", "25-report-analysis-prompt"]);
 const ADRS = grp("Decisions (ADRs)").filter(d => d[0] !== "adr/README");
 
 function renderNav(filter = $("#filter").value) {
@@ -465,7 +458,7 @@ function overview() {
     <section class="reveal">
     <h2>What works today</h2>
     <ul class="works">${works.map(w => `<li>${w}</li>`).join("")}</ul>
-    <a class="devcard" href="#/developer"><span><b>Developer guide</b>Architecture, strategy design, decision records, build status and the roadmap.</span><i aria-hidden="true">→</i></a>
+    <a class="devcard" href="#/developer"><span><b>Developer guide</b>Strategy design, glossary, decision records, build status and the roadmap.</span><i aria-hidden="true">→</i></a>
     </section>
   </div>`;
   document.querySelectorAll(".facade").forEach(facade => facade.addEventListener("click", () => {
