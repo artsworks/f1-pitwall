@@ -12,7 +12,8 @@ import pytest
 
 from pitwall.audio.dispatcher import Call
 from pitwall.clock import VirtualClock
-from pitwall.engine import build_engine, run_replay
+from pitwall.engine import Engine, build_engine, run_replay
+from pitwall.learning.debrief import render_debrief
 from pitwall.store.db import MIGRATIONS, Database
 
 from .race_synth import RaceSpec, race_stream
@@ -23,14 +24,26 @@ pytestmark = [pytest.mark.slow, pytest.mark.replay]
 Run = tuple[list[Call], list[dict], list[dict], list[dict]]
 
 
-def _replay(tmp: Path, spec: RaceSpec) -> Run:
+def _run(
+    tmp: Path, spec: RaceSpec, db: Database, *, isolated: bool = False
+) -> tuple[Engine, list[Call]]:
     path = write_packet_stream(tmp / "race.f1bin", race_stream(spec))
-    log = tmp / "decisions.jsonl"
-    db = Database(":memory:")
-    engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_path=log)
+    engine = build_engine(
+        clock=VirtualClock(),
+        sinks=[],
+        db=db,
+        decision_log_path=tmp / "decisions.jsonl",
+        isolated=isolated,
+    )
     _, calls = asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()
-    rows = [json.loads(line) for line in log.read_text().splitlines() if line]
+    return engine, calls
+
+
+def _replay(tmp: Path, spec: RaceSpec) -> Run:
+    db = Database(":memory:")
+    engine, calls = _run(tmp, spec, db)
+    rows = [json.loads(line) for line in (tmp / "decisions.jsonl").read_text().splitlines() if line]
     uid = engine.state.session_uid
     assert uid is not None
     return calls, rows, db.plan_events_for_session(uid), db.calls_for_session(uid)
@@ -94,6 +107,45 @@ def test_calls_rows_carry_active_plan(runs: dict[str, Run]) -> None:
     planned = [r for r in fired if r["active_plan"]]
     assert planned and all(r["on_plan"] in (0, 1) for r in planned)
     assert {r["active_plan"] for r in planned} >= {"A", "C"}
+
+
+def test_five_lap_race_announces_no_stop_and_debrief_agrees(tmp_path: Path) -> None:
+    db = Database(":memory:")
+    engine, calls = _run(tmp_path, RaceSpec(laps=5, dt=0.5, finish=True), db, isolated=True)
+    uid = engine.state.session_uid
+    assert uid is not None
+
+    plan = next(call for call in calls if call.rule_id.startswith("plan_"))
+    assert (plan.rule_id, plan.lap) == ("plan_announce_no_stop", 1)
+    assert "no stop, medium to the end" in plan.text
+    assert not any(call.rule_id in {"box_now", "box_in_n", "plan_target_lap"} for call in calls)
+    assert db.pit_events_for_session(uid) == []
+    debrief = render_debrief(db, uid, engine.store.current())
+    assert " · 0 stops · " in debrief
+    assert "No pit stops." in debrief
+    db.close()
+
+
+def test_short_race_box_after_line_counts_one_stop_on_entry_lap(tmp_path: Path) -> None:
+    db = Database(":memory:")
+    spec = RaceSpec(
+        laps=12,
+        player_pit_lap=6,
+        pit_box_after_line=True,
+        compound_after_stop=16,
+        pit_lane_loss_ms=19_000,
+    )
+    engine, calls = _run(tmp_path, spec, db, isolated=True)
+    uid = engine.state.session_uid
+    assert uid is not None
+
+    window = next(call for call in calls if call.rule_id == "plan_window_open")
+    assert window.lap < 6 and "target lap 6" in window.text
+    assert [(pit.lap_num, pit.loss_ms) for pit in db.pit_events_for_session(uid)] == [(6, 19_000)]
+    debrief = render_debrief(db, uid, engine.store.current())
+    assert " · 1 stop · " in debrief
+    assert "L6 · 19.0 s" in debrief
+    db.close()
 
 
 def test_migration_adds_plan_columns_to_existing_db(tmp_path: Path) -> None:
