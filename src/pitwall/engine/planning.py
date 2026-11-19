@@ -131,7 +131,7 @@ class Planner:
         self.plan_tracker = PlanTracker()
         self._plan_key: tuple[Any, ...] | None = None
         self._damage_pace_ms = 0.0
-        self._slow_run: tuple[int, float, int] | None = None
+        self._slow_run: tuple[int, float, float | None] | None = None
         self._damage_stops = 0
         self._stops_done = 0
         self._red_restart = False
@@ -195,11 +195,11 @@ class Planner:
         if measured is None or measured < self.ctx.th("plan_damage_pace_ms", 1500):
             self._slow_run = None
         elif self._slow_run is None or self._slow_run[0] not in (lap, lap - 1):
-            self._slow_run = (lap, measured, 1)
+            self._slow_run = (lap, measured, None)
         elif self._slow_run[0] == lap - 1:
-            self._slow_run = (lap, min(self._slow_run[1], measured), self._slow_run[2] + 1)
+            self._slow_run = (lap, measured, min(self._slow_run[1], measured))
         run = self._slow_run
-        confirmed = run if run is not None and run[2] >= 2 else None
+        confirmed = run[2] if run is not None else None
         positions = (
             0 < snap.lap_num <= self.ctx.th("plan_rebuild_max_lap", 2)
             and snap.grid_position > 0
@@ -217,7 +217,7 @@ class Planner:
                 self.ctx.th("damage_tyre_pace_ms", 1500) if tyre and measured is None else 0.0,
             )
         elif confirmed is not None:
-            penalty = confirmed[1]
+            penalty = confirmed
         self._damage_pace_ms = max(self._damage_pace_ms, penalty)
         penalty = self._damage_pace_ms
         if not cause and penalty > 0:

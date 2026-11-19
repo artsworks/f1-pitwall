@@ -214,6 +214,26 @@ def test_engine_damage_pace_restarts_after_a_clean_lap() -> None:
     db.close()
 
 
+def test_engine_damage_pace_rises_after_two_larger_slow_laps() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    fit = DegFit(90_000.0, 100.0, 0.0, 10, 100.0, 0.9, "prior")
+    expected = [("", 0.0, 0.0), ("pace", 2000.0, 0.0), ("pace", 2000.0, 0.0), ("pace", 8000.0, 0.0)]
+    for lap_num, deficit, result in zip(
+        (2, 3, 4, 5), (2000, 2000, 8000, 8000), expected, strict=True
+    ):
+        lap_time = 90_000 + 100 * lap_num + deficit
+        engine.state.laps.append(
+            LapSummary(lap_num, lap_time, 30_000, 30_000, 17, lap_num, 10.0, True)
+        )
+        snap = Snapshot(
+            now=1.0, race_phase="racing", lap_num=lap_num + 1, tyre_age_laps=lap_num + 1
+        )
+        assert engine.planner._plan_damage(snap, fit) == result
+        assert engine.planner._plan_damage(snap, fit) == result
+    db.close()
+
+
 def test_engine_damage_signal_rebuilds_and_clears_after_stop() -> None:
     db = Database(":memory:")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
