@@ -403,6 +403,35 @@ def test_rival_ahead_pitted_rule_requires_time_to_stop(laps_left_offset: int) ->
     assert ("rival_ahead_pitted" in ids) == (laps_left_offset > 0)
 
 
+def test_box_now_records_an_eligible_in_lap_skip_only_once() -> None:
+    engine = _default_rule_engine()
+    fields = {
+        "pit_plan": "free_stop",
+        "pit_plan_confidence": 0.1,
+        "laps_of_pace": 0.0,
+        "pit_plan_gain_s": 1.0,
+        "laps_remaining": 7,
+        "_ages": {"lap_data": 0.1, "car_status": 0.1},
+    }
+    no_gain = _rule_snapshot(phase="in_lap", **(fields | {"pit_plan_gain_s": -1.0}))
+    assert not any(s.rule.id == "box_now" for s in engine.evaluate(no_gain).suppressed)
+    blocked = _rule_snapshot(phase="in_lap", **fields)
+    result = engine.evaluate(blocked)
+    assert not any(c.rule.id == "box_now" for c in result.candidates)
+    skip = next(s for s in result.suppressed if s.rule.id == "box_now")
+    assert skip.reason == "in_lap"
+    assert skip.inputs is not None
+    assert skip.inputs["phase"] == "in_lap"
+    assert skip.inputs["pit_plan"] == "free_stop"
+    assert not any(s.rule.id == "box_now" for s in engine.evaluate(blocked).suppressed)
+    assert not any(
+        s.rule.id == "box_now"
+        for s in engine.evaluate(_rule_snapshot(phase="out_lap", **fields)).suppressed
+    )
+    racing = engine.evaluate(_rule_snapshot(phase="racing", **fields))
+    assert any(c.rule.id == "box_now" for c in racing.candidates)
+
+
 def test_cover_box_rule_fires_and_respects_minimum_laps() -> None:
     from pitwall.config.loader import ConfigStore
 

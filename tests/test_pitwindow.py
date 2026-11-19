@@ -125,6 +125,30 @@ def test_teammate_stack_gates_owed_safety_car_cheap_stop() -> None:
     assert stacked.plan != "cheap_stop"
 
 
+def test_teammate_stack_not_counted_twice_in_owed_sc_cheap_stop() -> None:
+    # The k==0 projection already includes the 4 s stack loss, so comparing it
+    # against green - SC loss minus the stack again rejected this owed stop.
+    kw = dict(
+        lap_num=2,
+        laps_remaining=14,
+        tyre_age=1,
+        wear_mean=20.0,
+        fit=fit(50),
+        fresh=fit(50),
+        sc_status=1,
+        pit_loss_s=12.0,
+        green_pit_loss_s=22.0,
+        stop_owed=True,
+        teammate_pitting=True,
+    )
+    p = run(**kw)
+    assert p.window[0] > 2  # lap 2 is outside the normal window
+    assert p.projections[0][1] - min(d for _, d in p.projections) == pytest.approx(6.1)
+    assert p.plan == "cheap_stop"
+    assert p.lap == 2
+    assert p.gain_s == pytest.approx(22.0 - 12.0 - 4.0)
+
+
 def test_teammate_stack_disables_free_stop_without_enough_gap() -> None:
     kwargs = dict(
         tyre_age=20,
@@ -327,6 +351,30 @@ def test_sc_cheap_stop_when_plan_owes_a_stop() -> None:
     assert owed.plan == "cheap_stop"
     assert owed.gain_s == pytest.approx(14.0)
     assert run(**kw).plan != "cheap_stop"
+
+
+def test_sc_cheap_stop_in_short_race_when_early_stop_is_cheap() -> None:
+    # 15-lap race: the scaled deg prior is 75 * 58 / 15 ms per lap.
+    kw = dict(
+        lap_num=6,
+        laps_remaining=9,
+        tyre_age=6,
+        wear_mean=25.2,
+        fit=fit(75 * 58 / 15),
+        fresh=fit(75 * 58 / 15),
+        laps_of_pace=0.0,
+        pit_loss_s=8.0,
+        green_pit_loss_s=21.0,
+        sc_status=1,
+        stop_owed=True,
+        stop_mandatory=True,
+        gap_behind_s=1.0,
+    )
+    assert run(**kw).plan == "cheap_stop"
+    early = dict(kw, lap_num=3, laps_remaining=12, tyre_age=3, wear_mean=12.6)
+    assert run(**early).plan != "cheap_stop"
+    full = dict(kw, lap_num=25, laps_remaining=33, tyre_age=25, wear_mean=30.0)
+    assert run(**{**full, "fit": fit(75), "fresh": fit(75)}).plan != "cheap_stop"
 
 
 def test_aggressive_sc_stop_lower_wear() -> None:

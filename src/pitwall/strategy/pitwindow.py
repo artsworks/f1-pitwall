@@ -349,6 +349,7 @@ def optimise(
         and (
             wear_mean >= _f(mode, "sc_stop_min_wear_pct", 35)
             or (stop_owed and window[0] <= lap_num <= window[1])
+            or (stop_owed and green_pit_loss_s - pit_loss_s > projections[0][1] - best_delta)
         )
         and laps_remaining > _f(th, "sc_stop_min_laps_left", 3)
         and (stack_s == 0 or green_pit_loss_s - pit_loss_s - stack_s > 0)

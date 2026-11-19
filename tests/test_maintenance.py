@@ -171,6 +171,68 @@ def test_race_priors_do_not_mix_race_distances() -> None:
     assert engine.model._learned_name(7, 17, "deg_ms_per_lap") == "deg_ms_per_lap"  # noqa: SLF001
 
 
+def _deg_prior_for(
+    engine,
+    track_id: int,
+    *,
+    session_type: int,
+    total_laps: int,
+    track_length_m: float = 5278.0,
+    weekend_structure: tuple[int, ...] = (),
+):
+    engine.state.session_type = session_type
+    engine.state.total_laps = total_laps
+    engine.state.track_length_m = track_length_m
+    engine.state.weekend_structure = weekend_structure
+    return engine.model._deg_prior(track_id, 17, engine.store.current())  # noqa: SLF001
+
+
+def test_default_deg_prior_is_not_scaled() -> None:
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=Database(":memory:"))
+    assert _deg_prior_for(engine, 999, session_type=15, total_laps=15).deg_ms_per_lap == 80.0
+    assert _deg_prior_for(engine, 999, session_type=15, total_laps=58).deg_ms_per_lap == 80.0
+    assert _deg_prior_for(engine, 999, session_type=1, total_laps=15).deg_ms_per_lap == 80.0
+    assert _deg_prior_for(engine, 999, session_type=15, total_laps=5).deg_ms_per_lap == 80.0
+    sprint = dict(session_type=15, total_laps=24, weekend_structure=(15, 16))
+    assert _deg_prior_for(engine, 999, **sprint).deg_ms_per_lap == 80.0
+
+
+def test_full_distance_track_file_deg_prior_scales_in_short_races() -> None:
+    overrides = {"track": {"track_id": 999, "deg_ms_per_lap": {17: 80.0}}}
+    engine = build_engine(
+        clock=VirtualClock(), sinks=[], db=Database(":memory:"), overrides=overrides
+    )
+    short = _deg_prior_for(engine, 999, session_type=15, total_laps=15)
+    assert short.deg_ms_per_lap == pytest.approx(80 * 58 / 15)
+    assert _deg_prior_for(engine, 999, session_type=15, total_laps=58).deg_ms_per_lap == 80.0
+    assert _deg_prior_for(engine, 999, session_type=1, total_laps=15).deg_ms_per_lap == 80.0
+    assert _deg_prior_for(engine, 999, session_type=15, total_laps=5).deg_ms_per_lap == 80.0
+    sprint = dict(session_type=15, total_laps=24, weekend_structure=(15, 16))
+    assert _deg_prior_for(engine, 999, **sprint).deg_ms_per_lap == 80.0
+
+
+def test_track_file_deg_prior_scales_by_its_reference_race_length() -> None:
+    overrides = {
+        "track": {"track_id": 999, "deg_ms_per_lap": {17: 217.0}, "deg_race_laps": 18},
+    }
+    engine = build_engine(
+        clock=VirtualClock(), sinks=[], db=Database(":memory:"), overrides=overrides
+    )
+    same = _deg_prior_for(engine, 999, session_type=15, total_laps=18, track_length_m=4318.0)
+    assert same.deg_ms_per_lap == pytest.approx(217.0)
+    longer = _deg_prior_for(engine, 999, session_type=15, total_laps=71, track_length_m=4318.0)
+    assert longer.deg_ms_per_lap == pytest.approx(217.0 * 18 / 71)
+
+
+def test_full_weight_learned_deg_prior_is_not_scaled() -> None:
+    db = Database(":memory:")
+    engine = build_engine(clock=VirtualClock(), sinks=[], db=db)
+    db.fold_param(999, 17, scoped("deg_ms_per_lap", 15), 150.0, weight=20)
+    prior = _deg_prior_for(engine, 999, session_type=15, total_laps=15)
+    assert prior.source == "learned"
+    assert prior.deg_ms_per_lap == pytest.approx(150.0)
+
+
 def test_capped_fit_never_becomes_a_prior_and_thin_priors_shrink(tmp_path) -> None:
     db = Database(tmp_path / "p.sqlite")
     engine = build_engine(clock=VirtualClock(), sinks=[], db=db, decision_log_fp=io.StringIO())

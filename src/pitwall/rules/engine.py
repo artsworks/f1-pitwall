@@ -87,6 +87,7 @@ class Suppressed:
     rule: Rule
     reason: str
     detail: str = ""
+    inputs: dict[str, Any] | None = None
 
 
 class Rule:
@@ -96,6 +97,10 @@ class Rule:
         self.when = Predicate(defn.when)
         self.clear_when = Predicate(defn.clear_when) if defn.clear_when else None
         self._still_true = Predicate(defn.still_true) if defn.still_true else None
+        self._suppress_when = {
+            reason: Predicate(expr) for reason, expr in defn.suppress_when.items()
+        }
+        self._last_suppression: dict[str, tuple[int, int]] = {}
         self.armed = True
         self.obvious_noted = False
         self.fires_this_stint = 0
@@ -128,7 +133,20 @@ class Rule:
 
     def holds(self, snapshot: Snapshot, ns_kwargs: dict[str, Any]) -> bool:
         ns = make_namespace(snapshot, **ns_kwargs)
-        return bool(self.when(ns))
+        return bool(self.when(ns)) and self.suppression_reason(ns) is None
+
+    def suppression_reason(self, ns: TrackedNamespace) -> str | None:
+        for reason, predicate in self._suppress_when.items():
+            if predicate(ns):
+                return reason
+        return None
+
+    def should_log_suppression(self, snapshot: Snapshot, reason: str) -> bool:
+        key = (snapshot.session_uid, snapshot.lap_num)
+        if key == self._last_suppression.get(reason):
+            return False
+        self._last_suppression[reason] = key
+        return True
 
 
 @dataclass(slots=True)
@@ -276,6 +294,8 @@ class RuleEngine:
             ns = TrackedNamespace(data)
             try:
                 fired = bool(rule.when(ns))
+                blocked = rule.suppression_reason(ns) if fired and d.suppress_when else None
+                fired = fired and blocked is None
             except Exception as exc:  # noqa: BLE001 - failed predicates suppress this rule
                 self._note_error(rule, "expr_error", exc)
                 result.suppressed.append(Suppressed(rule, "expr_error", str(exc)))
@@ -289,6 +309,13 @@ class RuleEngine:
                     result.suppressed.append(Suppressed(rule, "clear_error", str(exc)))
             elif not fired:
                 rule.armed = True
+            if blocked is not None and rule.should_log_suppression(snapshot, blocked):
+                inputs = {
+                    name: _jsonable(ns.get(name))
+                    for name in dict.fromkeys(ns.accessed)
+                    if name in snap_attrs
+                }
+                result.suppressed.append(Suppressed(rule, blocked, inputs=inputs))
             if not (fired and rule.armed):
                 continue
             try:

@@ -38,7 +38,8 @@ check the changelog for what a given version added.
   before the fix that have no recording.
 - Recheck `release_go` and `release_hold` in a busy qualifying session. The two calls
   can still alternate every 30 s while cars pass the pit exit.
-- Confirm in a 5-lap race that the plan has no mandatory stop (`plan_no_stop_max_laps`).
+- Confirm the no-stop plan in a live 5-lap race (`plan_no_stop_max_laps`). A synthetic
+  replay already checks the no-stop announcement and debrief.
 
 ## Known gaps
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -9,10 +10,14 @@ from typing import Any
 import pytest
 import yaml
 
-from pitwall.config.loader import ConfigStore
+from pitwall.clock import VirtualClock
+from pitwall.config.loader import DEFAULTS_DIR, ConfigStore
+from pitwall.engine import build_engine, run_replay
 from pitwall.learning.bench import parse_scenario, run_scenario
+from pitwall.net.derive import WearScale, derive_recording
 from pitwall.protocol.header import PacketId, parse_header
 from pitwall.protocol.packets import parse
+from pitwall.store.db import Database
 
 from .race_synth import race_stream, spec_from_trace
 from .synth import write_packet_stream
@@ -170,3 +175,56 @@ def test_trace_race_matches_baseline(tmp_path, scenario_id):
         if got["ok"] != want["ok"]
     ]
     assert not mismatches, f"{scenario_id}: " + "; ".join(mismatches)
+
+
+@pytest.mark.replay
+@pytest.mark.parametrize(
+    ("reference_laps", "scripted_stop_lap", "fired_laps", "skips_expected"),
+    [
+        pytest.param(18, 11, [10], [(11, "free_stop")], id="packaged-prior"),
+        pytest.param(0, 11, [], [(11, "free_stop")], id="full-distance-prior-already-in-lap"),
+        pytest.param(0, 12, [11], [(12, "box_now")], id="full-distance-prior-still-racing"),
+    ],
+)
+def test_brazil_worn_tyres_box_call_timing(
+    tmp_path, reference_laps, scripted_stop_lap, fired_laps, skips_expected
+):
+    trace = yaml.safe_load(TRACE_PATH.read_text(encoding="utf-8"))
+    spec = spec_from_trace(trace, player_pit_lap=scripted_stop_lap)
+    recording = write_packet_stream(
+        tmp_path / "trace.f1bin", race_stream(spec), session_uid=spec.session_uid
+    )
+    scenario = parse_scenario(ROOT / "scenarios" / "brazil-worn-tyres.yaml")
+    worn = tmp_path / "worn.f1bin.zst"
+    derive_recording(recording, worn, [WearScale(scenario.mutations["wear_scale"])])
+    track = yaml.safe_load((DEFAULTS_DIR / "tracks" / "16.yaml").read_text(encoding="utf-8"))
+    db = Database(":memory:")
+    log_path = tmp_path / "decisions.jsonl"
+    with log_path.open("w+", encoding="utf-8") as log:
+        try:
+            engine = build_engine(
+                clock=VirtualClock(),
+                isolated=True,
+                overrides={
+                    "track": {**track, "deg_race_laps": reference_laps},
+                    "thresholds": track["thresholds"],
+                },
+                sinks=[],
+                db=db,
+                decision_log_fp=log,
+            )
+            _, calls = asyncio.run(run_replay(worn, engine))
+        finally:
+            db.close()
+        log.seek(0)
+        decisions = [row for row in map(json.loads, log) if row.get("rule_id") == "box_now"]
+    assert [c.lap for c in calls if c.rule_id == "box_now"] == fired_laps, decisions
+    assert [row["lap"] for row in decisions if row["outcome"] == "fired"] == fired_laps, decisions
+    skips = [row for row in decisions if row.get("suppressed_by") == "in_lap"]
+    assert [(row["lap"], row["inputs"]["pit_plan"]) for row in skips] == skips_expected, decisions
+    assert all(
+        row["outcome"] == "suppressed"
+        and row["call_id"] is None
+        and row["inputs"]["phase"] == "in_lap"
+        for row in skips
+    ), skips

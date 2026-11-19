@@ -35,6 +35,7 @@ def _replay(tmp: Path, spec: RaceSpec) -> list[ReplayTick]:
         sinks=[],
         db=Database(":memory:"),
         decision_log_path=tmp / "decisions.jsonl",
+        overrides={"thresholds": {"race_distance_km": 0}},
     )
     snapshots: list[Snapshot] = []
     original = engine.planner._plans
