@@ -23,6 +23,7 @@ Fields:
 | Field | Purpose |
 |---|---|
 | `when` / `clear_when` | trigger and release predicates — separate values give hysteresis, which is what stops oscillating calls |
+| `suppress_when` | reason-to-predicate map: if `when` matches but a guard blocks the call, log the first matching reason once per lap without queueing it |
 | `priority` | 1 critical, 2 tactical, 3 informational |
 | `cooldown_s`, `max_per_stint`, `min_lap` | rate limiting per rule |
 | `conflict_group` | Keep only queued calls in the group whose current predicate still holds. |
