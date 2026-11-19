@@ -18,21 +18,9 @@ enabled rules for the current session type against the 10 Hz snapshot.
   still_true: "tyre_core_ema_slow.FL > th.core_overheat - 3"   # revalidated at speak time
 ```
 
-Fields:
-
-| Field | Purpose |
-|---|---|
-| `when` / `clear_when` | trigger and release predicates — separate values give hysteresis, which is what stops oscillating calls |
-| `priority` | 1 critical, 2 tactical, 3 informational |
-| `cooldown_s`, `max_per_stint`, `min_lap` | rate limiting per rule |
-| `conflict_group` | Keep only queued calls in the group whose current predicate still holds. |
-| `supersedes` | Drop queued calls for the listed rule ids when this rule arrives. |
-| `contradicts` | Never speak both. Of the two the higher priority speaks, then the higher urgency class, then the newest call. Declared on either rule. |
-| `requires` | packets that must be fresh; the rule is skipped (not fired on stale data) otherwise |
-| `say` | phrasing template, or a list of variants rotated without repeats (first call uses the first) |
-| `escalate`, `repeat_window_s` | `[{after: N, say: [...]}]`: a different pool once the call has triggered N times inside the window; `{repeat}` is the count (ADR 0008) |
-| `still_true` | revalidated immediately before speaking; deliberately looser than `when` |
-| `screen_only` | show on the dashboard without speaking |
+Each field's meaning is commented on `RuleDefModel` in `src/pitwall/config/models.py`, the
+schema every rule file is validated against. Terms such as *call* and *urgency class* are
+in the [glossary](glossary.md).
 
 Predicates are evaluated in a restricted expression environment exposing only the
 snapshot, thresholds (`th`), the active mindset's parameters (`mode`, see

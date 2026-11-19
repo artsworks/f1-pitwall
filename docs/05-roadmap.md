@@ -26,7 +26,7 @@ These items come from the [status](status.md) "Next" list and the open exit crit
 Later options include defend and survive mindsets, a Streamdeck, a spotter, free-form
 voice questions beyond the fixed menu phrases, and an LLM phrasing layer over deterministic
 rule outputs. An optional LLM-assisted debrief could provide coaching analysis and Q&A over
-debrief artifacts and SQLite history, behind an optional API key (`10-angles-not-yet-considered.md`, item 21).
+debrief artifacts and SQLite history, behind an optional API key ([angles not yet considered](https://github.com/artsworks/f1-pitwall/blob/4b9a517/docs/10-angles-not-yet-considered.md), item 21).
 Keep decisions deterministic and delivery natural, never the reverse.
 
 ## Working agreements

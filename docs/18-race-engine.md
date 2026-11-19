@@ -2,7 +2,7 @@
 
 Implements `docs/05-roadmap.md` M3 on top of the M2 pipeline. Governing constraints:
 
-- **Persistence over minimalism** (`docs/01-architecture.md`): every model reads its priors
+- **Persistence over minimalism** (ADR 0011): every model reads its priors
   from SQLite, fits on rows already committed to SQLite, and writes fitted parameters back.
   In-memory state is a cache of the database, never the source of truth.
 - **Two clock domains** (ADR 0002): all model maths uses session time; freshness and

@@ -1,7 +1,7 @@
 # Setup advisor
 
 This proposal develops the "second product" identified in item 9 of
-`10-angles-not-yet-considered.md`: setup advice from stored tyre, wear, and pace history,
+[angles not yet considered](https://github.com/artsworks/f1-pitwall/blob/4b9a517/docs/10-angles-not-yet-considered.md): setup advice from stored tyre, wear, and pace history,
 in three phase-aware modes. **Status: A1 to A5 implemented.**
 Numbered 22 because `17-quali-run-plan.md` uses 17.
 

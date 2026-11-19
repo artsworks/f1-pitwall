@@ -1,7 +1,7 @@
 # ADR 0009: LLM as a gated chooser with rule veto
 
 - **Status:** accepted (2026-09). Supersedes the decision half of ADR 0008's "Why not an
-  LLM" and of `10-angles-not-yet-considered.md` item 20. ADR 0008's phrasing decision
+  LLM" and of [angles not yet considered](https://github.com/artsworks/f1-pitwall/blob/4b9a517/docs/10-angles-not-yet-considered.md) item 20. ADR 0008's phrasing decision
   (variant pools, escalation, seeded shuffle) stands unchanged.
 - **Context:** setup advisor proposal (`22-setup-advisor.md`) and a review of the LLM
   boundary with the project owner
