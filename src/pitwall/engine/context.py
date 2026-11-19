@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -69,3 +70,9 @@ class EngineContext:
     def race_laps(self) -> int:
         kind = session_kind(self.state.session_type)
         return self.state.total_laps if kind == "race" and self.state.total_laps > 0 else 0
+
+    def full_race_laps(self) -> int:
+        length = self.state.track_length_m
+        if length <= 0:
+            return 0
+        return math.ceil(self.th("race_distance_km", 305) * 1000 / length)

@@ -9,8 +9,56 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 - `speech.engine: "sapi"` is removed. Pitwall prints an unknown-engine warning and resolves the engine with `auto` (Piper if its voice is installed, else null). `auto` no longer picks SAPI on Windows, and `speech.voice` is gone.
 - Dashboard v3 is the `/` page, with a new layout for the race, the safety car, qualifying, cool-down and the pit board. The previous dashboard stays at `/v2`.
 - The cool-down payload gains `cool.fuel_need_laps`, the fuel a push lap needs.
+- Short races plan the first stop near half distance on tracks whose track file has degradation values. Sprints and races of 5 laps or fewer plan no stop. Safety-car stops and spin laps no longer break the plan.
 
 <!-- version list -->
+
+## v0.60.1 (2026-11-19)
+
+### Bug Fixes
+
+- **strategy**: Keep stop limit for named plans after damage in short races
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+- **strategy**: Log in-lap box call suppression
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+- **strategy**: Plan short-race stops from race-length scaled track-file deg priors
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+- **strategy**: Raise confirmed pace loss when slow laps worsen
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+- **strategy**: Stop double-counting stack delay in owed safety-car stops
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+### Code Style
+
+- **strategy**: Apply ruff format to pitwindow
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+### Documentation
+
+- **mockups**: Add dashboard redesign mockups
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+### Testing
+
+- **rules**: Set result_status and on-road podium in finish rule test
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
+- **strategy**: Cover short-race radio and stop summaries
+  ([#189](https://github.com/artsworks/f1-pitwall/pull/189),
+  [`80a50ac`](https://github.com/artsworks/f1-pitwall/commit/80a50ac702892e2d66cb1bc355658e0e6b002967))
+
 
 ## v0.60.0 (2026-11-17)
 

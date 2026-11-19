@@ -113,6 +113,7 @@ pit_exit_m: 320.0
 pit_entry_m: 5700.0
 fuel_kg_per_lap: 1.26
 deg_ms_per_lap: {16: 110, 17: 70, 18: 45}       # by actual compound id
+deg_race_laps: 0                                # race laps those values came from; 0 = full distance
 base_pace_ms: 0                                   # 0 = unknown
 thresholds: {energy_over_tolerance_j: 600000}     # optional threshold overrides for this track
 ```
@@ -131,6 +132,14 @@ global default. Non-race stint values are unscoped. Never combine scoped values 
 different race distances. Blend a learned degradation prior below `prior_full_weight`
 laps toward the overlay or default in proportion to its weight. Scale its confidence by
 the same proportion so one steep stint cannot set the plan alone.
+
+Track-file degradation priors scale with race length. The engine multiplies the value by
+the reference laps, then divides by the race laps. The reference is `deg_race_laps`, or the
+full distance when `deg_race_laps` is 0. The full distance is `race_distance_km` divided by
+the track length, rounded up. The scaled value stays at or below `deg_max_ms_per_lap`.
+
+Sprints and races of `plan_no_stop_max_laps` laps or fewer do not scale. The default,
+learned and weekend values never scale.
 
 Names include `deg_ms_per_lap@52L`, `base_ms@13L`, and `fuel_ms_per_lap@52L`. `N` is the
 session's total race laps. Weekend degradation uses earlier fitted practice stints on the

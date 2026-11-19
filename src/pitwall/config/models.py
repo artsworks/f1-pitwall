@@ -361,6 +361,7 @@ class RuleDefModel(BaseModel):
     clear_when: str | None = None
     # Revalidated just before speaking; deliberately looser than `when`.
     still_true: str | None = None
+    suppress_when: dict[str, str] = Field(default_factory=dict)  # log reason -> predicate
     retry_on_suppression: bool = False  # rearm after budget or focus suppression
     cooldown_s: float = 0.0  # min seconds between calls of this rule
     cooldown_group: str = ""  # rules sharing a group share one cooldown clock
@@ -425,6 +426,7 @@ class TrackOverlay(BaseModel):
     pit_entry_m: float = 0.0
     fuel_kg_per_lap: float = 0.0
     deg_ms_per_lap: dict[int, float] = Field(default_factory=dict)  # actual compound -> ms
+    deg_race_laps: int = 0  # race laps the deg values were measured at; 0 = full distance
     base_pace_ms: int = 0  # 0 = unknown
     thresholds: dict[str, float | dict[int, float]] = Field(default_factory=dict)
 

@@ -7,7 +7,9 @@ import pytest
 
 import pitwall.strategy.plans as plan_module
 from pitwall.config.loader import ConfigStore
-from pitwall.model.deg import DegFit, fit_stint
+from pitwall.engine import build_engine
+from pitwall.model.deg import DegFit, fit_stint, laps_of_pace
+from pitwall.state.session import Snapshot
 from pitwall.store.db import LapRow
 from pitwall.strategy.plans import (
     CompoundModel,
@@ -674,3 +676,39 @@ def test_engine_reseeds_plans_only_on_mindset_change(monkeypatch: pytest.MonkeyP
     engine.planner._plans(dataclasses.replace(snap, lap_num=6), fit(100.0), pit)  # type: ignore[arg-type]
     engine.planner._plans(dataclasses.replace(snap, lap_num=7), fit(100.0), pit)  # type: ignore[arg-type]
     assert calls == [False, False, True, False]
+
+
+def test_short_race_plans_first_stop_near_half_distance(tmp_path) -> None:
+    engine = build_engine(
+        isolated=True,
+        decision_log_path=tmp_path / "decisions.jsonl",
+        sinks=[],
+        overrides={"track": {"track_id": 999, "deg_ms_per_lap": {M: 80.0}}},
+    )
+    engine.state.session_type = 15
+    engine.state.total_laps = 15
+    engine.state.track_length_m = 5278.0
+    prior = engine.model._deg_prior(999, M, engine.store.current())  # noqa: SLF001
+    assert prior.deg_ms_per_lap == pytest.approx(80 * 58 / 15)
+    engine.ctx.deg_fit = prior
+    engine.ctx.fresh_prior = prior
+    pace_laps = laps_of_pace(prior, 0, 0.0, cliff_ms=1500, wear_cliff_pct=70, wear_per_lap=0.0)
+    snap = Snapshot(
+        now=1.0,
+        session_kind="race",
+        phase="racing",
+        race_phase="racing",
+        lap_num=1,
+        laps_remaining=15,
+        tyre_visual=M,
+        tyre_age_laps=0,
+        laps_of_pace=pace_laps,
+        pit_loss_s=21.0,
+        pit_loss_source="session",
+        _ages={"lap_data": 0.1, "car_status": 0.1},
+    )
+
+    planned = engine.planner._plan(snap)
+
+    assert 6 <= planned.plan_target_lap <= 9
+    assert planned.plan_window_end - planned.plan_window_start <= 3

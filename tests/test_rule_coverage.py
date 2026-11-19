@@ -46,7 +46,6 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "penalty_covered",
         "pit_exit_traffic",
         "plan_off",  # replay scenario unresolved: the post-stop plan switched directly to no-stop
-        "plan_announce_no_stop",
         "plan_box",
         "plan_box_safe",
         "plan_cool",

@@ -39,12 +39,13 @@ def _replay(
     tmp.mkdir(exist_ok=True)
     path = write_packet_stream(tmp / "race.f1bin", race_stream(spec))
     log = tmp / "decisions.jsonl"
+    thresholds = {"race_distance_km": 0, **(overrides or {}).get("thresholds", {})}
     engine = build_engine(
         clock=VirtualClock(),
         sinks=[],
         db=Database(":memory:"),
         decision_log_path=log,
-        overrides=overrides,
+        overrides={**(overrides or {}), "thresholds": thresholds},
     )
     _, calls = asyncio.run(run_replay(path, engine, None))
     engine.dispatcher.log.flush()

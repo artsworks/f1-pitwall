@@ -524,6 +524,26 @@ class Engine:
         if self.rule_engine is not None:
             result = self.rule_engine.evaluate(snapshot)
             for suppressed in result.suppressed:
+                if suppressed.inputs is not None:
+                    rule = suppressed.rule.defn
+                    self.ctx.dispatcher.log.write(
+                        {
+                            "t": now,
+                            "session_time": snapshot.session_time,
+                            "lap": snapshot.lap_num,
+                            "lap_distance": snapshot.lap_distance,
+                            "call_id": None,
+                            "rule_id": rule.id,
+                            "priority": rule.priority,
+                            "urgency": rule.urgency_class(),
+                            "outcome": "suppressed",
+                            "suppressed_by": suppressed.reason,
+                            "inputs": suppressed.inputs,
+                            "active_plan": snapshot.active_plan,
+                            "on_plan": snapshot.on_plan if snapshot.active_plan else None,
+                        }
+                    )
+                    continue
                 if suppressed.reason not in {"expr_error", "clear_error"}:
                     continue
                 key = (suppressed.rule.id, suppressed.reason)

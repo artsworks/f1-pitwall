@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pitwall redesign, round 1: icon and separation language</title>
+<style>
+:root{--bg:#0a0a0c;--panel:#121216;--panel2:#191920;--line:#2a2a30;--fg:#ececec;--dim:#8a8a92;--faint:#4a4a52;
+  --ok:#37e07a;--warn:#ffc233;--crit:#ff4d4d;--cold:#5cc8ff;--info:#b8b8ff;
+  --font:"Cascadia Mono","Consolas","JetBrains Mono",ui-monospace,monospace;font-size:clamp(14px,.9vw,24px)}
+*{box-sizing:border-box}
+body{margin:0;padding:1.5rem 2rem 4rem;background:var(--bg);color:var(--fg);font-family:var(--font);font-variant-numeric:tabular-nums}
+h1{font-size:1.5rem;margin:0 0 .3rem}
+h2{font-size:1.2rem;margin:2.6rem 0 .3rem;color:var(--warn)}
+p.note{color:var(--dim);margin:.2rem 0 1rem;max-width:70rem;font-size:.95rem;line-height:1.45}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6rem;align-items:start}
+.opt{border:1px dashed var(--faint);border-radius:.5rem;padding:2.2rem 1rem 1rem;position:relative}
+.opt>.tag{position:absolute;top:.5rem;left:.8rem;font-weight:700;color:var(--warn)}
+.opt>.tag small{color:var(--dim);font-weight:400;margin-left:.6rem}
+.i{width:1.5em;height:1.5em;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.35em;flex:none}
+.i.s{width:1.1em;height:1.1em;vertical-align:-.2em}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.crit{color:var(--crit)}.cold{color:var(--cold)}.dim{color:var(--dim)}
+.big{font-size:2.2rem;font-weight:700;line-height:1}
+.mid{font-size:1.5rem;font-weight:700}
+.tagw{font-size:.8rem;letter-spacing:.08em;color:var(--dim);margin-left:.4rem}
+.cmp{display:inline-block;min-width:1.5em;text-align:center;border-radius:50%;border:.16em solid;font-weight:700;font-size:.9em;line-height:1.3}
+.cmp.M{color:#ffd23c}.cmp.H{color:#f2f2f2}.cmp.S{color:#ff4d4d}.cmp.I{color:#37e07a}
+.row{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.sp{flex:1}
+
+/* before */
+.before{display:grid;grid-template-columns:1fr 1fr;gap:1.6rem}
+.before pre{margin:0;background:var(--panel);border:1px solid var(--line);padding:1rem;color:var(--dim);font:inherit;font-size:.95rem;white-space:pre-wrap;line-height:1.5}
+
+/* decision 1 */
+.d1 .blk{background:var(--panel);border:1px solid var(--line);padding:.8rem 1rem;margin-bottom:.6rem}
+.d1 .pair{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.d1 .pair .blk{margin-bottom:.6rem}
+.wx3{display:flex;gap:1.2rem;align-items:flex-end}
+.wx3>div{text-align:center}
+.wx3 .i{width:2.2em;height:2.2em}
+.wx3 small{display:block;color:var(--dim);font-size:.75rem}
+.secs{display:flex;gap:.9rem;font-size:1.05rem}
+/* gauge variants (option C) */
+.zero{position:relative;height:1.1rem;background:linear-gradient(90deg,rgba(255,77,77,.25) 50%,rgba(55,224,122,.2) 50%);border-radius:.2rem;flex:1;min-width:6rem}
+.zero::before{content:"";position:absolute;left:50%;top:-.25rem;bottom:-.25rem;width:2px;background:var(--fg)}
+.zero i{position:absolute;top:-.3rem;bottom:-.3rem;width:.45rem;border-radius:.2rem;background:var(--ok);left:64%}
+.cell{position:relative;width:5.6rem;height:2.4rem;border:.18rem solid var(--fg);border-radius:.35rem;flex:none}
+.cell::after{content:"";position:absolute;right:-.55rem;top:.55rem;width:.3rem;height:.9rem;background:var(--fg);border-radius:0 .15rem .15rem 0}
+.cell i{position:absolute;inset:.15rem;right:auto;width:62%;background:var(--warn);border-radius:.15rem}
+.cell b{position:absolute;inset:0;display:grid;place-items:center;color:#000;mix-blend-mode:normal;font-size:1.1rem;text-shadow:0 0 3px var(--warn)}
+.rain{display:flex;gap:.5rem;align-items:flex-end;height:3.4rem}
+.rain>div{width:3.2rem;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+.rain u{display:block;width:100%;background:var(--cold);opacity:.8;border-radius:.15rem .15rem 0 0}
+.rain .i{margin-bottom:.15rem}
+.rain .mk{position:absolute;top:-.2rem;right:-.5rem}
+.sbar{display:flex;gap:.2rem;flex:1;min-width:8rem}
+.sbar span{flex:1;text-align:center;padding:.15rem 0;border-radius:.2rem;color:#000;font-weight:700;font-size:.95rem}
+.sbar .g{background:var(--ok)}.sbar .a{background:var(--warn)}
+.car{width:3.4rem;height:5.4rem;flex:none}
+.car *{fill:var(--faint);stroke:none}
+.car .hit1{fill:var(--warn)}.car .hit2{fill:var(--cold)}
+
+/* decision 2: one template, three skins */
+.sec{display:grid;grid-template-columns:2.4rem 1fr;align-items:start}
+.sec .ic{padding-top:.1rem}
+.sec .bd{display:flex;flex-direction:column;gap:.3rem}
+.sec .bd .alt{color:var(--dim);font-size:.95rem}
+.gap{font-size:1.5rem;font-weight:700}
+.railg{position:relative;height:.35rem;background:var(--line);border-radius:.2rem;flex:1;min-width:5rem}
+.railg i{position:absolute;left:27%;top:-.25rem;width:.5rem;height:.85rem;background:var(--ok);border-radius:.15rem}
+.ring{width:1.5em;height:1.5em;border-radius:50%;background:conic-gradient(var(--ok) 62%,var(--line) 0);display:inline-block;vertical-align:-.35em;-webkit-mask:radial-gradient(circle,transparent 42%,#000 44%);mask:radial-gradient(circle,transparent 42%,#000 44%)}
+
+/* A rails: no boxes, icon gutter, hairlines inside a domain, heavy rule between domains */
+.sepA .dom{border-top:.2rem solid var(--faint);padding-top:.2rem;margin-top:1rem}
+.sepA .dom:first-child{margin-top:0}
+.sepA .sec{padding:.6rem 0 .6rem .6rem;border-top:1px solid var(--line)}
+.sepA .dom .sec:first-child{border-top:none}
+.sepA .sec .ic{color:var(--dim)}
+.sepA .act .sec{border-left:.35rem solid var(--warn);background:rgba(255,194,51,.08);margin-bottom:.25rem;border-top:none}
+.sepA .act .sec .ic{color:var(--warn)}
+
+/* B bands: one tinted band per domain, vertical domain name on the left edge */
+.sepB .dom{display:grid;grid-template-columns:1.7rem 1fr;background:var(--panel);margin-bottom:.35rem}
+.sepB .dom:nth-child(even){background:var(--panel2)}
+.sepB .dom::before{content:attr(data-name);grid-row:1/span 6;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;
+  font-size:.75rem;letter-spacing:.25em;color:var(--dim);background:rgba(255,255,255,.05);padding:.3rem 0}
+.sepB .sec{grid-column:2;padding:.6rem .8rem;border-top:1px solid var(--line)}
+.sepB .dom .sec:first-child{border-top:none}
+.sepB .sec .ic{color:var(--dim)}
+.sepB .act::before{background:var(--warn);color:#000;font-weight:700}
+.sepB .act{outline:1px solid var(--warn)}
+
+/* C islands: one rounded card per section, domain caption above, action cards filled */
+.sepC{display:flex;flex-direction:column;gap:.55rem}
+.sepC .dom{display:contents}
+.sepC .dom::before{content:attr(data-name);font-size:.75rem;letter-spacing:.25em;color:var(--dim);margin-top:.5rem}
+.sepC .sec{background:var(--panel);border:1px solid var(--line);border-radius:.7rem;padding:.7rem .9rem}
+.sepC .sec .ic{color:var(--dim)}
+.sepC .act .sec{background:var(--warn);color:#000;border:none}
+.sepC .act .sec .ic,.sepC .act .sec .dim,.sepC .act .sec .alt,.sepC .act .sec .ok{color:#000}
+.sepC .act .sec .cmp{color:#000}
+
+/* vocabulary */
+.voc{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem 1.6rem}
+.voc div{display:grid;grid-template-columns:2.2rem 1fr;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--line)}
+.voc small{color:var(--dim);font-size:.85rem}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fuel" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/></symbol>
+  <symbol id="batt" viewBox="0 0 24 24"><path d="M2 8h17v8H2zM19 10.500h3v3h-3M11 9.500 8 12.500h4l-3 3"/></symbol>
+  <symbol id="save" viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3 4"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></symbol>
+  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/></symbol>
+  <symbol id="cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 5.500 5.500 0 0 0-10.600 1.500A3.300 3.300 0 0 0 7 18z"/></symbol>
+  <symbol id="rain1" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.500 5.500 0 0 0-10.600 1.500A3.300 3.300 0 0 0 7 14zM9 17l-1 3M15 17l-1 3"/></symbol>
+  <symbol id="rain2" viewBox="0 0 24 24"><path d="M7 14h10a4 4 0 0 0 0-8 5.500 5.500 0 0 0-10.600 1.500A3.300 3.300 0 0 0 7 14zM8 17l-1 4M12 17l-1 4M16 17l-1 4"/></symbol>
+  <symbol id="lap" viewBox="0 0 24 24"><circle cx="12" cy="13.500" r="7.500"/><path d="M12 9.500v4l2.500 2M10 2.500h4M12 2.500V6"/></symbol>
+  <symbol id="dmg" viewBox="0 0 24 24"><path d="M14.500 5.500a4.500 4.500 0 0 0 5.800 5.800L11 20.500a2.300 2.300 0 0 1-3.300-3.300l9.300-9.300"/></symbol>
+  <symbol id="wing" viewBox="0 0 24 24"><path d="M2 9h20v3H2zM4 12v5M20 12v5M10 12l1 6h2l1-6"/></symbol>
+  <symbol id="floor" viewBox="0 0 24 24"><path d="M8 3h8l2 18H6zM9 9h6M8.500 15h7"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.500v.300"/></symbol>
+  <symbol id="flag" viewBox="0 0 24 24"><path d="M5 21V4h13l-3 4 3 4H5"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M4 8v13h16V8M12 2v11M8 9l4 4 4-4"/></symbol>
+  <symbol id="exit" viewBox="0 0 24 24"><path d="M3 12h12M11 7l5 5-5 5M20 4v16"/></symbol>
+  <symbol id="reply" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-6 4z"/></symbol>
+  <symbol id="attack" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></symbol>
+  <symbol id="defend" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"/></symbol>
+  <symbol id="free" viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/></symbol>
+  <symbol id="plan" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></symbol>
+  <symbol id="uc" viewBox="0 0 24 24"><path d="M4 5v6a6 6 0 0 0 6 6h9M15 13l4 4-4 4"/></symbol>
+  <symbol id="oc" viewBox="0 0 24 24"><path d="M4 19v-6a6 6 0 0 1 6-6h9M15 3l4 4-4 4"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M8 3h8l5 5v8l-5 5H8l-5-5V8zM12 8v8M8 12h8"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.500v.300"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M4 12.500l5 5L20 6.500"/></symbol>
+  <symbol id="no" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="win" viewBox="0 0 24 24"><path d="M8 4H4v16h4M16 4h4v16h-4M9 12h6"/></symbol>
+</svg>
+
+<h1>Round 1: icon and separation language</h1>
+<p class="note">Two decisions. Pick one letter for each. Both samples use the same values so you compare only the style. Sizes match the live dashboard on a 1920 px wide window. The left tyre section, banner and status bar are not part of this round.</p>
+
+<h2>Today, for reference</h2>
+<div class="before">
+<pre>FUEL AT FLAG   +0.4   laps SPARE · game   1.82 kg/lap
+BATT   62%   OVER · SAVE   −0.3 MJ/lap · floor 4L
+WEATHER   NOW 10% OVERCAST   IN 10 55% LIGHT RAIN   IN 30 80% HEAVY RAIN   INTER in 9 min ~L28
+LAST LAPS   base 1:32.6   L23 1:32.418 vs L22   Δ −0.214s base −0.182s   S1 −0.102s S2 +0.031s S3 −0.143s
+DAMAGE   FW L 12%   FLOOR 6%</pre>
+<pre>RACE · AUTO   safety › box › reply › battle › info
+EXECUTION   BOX NOW · PLAN A · FIT H   window L26–28 · costs 22 s · PIT EXIT ✓ CLEAN
+REPLY   TYRES   Fronts at 38 percent, about 9 laps left
+▶ ATTACKING · 3 laps   ▲ AHEAD P4 NORRIS M 12L +0.8   ▶ closing 0.3 s/lap   last −0.2s faster   PASS 62%
+STRATEGY   PLAN A M → H window L26–28 ✓ ON PLAN   PLAN B M → H → S 2 stops · +3.1 s   PIT EXIT ✓ CLEAN   UC +0.8 s · OC −0.4 s</pre>
+</div>
+
+<h2>Decision 1: how much does the icon replace?</h2>
+<p class="note">A removes every word and lets the icon shape and colour carry the state. B keeps one short tag only where a state is not normal. C turns the icon into the gauge, so the shape itself shows the amount.</p>
+<div class="cols d1">
+
+  <div class="opt"><span class="tag">A<small>icon + number, no words</small></span>
+    <div class="pair">
+      <div class="blk row"><svg class="i ok"><use href="#fuel"/></svg><span class="big ok">+0.4</span></div>
+      <div class="blk row"><svg class="i"><use href="#batt"/></svg><span class="big">62</span><svg class="i warn"><use href="#save"/></svg><span class="warn mid">4L</span></div>
+    </div>
+    <div class="blk row">
+      <div class="wx3">
+        <div><svg class="i"><use href="#cloud"/></svg><div>10</div></div>
+        <div><svg class="i cold"><use href="#rain1"/></svg><div class="cold">55</div></div>
+        <div><svg class="i cold"><use href="#rain2"/></svg><div class="cold">80</div></div>
+      </div>
+      <span class="sp"></span><span class="cmp I">I</span><span class="mid">L28</span>
+    </div>
+    <div class="blk">
+      <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="mid">1:32.418</span><span class="sp"></span><span class="mid ok">−0.214</span></div>
+      <div class="secs" style="margin:.4rem 0 0 2.2rem"><span class="ok">−.102</span><span class="warn">+.031</span><span class="ok">−.143</span></div>
+    </div>
+    <div class="blk row"><svg class="i warn"><use href="#wing"/></svg><span class="warn mid">12</span><svg class="i dim"><use href="#floor"/></svg><span class="mid">6</span></div>
+  </div>
+
+  <div class="opt"><span class="tag">B<small>icon + number + tag when not normal</small></span>
+    <div class="pair">
+      <div class="blk"><div class="row"><svg class="i ok"><use href="#fuel"/></svg><span class="big ok">+0.4</span></div><div class="tagw" style="margin-left:2.2rem">LAPS</div></div>
+      <div class="blk"><div class="row"><svg class="i"><use href="#batt"/></svg><span class="big">62%</span></div><div class="row warn" style="margin-top:.2rem"><svg class="i s"><use href="#save"/></svg>SAVE<span class="tagw">4L LEFT</span></div></div>
+    </div>
+    <div class="blk">
+      <div class="row">
+        <div class="wx3">
+          <div><small>NOW</small><svg class="i"><use href="#cloud"/></svg><div>10%</div></div>
+          <div><small>10m</small><svg class="i cold"><use href="#rain1"/></svg><div class="cold">55%</div></div>
+          <div><small>30m</small><svg class="i cold"><use href="#rain2"/></svg><div class="cold">80%</div></div>
+        </div>
+        <span class="sp"></span><span class="cmp I">I</span><span class="mid">L28</span><span class="tagw">9 MIN</span>
+      </div>
+    </div>
+    <div class="blk">
+      <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="mid">1:32.418</span><span class="tagw">L23</span><span class="sp"></span><span class="mid ok">−0.214</span></div>
+      <div class="secs" style="margin:.4rem 0 0 2.2rem"><span class="dim">S1</span><span class="ok">−.102</span><span class="dim">S2</span><span class="warn">+.031</span><span class="dim">S3</span><span class="ok">−.143</span></div>
+    </div>
+    <div class="blk row"><svg class="i warn"><use href="#wing"/></svg><span class="warn mid">12%</span><span class="tagw">FW L</span><svg class="i dim"><use href="#floor"/></svg><span class="mid">6%</span><span class="tagw">FLOOR</span></div>
+  </div>
+
+  <div class="opt"><span class="tag">C<small>the icon is the gauge</small></span>
+    <div class="pair">
+      <div class="blk row"><svg class="i ok"><use href="#fuel"/></svg><div class="zero"><i></i></div><span class="mid ok">+0.4</span></div>
+      <div class="blk row"><div class="cell"><i></i><b>62</b></div><svg class="i warn" style="margin-left:.5rem"><use href="#save"/></svg><span class="warn mid">4L</span></div>
+    </div>
+    <div class="blk row">
+      <div class="rain">
+        <div><svg class="i"><use href="#cloud"/></svg><u style="height:10%"></u></div>
+        <div><svg class="i cold"><use href="#rain1"/></svg><u style="height:42%"></u><span class="cmp I mk">I</span></div>
+        <div><svg class="i cold"><use href="#rain2"/></svg><u style="height:62%"></u></div>
+      </div>
+      <span class="sp"></span><span class="cmp I">I</span><span class="mid">L28</span>
+    </div>
+    <div class="blk">
+      <div class="row"><svg class="i dim"><use href="#lap"/></svg><span class="mid">1:32.418</span><span class="sp"></span><span class="mid ok">−0.214</span></div>
+      <div class="row" style="margin:.4rem 0 0 2.2rem"><div class="sbar"><span class="g">−.10</span><span class="a">+.03</span><span class="g">−.14</span></div></div>
+    </div>
+    <div class="blk row">
+      <svg class="car" viewBox="0 0 34 54"><rect class="hit1" x="1" y="2" width="15" height="5" rx="1"/><rect x="18" y="2" width="15" height="5" rx="1"/><rect x="14" y="7" width="6" height="12"/><rect class="hit2" x="9" y="19" width="16" height="22" rx="3"/><rect x="5" y="46" width="24" height="6" rx="1"/><rect x="14" y="41" width="6" height="5"/></svg>
+      <span class="warn mid">12</span><span class="cold mid">6</span>
+    </div>
+  </div>
+</div>
+
+<h2>Decision 2: how are sections separated?</h2>
+<p class="note">The stack mixes your examples from both columns so you can judge the separation: execution and reply, battle and strategy, weather, last lap, damage. Sections that belong together form a group (ACT, RACE, TRACK, PACE, CAR). An action section must look different from a data section in every option.</p>
+<div class="cols">
+  <div class="opt"><span class="tag">A<small>rails: no boxes, icon gutter, heavy rule between groups</small></span><div class="sepA" data-fill="stack"></div></div>
+  <div class="opt"><span class="tag">B<small>bands: tinted band per group, group name on the edge</small></span><div class="sepB" data-fill="stack"></div></div>
+  <div class="opt"><span class="tag">C<small>islands: one card per section, action cards filled</small></span><div class="sepC" data-fill="stack"></div></div>
+</div>
+
+<template id="stack">
+  <div class="dom act" data-name="ACT">
+    <div class="sec"><div class="ic"><svg class="i"><use href="#box"/></svg></div><div class="bd">
+      <div class="row"><span class="big">BOX</span><span class="cmp H">H</span><span class="sp"></span><svg class="i s"><use href="#win"/></svg><span class="mid">26–28</span></div>
+      <div class="row alt"><svg class="i s"><use href="#lap"/></svg>22s<svg class="i s"><use href="#exit"/></svg><svg class="i s ok"><use href="#ok"/></svg></div>
+    </div></div>
+    <div class="sec"><div class="ic"><svg class="i"><use href="#reply"/></svg></div><div class="bd">
+      <div class="row"><span class="mid">FRONTS 38%</span><span class="sp"></span><span class="mid">9L</span></div>
+    </div></div>
+  </div>
+  <div class="dom" data-name="RACE">
+    <div class="sec"><div class="ic"><svg class="i ok"><use href="#attack"/></svg></div><div class="bd">
+      <div class="row"><svg class="i s"><use href="#up"/></svg><span class="mid">P4 NOR</span><span class="cmp M">M</span><span class="dim">12L</span><span class="sp"></span><span class="gap">+0.8</span></div>
+      <div class="row"><div class="railg"><i></i></div><span class="ok"><svg class="i s"><use href="#close"/></svg>0.3</span><span><span class="ring"></span> 62</span></div>
+    </div></div>
+    <div class="sec"><div class="ic"><svg class="i"><use href="#plan"/></svg></div><div class="bd">
+      <div class="row"><b>A</b><span class="cmp M">M</span><span class="dim">›</span><span class="cmp H">H</span><span class="sp"></span><svg class="i s"><use href="#win"/></svg>26–28<svg class="i s ok"><use href="#ok"/></svg></div>
+      <div class="row alt"><b>B</b><span class="cmp M">M</span>›<span class="cmp H">H</span>›<span class="cmp S">S</span><span class="sp"></span>+3.1</div>
+      <div class="row alt"><svg class="i s"><use href="#exit"/></svg><svg class="i s ok"><use href="#ok"/></svg><span class="sp"></span><svg class="i s"><use href="#uc"/></svg>+0.8<svg class="i s"><use href="#oc"/></svg>−0.4</div>
+    </div></div>
+  </div>
+  <div class="dom" data-name="TRACK">
+    <div class="sec"><div class="ic"><svg class="i"><use href="#cloud"/></svg></div><div class="bd">
+      <div class="row"><span>10</span><svg class="i cold"><use href="#rain1"/></svg><span class="cold">55</span><svg class="i cold"><use href="#rain2"/></svg><span class="cold">80</span><span class="sp"></span><span class="cmp I">I</span><span class="mid">L28</span></div>
+    </div></div>
+  </div>
+  <div class="dom" data-name="PACE">
+    <div class="sec"><div class="ic"><svg class="i"><use href="#lap"/></svg></div><div class="bd">
+      <div class="row"><span class="mid">1:32.418</span><span class="sp"></span><span class="mid ok">−0.214</span></div>
+      <div class="row alt"><span class="ok">−.102</span><span class="warn">+.031</span><span class="ok">−.143</span></div>
+    </div></div>
+  </div>
+  <div class="dom" data-name="CAR">
+    <div class="sec"><div class="ic"><svg class="i"><use href="#dmg"/></svg></div><div class="bd">
+      <div class="row"><svg class="i warn"><use href="#wing"/></svg><span class="warn mid">12</span><svg class="i dim"><use href="#floor"/></svg><span class="mid">6</span></div>
+    </div></div>
+  </div>
+</template>
+
+<h2>Proposed icon vocabulary</h2>
+<p class="note">Each icon and the words it replaces. Tell me which icons you cannot read at a glance and I will redraw them.</p>
+<div class="voc">
+  <div><svg class="i"><use href="#fuel"/></svg><small>FUEL AT FLAG, laps spare or short</small></div>
+  <div><svg class="i"><use href="#batt"/></svg><small>BATT</small></div>
+  <div><svg class="i"><use href="#save"/></svg><small>OVER · SAVE</small></div>
+  <div><svg class="i"><use href="#plug"/></svg><small>UNDER · CHARGING</small></div>
+  <div><svg class="i"><use href="#bolt"/></svg><small>SPEND · ATTACK OK</small></div>
+  <div><svg class="i"><use href="#cloud"/></svg><small>WEATHER, sky words</small></div>
+  <div><svg class="i"><use href="#lap"/></svg><small>LAST LAPS, lap time, costs N s</small></div>
+  <div><svg class="i"><use href="#dmg"/></svg><small>DAMAGE</small></div>
+  <div><svg class="i"><use href="#wing"/></svg><small>front wing, rear wing</small></div>
+  <div><svg class="i"><use href="#floor"/></svg><small>floor, diffuser</small></div>
+  <div><svg class="i"><use href="#warn"/></svg><small>SAFETY: SC, VSC</small></div>
+  <div><svg class="i"><use href="#flag"/></svg><small>red flag, blue flag</small></div>
+  <div><svg class="i"><use href="#box"/></svg><small>EXECUTION, BOX NOW, IN PIT LANE</small></div>
+  <div><svg class="i"><use href="#win"/></svg><small>window L26–28</small></div>
+  <div><svg class="i"><use href="#exit"/></svg><small>PIT EXIT clean or traffic</small></div>
+  <div><svg class="i"><use href="#reply"/></svg><small>REPLY</small></div>
+  <div><svg class="i"><use href="#attack"/></svg><small>CATCHING, ATTACKING</small></div>
+  <div><svg class="i"><use href="#defend"/></svg><small>DEFENDING, UNDER THREAT</small></div>
+  <div><svg class="i"><use href="#free"/></svg><small>FREE AIR, MANAGING</small></div>
+  <div><svg class="i"><use href="#close"/></svg><small>closing N s/lap</small></div>
+  <div><span class="ring"></span><small>PASS or HOLD %</small></div>
+  <div><svg class="i"><use href="#plan"/></svg><small>STRATEGY, PLAN A/B/C</small></div>
+  <div><svg class="i"><use href="#uc"/></svg><small>undercut</small></div>
+  <div><svg class="i"><use href="#oc"/></svg><small>overcut</small></div>
+  <div><svg class="i"><use href="#ok"/></svg><small>ON PLAN, CLEAN</small></div>
+  <div><svg class="i"><use href="#no"/></svg><small>OFF PLAN, TRAFFIC</small></div>
+  <div><svg class="i"><use href="#pen"/></svg><small>penalty +N s</small></div>
+  <div><svg class="i"><use href="#info"/></svg><small>INFO, rival pitted</small></div>
+</div>
+
+<script>
+document.querySelectorAll("[data-fill]").forEach(function (n) {
+  n.appendChild(document.getElementById(n.dataset.fill).content.cloneNode(true));
+});
+</script>
+</body>
+</html>
