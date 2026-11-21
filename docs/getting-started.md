@@ -148,7 +148,7 @@ repeat. At startup, Pitwall renders the startup lines with the selected engine b
 speaks them.
 
 `voice warm` renders phrases in parallel. `speech.warm_workers` sets how many at once.
-Unset, it uses half the logical cores, and at most 4 for OmniVoice.
+Unset, it uses half the logical cores, and at most 4 for OmniVoice and Kokoro.
 While it runs, `voice warm` prints its progress and an estimate of the time left.
 
 Pick the default with `speech.piper_voice`. Set speed with `speech.piper_speed`, default
@@ -211,6 +211,8 @@ Pick a voice with `speech.kokoro_voice`, default `af_heart`. The voice list is a
 Set `speech.kokoro_device` to `cpu` to force the CPU. The default `auto` uses the GPU when it is available. To switch back to Piper, set `speech.engine` to `piper`.
 
 On the GPU, Kokoro limits its memory pool to 1024 MB and reaches its full size at startup. If a GPU render fails, Kokoro renders that line on the CPU. After three failed GPU renders in a row, Kokoro stays on the CPU. CPU renders use 4 threads.
+
+On the GPU, `voice warm` renders 128 or more new phrases in worker processes. Each worker loads its own Kokoro session on the GPU. Each worker uses about 1.2 GB of GPU memory. Lower `speech.warm_workers` if the GPU has little memory.
 
 If a render fails, or takes longer than `speech.render_timeout_s`, Pitwall plays the line with Piper when a Piper voice is installed. Otherwise it drops the line.
 

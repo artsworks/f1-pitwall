@@ -18,7 +18,15 @@ from typing import Any
 import numpy as np
 
 from pitwall.audio.piper_tts import lazy_piper_tones
-from pitwall.audio.wav_speaker import Player, WavSpeaker, default_player, radio_blip, to_wav
+from pitwall.audio.wav_speaker import (
+    Player,
+    WarmProcess,
+    WavSpeaker,
+    default_player,
+    default_warm_workers,
+    radio_blip,
+    to_wav,
+)
 from pitwall.config.models import SpeechSettings
 from pitwall.config.paths import storage_path
 
@@ -27,6 +35,7 @@ KOKORO_VOICES = "voices-v1.0.bin"
 KOKORO_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1"
 GPU_MEM_LIMIT_MB = 1024
 GPU_FAILURES_MAX = 3
+WARM_MIN_BATCH = 128
 CPU_THREADS = 4
 PRESIZE_TEXT = (
     "Box at the end of this lap for hards, we go to the end, expect to come out in clean air "
@@ -63,6 +72,9 @@ class KokoroRenderer:
         cache_identity: str,
         cpu_factory: Callable[[], Any] | None = None,
         provisional_source: Callable[[str, int], tuple[bytes, float] | None] | None = None,
+        *,
+        warm_workers: int | None = None,
+        warm_process: WarmProcess | None = None,
     ) -> None:
         self._kokoro = kokoro
         self._settings = settings
@@ -73,6 +85,11 @@ class KokoroRenderer:
         self._cpu_lock = threading.Lock()
         self._provisional_source = provisional_source
         self._gpu_failures = 0
+        self.warm_parallelism = "process" if warm_process is not None else None
+        self.warm_workers = (
+            warm_workers if warm_workers is not None else default_warm_workers(cap=4)
+        )
+        self.warm_process = warm_process
 
     def provisional(self, text: str, priority: int) -> tuple[bytes, float] | None:
         if self._provisional_source is None:
@@ -123,7 +140,24 @@ class KokoroRenderer:
         return to_wav(samples, sample_rate), len(samples) / sample_rate
 
 
-def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) -> WavSpeaker:
+_WARM_RENDERER: KokoroRenderer | None = None
+
+
+def _warm_init(settings: SpeechSettings) -> None:
+    """ProcessPoolExecutor initializer: load one Kokoro session per worker."""
+    global _WARM_RENDERER
+    _WARM_RENDERER = _build_renderer(settings, warm=False)
+
+
+def _warm_render(task: tuple[str, int]) -> tuple[bytes, float]:
+    text, priority = task
+    renderer = _WARM_RENDERER
+    if renderer is None:
+        raise RuntimeError("kokoro warm worker has no loaded session")
+    return renderer.render(text, priority, background=True)
+
+
+def _build_renderer(settings: SpeechSettings, *, warm: bool = True) -> KokoroRenderer:
     directory = kokoro_dir(settings)
     model = directory / KOKORO_MODEL
     voices = directory / KOKORO_VOICES
@@ -209,10 +243,21 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
         identity,
         cpu_factory=build_cpu_kokoro if on_gpu else None,
         provisional_source=lazy_piper_tones(settings),
+        warm_workers=settings.warm_workers,
+        warm_process=(
+            WarmProcess(_warm_init, (settings,), _warm_render, min_batch=WARM_MIN_BATCH)
+            if on_gpu and warm
+            else None
+        ),
     )
     renderer.render("Radio check.", 2)
     if on_gpu:
         renderer.render(PRESIZE_TEXT, 2)
+    return renderer
+
+
+def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) -> WavSpeaker:
+    renderer = _build_renderer(settings)
     return WavSpeaker(
         renderer,
         player or default_player(),
