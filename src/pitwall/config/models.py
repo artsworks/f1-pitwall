@@ -292,6 +292,8 @@ class SpeechSettings(BaseModel):
     # How long a cold (uncached) line waits for OmniVoice WAV before Piper provisional
     # audio plays. 0 restores instant Piper.
     omnivoice_wait_s: float = 5.0
+    # max wait for one primary render before provisional audio or a drop; None or 0 = no limit
+    render_timeout_s: float | None = Field(default=4.0, ge=0)
     kokoro_voice: str = "af_heart"
     kokoro_lang: str = "en-us"
     kokoro_speed: float = 1.0

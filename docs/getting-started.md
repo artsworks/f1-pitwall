@@ -210,7 +210,9 @@ Pick a voice with `speech.kokoro_voice`, default `af_heart`. The voice list is a
 
 Set `speech.kokoro_device` to `cpu` to force the CPU. The default `auto` uses the GPU when it is available. To switch back to Piper, set `speech.engine` to `piper`.
 
-On the GPU, Kokoro limits its memory pool to 1024 MB and reaches its full size at startup. If a GPU render fails, Kokoro renders that line on the CPU. If the CPU render also fails, Pitwall drops the line. CPU renders use 4 threads.
+On the GPU, Kokoro limits its memory pool to 1024 MB and reaches its full size at startup. If a GPU render fails, Kokoro renders that line on the CPU. After three failed GPU renders in a row, Kokoro stays on the CPU. CPU renders use 4 threads.
+
+If a render fails, or takes longer than `speech.render_timeout_s`, Pitwall plays the line with Piper when a Piper voice is installed. Otherwise it drops the line.
 
 ## Phone radio over HTTPS
 

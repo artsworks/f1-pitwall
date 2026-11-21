@@ -12,13 +12,15 @@ import numpy as np
 import pytest
 
 from pitwall.audio.kokoro_tts import (
+    GPU_FAILURES_MAX,
     GPU_MEM_LIMIT_MB,
     KOKORO_MODEL,
     KOKORO_VOICES,
     PRESIZE_TEXT,
+    KokoroRenderer,
     make_kokoro_speaker,
 )
-from pitwall.audio.piper_tts import voice_path
+from pitwall.audio.piper_tts import lazy_piper_tones, voice_path
 from pitwall.audio.speaker import ENGINES, EngineSpec, auto_engine, make_speaker
 from pitwall.audio.wav_speaker import WavSpeaker, radio_blip, to_wav
 from pitwall.cli import main
@@ -371,3 +373,35 @@ def test_render_failure_after_startup_drops_call(kokoro_env: SimpleNamespace) ->
     speaker.speak(make_call("bad-call", text="bad"))
     assert dropped.wait(2.0)
     speaker.close()
+
+
+def test_repeated_gpu_failures_stay_on_cpu(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+    for _ in range(GPU_FAILURES_MAX):
+        speaker._renderer.render("gpu-bad", 2)
+    kokoro_env.creates.clear()
+    speaker._renderer.render("normal", 2)
+    assert [c["device"] for c in kokoro_env.creates] == ["CPUExecutionProvider"]
+    speaker.close()
+
+
+def test_provisional_comes_from_source_or_is_none() -> None:
+    audio = (b"RIFF", 0.5)
+    renderer = KokoroRenderer(
+        None,
+        SpeechSettings(engine="kokoro"),
+        "kokoro",
+        "identity",
+        provisional_source=lambda text, _priority: audio if text == "line" else None,
+    )
+    assert renderer.provisional("line", 2) == audio
+    assert renderer.provisional("other", 2) is None
+    assert (
+        KokoroRenderer(None, SpeechSettings(), "kokoro", "identity").provisional("line", 2) is None
+    )
+
+
+def test_lazy_piper_provisional_is_none_without_voice(tmp_path: Path) -> None:
+    provisional = lazy_piper_tones(SpeechSettings(voices_dir=str(tmp_path)))
+    assert provisional("line", 2) is None
+    assert provisional("line", 1) is None
