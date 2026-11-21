@@ -65,7 +65,7 @@ policy:
   p3_straight_wait_s: 8.0   # P3 calls wait this long past their deadline for a straight
 speech:
   enabled: true
-  engine: "auto"          # auto selects the platform default; registered engines can use their id
+  engine: "auto"          # auto prefers Kokoro with model files installed, then Piper, then null
   piper_voice: "en_GB-northern_english_male-medium"
   piper_speed: 1.3        # >1 faster; 1.0 = voice natural pace
   omnivoice_url: "http://127.0.0.1:8080" # OmniVoice server base URL

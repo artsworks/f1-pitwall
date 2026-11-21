@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import sys
 import threading
 import wave
@@ -17,8 +18,10 @@ from pitwall.audio.kokoro_tts import (
     PRESIZE_TEXT,
     make_kokoro_speaker,
 )
-from pitwall.audio.speaker import ENGINES, EngineSpec, make_speaker
+from pitwall.audio.piper_tts import voice_path
+from pitwall.audio.speaker import ENGINES, EngineSpec, auto_engine, make_speaker
 from pitwall.audio.wav_speaker import WavSpeaker, radio_blip, to_wav
+from pitwall.cli import main
 from pitwall.config.models import SpeechSettings
 from tests.audio_contract import (
     FakePlayer,
@@ -274,6 +277,69 @@ def test_gpu_render_failure_retries_on_cpu_once(kokoro_env: SimpleNamespace) -> 
 def test_missing_model_names_the_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match=KOKORO_MODEL):
         make_kokoro_speaker(SpeechSettings(engine="kokoro", voices_dir=str(tmp_path)))
+
+
+@pytest.mark.parametrize(
+    "files", [(), (KOKORO_MODEL,), (KOKORO_VOICES,), (KOKORO_MODEL, KOKORO_VOICES)]
+)
+@pytest.mark.parametrize("piper_installed", [False, True])
+def test_auto_engine_prefers_complete_kokoro_files(
+    tmp_path: Path, files: tuple[str, ...], piper_installed: bool
+) -> None:
+    settings = SpeechSettings(voices_dir=str(tmp_path))
+    directory = tmp_path / "kokoro"
+    directory.mkdir()
+    for name in files:
+        (directory / name).touch()
+    if piper_installed:
+        voice_path(settings).touch()
+    expected = "kokoro" if len(files) == 2 else "piper" if piper_installed else "null"
+    assert auto_engine(settings) == expected
+
+
+@pytest.mark.parametrize("engine", ["kokoro", "auto"])
+def test_voice_warm_follows_profile_for_kokoro(
+    kokoro_env: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    engine: str,
+) -> None:
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(
+        json.dumps({"speech": {"engine": engine, "voices_dir": str(kokoro_env.dir)}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PITWALL_PROFILE", str(profile))
+    monkeypatch.chdir(tmp_path)
+    warmed = []
+    closed = []
+
+    def factory(settings: SpeechSettings) -> SimpleNamespace:
+        assert settings.voices_dir == str(kokoro_env.dir)
+        return SimpleNamespace(
+            name="kokoro",
+            warm=lambda phrases, **_kwargs: warmed.extend(phrases) or len(phrases),
+            close=lambda: closed.append(True),
+        )
+
+    monkeypatch.setitem(ENGINES, "kokoro", EngineSpec("kokoro", factory, "piper"))
+    assert main(["voice", "warm"]) == 0
+    captured = capsys.readouterr()
+    assert "voice warm: loading kokoro" in captured.err
+    assert "phrases for kokoro" in captured.out
+    assert warmed
+    assert closed == [True]
+    assert kokoro_env.sessions == []
+
+
+def test_auto_missing_kokoro_package_falls_back_to_piper(
+    kokoro_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", None)
+    sentinel = object()
+    monkeypatch.setitem(ENGINES, "piper", EngineSpec("piper", lambda _s: sentinel, "null"))
+    assert make_speaker(SpeechSettings(engine="auto", voices_dir=str(kokoro_env.dir))) is sentinel
 
 
 def test_missing_kokoro_package_names_the_fix(
