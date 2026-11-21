@@ -108,7 +108,7 @@ If the client sends another `v`, the server closes the socket with code 4001.
 
 ## Speech engines
 
-`speech.engine` in `settings.yaml` picks the engine. The default `auto` uses Piper if its voice file exists, else `null`. Windows has no built-in speech fallback. On Mac and Linux, `auto` also picks Piper once the voice is downloaded.
+`speech.engine` in `settings.yaml` picks the engine. The default `auto` prefers Kokoro when its model files are installed, then Piper, then `null`. Windows has no built-in speech fallback.
 
 | `speech.engine` | Local speech | Browser audio stream |
 |---|---|---|
