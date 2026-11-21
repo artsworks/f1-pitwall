@@ -9,10 +9,13 @@ import socket
 import threading
 from collections.abc import Coroutine, Generator
 from types import FrameType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 from uvicorn.server import HANDLED_SIGNALS
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
 
 CLOSE_GRACE_S = 0.5
 
@@ -68,6 +71,17 @@ class PitwallServer(uvicorn.Server):
             transport = getattr(connection, "transport", None)
             if transport is not None:
                 transport.abort()
+
+    def abort_websocket(self, ws: WebSocket) -> None:
+        # Uvicorn stores the ASGI scope on the protocol and passes that same
+        # dict to the app, so identity matching finds the owning connection.
+        for connection in list(self.server_state.connections):
+            if getattr(connection, "scope", None) is not ws.scope:
+                continue
+            transport = getattr(connection, "transport", None)
+            if transport is not None:
+                transport.abort()
+            return
 
     async def _wait_tasks_to_complete(self) -> None:
         servers, self.servers = self.servers, []

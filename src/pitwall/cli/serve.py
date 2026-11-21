@@ -336,6 +336,7 @@ async def _serve(
         else None,
     )
     server = PitwallServer(config)
+    hub.abort_ws = server.abort_websocket
     scheme = "https" if settings.connection.https_cert and settings.connection.https_key else "http"
     port = settings.connection.http_port
     entries = list(banner or [])
