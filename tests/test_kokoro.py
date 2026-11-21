@@ -279,7 +279,9 @@ def test_missing_model_names_the_file(tmp_path: Path) -> None:
         make_kokoro_speaker(SpeechSettings(engine="kokoro", voices_dir=str(tmp_path)))
 
 
-@pytest.mark.parametrize("files", [(), (KOKORO_MODEL,), (KOKORO_VOICES,), (KOKORO_MODEL, KOKORO_VOICES)])
+@pytest.mark.parametrize(
+    "files", [(), (KOKORO_MODEL,), (KOKORO_VOICES,), (KOKORO_MODEL, KOKORO_VOICES)]
+)
 @pytest.mark.parametrize("piper_installed", [False, True])
 def test_auto_engine_prefers_complete_kokoro_files(
     tmp_path: Path, files: tuple[str, ...], piper_installed: bool
