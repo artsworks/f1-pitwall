@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import functools
 import json
 import logging
 import time
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.dispatcher import Call
@@ -27,6 +29,8 @@ if TYPE_CHECKING:
 
 PROTOCOL_VERSION = 1
 CALLS_BUFFER = 12
+MAX_PENDING_FRAMES = 64
+EVICT_CLOSE_S = 1.0
 
 
 class Hub:
@@ -37,10 +41,12 @@ class Hub:
         self.seq = 0
         self.recent_calls: deque[dict[str, Any]] = deque(maxlen=CALLS_BUFFER)
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._pending: dict[WebSocket, set[asyncio.Task[None]]] = {}
         # Frames captured when no loop is attached (tests, replay pre-server).
         self.outbox: list[dict[str, Any]] = []
         self.health_source: Any = None  # callable -> dict for /api/health
         self.speech_health_source: Any = None  # callable -> dict under "speech" in /api/health
+        self.abort_ws: Callable[[WebSocket], None] | None = None
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -57,7 +63,29 @@ class Hub:
             "payload": payload,
         }
 
-    def broadcast(self, type_: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _on_loop(self) -> bool:
+        try:
+            return asyncio.get_running_loop() is self._loop
+        except RuntimeError:
+            return False
+
+    def _run(self, fn: Callable[..., Any], *args: Any) -> None:
+        if self._loop is None:
+            fn(*args)
+            return
+        if self._on_loop():
+            self._loop.call_soon(fn, *args)
+            return
+        with contextlib.suppress(RuntimeError):
+            self._loop.call_soon_threadsafe(fn, *args)
+
+    def broadcast(self, type_: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        if self._loop is None or self._on_loop():
+            return self._broadcast(type_, payload)
+        self._run(self._broadcast, type_, payload)
+        return None
+
+    def _broadcast(self, type_: str, payload: dict[str, Any]) -> dict[str, Any]:
         frame = self.frame(type_, payload)
         if type_ == "call":
             self.recent_calls.append(
@@ -72,7 +100,37 @@ class Hub:
             self.outbox.append(frame)
             return
         for ws in list(self.clients if clients is None else clients):
-            asyncio.run_coroutine_threadsafe(self._send_ws(ws, data), self._loop)
+            pending = self._pending.setdefault(ws, set())
+            if len(pending) >= MAX_PENDING_FRAMES:
+                self._evict_slow(ws)
+                continue
+            task = asyncio.ensure_future(self._send_ws(ws, data))
+            pending.add(task)
+            task.add_done_callback(functools.partial(self._sent, ws))
+
+    def _sent(self, ws: WebSocket, task: asyncio.Task[None]) -> None:
+        pending = self._pending.get(ws)
+        if pending is None:
+            return
+        pending.discard(task)
+        if not pending:
+            del self._pending[ws]
+
+    def _evict_slow(self, ws: WebSocket) -> None:
+        log.warning("closing websocket client %r: %d frames unsent", ws, MAX_PENDING_FRAMES)
+        self.clients.discard(ws)
+        self.audio_clients.discard(ws)
+        for task in self._pending.pop(ws, set()):
+            task.cancel()
+        asyncio.ensure_future(self._close_ws(ws))
+
+    async def _close_ws(self, ws: WebSocket) -> None:
+        try:
+            await asyncio.wait_for(ws.close(code=1013), EVICT_CLOSE_S)
+        except Exception:  # noqa: BLE001 - a stalled close falls back to aborting the transport
+            if self.abort_ws is not None:
+                with contextlib.suppress(Exception):
+                    self.abort_ws(ws)
 
     async def _send_ws(self, ws: WebSocket, data: str) -> None:
         try:
@@ -102,6 +160,9 @@ class Hub:
 
     def audio(self, call_id: str, priority: int, wav: bytes) -> None:
         """Send a rendered WAV from a stream-capable speaker to audio clients."""
+        self._run(self._audio, call_id, priority, wav)
+
+    def _audio(self, call_id: str, priority: int, wav: bytes) -> None:
         if not self.audio_clients:
             return
         self._send(
@@ -123,9 +184,15 @@ class Hub:
                 entry["audio"] = update(entry["audio"])
 
     def cancel(self, call_id: str) -> None:
+        self._run(self._cancel, call_id)
+
+    def _cancel(self, call_id: str) -> None:
         self._mark(call_id, lambda a: "interrupted" if a == "started" else "dropped")
-        self.broadcast("cancel", {"id": call_id})
+        self._broadcast("cancel", {"id": call_id})
 
     def spoken(self, call_id: str, t: float) -> None:
+        self._run(self._spoken, call_id, t)
+
+    def _spoken(self, call_id: str, t: float) -> None:
         self._mark(call_id, lambda a: "started" if a == "dispatched" else a)
-        self.broadcast("spoken", {"id": call_id, "t": t})
+        self._broadcast("spoken", {"id": call_id, "t": t})

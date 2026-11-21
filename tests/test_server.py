@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
+import os
 import re
+import socket
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi import WebSocketDisconnect
@@ -382,6 +386,285 @@ def test_health_includes_speech_only_when_speech_source_is_set() -> None:
         "engine": "fake",
         "breaker_open": False,
     }
+
+
+class _FakeSocket:
+    def __init__(self, stall: asyncio.Event | None = None) -> None:
+        self.stall = stall
+        self.frames: list[dict[str, object]] = []
+        self.close_code: int | None = None
+
+    async def send_text(self, data: str) -> None:
+        if self.stall is not None:
+            await self.stall.wait()
+        self.frames.append(json.loads(data))
+
+    async def close(self, code: int = 1000) -> None:
+        self.close_code = code
+
+
+class _StuckSocket(_FakeSocket):
+    """send_text and close both wait on an event that never fires."""
+
+    async def send_text(self, data: str) -> None:
+        assert self.stall is not None
+        await self.stall.wait()
+
+    async def close(self, code: int = 1000) -> None:
+        assert self.stall is not None
+        await self.stall.wait()
+
+
+async def _settle() -> None:
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+def test_frames_from_speaker_thread_keep_order_and_state() -> None:
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        ws = _FakeSocket()
+        hub.clients.add(ws)
+        hub.speak(_call("c1"))
+
+        def from_speaker() -> None:
+            hub.spoken("c1", 1.0)
+            hub.cancel("c1")
+
+        await asyncio.to_thread(from_speaker)
+        await _settle()
+        assert [f["type"] for f in ws.frames] == ["call", "spoken", "cancel"]
+        seqs = [f["seq"] for f in ws.frames]
+        assert seqs == sorted(set(seqs))
+        assert hub.recent_calls[0]["audio"] == "interrupted"
+
+    asyncio.run(scenario())
+
+
+def test_slow_client_is_evicted_and_fast_client_gets_every_frame() -> None:
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        stall = asyncio.Event()
+        slow = _FakeSocket(stall)
+        fast = _FakeSocket()
+        aborted: list[object] = []
+        hub.abort_ws = aborted.append
+        hub.clients.update({slow, fast})
+        for _ in range(64):
+            hub.broadcast("state", {})
+            await asyncio.sleep(0)
+        pending = list(hub._pending[slow])
+        hub.broadcast("state", {})
+        await _settle()
+        assert slow not in hub.clients
+        assert slow.close_code == 1013
+        assert aborted == []
+        assert all(task.cancelled() for task in pending)
+        assert len(fast.frames) == 65
+
+    asyncio.run(scenario())
+
+
+def test_slow_client_eviction_aborts_when_close_stalls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pitwall.server.hub.EVICT_CLOSE_S", 0.05)
+
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        stall = asyncio.Event()
+        slow = _StuckSocket(stall)
+        fast = _FakeSocket()
+        aborted: list[object] = []
+        hub.abort_ws = aborted.append
+        hub.clients.update({slow, fast})
+        for _ in range(64):
+            hub.broadcast("state", {})
+            await asyncio.sleep(0)
+        hub.broadcast("state", {})
+        await asyncio.sleep(0.2)
+        assert slow not in hub.clients
+        assert aborted == [slow]
+        assert len(fast.frames) == 65
+
+    asyncio.run(scenario())
+
+
+def test_spoken_queued_while_loop_busy_cancel_keeps_enqueue_order() -> None:
+    """A busy dispatcher drain blocks the loop, so a spoken frame posted from
+    the speaker thread stays queued while sink.cancel runs on the loop. The
+    cancel must not overtake the spoken frame."""
+
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        ws = _FakeSocket()
+        hub.clients.add(ws)
+        hub.speak(_call("c1"))
+
+        posted = threading.Event()
+
+        def from_speaker() -> None:
+            hub.spoken("c1", 1.0)
+            posted.set()
+
+        thread = threading.Thread(target=from_speaker)
+        thread.start()
+        assert posted.wait(timeout=2)
+        hub.cancel("c1")
+        thread.join(timeout=2)
+        await _settle()
+        assert [f["type"] for f in ws.frames] == ["call", "spoken", "cancel"]
+        assert hub.recent_calls[0]["audio"] == "interrupted"
+
+    asyncio.run(scenario())
+
+
+def test_abort_websocket_aborts_only_the_matching_connection() -> None:
+    import uvicorn
+
+    from pitwall.server.serve import PitwallServer
+
+    config = uvicorn.Config(
+        create_app(Hub(), ConfigStore(), Metrics()),
+        host="127.0.0.1",
+        port=0,
+        log_level="warning",
+    )
+    server = PitwallServer(config)
+
+    class _Transport:
+        def __init__(self) -> None:
+            self.aborted = False
+
+        def abort(self) -> None:
+            self.aborted = True
+
+    class _Conn:
+        def __init__(self, scope: object = None, transport: object = None) -> None:
+            self.scope = scope
+            self.transport = transport
+
+    scope = {"type": "websocket", "path": "/ws"}
+    match = _Conn(scope, _Transport())
+    other = _Conn({"type": "websocket"}, _Transport())
+    no_scope = _Conn(None, _Transport())
+    server.server_state.connections.update({match, other, no_scope})
+
+    server.abort_websocket(SimpleNamespace(scope=scope))
+
+    assert match.transport.aborted
+    assert not other.transport.aborted
+    assert not no_scope.transport.aborted
+
+
+@pytest.mark.slow
+def test_evicted_slow_client_gets_tcp_abort() -> None:
+    """Real uvicorn backend: with a full write buffer ws.close() stalls, so
+    evicting a client that never reads must abort the TCP connection."""
+    import uvicorn
+
+    from pitwall.server.serve import PitwallServer
+
+    hub = Hub()
+    app = create_app(hub, ConfigStore(), Metrics())
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=0,
+        log_level="warning",
+        timeout_graceful_shutdown=2,
+    )
+    server = PitwallServer(config)
+
+    listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listen.bind(("127.0.0.1", 0))
+    listen.listen()
+    port = listen.getsockname()[1]
+
+    def run_server() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        hub.attach_loop(loop)
+        abort = getattr(server, "abort_websocket", None)
+        if abort is not None:
+            hub.abort_ws = abort
+        loop.run_until_complete(server.serve(sockets=[listen]))
+
+    thread = threading.Thread(target=run_server, daemon=True)
+    thread.start()
+    sock: socket.socket | None = None
+    try:
+        deadline = time.monotonic() + 5
+        while not server.started and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started
+
+        sock = socket.create_connection(("127.0.0.1", port), timeout=5)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+        sock.settimeout(5)
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        sock.sendall(
+            (
+                "GET /ws HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+        resp = b""
+        while b"\r\n\r\n" not in resp:
+            chunk = sock.recv(4096)
+            assert chunk, "websocket handshake failed"
+            resp += chunk
+        assert resp.startswith(b"HTTP/1.1 101")
+
+        deadline = time.monotonic() + 5
+        while not hub.clients and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert hub.clients
+
+        # Never read again: fill the server's write buffer until the hub
+        # evicts this client, then the graceful close must time out.
+        pad = base64.b64encode(os.urandom(8192)).decode("ascii")
+        for _ in range(256):
+            hub.broadcast("state", {"pad": pad})
+            time.sleep(0.001)
+
+        # Keep the receive window closed while the stalled ws.close() hits
+        # EVICT_CLOSE_S and the transport abort fires.
+        time.sleep(2.5)
+
+        sock.settimeout(0.5)
+        deadline = time.monotonic() + 8
+        closed = False
+        while time.monotonic() < deadline:
+            try:
+                data = sock.recv(65536)
+            except (ConnectionResetError, ConnectionAbortedError):
+                closed = True
+                break
+            except TimeoutError:
+                continue
+            if data == b"":
+                closed = True
+                break
+        if not closed:
+            time.sleep(0.5)
+            closed = not server.server_state.connections
+        assert closed, "server kept the evicted client's TCP connection open"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+        if sock is not None:
+            sock.close()
+        listen.close()
 
 
 def test_packet_age_ms_helper() -> None:
