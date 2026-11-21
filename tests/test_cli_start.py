@@ -15,6 +15,7 @@ from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY
 from pitwall.cli import common
 from pitwall.cli import serve as cli
 from pitwall.config.loader import ConfigStore
+from pitwall.engine import Engine
 from pitwall.model.driver import DRIVER_COMPOUND, GLOBAL_TRACK_ID, RATING
 from pitwall.store.db import Database, _uid_to_sql
 
@@ -250,6 +251,26 @@ def test_start_runs_upkeep_and_pack_at_session_end(tmp_path: Path, monkeypatch, 
     assert Database(db_path).maintenance_version(f"graded:{_uid_to_sql(uid)}") == 1
 
 
+def test_start_session_end_keeps_alive_touched_and_reports_duration(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    _make_profile(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "_serve", _fake_serve_session_end(656))
+    touches: list[int] = []
+    real_touch = Engine.touch_alive
+
+    def counting_touch(self: Engine) -> None:
+        touches.append(1)
+        real_touch(self)
+
+    monkeypatch.setattr(Engine, "touch_alive", counting_touch)
+
+    assert cli.cmd_start(_start_args()) == 0
+
+    assert len(touches) >= 4
+    assert "learning: session end took" in capsys.readouterr().out
+
+
 def test_start_session_end_digest_failure_still_prints_link(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:  # type: ignore[no-untyped-def]
@@ -267,7 +288,7 @@ def test_start_session_end_digest_failure_still_prints_link(
     assert cli.cmd_start(_start_args()) == 0
     lines = capsys.readouterr().out.splitlines()
     skipped_index = lines.index("digest: skipped (boom)")
-    assert lines[skipped_index + 1] == (
+    assert lines[skipped_index + 2] == (
         f"debrief: http://localhost:8000/debrief/{uid}  (all sessions: http://localhost:8000/debrief)"
     )
 
