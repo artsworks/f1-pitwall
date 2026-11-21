@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +24,14 @@ from pitwall.config.paths import storage_path
 KOKORO_MODEL = "kokoro-v1.0.onnx"
 KOKORO_VOICES = "voices-v1.0.bin"
 KOKORO_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1"
+GPU_MEM_LIMIT_MB = 1024
+CPU_THREADS = 4
+PRESIZE_TEXT = (
+    "Box at the end of this lap for hards, we go to the end, expect to come out in clean air "
+    "with a four second gap behind."
+)
 _ERS = re.compile(r"\bERS\b")
+log = logging.getLogger(__name__)
 
 
 def kokoro_dir(settings: SpeechSettings) -> Path:
@@ -44,20 +54,39 @@ class KokoroRenderer:
     per_priority = True
 
     def __init__(
-        self, kokoro: Any, settings: SpeechSettings, label: str, cache_identity: str
+        self,
+        kokoro: Any,
+        settings: SpeechSettings,
+        label: str,
+        cache_identity: str,
+        cpu_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._kokoro = kokoro
         self._settings = settings
         self.label = label
         self.cache_identity = cache_identity
+        self._cpu_factory = cpu_factory
+        self._cpu_kokoro: Any = None
+        self._cpu_lock = threading.Lock()
 
     def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
-        samples, sample_rate = self._kokoro.create(
-            _ERS.sub("E R S", text),
-            voice=self._settings.kokoro_voice,
-            speed=_speed(self._settings, priority),
-            lang=self._settings.kokoro_lang,
-        )
+        spoken = _ERS.sub("E R S", text)
+        options = {
+            "voice": self._settings.kokoro_voice,
+            "speed": _speed(self._settings, priority),
+            "lang": self._settings.kokoro_lang,
+        }
+        try:
+            samples, sample_rate = self._kokoro.create(spoken, **options)
+        except Exception as exc:
+            if self._cpu_factory is None:
+                raise
+            log.warning("Kokoro GPU render failed for %r; rendering on the CPU: %s", text, exc)
+            with self._cpu_lock:
+                if self._cpu_kokoro is None:
+                    self._cpu_kokoro = self._cpu_factory()
+                cpu = self._cpu_kokoro
+            samples, sample_rate = cpu.create(spoken, **options)
         volume = max(0, min(100, self._settings.volume)) / 100.0
         samples = samples * volume
         if self._settings.radio_click:
@@ -87,30 +116,55 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
             "the Kokoro packages are not installed. Run `uv sync --extra kokoro`"
         ) from exc
 
-    providers: list[Any]
-    if settings.kokoro_device == "auto" and "CUDAExecutionProvider" in (
+    def build_cpu_kokoro() -> Any:
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = CPU_THREADS
+        options.inter_op_num_threads = 1
+        session = onnxruntime.InferenceSession(
+            str(model), sess_options=options, providers=["CPUExecutionProvider"]
+        )
+        return Kokoro.from_session(session, str(voices))
+
+    use_gpu = settings.kokoro_device == "auto" and "CUDAExecutionProvider" in (
         onnxruntime.get_available_providers()
-    ):
-        if hasattr(onnxruntime, "preload_dlls"):
-            onnxruntime.preload_dlls()
-        providers = [
-            ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "DEFAULT"}),
+    )
+    if use_gpu and hasattr(onnxruntime, "preload_dlls"):
+        onnxruntime.preload_dlls()
+    onnxruntime.set_default_logger_severity(3)
+    if use_gpu:
+        providers: list[Any] = [
+            (
+                "CUDAExecutionProvider",
+                {
+                    "cudnn_conv_algo_search": "DEFAULT",
+                    "arena_extend_strategy": "kSameAsRequested",
+                    "cudnn_conv_use_max_workspace": "0",
+                    "gpu_mem_limit": str(GPU_MEM_LIMIT_MB * 1024 * 1024),
+                },
+            ),
             "CPUExecutionProvider",
         ]
+        session = onnxruntime.InferenceSession(str(model), providers=providers)
+        kokoro = Kokoro.from_session(session, str(voices))
     else:
-        providers = ["CPUExecutionProvider"]
-    onnxruntime.set_default_logger_severity(3)
-    session = onnxruntime.InferenceSession(str(model), providers=providers)
-    kokoro = Kokoro.from_session(session, str(voices))
+        kokoro = build_cpu_kokoro()
     if settings.kokoro_voice not in kokoro.voices:
         raise ValueError(f"Kokoro voice {settings.kokoro_voice!r} is not in {voices.name}")
-    device = "cuda" if session.get_providers()[0] == "CUDAExecutionProvider" else "cpu"
+    on_gpu = use_gpu and session.get_providers()[0] == "CUDAExecutionProvider"
+    device = "cuda" if on_gpu else "cpu"
 
     identity = hashlib.sha256(
         json.dumps(
             {
                 "engine": "kokoro",
-                "settings": settings.model_dump(mode="json"),
+                "kokoro_voice": settings.kokoro_voice,
+                "kokoro_lang": settings.kokoro_lang,
+                "kokoro_speed": settings.kokoro_speed,
+                "rate": settings.rate,
+                "volume": settings.volume,
+                "tone_urgent_speed": settings.tone_urgent_speed,
+                "tone_calm_speed": settings.tone_calm_speed,
+                "radio_click": settings.radio_click,
                 "model_size": model.stat().st_size,
                 "model_mtime_ns": model.stat().st_mtime_ns,
                 "voices_size": voices.stat().st_size,
@@ -124,8 +178,11 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
         settings,
         f"kokoro ({settings.kokoro_voice}, {device})",
         identity,
+        cpu_factory=build_cpu_kokoro if on_gpu else None,
     )
     renderer.render("Radio check.", 2)
+    if on_gpu:
+        renderer.render(PRESIZE_TEXT, 2)
     return WavSpeaker(
         renderer,
         player or default_player(),

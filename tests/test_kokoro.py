@@ -10,7 +10,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pitwall.audio.kokoro_tts import KOKORO_MODEL, KOKORO_VOICES, make_kokoro_speaker
+from pitwall.audio.kokoro_tts import (
+    GPU_MEM_LIMIT_MB,
+    KOKORO_MODEL,
+    KOKORO_VOICES,
+    PRESIZE_TEXT,
+    make_kokoro_speaker,
+)
 from pitwall.audio.speaker import ENGINES, EngineSpec, make_speaker
 from pitwall.audio.wav_speaker import WavSpeaker, radio_blip, to_wav
 from pitwall.config.models import SpeechSettings
@@ -29,6 +35,7 @@ def kokoro_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
         voices={"af_heart", "af_bella"},
         creates=[],
         sessions=[],
+        session_options=[],
         logger_severities=[],
         preloads=[],
         cuda=True,
@@ -39,8 +46,11 @@ def kokoro_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
     (model_dir / KOKORO_VOICES).write_bytes(b"voices")
 
     class FakeSession:
-        def __init__(self, path: str, providers: list[object]) -> None:
+        def __init__(
+            self, path: str, sess_options: object = None, providers: list[object] | None = None
+        ) -> None:
             env.sessions.append((path, providers))
+            env.session_options.append(sess_options)
             self._providers = providers
 
         def get_providers(self) -> list[str]:
@@ -57,9 +67,14 @@ def kokoro_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
             return cls(session, voices_path)
 
         def create(self, text: str, voice: str, speed: float, lang: str) -> tuple[np.ndarray, int]:
-            env.creates.append({"text": text, "voice": voice, "speed": speed, "lang": lang})
+            device = self.session.get_providers()[0]
+            env.creates.append(
+                {"text": text, "voice": voice, "speed": speed, "lang": lang, "device": device}
+            )
             if text == "bad":
                 raise RuntimeError("render failed")
+            if text == "gpu-bad" and device == "CUDAExecutionProvider":
+                raise RuntimeError("gpu failed")
             return np.full(4800, 0.5, dtype=np.float32), 24000
 
     onnxruntime = SimpleNamespace(
@@ -68,6 +83,7 @@ def kokoro_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
         ),
         set_default_logger_severity=env.logger_severities.append,
         InferenceSession=FakeSession,
+        SessionOptions=SimpleNamespace,
         preload_dlls=lambda: env.preloads.append(True),
     )
     monkeypatch.setitem(sys.modules, "onnxruntime", onnxruntime)
@@ -163,15 +179,67 @@ def test_cache_identity_follows_voice_speed_and_model(kokoro_env: SimpleNamespac
     assert _identity(make_kokoro_speaker(_settings(kokoro_env), FakePlayer())) != base
 
 
-def test_cuda_session_uses_default_cudnn_search(kokoro_env: SimpleNamespace) -> None:
+@pytest.mark.parametrize(
+    "overrides",
+    [{"warm_phrases": 10}, {"omnivoice_url": "http://elsewhere:9000"}, {"kokoro_device": "cpu"}],
+)
+def test_cache_identity_ignores_device_and_service_settings(
+    kokoro_env: SimpleNamespace, overrides: dict[str, object]
+) -> None:
+    base = _identity(make_kokoro_speaker(_settings(kokoro_env), FakePlayer()))
+    other = make_kokoro_speaker(_settings(kokoro_env, **overrides), FakePlayer())
+    assert _identity(other) == base
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"volume": 80},
+        {"rate": 2},
+        {"radio_click": False},
+        {"tone_urgent_speed": 1.2},
+        {"kokoro_lang": "en-gb"},
+    ],
+)
+def test_cache_identity_follows_audio_settings(
+    kokoro_env: SimpleNamespace, overrides: dict[str, object]
+) -> None:
+    base = _identity(make_kokoro_speaker(_settings(kokoro_env), FakePlayer()))
+    other = make_kokoro_speaker(_settings(kokoro_env, **overrides), FakePlayer())
+    assert _identity(other) != base
+
+
+def test_cuda_session_uses_bounded_gpu_pool(kokoro_env: SimpleNamespace) -> None:
     speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
-    assert kokoro_env.sessions[-1][1] == [
-        ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "DEFAULT"}),
+    assert len(kokoro_env.sessions) == 1
+    assert kokoro_env.sessions[0][1] == [
+        (
+            "CUDAExecutionProvider",
+            {
+                "cudnn_conv_algo_search": "DEFAULT",
+                "arena_extend_strategy": "kSameAsRequested",
+                "cudnn_conv_use_max_workspace": "0",
+                "gpu_mem_limit": str(GPU_MEM_LIMIT_MB * 1024 * 1024),
+            },
+        ),
         "CPUExecutionProvider",
     ]
+    assert kokoro_env.session_options == [None]
     assert kokoro_env.preloads == [True]
     assert kokoro_env.logger_severities == [3]
     assert speaker.name == "kokoro (af_heart, cuda)"
+    speaker.close()
+
+
+def test_cuda_startup_presizes_gpu_pool_with_long_line(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+    assert [c["text"] for c in kokoro_env.creates] == ["Radio check.", PRESIZE_TEXT]
+    speaker.close()
+
+
+def test_cpu_startup_renders_only_radio_check(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env, kokoro_device="cpu"), FakePlayer())
+    assert [c["text"] for c in kokoro_env.creates] == ["Radio check."]
     speaker.close()
 
 
@@ -182,8 +250,24 @@ def test_cpu_session_when_cuda_is_forced_off_or_missing(
     kokoro_env.cuda = cuda_is_available
     speaker = make_kokoro_speaker(_settings(kokoro_env, kokoro_device=device), FakePlayer())
     assert kokoro_env.sessions[-1][1] == ["CPUExecutionProvider"]
+    assert kokoro_env.session_options[-1].intra_op_num_threads == 4
+    assert kokoro_env.session_options[-1].inter_op_num_threads == 1
     assert kokoro_env.preloads == []
     assert speaker.name == "kokoro (af_heart, cpu)"
+    speaker.close()
+
+
+def test_gpu_render_failure_retries_on_cpu_once(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+    wav, seconds = speaker.render("gpu-bad", 2)
+    assert assert_pitwall_wav(wav) == pytest.approx(seconds)
+    assert len(kokoro_env.sessions) == 2
+    assert kokoro_env.sessions[-1][1] == ["CPUExecutionProvider"]
+    speaker._renderer.render("gpu-bad", 2)
+    assert len(kokoro_env.sessions) == 2
+    kokoro_env.creates.clear()
+    speaker._renderer.render("normal", 2)
+    assert kokoro_env.creates[-1]["device"] == "CUDAExecutionProvider"
     speaker.close()
 
 
