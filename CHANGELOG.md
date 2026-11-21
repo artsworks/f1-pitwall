@@ -13,6 +13,30 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.4 (2026-11-21)
+
+### Bug Fixes
+
+- **audio**: Clear stale P1 urgency, cap stuck renders, time out provisional audio and apply render
+  timeout to OmniVoice ([#191](https://github.com/artsworks/f1-pitwall/pull/191),
+  [`7cd2bb0`](https://github.com/artsworks/f1-pitwall/commit/7cd2bb069b13d5c510e37e1f95080fd7aed6f5eb))
+
+- **audio**: Time out stuck renders, fall back to Piper and report speech health
+  ([#191](https://github.com/artsworks/f1-pitwall/pull/191),
+  [`7cd2bb0`](https://github.com/artsworks/f1-pitwall/commit/7cd2bb069b13d5c510e37e1f95080fd7aed6f5eb))
+
+### Chores
+
+- Format tests/test_metrics.py ([#191](https://github.com/artsworks/f1-pitwall/pull/191),
+  [`7cd2bb0`](https://github.com/artsworks/f1-pitwall/commit/7cd2bb069b13d5c510e37e1f95080fd7aed6f5eb))
+
+### Testing
+
+- **audio**: Wait for late renders to finish before the stuck-render recovery check
+  ([#191](https://github.com/artsworks/f1-pitwall/pull/191),
+  [`7cd2bb0`](https://github.com/artsworks/f1-pitwall/commit/7cd2bb069b13d5c510e37e1f95080fd7aed6f5eb))
+
+
 ## v0.60.3 (2026-11-21)
 
 ### Bug Fixes
