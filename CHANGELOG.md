@@ -13,6 +13,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.61.0 (2026-11-21)
+
+### Features
+
+- **audio**: Render Kokoro voice warm in worker processes, one CUDA session each
+  ([#195](https://github.com/artsworks/f1-pitwall/pull/195),
+  [`5f57530`](https://github.com/artsworks/f1-pitwall/commit/5f5753054af8177cd0991875cd9c3bc1e626fbaa))
+
+
 ## v0.60.6 (2026-11-21)
 
 ### Bug Fixes
