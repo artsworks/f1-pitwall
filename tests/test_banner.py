@@ -172,6 +172,61 @@ def _broadcast_frames(engine, frames: list, *, count: int = 1) -> list:
     return sent
 
 
+def test_state_broadcast_survives_one_failed_frame(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    calls = {"n": 0}
+
+    def flaky_payload(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return {"ok": True}
+
+    monkeypatch.setattr("pitwall.server.app.state_payload", flaky_payload)
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    sent: list[tuple[str, object]] = []
+    sleeps = [0]
+
+    async def stop_after_three(_period: float) -> None:
+        sleeps[0] += 1
+        if sleeps[0] == 3:
+            raise _StopBroadcast
+
+    engine.clock.sleep = stop_after_three
+    hub = SimpleNamespace(broadcast=lambda kind, payload: sent.append((kind, payload)))
+    caplog.set_level(logging.ERROR, logger="pitwall.cli.serve")
+    with pytest.raises(_StopBroadcast):
+        asyncio.run(cli._state_broadcast(engine, hub, engine.store, lambda: engine))
+    assert sent == [("state", {"ok": True}), ("state", {"ok": True})]
+    assert [r.getMessage() for r in caplog.records] == ["state broadcast failed"]
+
+
+def test_run_live_counts_tick_errors_and_logs_each_streak_once(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    engine = build_engine(clock=VirtualClock(), sinks=[])
+    outcomes = iter([RuntimeError("first"), RuntimeError("second"), None])
+
+    def flaky_tick(_now: float) -> list:
+        outcome = next(outcomes)
+        if outcome is not None:
+            raise outcome
+        return []
+
+    monkeypatch.setattr(engine, "tick", flaky_tick)
+    sleeps = [0]
+
+    async def stop_after_three(_period: float) -> None:
+        sleeps[0] += 1
+        if sleeps[0] == 3:
+            raise _StopBroadcast
+
+    engine.clock.sleep = stop_after_three
+    caplog.set_level(logging.ERROR, logger="pitwall.engine.core")
+    with pytest.raises(_StopBroadcast):
+        asyncio.run(engine.run_live())
+    assert engine.tick_errors == 2
+    assert engine.tick_error_streak == 0
+    assert sum(r.getMessage().startswith("tick failed") for r in caplog.records) == 1
+
+
 def test_state_broadcast_uses_processed_snapshot(tmp_path: Path) -> None:
     # Rival 0.8 s ahead through the race -> Engine._battle marks it attacking.
     path = write_packet_stream(tmp_path / "r.f1bin", race_stream(RaceSpec(laps=6, gap_ahead_s=0.8)))

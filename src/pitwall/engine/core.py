@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import logging
 import math
 import time
 import traceback
@@ -49,6 +50,8 @@ from pitwall.strategy.battle import (
 from pitwall.strategy.pitwindow import PitPlan
 from pitwall.voice.channel import VoiceChannel
 from pitwall.voice.worker import VoiceWorker
+
+log = logging.getLogger(__name__)
 
 
 def budget_label(v: float) -> str:
@@ -100,6 +103,8 @@ class Engine:
         self.controls._apply_mode()
         self.ctx.dispatcher.tuned_cooldown = load_cooldown_mults(self.ctx.db)
         self._alive_t = -math.inf
+        self.tick_errors = 0
+        self.tick_error_streak = 0
         self._rule_errors_logged: set[tuple[str, str]] = set()
         self._track_loaded: int | None = None
 
@@ -569,6 +574,11 @@ class Engine:
             self.ctx.dispatcher.submit(result.candidates, snapshot)
         return self.ctx.dispatcher.drain(now)
 
+    def touch_alive(self) -> None:
+        if self.writer.alive_path is not None:
+            with contextlib.suppress(OSError):
+                self.writer.alive_path.touch()
+
     async def run_live(self) -> None:
         """Tick at tick_hz forever; dispatch drains on its own loop. The
         watchdog keeps the loop alive through a failing tick (logged)."""
@@ -578,14 +588,18 @@ class Engine:
             now_mono = time.monotonic()
             if self.writer.alive_path is not None and now_mono - self._alive_t >= 1.0:
                 self._alive_t = now_mono
-                with contextlib.suppress(OSError):
-                    self.writer.alive_path.touch()
+                self.touch_alive()
             if now_mono - proc_sample_t >= 1.0:
                 proc_sample_t = now_mono
                 self.metrics.sample_process(now_mono)
             try:
                 self.tick(self.ctx.clock.now())
+                self.tick_error_streak = 0
             except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race
+                self.tick_errors += 1
+                self.tick_error_streak += 1
+                if self.tick_error_streak == 1:
+                    log.error("tick failed:\n%s", traceback.format_exc(limit=3))
                 self.ctx.dispatcher.log.write(
                     {
                         "t": self.ctx.clock.now(),
