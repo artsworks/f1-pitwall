@@ -1,0 +1,35 @@
+{
+ "label": "optload",
+ "cfg": {
+  "model": "kokoro-opt.onnx",
+  "so": {
+   "opt": "ORT_DISABLE_ALL"
+  }
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.5,
+ "first_ms": 705,
+ "vram_mib": 1553,
+ "n": 72,
+ "total_p50": 142.3,
+ "total_p95": 195.4,
+ "total_max": 240.8,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 140.8,
+ "run_p95": 193.7,
+ "pass1_p50": 142.3,
+ "pass23_p50": 141.4,
+ "rest_p50": 1.2,
+ "rest_p95": 1.5,
+ "nan_renders": 0,
+ "peak": 0.508,
+ "sample": {
+  "nan": 0,
+  "peak": 0.368,
+  "len": 87040
+ }
+}

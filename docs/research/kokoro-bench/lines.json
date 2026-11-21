@@ -1,0 +1,122 @@
+[
+ {
+  "text": "Copy. Your call",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Understood. Push now",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Copy, continue. No risks",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Copy. Cool it and go again",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Copy. Go again from the line",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "VSC active. Stay on the delta",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Tyres hot. Keep the slides down",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "Lost the front wing. Box this lap",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Boost is on again. Turn it off now.",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "P1 and in clean air. That's the lead",
+  "priority": 3,
+  "kind": "fixed"
+ },
+ {
+  "text": "Still deploying. Select recharge mode",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "VSC ending, VSC ending. Be ready to go",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Boost still on. Turn it off for the exit.",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Clear behind. Easy throttle, rears are hot.",
+  "priority": 1,
+  "kind": "fixed"
+ },
+ {
+  "text": "Readings unchanged. Careful with the contact",
+  "priority": 3,
+  "kind": "fixed"
+ },
+ {
+  "text": "Front limited. Brake straighter, let it rotate",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "Tyres cooking. Find wet patches on the straights",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "Another lock-up. Slightly untidy. Protect the tyres.",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "Damage to the floor. Downforce is reduced, brake earlier",
+  "priority": 2,
+  "kind": "fixed"
+ },
+ {
+  "text": "He's back in front. Wait for the detection point, then pass once",
+  "priority": 3,
+  "kind": "fixed"
+ },
+ {
+  "text": "Gap to Verstappen ahead, one point four seconds",
+  "priority": 3,
+  "kind": "filled"
+ },
+ {
+  "text": "Box this lap for mediums. Norris pitted on lap twenty four",
+  "priority": 2,
+  "kind": "filled"
+ },
+ {
+  "text": "Fuel is plus zero point six laps. You can push",
+  "priority": 3,
+  "kind": "filled"
+ },
+ {
+  "text": "Hamilton behind on fresh softs, two tenths a lap quicker",
+  "priority": 2,
+  "kind": "filled"
+ }
+]

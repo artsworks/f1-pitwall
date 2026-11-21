@@ -1,0 +1,32 @@
+{
+ "label": "iobind",
+ "cfg": {
+  "iobind": true
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.77,
+ "first_ms": 719,
+ "vram_mib": 1601,
+ "n": 72,
+ "total_p50": 148.2,
+ "total_p95": 204.5,
+ "total_max": 236.8,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 146.8,
+ "run_p95": 202.9,
+ "pass1_p50": 149.5,
+ "pass23_p50": 148.2,
+ "rest_p50": 1.2,
+ "rest_p95": 1.6,
+ "nan_renders": 0,
+ "peak": 0.513,
+ "sample": {
+  "nan": 0,
+  "peak": 0.364,
+  "len": 87040
+ }
+}

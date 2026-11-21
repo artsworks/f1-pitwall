@@ -192,7 +192,7 @@ fronts at this pace, and, above all, knowing when to stay silent.
 | [`docs/adr/`](docs/adr/README.md) | Architecture decision records: what live sessions taught us |
 | [`docs/05-roadmap.md`](docs/05-roadmap.md) | Next work and later options; the finished M0–M4 plan as history |
 | [`docs/reference/f1-26-udp-notes.md`](docs/reference/f1-26-udp-notes.md) | Verified format-2026 packet facts |
-| [`docs/research/`](docs/research/) | Research notes: lift and coast, penalty escalation, race end and formation lap, safety-car restart, team orders, track limits, weather crossover |
+| [`docs/research/`](docs/research/) | Research notes: Kokoro render benchmark, lift and coast, penalty escalation, race end and formation lap, safety-car restart, team orders, track limits, weather crossover |
 | [`docs/versioning.md`](docs/versioning.md) | Semantic Versioning, PR title rules and the release workflow |
 
 ## Licence

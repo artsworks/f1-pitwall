@@ -1,0 +1,32 @@
+{
+ "label": "phcache",
+ "cfg": {
+  "phcache": true
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.76,
+ "first_ms": 715,
+ "vram_mib": 1549,
+ "n": 72,
+ "total_p50": 143.1,
+ "total_p95": 188.9,
+ "total_max": 200.9,
+ "ph_p50": 0.0,
+ "ph_p95": 0.3,
+ "run_p50": 141.7,
+ "run_p95": 187.4,
+ "pass1_p50": 144.7,
+ "pass23_p50": 141.7,
+ "rest_p50": 1.2,
+ "rest_p95": 1.4,
+ "nan_renders": 0,
+ "peak": 0.511,
+ "sample": {
+  "nan": 0,
+  "peak": 0.364,
+  "len": 87040
+ }
+}

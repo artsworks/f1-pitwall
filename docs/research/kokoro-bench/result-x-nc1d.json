@@ -1,0 +1,34 @@
+{
+ "label": "nc1d",
+ "cfg": {
+  "cuda": {
+   "cudnn_conv1d_pad_to_nc1d": "1"
+  }
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.77,
+ "first_ms": 722,
+ "vram_mib": 1549,
+ "n": 72,
+ "total_p50": 146.2,
+ "total_p95": 190.2,
+ "total_max": 201.9,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 144.8,
+ "run_p95": 188.5,
+ "pass1_p50": 150.2,
+ "pass23_p50": 142.8,
+ "rest_p50": 1.2,
+ "rest_p95": 1.5,
+ "nan_renders": 0,
+ "peak": 0.506,
+ "sample": {
+  "nan": 0,
+  "peak": 0.378,
+  "len": 87040
+ }
+}
