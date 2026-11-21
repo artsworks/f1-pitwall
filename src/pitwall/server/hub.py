@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 PROTOCOL_VERSION = 1
 CALLS_BUFFER = 12
 MAX_PENDING_FRAMES = 64
+EVICT_CLOSE_S = 1.0
 
 
 class Hub:
@@ -45,6 +46,7 @@ class Hub:
         self.outbox: list[dict[str, Any]] = []
         self.health_source: Any = None  # callable -> dict for /api/health
         self.speech_health_source: Any = None  # callable -> dict under "speech" in /api/health
+        self.abort_ws: Callable[[WebSocket], None] | None = None
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -68,8 +70,11 @@ class Hub:
             return False
 
     def _run(self, fn: Callable[..., Any], *args: Any) -> None:
-        if self._loop is None or self._on_loop():
+        if self._loop is None:
             fn(*args)
+            return
+        if self._on_loop():
+            self._loop.call_soon(fn, *args)
             return
         with contextlib.suppress(RuntimeError):
             self._loop.call_soon_threadsafe(fn, *args)
@@ -120,8 +125,12 @@ class Hub:
         asyncio.ensure_future(self._close_ws(ws))
 
     async def _close_ws(self, ws: WebSocket) -> None:
-        with contextlib.suppress(Exception):
-            await ws.close(code=1013)
+        try:
+            await asyncio.wait_for(ws.close(code=1013), EVICT_CLOSE_S)
+        except Exception:  # noqa: BLE001 - a stalled close falls back to aborting the transport
+            if self.abort_ws is not None:
+                with contextlib.suppress(Exception):
+                    self.abort_ws(ws)
 
     async def _send_ws(self, ws: WebSocket, data: str) -> None:
         try:
