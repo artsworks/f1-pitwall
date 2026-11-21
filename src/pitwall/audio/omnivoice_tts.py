@@ -20,6 +20,7 @@ from pitwall.audio.piper_tts import (
 from pitwall.audio.wav_speaker import (
     InvalidWav,
     Player,
+    RenderSkipped,
     Synth,
     WavSpeaker,
     default_player,
@@ -212,7 +213,7 @@ class OmniVoiceRenderer:
         if background:
             return self._background_synth(text)
         if self._wait_s <= 0:
-            raise OmniVoiceError("omnivoice_wait_s is 0; skipping the foreground render")
+            raise RenderSkipped("omnivoice_wait_s is 0; skipping the foreground render")
         return self._synth(text)
 
     def provisional(self, text: str, priority: int) -> tuple[bytes, float] | None:
@@ -233,4 +234,5 @@ def make_omnivoice_speaker(settings: SpeechSettings, player: Player | None = Non
         renderer,
         player or default_player(),
         cache_dir=storage_path(settings.voices_dir) / ".phrases",
+        render_timeout_s=settings.render_timeout_s,
     )

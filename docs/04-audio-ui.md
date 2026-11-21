@@ -158,9 +158,11 @@ Each `audio` frame carries one complete WAV in base64. The WAV is RIFF, mono, 16
 
 A renderer can also give `provisional(text, priority)`. On a cache miss, `WavSpeaker` first waits for `render(..., background=False)`. If that render fails or times out, `WavSpeaker` plays the provisional audio and queues `render(..., background=True)` to fill the cache. OmniVoice waits up to `omnivoice_wait_s` and uses Piper as its provisional audio. The age check runs after the wait, so a call that passes `max_age_s` while it waits is dropped.
 
-A primary render that runs past `speech.render_timeout_s` (default 4.0) times out. The call then plays provisional audio if the renderer has it. Otherwise the call drops. The late render still fills the cache, so the next play of that line comes from the cache. Set the timeout to 0 or null for no limit.
+A primary render that runs past `speech.render_timeout_s` (default 4.0) times out. The call then plays provisional audio if the renderer has it. Otherwise the call drops. The late render still fills the cache, so the next play of that line comes from the cache. Set the timeout to 0 or null for no limit. Provisional audio has the same timeout. If it runs past the timeout, the call drops.
 
 After three failed or timed-out renders in a row, `WavSpeaker` opens a circuit breaker for 60 seconds. While it is open, calls skip the foreground render. They use provisional audio or drop, and background renders still fill the cache. The next call after 60 seconds tries the renderer again. A successful render closes the breaker. `health()` reports `breaker_open`, the failure and timeout counts, and the last error.
+
+A renderer can raise `RenderSkipped` to skip the foreground render on purpose. A skip is not a failure and does not count toward the breaker. At most three timed-out renders stay outstanding. While that limit is reached, calls skip the foreground render. A failed or skipped call without provisional audio still queues a background render.
 
 Kokoro uses Piper as its provisional audio when a Piper voice is installed. Piper has no provisional audio, so its timed-out or failed renders drop.
 

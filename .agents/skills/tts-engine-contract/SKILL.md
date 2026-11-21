@@ -73,8 +73,11 @@ Build WAV engines on `WavSpeaker` in `wav_speaker.py`. `WavSpeaker` owns the que
 - `per_priority`: `True` if the audio depends on the call priority.
 - `render(text, priority, *, background=False)`: returns `(wav_bytes, seconds)`. Raise on failure.
 - `provisional(text, priority)` (optional): audio to play now while `render(..., background=True)` fills the cache.
-- A primary render that passes `speech.render_timeout_s` times out. The call plays provisional audio or drops. The late render still fills the cache.
+- A primary render that passes `speech.render_timeout_s` times out. The call plays provisional audio or drops. The late render still fills the cache. Provisional audio has the same timeout.
 - Three failed or timed-out renders in a row open a circuit breaker for 60 seconds. Calls skip the foreground render while it is open. Background renders still fill the cache.
+- `render` may raise `RenderSkipped` to skip the foreground render on purpose. A skip is not a failure and does not count toward the breaker.
+- At most three timed-out renders stay outstanding. While that limit is reached, calls skip the foreground render.
+- A failed or skipped call without provisional audio still queues a background render.
 - `warm_parallelism`, `warm_workers`, `warm_process` (optional): let `warm()` render in parallel with `"thread"` or `"process"` workers. Use `default_warm_workers()` for the default count.
 
 If the vendor returns PCM or chunks, collect the chunks in order and call `pcm_to_wav(chunks, sample_rate, channels=..., dtype=...)`. Convert MP3 or Opus to PCM first. If a cancel or flush happens during rendering, `WavSpeaker` discards the result.

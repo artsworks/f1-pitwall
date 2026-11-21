@@ -365,6 +365,59 @@ def test_omnivoice_speaker_plays_piper_when_wait_fails(
         speaker.close()
 
 
+def test_omnivoice_render_timeout_plays_piper_before_slow_server(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, state = fake_server
+    state.speech_delay_s = 0.5
+    tones = {priority: lambda _text: (PIPER_WAV, 0.02) for priority in (1, 2, 3)}
+    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
+    player = FakePlayer()
+    speaker = make_omnivoice_speaker(
+        _settings(url, tmp_path, omnivoice_wait_s=5, render_timeout_s=0.1), player
+    )
+    try:
+        started = time.monotonic()
+        speaker.speak(make_call("cold", text="Box this lap."))
+        _wait_for(lambda: bool(player.played))
+        assert time.monotonic() - started < 0.4
+        assert player.played == [PIPER_WAV]
+        assert speaker.health()["render_timeouts"] == 1
+    finally:
+        speaker.close()
+
+
+def test_omnivoice_zero_wait_is_a_skip_not_a_failure(
+    fake_server, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.omnivoice_tts as omnivoice_module
+
+    url, state = fake_server
+    tones = {priority: lambda _text: (PIPER_WAV, 0.02) for priority in (1, 2, 3)}
+    monkeypatch.setattr(omnivoice_module, "make_piper_tone_synths", lambda settings: tones)
+    player = FakePlayer()
+    speaker = make_omnivoice_speaker(_settings(url, tmp_path, omnivoice_wait_s=0), player)
+    try:
+        for index in range(4):
+            speaker.speak(make_call(f"cold-{index}", text=f"line {index}"))
+        _wait_for(lambda: len(player.played) == 4)
+        _wait_for(lambda: not speaker._pending)
+        health = speaker.health()
+        assert player.played == [PIPER_WAV] * 4
+        assert health["provisional_plays"] == 4
+        assert health["render_failures"] == 0
+        assert health["last_error"] is None
+        assert health["breaker_open"] is False
+        speech = [
+            payload["input"] for path, payload in state.requests if path == "/v1/audio/speech"
+        ]
+        assert sorted(speech) == sorted(f"line {index}" for index in range(4))
+    finally:
+        speaker.close()
+
+
 def test_omnivoice_speaker_streams_contract_wav(fake_server, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import pitwall.audio.omnivoice_tts as omnivoice_module
 

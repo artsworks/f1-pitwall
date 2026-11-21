@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 CACHE_SIZE = 64
 BREAKER_FAILURES = 3
 BREAKER_OPEN_S = 60.0
+MAX_STUCK_RENDERS = 3
+BACKGROUND_MAX = 32
 BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
 BLIP_PIP_GAP_S = 0.03
 BLIP_GAP_S = 0.06
@@ -83,18 +85,16 @@ class RenderSkipped(RuntimeError):
     pass
 
 
-class _RenderLane:
+class _RenderLane[T]:
     """One daemon thread that runs primary renders, so a stuck render can be abandoned."""
 
     def __init__(self) -> None:
-        self._jobs: queue.Queue[
-            tuple[Callable[[], tuple[bytes, float]], Future[tuple[bytes, float]]] | None
-        ] = queue.Queue()
+        self._jobs: queue.Queue[tuple[Callable[[], T], Future[T]] | None] = queue.Queue()
         self._thread = threading.Thread(target=self._run, daemon=True, name="wav-render-lane")
         self._thread.start()
 
-    def submit(self, fn: Callable[[], tuple[bytes, float]]) -> Future[tuple[bytes, float]]:
-        future: Future[tuple[bytes, float]] = Future()
+    def submit(self, fn: Callable[[], T]) -> Future[T]:
+        future: Future[T] = Future()
         self._jobs.put((fn, future))
         return future
 
@@ -325,7 +325,13 @@ class WavSpeaker:
         self._render_timeout_s = (
             render_timeout_s if render_timeout_s is not None and render_timeout_s > 0 else None
         )
-        self._lane = _RenderLane() if self._render_timeout_s is not None else None
+        self._lane: _RenderLane[tuple[bytes, float]] | None = (
+            _RenderLane() if self._render_timeout_s is not None else None
+        )
+        self._provisional_lane: _RenderLane[tuple[bytes, float] | None] | None = (
+            _RenderLane() if self._render_timeout_s is not None else None
+        )
+        self._provisional_job: Future[tuple[bytes, float] | None] | None = None
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
         self._cache_lock = threading.RLock()
         self._state_lock = threading.RLock()
@@ -339,20 +345,18 @@ class WavSpeaker:
         self._wake = threading.Event()
         self._background_queue: queue.Queue[tuple[tuple[int, str], str, int] | None] = queue.Queue()
         self._pending: set[tuple[int, str]] = set()
+        self._late: set[tuple[int, str]] = set()
         if fallback is not None:
             fallback.on_spoken = self._fallback_spoken
             fallback_callbacks = cast(Any, fallback)
             if hasattr(fallback_callbacks, "on_dropped"):
                 fallback_callbacks.on_dropped = self._fallback_dropped
-        self._has_provisional = callable(getattr(renderer, "provisional", None))
         self._thread = threading.Thread(target=self._worker, daemon=True, name="wav-speaker")
         self._thread.start()
-        self._background_thread: threading.Thread | None = None
-        if self._has_provisional:
-            self._background_thread = threading.Thread(
-                target=self._background_worker, daemon=True, name="wav-renderer"
-            )
-            self._background_thread.start()
+        self._background_thread = threading.Thread(
+            target=self._background_worker, daemon=True, name="wav-renderer"
+        )
+        self._background_thread.start()
 
     def _key(self, text: str, priority: int) -> tuple[int, str]:
         return (priority if self._renderer.per_priority else 0, text)
@@ -581,6 +585,9 @@ class WavSpeaker:
         if lane is None:
             wav, _ = self._renderer.render(text, priority, background=False)
         else:
+            with self._cache_lock:
+                if key in self._late or len(self._late) >= MAX_STUCK_RENDERS:
+                    raise RenderSkipped(f"{self.name} has stuck renders")
             future = lane.submit(lambda: self._renderer.render(text, priority, background=False))
             try:
                 wav, _ = future.result(timeout=self._render_timeout_s)
@@ -588,22 +595,42 @@ class WavSpeaker:
                 if future.done():
                     raise
                 self.render_timeouts += 1
+                with self._cache_lock:
+                    self._late.add(key)
                 lane.close()
                 self._lane = _RenderLane()
-                future.add_done_callback(lambda done: self._keep_late_render(key, text, done))
+                future.add_done_callback(
+                    lambda done: self._keep_late_render(key, text, priority, done)
+                )
                 raise RenderTimeout(f"{self.name} render timed out") from None
         result = wav, wav_info(wav)
         self._remember(key, result, disk=True, disk_required=False)
         return result
 
     def _keep_late_render(
-        self, key: tuple[int, str], text: str, future: Future[tuple[bytes, float]]
+        self, key: tuple[int, str], text: str, priority: int, future: Future[tuple[bytes, float]]
     ) -> None:
+        with self._cache_lock:
+            self._late.discard(key)
         try:
             wav, _ = future.result()
             self._remember(key, (wav, wav_info(wav)), disk=True, disk_required=False)
         except Exception as exc:  # noqa: BLE001 - a late render is best effort
             log.warning("%s late render failed for %r: %s", self.name, text, exc)
+            self._queue_background(key, text, priority)
+
+    def _provisional_audio(
+        self, provisional: Callable[[str, int], tuple[bytes, float] | None], call: Call
+    ) -> tuple[bytes, float] | None:
+        lane = self._provisional_lane
+        if lane is None:
+            return provisional(call.text, call.priority)
+        job = self._provisional_job
+        if job is not None and not job.done():
+            return None
+        job = lane.submit(lambda: provisional(call.text, call.priority))
+        self._provisional_job = job
+        return job.result(timeout=self._render_timeout_s)
 
     def _get_for_call(self, call: Call) -> tuple[bytes, float]:
         key = self._key(call.text, call.priority)
@@ -621,7 +648,7 @@ class WavSpeaker:
             audio = None
             if callable(provisional):
                 try:
-                    audio = provisional(call.text, call.priority)
+                    audio = self._provisional_audio(provisional, call)
                 except Exception as provisional_exc:  # noqa: BLE001 - the call fails as if none existed
                     log.warning(
                         "%s provisional audio failed for %r: %s",
@@ -629,6 +656,8 @@ class WavSpeaker:
                         call.text,
                         provisional_exc,
                     )
+            if not isinstance(exc, RenderTimeout):
+                self._queue_background(key, call.text, call.priority)
             if audio is None:
                 raise
             log.warning(
@@ -638,8 +667,6 @@ class WavSpeaker:
                 exc,
             )
             self.provisional_plays += 1
-            if not isinstance(exc, RenderTimeout):
-                self._queue_background(key, call.text, call.priority)
             return audio[0], wav_info(audio[0])
         self._consecutive_failures = 0
         self._breaker_open_until = None
@@ -647,7 +674,11 @@ class WavSpeaker:
 
     def _queue_background(self, key: tuple[int, str], text: str, priority: int) -> None:
         with self._cache_lock:
-            if key not in self._pending:
+            if (
+                key not in self._pending
+                and key not in self._late
+                and len(self._pending) < BACKGROUND_MAX
+            ):
                 self._pending.add(key)
                 self._background_queue.put((key, text, priority))
 
@@ -816,6 +847,8 @@ class WavSpeaker:
             generation = self._gen
             received = self._received.pop(call.id, time.monotonic())
             cancelled = call.id in self._cancelled
+            if call.priority == 1:
+                self._urgent.clear()
             if cancelled:
                 self._cancelled.discard(call.id)
         if cancelled:
@@ -888,11 +921,12 @@ class WavSpeaker:
     def close(self) -> None:
         self._q.put((-1, next(self._seq), None))
         self._thread.join(timeout=2.0)
-        if self._background_thread is not None:
-            self._background_queue.put(None)
-            self._background_thread.join(timeout=2.0)
+        self._background_queue.put(None)
+        self._background_thread.join(timeout=2.0)
         if self._lane is not None:
             self._lane.close()
+        if self._provisional_lane is not None:
+            self._provisional_lane.close()
         self._player.stop()
         if self._fallback is not None:
             self._fallback.close()
