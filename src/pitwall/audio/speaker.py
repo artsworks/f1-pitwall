@@ -162,8 +162,12 @@ register_engine(EngineSpec("null", _make_null, None))
 
 
 def auto_engine(settings: SpeechSettings) -> str:
+    from pitwall.audio.kokoro_tts import KOKORO_MODEL, KOKORO_VOICES, kokoro_dir
     from pitwall.audio.piper_tts import voice_path
 
+    directory = kokoro_dir(settings)
+    if (directory / KOKORO_MODEL).exists() and (directory / KOKORO_VOICES).exists():
+        return "kokoro"
     return "piper" if voice_path(settings).exists() else "null"
 
 
