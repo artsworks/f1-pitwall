@@ -13,6 +13,23 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.3 (2026-11-21)
+
+### Bug Fixes
+
+- **voice**: Auto engine prefers Kokoro when its model files exist
+  ([#194](https://github.com/artsworks/f1-pitwall/pull/194),
+  [`a2631cd`](https://github.com/artsworks/f1-pitwall/commit/a2631cdc4b3ffcec94e45029011d688fdf33c843))
+
+### Code Style
+
+- **tests**: Ruff format test_metrics.py ([#194](https://github.com/artsworks/f1-pitwall/pull/194),
+  [`a2631cd`](https://github.com/artsworks/f1-pitwall/commit/a2631cdc4b3ffcec94e45029011d688fdf33c843))
+
+- **tests**: Wrap long parametrize line ([#194](https://github.com/artsworks/f1-pitwall/pull/194),
+  [`a2631cd`](https://github.com/artsworks/f1-pitwall/commit/a2631cdc4b3ffcec94e45029011d688fdf33c843))
+
+
 ## v0.60.2 (2026-11-21)
 
 ### Bug Fixes
