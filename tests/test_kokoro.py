@@ -10,18 +10,22 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from pitwall.audio import kokoro_tts
 from pitwall.audio.kokoro_tts import (
     GPU_FAILURES_MAX,
     GPU_MEM_LIMIT_MB,
     KOKORO_MODEL,
     KOKORO_VOICES,
     PRESIZE_TEXT,
+    WARM_MIN_BATCH,
     KokoroRenderer,
+    _warm_init,
+    _warm_render,
     make_kokoro_speaker,
 )
 from pitwall.audio.piper_tts import lazy_piper_tones
 from pitwall.audio.speaker import ENGINES, EngineSpec, make_speaker
-from pitwall.audio.wav_speaker import WavSpeaker, radio_blip, to_wav
+from pitwall.audio.wav_speaker import WavSpeaker, default_warm_workers, radio_blip, to_wav
 from pitwall.config.models import SpeechSettings
 from tests.audio_contract import (
     FakePlayer,
@@ -340,3 +344,63 @@ def test_lazy_piper_provisional_is_none_without_voice(tmp_path: Path) -> None:
     provisional = lazy_piper_tones(SpeechSettings(voices_dir=str(tmp_path)))
     assert provisional("line", 2) is None
     assert provisional("line", 1) is None
+
+
+def test_gpu_speaker_warms_in_worker_processes(kokoro_env: SimpleNamespace) -> None:
+    settings = _settings(kokoro_env)
+    speaker = make_kokoro_speaker(settings, FakePlayer())
+    renderer = speaker._renderer
+    assert renderer.warm_parallelism == "process"
+    assert renderer.warm_workers == default_warm_workers(cap=4)
+    assert renderer.warm_process.initializer is _warm_init
+    assert renderer.warm_process.render is _warm_render
+    assert renderer.warm_process.initargs == (settings,)
+    assert renderer.warm_process.min_batch == WARM_MIN_BATCH
+    speaker.close()
+
+
+def test_warm_workers_setting_is_used(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env, warm_workers=2), FakePlayer())
+    assert speaker._renderer.warm_workers == 2
+    speaker.close()
+
+
+def test_cpu_speaker_warms_sequentially(kokoro_env: SimpleNamespace) -> None:
+    speaker = make_kokoro_speaker(_settings(kokoro_env, kokoro_device="cpu"), FakePlayer())
+    assert speaker._renderer.warm_parallelism is None
+    assert speaker._renderer.warm_process is None
+    speaker.close()
+
+
+def test_warm_worker_renders_the_game_renderer_output(
+    kokoro_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kokoro_tts, "_WARM_RENDERER", None)
+    _warm_init(_settings(kokoro_env))
+    kokoro_env.creates.clear()
+    wav, seconds = _warm_render(("ERS fault.", 1))
+    assert assert_pitwall_wav(wav) == pytest.approx(seconds)
+    assert kokoro_env.creates[-1]["text"] == "E R S fault."
+    assert kokoro_env.creates[-1]["speed"] == pytest.approx(1.1)
+    assert kokoro_env.creates[-1]["device"] == "CUDAExecutionProvider"
+    assert kokoro_tts._WARM_RENDERER.warm_process is None
+
+
+def test_warm_render_without_init_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(kokoro_tts, "_WARM_RENDERER", None)
+    with pytest.raises(RuntimeError, match="no loaded session"):
+        _warm_render(("line", 2))
+
+
+def test_small_warm_batch_renders_in_process(
+    kokoro_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_pool(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a small batch must not start a worker pool")
+
+    monkeypatch.setattr("pitwall.audio.wav_speaker.ProcessPoolExecutor", no_pool)
+    speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+    kokoro_env.creates.clear()
+    assert speaker.warm([(f"line {i}", 2) for i in range(4)]) == 4
+    assert sorted(c["text"] for c in kokoro_env.creates) == [f"line {i}" for i in range(4)]
+    speaker.close()

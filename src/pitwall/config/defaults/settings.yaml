@@ -78,7 +78,7 @@ speech:
   kokoro_device: "auto"
   voices_dir: "voices"
   warm_phrases: 150       # phrases pre-rendered by 'pitwall voice warm'; lower it to save disk space
-  warm_workers: null      # phrases rendered at once by 'voice warm'; null = half the cores (omnivoice at most 4)
+  warm_workers: null      # phrases rendered at once by 'voice warm'; null = half the cores (omnivoice and kokoro at most 4)
   rate: 0
   volume: 100
   # The cycle wraps, returning to normal between each extreme.
