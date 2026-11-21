@@ -13,6 +13,19 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.5 (2026-11-21)
+
+### Bug Fixes
+
+- **server**: Abort evicted clients whose close stalls and keep on-loop Hub calls in order
+  ([#192](https://github.com/artsworks/f1-pitwall/pull/192),
+  [`13b4f3b`](https://github.com/artsworks/f1-pitwall/commit/13b4f3be0b0d70e73fec913d9b6c7f6803170200))
+
+- **server**: Run Hub calls on the event loop and close clients with 64 unsent frames
+  ([#192](https://github.com/artsworks/f1-pitwall/pull/192),
+  [`13b4f3b`](https://github.com/artsworks/f1-pitwall/commit/13b4f3be0b0d70e73fec913d9b6c7f6803170200))
+
+
 ## v0.60.4 (2026-11-21)
 
 ### Bug Fixes
