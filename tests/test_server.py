@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -382,6 +383,70 @@ def test_health_includes_speech_only_when_speech_source_is_set() -> None:
         "engine": "fake",
         "breaker_open": False,
     }
+
+
+class _FakeSocket:
+    def __init__(self, stall: asyncio.Event | None = None) -> None:
+        self.stall = stall
+        self.frames: list[dict[str, object]] = []
+        self.close_code: int | None = None
+
+    async def send_text(self, data: str) -> None:
+        if self.stall is not None:
+            await self.stall.wait()
+        self.frames.append(json.loads(data))
+
+    async def close(self, code: int = 1000) -> None:
+        self.close_code = code
+
+
+async def _settle() -> None:
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+def test_frames_from_speaker_thread_keep_order_and_state() -> None:
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        ws = _FakeSocket()
+        hub.clients.add(ws)
+        hub.speak(_call("c1"))
+
+        def from_speaker() -> None:
+            hub.spoken("c1", 1.0)
+            hub.cancel("c1")
+
+        await asyncio.to_thread(from_speaker)
+        await _settle()
+        assert [f["type"] for f in ws.frames] == ["call", "spoken", "cancel"]
+        seqs = [f["seq"] for f in ws.frames]
+        assert seqs == sorted(set(seqs))
+        assert hub.recent_calls[0]["audio"] == "interrupted"
+
+    asyncio.run(scenario())
+
+
+def test_slow_client_is_evicted_and_fast_client_gets_every_frame() -> None:
+    async def scenario() -> None:
+        hub = Hub()
+        hub.attach_loop(asyncio.get_running_loop())
+        stall = asyncio.Event()
+        slow = _FakeSocket(stall)
+        fast = _FakeSocket()
+        hub.clients.update({slow, fast})
+        for _ in range(64):
+            hub.broadcast("state", {})
+            await asyncio.sleep(0)
+        pending = list(hub._pending[slow])
+        hub.broadcast("state", {})
+        await _settle()
+        assert slow not in hub.clients
+        assert slow.close_code == 1013
+        assert all(task.cancelled() for task in pending)
+        assert len(fast.frames) == 65
+
+    asyncio.run(scenario())
 
 
 def test_packet_age_ms_helper() -> None:
