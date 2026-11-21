@@ -1069,6 +1069,7 @@ def test_stuck_renders_are_capped_and_not_redispatched(monkeypatch: pytest.Monke
         assert lane_threads() == threads_before
 
         gate.set()
+        _wait_for(lambda: not speaker._late)
         speaker.speak(make_call("cold4", text="cold4"))
         _wait_for(lambda: spoken == ["cold4"])
         assert ("cold4", 2, False) in renderer.calls
