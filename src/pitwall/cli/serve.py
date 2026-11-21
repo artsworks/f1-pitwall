@@ -9,6 +9,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -212,41 +213,49 @@ async def _state_broadcast(
     period = 1.0 / store.current().ui.state_hz
     last_status = base.clock.now()
     seen_packet = False
+    failing = False
     while True:
-        engine = active()
-        now = engine.clock.now()
-        if now - last_status >= 10.0:
-            last_status = now
-            c = engine.ingest.census(now=now)
-            accepted = sum(p["accepted"] for p in c["packets"].values())
-            rate = c["packets"].get(str(int(PacketId.CAR_TELEMETRY)), {}).get("rate_hz", 0.0)
-            log.debug(
-                f"udp: {c['raw_datagrams']} datagrams, {accepted} accepted, "
-                f"unsupported={c['dropped_unsupported']} malformed={c['dropped_malformed']} "
-                f"size_mismatch={sum(p['dropped_size_mismatch'] for p in c['packets'].values())} "
-                f"telemetry {rate:.0f} Hz"
+        try:
+            engine = active()
+            now = engine.clock.now()
+            if now - last_status >= 10.0:
+                last_status = now
+                c = engine.ingest.census(now=now)
+                accepted = sum(p["accepted"] for p in c["packets"].values())
+                rate = c["packets"].get(str(int(PacketId.CAR_TELEMETRY)), {}).get("rate_hz", 0.0)
+                size_mismatch = sum(p["dropped_size_mismatch"] for p in c["packets"].values())
+                log.debug(
+                    f"udp: {c['raw_datagrams']} datagrams, {accepted} accepted, "
+                    f"unsupported={c['dropped_unsupported']} malformed={c['dropped_malformed']} "
+                    f"size_mismatch={size_mismatch} "
+                    f"telemetry {rate:.0f} Hz"
+                )
+            snap = engine.last_snapshot or engine.state.snapshot(engine.clock.now())
+            if snap.last_packet_t is not None and not seen_packet:
+                seen_packet = True
+                if pin:
+                    print("telemetry connected\n" + _pin_box(pin, pin_note), flush=True)
+            payload = state_payload(
+                snap,
+                settings=store.current(),
+                metrics=engine.metrics,
+                quiet=store.current().policy.quiet,
+                quiet_left_s=_quiet_left_s(engine, now),
+                silent=engine.dispatcher.silent,
+                mindset=engine.mindset,
+                volume_pct=engine.volume_pct,
+                page=engine.page,
+                menu=engine.menu_payload(now),
+                voice=engine.voice_payload(now),
             )
-        snap = engine.last_snapshot or engine.state.snapshot(engine.clock.now())
-        if snap.last_packet_t is not None and not seen_packet:
-            seen_packet = True
-            if pin:
-                print("telemetry connected\n" + _pin_box(pin, pin_note), flush=True)
-        payload = state_payload(
-            snap,
-            settings=store.current(),
-            metrics=engine.metrics,
-            quiet=store.current().policy.quiet,
-            quiet_left_s=_quiet_left_s(engine, now),
-            silent=engine.dispatcher.silent,
-            mindset=engine.mindset,
-            volume_pct=engine.volume_pct,
-            page=engine.page,
-            menu=engine.menu_payload(now),
-            voice=engine.voice_payload(now),
-        )
-        hub.broadcast("state", payload)
-        if snap.last_packet_t is not None:
-            engine.metrics.note_packet_to_ws(snap.last_packet_t, engine.clock.now())
+            hub.broadcast("state", payload)
+            if snap.last_packet_t is not None:
+                engine.metrics.note_packet_to_ws(snap.last_packet_t, engine.clock.now())
+            failing = False
+        except Exception:  # noqa: BLE001 - one bad state frame must not stop the feed
+            if not failing:
+                log.exception("state broadcast failed")
+            failing = True
         await base.clock.sleep(period)
 
 
@@ -318,7 +327,12 @@ async def _serve(
         e = active()
         snap = e.state.snapshot(e.clock.now())
         age = packet_age_ms(snap)
-        return {"packet_age_ms": age, "live": age is not None and age < 1000.0}
+        return {
+            "packet_age_ms": age,
+            "live": age is not None and age < 1000.0,
+            "tick_errors": e.tick_errors,
+            "tick_error_streak": e.tick_error_streak,
+        }
 
     hub.health_source = _health
     hub.attach_loop(asyncio.get_running_loop())
@@ -497,11 +511,14 @@ def cmd_start(args: argparse.Namespace) -> int:
         from pitwall.learning.learnpack import write_pack
         from pitwall.learning.maintenance import maintain
 
+        started = time.monotonic()
+        engine.touch_alive()
         print("learning: session ended, updating track learning…", flush=True)
         try:
             print(f"learning: {maintain(db, settings, refit=True).summary()}", flush=True)
         except sqlite3.Error as e:
             print(f"learning: upkeep skipped ({e})", flush=True)
+        engine.touch_alive()
         try:
             saved = write_pack(
                 db, pack_dir, keep_days=settings.learning.pack_keep_days, refresh_quality=[uid]
@@ -509,11 +526,13 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"learning pack: saved {_folder_link(saved)}", flush=True)
         except (OSError, sqlite3.Error, ValueError) as e:
             print(f"learning pack: skipped ({e})", flush=True)
+        engine.touch_alive()
         try:
             rating_text = _driver_rating_text(db, settings.thresholds, engine.state.track_id)
             print(f"driver rating: {rating_text}", flush=True)
         except sqlite3.Error as e:
             print(f"driver rating: skipped ({e})", flush=True)
+        engine.touch_alive()
         try:
             current = store.current()
             digest = build_digest(db, uid, current.thresholds, setup_rules=current.setup_rules)
@@ -523,6 +542,8 @@ def cmd_start(args: argparse.Namespace) -> int:
             print(f"digest: saved {_folder_link(path)}", flush=True)
         except (OSError, sqlite3.Error, ValueError) as e:
             print(f"digest: skipped ({e})", flush=True)
+        engine.touch_alive()
+        print(f"learning: session end took {time.monotonic() - started:.1f} s", flush=True)
         url = _local_url(settings)
         print(f"debrief: {url}/debrief/{uid}  (all sessions: {url}/debrief)", flush=True)
 
