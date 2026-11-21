@@ -1,0 +1,47 @@
+{
+ "label": "piper",
+ "mode": "piper",
+ "providers": [
+  "piper en_GB-cori-high speed 1.1"
+ ],
+ "sample_rate": 22050,
+ "load_s": 2.67,
+ "first_render_ms": 1105,
+ "vram_delta_mib": 27,
+ "pass1": {
+  "n": 24,
+  "p50_ms": 409,
+  "p95_ms": 577,
+  "max_ms": 588,
+  "rtf": 0.143
+ },
+ "pass2_3": {
+  "n": 48,
+  "p50_ms": 421,
+  "p95_ms": 554,
+  "max_ms": 590,
+  "rtf": 0.14
+ },
+ "all": {
+  "n": 72,
+  "p50_ms": 415,
+  "p95_ms": 564,
+  "max_ms": 590,
+  "rtf": 0.141
+ },
+ "short_le30": {
+  "n": 18,
+  "p50_ms": 322,
+  "p95_ms": 496,
+  "max_ms": 513,
+  "rtf": 0.143
+ },
+ "long_gt45": {
+  "n": 27,
+  "p50_ms": 519,
+  "p95_ms": 586,
+  "max_ms": 590,
+  "rtf": 0.141
+ },
+ "audio_s_mean": 3.02
+}

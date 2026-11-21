@@ -1,0 +1,331 @@
+[
+ {
+  "text": "Another spin. Clear behind, gentle throttle.",
+  "speed": 0.95,
+  "tokens": 47,
+  "len": 87000,
+  "nonfinite": 87000
+ },
+ {
+  "text": "Another spin. Clear behind, gentle throttle.",
+  "speed": 1.0,
+  "tokens": 47,
+  "len": 82200,
+  "nonfinite": 82200
+ },
+ {
+  "text": "Another spin. Clear behind, gentle throttle.",
+  "speed": 1.1,
+  "tokens": 47,
+  "len": 78600,
+  "nonfinite": 78600
+ },
+ {
+  "text": "Blue flag. Yield to the car behind",
+  "speed": 1.1,
+  "tokens": 39,
+  "len": 66600,
+  "nonfinite": 66600
+ },
+ {
+  "text": "Cold tyres and brakes for the restart. Warm them up, brake early into turn one",
+  "speed": 1.1,
+  "tokens": 86,
+  "len": 119400,
+  "nonfinite": 119400
+ },
+ {
+  "text": "Drive-through is a separate pass, no tyres. The tyre stop comes after",
+  "speed": 1.1,
+  "tokens": 69,
+  "len": 111600,
+  "nonfinite": 111600
+ },
+ {
+  "text": "Green flag, green flag. Racing again, push now",
+  "speed": 1.1,
+  "tokens": 52,
+  "len": 88800,
+  "nonfinite": 88800
+ },
+ {
+  "text": "Green flag. Racing again, push now",
+  "speed": 0.95,
+  "tokens": 38,
+  "len": 75600,
+  "nonfinite": 75600
+ },
+ {
+  "text": "Green flag. Racing again, push now",
+  "speed": 1.1,
+  "tokens": 38,
+  "len": 67800,
+  "nonfinite": 67800
+ },
+ {
+  "text": "Green flag. VSC is over, race at full pace",
+  "speed": 0.95,
+  "tokens": 55,
+  "len": 94800,
+  "nonfinite": 94800
+ },
+ {
+  "text": "Green flag. VSC is over, race at full pace",
+  "speed": 1.0,
+  "tokens": 55,
+  "len": 91800,
+  "nonfinite": 91800
+ },
+ {
+  "text": "Green flag. VSC is over, race at full pace",
+  "speed": 1.1,
+  "tokens": 55,
+  "len": 85800,
+  "nonfinite": 85800
+ },
+ {
+  "text": "Green, green. Safety car in, race now",
+  "speed": 0.95,
+  "tokens": 45,
+  "len": 79200,
+  "nonfinite": 79200
+ },
+ {
+  "text": "Green, green. Safety car in, race now",
+  "speed": 1.0,
+  "tokens": 45,
+  "len": 77400,
+  "nonfinite": 77400
+ },
+ {
+  "text": "Green, green. Safety car in, race now",
+  "speed": 1.1,
+  "tokens": 45,
+  "len": 72000,
+  "nonfinite": 72000
+ },
+ {
+  "text": "Green, green. VSC's over, full power",
+  "speed": 1.1,
+  "tokens": 46,
+  "len": 75600,
+  "nonfinite": 75600
+ },
+ {
+  "text": "He's on fresher tyres, not in our race. Let him go, save the tyres",
+  "speed": 0.95,
+  "tokens": 75,
+  "len": 121200,
+  "nonfinite": 121200
+ },
+ {
+  "text": "He's on fresher tyres, not in our race. Let him go, save the tyres",
+  "speed": 1.0,
+  "tokens": 75,
+  "len": 118200,
+  "nonfinite": 118200
+ },
+ {
+  "text": "He's on fresher tyres, not in our race. Let him go, save the tyres",
+  "speed": 1.1,
+  "tokens": 75,
+  "len": 109200,
+  "nonfinite": 109200
+ },
+ {
+  "text": "Lap invalid. Next one, inside the white line.",
+  "speed": 0.95,
+  "tokens": 51,
+  "len": 91800,
+  "nonfinite": 91800
+ },
+ {
+  "text": "Lap is gone. Reset and get a clean one.",
+  "speed": 0.95,
+  "tokens": 43,
+  "len": 78600,
+  "nonfinite": 78600
+ },
+ {
+  "text": "Lap is gone. Reset and get a clean one.",
+  "speed": 1.0,
+  "tokens": 43,
+  "len": 75600,
+  "nonfinite": 75600
+ },
+ {
+  "text": "Lap is gone. Reset and get a clean one.",
+  "speed": 1.1,
+  "tokens": 43,
+  "len": 70200,
+  "nonfinite": 70200
+ },
+ {
+  "text": "Lap's deleted, track limits. Back off, recharge, we go again",
+  "speed": 1.1,
+  "tokens": 67,
+  "len": 94800,
+  "nonfinite": 94800
+ },
+ {
+  "text": "Last chance for the lap. Go out now",
+  "speed": 1.1,
+  "tokens": 38,
+  "len": 64800,
+  "nonfinite": 64800
+ },
+ {
+  "text": "Lost it again. Clear, gentle throttle.",
+  "speed": 1.0,
+  "tokens": 40,
+  "len": 75000,
+  "nonfinite": 75000
+ },
+ {
+  "text": "Nearly spun. Great reactions, ease the rears",
+  "speed": 0.95,
+  "tokens": 45,
+  "len": 85200,
+  "nonfinite": 85200
+ },
+ {
+  "text": "Next lap's gone too, track limits. Cool lap, recharge, we go again",
+  "speed": 1.0,
+  "tokens": 75,
+  "len": 116400,
+  "nonfinite": 116400
+ },
+ {
+  "text": "Next lap's gone too, track limits. Cool lap, recharge, we go again",
+  "speed": 1.1,
+  "tokens": 75,
+  "len": 111000,
+  "nonfinite": 111000
+ },
+ {
+  "text": "Release now. The window's closing, or we miss the lap",
+  "speed": 0.95,
+  "tokens": 55,
+  "len": 88800,
+  "nonfinite": 88800
+ },
+ {
+  "text": "Release now. The window's closing, or we miss the lap",
+  "speed": 1.0,
+  "tokens": 55,
+  "len": 85200,
+  "nonfinite": 85200
+ },
+ {
+  "text": "Release now. The window's closing, or we miss the lap",
+  "speed": 1.1,
+  "tokens": 55,
+  "len": 82200,
+  "nonfinite": 82200
+ },
+ {
+  "text": "Reminder, penalty's unserved. It comes off at the stop",
+  "speed": 0.95,
+  "tokens": 55,
+  "len": 100200,
+  "nonfinite": 100200
+ },
+ {
+  "text": "Reminder, penalty's unserved. It comes off at the stop",
+  "speed": 1.0,
+  "tokens": 55,
+  "len": 97200,
+  "nonfinite": 97200
+ },
+ {
+  "text": "Reminder, penalty's unserved. It comes off at the stop",
+  "speed": 1.1,
+  "tokens": 55,
+  "len": 90600,
+  "nonfinite": 90600
+ },
+ {
+  "text": "Same lock-up again. Slightly untidy. Softer pedal.",
+  "speed": 1.1,
+  "tokens": 54,
+  "len": 90600,
+  "nonfinite": 90600
+ },
+ {
+  "text": "Stay out, extend. Their tyres need time, push now",
+  "speed": 1.1,
+  "tokens": 55,
+  "len": 91200,
+  "nonfinite": 91200
+ },
+ {
+  "text": "Tyre check, roughly one lap of pace in them",
+  "speed": 1.1,
+  "tokens": 46,
+  "len": 72600,
+  "nonfinite": 72600
+ },
+ {
+  "text": "Understood, your call. Cool this one then",
+  "speed": 1.1,
+  "tokens": 42,
+  "len": 69600,
+  "nonfinite": 69600
+ },
+ {
+  "text": "Unserved penalty on the car. We serve it at the stop",
+  "speed": 1.1,
+  "tokens": 53,
+  "len": 84600,
+  "nonfinite": 84600
+ },
+ {
+  "text": "VSC ending, VSC ending. Be ready to go",
+  "speed": 0.95,
+  "tokens": 57,
+  "len": 99600,
+  "nonfinite": 99600
+ },
+ {
+  "text": "VSC ending, VSC ending. Be ready to go",
+  "speed": 1.0,
+  "tokens": 57,
+  "len": 96600,
+  "nonfinite": 96600
+ },
+ {
+  "text": "VSC ending, VSC ending. Be ready to go",
+  "speed": 1.1,
+  "tokens": 57,
+  "len": 90600,
+  "nonfinite": 90600
+ },
+ {
+  "text": "Virtual safety car ending. Hold the delta until green",
+  "speed": 0.95,
+  "tokens": 64,
+  "len": 108000,
+  "nonfinite": 108000
+ },
+ {
+  "text": "Virtual safety car ending. Hold the delta until green",
+  "speed": 1.0,
+  "tokens": 64,
+  "len": 105600,
+  "nonfinite": 105600
+ },
+ {
+  "text": "Window closing. Go now or we miss the lap",
+  "speed": 1.0,
+  "tokens": 47,
+  "len": 75000,
+  "nonfinite": 75000
+ },
+ {
+  "text": "Window closing. Go now or we miss the lap",
+  "speed": 1.1,
+  "tokens": 47,
+  "len": 72600,
+  "nonfinite": 72600
+ }
+]

@@ -1,0 +1,48 @@
+{
+ "label": "kokoro-gpu-fp32-rerun",
+ "mode": "kokoro-cuda",
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "sample_rate": 24000,
+ "load_s": 1.21,
+ "first_render_ms": 754,
+ "vram_delta_mib": 1381,
+ "pass1": {
+  "n": 24,
+  "p50_ms": 177,
+  "p95_ms": 236,
+  "max_ms": 250,
+  "rtf": 0.068
+ },
+ "pass2_3": {
+  "n": 48,
+  "p50_ms": 171,
+  "p95_ms": 227,
+  "max_ms": 233,
+  "rtf": 0.066
+ },
+ "all": {
+  "n": 72,
+  "p50_ms": 172,
+  "p95_ms": 232,
+  "max_ms": 250,
+  "rtf": 0.067
+ },
+ "short_le30": {
+  "n": 18,
+  "p50_ms": 148,
+  "p95_ms": 177,
+  "max_ms": 206,
+  "rtf": 0.081
+ },
+ "long_gt45": {
+  "n": 27,
+  "p50_ms": 208,
+  "p95_ms": 235,
+  "max_ms": 250,
+  "rtf": 0.063
+ },
+ "audio_s_mean": 2.67
+}

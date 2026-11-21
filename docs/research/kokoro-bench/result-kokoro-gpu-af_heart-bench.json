@@ -1,0 +1,48 @@
+{
+ "label": "kokoro-gpu-af_heart-bench",
+ "mode": "kokoro-cuda",
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "sample_rate": 24000,
+ "load_s": 1.16,
+ "first_render_ms": 754,
+ "vram_delta_mib": 1579,
+ "pass1": {
+  "n": 24,
+  "p50_ms": 164,
+  "p95_ms": 208,
+  "max_ms": 218,
+  "rtf": 0.062
+ },
+ "pass2_3": {
+  "n": 48,
+  "p50_ms": 160,
+  "p95_ms": 197,
+  "max_ms": 221,
+  "rtf": 0.059
+ },
+ "all": {
+  "n": 72,
+  "p50_ms": 163,
+  "p95_ms": 208,
+  "max_ms": 221,
+  "rtf": 0.06
+ },
+ "short_le30": {
+  "n": 18,
+  "p50_ms": 133,
+  "p95_ms": 147,
+  "max_ms": 153,
+  "rtf": 0.071
+ },
+ "long_gt45": {
+  "n": 27,
+  "p50_ms": 187,
+  "p95_ms": 217,
+  "max_ms": 221,
+  "rtf": 0.057
+ },
+ "audio_s_mean": 2.72
+}

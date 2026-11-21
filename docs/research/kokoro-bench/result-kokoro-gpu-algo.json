@@ -1,0 +1,48 @@
+{
+ "label": "kokoro-gpu-algo",
+ "mode": "kokoro-cuda",
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "sample_rate": 24000,
+ "load_s": 1.21,
+ "first_render_ms": 886,
+ "vram_delta_mib": 1545,
+ "pass1": {
+  "n": 24,
+  "p50_ms": 165,
+  "p95_ms": 207,
+  "max_ms": 211,
+  "rtf": 0.062
+ },
+ "pass2_3": {
+  "n": 48,
+  "p50_ms": 158,
+  "p95_ms": 211,
+  "max_ms": 215,
+  "rtf": 0.061
+ },
+ "all": {
+  "n": 72,
+  "p50_ms": 160,
+  "p95_ms": 210,
+  "max_ms": 215,
+  "rtf": 0.062
+ },
+ "short_le30": {
+  "n": 18,
+  "p50_ms": 138,
+  "p95_ms": 155,
+  "max_ms": 157,
+  "rtf": 0.075
+ },
+ "long_gt45": {
+  "n": 27,
+  "p50_ms": 193,
+  "p95_ms": 213,
+  "max_ms": 215,
+  "rtf": 0.058
+ },
+ "audio_s_mean": 2.67
+}

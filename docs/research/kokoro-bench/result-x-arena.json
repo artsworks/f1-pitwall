@@ -1,0 +1,34 @@
+{
+ "label": "arena",
+ "cfg": {
+  "cuda": {
+   "arena_extend_strategy": "kSameAsRequested"
+  }
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.78,
+ "first_ms": 713,
+ "vram_mib": 1423,
+ "n": 72,
+ "total_p50": 147.1,
+ "total_p95": 202.3,
+ "total_max": 216.0,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 145.3,
+ "run_p95": 200.6,
+ "pass1_p50": 146.1,
+ "pass23_p50": 147.1,
+ "rest_p50": 1.3,
+ "rest_p95": 1.6,
+ "nan_renders": 0,
+ "peak": 0.512,
+ "sample": {
+  "nan": 0,
+  "peak": 0.362,
+  "len": 87040
+ }
+}

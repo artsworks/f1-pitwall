@@ -1,0 +1,30 @@
+{
+ "label": "q3-base3",
+ "cfg": {},
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.75,
+ "first_ms": 718,
+ "vram_mib": 1548,
+ "n": 72,
+ "total_p50": 143.9,
+ "total_p95": 184.9,
+ "total_max": 209.1,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 142.5,
+ "run_p95": 183.3,
+ "pass1_p50": 147.3,
+ "pass23_p50": 140.9,
+ "rest_p50": 1.2,
+ "rest_p95": 1.4,
+ "nan_renders": 0,
+ "peak": 0.512,
+ "sample": {
+  "nan": 0,
+  "peak": 0.368,
+  "len": 87040
+ }
+}
