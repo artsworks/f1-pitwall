@@ -401,6 +401,12 @@ def cmd_bench(args: argparse.Namespace) -> int:
     if args.accept_changes and not args.update_baseline:
         print("bench: --accept-changes requires --update-baseline")
         return 1
+    if args.profile and args.update_baseline:
+        print("bench: --profile cannot be used with --update-baseline")
+        return 1
+    if args.profile and args.accept_changes:
+        print("bench: --profile cannot be used with --accept-changes")
+        return 1
     if args.trend:
         return _bench_history(scenarios_dir, args.window)
     if args.update_baseline and args.note is None:
@@ -441,6 +447,10 @@ def cmd_bench(args: argparse.Namespace) -> int:
                 f"bench: moved {moved} source recording(s) to {bench_dir}",
                 file=sys.stderr,
             )
+        if args.profile:
+            for scenario, (source, reason) in zip(scenarios, sources, strict=True):
+                _bench_profile_scenario(scenario, source, reason, settings, rules_dir)
+            return 0
         pending = [(i, source) for i, (source, _) in enumerate(sources) if source is not None]
         done = 0
         if jobs == 1 or len(pending) <= 1:
@@ -633,6 +643,62 @@ def _positive_int(value: str) -> int:
     if result < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return result
+
+
+def _bench_profile_scenario(
+    scenario: Any,
+    source: Path | None,
+    reason: str,
+    settings: Any,
+    rules_dir: Path | None,
+) -> None:
+    """Replay one scenario at max speed with Metrics attached and print the
+    timing budget. Never touches the scorecard or baseline."""
+    import asyncio
+    import io
+    import tempfile
+
+    from pitwall.clock import VirtualClock
+    from pitwall.engine import build_engine, run_replay
+    from pitwall.learning.bench import _scenario_ops
+    from pitwall.net.derive import derive_recording
+    from pitwall.net.recording import RecordingReader
+    from pitwall.store.uids import is_synthetic_uid
+
+    if source is None:
+        print(f"bench profile {scenario.id}: skipped ({reason})")
+        return
+    with tempfile.TemporaryDirectory(prefix="pitwall-bench-") as temporary:
+        path = source
+        if scenario.kind == "synthetic":
+            path = Path(temporary) / "derived.f1bin.zst"
+            derive_recording(source, path, _scenario_ops(scenario.mutations, source))
+        with RecordingReader(path) as reader:
+            header = reader.header
+        engine = build_engine(
+            clock=VirtualClock(),
+            overrides={"engine": {"heartbeat_s": 0}},
+            rules_dir=rules_dir,
+            isolated=True,
+            synthetic=bool(header.metadata.get("synthetic"))
+            or is_synthetic_uid(header.session_uid),
+            sinks=[],
+            decision_log_fp=io.StringIO(),
+            session_started_at=header.wall_clock_start_us / 1_000_000.0,
+        )
+        cpu0 = time.process_time()
+        delivered, _ = asyncio.run(run_replay(path, engine))
+        cpu_s = time.process_time() - cpu0
+        summary = engine.metrics.summary()
+        print(
+            f"bench profile {scenario.id}: {delivered} packets, "
+            f"parse us p50 {summary['parse_us']['p50']:.0f} "
+            f"p99 {summary['parse_us']['p99']:.0f}, "
+            f"tick ms p50 {summary['tick_ms']['p50']:.2f} "
+            f"p99 {summary['tick_ms']['p99']:.2f} "
+            f"max {summary['tick_ms']['max']:.2f}, "
+            f"cpu {cpu_s:.2f} s"
+        )
 
 
 def _bench_history(scenarios_dir: Path, window: int) -> int:

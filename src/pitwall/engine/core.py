@@ -79,6 +79,7 @@ class Engine:
         self.rule_engine = rule_engine
         self.ctx.dispatcher.on_response = self._on_dispatcher_response
         self.metrics = dispatcher.metrics
+        self.ingest.metrics = self.metrics
         self.speaker_name = "null"
         self.recording_desc = "off"
         self._paused = False
@@ -445,6 +446,13 @@ class Engine:
         self.setup_advisor.update_stop_wing(self.ctx.pit_plan.plan in _STOP_PLANS)
 
     def tick(self, now: float) -> list[Call]:
+        start_t = time.perf_counter()
+        try:
+            return self._tick(now)
+        finally:
+            self.metrics.note_tick(start_t, time.perf_counter())
+
+    def _tick(self, now: float) -> list[Call]:
         self.model._sync_run_fuel()
         self.ctx.store.poll(now)
         self.controls.sync_volume_steps()
@@ -565,11 +573,16 @@ class Engine:
         """Tick at tick_hz forever; dispatch drains on its own loop. The
         watchdog keeps the loop alive through a failing tick (logged)."""
         period = self.tick_period
+        proc_sample_t = -1.0
         while True:
-            if self.writer.alive_path is not None and time.monotonic() - self._alive_t >= 1.0:
-                self._alive_t = time.monotonic()
+            now_mono = time.monotonic()
+            if self.writer.alive_path is not None and now_mono - self._alive_t >= 1.0:
+                self._alive_t = now_mono
                 with contextlib.suppress(OSError):
                     self.writer.alive_path.touch()
+            if now_mono - proc_sample_t >= 1.0:
+                proc_sample_t = now_mono
+                self.metrics.sample_process(now_mono)
             try:
                 self.tick(self.ctx.clock.now())
             except Exception:  # noqa: BLE001 - watchdog: one bad tick must not end a race

@@ -116,6 +116,22 @@ Engine adapters must keep this measurement:
 Expect to need at most the first three. The architecture keeps all five options open, so
 none requires a decision now.
 
+## When to add native code
+
+Add native code only after hatches 1 to 3 are applied, and only if the numbers say the
+backend is the problem. That means backend CPU above 2 % steady state, or tick p99 above
+20 ms, or the frame-time A/B showing the backend outside the noise. It also means a
+`pitwall bench --profile` run or a profiler puts more than 50 % of the time in one pure
+function.
+
+The native module covers only that function. Build it with PyO3 and maturin as an abi3
+wheel. Keep the Python version as the reference and the fallback. A parity test runs both
+implementations on recorded packets.
+
+The first profile run did not meet this rule, so native code is not planned. On the Imola,
+Brazil and Zandvoort race recordings, tick p99 was 2.5 to 4.2 ms and parse p99 was 81 to
+119 µs per packet. Backend CPU was below 1 % of an 8-core machine.
+
 ## Operational shape
 
 Ship a tray application (PyInstaller single file) that starts with Windows, shows

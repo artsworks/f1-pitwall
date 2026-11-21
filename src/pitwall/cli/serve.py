@@ -528,6 +528,19 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     if db is not None:
         engine.on_session_end = on_session_end
+
+    def _log_budget_metrics() -> None:
+        summary = engine.metrics.summary()
+        print(
+            f"metrics: tick p99 {summary['tick_ms']['p99']:.2f} ms "
+            f"(max {summary['tick_ms']['max']:.2f}), "
+            f"parse p99 {summary['parse_us']['p99']:.0f} us, "
+            f"cpu {summary['process']['cpu_pct']:.1f} %, "
+            f"rss {summary['process']['rss_mb']:.0f} MB",
+            flush=True,
+        )
+
+    state.session_end_listeners.append(_log_budget_metrics)
     if recorder is not None:
         engine.recording_path_source = lambda: recorder.current_path or recorder.last_path
     elif child:

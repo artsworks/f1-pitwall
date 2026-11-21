@@ -850,6 +850,10 @@ def state_payload(
             "queue_wait_p99_ms": lat["queue_wait_ms"]["p99"],
             "tts_p99_ms": lat["tts_ms"]["p99"],
             "packet_to_ws_p99_ms": lat["packet_to_ws_ms"]["p99"],
+            "tick_p99_ms": lat["tick_ms"]["p99"],
+            "parse_p99_us": lat["parse_us"]["p99"],
+            "cpu_pct": lat["process"]["cpu_pct"],
+            "rss_mb": lat["process"]["rss_mb"],
         },
     }
 

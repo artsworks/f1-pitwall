@@ -277,4 +277,8 @@ def test_dashboard_latency_values_use_metrics() -> None:
         "queue_wait_p99_ms": 17.0,
         "tts_p99_ms": 31.0,
         "packet_to_ws_p99_ms": 42.0,
+        "tick_p99_ms": 0.0,
+        "parse_p99_us": 0.0,
+        "cpu_pct": 0.0,
+        "rss_mb": 0.0,
     }

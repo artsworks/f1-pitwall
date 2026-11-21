@@ -78,6 +78,10 @@ def test_websocket_hello_and_state_shape() -> None:
             "queue_wait_p99_ms",
             "tts_p99_ms",
             "packet_to_ws_p99_ms",
+            "tick_p99_ms",
+            "parse_p99_us",
+            "cpu_pct",
+            "rss_mb",
         }
         for key in ("live", "tyres", "brakes", "phase", "latency"):
             assert key in snap["payload"]

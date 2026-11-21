@@ -10,6 +10,7 @@ import asyncio
 import io
 import json
 import struct
+import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pitwall.clock import VirtualClock
 from pitwall.config.models import Settings
+from pitwall.metrics import Metrics
 from pitwall.model.driver import fold_weight
 from pitwall.protocol.header import (
     HEADER_SIZE,
@@ -55,6 +57,8 @@ class Ingest:
         # Optional payload rewrite applied after recording, before parsing
         # (e.g. `pitwall replay --mask-restricted`).
         self.transform: Callable[[bytes], bytes] | None = None
+        # Optional metrics sink for parse cost; the engine attaches its Metrics.
+        self.metrics: Metrics | None = None
 
     def register(self, packet_id: int, handler: PacketHandler) -> None:
         self._handlers[packet_id].append(handler)
@@ -86,8 +90,11 @@ class Ingest:
         arrivals.append(recv_time)
         while arrivals and recv_time - arrivals[0] > RATE_WINDOW_S:
             arrivals.popleft()
+        start_t = time.perf_counter()
         for handler in self._handlers[header.packet_id]:
             handler(header, payload, recv_time)
+        if self.metrics is not None:
+            self.metrics.note_parse(start_t, time.perf_counter())
 
     def rate_hz(self, packet_id: int, now: float) -> float:
         """Observed rate over the last RATE_WINDOW_S seconds."""

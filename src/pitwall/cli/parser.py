@@ -362,6 +362,11 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--out", type=Path, default=None, help="write scorecard JSON")
     add_json_arg(bench, help="print scorecard and gate as JSON")
     bench.add_argument("--trend", action="store_true", help="show history trend without replay")
+    bench.add_argument(
+        "--profile",
+        action="store_true",
+        help="replay selected scenarios at max speed and print timing metrics",
+    )
     bench.add_argument("--window", type=_positive_int, default=5)
     bench.add_argument(
         "--jobs",
