@@ -13,6 +13,15 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.6 (2026-11-21)
+
+### Bug Fixes
+
+- **engine**: Keep the state feed alive after an error, report tick errors and time session-end
+  learning ([#193](https://github.com/artsworks/f1-pitwall/pull/193),
+  [`5d79d70`](https://github.com/artsworks/f1-pitwall/commit/5d79d703cb4602e2d844291e0a6ebc075e5743a7))
+
+
 ## v0.60.5 (2026-11-21)
 
 ### Bug Fixes

@@ -1046,7 +1046,7 @@ wheels = [
 
 [[package]]
 name = "pitwall"
-version = "0.60.5"
+version = "0.60.6"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
