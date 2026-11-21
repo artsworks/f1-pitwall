@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+import logging
+import threading
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +50,7 @@ SUGGESTED_VOICES = (
     "en_US-lessac-medium",
 )
 PIPER_NOISE_SCALE = 0.667  # Piper's default phoneme noise; scaled per tone
+log = logging.getLogger(__name__)
 
 
 def voice_path(settings: SpeechSettings, name: str | None = None) -> Path:
@@ -170,6 +173,31 @@ class PiperRenderer:
         return self.tones.get(priority, self.synth)(text)
 
 
+def lazy_piper_tones(
+    settings: SpeechSettings,
+) -> Callable[[str, int], tuple[bytes, float] | None]:
+    """Provisional audio from Piper, loaded on first use. Returns None when Piper is unavailable."""
+    lock = threading.Lock()
+    tones: dict[int, Synth] | None = None
+    failed = False
+
+    def provisional(text: str, priority: int) -> tuple[bytes, float] | None:
+        nonlocal tones, failed
+        with lock:
+            if tones is None and not failed:
+                try:
+                    tones = make_piper_tone_synths(settings)
+                except Exception as exc:  # noqa: BLE001 - report the missing voice once
+                    failed = True
+                    log.warning("Piper provisional audio unavailable: %s", exc)
+            loaded = tones
+        if loaded is None:
+            return None
+        return loaded.get(priority, loaded[2])(text)
+
+    return provisional
+
+
 def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -> WavSpeaker:
     tones = make_piper_tone_synths(settings)
     model = voice_path(settings)
@@ -196,6 +224,7 @@ def make_piper_speaker(settings: SpeechSettings, player: Player | None = None) -
         renderer,
         player or default_player(),
         cache_dir=storage_path(settings.voices_dir) / ".phrases",
+        render_timeout_s=settings.render_timeout_s,
     )
 
 

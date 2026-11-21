@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 CACHE_SIZE = 64
+BREAKER_FAILURES = 3
+BREAKER_OPEN_S = 60.0
 BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
 BLIP_PIP_GAP_S = 0.03
 BLIP_GAP_S = 0.06
@@ -71,6 +73,46 @@ class WarmProcess:
 
 class InvalidWav(ValueError):
     pass
+
+
+class RenderTimeout(RuntimeError):
+    pass
+
+
+class RenderSkipped(RuntimeError):
+    pass
+
+
+class _RenderLane:
+    """One daemon thread that runs primary renders, so a stuck render can be abandoned."""
+
+    def __init__(self) -> None:
+        self._jobs: queue.Queue[
+            tuple[Callable[[], tuple[bytes, float]], Future[tuple[bytes, float]]] | None
+        ] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="wav-render-lane")
+        self._thread.start()
+
+    def submit(self, fn: Callable[[], tuple[bytes, float]]) -> Future[tuple[bytes, float]]:
+        future: Future[tuple[bytes, float]] = Future()
+        self._jobs.put((fn, future))
+        return future
+
+    def close(self) -> None:
+        self._jobs.put(None)
+
+    def _run(self) -> None:
+        while True:
+            job = self._jobs.get()
+            if job is None:
+                return
+            fn, future = job
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                future.set_result(fn())
+            except Exception as exc:  # noqa: BLE001 - hand the render error to the waiting call
+                future.set_exception(exc)
 
 
 class WinsoundPlayer:
@@ -260,17 +302,30 @@ class WavSpeaker:
         *,
         cache_dir: Path | None = None,
         fallback: Speaker | None = None,
+        render_timeout_s: float | None = None,
     ) -> None:
         self.name = renderer.label
         self.on_spoken: Callable[[str, float], None] | None = None
         self.on_audio: Callable[[str, int, bytes], None] | None = None
         self.on_dropped: Callable[[str], None] | None = None
         self.busy_until = 0.0
+        self.render_failures = 0
+        self.render_timeouts = 0
+        self.provisional_plays = 0
+        self.last_error: str | None = None
+        self._last_error_t: float | None = None
+        self._dropped_count = 0
+        self._consecutive_failures = 0
+        self._breaker_open_until: float | None = None
         self._renderer = renderer
         self._player = player
         self._gain = 1.0
         self._cache_dir = cache_dir
         self._fallback = fallback
+        self._render_timeout_s = (
+            render_timeout_s if render_timeout_s is not None and render_timeout_s > 0 else None
+        )
+        self._lane = _RenderLane() if self._render_timeout_s is not None else None
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
         self._cache_lock = threading.RLock()
         self._state_lock = threading.RLock()
@@ -461,6 +516,20 @@ class WavSpeaker:
         if error is not None:
             raise error
 
+    def health(self) -> dict[str, Any]:
+        last_error_t = self._last_error_t
+        return {
+            "engine": self.name,
+            "worker_alive": self._thread.is_alive(),
+            "breaker_open": self._breaker_open(),
+            "render_failures": self.render_failures,
+            "render_timeouts": self.render_timeouts,
+            "provisional_plays": self.provisional_plays,
+            "dropped": self._dropped_count,
+            "last_error": self.last_error,
+            "last_error_age_s": None if last_error_t is None else time.monotonic() - last_error_t,
+        }
+
     def queue_status(self) -> tuple[int, float]:
         now = time.monotonic()
         with self._state_lock:
@@ -493,24 +562,74 @@ class WavSpeaker:
     def _current(self, generation: int) -> bool:
         return generation == self._gen
 
+    def _breaker_open(self) -> bool:
+        return self._breaker_open_until is not None and time.monotonic() < self._breaker_open_until
+
+    def _record_failure(self, exc: Exception) -> None:
+        if not isinstance(exc, RenderTimeout):
+            self.render_failures += 1
+        self.last_error = str(exc)
+        self._last_error_t = time.monotonic()
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= BREAKER_FAILURES:
+            self._breaker_open_until = time.monotonic() + BREAKER_OPEN_S
+
+    def _render_primary(
+        self, key: tuple[int, str], text: str, priority: int
+    ) -> tuple[bytes, float]:
+        lane = self._lane
+        if lane is None:
+            wav, _ = self._renderer.render(text, priority, background=False)
+        else:
+            future = lane.submit(lambda: self._renderer.render(text, priority, background=False))
+            try:
+                wav, _ = future.result(timeout=self._render_timeout_s)
+            except TimeoutError:
+                if future.done():
+                    raise
+                self.render_timeouts += 1
+                lane.close()
+                self._lane = _RenderLane()
+                future.add_done_callback(lambda done: self._keep_late_render(key, text, done))
+                raise RenderTimeout(f"{self.name} render timed out") from None
+        result = wav, wav_info(wav)
+        self._remember(key, result, disk=True, disk_required=False)
+        return result
+
+    def _keep_late_render(
+        self, key: tuple[int, str], text: str, future: Future[tuple[bytes, float]]
+    ) -> None:
+        try:
+            wav, _ = future.result()
+            self._remember(key, (wav, wav_info(wav)), disk=True, disk_required=False)
+        except Exception as exc:  # noqa: BLE001 - a late render is best effort
+            log.warning("%s late render failed for %r: %s", self.name, text, exc)
+
     def _get_for_call(self, call: Call) -> tuple[bytes, float]:
         key = self._key(call.text, call.priority)
         hit = self._cached(key)
         if hit is not None:
             return hit
-        provisional = getattr(self._renderer, "provisional", None)
-        if not callable(provisional):
-            return self.render(call.text, call.priority)
-        # Wait up to omnivoice_wait_s for OmniVoice. Fall back to Piper on failure so the
-        # line still speaks.
         try:
-            wav, _ = self._renderer.render(call.text, call.priority, background=False)
-            result = wav, wav_info(wav)
-            self._remember(key, result, disk=True, disk_required=False)
-            return result
-        except Exception as exc:  # noqa: BLE001 - log render failures and use provisional audio
-            fallback = provisional(call.text, call.priority)
-            if fallback is None:
+            if self._breaker_open():
+                raise RenderSkipped(f"{self.name} circuit is open")
+            result = self._render_primary(key, call.text, call.priority)
+        except Exception as exc:  # noqa: BLE001 - use provisional audio, or let the call fail
+            if not isinstance(exc, RenderSkipped):
+                self._record_failure(exc)
+            provisional = getattr(self._renderer, "provisional", None)
+            audio = None
+            if callable(provisional):
+                try:
+                    audio = provisional(call.text, call.priority)
+                except Exception as provisional_exc:  # noqa: BLE001 - the call fails as if none existed
+                    log.warning(
+                        "%s provisional audio failed for %r: %s",
+                        self.name,
+                        call.text,
+                        provisional_exc,
+                    )
+            if audio is None:
                 raise
             log.warning(
                 "%s render did not finish for %r; playing provisional audio: %s",
@@ -518,8 +637,13 @@ class WavSpeaker:
                 call.text,
                 exc,
             )
-            self._queue_background(key, call.text, call.priority)
-            return fallback[0], wav_info(fallback[0])
+            self.provisional_plays += 1
+            if not isinstance(exc, RenderTimeout):
+                self._queue_background(key, call.text, call.priority)
+            return audio[0], wav_info(audio[0])
+        self._consecutive_failures = 0
+        self._breaker_open_until = None
+        return result
 
     def _queue_background(self, key: tuple[int, str], text: str, priority: int) -> None:
         with self._cache_lock:
@@ -613,6 +737,7 @@ class WavSpeaker:
         with self._state_lock:
             if not self._current(generation) or call_id in self._cancelled:
                 return
+            self._dropped_count += 1
             callback = self.on_dropped
             if callback is not None:
                 try:
@@ -627,22 +752,27 @@ class WavSpeaker:
             setter(percent)
 
     def _play(self, call: Call, wav: bytes, seconds: float, generation: int) -> None:
+        try:
+            if self._gain != 1.0:
+                with wave.open(io.BytesIO(wav), "rb") as reader:
+                    params = reader.getparams()
+                    frames = reader.readframes(params.nframes)
+                if params.sampwidth == 2:
+                    samples = np.frombuffer(frames, dtype="<i2")
+                    scaled = np.clip(samples.astype(np.float64) * self._gain, -32768, 32767)
+                    buf = io.BytesIO()
+                    with wave.open(buf, "wb") as writer:
+                        writer.setparams(params)
+                        writer.writeframes(scaled.astype("<i2").tobytes())
+                    wav = buf.getvalue()
+        except Exception as exc:  # noqa: BLE001 - report playback failure and drop the call
+            log.warning("%s playback failed: %s", self.name, exc)
+            self._drop(call.id, generation)
+            return
         with self._state_lock:
             if not self._current(generation) or call.id in self._cancelled:
                 return
             try:
-                if self._gain != 1.0:
-                    with wave.open(io.BytesIO(wav), "rb") as reader:
-                        params = reader.getparams()
-                        frames = reader.readframes(params.nframes)
-                    if params.sampwidth == 2:
-                        samples = np.frombuffer(frames, dtype="<i2")
-                        scaled = np.clip(samples.astype(np.float64) * self._gain, -32768, 32767)
-                        buf = io.BytesIO()
-                        with wave.open(buf, "wb") as writer:
-                            writer.setparams(params)
-                            writer.writeframes(scaled.astype("<i2").tobytes())
-                        wav = buf.getvalue()
                 self._player.play(wav)
             except Exception as exc:  # noqa: BLE001 - report playback failure and drop the call
                 log.warning("%s playback failed: %s", self.name, exc)
@@ -675,44 +805,51 @@ class WavSpeaker:
             _, _, call = self._q.get()
             if call is None:
                 return
-            with self._state_lock:
-                generation = self._gen
-                received = self._received.pop(call.id, time.monotonic())
-                cancelled = call.id in self._cancelled
-                if cancelled:
-                    self._cancelled.discard(call.id)
-            if cancelled:
-                continue
             try:
-                wav, seconds = self._get_for_call(call)
-            except Exception as exc:  # noqa: BLE001 - report render failures to the call handler
-                self._failed(call, generation, received, exc)
-                continue
+                self._process(call)
+            except Exception:  # noqa: BLE001 - keep the worker alive for the next call
+                log.exception("%s failed while handling %s", self.name, call.id)
+                self._drop(call.id, self._gen)
+
+    def _process(self, call: Call) -> None:
+        with self._state_lock:
+            generation = self._gen
+            received = self._received.pop(call.id, time.monotonic())
+            cancelled = call.id in self._cancelled
+            if cancelled:
+                self._cancelled.discard(call.id)
+        if cancelled:
+            return
+        try:
+            wav, seconds = self._get_for_call(call)
+        except Exception as exc:  # noqa: BLE001 - report render failures to the call handler
+            self._failed(call, generation, received, exc)
+            return
+        with self._state_lock:
+            if not self._current(generation) or call.id in self._cancelled:
+                self._cancelled.discard(call.id)
+                return
+            if (
+                call.max_age_s is not None
+                and call.handoff_age_s + (time.monotonic() - received) > call.max_age_s
+            ):
+                drop = True
+            else:
+                drop = False
+        if drop:
+            self._drop(call.id, generation)
+            return
+        with self._state_lock:
+            if call.priority == 1:
+                self._urgent.clear()
+            self._wake.clear()
+            if self._urgent.is_set():
+                self._wake.set()
+        self._play(call, wav, seconds, generation)
+        if self._wake.wait(seconds):
             with self._state_lock:
-                if not self._current(generation) or call.id in self._cancelled:
-                    self._cancelled.discard(call.id)
-                    continue
-                if (
-                    call.max_age_s is not None
-                    and call.handoff_age_s + (time.monotonic() - received) > call.max_age_s
-                ):
-                    drop = True
-                else:
-                    drop = False
-            if drop:
-                self._drop(call.id, generation)
-                continue
-            with self._state_lock:
-                if call.priority == 1:
-                    self._urgent.clear()
-                self._wake.clear()
-                if self._urgent.is_set():
-                    self._wake.set()
-            self._play(call, wav, seconds, generation)
-            if self._wake.wait(seconds):
-                with self._state_lock:
-                    if self._current(generation) and self._urgent.is_set():
-                        self._player.stop()
+                if self._current(generation) and self._urgent.is_set():
+                    self._player.stop()
 
     def flush(self) -> None:
         with self._state_lock:
@@ -754,6 +891,8 @@ class WavSpeaker:
         if self._background_thread is not None:
             self._background_queue.put(None)
             self._background_thread.join(timeout=2.0)
+        if self._lane is not None:
+            self._lane.close()
         self._player.stop()
         if self._fallback is not None:
             self._fallback.close()

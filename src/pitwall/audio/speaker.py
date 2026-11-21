@@ -13,7 +13,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from pitwall.audio.dispatcher import Call
 from pitwall.config.models import SpeechSettings
@@ -75,6 +75,11 @@ class QueueStatusSpeaker(Protocol):
     def queue_status(self) -> tuple[int, float]: ...
 
 
+@runtime_checkable
+class HealthSpeaker(Protocol):
+    def health(self) -> dict[str, Any]: ...
+
+
 def streams_audio(speaker: Speaker) -> bool:
     if getattr(speaker, "supports_audio_stream", False) is not True:
         return False
@@ -100,6 +105,7 @@ def wire_speaker(speaker: Speaker, hub: Hub, dispatcher: Dispatcher) -> None:
     hub.streams_audio = streams_audio(speaker)
     if hub.streams_audio:
         cast(StreamableSpeaker, speaker).on_audio = hub.audio
+    hub.speech_health_source = speaker.health if isinstance(speaker, HealthSpeaker) else None
 
 
 class NullSpeaker:

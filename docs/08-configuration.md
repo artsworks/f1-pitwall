@@ -86,6 +86,8 @@ The OmniVoice server owns the voice, seed, temperatures and steps. Pitwall sends
 
 `omnivoice_timeout_s` (default 2.5) is the timeout for the `/v1/models` check at startup. `omnivoice_wait_s` (default 5.0) is how long a cold line waits for OmniVoice audio before Piper plays. Set `omnivoice_wait_s` to 0 to play Piper at once. The call still drops if its age passes `max_call_age_s` during the wait.
 
+`speech.render_timeout_s` (default 4.0) is the longest wait for one render. A render that takes longer plays provisional audio if the engine has it, or drops the call. Set it to 0 or null for no limit.
+
 All engines use `enabled`, `rate`, `volume` and `radio_click`. `warm_phrases` sets how many phrases `pitwall voice warm` renders, and `warm_workers` sets how many render at once. The default is half the logical cores, and at most 4 for OmniVoice, so the game keeps CPU. Each Piper worker uses one CPU thread. A new engine registers its id with `register_engine()`. See `.agents/skills/tts-engine-contract/SKILL.md`.
 
 `input.volume_cycle_bit` binds the speech volume cycle to UDP Action 10 by default. Set the bit to `0` to disable it. A change to an `input.*_bit` field or to `input.shortcuts` takes effect when Pitwall reloads the config. A button that you hold during the reload does not fire until you release it and press it again.

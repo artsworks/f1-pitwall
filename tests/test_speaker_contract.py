@@ -188,6 +188,21 @@ def test_wire_speaker_updates_hub_audio_metrics_and_drop_state() -> None:
     assert list(dispatcher._dropped) == [dropped.id]
 
 
+def test_wire_speaker_exposes_health_only_for_health_speakers() -> None:
+    class HealthNullSpeaker(NullSpeaker):
+        def health(self) -> dict[str, object]:
+            return {"engine": self.name}
+
+    hub = Hub()
+    wire_speaker(HealthNullSpeaker(), hub, _dispatcher())
+    assert hub.speech_health_source is not None
+    assert hub.speech_health_source() == {"engine": "null"}
+
+    plain = Hub()
+    wire_speaker(NullSpeaker(), plain, _dispatcher())
+    assert plain.speech_health_source is None
+
+
 def _small_wav() -> bytes:
     return to_wav(np.zeros(240, dtype=np.float32), 24_000)
 

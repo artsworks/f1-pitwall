@@ -1004,6 +1004,9 @@ def create_app(
     @app.get("/api/health")
     async def health() -> JSONResponse:
         extra = hub.health_source() if hub.health_source is not None else {}
+        speech = (
+            {"speech": hub.speech_health_source()} if hub.speech_health_source is not None else {}
+        )
         return JSONResponse(
             {
                 "config_hash": settings_store.hash,
@@ -1011,6 +1014,7 @@ def create_app(
                 "latency": metrics.summary(),
                 "speaker": speaker_name,
                 **extra,
+                **speech,
             }
         )
 
