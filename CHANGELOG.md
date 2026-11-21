@@ -13,6 +13,26 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.60.2 (2026-11-21)
+
+### Bug Fixes
+
+- **audio**: Cap Kokoro GPU memory, retry failed GPU renders on the CPU and key the phrase cache on
+  audio settings
+  ([`93eb2b3`](https://github.com/artsworks/f1-pitwall/commit/93eb2b3fe9479768d8daa4d26582a1a4e54707e8))
+
+### Chores
+
+- Add backend budget metrics and bench --profile; record that native code is not needed
+  ([`cd22fc7`](https://github.com/artsworks/f1-pitwall/commit/cd22fc7817965d66d1399ea0d3cfe7294890b416))
+
+### Documentation
+
+- Prune history and architecture docs, add glossary and link guard
+  ([#190](https://github.com/artsworks/f1-pitwall/pull/190),
+  [`171372f`](https://github.com/artsworks/f1-pitwall/commit/171372f7cac15c7d58744bd6cebd0958e66a0a5c))
+
+
 ## v0.60.1 (2026-11-19)
 
 ### Bug Fixes
