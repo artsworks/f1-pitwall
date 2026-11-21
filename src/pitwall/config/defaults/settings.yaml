@@ -71,6 +71,7 @@ speech:
   omnivoice_url: "http://127.0.0.1:8080" # OmniVoice server base URL
   omnivoice_timeout_s: 2.5 # startup /v1/models health-check timeout
   omnivoice_wait_s: 5.0    # cold line waits this long for OmniVoice before Piper plays; 0 = instant Piper
+  render_timeout_s: 4.0    # max wait for one primary render before provisional audio or a drop; null or 0 = no limit
   kokoro_voice: "af_heart"
   kokoro_lang: "en-us"
   kokoro_speed: 1.0

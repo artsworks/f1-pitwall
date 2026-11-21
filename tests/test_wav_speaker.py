@@ -16,6 +16,7 @@ from pitwall.audio.wav_speaker import (
     WarmProcess,
     WavSpeaker,
     pcm_to_wav,
+    to_wav,
     wav_info,
 )
 from tests.audio_contract import (
@@ -119,6 +120,25 @@ def test_p1_preempts_and_jumps_queue() -> None:
         _wait_for(lambda: "urgent" in spoken)
         assert player.stops >= 1
         assert any(text == "urgent" for text, _, _ in renderer.calls)
+    finally:
+        speaker.close()
+
+
+def test_dropped_p1_does_not_stop_later_calls() -> None:
+    renderer = FakeRenderer(fail_text="urgent")
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("urgent", priority=1, text="urgent"))
+        _wait_for(lambda: dropped == ["urgent"])
+        speaker.speak(make_call("routine", priority=2, text="routine"))
+        _wait_for(lambda: spoken == ["routine"])
+        time.sleep(0.05)
+        assert player.stops == 0
     finally:
         speaker.close()
 
@@ -947,3 +967,326 @@ def test_wav_info_rejects_invalid_and_truncated_wavs() -> None:
     valid = FakeRenderer().render("valid", 2)[0]
     with pytest.raises(InvalidWav):
         wav_info(valid[:-4])
+
+
+class ProvisionalFake(FakeRenderer):
+    def __init__(
+        self, *, fail_text: str | None = None, provisional_error: str | None = None
+    ) -> None:
+        super().__init__(fail_text=fail_text)
+        self.provisional_error = provisional_error
+        self.provisional_wav = to_wav(np.zeros(160, dtype=np.float32), 16_000)
+
+    def provisional(self, _text: str, _priority: int) -> tuple[bytes, float]:
+        if self.provisional_error is not None:
+            raise RuntimeError(self.provisional_error)
+        return self.provisional_wav, wav_info(self.provisional_wav)
+
+
+def test_render_timeout_plays_provisional_then_caches_late_render(tmp_path: Path) -> None:
+    renderer = ProvisionalFake()
+    renderer.block_next()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player, cache_dir=tmp_path, render_timeout_s=0.05)
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("slow", text="line"))
+        _wait_for(lambda: spoken == ["slow"])
+        assert player.played == [renderer.provisional_wav]
+        assert speaker.health()["render_timeouts"] == 1
+        renderer.release.set()
+        path = speaker._phrase_path(speaker._key("line", 2))
+        assert path is not None
+        _wait_for(path.is_file)
+        speaker.speak(make_call("again", text="line"))
+        _wait_for(lambda: spoken == ["slow", "again"])
+        assert player.played[1] == path.read_bytes()
+        assert renderer.calls == [("line", 2, False)]
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_render_timeout_without_provisional_drops_call() -> None:
+    renderer = FakeRenderer()
+    renderer.block_next()
+    speaker = WavSpeaker(renderer, FakePlayer(), render_timeout_s=0.05)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("slow", text="slow"))
+        _wait_for(lambda: dropped == ["slow"])
+        renderer.release.set()
+        speaker.speak(make_call("next", text="next"))
+        _wait_for(lambda: spoken == ["next"])
+        assert dropped == ["slow"]
+        assert speaker.health()["dropped"] == 1
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_stuck_renders_are_capped_and_not_redispatched(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pitwall.audio.wav_speaker.BREAKER_OPEN_S", 0.2)
+    gate = threading.Event()
+
+    class StuckRenderer(FakeRenderer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stuck_calls = 0
+
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if text.startswith("cold") and not background:
+                self.stuck_calls += 1
+                gate.wait(5.0)
+            return super().render(text, priority, background=background)
+
+    def lane_threads() -> int:
+        return sum(thread.name == "wav-render-lane" for thread in threading.enumerate())
+
+    renderer = StuckRenderer()
+    speaker = WavSpeaker(renderer, FakePlayer(), render_timeout_s=0.05)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        for index in range(3):
+            speaker.speak(make_call(f"cold{index}", text=f"cold{index}"))
+        _wait_for(lambda: len(dropped) == 3)
+        assert renderer.stuck_calls == 3
+        _wait_for(lambda: not speaker.health()["breaker_open"])
+
+        threads_before = lane_threads()
+        speaker.speak(make_call("cold3", text="cold3"))
+        _wait_for(lambda: len(dropped) == 4)
+        assert renderer.stuck_calls == 3
+        assert lane_threads() == threads_before
+
+        gate.set()
+        speaker.speak(make_call("cold4", text="cold4"))
+        _wait_for(lambda: spoken == ["cold4"])
+        assert ("cold4", 2, False) in renderer.calls
+    finally:
+        gate.set()
+        speaker.close()
+
+
+def test_failed_late_render_still_queues_background_fill() -> None:
+    gate = threading.Event()
+
+    class LateFailRenderer(FakeRenderer):
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if text == "late" and not background:
+                self.calls.append((text, priority, background))
+                gate.wait(5.0)
+                raise RuntimeError("late failure")
+            return super().render(text, priority, background=background)
+
+    renderer = LateFailRenderer()
+    speaker = WavSpeaker(renderer, FakePlayer(), render_timeout_s=0.05)
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("late", text="late"))
+        _wait_for(lambda: dropped == ["late"])
+        gate.set()
+        _wait_for(lambda: ("late", 2, True) in renderer.calls)
+        _wait_for(lambda: speaker._cached(speaker._key("late", 2)) is not None)
+    finally:
+        gate.set()
+        speaker.close()
+
+
+def test_breaker_opens_after_repeated_failures_and_probe_closes_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pitwall.audio.wav_speaker.BREAKER_OPEN_S", 0.5)
+    renderer = FakeRenderer(fail_text="bad")
+    speaker = WavSpeaker(renderer, FakePlayer())
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        for index in range(3):
+            speaker.speak(make_call(f"bad-{index}", text="bad"))
+        _wait_for(lambda: len(dropped) == 3)
+        assert speaker.health()["breaker_open"] is True
+        speaker.speak(make_call("skipped", text="bad"))
+        _wait_for(lambda: len(dropped) == 4)
+        assert [call for call in renderer.calls if not call[2]] == [("bad", 2, False)] * 3
+        assert speaker.health()["render_failures"] == 3
+        _wait_for(lambda: not speaker.health()["breaker_open"])
+        speaker.speak(make_call("probe", text="good"))
+        _wait_for(lambda: spoken == ["probe"])
+        assert renderer.calls[-1] == ("good", 2, False)
+        assert speaker.health()["breaker_open"] is False
+    finally:
+        speaker.close()
+
+
+def test_failing_provisional_drops_call_and_worker_keeps_playing() -> None:
+    renderer = ProvisionalFake(fail_text="bad", provisional_error="provisional broke")
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("bad", text="bad"))
+        _wait_for(lambda: dropped == ["bad"])
+        speaker.speak(make_call("good", text="good"))
+        _wait_for(lambda: spoken == ["good"])
+        assert speaker.health()["worker_alive"] is True
+        assert len(player.played) == 1
+    finally:
+        speaker.close()
+
+
+def test_stuck_provisional_audio_times_out_and_is_not_redispatched() -> None:
+    class BlockingProvisional(ProvisionalFake):
+        def __init__(self) -> None:
+            super().__init__(fail_text="bad")
+            self.gate = threading.Event()
+            self.provisional_calls = 0
+
+        def provisional(self, text: str, priority: int) -> tuple[bytes, float]:
+            self.provisional_calls += 1
+            self.gate.wait(5.0)
+            return super().provisional(text, priority)
+
+    renderer = BlockingProvisional()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player, render_timeout_s=0.05)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("first", text="bad"))
+        _wait_for(lambda: dropped == ["first"])
+        speaker.speak(make_call("second", text="bad"))
+        _wait_for(lambda: dropped == ["first", "second"])
+        assert renderer.provisional_calls == 1
+        renderer.gate.set()
+        _wait_for(lambda: speaker._provisional_job is not None and speaker._provisional_job.done())
+        speaker.speak(make_call("third", text="bad"))
+        _wait_for(lambda: spoken == ["third"])
+        assert player.played == [renderer.provisional_wav]
+    finally:
+        renderer.gate.set()
+        speaker.close()
+
+
+def test_open_breaker_still_fills_cache_in_background() -> None:
+    class ForegroundDownRenderer(ProvisionalFake):
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if not background:
+                raise RuntimeError("foreground down")
+            return super().render(text, priority, background=background)
+
+    renderer = ForegroundDownRenderer()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    key = speaker._key("t3", 2)
+    try:
+        for index in range(3):
+            speaker.speak(make_call(f"t{index}", text=f"t{index}"))
+        _wait_for(lambda: speaker.health()["provisional_plays"] == 3)
+        assert speaker.health()["breaker_open"] is True
+        speaker.speak(make_call("t3", text="t3"))
+        _wait_for(lambda: speaker._cached(key) is not None)
+        assert ("t3", 2, False) not in renderer.calls
+        assert renderer.calls.count(("t3", 2, True)) == 1
+        speaker.speak(make_call("t3-again", text="t3"))
+        _wait_for(lambda: spoken[-1:] == ["t3-again"])
+        cached_wav = speaker._cached(key)[0]
+        assert player.played[-1] == cached_wav
+        assert cached_wav != renderer.provisional_wav
+    finally:
+        speaker.close()
+
+
+def test_open_breaker_fills_cache_without_provisional_audio() -> None:
+    class ForegroundDownRenderer(FakeRenderer):
+        def render(
+            self, text: str, priority: int, *, background: bool = False
+        ) -> tuple[bytes, float]:
+            if text.startswith("down") and not background:
+                raise RuntimeError("foreground down")
+            return super().render(text, priority, background=background)
+
+    renderer = ForegroundDownRenderer()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player)
+    dropped: list[str] = []
+    spoken: list[str] = []
+    speaker.on_dropped = dropped.append
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    key = speaker._key("line", 2)
+    try:
+        for index in range(3):
+            speaker.speak(make_call(f"down{index}", text=f"down{index}"))
+        _wait_for(lambda: len(dropped) == 3)
+        assert speaker.health()["breaker_open"] is True
+        speaker.speak(make_call("line", text="line"))
+        _wait_for(lambda: dropped == ["down0", "down1", "down2", "line"])
+        _wait_for(lambda: speaker._cached(key) is not None)
+        assert renderer.calls.count(("line", 2, True)) == 1
+        speaker.speak(make_call("line-again", text="line"))
+        _wait_for(lambda: spoken == ["line-again"])
+        assert player.played == [speaker._cached(key)[0]]
+    finally:
+        speaker.close()
+
+
+def test_health_reports_render_and_playback_state() -> None:
+    renderer = ProvisionalFake(fail_text="bad")
+    speaker = WavSpeaker(renderer, FakePlayer())
+    try:
+        speaker.speak(make_call("bad", text="bad"))
+        _wait_for(lambda: speaker.health()["provisional_plays"] == 1)
+        health = speaker.health()
+        assert set(health) == {
+            "engine",
+            "worker_alive",
+            "breaker_open",
+            "render_failures",
+            "render_timeouts",
+            "provisional_plays",
+            "dropped",
+            "last_error",
+            "last_error_age_s",
+        }
+        assert health["engine"] == "fake"
+        assert health["worker_alive"] is True
+        assert health["breaker_open"] is False
+        assert health["render_failures"] == 1
+        assert health["render_timeouts"] == 0
+        assert health["dropped"] == 0
+        assert health["last_error"] == "render failed"
+        assert health["last_error_age_s"] >= 0
+    finally:
+        speaker.close()
+
+
+def test_wav_speaker_contract_with_render_timeout() -> None:
+    player = FakePlayer()
+    speaker = WavSpeaker(FakeRenderer(), player, render_timeout_s=1.0)
+    try:
+        check_speaker_contract(speaker, player)
+    finally:
+        speaker.close()

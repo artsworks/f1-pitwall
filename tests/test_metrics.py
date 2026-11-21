@@ -58,17 +58,12 @@ def test_summary_budget_keys() -> None:
 def test_bench_profile_rejects_update_baseline(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["bench", "--profile", "--update-baseline", "--note", "x"]) == 1
     assert (
-        capsys.readouterr().out.strip()
-        == "bench: --profile cannot be used with --update-baseline"
+        capsys.readouterr().out.strip() == "bench: --profile cannot be used with --update-baseline"
     )
 
 
 def test_bench_profile_rejects_accept_changes(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["bench", "--profile", "--update-baseline", "--accept-changes", "--note", "x"]) == 1
     assert (
-        main(["bench", "--profile", "--update-baseline", "--accept-changes", "--note", "x"])
-        == 1
-    )
-    assert (
-        capsys.readouterr().out.strip()
-        == "bench: --profile cannot be used with --update-baseline"
+        capsys.readouterr().out.strip() == "bench: --profile cannot be used with --update-baseline"
     )

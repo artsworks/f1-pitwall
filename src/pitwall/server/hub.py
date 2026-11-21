@@ -40,6 +40,7 @@ class Hub:
         # Frames captured when no loop is attached (tests, replay pre-server).
         self.outbox: list[dict[str, Any]] = []
         self.health_source: Any = None  # callable -> dict for /api/health
+        self.speech_health_source: Any = None  # callable -> dict under "speech" in /api/health
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop

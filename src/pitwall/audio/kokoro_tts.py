@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 
+from pitwall.audio.piper_tts import lazy_piper_tones
 from pitwall.audio.wav_speaker import Player, WavSpeaker, default_player, radio_blip, to_wav
 from pitwall.config.models import SpeechSettings
 from pitwall.config.paths import storage_path
@@ -25,6 +26,7 @@ KOKORO_MODEL = "kokoro-v1.0.onnx"
 KOKORO_VOICES = "voices-v1.0.bin"
 KOKORO_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1"
 GPU_MEM_LIMIT_MB = 1024
+GPU_FAILURES_MAX = 3
 CPU_THREADS = 4
 PRESIZE_TEXT = (
     "Box at the end of this lap for hards, we go to the end, expect to come out in clean air "
@@ -60,6 +62,7 @@ class KokoroRenderer:
         label: str,
         cache_identity: str,
         cpu_factory: Callable[[], Any] | None = None,
+        provisional_source: Callable[[str, int], tuple[bytes, float] | None] | None = None,
     ) -> None:
         self._kokoro = kokoro
         self._settings = settings
@@ -68,6 +71,42 @@ class KokoroRenderer:
         self._cpu_factory = cpu_factory
         self._cpu_kokoro: Any = None
         self._cpu_lock = threading.Lock()
+        self._provisional_source = provisional_source
+        self._gpu_failures = 0
+
+    def provisional(self, text: str, priority: int) -> tuple[bytes, float] | None:
+        if self._provisional_source is None:
+            return None
+        return self._provisional_source(text, priority)
+
+    def _create(self, text: str, options: dict[str, Any]) -> tuple[Any, int]:
+        cpu_factory = self._cpu_factory
+        if cpu_factory is not None and self._gpu_failures >= GPU_FAILURES_MAX:
+            return self._cpu_create(cpu_factory, text, options)
+        try:
+            samples, sample_rate = self._kokoro.create(text, **options)
+        except Exception as exc:
+            if cpu_factory is None:
+                raise
+            self._gpu_failures += 1
+            if self._gpu_failures == GPU_FAILURES_MAX:
+                log.warning(
+                    "Kokoro GPU failed %d renders in a row; staying on the CPU", GPU_FAILURES_MAX
+                )
+            log.warning("Kokoro GPU render failed for %r; rendering on the CPU: %s", text, exc)
+            return self._cpu_create(cpu_factory, text, options)
+        self._gpu_failures = 0
+        return samples, sample_rate
+
+    def _cpu_create(
+        self, cpu_factory: Callable[[], Any], text: str, options: dict[str, Any]
+    ) -> tuple[Any, int]:
+        with self._cpu_lock:
+            if self._cpu_kokoro is None:
+                self._cpu_kokoro = cpu_factory()
+            cpu = self._cpu_kokoro
+        samples, sample_rate = cpu.create(text, **options)
+        return samples, sample_rate
 
     def render(self, text: str, priority: int, *, background: bool = False) -> tuple[bytes, float]:
         spoken = _ERS.sub("E R S", text)
@@ -76,17 +115,7 @@ class KokoroRenderer:
             "speed": _speed(self._settings, priority),
             "lang": self._settings.kokoro_lang,
         }
-        try:
-            samples, sample_rate = self._kokoro.create(spoken, **options)
-        except Exception as exc:
-            if self._cpu_factory is None:
-                raise
-            log.warning("Kokoro GPU render failed for %r; rendering on the CPU: %s", text, exc)
-            with self._cpu_lock:
-                if self._cpu_kokoro is None:
-                    self._cpu_kokoro = self._cpu_factory()
-                cpu = self._cpu_kokoro
-            samples, sample_rate = cpu.create(spoken, **options)
+        samples, sample_rate = self._create(spoken, options)
         volume = max(0, min(100, self._settings.volume)) / 100.0
         samples = samples * volume
         if self._settings.radio_click:
@@ -179,6 +208,7 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
         f"kokoro ({settings.kokoro_voice}, {device})",
         identity,
         cpu_factory=build_cpu_kokoro if on_gpu else None,
+        provisional_source=lazy_piper_tones(settings),
     )
     renderer.render("Radio check.", 2)
     if on_gpu:
@@ -187,4 +217,5 @@ def make_kokoro_speaker(settings: SpeechSettings, player: Player | None = None) 
         renderer,
         player or default_player(),
         cache_dir=storage_path(settings.voices_dir) / ".phrases",
+        render_timeout_s=settings.render_timeout_s,
     )

@@ -373,6 +373,17 @@ def test_health_includes_packet_age_and_live() -> None:
     assert h["live"] is False
 
 
+def test_health_includes_speech_only_when_speech_source_is_set() -> None:
+    hub = Hub()
+    client = TestClient(create_app(hub, ConfigStore(), Metrics()))
+    assert "speech" not in client.get("/api/health").json()
+    hub.speech_health_source = lambda: {"engine": "fake", "breaker_open": False}
+    assert client.get("/api/health").json()["speech"] == {
+        "engine": "fake",
+        "breaker_open": False,
+    }
+
+
 def test_packet_age_ms_helper() -> None:
     from pitwall.server.app import packet_age_ms
 
