@@ -597,6 +597,14 @@ Migration 3 (append-only): `calls.active_plan TEXT`, `calls.on_plan INT` and a
 sequence, plans JSON)` table; `Database.insert_plan_event()` /
 `plan_events_for_session()`.
 
+`Engine._log_sc_verdict()` runs inside `_plans()` on each lap the shadow verdict
+applies (docs/27 phase 1): SC or VSC with the VSC not ending, not a sprint or
+short race, more than `sc_stop_min_laps_left` laps left, on a dry compound. It
+writes one `suppressed` decision record per session and lap under rule id
+`sc_verdict`. The record's `inputs` carry the pick, the reason and the compound
+ladder, so the rows reach `calls.inputs` for hindsight. The verdict never
+reaches the radio.
+
 ## Battle state (`pitwall.strategy.battle`)
 
 `Engine._battle()` runs every racing tick after the plans and classifies the fight around

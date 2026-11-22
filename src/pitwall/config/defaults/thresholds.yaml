@@ -142,6 +142,7 @@ thresholds:
   # SC/VSC restart procedures (sc-restart)
   sc_delta_warn_s: -0.1   # SC/VSC delta below this is too fast (penalty risk)
   sc_delta_clear_s: 0.3   # re-arm once the delta is back above this
+  sc_verdict_current_lap_weight: 0.5  # SC verdict: weight of the current lap inside laps_needed
   # Weather radar and slick/inter crossover calls (docs/research/weather-crossover.md)
   rain_heads_up_pct: 40      # forecast rain chance for the early heads-up (below rain_inter_pct)
   rain_heads_up_max_min: 15  # heads-up looks only at forecast samples up to this many minutes ahead

@@ -147,6 +147,12 @@ measured pit loss.
 **Cheap stop.** If the `SCAR` event reports a safety car or VSC and current tyre wear
 justifies a stop, recommend boxing now and quantify the saving.
 
+**Safety-car verdict.** Under SC or VSC, `sc_verdict()` ranks each dry compound by
+whether its pace life and `usable_life` reach the flag, and picks the fastest
+survivor. Each lap it runs, the engine writes one suppressed decision record with
+the pick, the reason and the compound ladder. The verdict never speaks.
+`cheap_stop` still owns the radio until the shadow log proves it (docs/27).
+
 **Rival scope.** Track at most three rivals: the car ahead, the car behind (only while the
 gap is under 5 s), and the projected pit-exit rival. The projected rival's track position
 lands near your pit-exit point, computed as

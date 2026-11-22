@@ -30,6 +30,7 @@ from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
+    WORDS,
     CompoundModel,
     PlanEvent,
     PlanFields,
@@ -39,6 +40,7 @@ from pitwall.strategy.plans import (
     compound_stop_owed,
     view_fields,
 )
+from pitwall.strategy.scverdict import sc_verdict
 
 
 def _true_behind_view(snap: Snapshot) -> tuple[RivalView | None, float]:
@@ -140,6 +142,7 @@ class Planner:
         self._stop_check: tuple[str, str, int, float] | None = None
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
+        self._sc_verdict_laps: set[tuple[Any, int]] = set()
 
     def reset(self) -> None:
         self._held_plan = None
@@ -156,6 +159,7 @@ class Planner:
         self._stop_check = None
         self._used_compounds.clear()
         self._prev_race_phase = ""
+        self._sc_verdict_laps.clear()
 
     def rewind(self, t: float) -> None:
         self._held_plan = None
@@ -489,21 +493,22 @@ class Planner:
                 cur_cliff_age = (
                     snap.tyre_age_laps + lop if math.isfinite(lop) else cliff_age(cur, cliff)
                 )
+                inp = PlanInputs(
+                    lap_num=snap.lap_num,
+                    laps_remaining=snap.laps_remaining,
+                    tyre_age=snap.tyre_age_laps,
+                    current=snap.tyre_visual,
+                    cur=cur,
+                    cur_cliff_age=cur_cliff_age,
+                    compounds=self._compound_models(snap, cur),
+                    used=frozenset(self._used_compounds),
+                    green_loss_s=self.ctx.green_pit_loss_s or snap.pit_loss_s,
+                    sc_loss_s=self.ctx.sc_pit_loss_s or snap.pit_loss_s,
+                    wing_change_s=wing_loss_s,
+                    damage_pace_ms=damage_pace_ms,
+                )
                 tracker.update(
-                    PlanInputs(
-                        lap_num=snap.lap_num,
-                        laps_remaining=snap.laps_remaining,
-                        tyre_age=snap.tyre_age_laps,
-                        current=snap.tyre_visual,
-                        cur=cur,
-                        cur_cliff_age=cur_cliff_age,
-                        compounds=self._compound_models(snap, cur),
-                        used=frozenset(self._used_compounds),
-                        green_loss_s=self.ctx.green_pit_loss_s or snap.pit_loss_s,
-                        sc_loss_s=self.ctx.sc_pit_loss_s or snap.pit_loss_s,
-                        wing_change_s=wing_loss_s,
-                        damage_pace_ms=damage_pace_ms,
-                    ),
+                    inp,
                     self._plan_thresholds(snap, invalidate in ("damage", "pace")),
                     stops_done=self._stops_done,
                     neutralised=neutral,
@@ -515,12 +520,84 @@ class Planner:
                 self._red_restart = False
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
+                self._log_sc_verdict(snap, inp)
         st: PlanState = tracker.state
         if not st.active:
             return snap
         fields = view_fields(st, snap.lap_num)
         self.ctx.state.set_model(_with_plan(self.ctx.state.model, fields))
         return _with_plan(snap, fields)
+
+    def _log_sc_verdict(self, snap: Snapshot, inp: PlanInputs) -> None:
+        """Phase-1 shadow verdict (docs/27): each lap it runs, write one
+        suppressed decision record with the pick and the compound ladder.
+        cheap_stop still owns the radio; nothing here is spoken."""
+        phase = snap.race_phase
+        if not (
+            phase in ("sc", "vsc")
+            and not (phase == "vsc" and snap.sc_ending)
+            and not snap.is_sprint
+            and not snap.short_race
+            and snap.laps_remaining > self.ctx.th("sc_stop_min_laps_left", 3)
+            and snap.tyre_visual in DRY
+        ):
+            return
+        uid = self.ctx.state.session_uid
+        if (uid, snap.lap_num) in self._sc_verdict_laps:
+            return
+        self._sc_verdict_laps.add((uid, snap.lap_num))
+        if snap.tyre_sets:
+            sets = {
+                16: snap.fresh_sets_soft,
+                17: snap.fresh_sets_medium,
+                18: snap.fresh_sets_hard,
+            }
+            usable = {
+                v: max(
+                    (s.usable_life for s in snap.tyre_sets if s.visual == v),
+                    default=0,
+                )
+                for v in DRY
+            }
+        else:
+            sets, usable = {}, {}
+        th = self._plan_thresholds(snap, False)
+        verdict = sc_verdict(
+            inp,
+            fresh_sets=sets,
+            usable_life=usable,
+            cur_wear_pct=snap.wear_max_pct,
+            cur_wear_per_lap_pct=snap.wear_per_lap_pct,
+            stacking=snap.teammate_stacking,
+            th=th,
+        )
+        self.ctx.dispatcher.log.write(
+            {
+                "t": snap.now,
+                "session_time": snap.session_time,
+                "lap": snap.lap_num,
+                "lap_distance": snap.lap_distance,
+                "call_id": None,
+                "rule_id": "sc_verdict",
+                "priority": 2,
+                "urgency": "tactical",
+                "rank": 3,
+                "outcome": "suppressed",
+                "suppressed_by": "shadow",
+                "text": "",
+                "inputs": {
+                    "pick": verdict.pick,
+                    "pick_compound": WORDS.get(verdict.pick, ""),
+                    "reason": verdict.reason,
+                    "laps_needed": verdict.laps_needed,
+                    "saving_s": verdict.saving_s,
+                    "survive_min": verdict.survive_min,
+                    "ladder": [dataclasses.asdict(row) for row in verdict.rows],
+                },
+                "active_plan": snap.active_plan,
+                "on_plan": snap.on_plan if snap.active_plan else None,
+            }
+        )
 
     def _persist_plan_event(self, snap: Snapshot, ev: PlanEvent, st: PlanState) -> None:
         plans = [
