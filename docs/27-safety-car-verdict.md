@@ -1,6 +1,6 @@
 # Safety car verdict: which compound reaches the flag (plan v4)
 
-Status: draft for review. No code exists yet. Checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
+Status: phase 1 (shadow log) and phase 2 (hindsight grading) are built. Phases 3 to 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
 
 ## Goal
 
@@ -94,7 +94,7 @@ Hindsight grades the ladder row of the set that ran after the SC, not the verdic
 - If the driver made a stop, grade the row of the fitted compound. If the driver made no stop, grade the row of the current set.
 - Good: the row said "survives" and the set reached the flag with no later stop for tyres. Also good: the row said "does not survive" and the driver made a later stop for tyres.
 - Wrong: the row and the result disagree.
-- Censored: a later stop for damage, rain, a penalty or an owed second compound, or a second SC stop.
+- Censored: a later stop for rain, an owed second compound, damage or a penalty, or a second SC stop. The grader detects damage from a damage call (`front_wing_damage`, `front_wing_lost_box` or `puncture`) between the verdict and the stop. It detects a penalty from `penalty_served_stop_go` at the stop.
 - Test: one synthetic race for each grade, and one for a "stay out".
 
 ### Phase 3: ladder on the Plan C card, and bench scenario

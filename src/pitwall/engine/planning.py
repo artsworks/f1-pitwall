@@ -577,7 +577,7 @@ class Planner:
                 "session_time": snap.session_time,
                 "lap": snap.lap_num,
                 "lap_distance": snap.lap_distance,
-                "call_id": None,
+                "call_id": f"sc_verdict:{snap.lap_num}",
                 "rule_id": "sc_verdict",
                 "priority": 2,
                 "urgency": "tactical",
