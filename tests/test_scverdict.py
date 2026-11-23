@@ -314,6 +314,22 @@ def test_sc_verdict_runs_under_full_sc_that_is_ending(tmp_path) -> None:
     assert len(_verdict_calls(db)) == 1
 
 
+@pytest.mark.parametrize(
+    ("offset", "logged"),
+    [(-0.05, 0.55), (-0.30, 0.45), (0.50, 0.85)],
+    ids=["learned", "floor", "ceiling"],
+)
+def test_sc_verdict_applies_learned_survive_offset_within_bounds(tmp_path, offset, logged) -> None:
+    db = Database(":memory:")
+    db.set_param(-1, -1, "sc_survive_offset", offset, 1.0)
+    engine = _sc_engine(tmp_path, db)
+
+    engine.planner._plan(_sc_snap())
+
+    (call,) = _verdict_calls(db)
+    assert json.loads(call["inputs"])["survive_min"] == pytest.approx(logged)
+
+
 def test_sc_verdict_rides_the_snapshot_until_green(tmp_path) -> None:
     engine = _sc_engine(tmp_path, Database(":memory:"))
     planner = engine.planner

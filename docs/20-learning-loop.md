@@ -98,6 +98,15 @@ logged and skipped. To run upkeep again, restart `pitwall start`. To skip the re
 cooldown steps, set `learning.auto_calibrate: false`. Cooldown multipliers stay between
 `tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
 
+The safety-car survival threshold learns an offset in the same step. Upkeep recomputes it
+from every graded `sc_row` outcome in the database. Synthetic sessions, censored rows and
+`n/a` rows do not count. An optimistic miss is a "survives" row for a set that lost pace.
+A pessimistic miss is a "does not survive" row for a set that kept pace. Fewer than
+`sc_survive_learn_min_rows` graded rows keep the offset at 0. Otherwise the offset is
+`sc_survive_step_up` times the optimistic misses, minus `sc_survive_step_down` times the
+pessimistic misses. The engine reads the offset when it starts, so a running session keeps
+the value it loaded.
+
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
 `deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value
 does not have enough weight, the engine falls back to the unscoped value. Non-race stints

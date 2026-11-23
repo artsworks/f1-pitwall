@@ -41,6 +41,7 @@ class EngineContext:
     energy_prev_lap: EnergyBudget | None = None
     green_pit_loss_s: float = 0.0
     sc_pit_loss_s: float = 0.0
+    sc_survive_offset: float = 0.0
     green_pit_samples_s: list[float] = field(default_factory=list)
     stint_laps: list[LapRow] = field(default_factory=list)
     stint_fuel_ref: float = 0.0

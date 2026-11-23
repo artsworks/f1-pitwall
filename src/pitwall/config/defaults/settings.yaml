@@ -272,6 +272,12 @@ thresholds:
   tune_min_cooldown_mult: 0.5
   tune_max_cooldown_mult: 4.0
   tune_auto_weight: 0.5         # a hindsight outcome counts this much of a human grade
+  # Learned offset on sc_survive_min (pitwall tune, docs/20)
+  sc_survive_learn_min_rows: 3  # graded sc_row outcomes before the offset moves off 0
+  sc_survive_step_up: 0.10      # per optimistic miss: the row said survives, the set lost pace
+  sc_survive_step_down: 0.05    # per pessimistic miss: the row said no survival, the set kept pace
+  sc_survive_min_floor: 0.45    # the learned survival threshold never goes below this
+  sc_survive_min_ceiling: 0.85  # ... and never above this
   # Hindsight grader (pitwall digest, docs/20)
   hind_stop_window_laps: 1      # a box call counts as taken if the stop is within this
   hind_stop_tol_s: 1.5          # stop lap within this of the hindsight-best is "good"

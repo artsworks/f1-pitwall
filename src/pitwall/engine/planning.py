@@ -569,6 +569,11 @@ class Planner:
         else:
             sets, usable = {}, {}
         th = self._plan_thresholds(snap, False)
+        learned = threshold(th, "sc_survive_min", 0.60) + self.ctx.sc_survive_offset
+        survive_min = min(
+            threshold(th, "sc_survive_min_ceiling", 0.85),
+            max(threshold(th, "sc_survive_min_floor", 0.45), learned),
+        )
         verdict = sc_verdict(
             inp,
             fresh_sets=sets,
@@ -576,7 +581,7 @@ class Planner:
             cur_wear_pct=snap.wear_max_pct,
             cur_wear_per_lap_pct=snap.wear_per_lap_pct,
             stacking=snap.teammate_stacking,
-            th=th,
+            th={**th, "sc_survive_min": round(survive_min, 3)},
         )
         self._sc_verdict = verdict
         self.ctx.dispatcher.log.write(

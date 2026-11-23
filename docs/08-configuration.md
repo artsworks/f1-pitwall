@@ -239,6 +239,20 @@ Switch mindsets mid-race with a wheel button (UDP Action 2) or key, then confirm
 ("aggressive"). Use the dashboard toggle between sessions because clicking it takes focus
 from a fullscreen game (`12-driver-input.md`).
 
+### Learned offset on `sc_survive_min`
+
+`pitwall tune` learns an offset that the engine adds to the mindset's `sc_survive_min`.
+The offset comes from graded safety-car rows (docs/20). The engine clamps the result
+between the floor and the ceiling.
+
+| Key | Default | What it controls |
+|---|---|---|
+| `sc_survive_learn_min_rows` | 3 | graded rows needed before the offset moves off 0 |
+| `sc_survive_step_up` | 0.10 | offset added per optimistic miss |
+| `sc_survive_step_down` | 0.05 | offset subtracted per pessimistic miss |
+| `sc_survive_min_floor` | 0.45 | lowest survival threshold the offset can reach |
+| `sc_survive_min_ceiling` | 0.85 | highest survival threshold the offset can reach |
+
 ## Weekend and season context
 
 The engine uses the weekend link for degradation priors. Fitted practice stints can inform

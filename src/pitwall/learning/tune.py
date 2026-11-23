@@ -18,6 +18,7 @@ TUNE_TRACK = -1  # model_params namespace for rule tuning (not track-specific)
 TUNE_COMPOUND = -1
 COOLDOWN_PREFIX = "cooldown_mult:"
 AB_PREFIX = "ab_net:"
+SC_SURVIVE_OFFSET = "sc_survive_offset"
 
 _BAD = ("noise", "wrong", "too_late")
 # Fuel margin at the flag also moves with the driver's response to the call
@@ -48,6 +49,9 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
     hi = _th(th, "tune_max_cooldown_mult", 4.0)
     auto_w = _th(th, "tune_auto_weight", 0.5)
     cap = _th(th, "param_weight_cap", 50)
+    sc_min_rows = int(_th(th, "sc_survive_learn_min_rows", 3))
+    sc_up = _th(th, "sc_survive_step_up", 0.10)
+    sc_down = _th(th, "sc_survive_step_down", 0.05)
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     graded: set[tuple[object, str]] = set()
     synthetic_uids = {
@@ -82,6 +86,20 @@ def tune_from_db(db: Database, th: Mapping[str, Any]) -> list[RuleTune]:
             continue
         seen.add(key)
         auto[str(o["rule_id"])][label] += 1
+    sc_rows = [
+        o
+        for o in db.all_outcomes()
+        if o["metric"] == "sc_row"
+        and o["label"] in ("good", "wrong")
+        and not is_synthetic_session(o["session_uid"])
+    ]
+    if sc_rows:
+        pessimistic = sum(1 for o in sc_rows if o["label"] == "wrong" and o["predicted"] == 0.0)
+        optimistic = sum(1 for o in sc_rows if o["label"] == "wrong" and o["predicted"] == 1.0)
+        offset = 0.0
+        if len(sc_rows) >= sc_min_rows:
+            offset = round(optimistic * sc_up - pessimistic * sc_down, 3)
+        db.set_param(TUNE_TRACK, TUNE_COMPOUND, SC_SURVIVE_OFFSET, offset, min(len(sc_rows), cap))
     ab: dict[str, int] = defaultdict(int)
     for r in db.ab_results():
         ab[str(r["rule_id"])] += int(r["only_b"] or 0) - int(r["only_a"] or 0)
@@ -116,6 +134,14 @@ def load_cooldown_mults(db: Database | None) -> dict[str, float]:
         for p in db.params_for_track(TUNE_TRACK)
         if p.compound == TUNE_COMPOUND and p.name.startswith(COOLDOWN_PREFIX)
     }
+
+
+def load_sc_survive_offset(db: Database | None) -> float:
+    """Persisted offset on sc_survive_min for the safety-car verdict."""
+    if db is None:
+        return 0.0
+    param = db.get_param(TUNE_TRACK, TUNE_COMPOUND, SC_SURVIVE_OFFSET)
+    return 0.0 if param is None else param.value
 
 
 def record_diff(db: Database, result: Mapping[str, Any], **meta: str) -> int:

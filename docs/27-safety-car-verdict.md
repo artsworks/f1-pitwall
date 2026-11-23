@@ -40,6 +40,7 @@ No code on main asks whether the new set lasts to the flag.
 7. **The survival threshold is a new mindset key.** `sc_survive_min` is 0.60 for balanced and 0.45 for aggressive. The first values were 0.75 and 0.60. They changed on 2026-11-23 without calibration data, because the model is too pessimistic. Check them again before phase 4. `pit_confidence_min` (0.70 and 0.55) keeps its present meaning and its present use.
 8. **No confidence word until the high band can occur.** Without a learned wear prior the band stops at medium, so the word is always "medium". The radio line and the card omit the word until phase 5 lifts the cap.
 9. **The learned wear prior waits for evidence.** It needs a new learning path. The shadow log shows how often `usable_life` is wrong. Build the prior only if that case is common.
+10. **Learning moves the survival threshold.** Upkeep computes an offset on `sc_survive_min` from all `sc_row` grades of real sessions. A wrong "does not survive" lowers the threshold by 0.05. A wrong "survives" raises it by 0.10, because a wrong "stay out" costs more. The offset stays at 0 below 3 graded rows. The engine keeps the result between 0.45 and 0.85 and loads it at the start of a session. A row graded under an old threshold keeps its count. The limits bound that error.
 
 Decisions 1 to 5 and 7 of plan v2 stay as agreed. Decision 6 of plan v2 (the wear prior) moves to phase 5.
 
