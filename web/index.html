@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>pitwall</title>
-  <link rel="stylesheet" href="/static/style.css?v=38">
+  <link rel="stylesheet" href="/static/style.css?v=39">
 </head>
 <!-- One fixed screen (docs/15 §3). Body classes set by app.js: pit, race-pit, cool, quali, menu, sc,
      redflag, stale, phone, squeeze. Every value updates in place; nothing reflows. -->
@@ -131,17 +131,24 @@
       <div class="cap">CAR</div>
       <div class="carhead">
         <div class="card carcard">
-          <div class="row"><svg class="i l ok"><use href="#ico-fuel"/></svg><span id="fuel" class="hero">--</span></div>
-          <span class="tagw">LAPS AT FLAG</span>
+          <div class="car-label">Fuel</div>
+          <div id="fuel" class="hero">--</div>
+          <div class="car-desc">Laps at flag</div>
         </div>
         <div id="batt" class="card carcard battcard">
-          <div class="row"><svg class="i"><use href="#ico-batt"/></svg><span id="batt-pct" class="big">--</span></div>
-          <div class="row"><span id="batt-mode" class="mode">--</span><span id="batt-sub" class="tagw" hidden></span></div>
+          <div class="car-label">Battery</div>
+          <div class="car-value"><span id="batt-pct" class="big">--</span><span class="unit">%</span></div>
+          <div id="batt-charge" class="meter charge" aria-hidden="true" hidden><i></i></div>
+          <div class="car-state"><div id="batt-mode" class="mode">--</div><div id="batt-sub" class="car-desc" hidden></div></div>
         </div>
         <div id="damage" class="card carcard dmgcard">
-          <div class="row"><svg class="i s dim"><use href="#dmg"/></svg><span class="wing"><b id="dm-fwl" class="mid">--</b><svg class="i h"><use href="#wingL"/></svg><svg class="i h"><use href="#wingR"/></svg><b id="dm-fwr" class="mid">--</b></span></div>
-          <div class="row sub"><svg class="i"><use href="#floor"/></svg><b id="dm-floor" class="mid">--</b></div>
-          <div id="dm-more" class="tagw"></div>
+          <div class="car-label">Damage</div>
+          <div class="damage-rows">
+            <div class="damage-row"><span>Front wing L</span><div><b id="dm-fwl" class="mid">--</b><span class="unit">%</span></div></div>
+            <div class="damage-row"><span>Front wing R</span><div><b id="dm-fwr" class="mid">--</b><span class="unit">%</span></div></div>
+            <div class="damage-row"><span>Floor</span><div><b id="dm-floor" class="mid">--</b><span class="unit">%</span></div></div>
+          </div>
+          <div id="dm-more" class="damage-note"></div>
         </div>
       </div>
       <div id="tyres" class="tyres">
@@ -324,7 +331,7 @@
     <ol id="drvmenu-list"></ol>
   </aside>
   <div id="fx" class="fx"></div>
-  <script src="/static/app.js?v=42"></script>
+  <script src="/static/app.js?v=43"></script>
   <script src="/static/review.js?v=25"></script>
 </body>
 </html>

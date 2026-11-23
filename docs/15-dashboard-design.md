@@ -63,9 +63,11 @@ Ordered by how often a glance must resolve it. Type sizes follow the order.
 
 ## 3. Layout grid
 
-The live page is one fixed 16:9 screen. Rows, top to bottom: status bar (3 rem), banner (10 rem), main row, and footer (2 rem). The main row has three columns in the grid `3.6fr 4.6fr 3.8fr`. The root font size comes from the viewport width (`font-size: clamp(14px, 0.9vw, 24px)`), so 1080p and 1440p use nearly the same physical scale on a 27-inch panel. Zones never reflow between sessions. Empty zones keep their space when values are absent.
+The live page is one fixed 16:9 screen. Rows, top to bottom: status bar (3 rem), banner (14 rem), main row, and footer (2 rem). The main row has three columns in the grid `3.6fr 4.6fr 3.8fr`. The root font size comes from the viewport width (`font-size: clamp(14px, 0.9vw, 24px)`), so 1080p and 1440p use nearly the same physical scale on a 27-inch panel. Zones never reflow between sessions. Empty zones keep their space when values are absent.
 
 Dashboard v3 follows two locked references. [`docs/mockups/redesign-5-full.html`](mockups/redesign-5-full.html) gives the race screen and its safety-car frame. [`docs/mockups/redesign-4-quali-takeovers.html`](mockups/redesign-4-quali-takeovers.html) gives qualifying, cool-down and the pit board. The mockups define the design. Edit them only when the design changes.
+
+The approved **Instrument, refined** polish keeps that layout and its racing colours. The banner reserves separate rows for the two-line call, optional evidence and previous radio. Spoken calls use a system sans-serif; telemetry and instrument captions remain monospaced. Fuel, Battery and Damage have explicit labels, battery charge has a small meter, and front-wing sides and floor damage carry labelled percentages. Secondary labels have higher contrast and less letter spacing.
 
 Columns, left to right:
 

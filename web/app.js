@@ -577,26 +577,22 @@
     setClass("fuel", "hero" + (d === null || d === undefined ? "" : d < 0 ? " crit" : d < 0.5 ? " warn" : " ok"));
   }
 
-  var BATT_WORDS = { on_budget: "ON BUDGET", over: "OVER · SAVE", under: "UNDER · CHARGING", attack_ok: "SPEND · ATTACK OK" };
-  var BATT_ICONS = { on_budget: "M13 2 4 14h7l-1 8 9-12h-7z", attack_ok: "M13 2 4 14h7l-1 8 9-12h-7z",
-    over: "M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3 4",
-    under: "M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" };
+  var BATT_WORDS = { on_budget: "On budget", over: "Over · save", under: "Under · charging", attack_ok: "Spend · attack OK" };
   function renderBatt(p, s) {
     var e = s && s.energy ? s.energy : null, mode = e ? e.mode : null;
     setClass("batt", "card carcard battcard" + (mode ? " " + mode : ""));
-    setText("batt-pct", fmt(p.ers_pct, 0) + "%");
-    var m = el("batt-mode");
-    if (m && m.dataset.mode !== String(mode)) {
-      m.dataset.mode = String(mode);
-      m.innerHTML = mode && BATT_ICONS[mode] ?
-        '<svg class="ico" viewBox="0 0 24 24"><path d="' + BATT_ICONS[mode] + '"/></svg> ' : "";
-      m.appendChild(document.createTextNode(BATT_WORDS[mode] || "no budget yet"));
+    setText("batt-pct", fmt(p.ers_pct, 0));
+    setText("batt-mode", BATT_WORDS[mode] || "No budget yet");
+    var charge = el("batt-charge");
+    if (charge) {
+      charge.hidden = typeof p.ers_pct !== "number" || !Number.isFinite(p.ers_pct);
+      if (!charge.hidden) charge.style.setProperty("--f", Math.max(0, Math.min(1, p.ers_pct / 100)));
     }
     var sub = el("batt-sub");
     if (sub) {
       var floor = !!e && e.laps_to_floor !== null && e.laps_to_floor !== undefined;
       sub.hidden = !floor;
-      if (floor) sub.textContent = "FLOOR " + fmt(e.laps_to_floor, 0) + "L";
+      if (floor) sub.textContent = "Floor in " + fmt(e.laps_to_floor, 0) + " laps";
     }
   }
 
@@ -690,7 +686,7 @@
     });
     if (d.drs_fault) parts.push(span("DRS FAULT", "n crit"));
     if (d.ers_fault) parts.push(span("ERS FAULT", "n crit"));
-    if (!parts.length) more.appendChild(span("✓ none", ""));
+    more.appendChild(document.createTextNode(parts.length ? "Other: " : "Other: none"));
     parts.forEach(function (x, i) {
       if (i) more.appendChild(document.createTextNode("  "));
       more.appendChild(x);
