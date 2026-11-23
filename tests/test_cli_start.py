@@ -4,6 +4,8 @@ import argparse
 import json
 import sqlite3
 import sys
+import threading
+import time
 from collections.abc import Coroutine
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,6 +91,50 @@ def test_driver_rating_text_uses_global_and_track_learning() -> None:
     assert cli._driver_rating_text(db, th) == "0.62 (confidence 0.50, global)"
     db.fold_param(7, DRIVER_COMPOUND, RATING, 0.41, 1)
     assert cli._driver_rating_text(db, th, 7) == "0.41 (confidence 0.09, track)"
+
+
+def test_speech_line_reports_health_counts_and_gpu() -> None:
+    health = {
+        "engine": "kokoro (af_heart, cuda)",
+        "slow_renders": 4,
+        "render_timeouts": 2,
+        "render_failures": 1,
+        "provisional_plays": 3,
+        "dropped": 5,
+        "breaker_open": True,
+    }
+    assert cli._speech_line(health, 812.4, "gpu 97 %, 15200/16303 MB") == (
+        "speech: kokoro (af_heart, cuda), handoff to playback p99 812 ms, slow 4, "
+        "timeouts 2, failures 1, provisional 3, dropped 5, breaker open, "
+        "gpu 97 %, 15200/16303 MB"
+    )
+
+
+def test_speech_line_tolerates_missing_health_keys() -> None:
+    assert cli._speech_line({}, 0.0, None) == (
+        "speech: ?, handoff to playback p99 0 ms, slow 0, timeouts 0, failures 0, "
+        "provisional 0, dropped 0, breaker closed"
+    )
+
+
+def test_print_speech_line_samples_gpu_off_the_caller_thread(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    release = threading.Event()
+
+    def blocked_gpu() -> str:
+        release.wait(5.0)
+        return "gpu 12 %, 1/2 MB"
+
+    monkeypatch.setattr(cli, "gpu_status", blocked_gpu)
+    cli._print_speech_line({"engine": "kokoro"}, 100.0)
+    assert capsys.readouterr().out == ""
+    release.set()
+    printed = ""
+    deadline = time.monotonic() + 2.0
+    while "gpu 12 %" not in printed and time.monotonic() < deadline:
+        printed += capsys.readouterr().out
+        time.sleep(0.01)
+    assert printed.startswith("speech: kokoro, handoff to playback p99 100 ms")
+    assert printed.endswith("gpu 12 %, 1/2 MB\n")
 
 
 def test_speak_startup_warms_before_speaking_at_current_time() -> None:

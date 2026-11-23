@@ -194,6 +194,7 @@ def _build_renderer(settings: SpeechSettings, *, warm: bool = True) -> KokoroRen
     if use_gpu and hasattr(onnxruntime, "preload_dlls"):
         onnxruntime.preload_dlls()
     onnxruntime.set_default_logger_severity(3)
+    logging.getLogger("phonemizer").setLevel(logging.ERROR)
     if use_gpu:
         providers: list[Any] = [
             (

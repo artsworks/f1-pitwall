@@ -77,6 +77,7 @@ Build WAV engines on `WavSpeaker` in `wav_speaker.py`. `WavSpeaker` owns the que
 - Three failed or timed-out renders in a row open a circuit breaker for 60 seconds. Calls skip the foreground render while it is open. Background renders still fill the cache.
 - `render` may raise `RenderSkipped` to skip the foreground render on purpose. A skip is not a failure and does not count toward the breaker.
 - At most three timed-out renders stay outstanding. While that limit is reached, calls skip the foreground render.
+- `WavSpeaker` starts the render of a call when `speak()` receives it, on a look-ahead thread. The render runs while earlier calls play. A P1 call does not wait for look-ahead renders that have not started.
 - A failed or skipped call without provisional audio still queues a background render.
 - `warm_parallelism`, `warm_workers`, `warm_process` (optional): let `warm()` render in parallel with `"thread"` or `"process"` workers. Use `default_warm_workers()` for the default count.
 

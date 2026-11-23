@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 import numpy as np
 
 from pitwall.audio.dispatcher import Call
+from pitwall.audio.gpu import gpu_status
 
 if TYPE_CHECKING:
     from pitwall.audio.speaker import Speaker
@@ -33,6 +34,7 @@ BREAKER_FAILURES = 3
 BREAKER_OPEN_S = 60.0
 MAX_STUCK_RENDERS = 3
 BACKGROUND_MAX = 32
+SLOW_RENDER_S = 1.5
 BLIP_PIPS = ((587.0, 0.06, 0.025), (784.0, 0.07, 0.03))
 BLIP_PIP_GAP_S = 0.03
 BLIP_GAP_S = 0.06
@@ -311,6 +313,7 @@ class WavSpeaker:
         self.busy_until = 0.0
         self.render_failures = 0
         self.render_timeouts = 0
+        self.slow_renders = 0
         self.provisional_plays = 0
         self.last_error: str | None = None
         self._last_error_t: float | None = None
@@ -332,6 +335,7 @@ class WavSpeaker:
             _RenderLane() if self._render_timeout_s is not None else None
         )
         self._provisional_job: Future[tuple[bytes, float] | None] | None = None
+        self._ahead_lane: _RenderLane[tuple[bytes, float]] = _RenderLane()
         self._cache: OrderedDict[tuple[int, str], tuple[bytes, float]] = OrderedDict()
         self._cache_lock = threading.RLock()
         self._state_lock = threading.RLock()
@@ -346,6 +350,7 @@ class WavSpeaker:
         self._background_queue: queue.Queue[tuple[tuple[int, str], str, int] | None] = queue.Queue()
         self._pending: set[tuple[int, str]] = set()
         self._late: set[tuple[int, str]] = set()
+        self._ahead: dict[tuple[int, str], Future[tuple[bytes, float]]] = {}
         if fallback is not None:
             fallback.on_spoken = self._fallback_spoken
             fallback_callbacks = cast(Any, fallback)
@@ -528,6 +533,7 @@ class WavSpeaker:
             "breaker_open": self._breaker_open(),
             "render_failures": self.render_failures,
             "render_timeouts": self.render_timeouts,
+            "slow_renders": self.slow_renders,
             "provisional_plays": self.provisional_plays,
             "dropped": self._dropped_count,
             "last_error": self.last_error,
@@ -548,6 +554,7 @@ class WavSpeaker:
                 self._wake.set()
             self._received[call.id] = time.monotonic()
             self._q.put((call.priority, next(self._seq), call))
+            self._start_ahead(call)
 
     def cancel(self, call_id: str) -> None:
         with self._state_lock:
@@ -578,17 +585,86 @@ class WavSpeaker:
         if self._consecutive_failures >= BREAKER_FAILURES:
             self._breaker_open_until = time.monotonic() + BREAKER_OPEN_S
 
+    def _timed_render(self, text: str, priority: int) -> tuple[bytes, float]:
+        started = time.monotonic()
+        result = self._renderer.render(text, priority, background=False)
+        elapsed = time.monotonic() - started
+        if elapsed >= SLOW_RENDER_S:
+            self.slow_renders += 1
+            self._report_render("was slow:", elapsed, text)
+        return result
+
+    def _render_ahead(self, key: tuple[int, str], text: str, priority: int) -> tuple[bytes, float]:
+        hit = self._cached(key)
+        if hit is not None:
+            return hit
+        wav, _ = self._timed_render(text, priority)
+        result = wav, wav_info(wav)
+        self._remember(key, result, disk=True, disk_required=False)
+        return result
+
+    def _start_ahead(self, call: Call) -> None:
+        key = self._key(call.text, call.priority)
+        with self._cache_lock:
+            if (
+                self._breaker_open()
+                or key in self._ahead
+                or key in self._late
+                or len(self._late) >= MAX_STUCK_RENDERS
+            ):
+                return
+            future = self._ahead_lane.submit(
+                lambda: self._render_ahead(key, call.text, call.priority)
+            )
+            self._ahead[key] = future
+            future.add_done_callback(lambda done: self._forget_ahead(key, done))
+
+    def _forget_ahead(self, key: tuple[int, str], future: Future[tuple[bytes, float]]) -> None:
+        with self._cache_lock:
+            if self._ahead.get(key) is future and (
+                future.cancelled() or future.exception() is None
+            ):
+                del self._ahead[key]
+
+    def _discard_stale_ahead(self, key: tuple[int, str]) -> None:
+        with self._cache_lock:
+            future = self._ahead.get(key)
+            if future is not None and future.done():
+                del self._ahead[key]
+
     def _render_primary(
         self, key: tuple[int, str], text: str, priority: int
     ) -> tuple[bytes, float]:
         lane = self._lane
-        if lane is None:
-            wav, _ = self._renderer.render(text, priority, background=False)
-        else:
+        if lane is not None:
             with self._cache_lock:
                 if key in self._late or len(self._late) >= MAX_STUCK_RENDERS:
                     raise RenderSkipped(f"{self.name} has stuck renders")
-            future = lane.submit(lambda: self._renderer.render(text, priority, background=False))
+        with self._cache_lock:
+            ahead = self._ahead.pop(key, None)
+        if ahead is not None and not ahead.cancel():
+            try:
+                return ahead.result(timeout=self._render_timeout_s)
+            except TimeoutError:
+                if ahead.done():
+                    raise
+                self.render_timeouts += 1
+                with self._cache_lock:
+                    self._late.add(key)
+                self._ahead_lane.close()
+                self._ahead_lane = _RenderLane()
+                ahead.add_done_callback(
+                    lambda done: self._keep_late_render(key, text, priority, done)
+                )
+                raise RenderTimeout(f"{self.name} render timed out") from None
+        if ahead is None:
+            hit = self._cached(key)
+            if hit is not None:
+                return hit
+        if lane is None:
+            wav, _ = self._timed_render(text, priority)
+        else:
+            future = lane.submit(lambda: self._timed_render(text, priority))
             try:
                 wav, _ = future.result(timeout=self._render_timeout_s)
             except TimeoutError:
@@ -637,13 +713,17 @@ class WavSpeaker:
         hit = self._cached(key)
         if hit is not None:
             return hit
+        started = 0.0
         try:
             if self._breaker_open():
                 raise RenderSkipped(f"{self.name} circuit is open")
+            started = time.monotonic()
             result = self._render_primary(key, call.text, call.priority)
         except Exception as exc:  # noqa: BLE001 - use provisional audio, or let the call fail
             if not isinstance(exc, RenderSkipped):
                 self._record_failure(exc)
+                outcome = "timed out after" if isinstance(exc, RenderTimeout) else "failed after"
+                self._report_render(outcome, time.monotonic() - started, call.text)
             provisional = getattr(self._renderer, "provisional", None)
             audio = None
             if callable(provisional):
@@ -671,6 +751,20 @@ class WavSpeaker:
         self._consecutive_failures = 0
         self._breaker_open_until = None
         return result
+
+    def _report_render(self, outcome: str, elapsed_s: float, text: str) -> None:
+        def report() -> None:
+            gpu = gpu_status()
+            log.warning(
+                "%s render %s %.2f s (%d chars)%s",
+                self.name,
+                outcome,
+                elapsed_s,
+                len(text),
+                f", {gpu}" if gpu else "",
+            )
+
+        threading.Thread(target=report, daemon=True, name="speech-diagnostic").start()
 
     def _queue_background(self, key: tuple[int, str], text: str, priority: int) -> None:
         with self._cache_lock:
@@ -852,6 +946,7 @@ class WavSpeaker:
             if cancelled:
                 self._cancelled.discard(call.id)
         if cancelled:
+            self._discard_stale_ahead(self._key(call.text, call.priority))
             return
         try:
             wav, seconds = self._get_for_call(call)
@@ -897,6 +992,11 @@ class WavSpeaker:
             self._urgent.clear()
             self._wake.set()
             self._player.stop()
+            with self._cache_lock:
+                ahead = tuple(self._ahead.items())
+            for key, future in ahead:
+                future.cancel()
+                self._discard_stale_ahead(key)
             if self._fallback is not None:
                 from pitwall.audio.speaker import FlushableSpeaker
 
@@ -925,6 +1025,7 @@ class WavSpeaker:
         self._background_thread.join(timeout=2.0)
         if self._lane is not None:
             self._lane.close()
+        self._ahead_lane.close()
         if self._provisional_lane is not None:
             self._provisional_lane.close()
         self._player.stop()

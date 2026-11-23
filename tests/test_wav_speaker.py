@@ -1008,6 +1008,211 @@ def test_render_timeout_plays_provisional_then_caches_late_render(tmp_path: Path
         speaker.close()
 
 
+def test_look_ahead_renders_next_call_while_previous_plays() -> None:
+    renderer = FakeRenderer(duration_s=1.0)
+    speaker = WavSpeaker(renderer, FakePlayer())
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("a", text="a"))
+        speaker.speak(make_call("b", text="b"))
+        _wait_for(lambda: spoken == ["a"])
+        _wait_for(lambda: any(text == "b" for text, _, _ in renderer.calls), timeout=0.5)
+        assert spoken == ["a"]
+        _wait_for(lambda: spoken == ["a", "b"], timeout=3.0)
+    finally:
+        speaker.close()
+
+
+def test_uncached_call_renders_once_when_look_ahead_is_claimed() -> None:
+    renderer = FakeRenderer(delay_s=0.1)
+    speaker = WavSpeaker(renderer, FakePlayer())
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("once", text="once"))
+        _wait_for(lambda: spoken == ["once"])
+        assert [text for text, _, _ in renderer.calls] == ["once"]
+    finally:
+        speaker.close()
+
+
+def test_p1_does_not_wait_for_unstarted_look_ahead_renders() -> None:
+    renderer = FakeRenderer(duration_s=1.0)
+    speaker = WavSpeaker(renderer, FakePlayer())
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("long", text="long"))
+        _wait_for(lambda: spoken == ["long"])
+        renderer.block_next()
+        speaker.speak(make_call("x", priority=3, text="x"))
+        assert renderer.entered.wait(1.0)
+        speaker.speak(make_call("y", priority=3, text="y"))
+        speaker.speak(make_call("z", priority=1, text="z"))
+        _wait_for(lambda: "z" in spoken, timeout=0.5)
+        assert "x" not in spoken
+        renderer.release.set()
+        _wait_for(lambda: spoken == ["long", "z", "x", "y"], timeout=4.0)
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_flush_cancels_unstarted_look_ahead_renders() -> None:
+    renderer = FakeRenderer()
+    renderer.block_next()
+    speaker = WavSpeaker(renderer, FakePlayer())
+    events: list[str] = []
+    speaker.on_audio = lambda call_id, _priority, _wav: events.append(call_id)
+    speaker.on_spoken = lambda call_id, _time: events.append(call_id)
+    speaker.on_dropped = events.append
+    try:
+        speaker.speak(make_call("x", text="x"))
+        assert renderer.entered.wait(1.0)
+        speaker.speak(make_call("y", text="y"))
+        speaker.flush()
+        renderer.release.set()
+        _wait_for(lambda: speaker._cached(speaker._key("x", 2)) is not None)
+        time.sleep(0.05)
+        assert "y" not in [text for text, _, _ in renderer.calls]
+        assert events == []
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_failed_look_ahead_render_is_not_retried_in_foreground() -> None:
+    renderer = FakeRenderer(fail_text="bad")
+    speaker = WavSpeaker(renderer, FakePlayer())
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+
+    def foreground() -> list[tuple[str, int, bool]]:
+        return [call for call in renderer.calls if not call[2]]
+
+    try:
+        speaker.speak(make_call("bad-0", text="bad"))
+        _wait_for(lambda: dropped == ["bad-0"])
+        assert foreground() == [("bad", 2, False)]
+        speaker.speak(make_call("bad-1", text="bad"))
+        _wait_for(lambda: dropped == ["bad-0", "bad-1"])
+        assert foreground() == [("bad", 2, False)] * 2
+    finally:
+        speaker.close()
+
+
+def test_claimed_look_ahead_timeout_replaces_lane(tmp_path: Path) -> None:
+    renderer = ProvisionalFake()
+    renderer.block_next()
+    player = FakePlayer()
+    speaker = WavSpeaker(renderer, player, cache_dir=tmp_path, render_timeout_s=0.05)
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("slow", text="line"))
+        _wait_for(lambda: spoken == ["slow"])
+        assert player.played == [renderer.provisional_wav]
+        assert speaker.health()["render_timeouts"] == 1
+        speaker.speak(make_call("other", text="other"))
+        _wait_for(lambda: spoken == ["slow", "other"])
+        renderer.release.set()
+        path = speaker._phrase_path(speaker._key("line", 2))
+        assert path is not None
+        _wait_for(path.is_file)
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def _messages(caplog) -> list[str]:  # type: ignore[no-untyped-def]
+    return [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+
+
+def _diagnostic(caplog, needle: str) -> str:  # type: ignore[no-untyped-def]
+    _wait_for(lambda: any(needle in message for message in _messages(caplog)))
+    return next(message for message in _messages(caplog) if needle in message)
+
+
+def test_slow_render_reports_duration_and_gpu(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    monkeypatch.setattr(wav_speaker_module, "SLOW_RENDER_S", 0.0)
+    monkeypatch.setattr(wav_speaker_module, "gpu_status", lambda: "gpu 50 %, 1000/16000 MB")
+    speaker = WavSpeaker(FakeRenderer(), FakePlayer())
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("slow", text="line"))
+        _wait_for(lambda: spoken == ["slow"])
+        message = _diagnostic(caplog, "render was slow:")
+        assert "gpu 50 %, 1000/16000 MB" in message
+        assert "chars)" in message
+        assert speaker.health()["slow_renders"] == 1
+    finally:
+        speaker.close()
+
+
+def test_fast_render_is_not_reported(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    monkeypatch.setattr(wav_speaker_module, "gpu_status", lambda: None)
+    speaker = WavSpeaker(FakeRenderer(), FakePlayer())
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("fast", text="line"))
+        _wait_for(lambda: spoken == ["fast"])
+        time.sleep(0.1)
+        assert not any("render was slow" in message for message in _messages(caplog))
+        assert speaker.health()["slow_renders"] == 0
+    finally:
+        speaker.close()
+
+
+def test_render_timeout_reports_duration_with_and_without_gpu(
+    monkeypatch, caplog, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    monkeypatch.setattr(wav_speaker_module, "gpu_status", lambda: None)
+    renderer = ProvisionalFake()
+    renderer.block_next()
+    speaker = WavSpeaker(renderer, FakePlayer(), cache_dir=tmp_path, render_timeout_s=0.05)
+    spoken: list[str] = []
+    speaker.on_spoken = lambda call_id, _time: spoken.append(call_id)
+    try:
+        speaker.speak(make_call("slow", text="line"))
+        _wait_for(lambda: spoken == ["slow"])
+        message = _diagnostic(caplog, "render timed out after")
+        assert message.endswith("(4 chars)")
+        monkeypatch.setattr(wav_speaker_module, "gpu_status", lambda: "gpu 98 %, 1/2 MB")
+        speaker._report_render("timed out after", 4.0, "line")
+        _wait_for(
+            lambda: any(
+                message.endswith("chars), gpu 98 %, 1/2 MB") for message in _messages(caplog)
+            )
+        )
+    finally:
+        renderer.release.set()
+        speaker.close()
+
+
+def test_render_failure_reports_duration(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    import pitwall.audio.wav_speaker as wav_speaker_module
+
+    monkeypatch.setattr(wav_speaker_module, "gpu_status", lambda: None)
+    speaker = WavSpeaker(FakeRenderer(fail_text="bad"), FakePlayer())
+    dropped: list[str] = []
+    speaker.on_dropped = dropped.append
+    try:
+        speaker.speak(make_call("bad", text="bad"))
+        _wait_for(lambda: dropped == ["bad"])
+        assert "chars)" in _diagnostic(caplog, "render failed after")
+    finally:
+        speaker.close()
+
+
 def test_render_timeout_without_provisional_drops_call() -> None:
     renderer = FakeRenderer()
     renderer.block_next()
@@ -1267,6 +1472,7 @@ def test_health_reports_render_and_playback_state() -> None:
             "breaker_open",
             "render_failures",
             "render_timeouts",
+            "slow_renders",
             "provisional_plays",
             "dropped",
             "last_error",

@@ -160,6 +160,8 @@ A renderer can also give `provisional(text, priority)`. On a cache miss, `WavSpe
 
 A primary render that runs past `speech.render_timeout_s` (default 4.0) times out. The call then plays provisional audio if the renderer has it. Otherwise the call drops. The late render still fills the cache, so the next play of that line comes from the cache. Set the timeout to 0 or null for no limit. Provisional audio has the same timeout. If it runs past the timeout, the call drops.
 
+The terminal reports slow speech. A render that takes 1.5 s or longer, times out or fails prints one warning line with its duration and the text length. If `nvidia-smi` is available, the line also has the GPU utilization and memory for the whole GPU. At session end, a `speech:` line prints the handoff-to-playback p99 and the counts of slow renders, timeouts, failures, provisional plays and drops.
+
 After three failed or timed-out renders in a row, `WavSpeaker` opens a circuit breaker for 60 seconds. While it is open, calls skip the foreground render. They use provisional audio or drop, and background renders still fill the cache. The next call after 60 seconds tries the renderer again. A successful render closes the breaker. `health()` reports `breaker_open`, the failure and timeout counts, and the last error.
 
 A renderer can raise `RenderSkipped` to skip the foreground render on purpose. A skip is not a failure and does not count toward the breaker. At most three timed-out renders stay outstanding. While that limit is reached, calls skip the foreground render. A failed or skipped call without provisional audio still queues a background render.
