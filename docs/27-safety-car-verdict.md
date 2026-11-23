@@ -1,6 +1,6 @@
 # Safety car verdict: which compound reaches the flag (plan v4)
 
-Status: phases 1 to 3 are built (shadow log, hindsight grading, ladder card and debrief list). Phases 4 and 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
+Status: phases 1 to 3 are built (shadow log, hindsight grading, ladder card and debrief list). The core of phase 4 is built, see "Takeover, 2026-11-24". The rest of phase 4 and phase 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
 
 ## Goal
 
@@ -115,6 +115,8 @@ Hindsight grades the ladder row of the set that ran after the SC, not the verdic
 ### Phase 4: takeover
 
 Start this phase only when the pass mark below is met and the repo owner has run the full bench.
+
+Override on 2026-11-24: the repo owner started the takeover at 5 graded rows, below the pass mark. The section "Takeover, 2026-11-24" lists what is built.
 
 **Pass mark.** These numbers are a first estimate, not a measured value. Change them after the first shadow sessions if they prove too easy or too hard.
 
@@ -336,6 +338,59 @@ The grader asked only whether a later stop came. The grader now asks the same qu
 - Imola hards: the first three green laps were 79.6, 81.0 and 80.6 s. The last three were 84.5, 84.1 and 80.7 s. Lap 14 had no ERS deployment. Lap 16 had full ERS deployment and a track limits penalty. The median ignores one such lap.
 - Track 16 mediums: the stint has 6 valid green laps, 5 before the SC and 1 after it. The set kept its pace, so the row was wrong. This row is the evidence for the pessimistic model.
 - Two of the three "survives" grades rest on the stop rule alone, because their stints had fewer than 6 green laps.
+
+### Takeover, 2026-11-24
+
+The repo owner decided to take over before the pass mark was met. The count stood at 5 graded rows, 4 good, 1 wrong, 0 wrong "survives".
+
+Built (clash rows 1 to 6, 9 and 10):
+
+- The verdict runs before the pit-window optimiser. A pick gives `cheap_stop`. No pick gives `stay`. The wear gate, the two owed-stop gates and `sc_stop_min_wear_pct` are removed.
+- Plan C takes its sequence from the verdict. A "stay out" lists no Plan C and switches no plan.
+- When nothing reaches the flag, the verdict compares a stop now plus one later stop with the best plan that has no stop now. The verdict picks the stop only when it is faster. The headline then reads `BOX, MED` without `TO END`.
+- The survival of the pick is the plan confidence. `box_now` keeps `cheap_stop` and the `pit_confidence_min` gate. `plan_sc_box` speaks when `box_now` is gated out.
+- New rule `sc_stay_out` speaks one time for each SC period.
+- `pitwall voice warm` renders the `plan_sc_box` lines for each dry compound and the stay-out lines. The default of `speech.warm_phrases` is 170.
+- The card shows the headline `BOX, MED TO END`, `BOX, MED` or `STAY OUT`. The phone layout shows the headline only.
+- With no deg fit, the engine now plans from the fresh prior while the verdict runs. Before the takeover the engine made no pit call in that case.
+- With damage and no pick, the pit-window optimiser decides as before. The damage stop is not in the verdict yet.
+- A "stay out" verdict also stops undercut and cover calls under SC.
+
+Not built: position guard, damage stop, rain gate, penalty seconds, `decision_point: pit_entry` for the stay-out line, box lap, positions row, badges and the bench scenario (clash rows 7, 8, 11 and 12).
+
+Learning:
+
+- `sc_row` grades no longer feed `cooldown_mult:sc_verdict`. The grades judge the survival model and not the timing of a call. They still move the offset on `sc_survive_min`.
+- `pitwall tune` prints the offset and the number of graded rows.
+- `pitwall replay --seed-db` loads the offset. The replay passes the database to the engine in the same way as a live session.
+- The grader now grades rows that the driver follows. A driver who obeys a "stay out" never tests a fresh-set row with "does not survive". The evidence for those rows stops, and a too-pessimistic fresh-set row cannot be found from real sessions. A wrong "survives" on the current set still shows.
+- The decision record of the verdict still has `suppressed_by: shadow`. The name is out of date.
+
+Replay batch after the takeover (7 races, deg priors of 2026-11-23). The driver in a recording cannot follow the new radio.
+
+| Race | Verdict | Radio | Driver | Grade |
+|---|---|---|---|---|
+| Imola, 2026-11-23 | L3 stay out, nothing reaches the flag | `sc_stay_out` L3 | stop L3 for softs | good |
+| Imola, 2026-11-19 | L2 and L3 stay out, nothing reaches the flag | none, wing damage on L2 | stop L2 for hards | good |
+| Track 32 | L10 and L11 stay out, current set is faster | `sc_stay_out` L10 | no stop | good |
+| Track 16 | L14 and L15 softs to the flag | `plan_sc_box` L14, softs | no stop | wrong |
+| Track 7 | L8 to L10 stay out, current set is faster | `sc_stay_out` L8 | stop L8 for softs | good |
+| Track 14 | L5 hards, L6 softs, then stay out | `plan_sc_box` L5, hards | stops L5 and L10 | censored |
+| Imola, 2026-10-22 | L1 to L3 stay out, nothing reaches the flag | `sc_stay_out` L3 | stop L1, rain stop L8 | censored |
+
+- Track 7, laps 8 and 9: the radio says "stay out" and no stop call fires. Before the takeover `cheap_stop` said "box" on both laps.
+- Imola, 2026-11-23: the radio says "stay out" on lap 3. Before the takeover the dashboard said `BOX NOW`. The two-stop was not faster than the best plan with no stop now.
+- Track 16: the radio now calls a stop for softs from mediums that kept their pace. This is the pessimistic model fault, and it is now a spoken call.
+- Imola, 2026-11-19: with wing damage and no pick, the verdict is silent and the other rules decide.
+- Imola, 2026-10-22: the verdict ran on laps 1 to 3, and the stay-out line fired on lap 3 only. The cause is not checked.
+- `plan_invalid` fires after the SC in five races. In four of them the recorded driver did not follow the verdict. Track 14, lap 8 is not checked: the driver made the stop on lap 5, and the radio still said "off Plan C".
+- The grades did not change: 5 graded rows, 4 good, 1 wrong, 0 wrong "survives".
+
+Open:
+
+- `optimise()` still takes `wear_mean`, `green_pit_loss_s` and `stop_owed`, and no longer reads them.
+- The repo owner must run the full bench and accept the baseline.
+- The headline on the dashboard is not checked in a browser.
 
 ## Risks
 
