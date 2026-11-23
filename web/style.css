@@ -341,6 +341,16 @@ svg.wxi { display: block; margin: 0 auto; }
 .dmgcard .n.warn { color: var(--warn); } .dmgcard .n.crit { color: var(--crit); }
 .dmgcard #dm-more { white-space: normal; }
 
+/* Keep the tyre grid's height budget on laptop and short landscape displays. */
+@media (max-height: 850px) {
+  body.dash:not(.phone) { --banner-height: 10rem; }
+  body.dash:not(.phone) .banner .body { padding: .4rem 0; gap: .2rem; }
+  body.dash:not(.phone) .banner .text { font-size: 2.4rem; }
+  body.dash:not(.phone) .carcard { min-height: 7.8rem; padding: .55rem .7rem; }
+  body.dash:not(.phone) .damage-rows { gap: .15rem; }
+  body.dash:not(.phone) .drvmenu { font-size: 2rem; }
+}
+
 .tyres { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .5rem; }
 .t-head { font-size: 1.3rem; white-space: nowrap; }
 .t-head .cmp { font-size: 1.5rem; }

@@ -67,7 +67,7 @@ The live page is one fixed 16:9 screen. Rows, top to bottom: status bar (3 rem),
 
 Dashboard v3 follows two locked references. [`docs/mockups/redesign-5-full.html`](mockups/redesign-5-full.html) gives the race screen and its safety-car frame. [`docs/mockups/redesign-4-quali-takeovers.html`](mockups/redesign-4-quali-takeovers.html) gives qualifying, cool-down and the pit board. The mockups define the design. Edit them only when the design changes.
 
-The approved **Instrument, refined** polish keeps that layout and its racing colours. The banner reserves separate rows for the two-line call, optional evidence and previous radio. Spoken calls use a system sans-serif; telemetry and instrument captions remain monospaced. Fuel, Battery and Damage have explicit labels, battery charge has a small meter, and front-wing sides and floor damage carry labelled percentages. Secondary labels have higher contrast and less letter spacing.
+The approved **Instrument, refined** polish keeps that layout and its racing colours. The banner reserves separate rows for the two-line call, optional evidence and previous radio. At heights up to 850px, the desktop banner returns to 10rem and car cards become compact so tyre readings retain their space. Spoken calls use a system sans-serif; telemetry and instrument captions remain monospaced. Fuel, Battery and Damage have explicit labels, battery charge has a small meter, and front-wing sides and floor damage carry labelled percentages. Secondary labels have higher contrast and less letter spacing.
 
 Columns, left to right:
 
