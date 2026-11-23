@@ -136,6 +136,8 @@ class Planner:
         self._slow_run: tuple[int, float, float | None] | None = None
         self._damage_stops = 0
         self._stops_done = 0
+        self._sc_counted_stops = -1
+        self._prev_num_pit_stops: int | None = None
         self._red_restart = False
         self._prev_pit_status = 0
         self._stop_expect: tuple[str, str, int] | None = None
@@ -154,6 +156,8 @@ class Planner:
         self._damage_stops = 0
         self._plan_mc_cache.clear()
         self._stops_done = 0
+        self._sc_counted_stops = -1
+        self._prev_num_pit_stops = None
         self._red_restart = False
         self._prev_pit_status = 0
         self._stop_expect = None
@@ -358,7 +362,7 @@ class Planner:
         if verdict is not None and sc_status != 0:
             if plan.plan == "cheap_stop":
                 sc_call = "box"
-            elif plan.plan == "stay" and damage_pace_ms <= 0:
+            elif plan.plan == "stay" and damage_pace_ms <= 0 and not verdict.hold:
                 sc_call = "stay"
         self.ctx.pit_plan = plan
         self.ctx.state.set_model(
@@ -472,9 +476,22 @@ class Planner:
             stop_expected_compound=self._stop_check[1] if self._stop_check is not None else "",
         )
         phase = snap.race_phase
-        if phase == "out_lap" and self._prev_race_phase != "out_lap":
+        stops = snap.num_pit_stops
+        if (
+            phase in ("sc", "vsc")
+            and self._prev_num_pit_stops is not None
+            and stops > self._prev_num_pit_stops
+        ):
+            self._stops_done += 1
+            self._sc_counted_stops = stops
+        if (
+            phase == "out_lap"
+            and self._prev_race_phase != "out_lap"
+            and stops != self._sc_counted_stops
+        ):
             self._stops_done += 1
         self._prev_race_phase = phase
+        self._prev_num_pit_stops = stops
         if phase == "red_flag":
             self._red_restart = True  # rebuild the plan from the restart tyres
             self._plan_key = None
@@ -605,6 +622,8 @@ class Planner:
             cur_wear_per_lap_pct=snap.wear_per_lap_pct,
             stacking=snap.teammate_stacking,
             th={**th, "sc_survive_min": round(survive_min, 3)},
+            rain_due=snap.weather_crossover in ("to_inter", "to_wet"),
+            penalty_s=float(snap.penalty_s),
         )
         self._sc_verdict = verdict
         self.ctx.dispatcher.log.write(
@@ -631,6 +650,8 @@ class Planner:
                     "ladder": [dataclasses.asdict(row) for row in verdict.rows],
                     "sequence": list(verdict.sequence),
                     "to_flag": verdict.to_flag,
+                    "hold": verdict.hold,
+                    "penalty_s": snap.penalty_s,
                 },
                 "active_plan": snap.active_plan,
                 "on_plan": snap.on_plan if snap.active_plan else None,

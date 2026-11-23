@@ -6,6 +6,7 @@ modules: every input is a plain value."""
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -47,6 +48,7 @@ class ScVerdict:
     rows: tuple[ScRow, ...]
     sequence: tuple[int, ...]  # visual compounds from the current set, () = stay out
     to_flag: bool  # the pick survives to the flag
+    hold: bool = False  # rain is due: no stop now, the weather rules own the call
 
 
 def _two_compound_ok(inp: PlanInputs, compound: int, th: Mapping[str, object]) -> bool:
@@ -69,11 +71,16 @@ def sc_verdict(
     cur_wear_per_lap_pct: float,
     stacking: bool,
     th: Mapping[str, object],
+    rain_due: bool = False,
+    penalty_s: float = 0.0,
 ) -> ScVerdict:
     """The verdict and ladder for one SC/VSC lap. `fresh_sets` maps a visual
     compound to its wear == 0 sets (-1 when the count is unknown); `usable_life`
     maps it to the game's reported laps (absent = no wear gate). The current
-    lap counts at `sc_verdict_current_lap_weight` inside `laps_needed`."""
+    lap counts at `sc_verdict_current_lap_weight` inside `laps_needed`.
+    `penalty_s` is served in the pit lane, so it adds to every stop's loss."""
+    if penalty_s > 0:
+        inp = dataclasses.replace(inp, sc_loss_s=inp.sc_loss_s + penalty_s)
     cliff_ms = _f(th, "tyre_cliff_ms", 1500)
     survive_min = _f(th, "sc_survive_min", 0.60)
     laps_needed = max(0.0, inp.laps_remaining - 1 + _f(th, "sc_verdict_current_lap_weight", 0.5))
@@ -164,7 +171,7 @@ def sc_verdict(
             )
         )
 
-    can_stop = saving_s > 0
+    can_stop = saving_s > 0 and not rain_due
     pick = 0
     pick_t = math.inf
     for r in rows:
@@ -205,7 +212,9 @@ def sc_verdict(
             two_stop = None
     sequence: tuple[int, ...] = ()
     to_flag = False
-    if pick:
+    if rain_due:
+        reason = "hold, rain is due"
+    elif pick:
         reason = f"{WORDS.get(pick, '?')} to the flag"
         sequence, to_flag = (inp.current, pick), True
     elif two_stop is not None:
@@ -228,4 +237,5 @@ def sc_verdict(
         rows=tuple(rows),
         sequence=sequence,
         to_flag=to_flag,
+        hold=rain_due,
     )

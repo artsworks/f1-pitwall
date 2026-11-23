@@ -382,8 +382,8 @@ Replay batch after the takeover (7 races, deg priors of 2026-11-23). The driver 
 - Imola, 2026-11-23: the radio says "stay out" on lap 3. Before the takeover the dashboard said `BOX NOW`. The two-stop was not faster than the best plan with no stop now.
 - Track 16: the radio now calls a stop for softs from mediums that kept their pace. This is the pessimistic model fault, and it is now a spoken call.
 - Imola, 2026-11-19: with wing damage and no pick, the verdict is silent and the other rules decide.
-- Imola, 2026-10-22: the verdict ran on laps 1 to 3, and the stay-out line fired on lap 3 only. The cause is not checked.
-- `plan_invalid` fires after the SC in five races. In four of them the recorded driver did not follow the verdict. Track 14, lap 8 is not checked: the driver made the stop on lap 5, and the radio still said "off Plan C".
+- Imola, 2026-10-22: the verdict ran on laps 1 to 3, and the stay-out line fired on lap 3 only. The cause is in "Close-out, 2026-11-24".
+- `plan_invalid` fires after the SC in five races. In four of them the recorded driver did not follow the verdict. Track 14, lap 8 was a fault: the driver made the stop on lap 5, and the radio still said "off Plan C". The fix is in "Close-out, 2026-11-24".
 - The grades did not change: 5 graded rows, 4 good, 1 wrong, 0 wrong "survives".
 
 Open:
@@ -391,6 +391,24 @@ Open:
 - `optimise()` still takes `wear_mean`, `green_pit_loss_s` and `stop_owed`, and no longer reads them.
 - The repo owner must run the full bench and accept the baseline.
 - The headline on the dashboard is not checked in a browser.
+
+### Close-out, 2026-11-24
+
+Causes found:
+
+- Track 14, lap 8, "off Plan C". The engine counted a stop only when the race phase changed to `out_lap`. The phase stays `sc` or `vsc` for the whole period, so the engine did not count a stop made under SC. At the green flag the plan tracker read Plan C as not taken. The engine now also counts a stop when `num_pit_stops` rises under SC or VSC. The replay of track 14 has no `plan_invalid` on lap 8.
+- Track 14, lap 11 now has a `plan_invalid`. The driver made a second stop on lap 10 for a new nose, which no plan had.
+- Imola, 2026-10-22, the late stay-out line. On lap 1 the wing damage skipped the verdict call, as designed. The driver made the stop at the end of lap 1, and the repair cleared the damage on lap 2. The car was then in the pit lane, and `sc_stay_out` needs `pit_status == 0`. The game was paused from 124 s to 238 s. The engine does not evaluate rules during a pause, so the line fired when the pause ended. No fault.
+
+Built (clash rows 8 and 11):
+
+- Rain gate. When `weather_crossover` is `to_inter` or `to_wet`, the verdict is "hold, rain is due". The verdict picks no compound, and `sc_call` is "". `sc_stay_out` is silent and the weather rules own the radio. The ladder is still logged, with `hold` in the record.
+- The rain gate does not compare the forecast time with the laps left. A crossover that the weather rules announce is enough.
+- Penalty seconds. `penalty_s` adds to the SC pit loss in the verdict. The saving, the race time of each fresh-set row and the two-stop include it. The row of the current set does not.
+- Drive-through and stop-go penalties are not in the verdict. The snapshot has no seconds for them.
+- Imola, 2026-10-22 after the change: laps 1 to 3 read "hold, rain is due", and no stay-out line fires. The rain stop came on lap 8.
+
+Not built: position guard, damage stop, `decision_point: pit_entry` for the stay-out line, box lap, positions row, badges with the rain badge, and the bench scenario (clash rows 7 and 12).
 
 ## Risks
 

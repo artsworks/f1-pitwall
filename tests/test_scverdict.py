@@ -442,3 +442,132 @@ def test_sc_verdict_runs_without_a_deg_fit(tmp_path) -> None:
     planned = engine.planner._plan(_sc_snap())
 
     assert planned.sc_call != ""
+
+
+def test_stop_under_sc_counts_toward_plan_c(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    assert planner._plan(_sc_snap()).active_plan == "C"
+    planner._plan(_sc_snap(pit_status=1))
+    planner._plan(_sc_snap(pit_status=2, num_pit_stops=1, tyre_visual=H))
+    planner._plan(_sc_snap(pit_status=0, num_pit_stops=1, tyre_visual=H))
+
+    green = planner._plan(
+        _sc_snap(
+            race_phase="racing",
+            phase="racing",
+            safety_car_status=0,
+            lap_num=4,
+            laps_remaining=10,
+            tyre_visual=H,
+            num_pit_stops=1,
+        )
+    )
+
+    assert planner._stops_done == 1
+    assert green.plan_switch_reason != "invalid"
+    assert "plan_invalid" not in {c.rule.id for c in engine.rule_engine.evaluate(green).candidates}
+
+
+def test_sc_stop_not_double_counted_when_sc_ends_in_pit_lane(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    planner._plan(_sc_snap())
+    planner._plan(_sc_snap(pit_status=1))
+    planner._plan(_sc_snap(pit_status=2, num_pit_stops=1, tyre_visual=H))
+    for phase in ("in_lap", "out_lap", "racing"):
+        planner._plan(
+            _sc_snap(
+                race_phase=phase,
+                phase=phase,
+                safety_car_status=0,
+                lap_num=4,
+                laps_remaining=10,
+                pit_status=1 if phase == "in_lap" else 0,
+                num_pit_stops=1,
+                tyre_visual=H,
+            )
+        )
+
+    assert planner._stops_done == 1
+
+
+def test_green_flag_stop_counts_once(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    base = dict(
+        race_phase="racing",
+        phase="racing",
+        safety_car_status=0,
+        lap_num=4,
+        laps_remaining=10,
+        tyre_visual=M,
+    )
+
+    def snap(**kw: object) -> Snapshot:
+        return _sc_snap(**{**base, **kw})
+
+    planner._plan(snap())
+    planner._plan(snap(race_phase="in_lap", phase="in_lap", pit_status=1))
+    planner._plan(
+        snap(race_phase="in_lap", phase="in_lap", pit_status=2, num_pit_stops=1, tyre_visual=H)
+    )
+    planner._plan(snap(race_phase="out_lap", phase="out_lap", num_pit_stops=1, tyre_visual=H))
+    planner._plan(snap(lap_num=5, laps_remaining=9, num_pit_stops=1, tyre_visual=H))
+
+    assert planner._stops_done == 1
+
+
+def test_rain_due_holds_instead_of_picking() -> None:
+    picked = verdict(inputs())
+    assert picked.pick == M and picked.hold is False
+    held = verdict(inputs(), rain_due=True)
+    assert held.pick == 0 and held.sequence == ()
+    assert held.to_flag is False and held.hold is True
+    assert held.reason == "hold, rain is due"
+    assert len(held.rows) == len(picked.rows)
+
+
+def test_penalty_adds_to_stop_race_times_not_the_current_set() -> None:
+    base = verdict(inputs())
+    penalised = verdict(inputs(), penalty_s=5.0)
+    assert penalised.saving_s == pytest.approx(base.saving_s - 5.0, abs=0.01)
+    for b, p in zip(base.rows, penalised.rows, strict=True):
+        if b.current:
+            assert p.race_time_s == pytest.approx(b.race_time_s, abs=0.01)
+        else:
+            assert p.race_time_s == pytest.approx(b.race_time_s + 5.0, abs=0.01)
+
+
+def test_penalty_larger_than_the_saving_stays_out() -> None:
+    v = verdict(inputs(), penalty_s=25.0)
+    assert v.pick == 0
+    assert v.reason == "stay out, the stop saves nothing"
+
+
+def test_rain_crossover_silences_the_stay_call(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    worn = dict(
+        wear_mean_pct=60.0,
+        wear_max_pct=60.0,
+        tyre_sets=tuple(
+            TyreSet(visual=v, available=1, life_span=7, usable_life=7) for v in (16, 17, 18)
+        ),
+    )
+    planned = engine.planner._plan(_sc_snap(weather_crossover="to_inter", **worn))
+
+    assert planned.sc_call == ""
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
+    assert not fired & {"sc_stay_out", "box_now", "plan_sc_box"}
+
+
+def test_large_penalty_turns_the_box_into_a_stay(tmp_path) -> None:
+    picked = _sc_engine(tmp_path, Database(":memory:")).planner._plan(_sc_snap())
+    assert picked.sc_call == "box"
+
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planned = engine.planner._plan(_sc_snap(penalty_s=60))
+
+    assert planned.sc_call == "stay"
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
+    assert not fired & {"plan_sc_box", "box_now"}
