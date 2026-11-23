@@ -638,7 +638,7 @@ class Planner:
                 "urgency": "tactical",
                 "rank": 3,
                 "outcome": "suppressed",
-                "suppressed_by": "shadow",
+                "suppressed_by": "record_only",
                 "text": "",
                 "inputs": {
                     "pick": verdict.pick,

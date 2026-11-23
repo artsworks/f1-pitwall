@@ -411,7 +411,7 @@ def _verdict(db: Database, lap: int, *rows: tuple[int, bool, bool]) -> None:
             "rule_id": "sc_verdict",
             "lap": lap,
             "outcome": "suppressed",
-            "suppressed_by": "shadow",
+            "suppressed_by": "record_only",
             "t": float(lap),
             "inputs": {
                 "ladder": [

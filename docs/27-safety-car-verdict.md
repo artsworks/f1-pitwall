@@ -364,7 +364,7 @@ Learning:
 - `pitwall tune` prints the offset and the number of graded rows.
 - `pitwall replay --seed-db` loads the offset. The replay passes the database to the engine in the same way as a live session.
 - The grader now grades rows that the driver follows. A driver who obeys a "stay out" never tests a fresh-set row with "does not survive". The evidence for those rows stops, and a too-pessimistic fresh-set row cannot be found from real sessions. A wrong "survives" on the current set still shows.
-- The decision record of the verdict still has `suppressed_by: shadow`. The name is out of date.
+- The decision record of the verdict had `suppressed_by: shadow`. The value is now `record_only`. Records written before the change keep `shadow`. No code reads the value.
 
 Replay batch after the takeover (7 races, deg priors of 2026-11-23). The driver in a recording cannot follow the new radio.
 
