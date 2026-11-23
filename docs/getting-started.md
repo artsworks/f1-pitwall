@@ -127,12 +127,12 @@ uses the voice automatically when available and plays nothing (`null`) if it can
 ```powershell
 pitwall voice get                      # default: en_GB-northern_english_male-medium
 pitwall voice get en_US-ryan-high      # try others; samples: https://rhasspy.github.io/piper-samples/
-pitwall voice warm                     # pre-render common fixed phrases (default 150)
+pitwall voice warm                     # pre-render common fixed phrases (default 170)
 pitwall voice                          # list installed voices
 pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
 ```
 
-`speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 150.
+`speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 170.
 If disk space is tight, lower it in `~/.pitwall/profile.yaml`:
 
 ```yaml
