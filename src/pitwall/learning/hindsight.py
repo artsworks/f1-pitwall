@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from statistics import median
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
@@ -411,7 +412,7 @@ def grade_session(
                 f"plan {ev.get('to_plan')} {'-'.join(seq)}, ran {'-'.join(run_seq)}",
             )
         )
-    out.extend(_grade_sc_verdicts(db, uid, laps, stops, parts, finished))
+    out.extend(_grade_sc_verdicts(db, uid, laps, stops, parts, finished, th))
     from pitwall.setup.grade import grade_setup_recs
 
     out.extend(grade_setup_recs(db, uid, th, _setup_rules(setup_rules)))
@@ -430,6 +431,7 @@ def _grade_sc_verdicts(
     stops: Sequence[int],
     parts: Sequence[Sequence[LapRow]],
     finished: bool,
+    th: Mapping[str, object],
 ) -> list[Outcome]:
     """Grade one shadow sc_verdict ladder row per SC/VSC period (docs/27
     phase 2): the fitted compound's fresh-set row after an SC stop, else the
@@ -538,6 +540,17 @@ def _grade_sc_verdicts(
         result = "reached the flag" if ran else f"stopped for tyres L{later}"
         if damaged:
             result = f"damage stop L{later}"
+        actual = 1.0 if ran else 0.0
+        label = GOOD if survives == ran else WRONG
+        if ran:
+            green = [lap for lap in parts[i] if lap.valid and lap.sc_status not in (1, 2)]
+            if len(green) >= 6:
+                times = [lap.lap_time_ms for lap in green]
+                loss_ms = median(times[-3:]) - median(times[:3])
+                has_pace = loss_ms < _th(th, "tyre_cliff_ms", 1500)
+                actual = 1.0 if has_pace else 0.0
+                label = GOOD if survives == has_pace else WRONG
+                result = f"reached the flag, lost {loss_ms / 1000:.1f} s of pace"
         out.append(
             Outcome(
                 cid,
@@ -545,9 +558,9 @@ def _grade_sc_verdicts(
                 lap_n,
                 "sc_row",
                 predicted,
-                1.0 if ran else 0.0,
+                actual,
                 None,
-                GOOD if survives == ran else WRONG,
+                label,
                 f"{name} row L{lap_n} {said}, {result}",
             )
         )

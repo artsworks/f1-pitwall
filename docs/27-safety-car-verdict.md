@@ -94,7 +94,10 @@ Each phase is one pull request with its own test.
 Hindsight grades the ladder row of the set that ran after the SC, not the verdict as a whole. This grades a "stay out" too, and a stop that the driver made against the verdict.
 
 - If the driver made a stop, grade the row of the fitted compound. If the driver made no stop, grade the row of the current set.
-- Good: the row said "survives" and the set reached the flag with no later stop for tyres. Also good: the row said "does not survive" and the driver made a later stop for tyres.
+- Good: the row said "survives" and the set reached the flag with no later stop for tyres and with pace. Also good: the row said "does not survive" and the driver made a later stop for tyres.
+- Pace at the flag: the grader takes the valid green laps of the graded stint. The pace loss is the median of the last 3 laps minus the median of the first 3 laps. A loss of `tyre_cliff_ms` or more means that the set had no fighting pace. A "does not survive" row is then good, and a "survives" row is wrong.
+- With fewer than 6 valid green laps in the stint, the grader does not measure pace. A set that reached the flag then counts as "survives".
+- The pace loss has no fuel correction. The fuel burn makes the late laps faster, so the measured loss is too small.
 - Also good: the row said "does not survive" and a damage stop followed. A set with no pace left makes a spin more likely. A damage stop after a "survives" row stays censored.
 - Wrong: the row and the result disagree.
 - Censored: a later stop for rain, an owed second compound, damage or a penalty, or a second SC stop. The grader detects damage from a damage call (`front_wing_damage`, `front_wing_lost_box` or `puncture`) between the verdict and the stop. It detects a penalty from `penalty_served_stop_go` at the stop.
@@ -229,9 +232,9 @@ Do these checks at the start of phase 1. I did not verify these points on main.
 
 Status on 2026-11-23: 1 graded row of 12 from a live session, 0 wrong. The database shows this row as censored until hindsight grades the session again.
 
-With the replay batch below, and with the finish fault fixed, the count is 5 graded rows, 3 good and 2 wrong. The 2 wrong grades use the whole allowance at 5 rows of 12.
+With the replay batch below, and with the finish fault fixed, the count was 5 graded rows, 3 good and 2 wrong. With the pace grade the count is 5 graded rows, 4 good and 1 wrong. No "survives" row is wrong.
 
-Decision on 2026-11-23: the verdict does not take over yet. The finish fault and the pick fault are fixed. The batch ran again after the pick fix, and the grades did not change. The pessimistic model and the grader question are still open.
+Decision on 2026-11-23: the verdict does not take over yet. The finish fault and the pick fault are fixed. The batch ran again after the pick fix, and the grades did not change. The grader now measures pace at the flag, see "Pace grade". The pessimistic model is still open.
 
 ### Imola, 16 laps, 2026-11-23 (session 14001174973346760379)
 
@@ -315,6 +318,23 @@ Third replay, after the pick fix:
 - Track 16, laps 14 and 15: the pick stays, because the current mediums do not survive (53%). The current set is faster by 4 s and reached the flag. This is the pessimistic model fault.
 - The grades did not change: 5 graded rows, 3 good, 2 wrong, 0 wrong "survives". The grade reads the ladder row and not the pick.
 - Track 7, lap 8: the driver made the stop for softs, and the softs reached the flag. The verdict now says "stay out" there. The grader cannot say which choice was faster.
+
+### Pace grade, 2026-11-23
+
+The grader asked only whether a later stop came. The grader now asks the same question as the verdict, as phase 2 describes. The databases of the third replay were graded again, with no new replay.
+
+| Race | Row graded | Grade before | Grade with the pace grade |
+|---|---|---|---|
+| Imola 16 laps, 2026-11-23 | S, does not survive | good | good, damage stop L14 |
+| Imola 16 laps, 2026-11-19 | H, does not survive | wrong | good, lost 3.5 s of pace |
+| Track 32, 14 laps | S on car, survives | good | good, 1 green lap, no pace measured |
+| Track 16, 18 laps | M on car, does not survive (53%) | wrong | wrong, lost 0.4 s of pace |
+| Track 7, 13 laps | S, survives | good | good, 3 green laps, no pace measured |
+
+- The 3 censored rows did not change.
+- Imola hards: the first three green laps were 79.6, 81.0 and 80.6 s. The last three were 84.5, 84.1 and 80.7 s. Lap 14 had no ERS deployment. Lap 16 had full ERS deployment and a track limits penalty. The median ignores one such lap.
+- Track 16 mediums: the stint has 6 valid green laps, 5 before the SC and 1 after it. The set kept its pace, so the row was wrong. This row is the evidence for the pessimistic model.
+- Two of the three "survives" grades rest on the stop rule alone, because their stints had fewer than 6 green laps.
 
 ## Risks
 

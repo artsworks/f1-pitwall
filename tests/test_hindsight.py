@@ -346,16 +346,21 @@ def test_plan_graded_on_visual_compound_with_pitted_out_lap(tmp_path: Path) -> N
 
 
 def _sc_race(
-    db: Database, sets: list[tuple[int, int]], sc_laps: tuple[int, ...], last_lap: int = 20
+    db: Database,
+    sets: list[tuple[int, int]],
+    sc_laps: tuple[int, ...],
+    last_lap: int = 20,
+    deg: int = 100,
 ) -> None:
     """20-lap race: each (in-lap, next compound) in `sets` ends a stint, the
-    first stint is medium, and `sc_laps` run under the safety car."""
+    first stint is medium, and `sc_laps` run under the safety car. Lap times
+    rise by `deg` ms per lap of tyre age."""
     db.upsert_session(UID, track_id=7, session_type=15)
     db.set_session_total_laps(UID, 20)
     stops = dict(sets)
     compound, age = MEDIUM, 0
     for n in range(1, last_lap + 1):
-        lap = _lap(n, 90_000 + 100 * age, compound, age, pitted=n in stops)
+        lap = _lap(n, 90_000 + deg * age, compound, age, pitted=n in stops)
         db.insert_lap(UID, 0, replace(lap, sc_status=1 if n in sc_laps else 0))
         age += 1
         if n in stops:
@@ -427,12 +432,47 @@ def test_sc_verdict_censored_when_second_compound_owed(tmp_path: Path) -> None:
 
 def test_sc_verdict_stay_out_grades_current_row(tmp_path: Path) -> None:
     db = Database(tmp_path / "h.sqlite")
-    _sc_race(db, [], (8, 9))
+    _sc_race(db, [], (8, 9), deg=50)
     _verdict(db, 8, (MEDIUM, True, False), (HARD, False, False))
     _verdict(db, 9, (MEDIUM, True, True), (HARD, False, False))
     (o,) = _sc_grade(db)
     assert o.lap == 9 and o.label == "good"
     assert "M row L9 survives (82%), reached the flag" in o.detail
+
+
+def test_sc_verdict_good_when_non_survivor_reaches_flag_without_pace(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _sc_race(db, [(9, HARD)], (8, 9), deg=300)
+    _verdict(db, 9, (MEDIUM, True, False), (HARD, False, False))
+    (o,) = _sc_grade(db)
+    assert o.label == "good" and o.actual == 0.0
+    assert "reached the flag, lost 2.4 s of pace" in o.detail
+
+
+def test_sc_verdict_wrong_when_survivor_reaches_flag_without_pace(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _sc_race(db, [(9, HARD)], (8, 9), deg=300)
+    _verdict(db, 9, (MEDIUM, True, False), (HARD, False, True))
+    (o,) = _sc_grade(db)
+    assert o.label == "wrong" and o.actual == 0.0
+
+
+def test_sc_verdict_wrong_when_non_survivor_reaches_flag_with_pace(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _sc_race(db, [(9, HARD)], (8, 9))
+    _verdict(db, 9, (MEDIUM, True, False), (HARD, False, False))
+    (o,) = _sc_grade(db)
+    assert o.label == "wrong" and o.actual == 1.0
+    assert "lost 0.8 s of pace" in o.detail
+
+
+def test_sc_verdict_falls_back_to_stop_rule_with_few_green_laps(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _sc_race(db, [(16, HARD)], (15, 16), deg=300)
+    _verdict(db, 16, (MEDIUM, True, False), (HARD, False, False))
+    (o,) = _sc_grade(db)
+    assert o.label == "wrong" and o.actual == 1.0
+    assert o.detail.endswith("reached the flag")
 
 
 def _censored_sc(tmp_path: Path, sets: list[tuple[int, int]], sc_laps: tuple[int, ...], **kw):
