@@ -140,11 +140,12 @@ def test_s_zero_pace_survival_is_a_step() -> None:
 
 
 def test_survive_min_comes_from_the_mode_mapping() -> None:
-    # deg 132 at sd 20 gives survival ~= 0.71: above aggressive, below balanced.
-    inp = inputs(compounds=models(m_deg=132.0, sd=20.0))
+    # deg 132 at sd 60 gives survival ~= 0.57: above aggressive, below balanced.
+    # Softs at deg 200 fail in both modes.
+    inp = inputs(compounds=models(s_deg=200.0, m_deg=132.0, sd=60.0))
     balanced = verdict(inp, cur_wear_pct=60.0)
     assert row(M, balanced.rows).survives is False and balanced.pick == H
-    aggressive = verdict(inp, cur_wear_pct=60.0, th={**TH, "sc_survive_min": 0.60})
+    aggressive = verdict(inp, cur_wear_pct=60.0, th={**TH, "sc_survive_min": 0.45})
     assert row(M, aggressive.rows).survives is True and aggressive.pick == M
 
 
@@ -251,7 +252,7 @@ def test_sc_verdict_writes_one_suppressed_call_with_the_ladder(tmp_path) -> None
     # Uniform deg models tie on race time; hardest-first order picks the hard.
     assert inputs["pick"] == H
     assert inputs["pick_compound"] == "hard"
-    assert inputs["survive_min"] == pytest.approx(0.75)
+    assert inputs["survive_min"] == pytest.approx(0.60)
     ladder = inputs["ladder"]
     assert [r["compound"] for r in ladder] == [H, M, S, M]
     assert ladder[-1]["current"] is True

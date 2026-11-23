@@ -5,7 +5,7 @@ mindsets:
     position_loss_risk_max: 0.30
     undercut_speak_threshold_s: 1.0
     sc_stop_min_wear_pct: 35
-    sc_survive_min: 0.75
+    sc_survive_min: 0.60
     tyre_life_buffer_laps: 2.0
     push_laps_per_stint: 2
     thermal_warn_offset_c: 0
@@ -31,7 +31,7 @@ mindsets:
     position_loss_risk_max: 0.55
     undercut_speak_threshold_s: 0.4
     sc_stop_min_wear_pct: 25
-    sc_survive_min: 0.60
+    sc_survive_min: 0.45
     tyre_life_buffer_laps: 1.0
     push_laps_per_stint: 4
     thermal_warn_offset_c: 3

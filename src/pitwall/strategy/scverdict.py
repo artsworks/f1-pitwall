@@ -73,7 +73,7 @@ def sc_verdict(
     maps it to the game's reported laps (absent = no wear gate). The current
     lap counts at `sc_verdict_current_lap_weight` inside `laps_needed`."""
     cliff_ms = _f(th, "tyre_cliff_ms", 1500)
-    survive_min = _f(th, "sc_survive_min", 0.75)
+    survive_min = _f(th, "sc_survive_min", 0.60)
     laps_needed = max(0.0, inp.laps_remaining - 1 + _f(th, "sc_verdict_current_lap_weight", 0.5))
     stack_s = _f(th, "double_stack_loss_s", 4.0) if stacking else 0.0
     saving_s = inp.green_loss_s - inp.sc_loss_s - inp.wing_change_s - stack_s

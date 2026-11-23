@@ -37,7 +37,7 @@ No code on main asks whether the new set lasts to the flag.
 4. **Use the shorter life, not a product.** Pace life and wear life belong to the same tyre and driver, so they are not independent. Survival is the probability for the shorter of the two lives.
 5. **`usable_life` is the wear life until a learned prior exists.** A compound whose `usable_life` is below `laps_needed` is not a survivor. This closes the case where a soft with a low pace slope passes although wear ends its life.
 6. **The compound ladder shows the margin in laps.** A row reads `M  life 14  need 10  +4`. The exact percentage shows only in review mode and on the debrief page.
-7. **The survival threshold is a new mindset key.** `sc_survive_min` is 0.75 for balanced and 0.60 for aggressive. `pit_confidence_min` (0.70 and 0.55) keeps its present meaning and its present use.
+7. **The survival threshold is a new mindset key.** `sc_survive_min` is 0.60 for balanced and 0.45 for aggressive. The first values were 0.75 and 0.60. They changed on 2026-11-23 without calibration data, because the model is too pessimistic. Check them again before phase 4. `pit_confidence_min` (0.70 and 0.55) keeps its present meaning and its present use.
 8. **No confidence word until the high band can occur.** Without a learned wear prior the band stops at medium, so the word is always "medium". The radio line and the card omit the word until phase 5 lifts the cap.
 9. **The learned wear prior waits for evidence.** It needs a new learning path. The shadow log shows how often `usable_life` is wrong. Build the prior only if that case is common.
 
