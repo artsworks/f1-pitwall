@@ -211,6 +211,27 @@ def test_stop_adjusted_gaps_use_green_loss_when_vsc_ending(
     assert losses == [expected_loss]
 
 
+def test_vsc_ending_survives_resume_event_while_still_under_vsc() -> None:
+    ingest, state = _state()
+    state.race_phase = "vsc"
+
+    def scar(event_type: int, t: float) -> None:
+        event = {
+            "event_string_code": b"SCAR",
+            "event_data": bytes((2, event_type)).ljust(12, b"\0"),
+        }
+        _send(ingest, pack_packet(PacketId.EVENT, event, session_time=t), t)
+
+    session = {"session_type": 15, "safety_car_status": 2}
+    _send(ingest, pack_packet(PacketId.SESSION, session, session_time=0.0), 0.0)
+    scar(1, 1.0)
+    assert state.snapshot(1.0).sc_ending
+    scar(3, 2.0)
+    assert state.snapshot(2.0).sc_ending
+    scar(0, 3.0)
+    assert not state.snapshot(3.0).sc_ending
+
+
 def _lap_tick(
     accumulator: LapAccumulator,
     lap_num: int,

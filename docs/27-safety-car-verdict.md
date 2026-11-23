@@ -93,6 +93,7 @@ Hindsight grades the ladder row of the set that ran after the SC, not the verdic
 
 - If the driver made a stop, grade the row of the fitted compound. If the driver made no stop, grade the row of the current set.
 - Good: the row said "survives" and the set reached the flag with no later stop for tyres. Also good: the row said "does not survive" and the driver made a later stop for tyres.
+- Also good: the row said "does not survive" and a damage stop followed. A set with no pace left makes a spin more likely. A damage stop after a "survives" row stays censored.
 - Wrong: the row and the result disagree.
 - Censored: a later stop for rain, an owed second compound, damage or a penalty, or a second SC stop. The grader detects damage from a damage call (`front_wing_damage`, `front_wing_lost_box` or `puncture`) between the verdict and the stop. It detects a penalty from `penalty_served_stop_go` at the stop.
 - Test: one synthetic race for each grade, and one for a "stay out".
@@ -120,6 +121,7 @@ Work in this phase:
 
 - `cheap_stop` and Plan C read the verdict. Remove the wear gate and `sc_stop_min_wear_pct` from `pitwindow.py`, `mindsets.yaml`, `docs/08-configuration.md` and `docs/18-race-engine.md`.
 - Add the position guard: no stop if the expected net positions after regain are below 0, unless the current set does not survive. With `snap.rival_data_restricted`, the regain uses pace only.
+- Add the damage stop to the verdict. A stop to repair damage is right when the damage is severe and the car cannot hold its position. The stop is also right when the positions lost are few against the gain in survival to the flag.
 - Add the rain gate: if the weather rules expect a change to intermediates before the flag, the verdict is "hold" and the weather rules decide.
 - Give the verdict rule `decision_point: pit_entry`, the same as `plan_sc_box`. On a track with no `pit_entry_m`, the rule fires at the start of the lap.
 - Add the verdict word, the box lap, the positions row and the badges to the Plan C card.
@@ -211,12 +213,48 @@ Work in this phase:
 Do these checks at the start of phase 1. I did not verify these points on main.
 
 1. Whether `usable_life` changes with the race length, and whether its values are plausible for each compound. Log the value in a replay before any code relies on it.
+   Partly answered on 2026-11-23, see "Shadow sessions". The values at 16 laps are plausible for each compound. One race length cannot show whether the value changes with the race length.
 2. Whether the deg prior that reaches `CompoundModel` is the one scoped by race length (`@13L`, `model/deg.py:347`).
 3. Whether `CompoundModel.sets` comes from the fresh-set count at `state/session.py:2702`.
 4. Whether the `inputs` of a decision record can carry the ladder, and whether hindsight can read the ladder without a schema change.
 5. How the debrief page gets its data (`learning/debrief.py`), and what a new list on that page needs.
 6. Which field tells the strategy code that the weather rules expect intermediates. `weather_in_10` and `weather_crossover_pct` are the candidates.
 7. Whether any code predicts rival stops. A search by name found `stop_adjusted_gaps` in `state/race.py` and no prediction.
+
+## Shadow sessions
+
+### Count against the pass mark
+
+Status on 2026-11-23: 1 graded row of 12, 1 real row of 5, 0 wrong. The database shows this row as censored until hindsight grades the session again.
+
+### Imola, 16 laps, 2026-11-23 (session 14001174973346760379)
+
+What happened:
+
+- Red flag on lap 1. Restart on lap 3 with mediums.
+- VSC on lap 3. The dashboard showed `BOX NOW` on the Plan C card and on the action card. The driver followed the dashboard and made a stop on lap 3 for softs.
+- The radio spoke no stop call. `plan_sc_box` needs Plan C to be active, and the active plan stayed on Plan A.
+- The softs ran laps 4 to 14. The driver reported no usable pace on the last laps, then a spin and a lost front wing. The stop on lap 14 followed.
+
+What the shadow log shows:
+
+- Lap 3: no pick, "stay out, nothing reaches the flag", `laps_needed` 13.5, saving 21.5 s.
+- Lap 3 ladder, pace life and `usable_life`: hard 5.3 and 23, medium 6.4 and 18, soft 6.2 and 12, current medium 3.3 and 18.
+- Every row had survival 0 and a negative margin. The Plan C card showed `BOX NOW M` on the same lap.
+- Lap 4 has a second record. The engine wrote it 5.6 s after `vsc_ending`, with the car in the pit lane.
+- Grade: "S row L3 does not survive (0%), damage stop L14". The first grade was censored. The grade is good under the damage rule in phase 2.
+
+Findings:
+
+- **The verdict was right and the dashboard was wrong.** The verdict said that no compound reaches the flag. The softs did not reach the flag with fighting pace. `cheap_stop` recommended the stop at 3% wear, because a stop was owed and the VSC saving was larger. `cheap_stop` does not ask whether the new set lasts. This is the case that the takeover exists to close.
+- **Disagreement on lap 3.** The dashboard said `BOX NOW` and every ladder row had a negative margin. The rule in this doc counts radio calls, and the radio was silent. The count of disagreements must include the dashboard cards too.
+- **The row was right.** The driver names tyre wear as the cause of the spin. The grader cannot see that cause, so phase 2 now grades a damage stop after a "does not survive" row as good.
+- **Open check 1.** `usable_life` was 23, 18 and 12 laps for hard, medium and soft at 16 laps. The softs ran 11 laps to 46% wear, and the driver reported them finished. The soft value of 12 agrees with that. The wear gate stays.
+- **The pace lives agree with earlier stints.** The deg priors for Imola at 16 laps were 281 (hard), 234 (medium) and 243 (soft) ms for each lap. Three medium stints measured 350 to 406, and two hard stints measured 335 and 381. The priors are not too steep for this driver.
+- **The priors are noisy between compounds.** Each prior comes from 2 or 3 stints. The hard got a shorter pace life than the medium for this reason.
+- **Survival is a step when the prior is learned.** `_compound_models` sets the standard deviation to 0 for a learned or overlay prior. Every row then has survival 0 or 1, and the noise in the prior is ignored.
+- **The Plan C card and the action card named different compounds.** The Plan C card said medium, and the action card said `PLAN A` with soft.
+- **Fixed: a record after the VSC ended.** SCAR event 3 (resume) set `sc_ending` back to false while `race_phase` was still `vsc`. The engine wrote the lap 4 record 0.1 s later. `sc_ending` now stays true through the resume event.
 
 ## Risks
 

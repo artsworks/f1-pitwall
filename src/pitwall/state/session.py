@@ -2053,7 +2053,7 @@ class SessionState:
         elif pkt.code == "SCAR":
             if isinstance(pkt.detail, dict):
                 # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
-                self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2)
+                self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2, 3)
         elif pkt.code == "PENA":
             if isinstance(pkt.detail, dict):
                 ptype = int(pkt.detail.get("penalty_type", 0))

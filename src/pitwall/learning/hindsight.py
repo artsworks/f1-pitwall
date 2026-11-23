@@ -501,6 +501,7 @@ def _grade_sc_verdicts(
         predicted = 1.0 if survives else 0.0
         later = stops[i] if i < len(stops) else None
         why = ""
+        damaged = False
         if later is None and not finished:
             why = "no finish"
         elif later is not None:
@@ -510,7 +511,10 @@ def _grade_sc_verdicts(
             elif neutralised(later):
                 why = f"second SC stop L{later}"
             elif called(SC_DAMAGE_RULES, lap_n, later):
-                why = f"damage stop L{later}"
+                if survives:
+                    why = f"damage stop L{later}"
+                else:
+                    damaged = True
             elif called(SC_PENALTY_RULES, later - 1, later + 1):
                 why = f"penalty stop L{later}"
             elif len(dry) < 2:
@@ -532,6 +536,8 @@ def _grade_sc_verdicts(
             continue
         ran = later is None
         result = "reached the flag" if ran else f"stopped for tyres L{later}"
+        if damaged:
+            result = f"damage stop L{later}"
         out.append(
             Outcome(
                 cid,

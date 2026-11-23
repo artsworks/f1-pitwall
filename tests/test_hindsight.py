@@ -449,6 +449,16 @@ def test_sc_verdict_censored_by_damage_stop(tmp_path: Path) -> None:
     assert o.label == "censored" and "damage stop L16" in o.detail
 
 
+def test_sc_verdict_good_when_damage_stop_follows_non_survivor(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    _sc_race(db, [(9, HARD), (16, MEDIUM)], (8, 9))
+    _verdict(db, 9, (MEDIUM, True, False), (HARD, False, False))
+    _call(db, "f15", "front_wing_lost_box", 15)
+    (o,) = _sc_grade(db)
+    assert (o.metric, o.label) == ("sc_row", "good")
+    assert o.detail.endswith("damage stop L16")
+
+
 def test_sc_verdict_censored_by_penalty_stop(tmp_path: Path) -> None:
     db = _censored_sc(tmp_path, [(9, HARD), (16, MEDIUM)], (8, 9))
     _call(db, "s17", "penalty_served_stop_go", 17)
