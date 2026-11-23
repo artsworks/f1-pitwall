@@ -654,6 +654,34 @@ def test_lap_summary_and_validity() -> None:
     assert "pitted" in state.laps[-1].invalid_reasons
 
 
+def test_final_lap_is_stored_when_the_race_finishes() -> None:
+    ingest, state = _state()
+    _send(
+        ingest,
+        pack_packet(
+            PacketId.SESSION,
+            {"session_type": 15, "total_laps": 3, "safety_car_status": 0},
+            session_time=0.0,
+        ),
+        0.0,
+    )
+
+    def lap(num: int, t: float, **kw: object) -> None:
+        car = {"current_lap_num": num, "driver_status": 4, "pit_status": 0, **kw}
+        _send(ingest, pack_packet(PacketId.LAP_DATA, {"cars": {0: car}}, session_time=t), t)
+
+    lap(1, 0.1, last_lap_time_ms=0)
+    lap(2, 90.0, last_lap_time_ms=80_000)
+    lap(3, 170.0, last_lap_time_ms=82_000)
+    lap(3, 250.0, last_lap_time_ms=78_900, result_status=3)
+    assert [s.lap_num for s in state.laps] == [1, 2, 3]
+    assert state.laps[-1].lap_time_ms == 78_900
+
+    lap(3, 251.0, last_lap_time_ms=78_900, result_status=3)
+    lap(3, 252.0, last_lap_time_ms=78_900, result_status=3)
+    assert [s.lap_num for s in state.laps] == [1, 2, 3]
+
+
 def test_ema_scalar() -> None:
     e = Ema(3.0)
     e.update(0.0, 100.0)

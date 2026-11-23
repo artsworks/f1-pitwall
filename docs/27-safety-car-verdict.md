@@ -225,7 +225,11 @@ Do these checks at the start of phase 1. I did not verify these points on main.
 
 ### Count against the pass mark
 
-Status on 2026-11-23: 1 graded row of 12, 1 real row of 5, 0 wrong. The database shows this row as censored until hindsight grades the session again.
+Status on 2026-11-23: 1 graded row of 12 from a live session, 0 wrong. The database shows this row as censored until hindsight grades the session again.
+
+With the replay batch below, and with the finish fault fixed, the count is 5 graded rows, 3 good and 2 wrong. The 2 wrong grades use the whole allowance at 5 rows of 12.
+
+Decision on 2026-11-23: the verdict does not take over yet. The finish fault is fixed. Fix the other two faults in "Replay batch" next, then grade the batch again.
 
 ### Imola, 16 laps, 2026-11-23 (session 14001174973346760379)
 
@@ -255,6 +259,36 @@ Findings:
 - **Survival is a step when the prior is learned.** `_compound_models` sets the standard deviation to 0 for a learned or overlay prior. Every row then has survival 0 or 1, and the noise in the prior is ignored.
 - **The Plan C card and the action card named different compounds.** The Plan C card said medium, and the action card said `PLAN A` with soft.
 - **Fixed: a record after the VSC ended.** SCAR event 3 (resume) set `sc_ending` back to false while `race_phase` was still `vsc`. The engine wrote the lap 4 record 0.1 s later. `sc_ending` now stays true through the resume event.
+
+### Replay batch, 2026-11-23
+
+Method:
+
+- A census read each recording of 10 MB or more without the engine. 16 files, 12 races, 7 races with SC or VSC laps on a dry compound.
+- Each race ran through `pitwall replay --speed max --seed-db` into its own copy of the database. The real database was read only.
+- The replays used the deg priors of 2026-11-23. Those priors include these races, so the result is better than a live run on the day.
+
+| Race | SC laps | Driver | Row graded | Grade before the finish fix | Grade after the finish fix |
+|---|---|---|---|---|---|
+| Imola 16 laps, 2026-11-23 | VSC 3 | stop L3 for softs, damage stop L14 | S, does not survive | good | good |
+| Imola 16 laps, 2026-11-19 | VSC 2 to 3 | stop L2 for hards, ran to the flag | H, does not survive | censored, no finish | wrong |
+| Track 32, 14 laps | SC 10 to 13 | no stop, softs 1 lap old | S on car, survives | censored, no finish | good |
+| Track 16, 18 laps | SC 14 to 16 | no stop, mediums 7 laps old | M on car, does not survive (53%) | censored, no finish | wrong |
+| Track 7, 13 laps | SC 8 to 10 | stop L8 for softs | S, survives | censored, no finish | good |
+| Track 14, 15 laps | SC 5 to 7, VSC 10 to 11 | stops L5 and L10, retired | H and S | censored | censored |
+| Imola 16 laps, 2026-10-22 | SC 1 to 3 | stop L1, rain stop L8 | M | censored, rain | censored |
+
+Faults found:
+
+- **Fixed: hindsight never saw a finish.** The engine did not store the final lap, because the game holds the lap counter at the flag. The engine now stores the final lap when the result status of the player becomes "finished". A second replay of the batch gave the grades in the last column. Before the fix: Of 55 races in the database, none had a lap row for the final lap. `grade_session` sets `finished` only when the last stored lap equals `total_laps`. Because of this, no real row could get the grade "reached the flag". The fuel and plan grades use the same value. Races stored before the fix keep the gap.
+- **The verdict picks a stop that is slower than no stop.** The pick is the fastest fresh survivor. The pick is never compared with the row of the current set. At track 32 on lap 10 the pick was softs at 443.5 s, and the current softs, 1 lap old, were at 435.1 s and survive. After a takeover the radio would call that stop from P1. In 11 of the 13 records with a pick, the current set survives and is faster than the pick.
+- **The model is too pessimistic, and the grader asks a different question.** The verdict asks for fighting pace (`tyre_cliff_ms`). The grader asks only whether a later stop came. The Imola hards ran 13 laps to the flag, and the last 4 laps were 2 to 4 s slower. The row was right on pace and wrong for the grader. At track 16 the mediums needed 3.5 laps with a margin of +1.0, and survival was 53%.
+
+Other results:
+
+- Both wrong grades are "does not survive" rows. No "survives" row was wrong.
+- Track 14, lap 5: the radio said "box, softs". The soft row did not survive, because `usable_life` was 10 and `laps_needed` was 10.5. The pick was hards, and the driver fitted hards.
+- Track 7, laps 8 and 9: the radio and the pick agreed on softs.
 
 ## Risks
 

@@ -1784,8 +1784,17 @@ class SessionState:
             self.sc_ending = False
         if car.grid_position and not self.grid_position:
             self.grid_position = car.grid_position
+        # The game holds the lap counter at the flag, so the final lap closes one tick later.
+        counted_lap = car.current_lap_num
+        if (
+            self._kind() == "race"
+            and car.result_status == 3
+            and self.total_laps > 0
+            and car.current_lap_num == self.total_laps
+        ):
+            counted_lap += 1
         summary = self.lap_acc.update(
-            current_lap_num=car.current_lap_num,
+            current_lap_num=counted_lap,
             last_lap_time_ms=car.last_lap_time_ms,
             sector1_ms=car.sector1_ms,
             sector2_ms=car.sector2_ms,
