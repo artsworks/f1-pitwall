@@ -495,6 +495,9 @@ def _grade_sc_verdicts(
             continue
         survives = bool(row.get("survives"))
         said = "survives" if survives else "does not survive"
+        pct = row.get("survival")
+        if isinstance(pct, (int, float)) and not isinstance(pct, bool):
+            said += f" ({round(100 * pct)}%)"
         predicted = 1.0 if survives else 0.0
         later = stops[i] if i < len(stops) else None
         why = ""

@@ -373,7 +373,15 @@ def _verdict(db: Database, lap: int, *rows: tuple[int, bool, bool]) -> None:
             "suppressed_by": "shadow",
             "t": float(lap),
             "inputs": {
-                "ladder": [{"compound": c, "current": cur, "survives": ok} for c, cur, ok in rows]
+                "ladder": [
+                    {
+                        "compound": c,
+                        "current": cur,
+                        "survives": ok,
+                        "survival": 0.82 if ok else 0.18,
+                    }
+                    for c, cur, ok in rows
+                ]
             },
         },
     )
@@ -390,7 +398,7 @@ def test_sc_verdict_good_when_row_survives(tmp_path: Path) -> None:
     _verdict(db, 9, (MEDIUM, True, False), (HARD, False, True))
     (o,) = _sc_grade(db)
     assert (o.call_id, o.metric, o.label) == ("sc_verdict:9", "sc_row", "good")
-    assert "H row L9 survives" in o.detail
+    assert "H row L9 survives (82%)" in o.detail
 
 
 def test_sc_verdict_good_when_row_does_not_survive(tmp_path: Path) -> None:
@@ -424,7 +432,7 @@ def test_sc_verdict_stay_out_grades_current_row(tmp_path: Path) -> None:
     _verdict(db, 9, (MEDIUM, True, True), (HARD, False, False))
     (o,) = _sc_grade(db)
     assert o.lap == 9 and o.label == "good"
-    assert "M row L9 survives, reached the flag" in o.detail
+    assert "M row L9 survives (82%), reached the flag" in o.detail
 
 
 def _censored_sc(tmp_path: Path, sets: list[tuple[int, int]], sc_laps: tuple[int, ...], **kw):

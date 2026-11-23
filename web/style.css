@@ -743,6 +743,7 @@ body.radio .drvmenu { top: auto; bottom: .9rem; left: .9rem; right: .9rem; width
   body.radio .banner { position: sticky; top: var(--status-h, 3rem);
     z-index: 2; box-shadow: 0 .6rem 1rem -.6rem #000; }
   body.radio .banner .life { height: 4px; }
+  .card.ladder { display: none; }
 }
 
 /* review transport bar: its own full-width row above the footer */

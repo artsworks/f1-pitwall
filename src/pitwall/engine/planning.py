@@ -40,7 +40,7 @@ from pitwall.strategy.plans import (
     compound_stop_owed,
     view_fields,
 )
-from pitwall.strategy.scverdict import sc_verdict
+from pitwall.strategy.scverdict import ScVerdict, sc_verdict
 
 
 def _true_behind_view(snap: Snapshot) -> tuple[RivalView | None, float]:
@@ -143,6 +143,7 @@ class Planner:
         self._used_compounds: set[int] = set()
         self._prev_race_phase = ""
         self._sc_verdict_laps: set[tuple[Any, int]] = set()
+        self._sc_verdict: ScVerdict | None = None
 
     def reset(self) -> None:
         self._held_plan = None
@@ -160,9 +161,11 @@ class Planner:
         self._used_compounds.clear()
         self._prev_race_phase = ""
         self._sc_verdict_laps.clear()
+        self._sc_verdict = None
 
     def rewind(self, t: float) -> None:
         self._held_plan = None
+        self._sc_verdict = None
         self._slow_run = None
         self._stop_expect = None
         self._prev_pit_status = -1  # -1: pit state unknown until the next tick
@@ -521,6 +524,9 @@ class Planner:
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
                 self._log_sc_verdict(snap, inp)
+        if phase not in ("sc", "vsc"):
+            self._sc_verdict = None
+        snap = dataclasses.replace(snap, sc_verdict=self._sc_verdict)
         st: PlanState = tracker.state
         if not st.active:
             return snap
@@ -541,6 +547,7 @@ class Planner:
             and snap.laps_remaining > self.ctx.th("sc_stop_min_laps_left", 3)
             and snap.tyre_visual in DRY
         ):
+            self._sc_verdict = None
             return
         uid = self.ctx.state.session_uid
         if (uid, snap.lap_num) in self._sc_verdict_laps:
@@ -571,6 +578,7 @@ class Planner:
             stacking=snap.teammate_stacking,
             th=th,
         )
+        self._sc_verdict = verdict
         self.ctx.dispatcher.log.write(
             {
                 "t": snap.now,

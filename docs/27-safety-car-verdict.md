@@ -1,6 +1,6 @@
 # Safety car verdict: which compound reaches the flag (plan v4)
 
-Status: phase 1 (shadow log) and phase 2 (hindsight grading) are built. Phases 3 to 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
+Status: phases 1 to 3 are built (shadow log, hindsight grading, ladder card and debrief list). Phases 4 and 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
 
 ## Goal
 
@@ -102,9 +102,8 @@ Hindsight grades the ladder row of the set that ran after the SC, not the verdic
 - Add the compound ladder to the Plan C card, as the section "Dashboard" describes for the shadow release.
 - Send the data in the existing state payload. Add no frames, because the Hub closes a client with 64 unsent frames (#192).
 - Show the verdict and its grade in review mode and on the debrief page.
-- Add one bench scenario for the 13-lap case. `learning/bench.py` already has a `wear_scale` mutation.
-- Update `docs/15-dashboard-design.md` and `docs/24-scenario-bench.md`.
-- Run `pitwall bench --only <id>` for that scenario. Do not pass `--update-baseline` or `--accept-changes`.
+- The bench scenario moves to phase 4. Bench `expect` checks read fired calls only, and the shadow record is suppressed.
+- Update `docs/15-dashboard-design.md`.
 
 ### Phase 4: takeover
 
@@ -125,6 +124,8 @@ Work in this phase:
 - Give the verdict rule `decision_point: pit_entry`, the same as `plan_sc_box`. On a track with no `pit_entry_m`, the rule fires at the start of the lap.
 - Add the verdict word, the box lap, the positions row and the badges to the Plan C card.
 - Apply the clash table below.
+- Add one bench scenario for the 13-lap case, and update `docs/24-scenario-bench.md`. `learning/bench.py` already has a `wear_scale` mutation.
+- Run `pitwall bench --only <id>` for that scenario. Do not pass `--update-baseline` or `--accept-changes`.
 - Add the radio lines: one stop line for each compound, and the stay-out line. Add all of them to `speech.warm_phrases`.
 - Test: the new lines render from the cache, because a render longer than `speech.render_timeout_s` can drop the line (#191).
 - Run the full suite one time: `uv run pytest -n auto --dist loadfile`.

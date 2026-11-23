@@ -780,3 +780,41 @@ def test_comparison_omits_gap_trace_outside_races() -> None:
     section = _comparison(report)
     assert "Car 1" in section
     assert "gaptrace" not in report
+
+
+def test_debrief_sc_verdict_card_lists_rows_and_counts() -> None:
+    db = Database(":memory:")
+    uid = 143
+    db.upsert_session(uid, track_id=7, session_type=15)
+    db.replace_outcomes(
+        uid,
+        [
+            {
+                "call_id": f"sc_verdict:{lap}",
+                "rule_id": "sc_verdict",
+                "lap": lap,
+                "metric": "sc_row",
+                "label": label,
+                "detail": f"H row L{lap} survives (82%), reached the flag",
+            }
+            for lap, label in ((9, "good"), (20, "wrong"), (30, "censored"))
+        ],
+    )
+    db.upsert_session(144, track_id=7, session_type=15)
+    db.replace_outcomes(
+        144,
+        [{"call_id": "x", "rule_id": "sc_verdict", "lap": 4, "metric": "sc_row", "label": "good"}],
+    )
+
+    report = render_debrief(db, uid, ConfigStore().current())
+
+    assert "SAFETY CAR VERDICT" in report
+    assert "H row L9 survives (82%), reached the flag" in report
+    assert "This session: 1 good, 1 wrong, 1 censored." in report
+    assert "All sessions: 2 good, 1 wrong. Pass mark: 12 graded rows, at most 2 wrong." in report
+
+
+def test_debrief_sc_verdict_card_absent_without_outcomes() -> None:
+    db = Database(":memory:")
+    db.upsert_session(145, track_id=7, session_type=15)
+    assert "SAFETY CAR VERDICT" not in render_debrief(db, 145, ConfigStore().current())

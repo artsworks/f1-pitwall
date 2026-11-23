@@ -89,6 +89,7 @@ from pitwall.state.zones import (
 from pitwall.strategy.pace import amount_words, pace_words_self
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.rejoin import FieldCar
+from pitwall.strategy.scverdict import ScVerdict
 from pitwall.strategy.weather import (
     crossover_projection,
     default_pit_loss_s,
@@ -690,6 +691,7 @@ class Snapshot:
     undercut_s: float = 0.0
     overcut_s: float = 0.0
     plans: tuple[StrategyPlan, ...] = ()
+    sc_verdict: ScVerdict | None = None
     active_plan: str = ""
     on_plan: bool = True
     plan_label: str = ""

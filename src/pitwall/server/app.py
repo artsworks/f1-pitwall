@@ -28,6 +28,7 @@ from pitwall.setup.rules import reason_for_symptom, setup_fields_for_param
 from pitwall.state.driving import WHEEL_NAMES
 from pitwall.state.session import Snapshot, pressure_window, thermal_window
 from pitwall.store.db import Database
+from pitwall.strategy.scverdict import ScVerdict
 
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 STALE_MS = 1000.0
@@ -276,6 +277,26 @@ def _compound(visual: int) -> str | None:
     return _COMPOUND_WORDS.get(visual) or (f"C{visual}" if visual else None)
 
 
+def _sc_ladder(verdict: ScVerdict | None) -> dict[str, Any] | None:
+    if verdict is None:
+        return None
+    return {
+        "need": _finite(verdict.laps_needed),
+        "rows": [
+            {
+                "compound": _compound(row.compound),
+                "current": row.current,
+                "no_set": not row.current and row.sets == 0,
+                "life": _finite(row.margin_laps + row.laps_needed),
+                "need": _finite(row.laps_needed),
+                "margin": _finite(row.margin_laps),
+                "survives": row.survives,
+            }
+            for row in verdict.rows
+        ],
+    }
+
+
 def _fit_mismatch(snapshot: Snapshot) -> dict[str, str] | None:
     """Compare tyres against the plan's next compound latched at pit entry.
 
@@ -453,6 +474,7 @@ def strategy_payload(
             }
             for p in snapshot.plans
         ],
+        "sc_ladder": _sc_ladder(snapshot.sc_verdict),
         "active_plan": snapshot.active_plan or None,
         "on_plan": snapshot.on_plan if snapshot.active_plan else None,
         "plan_off_s": snapshot.plan_off_s if snapshot.active_plan else None,

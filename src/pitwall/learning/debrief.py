@@ -1220,12 +1220,40 @@ def _hindsight(automatic: list[dict[str, Any]] | None) -> str:
     return " · ".join(parts) or "—"
 
 
+def _sc_verdict_card(
+    outcomes: dict[str, list[dict[str, Any]]], totals: Mapping[str, int] | None
+) -> str:
+    rows = sorted(
+        (o for group in outcomes.values() for o in group if o.get("metric") == "sc_row"),
+        key=lambda o: o.get("lap") or 0,
+    )
+    if not rows:
+        return ""
+    here = Counter(str(o.get("label") or "") for o in rows)
+    total = totals or {}
+    table = _table(
+        ("Lap", "Row", "Grade"),
+        [(o.get("lap"), o.get("detail") or "", _verdict(str(o.get("label") or ""))) for o in rows],
+        "outcomes",
+    )
+    session_line = (
+        f"This session: {here['good']} good, {here['wrong']} wrong, {here['censored']} censored."
+    )
+    all_line = (
+        f"All sessions: {total.get('good', 0)} good, {total.get('wrong', 0)} wrong. "
+        "Pass mark: 12 graded rows, at most 2 wrong."
+    )
+    summary = f"<p>{_esc(session_line)}</p><p>{_esc(all_line)}</p>"
+    return _card("SAFETY CAR VERDICT", table + summary, "outcomes")
+
+
 def _strategy_section(
     calls: list[dict[str, Any]],
     pits: list[PitEventRow],
     pit_laps: list[int],
     grades: dict[str, dict[str, Any]],
     outcomes: dict[str, list[dict[str, Any]]],
+    sc_totals: Mapping[str, int] | None = None,
 ) -> str:
     strategy_rows = []
     for call in calls:
@@ -1279,7 +1307,9 @@ def _strategy_section(
             empty_message = "No pit stops."
         pit_content = f"<p>{_esc(empty_message)}</p>"
     pit = _card("PIT STOPS", pit_content, "pit_events")
-    return _section("strategy", "05", "Strategy calls", strategy + pit)
+    return _section(
+        "strategy", "05", "Strategy calls", strategy + pit + _sc_verdict_card(outcomes, sc_totals)
+    )
 
 
 def _call_timeline(
@@ -1706,7 +1736,9 @@ def render_debrief(db: Database, uid: int, settings: Settings, *, editable: bool
         + _comparison_section(db, uid, session, laps, pit_laps)
         + _sector_section(laps)
         + _tyres_section(laps, settings)
-        + _strategy_section(calls, pits, pit_laps, grades, outcomes)
+        + _strategy_section(
+            calls, pits, pit_laps, grades, outcomes, db.outcome_label_counts("sc_row")
+        )
         + _radio_section(calls, laps, pit_laps, grades, outcomes, inputs, editable=editable)
         + _incidents_section(laps)
         + _actions_section(db, uid, settings, session, grades)

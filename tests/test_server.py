@@ -1542,3 +1542,41 @@ def test_pit_board_shows_in_race_while_in_pit_lane() -> None:
         quiet=False,
     )
     assert payload["pit_board"] is not None
+
+
+def test_strategy_payload_sc_ladder() -> None:
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+    from pitwall.strategy.scverdict import ScRow, ScVerdict
+
+    base = dataclasses.replace(
+        Snapshot(now=0.0), session_kind="race", race_phase="sc", lap_num=5, laps_remaining=30
+    )
+    s = strategy_payload(base)
+    assert s is not None and s["sc_ladder"] is None
+    rows = (
+        ScRow(18, False, 1, 30.0, 30, 14.0, 16.0, 0.9, True, 3000.0),
+        ScRow(16, False, 0, 10.0, 10, 14.0, -4.0, 0.1, False, None),
+        ScRow(17, True, 1, 8.0, 8, 14.0, float("inf"), 0.0, False, None),
+    )
+    verdict = ScVerdict(18, "fastest", 14.0, 1.0, 0.75, rows)
+    s = strategy_payload(dataclasses.replace(base, sc_verdict=verdict))
+    assert s is not None
+    ladder = s["sc_ladder"]
+    assert ladder["need"] == 14.0
+    hard, soft, current = ladder["rows"]
+    assert hard == {
+        "compound": "HARD",
+        "current": False,
+        "no_set": False,
+        "life": 30.0,
+        "need": 14.0,
+        "margin": 16.0,
+        "survives": True,
+    }
+    assert soft["no_set"] is True and soft["margin"] == -4.0 and soft["survives"] is False
+    assert current["current"] is True and current["no_set"] is False
+    assert current["margin"] is None and current["life"] is None
+    assert "pick" not in ladder and "reason" not in ladder

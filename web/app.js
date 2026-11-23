@@ -854,8 +854,10 @@
     var normal = all.filter(function (pl) { return pl.kind !== "reactive"; });
     var plans = react.concat(normal);
     var focusReactive = scLive && react.length > 0;
+    var ladder = s && s.sc_ladder && scLive ? ladderCard(s.sc_ladder) : null;
     if (!plans.length) {
       box.appendChild(node("card dim1", [s ? s.stint_plan || "no stop planned" : "--"]));
+      if (ladder) box.appendChild(ladder);
       return;
     }
     var ap = activePlan(s);
@@ -913,6 +915,24 @@
     if (!ap && (hasExit || hasUc)) {
       box.appendChild(node("card dim1 row", [icon("exit", "i s"), exitNode(s.pit_exit), span("", "sp")].concat(ucOcNodes(s))));
     }
+    if (ladder) box.appendChild(ladder);
+  }
+
+  // Shadow SC verdict (docs/27): one row per compound with life, need and margin in laps. No pick is shown.
+  function ladderCard(l) {
+    return node("card ladder", (l.rows || []).map(function (r) {
+      var life = typeof r.life === "number" ? Math.floor(r.life) : null;
+      var need = typeof r.need === "number" ? Math.ceil(r.need) : null;
+      var margin = life === null || need === null ? null : life - need;
+      var nums = r.no_set ? [span("NO SET", "tagw")] :
+        margin === null ? [span("--", "dim1")] : [
+          span("life " + life, "mid"), span("need " + need, "mid"),
+          span((margin >= 0 ? "+" : "-") + Math.abs(margin), "mid" + (r.survives ? "" : " warn"))
+        ];
+      return node("row sub" + (r.no_set ? " dim1" : ""), [compChip(r.compound)].concat(nums, [
+        span("", "sp"), r.current ? span("ON CAR", "tagw") : null
+      ]));
+    }));
   }
 
   function activePlan(s) {

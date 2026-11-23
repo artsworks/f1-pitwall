@@ -291,3 +291,20 @@ def test_sc_verdict_runs_under_full_sc_that_is_ending(tmp_path) -> None:
     engine.planner._plan(snap)
 
     assert len(_verdict_calls(db)) == 1
+
+
+def test_sc_verdict_rides_the_snapshot_until_green(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+
+    under_sc = planner._plan(_sc_snap())
+    assert under_sc.sc_verdict is not None
+    assert len(under_sc.sc_verdict.rows) == 4
+    assert planner._plan(_sc_snap()).sc_verdict is under_sc.sc_verdict
+
+    green = planner._plan(
+        _sc_snap(race_phase="racing", phase="racing", safety_car_status=0, lap_num=4)
+    )
+    assert green.sc_verdict is None
+    pit = planner._plan(_sc_snap(race_phase="pit", phase="pit", lap_num=4))
+    assert pit.sc_verdict is None
