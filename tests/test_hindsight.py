@@ -16,7 +16,7 @@ from pitwall.learning.hindsight import (
     stop_cost_s,
     stop_laps,
 )
-from pitwall.learning.tune import tune_from_db
+from pitwall.learning.tune import format_tune, load_sc_survive_offset, tune_from_db
 from pitwall.state.lap import SC_UNKNOWN, LapSummary
 from pitwall.store.db import Database
 from pitwall.store.uids import derived_uid
@@ -250,6 +250,42 @@ def test_tune_skips_synthetic_press_grades_but_keeps_review_grades(tmp_path: Pat
 
     assert "press_rule" not in rows
     assert rows["review_rule"].grades == 1
+
+
+def test_sc_rows_tune_the_offset_not_the_cooldown(tmp_path: Path) -> None:
+    db = Database(tmp_path / "h.sqlite")
+    db.upsert_session(UID, track_id=7, session_type=15)
+    db.replace_outcomes(
+        UID,
+        [
+            {
+                "call_id": f"sc_verdict:{lap}",
+                "rule_id": "sc_verdict",
+                "lap": lap,
+                "metric": "sc_row",
+                "predicted": predicted,
+                "actual": None,
+                "error": None,
+                "label": label,
+                "detail": "",
+            }
+            for lap, (predicted, label) in enumerate(
+                [(0.0, "wrong"), (1.0, "good"), (1.0, "good")], start=1
+            )
+        ],
+    )
+
+    assert "sc_verdict" not in {row.rule_id for row in tune_from_db(db, {})}
+    assert db.get_param(-1, -1, "cooldown_mult:sc_verdict") is None
+    assert load_sc_survive_offset(db) == -0.05
+
+
+def test_format_tune_prints_the_sc_offset() -> None:
+    assert (
+        format_tune([], sc_offset=0.05, sc_rows=5).splitlines()[0]
+        == "sc_survive_min offset +0.05 (5 graded rows)"
+    )
+    assert "sc_survive_min offset" not in format_tune([])
 
 
 def test_digest_cli_writes_json(tmp_path: Path, capsys: object) -> None:

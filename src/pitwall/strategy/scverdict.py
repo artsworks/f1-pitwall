@@ -1,8 +1,8 @@
-"""Safety-car verdict (docs/27 phase 1): which dry compound reaches the flag
-with fighting pace under SC/VSC, or that none does. Shadow-only: the engine
-logs the verdict and its compound ladder as a suppressed decision record;
-`cheap_stop` still owns the radio. Pure and deterministic like the other
-strategy modules: every input is a plain value."""
+"""Safety-car verdict (docs/27): which dry compound reaches the flag with
+fighting pace under SC/VSC, or the two-stop that beats waiting, or stay out.
+The engine boxes or stays out on this verdict and logs the compound ladder as
+a suppressed decision record. Pure and deterministic like the other strategy
+modules: every input is a plain value."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from statistics import NormalDist
 
 from pitwall.config.thresholds import threshold as _f
-from pitwall.strategy.plans import DRY, WORDS, PlanInputs, evaluate
+from pitwall.strategy.plans import DRY, WORDS, PlanInputs, derive, evaluate, reactive
 
 _NORMAL = NormalDist()
 
@@ -45,6 +45,8 @@ class ScVerdict:
     saving_s: float
     survive_min: float
     rows: tuple[ScRow, ...]
+    sequence: tuple[int, ...]  # visual compounds from the current set, () = stay out
+    to_flag: bool  # the pick survives to the flag
 
 
 def _two_compound_ok(inp: PlanInputs, compound: int, th: Mapping[str, object]) -> bool:
@@ -188,8 +190,27 @@ def sc_verdict(
     )
     if faster_out:
         pick = 0
+    legal_stay = cur_row is not None and cur_row.survives and _two_compound_ok(inp, inp.current, th)
+    two_stop = None
+    if (
+        not pick
+        and can_stop
+        and not legal_stay
+        and not any(r.survives and not r.current for r in rows)
+    ):
+        best_one = min((e.race_time_s for e in derive(inp, th)), default=math.inf)
+        no_fresh = frozenset(c for c in DRY if fresh_sets.get(c, -1) == 0)
+        two_stop = reactive(inp, th, min_stops=2, no_fresh_first=no_fresh)
+        if two_stop is not None and two_stop.race_time_s >= best_one:
+            two_stop = None
+    sequence: tuple[int, ...] = ()
+    to_flag = False
     if pick:
         reason = f"{WORDS.get(pick, '?')} to the flag"
+        sequence, to_flag = (inp.current, pick), True
+    elif two_stop is not None:
+        pick, sequence = two_stop.compounds[1], two_stop.compounds
+        reason = f"{WORDS.get(pick, '?')}, two stops, nothing reaches the flag"
     elif faster_out:
         reason = "stay out, the current set is faster"
     elif not can_stop:
@@ -205,4 +226,6 @@ def sc_verdict(
         saving_s=round(saving_s, 2),
         survive_min=survive_min,
         rows=tuple(rows),
+        sequence=sequence,
+        to_flag=to_flag,
     )

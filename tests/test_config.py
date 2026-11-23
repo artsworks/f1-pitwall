@@ -164,7 +164,7 @@ def test_profile_unknown_bit_key_keeps_volume_cycle(tmp_path: Path, monkeypatch)
 def test_warm_phrases_default_and_profile_override(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("PITWALL_PROFILE", str(tmp_path / "missing.yaml"))
     speech = ConfigStore().current().speech
-    assert speech.warm_phrases == 150
+    assert speech.warm_phrases == 170
     assert speech.warm_workers is None
     profile = tmp_path / "profile.yaml"
     profile.write_text("speech:\n  warm_phrases: 50\n  warm_workers: 4\n")

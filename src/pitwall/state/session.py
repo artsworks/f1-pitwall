@@ -692,6 +692,7 @@ class Snapshot:
     overcut_s: float = 0.0
     plans: tuple[StrategyPlan, ...] = ()
     sc_verdict: ScVerdict | None = None
+    sc_call: str = ""  # "box" or "stay" when the safety-car verdict makes the call
     active_plan: str = ""
     on_plan: bool = True
     plan_label: str = ""

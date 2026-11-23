@@ -178,6 +178,40 @@ def test_pick_stays_when_a_second_compound_is_owed() -> None:
     assert v.pick == H
 
 
+def test_survivor_pick_sequence_starts_with_current() -> None:
+    v = verdict(inputs())
+    assert v.sequence == (M, M)
+    assert v.to_flag is True
+
+
+def test_stay_out_has_an_empty_sequence() -> None:
+    v = verdict(inputs(), usable_life={S: 9, M: 10, H: 10})
+    assert v.pick == 0
+    assert v.sequence == ()
+    assert v.to_flag is False
+
+
+def test_two_stop_now_beats_waiting_when_nothing_reaches_the_flag() -> None:
+    # A stop now costs 1.5 s under SC. The worn set makes a later stop pay
+    # more than a stop now plus a second one.
+    inp = inputs(
+        cur=fit(700.0),
+        cur_cliff_age=2.0,
+        compounds=models(s_deg=100.0, m_deg=100.0, h_deg=100.0),
+    )
+    v = verdict(inp, usable_life={S: 9, M: 10, H: 10}, cur_wear_pct=60.0)
+    assert len(v.sequence) == 3 and v.sequence[0] == M
+    assert v.pick == v.sequence[1]
+    assert v.to_flag is False
+    assert "two stops" in v.reason
+
+
+def test_two_stop_slower_than_waiting_stays_out() -> None:
+    v = verdict(inputs(), usable_life={S: 9, M: 10, H: 10})
+    assert v.pick == 0
+    assert v.reason == "stay out, nothing reaches the flag"
+
+
 def _engine(tmp_path, db=None):
     return build_engine(
         isolated=True,
@@ -345,3 +379,66 @@ def test_sc_verdict_rides_the_snapshot_until_green(tmp_path) -> None:
     assert green.sc_verdict is None
     pit = planner._plan(_sc_snap(race_phase="pit", phase="pit", lap_num=4))
     assert pit.sc_verdict is None
+
+
+def test_sc_verdict_pick_boxes_through_plan_c(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+
+    planned = engine.planner._plan(_sc_snap())
+
+    assert planned.pit_plan == "cheap_stop"
+    assert planned.active_plan == "C"
+    assert planned.plan_next_compound == "hard"
+    assert planned.sc_call == "box"
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
+    assert fired & {"box_now", "plan_sc_box"}
+    assert not fired & {"plan_switch", "plan_switch_no_stop", "plan_invalid"}
+
+
+def test_sc_verdict_stay_replaces_the_wear_gate(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    worn = dict(
+        wear_mean_pct=60.0,
+        wear_max_pct=60.0,
+        tyre_sets=tuple(
+            TyreSet(visual=v, available=1, life_span=7, usable_life=7) for v in (16, 17, 18)
+        ),
+    )
+    stays = 0
+    for lap in (3, 4, 5):
+        snap = _sc_snap(
+            lap_num=lap,
+            laps_remaining=11 - (lap - 3),
+            tyre_age_laps=2 + (lap - 3),
+            **worn,
+        )
+        planned = engine.planner._plan(snap)
+        assert planned.pit_plan == "stay"
+        assert planned.sc_call == "stay"
+        fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
+        assert not fired & {"box_now", "plan_sc_box"}
+        stays += "sc_stay_out" in fired
+    assert stays == 1
+
+    green = engine.planner._plan(
+        _sc_snap(
+            race_phase="racing",
+            phase="racing",
+            safety_car_status=0,
+            lap_num=6,
+            laps_remaining=8,
+            tyre_age_laps=5,
+            **worn,
+        )
+    )
+    assert green.sc_call == ""
+    assert "plan_invalid" not in {c.rule.id for c in engine.rule_engine.evaluate(green).candidates}
+
+
+def test_sc_verdict_runs_without_a_deg_fit(tmp_path) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    engine.ctx.deg_fit = None
+
+    planned = engine.planner._plan(_sc_snap())
+
+    assert planned.sc_call != ""

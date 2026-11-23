@@ -299,7 +299,7 @@ class SpeechSettings(BaseModel):
     kokoro_speed: float = 1.0
     kokoro_device: Literal["auto", "cpu"] = "auto"
     voices_dir: str = "voices"
-    warm_phrases: int = 150  # fixed phrases pre-rendered by `pitwall voice warm`
+    warm_phrases: int = 170  # fixed phrases pre-rendered by `pitwall voice warm`
     # None -> engine default (half the cores; omnivoice at most 4)
     warm_workers: int | None = Field(default=None, ge=1)
     rate: int = 0

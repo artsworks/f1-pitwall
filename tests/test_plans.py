@@ -448,6 +448,39 @@ def test_tracker_does_not_switch_to_c_without_a_cheap_stop() -> None:
     assert state.active == "A"
 
 
+def test_tracker_sc_sequence_sets_plan_c() -> None:
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    inp = inputs(lap_num=15, laps_remaining=36, tyre_age=14)
+    st = tr.update(inp, TH, stops_done=0, neutralised=True, cheap_stop=True, sc_sequence=(M, H))
+
+    assert st.active == "C"
+    assert st.active_plan is not None and st.active_plan.compounds == (M, H)
+    assert [(e.kind, e.to_plan, e.reason) for e in tr.drain() if e.kind == "switch"] == [
+        ("switch", "C", "sc")
+    ]
+
+
+def test_tracker_empty_sc_sequence_lists_no_plan_c() -> None:
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    inp = inputs(lap_num=15, laps_remaining=36, tyre_age=14)
+    st = tr.update(inp, TH, stops_done=0, neutralised=True, cheap_stop=False, sc_sequence=())
+
+    assert "C" not in {p.id for p in st.plans}
+    assert [e for e in tr.drain() if e.kind == "switch"] == []
+    tr.update(
+        inputs(lap_num=17, laps_remaining=34, tyre_age=16),
+        TH,
+        stops_done=0,
+        neutralised=False,
+        cheap_stop=False,
+    )
+    assert "invalid" not in {e.reason for e in tr.drain()}
+
+
 def test_tracker_sc_stop_taken_keeps_c() -> None:
     tr = PlanTracker()
     tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)

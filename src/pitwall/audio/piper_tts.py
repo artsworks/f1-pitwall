@@ -232,12 +232,16 @@ def common_phrases(
     limit: int = 150, extra: Iterable[tuple[str, int]] = ()
 ) -> list[tuple[str, int]]:
     from pitwall.audio.speaker import REJOIN_OPENER, STARTUP_LINES, STARTUP_PRIORITY
+    from pitwall.strategy.plans import DRY, WORDS
 
     root = Path(__file__).resolve().parents[1] / "config" / "defaults" / "rules"
     phrases: set[tuple[str, int]] = set()
 
     def add(text: str, priority: int) -> None:
-        if text and "{" not in text:
+        if "{plan_next_compound}" in text and "{" not in text.replace("{plan_next_compound}", ""):
+            for word in (WORDS[c] for c in DRY):
+                phrases.add((text.replace("{plan_next_compound}", word), priority))
+        elif text and "{" not in text:
             phrases.add((text, priority))
 
     for path in sorted(root.glob("*.yaml")):

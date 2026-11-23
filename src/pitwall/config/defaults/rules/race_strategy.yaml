@@ -253,6 +253,19 @@ rules:
     on_neg:
       - "Understood, staying out. Plan {plan_switched_from} stays open"
       - "Copy, stay out. Plan {plan_switched_from} remains open"
+  # The safety-car verdict says stay out. Armed once per SC period (clear_when on green).
+  - id: sc_stay_out
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    when: "phase in ('sc', 'vsc') and sc_call == 'stay' and pit_status == 0"
+    clear_when: "phase not in ('sc', 'vsc')"
+    cooldown_s: 120
+    requires: [lap_data]
+    say:
+      - "Stay out, stay out. No stop"
+      - "Stay out. We are not stopping"
+      - "No stop, stay out. Stay out"
   # The game sends no teammate pit plan, so this uses teammate LapData.
   - id: double_stack
     sessions: [race]

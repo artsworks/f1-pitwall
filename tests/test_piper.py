@@ -8,7 +8,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
+import pitwall
 from pitwall.audio.piper_tts import (
     PiperRenderer,
     common_phrases,
@@ -24,6 +26,7 @@ from pitwall.audio.speaker import (
     make_speaker,
 )
 from pitwall.audio.wav_speaker import WarmProcess, WavSpeaker, default_warm_workers
+from pitwall.config.loader import ConfigStore
 from pitwall.config.models import SpeechSettings
 from tests.audio_contract import FakePlayer
 
@@ -69,6 +72,21 @@ def test_common_phrases_limit() -> None:
     assert len(every) > 150
     assert common_phrases() == every[:150]
     assert len(common_phrases(10)) == 10
+
+
+def test_common_phrases_warm_the_sc_call_lines_for_each_compound() -> None:
+    rules = Path(pitwall.__file__).parent / "config" / "defaults" / "rules" / "race_strategy.yaml"
+    say = {
+        rule["id"]: rule["say"]
+        for rule in yaml.safe_load(rules.read_text(encoding="utf-8"))["rules"]
+    }
+    warmed = {text for text, _ in common_phrases(ConfigStore().current().speech.warm_phrases)}
+
+    for text in say["sc_stay_out"]:
+        assert text in warmed
+    for text in say["plan_sc_box"]:
+        for word in ("soft", "medium", "hard"):
+            assert text.replace("{plan_next_compound}", word) in warmed
 
 
 def test_to_wav_roundtrip() -> None:

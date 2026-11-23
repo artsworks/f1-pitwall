@@ -23,7 +23,7 @@ SC_SURVIVE_OFFSET = "sc_survive_offset"
 _BAD = ("noise", "wrong", "too_late")
 # Fuel margin at the flag also moves with the driver's response to the call
 # (lift and coast after fuel_short), so it grades the forecast, not the call.
-AUTO_SKIP_METRICS = ("fuel_margin",)
+AUTO_SKIP_METRICS = ("fuel_margin", "sc_row")
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,12 +165,16 @@ def record_diff(db: Database, result: Mapping[str, Any], **meta: str) -> int:
     return n
 
 
-def format_tune(rows: list[RuleTune]) -> str:
+def format_tune(rows: list[RuleTune], sc_offset: float | None = None, sc_rows: int = 0) -> str:
+    lines: list[str] = []
+    if sc_offset is not None:
+        lines.append(f"sc_survive_min offset {sc_offset:+.2f} ({sc_rows} graded rows)")
     if not rows:
-        return "tune: no grades or A/B results in the database yet"
-    lines = [
+        lines.append("tune: no grades or A/B results in the database yet")
+        return "\n".join(lines)
+    lines.append(
         f"{'rule':<28} {'n':>3} {'good':>4} {'bad':>4} {'auto':>4} {'cooldown x':>10} {'ab net':>6}"
-    ]
+    )
     for r in rows:
         lines.append(
             f"{r.rule_id:<28} {r.grades:>3} {r.good:>4} {r.bad:>4} {r.auto:>4} "

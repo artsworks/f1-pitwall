@@ -425,8 +425,8 @@ for all non-player active cars; when every one is exactly 0 for `th.restricted_d
 consecutive laps, `rival_data_restricted = True`. In restricted mode `rival_*_age` is 0 and the
 optimiser's `confidence` for rival-dependent plans (undercut, overcut) is multiplied by
 `th.restricted_confidence_factor` (default 0.7), so those calls degrade rather than fabricate;
-plans from the player's own tyre model keep full confidence. `cheap_stop` confidence is the pit-loss source factor alone (measured wear and the
-neutralised pit loss decide it, not the deg fit). Position-loss `risk` is 0 when
+plans from the player's own tyre model keep full confidence. `cheap_stop` confidence is the survival of the verdict's pick when the pick reaches the
+flag. For a two-stop pick it is the pit-loss source factor alone. Position-loss `risk` is 0 when
 `laps_of_pace < laps_remaining − mode.tyre_life_buffer_laps` (the stop is forced, so the place
 is lost whenever it is taken).
 
@@ -476,9 +476,9 @@ fresh-tyre stint from the prior `DegFit` for the *next* compound (same compound 
 unknown). The best `k` minimises total time; `gain_s` = best − stopping now (positive means
 waiting gains). Decisions:
 
-- `cheap_stop`: `sc_status != 0` and `wear_mean >= mode.sc_stop_min_wear_pct` and
-  `laps_remaining > th.sc_stop_min_laps_left` → `plan='cheap_stop', lap=lap_num`.
-  The pit loss used is the SC/VSC prior.
+- `cheap_stop`: `sc_status != 0` and the safety-car verdict picks a compound → `plan='cheap_stop', lap=lap_num`.
+  The gain is the verdict's saving. The verdict runs only when `laps_remaining > th.sc_stop_min_laps_left`.
+  With no pick and no damage pace, the plan is `stay`.
 - `free_stop`: pitting now costs no position: `gap_behind_s > pit_loss_s + th.free_stop_margin_s`
   and `pit_exit_clean` → `plan='free_stop'` when `best_k <= lap_num + 1`.
 - `undercut` requires `gap_ahead_s < th.undercut_max_gap_s` and an open pit window, `window[0] <= lap_num`.
@@ -597,14 +597,14 @@ Migration 3 (append-only): `calls.active_plan TEXT`, `calls.on_plan INT` and a
 sequence, plans JSON)` table; `Database.insert_plan_event()` /
 `plan_events_for_session()`.
 
-`Engine._log_sc_verdict()` runs inside `_plans()` on each lap the shadow verdict
-applies (docs/27 phase 1): SC or VSC with the VSC not ending, not a sprint or
-short race, more than `sc_stop_min_laps_left` laps left, on a dry compound. It
-writes one `suppressed` decision record per session and lap under rule id
-`sc_verdict`. The record's `inputs` carry the pick, the reason and the compound
-ladder, so the rows reach `calls.inputs` for hindsight. The pick is zero when the
-current set survives and staying out is not slower. The verdict never
-reaches the radio.
+`Planner._verdict()` runs in `_plan()`, before `optimise()`, on each lap the verdict
+applies (docs/27): SC or VSC with the VSC not ending, not a sprint or short race, more
+than `sc_stop_min_laps_left` laps left, on a dry compound. It writes one decision record
+per session and lap under rule id `sc_verdict`, with outcome `suppressed`. The record's
+`inputs` carry the pick, the reason, the compound ladder, `sequence` and `to_flag`, so the
+rows reach `calls.inputs` for hindsight. The pick is zero when the current set survives
+and staying out is not slower, and no two-stop beats waiting. `Snapshot.sc_call` is
+`box` or `stay` from the verdict. The `sc_stay_out` rule reads it.
 
 ## Battle state (`pitwall.strategy.battle`)
 
@@ -771,6 +771,7 @@ pitwall start                     # supervisor: binds udp_port, RecordingRotator
 
 `pitwall tune [PATHS...] [--calls-mode on|off] [--db PATH]` ingests optional recordings,
 then folds human grades and hindsight outcomes into per-rule cooldown multipliers in SQLite.
+SC verdict rows (`sc_row`) feed only the `sc_survive_min` offset, which the output prints first.
 Outcomes count only when no human grade exists for that call. It also reports per-rule A/B
 net counts saved by `pitwall diff --record`. The live dispatcher loads saved cooldown
 multipliers at start.

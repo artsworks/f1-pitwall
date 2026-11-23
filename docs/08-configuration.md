@@ -127,7 +127,6 @@ Each parameter maps to something a race engineer changes when told "we're attack
 | `pit_confidence_min` | 0.70 | 0.55 | model confidence required to speak a pit call | acts on a less certain read when driver rating allows |
 | `position_loss_risk_max` | 0.30 | 0.55 | tolerated probability that a strategy call costs a place | accepts traffic risk when driver rating allows |
 | `undercut_speak_threshold_s` | 1.0 | 0.4 | smallest undercut opportunity worth saying | "there's an undercut on Norris, small but it's there" |
-| `sc_stop_min_wear_pct` | 35 | 25 | wear above which a safety-car stop is recommended | takes the cheap stop earlier to get fresher tyres for the restart |
 | `sc_survive_min` | 0.60 | 0.45 | survival probability a compound needs to be the safety-car verdict's pick | wants a surer tyre-life read before committing to a stop |
 | `tyre_life_buffer_laps` | 2.0 | 1.0 | laps of margin kept before the modelled cliff | runs the stint closer to the edge |
 | `push_laps_per_stint` | 2 | 4 | push laps the plan allows (in-lap, out-lap, attack) | more laps asked at full pace |
@@ -156,7 +155,6 @@ mindsets:
     pit_confidence_min: 0.70
     position_loss_risk_max: 0.30
     undercut_speak_threshold_s: 1.0
-    sc_stop_min_wear_pct: 35
     sc_survive_min: 0.60
     tyre_life_buffer_laps: 2.0
     push_laps_per_stint: 2
@@ -182,7 +180,6 @@ mindsets:
     pit_confidence_min: 0.55
     position_loss_risk_max: 0.55
     undercut_speak_threshold_s: 0.4
-    sc_stop_min_wear_pct: 25
     sc_survive_min: 0.45
     tyre_life_buffer_laps: 1.0
     push_laps_per_stint: 4

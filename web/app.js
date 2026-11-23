@@ -855,6 +855,7 @@
     var plans = react.concat(normal);
     var focusReactive = scLive && react.length > 0;
     var ladder = s && s.sc_ladder && scLive ? ladderCard(s.sc_ladder) : null;
+    if (ladder && s.sc_ladder.headline) box.appendChild(node("card", [span(s.sc_ladder.headline, "big")]));
     if (!plans.length) {
       box.appendChild(node("card dim1", [s ? s.stint_plan || "no stop planned" : "--"]));
       if (ladder) box.appendChild(ladder);

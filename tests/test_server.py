@@ -1561,7 +1561,7 @@ def test_strategy_payload_sc_ladder() -> None:
         ScRow(16, False, 0, 10.0, 10, 14.0, -4.0, 0.1, False, None),
         ScRow(17, True, 1, 8.0, 8, 14.0, float("inf"), 0.0, False, None),
     )
-    verdict = ScVerdict(18, "fastest", 14.0, 1.0, 0.75, rows)
+    verdict = ScVerdict(18, "fastest", 14.0, 1.0, 0.75, rows, (17, 18), True)
     s = strategy_payload(dataclasses.replace(base, sc_verdict=verdict))
     assert s is not None
     ladder = s["sc_ladder"]
@@ -1580,3 +1580,18 @@ def test_strategy_payload_sc_ladder() -> None:
     assert current["current"] is True and current["no_set"] is False
     assert current["margin"] is None and current["life"] is None
     assert "pick" not in ladder and "reason" not in ladder
+
+
+def test_sc_ladder_headline_follows_the_call() -> None:
+    from pitwall.server.app import _sc_ladder
+    from pitwall.strategy.scverdict import ScRow, ScVerdict
+
+    rows = (ScRow(17, False, 1, 20.0, 20, 14.0, 6.0, 0.9, True, 1000.0),)
+    flag = ScVerdict(17, "medium to the flag", 14.0, 10.0, 0.6, rows, (17, 17), True)
+    two = ScVerdict(17, "medium, two stops", 14.0, 10.0, 0.6, rows, (17, 17, 17), False)
+    stay = ScVerdict(0, "stay out, nothing reaches the flag", 14.0, 10.0, 0.6, rows, (), False)
+
+    assert _sc_ladder(stay, "stay")["headline"] == "STAY OUT"
+    assert _sc_ladder(flag, "box")["headline"] == "BOX, MED TO END"
+    assert _sc_ladder(two, "box")["headline"] == "BOX, MED"
+    assert _sc_ladder(flag, "")["headline"] is None

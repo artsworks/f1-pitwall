@@ -238,7 +238,7 @@ class Planner:
         if not snap.race_phase or self.ctx.fresh_prior is None:
             return snap
         if fit is None:
-            if self._plan_damage(snap, self.ctx.fresh_prior)[1] <= 0:
+            if not self._sc_gate(snap) and self._plan_damage(snap, self.ctx.fresh_prior)[1] <= 0:
                 return self._plans(snap, self.ctx.fresh_prior, NO_PLAN)
             fit = self.ctx.fresh_prior
         fit = planning_fit(fit, self.ctx.fresh_prior, self.ctx.th("deg_rmse_bad_ms", 800))
@@ -269,6 +269,7 @@ class Planner:
         if vsc_ending:
             pit_loss_s = (self.ctx.green_pit_loss_s or snap.pit_loss_s) + wing_loss_s
             sc_status = 0
+        verdict = self._verdict(snap, fit, damage_pace_ms, wing_loss_s)
         plan = optimise(
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
@@ -296,6 +297,7 @@ class Planner:
             th=settings.thresholds,
             teammate_pitting=snap.teammate_stacking,
             field=snap.field_cars,
+            sc_verdict=verdict if sc_status != 0 else None,
         )
         if snap.safety_car_status == 0:
             session_uid = self.ctx.state.session_uid
@@ -352,6 +354,12 @@ class Planner:
         plan, self._held_plan = _hold_cover_plan(
             self._held_plan, plan, snap, self.ctx.th("pit_min_laps_left", 2)
         )
+        sc_call = ""
+        if verdict is not None and sc_status != 0:
+            if plan.plan == "cheap_stop":
+                sc_call = "box"
+            elif plan.plan == "stay" and damage_pace_ms <= 0:
+                sc_call = "stay"
         self.ctx.pit_plan = plan
         self.ctx.state.set_model(
             dataclasses.replace(
@@ -386,6 +394,7 @@ class Planner:
             pit_window_end=plan.window[1],
             undercut_s=plan.undercut_s,
             overcut_s=plan.overcut_s,
+            sc_call=sc_call,
         )
         return self._plans(snap, fit, plan)
 
@@ -484,6 +493,7 @@ class Planner:
                 invalidate,
                 round(damage_pace_ms / 100),
                 round(wing_loss_s, 1),
+                self._sc_verdict.sequence if self._sc_verdict is not None else None,
                 snap.is_sprint,
             )
             if key != self._plan_key:
@@ -491,25 +501,7 @@ class Planner:
                     tracker.reset()  # the weekend format arrived: a fresh plan, not a switch
                 reseed = self._plan_key is not None and self._plan_key[5] != self._mindset()
                 self._plan_key = key
-                lop = snap.laps_of_pace
-                cliff = self.ctx.th("tyre_cliff_ms", 1500)
-                cur_cliff_age = (
-                    snap.tyre_age_laps + lop if math.isfinite(lop) else cliff_age(cur, cliff)
-                )
-                inp = PlanInputs(
-                    lap_num=snap.lap_num,
-                    laps_remaining=snap.laps_remaining,
-                    tyre_age=snap.tyre_age_laps,
-                    current=snap.tyre_visual,
-                    cur=cur,
-                    cur_cliff_age=cur_cliff_age,
-                    compounds=self._compound_models(snap, cur),
-                    used=frozenset(self._used_compounds),
-                    green_loss_s=self.ctx.green_pit_loss_s or snap.pit_loss_s,
-                    sc_loss_s=self.ctx.sc_pit_loss_s or snap.pit_loss_s,
-                    wing_change_s=wing_loss_s,
-                    damage_pace_ms=damage_pace_ms,
-                )
+                inp = self._plan_inputs(snap, cur, damage_pace_ms, wing_loss_s)
                 tracker.update(
                     inp,
                     self._plan_thresholds(snap, invalidate in ("damage", "pace")),
@@ -519,14 +511,18 @@ class Planner:
                     reseed=reseed,
                     invalidate=invalidate,
                     restart=self._red_restart,
+                    sc_sequence=None if self._sc_verdict is None else self._sc_verdict.sequence,
                 )
                 self._red_restart = False
                 for ev in tracker.drain():
                     self._persist_plan_event(snap, ev, tracker.state)
-                self._log_sc_verdict(snap, inp)
-        if phase not in ("sc", "vsc"):
+        if not self._sc_gate(snap):
             self._sc_verdict = None
-        snap = dataclasses.replace(snap, sc_verdict=self._sc_verdict)
+        snap = dataclasses.replace(
+            snap,
+            sc_verdict=self._sc_verdict,
+            sc_call=snap.sc_call if self._sc_verdict is not None else "",
+        )
         st: PlanState = tracker.state
         if not st.active:
             return snap
@@ -534,25 +530,52 @@ class Planner:
         self.ctx.state.set_model(_with_plan(self.ctx.state.model, fields))
         return _with_plan(snap, fields)
 
-    def _log_sc_verdict(self, snap: Snapshot, inp: PlanInputs) -> None:
-        """Phase-1 shadow verdict (docs/27): each lap it runs, write one
-        suppressed decision record with the pick and the compound ladder.
-        cheap_stop still owns the radio; nothing here is spoken."""
+    def _sc_gate(self, snap: Snapshot) -> bool:
+        """A dry race under SC or VSC with laps left to plan for (docs/27)."""
         phase = snap.race_phase
-        if not (
+        return (
             phase in ("sc", "vsc")
             and not (phase == "vsc" and snap.sc_ending)
             and not snap.is_sprint
             and not snap.short_race
             and snap.laps_remaining > self.ctx.th("sc_stop_min_laps_left", 3)
             and snap.tyre_visual in DRY
-        ):
+        )
+
+    def _plan_inputs(
+        self, snap: Snapshot, cur: DegFit, damage_pace_ms: float, wing_loss_s: float
+    ) -> PlanInputs:
+        lop = snap.laps_of_pace
+        cliff = self.ctx.th("tyre_cliff_ms", 1500)
+        cur_cliff_age = snap.tyre_age_laps + lop if math.isfinite(lop) else cliff_age(cur, cliff)
+        return PlanInputs(
+            lap_num=snap.lap_num,
+            laps_remaining=snap.laps_remaining,
+            tyre_age=snap.tyre_age_laps,
+            current=snap.tyre_visual,
+            cur=cur,
+            cur_cliff_age=cur_cliff_age,
+            compounds=self._compound_models(snap, cur),
+            used=frozenset(c for c in self._used_compounds | {snap.tyre_visual} if c),
+            green_loss_s=self.ctx.green_pit_loss_s or snap.pit_loss_s,
+            sc_loss_s=self.ctx.sc_pit_loss_s or snap.pit_loss_s,
+            wing_change_s=wing_loss_s,
+            damage_pace_ms=damage_pace_ms,
+        )
+
+    def _verdict(
+        self, snap: Snapshot, cur: DegFit, damage_pace_ms: float, wing_loss_s: float
+    ) -> ScVerdict | None:
+        """The safety-car verdict (docs/27), computed once per lap. Each lap
+        writes one suppressed decision record with the pick and the ladder."""
+        if not self._sc_gate(snap):
             self._sc_verdict = None
-            return
+            return None
         uid = self.ctx.state.session_uid
         if (uid, snap.lap_num) in self._sc_verdict_laps:
-            return
+            return self._sc_verdict
         self._sc_verdict_laps.add((uid, snap.lap_num))
+        inp = self._plan_inputs(snap, cur, damage_pace_ms, wing_loss_s)
         if snap.tyre_sets:
             sets = {
                 16: snap.fresh_sets_soft,
@@ -606,11 +629,14 @@ class Planner:
                     "saving_s": verdict.saving_s,
                     "survive_min": verdict.survive_min,
                     "ladder": [dataclasses.asdict(row) for row in verdict.rows],
+                    "sequence": list(verdict.sequence),
+                    "to_flag": verdict.to_flag,
                 },
                 "active_plan": snap.active_plan,
                 "on_plan": snap.on_plan if snap.active_plan else None,
             }
         )
+        return verdict
 
     def _persist_plan_event(self, snap: Snapshot, ev: PlanEvent, st: PlanState) -> None:
         plans = [

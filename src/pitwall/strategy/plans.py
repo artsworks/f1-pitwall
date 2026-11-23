@@ -289,11 +289,17 @@ def derive(inp: PlanInputs, th: Mapping[str, object]) -> list[PlanEval]:
     )
 
 
-def reactive(inp: PlanInputs, th: Mapping[str, object]) -> PlanEval | None:
+def reactive(
+    inp: PlanInputs,
+    th: Mapping[str, object],
+    *,
+    min_stops: int = 1,
+    no_fresh_first: frozenset[int] = frozenset(),
+) -> PlanEval | None:
     """Plan C: box this lap under SC/VSC at the neutralised loss."""
     best: PlanEval | None = None
     for seq in _sequences(inp, th):
-        if len(seq) < 2:
+        if len(seq) < min_stops + 1 or seq[1] in no_fresh_first:
             continue
         e = evaluate(inp, seq, th, stop_now=True, first_loss_s=inp.sc_loss_s)
         if e is not None and (best is None or e.race_time_s < best.race_time_s):
@@ -394,10 +400,13 @@ class PlanTracker:
         reseed: bool = False,
         invalidate: str = "",
         restart: bool = False,
+        sc_sequence: tuple[int, ...] | None = None,
     ) -> PlanState:
         """`reseed` rebuilds A/B from the current ranking (mindset change),
         based at `stops_done` so completed stops are not replayed. `restart`
-        reseeds after a red-flag restart and reports it as a 'restart' switch."""
+        reseeds after a red-flag restart and reports it as a 'restart' switch.
+        `sc_sequence` is the safety-car verdict's sequence: None uses the
+        reactive best, () lists no Plan C."""
         ranked = derive(inp, th)
         if not ranked:
             return self.state
@@ -464,7 +473,14 @@ class PlanTracker:
                     evals[pid] = evaluate(inp, rem, th)
             else:
                 evals[pid] = None
-        c_now = evals.get("C") if "C" in self.seqs else reactive(inp, th)
+        if "C" in self.seqs:
+            c_now = evals.get("C")
+        elif sc_sequence is None:
+            c_now = reactive(inp, th)
+        elif sc_sequence:
+            c_now = evaluate(inp, sc_sequence, th, stop_now=True, first_loss_s=inp.sc_loss_s)
+        else:
+            c_now = None
         best = ranked[0]
         switch_s = _f(th, "plan_switch_s", 5.0)
         off_s = _f(th, "plan_off_s", 3.0)

@@ -277,10 +277,20 @@ def _compound(visual: int) -> str | None:
     return _COMPOUND_WORDS.get(visual) or (f"C{visual}" if visual else None)
 
 
-def _sc_ladder(verdict: ScVerdict | None) -> dict[str, Any] | None:
+_SC_SHORT = {16: "SOFT", 17: "MED", 18: "HARD"}
+
+
+def _sc_ladder(verdict: ScVerdict | None, call: str) -> dict[str, Any] | None:
     if verdict is None:
         return None
+    headline = None
+    if call == "stay":
+        headline = "STAY OUT"
+    elif call == "box":
+        word = _SC_SHORT[verdict.pick]
+        headline = f"BOX, {word} TO END" if verdict.to_flag else f"BOX, {word}"
     return {
+        "headline": headline,
         "need": _finite(verdict.laps_needed),
         "rows": [
             {
@@ -474,7 +484,7 @@ def strategy_payload(
             }
             for p in snapshot.plans
         ],
-        "sc_ladder": _sc_ladder(snapshot.sc_verdict),
+        "sc_ladder": _sc_ladder(snapshot.sc_verdict, snapshot.sc_call),
         "active_plan": snapshot.active_plan or None,
         "on_plan": snapshot.on_plan if snapshot.active_plan else None,
         "plan_off_s": snapshot.plan_off_s if snapshot.active_plan else None,
