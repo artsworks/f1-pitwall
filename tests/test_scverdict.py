@@ -42,7 +42,7 @@ def inputs(**kw: object) -> PlanInputs:
         laps_remaining=11,
         tyre_age=2,
         current=M,
-        cur=fit(100.0),
+        cur=fit(110.0),
         cur_cliff_age=15.0,
         compounds=models(),
         used=frozenset({S, M}),
@@ -94,7 +94,7 @@ def test_verdict_stay_out_when_no_compound_survives() -> None:
 
 
 def test_usable_life_below_laps_needed_zeroes_survival() -> None:
-    v = verdict(inputs(), usable_life={S: 20, M: 10, H: 20})
+    v = verdict(inputs(), usable_life={S: 20, M: 10, H: 20}, cur_wear_pct=60.0)
     medium = row(M, v.rows)
     assert medium.survival == 0.0 and medium.survives is False
     assert v.pick == H  # mediums are out on wear, hards take the stop
@@ -109,7 +109,7 @@ def test_missing_tyres_packet_skips_wear_gate_and_set_counts() -> None:
 
 
 def test_zero_fresh_sets_blocks_the_pick() -> None:
-    v = verdict(inputs(), fresh_sets={S: 2, M: 0, H: 2})
+    v = verdict(inputs(), fresh_sets={S: 2, M: 0, H: 2}, cur_wear_pct=60.0)
     assert row(M, v.rows).sets == 0 and row(M, v.rows).survives is True
     assert v.pick == H
 
@@ -142,19 +142,39 @@ def test_s_zero_pace_survival_is_a_step() -> None:
 def test_survive_min_comes_from_the_mode_mapping() -> None:
     # deg 132 at sd 20 gives survival ~= 0.71: above aggressive, below balanced.
     inp = inputs(compounds=models(m_deg=132.0, sd=20.0))
-    balanced = verdict(inp)
+    balanced = verdict(inp, cur_wear_pct=60.0)
     assert row(M, balanced.rows).survives is False and balanced.pick == H
-    aggressive = verdict(inp, th={**TH, "sc_survive_min": 0.60})
+    aggressive = verdict(inp, cur_wear_pct=60.0, th={**TH, "sc_survive_min": 0.60})
     assert row(M, aggressive.rows).survives is True and aggressive.pick == M
 
 
 def test_current_lap_weight_moves_the_wear_gate_boundary() -> None:
-    kw = dict(usable_life={S: 20, M: 10, H: 20})
+    kw = dict(usable_life={S: 20, M: 10, H: 20}, cur_wear_pct=60.0)
     half = verdict(inputs(), **kw)
     assert row(M, half.rows).survives is False and half.pick == H
     free = verdict(inputs(), **kw, th={**TH, "sc_verdict_current_lap_weight": 0.0})
     # needed drops to 10.0, so a 10-lap usable life just survives.
     assert row(M, free.rows).survives is True and free.pick == M
+
+
+def test_no_pick_when_current_set_survives_and_is_not_slower() -> None:
+    v = verdict(inputs(cur=fit(100.0)))
+    current = v.rows[-1]
+    assert current.current is True and current.survives is True
+    assert current.race_time_s <= row(M, v.rows).race_time_s  # type: ignore[operator]
+    assert v.pick == 0
+    assert v.reason == "stay out, the current set is faster"
+
+
+def test_pick_stays_when_current_set_does_not_survive() -> None:
+    v = verdict(inputs(cur=fit(100.0)), cur_wear_pct=60.0)
+    assert v.rows[-1].survives is False
+    assert v.pick == M
+
+
+def test_pick_stays_when_a_second_compound_is_owed() -> None:
+    v = verdict(inputs(cur=fit(100.0), used=frozenset({M})))
+    assert v.pick == H
 
 
 def _engine(tmp_path, db=None):

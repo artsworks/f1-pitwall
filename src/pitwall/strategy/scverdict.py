@@ -176,8 +176,22 @@ def sc_verdict(
             continue
         if r.race_time_s < pick_t:
             pick, pick_t = r.compound, r.race_time_s
+    cur_row = next((r for r in rows if r.current), None)
+    # A second compound owed makes staying out illegal, so the pick stands.
+    faster_out = (
+        pick != 0
+        and cur_row is not None
+        and cur_row.survives
+        and cur_row.race_time_s is not None
+        and cur_row.race_time_s <= pick_t
+        and _two_compound_ok(inp, inp.current, th)
+    )
+    if faster_out:
+        pick = 0
     if pick:
         reason = f"{WORDS.get(pick, '?')} to the flag"
+    elif faster_out:
+        reason = "stay out, the current set is faster"
     elif not can_stop:
         reason = "stay out, the stop saves nothing"
     elif any(r.survives and not r.current for r in rows):

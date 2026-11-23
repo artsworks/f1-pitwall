@@ -65,6 +65,8 @@ For each dry compound with a fresh set, hardest first:
 - Wear life is the `usable_life` of the set. If `usable_life` is below `laps_needed`, survival is 0. If the Tyre Sets packet is absent, the wear gate does not apply.
 - A compound survives if its survival is at or above `sc_survive_min`.
 - The pick is the survivor with the lowest race time to the flag. `evaluate()` in `plans.py` already computes that time for a stop this lap.
+- The verdict makes no pick when the current set survives and its race time is not slower than the pick's. The reason is "stay out, the current set is faster".
+- If a second dry compound is still owed, the pick stays. The race time of the current set does not include the owed stop.
 - Only fresh sets count, the same rule as the existing fresh-set count. A used set is not a candidate in this version.
 - The two-compound rule uses `PlanInputs.used`. A set count of -1 means unknown and does not remove a compound.
 - The pit loss is the measured loss for the current phase plus `wing_loss_s`. The saving must be positive after the double-stack loss.
@@ -229,7 +231,7 @@ Status on 2026-11-23: 1 graded row of 12 from a live session, 0 wrong. The datab
 
 With the replay batch below, and with the finish fault fixed, the count is 5 graded rows, 3 good and 2 wrong. The 2 wrong grades use the whole allowance at 5 rows of 12.
 
-Decision on 2026-11-23: the verdict does not take over yet. The finish fault is fixed. Fix the other two faults in "Replay batch" next, then grade the batch again.
+Decision on 2026-11-23: the verdict does not take over yet. The finish fault and the pick fault are fixed. The batch ran again after the pick fix, and the grades did not change. The pessimistic model and the grader question are still open.
 
 ### Imola, 16 laps, 2026-11-23 (session 14001174973346760379)
 
@@ -281,14 +283,38 @@ Method:
 Faults found:
 
 - **Fixed: hindsight never saw a finish.** The engine did not store the final lap, because the game holds the lap counter at the flag. The engine now stores the final lap when the result status of the player becomes "finished". A second replay of the batch gave the grades in the last column. Before the fix: Of 55 races in the database, none had a lap row for the final lap. `grade_session` sets `finished` only when the last stored lap equals `total_laps`. Because of this, no real row could get the grade "reached the flag". The fuel and plan grades use the same value. Races stored before the fix keep the gap.
-- **The verdict picks a stop that is slower than no stop.** The pick is the fastest fresh survivor. The pick is never compared with the row of the current set. At track 32 on lap 10 the pick was softs at 443.5 s, and the current softs, 1 lap old, were at 435.1 s and survive. After a takeover the radio would call that stop from P1. In 11 of the 13 records with a pick, the current set survives and is faster than the pick.
+- **Fixed: the verdict picked a stop that was slower than no stop.** The pick was the fastest fresh survivor. The pick was never compared with the row of the current set. At track 32 on lap 10 the pick was softs at 443.5 s, and the current softs, 1 lap old, were at 435.1 s and survive. After a takeover the radio would call that stop from P1. In 11 of the 13 records with a pick, the current set survives and is faster than the pick. The verdict now makes no pick in that case, unless a second compound is owed. The table "Third replay" below shows each record.
 - **The model is too pessimistic, and the grader asks a different question.** The verdict asks for fighting pace (`tyre_cliff_ms`). The grader asks only whether a later stop came. The Imola hards ran 13 laps to the flag, and the last 4 laps were 2 to 4 s slower. The row was right on pace and wrong for the grader. At track 16 the mediums needed 3.5 laps with a margin of +1.0, and survival was 53%.
 
 Other results:
 
 - Both wrong grades are "does not survive" rows. No "survives" row was wrong.
 - Track 14, lap 5: the radio said "box, softs". The soft row did not survive, because `usable_life` was 10 and `laps_needed` was 10.5. The pick was hards, and the driver fitted hards.
-- Track 7, laps 8 and 9: the radio and the pick agreed on softs.
+- Track 7, laps 8 and 9: the radio and the pick agreed on softs. After the pick fix the verdict says "stay out" on both laps, and the radio still says "box".
+
+Third replay, after the pick fix:
+
+| Race | Lap | Pick before | Pick after | Stop time, s | Current set, s |
+|---|---|---|---|---|---|
+| Track 32 | 10 | soft | none | 443.5 | 435.1 |
+| Track 32 | 11 | soft | none | 356.4 | 348.3 |
+| Track 7 | 8 | soft | none | 570.2 | 563.8 |
+| Track 7 | 9 | soft | none | 482.7 | 478.7 |
+| Track 7 | 10 | medium | none | 385.2 | 375.9 |
+| Track 14 | 7 | medium | none | 812.7 | 806.3 |
+| Track 14 | 8 | medium | none | 722.8 | 717.0 |
+| Track 14 | 10 | soft | none | 556.7 | 555.6 |
+| Track 14 | 11 | soft | none | 466.4 | 463.2 |
+| Track 14 | 5 | hard | hard | 996.9 | 988.9 |
+| Track 14 | 6 | soft | soft | 902.4 | 899.4 |
+| Track 16 | 14 | soft | soft | 374.5 | 370.4 |
+| Track 16 | 15 | soft | soft | 300.8 | 296.6 |
+
+- 9 of the 13 picks changed to no pick. The 7 records with no pick before did not change.
+- Track 14, laps 5 and 6: the current mediums survive and are faster, and the pick stays. The car had raced only mediums, so a second compound was owed.
+- Track 16, laps 14 and 15: the pick stays, because the current mediums do not survive (53%). The current set is faster by 4 s and reached the flag. This is the pessimistic model fault.
+- The grades did not change: 5 graded rows, 3 good, 2 wrong, 0 wrong "survives". The grade reads the ladder row and not the pick.
+- Track 7, lap 8: the driver made the stop for softs, and the softs reached the flag. The verdict now says "stay out" there. The grader cannot say which choice was faster.
 
 ## Risks
 

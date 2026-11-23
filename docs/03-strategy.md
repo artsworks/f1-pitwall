@@ -149,7 +149,9 @@ justifies a stop, recommend boxing now and quantify the saving.
 
 **Safety-car verdict.** Under SC or VSC, `sc_verdict()` ranks each dry compound by
 whether its pace life and `usable_life` reach the flag, and picks the fastest
-survivor. Each lap it runs, the engine writes one suppressed decision record with
+survivor. It picks no compound when the current set survives and staying out is not slower.
+A second owed dry compound keeps the pick, because staying out is not legal then.
+Each lap it runs, the engine writes one suppressed decision record with
 the pick, the reason and the compound ladder. The verdict never speaks.
 `cheap_stop` still owns the radio until the shadow log proves it (docs/27).
 
