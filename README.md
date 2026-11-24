@@ -46,10 +46,12 @@ Run these commands from the Pitwall folder:
 | Start with Kokoro and a full recording | `uv run --extra kokoro pitwall start --record full` |
 | Reinstall the Kokoro packages | `uv sync --extra kokoro --reinstall-package kokoro-onnx --reinstall-package onnxruntime-gpu` |
 
-A plain `uv run` or `uv sync` removes the Kokoro packages. Pitwall then falls back to
-Piper. The next command with `--extra kokoro` installs the packages again.
-`pitwall update` keeps the Kokoro packages when they are installed. It also installs
-them when `speech.engine` is `kokoro`.
+`uv sync` without `--extra kokoro` removes the Kokoro packages and the NVIDIA CUDA
+libraries. `uv run --exact` does the same. Pitwall falls back to Piper while the
+packages are missing. A plain `uv run` keeps the Kokoro packages but does not
+install them when they are missing. Add `--extra kokoro` to `uv run` or `uv sync`
+to install them again. `pitwall update` keeps the Kokoro packages when they are
+installed. It also installs them when `speech.engine` is `kokoro`.
 
 To type less, add these functions to your PowerShell profile. Replace the path with your
 Pitwall folder.
