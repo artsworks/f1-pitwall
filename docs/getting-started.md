@@ -127,12 +127,12 @@ uses the voice automatically when available and plays nothing (`null`) if it can
 ```powershell
 pitwall voice get                      # default: en_GB-northern_english_male-medium
 pitwall voice get en_US-ryan-high      # try others; samples: https://rhasspy.github.io/piper-samples/
-pitwall voice warm                     # pre-render common fixed phrases (default 150)
+pitwall voice warm                     # pre-render common fixed phrases (default 170)
 pitwall voice                          # list installed voices
 pitwall voice say --engine piper --voice en_US-ryan-high "Box this lap."
 ```
 
-`speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 150.
+`speech.warm_phrases` sets how many phrases `voice warm` pre-renders. The default is 170.
 If disk space is tight, lower it in `~/.pitwall/profile.yaml`:
 
 ```yaml
@@ -203,8 +203,10 @@ Kokoro is a local neural voice. On Windows it runs on the NVIDIA GPU when one is
 3. Put both files in `voices/kokoro/`.
 4. Set `speech.engine` to `kokoro`.
 
-Run Pitwall with `uv run --extra kokoro pitwall ...`. A plain `uv run` removes the extra.
-`pitwall update` keeps the extra when it is installed.
+Run Pitwall with `uv run --extra kokoro pitwall ...`. A plain `uv run` keeps the
+extra but does not install it when it is missing. `uv sync` without `--extra
+kokoro` removes the extra and the NVIDIA CUDA libraries, and so does `uv run
+--exact`. `pitwall update` keeps the extra when it is installed.
 
 Pick a voice with `speech.kokoro_voice`, default `af_heart`. The voice list is at https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md. Set `speech.kokoro_lang` to the espeak language of the voice, default `en-us`. Set speed with `speech.kokoro_speed`, default 1.0.
 

@@ -144,8 +144,16 @@ The mandatory two-dry-compound rule blocks tyre-based `no_stop` returns while an
 **Free stop.** A position-neutral stop is available when the gap to the car behind exceeds
 measured pit loss.
 
-**Cheap stop.** If the `SCAR` event reports a safety car or VSC and current tyre wear
-justifies a stop, recommend boxing now and quantify the saving.
+**Cheap stop.** If the `SCAR` event reports a safety car or VSC and the verdict picks a
+compound, recommend boxing now and quantify the saving.
+
+**Safety-car verdict.** Under SC or VSC, `sc_verdict()` ranks each dry compound by
+whether its pace life and `usable_life` reach the flag, and picks the fastest
+survivor. When no compound survives, it picks a two-stop if one beats waiting for green.
+It picks no compound when the current set survives and staying out is not slower.
+A second owed dry compound keeps the pick, because staying out is not legal then.
+Each lap the engine writes one decision record with the pick, the reason and the
+compound ladder. The verdict makes the call: box for the pick, or stay out (docs/27).
 
 **Rival scope.** Track at most three rivals: the car ahead, the car behind (only while the
 gap is under 5 s), and the projected pit-exit rival. The projected rival's track position
@@ -251,7 +259,7 @@ The window does not open before the fitted set completes `plan_min_stint_laps`, 
 | `plan_off` | 2 | "Heads up, we're off Plan A. Losing 4 seconds on it, reviewing" |
 | `plan_switch` | 2 | "Switching to Plan B. two stop, medium then hard then soft, target lap 18" |
 | `plan_invalid` | 2 | "We're off Plan C. New plan is A, one stop, medium then hard" |
-| `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Cheap stop under the safety car" |
+| `box_now` | 1 | now prefixed with the plan: "Box, box. Plan C. Mediums to the flag, 21.5 seconds" |
 | `plan_sc_box` | 1 | fallback when `box_now` is gated out: "Plan C, box box. Hards, cheap stop" |
 | `double_stack` | 1 | teammate is ahead in the pit lane: "Double stack, ANTONELLI is in ahead. Hold in the lane, slow release" |
 

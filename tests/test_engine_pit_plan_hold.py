@@ -18,7 +18,7 @@ def test_vsc_ending_reprices_pit_plan_at_green_loss(tmp_path, monkeypatch) -> No
         decision_log_path=tmp_path / "decisions.jsonl",
         sinks=[],
     )
-    fit = DegFit(90_000.0, 150.0, 30.0, 20, 0.0, 0.9, "prior")
+    fit = DegFit(90_000.0, 40.0, 30.0, 20, 0.0, 0.9, "prior")
     engine.deg_fit = fit
     engine.ctx.fresh_prior = fit
     engine.ctx.green_pit_loss_s = 22.0

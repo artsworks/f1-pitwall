@@ -80,6 +80,7 @@ class Candidate:
     obvious: bool = False
     provisional_silent: bool = False
     brief: str = ""
+    unchanged: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -102,6 +103,7 @@ class Rule:
         }
         self._last_suppression: dict[str, tuple[int, int]] = {}
         self.armed = True
+        self._rearm_seen: dict[str, Any] = {}
         self.obvious_noted = False
         self.fires_this_stint = 0
         self.phrases = PhraseBook(defn)
@@ -198,6 +200,43 @@ class RuleEngine:
     def _limit(self, name: str) -> float:
         return self.staleness_s.get(name, STALENESS_DEFAULT_S)
 
+    def _call_checks(
+        self, rule: Rule, ns_kwargs: dict[str, Any], data: Mapping[str, Any]
+    ) -> tuple[
+        Callable[[Snapshot], bool] | None,
+        Callable[[Snapshot], bool] | None,
+        dict[str, Any],
+    ]:
+        """still_true/current closures plus the trigger-time values of the
+        rule's `unchanged` fields. The frozen values ride on the call so the
+        dispatcher can drop it when one of them changes."""
+        d = rule.defn
+        frozen = {name: data.get(name) for name in d.unchanged}
+        still_true = None
+        if rule._still_true is not None or frozen:
+
+            def still_true(
+                s: Snapshot,
+                r: Rule = rule,
+                k: dict[str, Any] = ns_kwargs,
+                f: dict[str, Any] = frozen,
+            ) -> bool:
+                for name, was in f.items():
+                    if getattr(s, name, None) != was:
+                        return False
+                return r.still_true(s, k) if r._still_true is not None else True
+
+        current = None
+        if d.conflict_group or d.supersedes or d.rotate_with:
+            if still_true is not None:
+                current = still_true
+            else:
+
+                def current(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
+                    return r.holds(s, k)
+
+        return still_true, current, frozen
+
     def candidate_for(self, rule_id: str, snapshot: Snapshot, text: str | None = None) -> Candidate:
         """Build a rule candidate for replay without changing its trigger state."""
         self._snapshot = snapshot
@@ -236,21 +275,8 @@ class RuleEngine:
             if name in snap_attrs
         }
         ns_kwargs = self._ns_kwargs()
-        still_true = None
-        if rule._still_true is not None:
-
-            def still_true(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
-                return r.still_true(s, k)
-
-        current = None
+        still_true, current, frozen = self._call_checks(rule, ns_kwargs, data)
         d = rule.defn
-        if d.conflict_group or d.supersedes or d.rotate_with:
-            if still_true is not None:
-                current = still_true
-            else:
-
-                def current(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
-                    return r.holds(s, k)
 
         brief = ""
         if d.brief:
@@ -273,6 +299,7 @@ class RuleEngine:
             obvious=obvious,
             provisional_silent=provisional_silent,
             brief=brief,
+            unchanged=frozen,
         )
 
     def evaluate(self, snapshot: Snapshot) -> EvalResult:
@@ -309,6 +336,13 @@ class RuleEngine:
                     result.suppressed.append(Suppressed(rule, "clear_error", str(exc)))
             elif not fired:
                 rule.armed = True
+            if d.rearm_on_change:
+                for name in d.rearm_on_change:
+                    if name not in rule._rearm_seen:
+                        rule._rearm_seen[name] = data.get(name)
+                    elif rule._rearm_seen[name] != data.get(name):
+                        rule._rearm_seen[name] = data.get(name)
+                        rule.armed = True
             if blocked is not None and rule.should_log_suppression(snapshot, blocked):
                 inputs = {
                     name: _jsonable(ns.get(name))
@@ -368,21 +402,8 @@ class RuleEngine:
                 for name in dict.fromkeys(ns.accessed)
                 if name in snap_attrs
             }
-            still_true = None
-            current = None
             ns_kwargs = self._ns_kwargs()
-            if rule._still_true is not None:
-
-                def still_true(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
-                    return r.still_true(s, k)
-
-            if d.conflict_group or d.supersedes or d.rotate_with:
-                if rule._still_true is not None:
-                    current = still_true
-                else:
-
-                    def current(s: Snapshot, r: Rule = rule, k: dict[str, Any] = ns_kwargs) -> bool:
-                        return r.holds(s, k)
+            still_true, current, frozen = self._call_checks(rule, ns_kwargs, data)
 
             result.candidates.append(
                 Candidate(
@@ -399,6 +420,7 @@ class RuleEngine:
                     obvious=obvious,
                     provisional_silent=provisional_silent,
                     brief=brief,
+                    unchanged=frozen,
                 )
             )
         return result

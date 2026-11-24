@@ -127,7 +127,7 @@ Each parameter maps to something a race engineer changes when told "we're attack
 | `pit_confidence_min` | 0.70 | 0.55 | model confidence required to speak a pit call | acts on a less certain read when driver rating allows |
 | `position_loss_risk_max` | 0.30 | 0.55 | tolerated probability that a strategy call costs a place | accepts traffic risk when driver rating allows |
 | `undercut_speak_threshold_s` | 1.0 | 0.4 | smallest undercut opportunity worth saying | "there's an undercut on Norris, small but it's there" |
-| `sc_stop_min_wear_pct` | 35 | 25 | wear above which a safety-car stop is recommended | takes the cheap stop earlier to get fresher tyres for the restart |
+| `sc_survive_min` | 0.60 | 0.45 | survival probability a compound needs to be the safety-car verdict's pick | wants a surer tyre-life read before committing to a stop |
 | `tyre_life_buffer_laps` | 2.0 | 1.0 | laps of margin kept before the modelled cliff | runs the stint closer to the edge |
 | `push_laps_per_stint` | 2 | 4 | push laps the plan allows (in-lap, out-lap, attack) | more laps asked at full pace |
 | `thermal_warn_offset_c` | 0 | +3 | shift of the "too hot" warning above the compound window | tolerates heat for pace before nagging |
@@ -155,7 +155,7 @@ mindsets:
     pit_confidence_min: 0.70
     position_loss_risk_max: 0.30
     undercut_speak_threshold_s: 1.0
-    sc_stop_min_wear_pct: 35
+    sc_survive_min: 0.60
     tyre_life_buffer_laps: 2.0
     push_laps_per_stint: 2
     thermal_warn_offset_c: 0
@@ -180,7 +180,7 @@ mindsets:
     pit_confidence_min: 0.55
     position_loss_risk_max: 0.55
     undercut_speak_threshold_s: 0.4
-    sc_stop_min_wear_pct: 25
+    sc_survive_min: 0.45
     tyre_life_buffer_laps: 1.0
     push_laps_per_stint: 4
     thermal_warn_offset_c: 3
@@ -235,6 +235,20 @@ Guard-rails:
 Switch mindsets mid-race with a wheel button (UDP Action 2) or key, then confirm by voice
 ("aggressive"). Use the dashboard toggle between sessions because clicking it takes focus
 from a fullscreen game (`12-driver-input.md`).
+
+### Learned offset on `sc_survive_min`
+
+`pitwall tune` learns an offset that the engine adds to the mindset's `sc_survive_min`.
+The offset comes from graded safety-car rows (docs/20). The engine clamps the result
+between the floor and the ceiling.
+
+| Key | Default | What it controls |
+|---|---|---|
+| `sc_survive_learn_min_rows` | 3 | graded rows needed before the offset moves off 0 |
+| `sc_survive_step_up` | 0.10 | offset added per optimistic miss |
+| `sc_survive_step_down` | 0.05 | offset subtracted per pessimistic miss |
+| `sc_survive_min_floor` | 0.45 | lowest survival threshold the offset can reach |
+| `sc_survive_min_ceiling` | 0.85 | highest survival threshold the offset can reach |
 
 ## Weekend and season context
 

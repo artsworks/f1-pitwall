@@ -37,6 +37,7 @@ idempotent. Store them in the `outcomes` table (migration 6):
 | `tyre_life` (`inputs.laps_of_pace`) | `laps_of_pace` | vs laps after the call until fuel-corrected pace stays `tyre_cliff_ms` slower for `hind_cliff_sustain_laps` consecutive green laps, than the stint's fitted age-0 pace (the model's reference, fitted from green laps up to the call). No cliff before the stop or flag: `censored` |
 | `fuel_*` (`inputs.fuel_margin_laps`) | `fuel_margin` | vs the final lap's fuel-remaining laps, tolerance `hind_fuel_tol_laps`. `censored` unless the session reached `sessions.total_laps` (migration 7). Kept in the digest as forecast calibration but not fed to `pitwall tune` (the driver's response to the call moves it) |
 | plan `set` / `switch` events | `plan_followed` | Did the compounds actually run from that lap match the plan's sequence exactly (a stint's compound is its first lap's visual compound, `laps.visual`, else its C-number code)? A plan replaced before any stop is `n/a`; a session that ended early while still on the plan so far is `censored` |
+| shadow `sc_verdict` records (docs/27) | `sc_row` | One row for each SC or VSC period. After a stop in the period, the grader takes the record from the stop lap and grades the fresh-set row of the fitted compound. With no stop, it grades the current-set row from the last record. The detail shows the survival percentage of the row. `good` if "survives" matches the result. A set that stopped again for tyres matches "does not survive". A set that reached the flag matches "survives" only when it kept pace: its last three green laps are less than `tyre_cliff_ms` slower than its first three. With fewer than six green laps, the grade uses the stop rule alone. The detail shows the pace loss. A later stop to intermediates or wets, a later stop under SC or VSC, a later stop after a damage call or with a served stop-go penalty, a later stop while a second dry compound is owed, or no finish is `censored`. The grade feeds only the `sc_survive_min` offset, not the cooldowns |
 
 Stops are laps flagged `pitted` next to a tyre change (not drive-throughs), or laps with a
 tyre-age reset. Count each tyre change as one stop. Use the in-lap when flagged, otherwise
@@ -96,6 +97,15 @@ Upkeep is idempotent. A second run with no new data changes nothing. Database er
 logged and skipped. To run upkeep again, restart `pitwall start`. To skip the refit and
 cooldown steps, set `learning.auto_calibrate: false`. Cooldown multipliers stay between
 `tune_min_cooldown_mult` and `tune_max_cooldown_mult`.
+
+The safety-car survival threshold learns an offset in the same step. Upkeep recomputes it
+from every graded `sc_row` outcome in the database. Synthetic sessions, censored rows and
+`n/a` rows do not count. An optimistic miss is a "survives" row for a set that lost pace.
+A pessimistic miss is a "does not survive" row for a set that kept pace. Fewer than
+`sc_survive_learn_min_rows` graded rows keep the offset at 0. Otherwise the offset is
+`sc_survive_step_up` times the optimistic misses, minus `sc_survive_step_down` times the
+pessimistic misses. The engine reads the offset when it starts, so a running session keeps
+the value it loaded.
 
 Race stint values are scoped to total race distance. A 52-lap race uses names such as
 `deg_ms_per_lap@52L`; another distance does not mix into that prior. If a scoped value

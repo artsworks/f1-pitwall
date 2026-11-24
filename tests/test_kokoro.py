@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import sys
 import threading
 import wave
@@ -122,6 +123,7 @@ def test_kokoro_speaker_passes_contract(kokoro_env: SimpleNamespace) -> None:
 
 def test_render_is_mono_16_bit_24_khz(kokoro_env: SimpleNamespace) -> None:
     speaker = make_kokoro_speaker(_settings(kokoro_env), FakePlayer())
+    assert logging.getLogger("phonemizer").level == logging.ERROR
     wav, seconds = speaker.render("Box this lap.", 2)
     assert assert_pitwall_wav(wav) == pytest.approx(seconds)
     with wave.open(io.BytesIO(wav), "rb") as reader:

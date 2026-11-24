@@ -63,6 +63,7 @@ class ModelView:
     plan_window_text: str = ""
     plan_window_open: bool = False
     plan_next_compound: str = ""
+    plan_sc_compound: str = ""
     plan_off_s: float = 0.0
     plan_off_prob: float = 0.0
     plan_delta_sd_s: float = 0.0

@@ -81,6 +81,7 @@ Zone rules:
 - TRACK, weather: an icon and rain chance for now, 10 and 30 minutes. Three icons show cloud, light rain and heavy rain. The card has no sky words. Beside it, the crossover compound, the lap it falls on and the time to it. No rain chance appears beside the crossover lap. Without a crossover, the card says "no crossover".
 - TRACK, limits: corner cuts and track limits warnings. Dots show the warnings left before the next penalty. The dots fill with `cuts % warn_at`, and all fill when a penalty is due. The penalty time shows at the right. The status bar chip shows the same counts. On phone, only the chip shows.
 - PLAN: one card per plan. The active plan has a thick border. Under a live SC or VSC, plan C comes first and takes the thick border from the active plan. The active card shows the plan letter, the compounds, ON PLAN or OFF PLAN, the box lap, the window and the exit row with the undercut and overcut deltas. Other plans show one dim line.
+- SC ladder: under a live SC or VSC, when `strategy.sc_ladder` is set, the PLAN column ends with one more card. It has one row for each compound with life, need and margin in laps, such as `life 14  need 10  +4`. The current set comes last with the tag ON CAR. A compound with no fresh set shows NO SET. A row that does not survive shows its margin in the warning colour. The card has no grade. A headline card above it names the call: `STAY OUT`, `BOX, MED TO END` when the pick survives to the flag, or `BOX, MED` for a two-stop. The headline stays on the phone layout, which hides the ladder card. The dashboard v3 shows it in the wide layout only.
 - CAR, fuel: signed laps at the flag. Green from 0.5 laps, amber from 0 to 0.5, red when short.
 - CAR, battery: the charge, the budget mode icon and word, and the laps to the floor.
 - CAR, damage: front wings and floor as numbers. Other parts and the DRS and ERS faults follow on one line. The line reads "✓ none" when nothing is damaged.
@@ -218,6 +219,10 @@ active}]` (delta vs the active plan, negative = faster; C is "box now under SC/V
 `plan_off_s` (active plan's loss vs the best legal strategy), `plan_target_lap` (next stop
 of the active plan or null) and `plan_switch: {from, reason: 'pace'|'invalid'|'sc', lap}`
 or null. Backend only; UI rendering is a separate PR.
+The safety car verdict (docs/27) adds `sc_ladder: null | {headline, need, rows: [{compound,
+current, no_set, life, need, margin, survives}]}`. It is null unless the verdict ran this
+tick under SC or VSC. Rows follow verdict order, with the current set last. `life`, `need`
+and `margin` are laps. The payload sends no pick, reason or survival percentage.
 
 Battle state (docs/18 "Battle state") adds `battle: {mode: 'free_air'|'catching'|
 'attacking'|'defending'|'under_threat'|'managing', mode_laps, catch_laps | null,

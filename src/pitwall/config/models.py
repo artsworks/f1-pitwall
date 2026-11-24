@@ -299,7 +299,7 @@ class SpeechSettings(BaseModel):
     kokoro_speed: float = 1.0
     kokoro_device: Literal["auto", "cpu"] = "auto"
     voices_dir: str = "voices"
-    warm_phrases: int = 150  # fixed phrases pre-rendered by `pitwall voice warm`
+    warm_phrases: int = 170  # fixed phrases pre-rendered by `pitwall voice warm`
     # None -> engine default (half the cores; omnivoice at most 4)
     warm_workers: int | None = Field(default=None, ge=1)
     rate: int = 0
@@ -363,6 +363,10 @@ class RuleDefModel(BaseModel):
     clear_when: str | None = None
     # Revalidated just before speaking; deliberately looser than `when`.
     still_true: str | None = None
+    # Snapshot fields frozen at trigger time: the queued call dies when one changes.
+    unchanged: list[str] = Field(default_factory=list)
+    # Snapshot fields whose change between evaluations re-arms the rule.
+    rearm_on_change: list[str] = Field(default_factory=list)
     suppress_when: dict[str, str] = Field(default_factory=dict)  # log reason -> predicate
     retry_on_suppression: bool = False  # rearm after budget or focus suppression
     cooldown_s: float = 0.0  # min seconds between calls of this rule

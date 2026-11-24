@@ -1303,6 +1303,38 @@ def test_strategy_payload_named_plans() -> None:
     assert s["plan_next_compound"] is None and s["fit_mismatch"] is None
 
 
+def test_strategy_payload_completed_reactive_plan() -> None:
+    """Plan C whose only stop is done reaches the dashboard with stops == 0
+    and no stop laps, so the client can drop the BOX NOW card."""
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+    from pitwall.strategy.plans import StrategyPlan
+
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=48,
+        laps_remaining=12,
+        tyre_visual=18,
+        plans=(
+            StrategyPlan("A", "primary", (18,), (), (0, 0), 1087.8, 0.0),
+            StrategyPlan("C", "reactive", (18,), (), (0, 0), 1080.0, -7.8),
+        ),
+        active_plan="C",
+        on_plan=True,
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    c = next(p for p in s["plans"] if p["id"] == "C")
+    assert c["kind"] == "reactive" and c["active"] is True
+    assert c["stops"] == 0 and c["stop_laps"] == [] and c["window"] is None
+    assert c["compounds"] == ["HARD"]
+
+
 def test_strategy_payload_next_compound_and_fit_mismatch() -> None:
     """Report a fitted-tyre mismatch from the engine's stop latch."""
     import dataclasses
@@ -1542,3 +1574,56 @@ def test_pit_board_shows_in_race_while_in_pit_lane() -> None:
         quiet=False,
     )
     assert payload["pit_board"] is not None
+
+
+def test_strategy_payload_sc_ladder() -> None:
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+    from pitwall.strategy.scverdict import ScRow, ScVerdict
+
+    base = dataclasses.replace(
+        Snapshot(now=0.0), session_kind="race", race_phase="sc", lap_num=5, laps_remaining=30
+    )
+    s = strategy_payload(base)
+    assert s is not None and s["sc_ladder"] is None
+    rows = (
+        ScRow(18, False, 1, 30.0, 30, 14.0, 16.0, 0.9, True, 3000.0),
+        ScRow(16, False, 0, 10.0, 10, 14.0, -4.0, 0.1, False, None),
+        ScRow(17, True, 1, 8.0, 8, 14.0, float("inf"), 0.0, False, None),
+    )
+    verdict = ScVerdict(18, "fastest", 14.0, 1.0, 0.75, rows, (17, 18), True)
+    s = strategy_payload(dataclasses.replace(base, sc_verdict=verdict))
+    assert s is not None
+    ladder = s["sc_ladder"]
+    assert ladder["need"] == 14.0
+    hard, soft, current = ladder["rows"]
+    assert hard == {
+        "compound": "HARD",
+        "current": False,
+        "no_set": False,
+        "life": 30.0,
+        "need": 14.0,
+        "margin": 16.0,
+        "survives": True,
+    }
+    assert soft["no_set"] is True and soft["margin"] == -4.0 and soft["survives"] is False
+    assert current["current"] is True and current["no_set"] is False
+    assert current["margin"] is None and current["life"] is None
+    assert "pick" not in ladder and "reason" not in ladder
+
+
+def test_sc_ladder_headline_follows_the_call() -> None:
+    from pitwall.server.app import _sc_ladder
+    from pitwall.strategy.scverdict import ScRow, ScVerdict
+
+    rows = (ScRow(17, False, 1, 20.0, 20, 14.0, 6.0, 0.9, True, 1000.0),)
+    flag = ScVerdict(17, "medium to the flag", 14.0, 10.0, 0.6, rows, (17, 17), True)
+    two = ScVerdict(17, "medium, two stops", 14.0, 10.0, 0.6, rows, (17, 17, 17), False)
+    stay = ScVerdict(0, "stay out, nothing reaches the flag", 14.0, 10.0, 0.6, rows, (), False)
+
+    assert _sc_ladder(stay, "stay")["headline"] == "STAY OUT"
+    assert _sc_ladder(flag, "box")["headline"] == "BOX, MED TO END"
+    assert _sc_ladder(two, "box")["headline"] == "BOX, MED"
+    assert _sc_ladder(flag, "")["headline"] is None

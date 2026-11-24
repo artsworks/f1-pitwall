@@ -13,7 +13,12 @@ import pytest
 
 from pitwall.clock import VirtualClock
 from pitwall.engine import build_engine, run_replay
-from pitwall.learning.tune import load_cooldown_mults, record_diff, tune_from_db
+from pitwall.learning.tune import (
+    load_cooldown_mults,
+    load_sc_survive_offset,
+    record_diff,
+    tune_from_db,
+)
 from pitwall.net.mask import mask_restricted
 from pitwall.protocol.header import PacketId
 from pitwall.protocol.packets import parse
@@ -178,6 +183,73 @@ def test_tune_folds_grades_and_ab(tmp_path: Path) -> None:
     rows = {r.rule_id: r for r in tune_from_db(db, {})}
     assert rows["noisy"].ab_net == -2
     assert tune_from_db(db, {}) == list(rows.values())  # idempotent
+
+
+def _sc_rows(db: Database, uid: int, rows: list[tuple[float, str]]) -> None:
+    db.replace_outcomes(
+        uid,
+        [
+            {
+                "call_id": f"sc_verdict:{lap}",
+                "rule_id": "sc_verdict",
+                "lap": lap,
+                "metric": "sc_row",
+                "predicted": predicted,
+                "actual": None,
+                "error": None,
+                "label": label,
+                "detail": "",
+            }
+            for lap, (predicted, label) in enumerate(rows, start=1)
+        ],
+    )
+
+
+def test_sc_survive_offset_needs_three_graded_rows(tmp_path: Path) -> None:
+    db = Database(tmp_path / "t.sqlite")
+    _sc_rows(db, 1, [(0.0, "wrong"), (1.0, "good")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == 0.0
+
+
+def test_sc_survive_offset_steps_down_for_pessimistic_misses(tmp_path: Path) -> None:
+    db = Database(tmp_path / "t.sqlite")
+    _sc_rows(db, 1, [(0.0, "wrong"), (1.0, "good"), (1.0, "good")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == -0.05
+
+
+def test_sc_survive_offset_steps_up_for_optimistic_misses(tmp_path: Path) -> None:
+    db = Database(tmp_path / "t.sqlite")
+    _sc_rows(db, 1, [(1.0, "wrong"), (0.0, "good"), (0.0, "good")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == 0.10
+
+
+def test_sc_survive_offset_nets_both_and_recomputes(tmp_path: Path) -> None:
+    db = Database(tmp_path / "t.sqlite")
+    _sc_rows(db, 1, [(0.0, "wrong"), (0.0, "wrong"), (1.0, "wrong"), (1.0, "good")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == 0.0
+    _sc_rows(db, 1, [(1.0, "wrong"), (0.0, "good"), (0.0, "good")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == 0.10
+
+
+def test_sc_survive_offset_ignores_synthetic_censored_and_n_a(tmp_path: Path) -> None:
+    db = Database(tmp_path / "t.sqlite")
+    synthetic_uid = 0x9234_5678_9ABC_DEF0
+    db.upsert_session(synthetic_uid, track_id=7, session_type=15, synthetic=True)
+    _sc_rows(db, synthetic_uid, [(0.0, "wrong")] * 3)
+    _sc_rows(db, 2, [(1.0, "censored"), (0.0, "n/a"), (1.0, "n/a")])
+    tune_from_db(db, {})
+    assert load_sc_survive_offset(db) == 0.0
+    assert db.get_param(-1, -1, "sc_survive_offset") is None
+
+
+def test_load_sc_survive_offset_defaults_to_zero(tmp_path: Path) -> None:
+    assert load_sc_survive_offset(None) == 0.0
+    assert load_sc_survive_offset(Database(tmp_path / "t.sqlite")) == 0.0
 
 
 def test_crash_recovery_rebuilds_from_db_and_recording_tail(tmp_path: Path) -> None:

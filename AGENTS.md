@@ -29,6 +29,10 @@ A serial `uv run pytest` takes more than 60 minutes. Run pytest in parallel. The
 - Before you finish, run the full suite once: `uv run pytest -n auto --dist loadfile`
 - To debug one test, run it by node ID without `-n`.
 
+## Git hooks
+
+Commits run `ruff check --fix` and `ruff format` on staged Python files through `pre-commit` (config in `.pre-commit-config.yaml`). The hooks call `uv run`, so sync the environment first. After `uv sync`, install the hook once per clone with `uv run pre-commit install`. The hooks rewrite files in place, so re-stage and commit again when they do.
+
 ## Do not commit
 
 These files are personal state or large local data. `.gitignore` covers most of them. Stage files by path and do not use `git add -A`.

@@ -6,6 +6,7 @@ from pitwall.config.loader import ConfigStore
 from pitwall.model.deg import DegFit
 from pitwall.model.driver import DriverScale, advice_scale
 from pitwall.strategy.pitwindow import RivalView, optimise, race_time_s
+from pitwall.strategy.scverdict import ScRow, ScVerdict
 
 SETTINGS = ConfigStore().current()
 TH = SETTINGS.thresholds
@@ -44,6 +45,82 @@ def run(**kw: object):
     )
     args.update(kw)
     return optimise(**args)  # type: ignore[arg-type]
+
+
+def pick_verdict(
+    pick: int = 17, saving_s: float = 10.0, survival: float = 0.9, to_flag: bool = True
+) -> ScVerdict:
+    row = ScRow(
+        compound=pick,
+        current=False,
+        sets=2,
+        pace_life_laps=20.0,
+        usable_life_laps=20,
+        laps_needed=10.0,
+        margin_laps=5.0,
+        survival=survival,
+        survives=True,
+        race_time_s=1000.0,
+    )
+    sequence = (17, pick) if to_flag else (17, pick, pick)
+    return ScVerdict(
+        pick=pick,
+        reason="",
+        laps_needed=10.0,
+        saving_s=saving_s,
+        survive_min=0.6,
+        rows=(row,),
+        sequence=sequence,
+        to_flag=to_flag,
+    )
+
+
+def stay_verdict() -> ScVerdict:
+    return ScVerdict(
+        pick=0,
+        reason="stay out, nothing reaches the flag",
+        laps_needed=10.0,
+        saving_s=10.0,
+        survive_min=0.6,
+        rows=(),
+        sequence=(),
+        to_flag=False,
+    )
+
+
+def test_sc_verdict_pick_is_the_cheap_stop() -> None:
+    p = run(sc_status=1, wear_mean=5.0, pit_loss_s=11.0, sc_verdict=pick_verdict(survival=0.7))
+    assert p.plan == "cheap_stop"
+    assert p.confidence == pytest.approx(0.7)
+    assert p.reason == "Mediums to the flag"
+
+
+def test_sc_stay_verdict_overrides_the_wear_and_owed_gates() -> None:
+    kw = dict(
+        lap_num=10,
+        laps_remaining=9,
+        tyre_age=9,
+        wear_mean=60.0,
+        fit=fit(150),
+        laps_of_pace=10.3,
+        pit_loss_s=8.0,
+        green_pit_loss_s=22.0,
+        sc_status=1,
+        stop_owed=True,
+    )
+    p = run(**kw, sc_verdict=stay_verdict())
+    assert p.window[0] <= 10 <= p.window[1]
+    assert p.plan == "stay"
+    assert p.reason == "Stay out, nothing reaches the flag"
+
+
+def test_sc_without_a_verdict_never_cheap_stops() -> None:
+    assert run(sc_status=1, wear_mean=60.0, pit_loss_s=11.0).plan != "cheap_stop"
+
+
+def test_damage_with_a_stay_verdict_plans_as_if_no_verdict() -> None:
+    kw = dict(sc_status=1, wear_mean=60.0, pit_loss_s=11.0, damage_pace_ms=3000.0)
+    assert run(**kw, sc_verdict=stay_verdict()) == run(**kw)
 
 
 def test_damage_moves_stop_to_now() -> None:
@@ -98,8 +175,8 @@ def test_teammate_stack_penalises_only_a_stop_this_lap() -> None:
 
 def test_teammate_stack_gates_safety_car_cheap_stop() -> None:
     kwargs = dict(sc_status=1, wear_mean=50.0, pit_loss_s=20.0, green_pit_loss_s=22.0)
-    base = run(**kwargs)
-    stacked = run(**kwargs, teammate_pitting=True)
+    base = run(**kwargs, sc_verdict=pick_verdict(saving_s=2.0))
+    stacked = run(**kwargs, teammate_pitting=True, sc_verdict=stay_verdict())
     assert base.plan == "cheap_stop"
     assert base.gain_s == pytest.approx(2.0)
     assert stacked.plan != "cheap_stop"
@@ -118,8 +195,8 @@ def test_teammate_stack_gates_owed_safety_car_cheap_stop() -> None:
         green_pit_loss_s=22.0,
         sc_status=1,
     )
-    base = run(**kwargs, stop_owed=True)
-    stacked = run(**kwargs, stop_owed=True, teammate_pitting=True)
+    base = run(**kwargs, stop_owed=True, sc_verdict=pick_verdict(saving_s=2.0))
+    stacked = run(**kwargs, stop_owed=True, teammate_pitting=True, sc_verdict=stay_verdict())
     assert base.window[0] <= 10 <= base.window[1]
     assert base.plan == "cheap_stop" and base.gain_s == pytest.approx(2.0)
     assert stacked.plan != "cheap_stop"
@@ -141,7 +218,7 @@ def test_teammate_stack_not_counted_twice_in_owed_sc_cheap_stop() -> None:
         stop_owed=True,
         teammate_pitting=True,
     )
-    p = run(**kw)
+    p = run(**kw, sc_verdict=pick_verdict(saving_s=22.0 - 12.0 - 4.0))
     assert p.window[0] > 2  # lap 2 is outside the normal window
     assert p.projections[0][1] - min(d for _, d in p.projections) == pytest.approx(6.1)
     assert p.plan == "cheap_stop"
@@ -325,12 +402,11 @@ def test_box_in_n_before_the_cliff() -> None:
     assert p.window[0] <= p.lap <= p.window[1]
 
 
-def test_sc_cheap_stop_needs_wear() -> None:
-    worn = run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0)
+def test_sc_cheap_stop_needs_a_verdict() -> None:
+    worn = run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0, sc_verdict=pick_verdict(saving_s=10.0))
     assert worn.plan == "cheap_stop"
     assert worn.gain_s == pytest.approx(10.0)
-    fresh = run(sc_status=1, wear_mean=10.0, pit_loss_s=11.0, laps_of_pace=30.0)
-    assert fresh.plan != "cheap_stop"
+    assert run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0).plan != "cheap_stop"
 
 
 def test_sc_cheap_stop_when_plan_owes_a_stop() -> None:
@@ -346,7 +422,7 @@ def test_sc_cheap_stop_when_plan_owes_a_stop() -> None:
         green_pit_loss_s=22.0,
         sc_status=1,
     )
-    owed = run(**kw, stop_owed=True)
+    owed = run(**kw, stop_owed=True, sc_verdict=pick_verdict(saving_s=14.0))
     assert owed.window[0] <= 10 <= owed.window[1]
     assert owed.plan == "cheap_stop"
     assert owed.gain_s == pytest.approx(14.0)
@@ -370,17 +446,19 @@ def test_sc_cheap_stop_in_short_race_when_early_stop_is_cheap() -> None:
         stop_mandatory=True,
         gap_behind_s=1.0,
     )
-    assert run(**kw).plan == "cheap_stop"
+    assert run(**kw, sc_verdict=pick_verdict()).plan == "cheap_stop"
     early = dict(kw, lap_num=3, laps_remaining=12, tyre_age=3, wear_mean=12.6)
-    assert run(**early).plan != "cheap_stop"
+    assert run(**early, sc_verdict=stay_verdict()).plan != "cheap_stop"
     full = dict(kw, lap_num=25, laps_remaining=33, tyre_age=25, wear_mean=30.0)
     assert run(**{**full, "fit": fit(75), "fresh": fit(75)}).plan != "cheap_stop"
 
 
-def test_aggressive_sc_stop_lower_wear() -> None:
-    p = run(sc_status=2, wear_mean=30.0, pit_loss_s=11.0, mode=AGGRESSIVE)
+def test_aggressive_sc_stop_follows_the_verdict() -> None:
+    p = run(
+        sc_status=2, wear_mean=30.0, pit_loss_s=11.0, mode=AGGRESSIVE, sc_verdict=pick_verdict()
+    )
     assert p.plan == "cheap_stop"
-    assert run(sc_status=2, wear_mean=30.0, pit_loss_s=11.0).plan != "cheap_stop"
+    assert run(sc_status=2, wear_mean=30.0, pit_loss_s=11.0, mode=AGGRESSIVE).plan != "cheap_stop"
 
 
 def test_undercut_on_slow_rival_ahead() -> None:
@@ -416,11 +494,12 @@ def test_driver_scale_changes_aggressive_plans_only() -> None:
     assert scaled_cover.risk == 0.2
     assert scaled_cover.confidence == round(cover.confidence * 0.5, 3)
 
-    base_stop = run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0)
+    base_stop = run(sc_status=1, wear_mean=50.0, pit_loss_s=11.0, sc_verdict=pick_verdict())
     scaled_stop = run(
         sc_status=1,
         wear_mean=50.0,
         pit_loss_s=11.0,
+        sc_verdict=pick_verdict(),
         driver=DriverScale(confidence_factor=0.5, risk_add=0.2, pace_cap_ms=100),
     )
     assert scaled_stop.plan == base_stop.plan == "cheap_stop"

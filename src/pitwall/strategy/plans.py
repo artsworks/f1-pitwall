@@ -30,6 +30,7 @@ class CompoundModel:
     deg_ms_per_lap: float
     sets: int  # usable sets left, -1 = unknown (no Tyre Sets packet)
     deg_posterior_sd_ms_per_lap: float = 0.0
+    usable_life_laps: int = 0  # game-reported fresh-set life, 0 = no Tyre Sets packet
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,21 +207,39 @@ def evaluate(
         sd_ms = inp.cur.deg_posterior_sd_ms_per_lap * _age_sum(inp.tyre_age, r)
         return PlanEval(seq, (), (0, 0), cur[r] / 1000.0, sd_ms / 1000.0)
     models = {c.visual: c for c in inp.compounds}
+    fitted = models.get(inp.current)
+    # The stint on the fitted set is capped by its remaining usable life
+    # (0/unknown = no cap); a spent set leaves only k1 == 0, stop now.
+    life_left = (
+        max(0, fitted.usable_life_laps - inp.tyre_age)
+        if fitted is not None and fitted.usable_life_laps > 0
+        else None
+    )
     fresh = []
+    caps = []
     for c in seq[1:]:
         m = models[c]
         cliff = math.inf if m.deg_ms_per_lap <= 0 else cliff_ms / m.deg_ms_per_lap
         fresh.append(_cum(m.base_ms, m.deg_ms_per_lap, 0, r, cliff, pen))
+        caps.append(m.usable_life_laps)
     k1s = [0] if stop_now else list(range(last_k + 1))
     per_k1: dict[int, tuple[float, tuple[int, ...]]] = {}
     for k1 in k1s:
-        if k1 > last_k:
+        if k1 > last_k or (life_left is not None and k1 > life_left):
             continue
         if stops == 1:
+            if caps[0] > 0 and r - k1 > caps[0]:
+                continue
             per_k1[k1] = (cur[k1] + fresh[0][r - k1] + first_ms, (k1,))
             continue
+        k2_lo = k1 + mn
+        k2_hi = last_k
+        if caps[0] > 0:
+            k2_hi = min(k2_hi, k1 + caps[0])
+        if caps[1] > 0:
+            k2_lo = max(k2_lo, r - caps[1])
         best: tuple[float, tuple[int, ...]] | None = None
-        for k2 in range(k1 + mn, last_k + 1):
+        for k2 in range(k2_lo, k2_hi + 1):
             t = cur[k1] + fresh[0][k2 - k1] + fresh[1][r - k2] + first_ms + loss_ms
             if best is None or t < best[0]:
                 best = (t, (k1, k2))
@@ -289,11 +308,33 @@ def derive(inp: PlanInputs, th: Mapping[str, object]) -> list[PlanEval]:
     )
 
 
-def reactive(inp: PlanInputs, th: Mapping[str, object]) -> PlanEval | None:
-    """Plan C: box this lap under SC/VSC at the neutralised loss."""
+def _fresh_stints(seq: tuple[int, ...], fresh_sets: Mapping[int, int]) -> bool:
+    """Every stint after the fitted set needs a wear == 0 set; repeats
+    count against the fresh count. -1 or a missing compound is unknown
+    and does not filter."""
+    tail = seq[1:]
+    for c in set(tail):
+        left = fresh_sets.get(c, -1)
+        if left >= 0 and tail.count(c) > left:
+            return False
+    return True
+
+
+def reactive(
+    inp: PlanInputs,
+    th: Mapping[str, object],
+    *,
+    min_stops: int = 1,
+    fresh_sets: Mapping[int, int] | None = None,
+) -> PlanEval | None:
+    """Plan C: box this lap under SC/VSC at the neutralised loss. With
+    `fresh_sets`, each future stint needs a fresh set; without it the
+    `CompoundModel.sets` contract applies."""
     best: PlanEval | None = None
     for seq in _sequences(inp, th):
-        if len(seq) < 2:
+        if len(seq) < min_stops + 1 or (
+            fresh_sets is not None and not _fresh_stints(seq, fresh_sets)
+        ):
             continue
         e = evaluate(inp, seq, th, stop_now=True, first_loss_s=inp.sc_loss_s)
         if e is not None and (best is None or e.race_time_s < best.race_time_s):
@@ -394,10 +435,13 @@ class PlanTracker:
         reseed: bool = False,
         invalidate: str = "",
         restart: bool = False,
+        sc_sequence: tuple[int, ...] | None = None,
     ) -> PlanState:
         """`reseed` rebuilds A/B from the current ranking (mindset change),
         based at `stops_done` so completed stops are not replayed. `restart`
-        reseeds after a red-flag restart and reports it as a 'restart' switch."""
+        reseeds after a red-flag restart and reports it as a 'restart' switch.
+        `sc_sequence` is the safety-car verdict's sequence: None uses the
+        reactive best, () lists no Plan C."""
         ranked = derive(inp, th)
         if not ranked:
             return self.state
@@ -464,7 +508,31 @@ class PlanTracker:
                     evals[pid] = evaluate(inp, rem, th)
             else:
                 evals[pid] = None
-        c_now = evals.get("C") if "C" in self.seqs else reactive(inp, th)
+        c_pending = "C" in self.seqs and self.seqs["C"][0] == stops_done
+        if c_pending and neutralised and sc_sequence is not None:
+            # The verdict owns a pending SC stop: a stay call retires Plan C,
+            # a new pick rebases it on the verdict's sequence.
+            c_now = (
+                evaluate(inp, sc_sequence, th, stop_now=True, first_loss_s=inp.sc_loss_s)
+                if sc_sequence
+                else None
+            )
+            evals["C"] = c_now
+            if c_now is not None:
+                revised = _next_compound(self.seqs["C"][1]) != _next_compound(c_now.compounds)
+                self._set("C", "reactive", stops_done, c_now)
+                if revised:
+                    # A new box compound is a new instruction: refresh the switch
+                    # lap so plan_sc_box re-announces. A pure reprice keeps it.
+                    self.switch_lap = lap
+        elif "C" in self.seqs:
+            c_now = evals.get("C")
+        elif sc_sequence is None:
+            c_now = reactive(inp, th)
+        elif sc_sequence:
+            c_now = evaluate(inp, sc_sequence, th, stop_now=True, first_loss_s=inp.sc_loss_s)
+        else:
+            c_now = None
         best = ranked[0]
         switch_s = _f(th, "plan_switch_s", 5.0)
         off_s = _f(th, "plan_off_s", 3.0)
@@ -586,6 +654,11 @@ def _seq_text(e: PlanEval | None) -> str:
     return "-".join(LETTERS.get(c, "?") for c in e.compounds) if e is not None else ""
 
 
+def _next_compound(seq: tuple[int, ...]) -> int:
+    """The compound a stop sequence boxes for next (0 = run to the flag)."""
+    return seq[1] if len(seq) > 1 else 0
+
+
 _STOP_WORDS = {0: "no stop", 1: "one stop", 2: "two stop"}
 
 
@@ -615,6 +688,7 @@ class PlanFields:
     plan_window_text: str
     plan_window_open: bool
     plan_next_compound: str
+    plan_sc_compound: str
     plan_off_s: float
     plan_off_prob: float
     plan_delta_sd_s: float
@@ -652,6 +726,11 @@ def view_fields(st: PlanState, lap_num: int) -> PlanFields:
         plan_window_open=st.stops_left > 0 and start > 0 and start <= lap_num <= end,
         plan_next_compound=(
             WORDS.get(active.compounds[1], "") if active is not None and active.stops else ""
+        ),
+        plan_sc_compound=(
+            WORDS.get(active.compounds[1], "")
+            if st.active == "C" and active is not None and active.stops
+            else ""
         ),
         plan_off_s=st.off_s,
         plan_off_prob=st.off_prob,

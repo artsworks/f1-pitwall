@@ -64,7 +64,13 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 def cmd_tune(args: argparse.Namespace) -> int:
     """Fold graded calls + A/B results from SQLite into persisted rule tuning."""
-    from pitwall.learning.tune import format_tune, tune_from_db
+    from pitwall.learning.tune import (
+        SC_SURVIVE_OFFSET,
+        TUNE_COMPOUND,
+        TUNE_TRACK,
+        format_tune,
+        tune_from_db,
+    )
 
     settings = ConfigStore().current()
     db = open_db(args, settings, "tune")
@@ -72,7 +78,11 @@ def cmd_tune(args: argparse.Namespace) -> int:
         return 1
     if args.paths:
         ingest_paths(args, db, settings, name="tune")
-    print(format_tune(tune_from_db(db, settings.thresholds)))
+    rows = tune_from_db(db, settings.thresholds)
+    param = db.get_param(TUNE_TRACK, TUNE_COMPOUND, SC_SURVIVE_OFFSET)
+    sc_offset = None if param is None else param.value
+    sc_rows = 0 if param is None else int(param.weight)
+    print(format_tune(rows, sc_offset, sc_rows))
     return 0
 
 

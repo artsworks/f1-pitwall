@@ -99,7 +99,7 @@ def test_sc_cheap_stop(runs) -> None:
     assert "sc_deployed" in _ids(calls)
     box = next(c for c in calls if c.rule_id == "box_now")
     assert box.lap in (5, 6)
-    assert "safety car" in box.text
+    assert "to the flag" in box.text
     row = next(r for r in rows if r["rule_id"] == "box_now" and r["outcome"] == "fired")
     assert row["inputs"]["pit_plan"] == "cheap_stop"
 

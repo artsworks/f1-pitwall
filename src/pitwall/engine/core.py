@@ -34,7 +34,7 @@ from pitwall.engine.planning import _STOP_PLANS, Planner
 from pitwall.engine.voice import VoiceController
 from pitwall.ingest import Ingest
 from pitwall.input.menu import DriverMenu
-from pitwall.learning.tune import load_cooldown_mults
+from pitwall.learning.tune import load_cooldown_mults, load_sc_survive_offset
 from pitwall.metrics import Metrics
 from pitwall.model.budget import EnergyBudget, FuelBudget
 from pitwall.model.deg import (
@@ -102,6 +102,7 @@ class Engine:
         )
         self.controls._apply_mode()
         self.ctx.dispatcher.tuned_cooldown = load_cooldown_mults(self.ctx.db)
+        self.ctx.sc_survive_offset = load_sc_survive_offset(self.ctx.db)
         self._alive_t = -math.inf
         self.tick_errors = 0
         self.tick_error_streak = 0

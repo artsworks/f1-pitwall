@@ -89,6 +89,7 @@ from pitwall.state.zones import (
 from pitwall.strategy.pace import amount_words, pace_words_self
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.rejoin import FieldCar
+from pitwall.strategy.scverdict import ScVerdict
 from pitwall.strategy.weather import (
     crossover_projection,
     default_pit_loss_s,
@@ -690,6 +691,8 @@ class Snapshot:
     undercut_s: float = 0.0
     overcut_s: float = 0.0
     plans: tuple[StrategyPlan, ...] = ()
+    sc_verdict: ScVerdict | None = None
+    sc_call: str = ""  # "box" or "stay" when the safety-car verdict makes the call
     active_plan: str = ""
     on_plan: bool = True
     plan_label: str = ""
@@ -701,6 +704,7 @@ class Snapshot:
     plan_window_text: str = ""
     plan_window_open: bool = False
     plan_next_compound: str = ""
+    plan_sc_compound: str = ""
     # Engine sets these from pit exit until the out lap ends.
     stop_plan: str = ""
     stop_expected_compound: str = ""
@@ -1782,8 +1786,17 @@ class SessionState:
             self.sc_ending = False
         if car.grid_position and not self.grid_position:
             self.grid_position = car.grid_position
+        # The game holds the lap counter at the flag, so the final lap closes one tick later.
+        counted_lap = car.current_lap_num
+        if (
+            self._kind() == "race"
+            and car.result_status == 3
+            and self.total_laps > 0
+            and car.current_lap_num == self.total_laps
+        ):
+            counted_lap += 1
         summary = self.lap_acc.update(
-            current_lap_num=car.current_lap_num,
+            current_lap_num=counted_lap,
             last_lap_time_ms=car.last_lap_time_ms,
             sector1_ms=car.sector1_ms,
             sector2_ms=car.sector2_ms,
@@ -2051,7 +2064,7 @@ class SessionState:
         elif pkt.code == "SCAR":
             if isinstance(pkt.detail, dict):
                 # event_type: 0 deployed, 1 returning (SC in / VSC ending), 2 returned, 3 resume
-                self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2)
+                self.sc_ending = int(pkt.detail.get("event_type", 0)) in (1, 2, 3)
         elif pkt.code == "PENA":
             if isinstance(pkt.detail, dict):
                 ptype = int(pkt.detail.get("penalty_type", 0))
@@ -3454,6 +3467,7 @@ class SessionState:
             plan_window_text=model.plan_window_text,
             plan_window_open=model.plan_window_open,
             plan_next_compound=model.plan_next_compound,
+            plan_sc_compound=model.plan_sc_compound,
             plan_off_s=model.plan_off_s,
             plan_off_prob=model.plan_off_prob,
             plan_delta_sd_s=model.plan_delta_sd_s,

@@ -732,11 +732,13 @@
     var ap = activePlan(s), lapNow = p.lap_num || 0, win = ap && ap.window;
     var inRacePit = !!(p.pit_board && !p.pit_board.show_release && p.phase !== "garage");
     var boxNow = !!(s && ((win && lapNow >= win[0] && lapNow <= win[1]) ||
-      (s.plans || []).some(function (x) { return x.kind === "reactive" && scLive; })));
+      (s.plans || []).some(function (x) {
+        return x.kind === "reactive" && scLive && planStopDue(x, lapNow);
+      })));
     renderBox(p, s, ap, inRacePit, boxNow);
     renderReplyCard();
     renderBattle(s, p.position);
-    renderPlans(s, scLive);
+    renderPlans(s, scLive, lapNow);
     renderInfo(s, t);
   }
 
@@ -845,7 +847,7 @@
 
   // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
   // Under live SC/VSC plan C comes first with an amber border. The active plan keeps its thick border.
-  function renderPlans(s, scLive) {
+  function renderPlans(s, scLive, lapNow) {
     var box = el("plans");
     if (!box) return;
     box.innerHTML = "";
@@ -854,13 +856,16 @@
     var normal = all.filter(function (pl) { return pl.kind !== "reactive"; });
     var plans = react.concat(normal);
     var focusReactive = scLive && react.length > 0;
+    var ladder = s && s.sc_ladder && scLive ? ladderCard(s.sc_ladder) : null;
+    if (ladder && s.sc_ladder.headline) box.appendChild(node("card", [span(s.sc_ladder.headline, "big")]));
     if (!plans.length) {
       box.appendChild(node("card dim1", [s ? s.stint_plan || "no stop planned" : "--"]));
+      if (ladder) box.appendChild(ladder);
       return;
     }
     var ap = activePlan(s);
     plans.forEach(function (pl) {
-      if (pl.kind === "reactive") {
+      if (pl.kind === "reactive" && planStopDue(pl, lapNow)) {
         var saving = typeof pl.delta_s === "number" && pl.delta_s < 0;
         box.appendChild(node("card plan" + (focusReactive ? " focus" : ""), [
           node("row", [
@@ -913,12 +918,36 @@
     if (!ap && (hasExit || hasUc)) {
       box.appendChild(node("card dim1 row", [icon("exit", "i s"), exitNode(s.pit_exit), span("", "sp")].concat(ucOcNodes(s))));
     }
+    if (ladder) box.appendChild(ladder);
+  }
+
+  // Shadow SC verdict (docs/27): one row per compound with life, need and margin in laps. No pick is shown.
+  function ladderCard(l) {
+    return node("card ladder", (l.rows || []).map(function (r) {
+      var life = typeof r.life === "number" ? Math.floor(r.life) : null;
+      var need = typeof r.need === "number" ? Math.ceil(r.need) : null;
+      var margin = life === null || need === null ? null : life - need;
+      var nums = r.no_set ? [span("NO SET", "tagw")] :
+        margin === null ? [span("--", "dim1")] : [
+          span("life " + life, "mid"), span("need " + need, "mid"),
+          span((margin >= 0 ? "+" : "-") + Math.abs(margin), "mid" + (r.survives ? "" : " warn"))
+        ];
+      return node("row sub" + (r.no_set ? " dim1" : ""), [compChip(r.compound)].concat(nums, [
+        span("", "sp"), r.current ? span("ON CAR", "tagw") : null
+      ]));
+    }));
   }
 
   function activePlan(s) {
     var ps = s && s.plans ? s.plans : [];
     for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
     return null;
+  }
+
+  // Plan C's BOX NOW card needs a stop due this lap; a finished Plan C or one
+  // whose next stop is later renders through the normal plan rows.
+  function planStopDue(pl, lapNow) {
+    return pl.stops > 0 && (pl.stop_laps || []).length > 0 && pl.stop_laps[0] <= lapNow;
   }
 
   function span(txt, cls, tag) {

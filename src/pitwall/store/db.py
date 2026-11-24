@@ -1071,6 +1071,12 @@ class Database:
             "SELECT * FROM outcomes WHERE session_uid=? ORDER BY lap, id", (_uid_to_sql(uid),)
         )
 
+    def outcome_label_counts(self, metric: str) -> dict[str, int]:
+        rows = self._rows(
+            "SELECT label, COUNT(*) AS n FROM outcomes WHERE metric=? GROUP BY label", (metric,)
+        )
+        return {str(r["label"]): int(r["n"]) for r in rows}
+
     def all_outcomes(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM outcomes ORDER BY session_uid, lap, id", ())
 

@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from pitwall.config.thresholds import threshold as _f
 from pitwall.model.deg import DegFit, cliff_age
 from pitwall.model.driver import NEUTRAL, DriverScale, is_aggressive_mode
+from pitwall.strategy.plans import WORDS
 from pitwall.strategy.rejoin import FieldCar, Rejoin, rejoin_position
+from pitwall.strategy.scverdict import ScVerdict
 
 AGGRESSIVE_PLANS = ("undercut", "overcut", "cover", "defend")
 
@@ -137,6 +139,7 @@ def optimise(
     teammate_pitting: bool = False,
     damage_pace_ms: float = 0.0,
     field: Sequence[FieldCar] = (),
+    sc_verdict: ScVerdict | None = None,
 ) -> PitPlan:
     if laps_remaining <= 0 or pit_loss_s <= 0:
         return NO_PLAN
@@ -344,24 +347,31 @@ def optimise(
             traffic_penalties_s=tuple(traffic_penalties),
         )
 
-    if (
-        sc_status != 0
-        and (
-            wear_mean >= _f(mode, "sc_stop_min_wear_pct", 35)
-            or (stop_owed and window[0] <= lap_num <= window[1])
-            or (stop_owed and green_pit_loss_s - pit_loss_s > projections[0][1] - best_delta)
-        )
-        and laps_remaining > _f(th, "sc_stop_min_laps_left", 3)
-        and (stack_s == 0 or green_pit_loss_s - pit_loss_s - stack_s > 0)
-    ):
-        # Measured wear plus the neutralised pit loss decide this, not the deg fit.
+    if sc_status != 0 and sc_verdict is not None and sc_verdict.pick:
+        name = f"{WORDS[sc_verdict.pick].capitalize()}s"
+        if sc_verdict.to_flag:
+            survival = next(
+                r.survival
+                for r in sc_verdict.rows
+                if r.compound == sc_verdict.pick and not r.current
+            )
+            return plan(
+                "cheap_stop",
+                lap_num,
+                sc_verdict.saving_s,
+                f"{name} to the flag",
+                confidence=survival,
+            )
         return plan(
             "cheap_stop",
             lap_num,
-            green_pit_loss_s - pit_loss_s - stack_s,
-            "Cheap stop under the safety car",
+            sc_verdict.saving_s,
+            f"{name}, two stops",
             confidence=PIT_LOSS_CONF.get(pit_loss_source, 0.6),
         )
+    if sc_status != 0 and sc_verdict is not None and damage_pace_ms <= 0:
+        reason = sc_verdict.reason
+        return plan("stay", 0, 0.0, reason[:1].upper() + reason[1:], risky=False)
     # Staying out beats every stop inside the horizon and the tyre lasts.
     if best_delta >= 0 and not stop_mandatory and laps_of_pace >= laps_remaining:
         return plan("no_stop", 0, -best_delta, "Tyres make the end")

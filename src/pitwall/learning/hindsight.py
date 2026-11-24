@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from statistics import median
 from typing import Any
 
 from pitwall.config.thresholds import threshold as _th
@@ -411,9 +412,158 @@ def grade_session(
                 f"plan {ev.get('to_plan')} {'-'.join(seq)}, ran {'-'.join(run_seq)}",
             )
         )
+    out.extend(_grade_sc_verdicts(db, uid, laps, stops, parts, finished, th))
     from pitwall.setup.grade import grade_setup_recs
 
     out.extend(grade_setup_recs(db, uid, th, _setup_rules(setup_rules)))
+    return out
+
+
+WET_VISUALS = (7, 8)
+SC_DAMAGE_RULES = ("front_wing_damage", "front_wing_lost_box", "puncture")
+SC_PENALTY_RULES = ("penalty_served_stop_go",)
+
+
+def _grade_sc_verdicts(
+    db: Database,
+    uid: int,
+    laps: Sequence[LapRow],
+    stops: Sequence[int],
+    parts: Sequence[Sequence[LapRow]],
+    finished: bool,
+    th: Mapping[str, object],
+) -> list[Outcome]:
+    """Grade one shadow sc_verdict ladder row per SC/VSC period (docs/27
+    phase 2): the fitted compound's fresh-set row after an SC stop, else the
+    current set's row."""
+    calls = db.calls_for_session(uid)
+    records = sorted(
+        (c for c in calls if c.get("rule_id") == "sc_verdict"),
+        key=lambda c: int(c.get("lap") or 0),
+    )
+    periods: list[list[dict[str, Any]]] = []
+    for rec in records:
+        if periods and int(rec.get("lap") or 0) <= int(periods[-1][-1].get("lap") or 0) + 1:
+            periods[-1].append(rec)
+        else:
+            periods.append([rec])
+    by_lap = {lap.lap_num: lap for lap in laps}
+
+    def visual(stint: Sequence[LapRow]) -> int:
+        return stint[0].visual or stint[0].compound
+
+    def neutralised(stop: int) -> bool:
+        return any(
+            x is not None and x.sc_status in (1, 2)
+            for x in (by_lap.get(stop), by_lap.get(stop + 1))
+        )
+
+    def called(rules: Sequence[str], lo: int, hi: int) -> bool:
+        return any(c.get("rule_id") in rules and lo < int(c.get("lap") or 0) <= hi for c in calls)
+
+    out: list[Outcome] = []
+    for period in periods:
+        first, last = int(period[0].get("lap") or 0), int(period[-1].get("lap") or 0)
+        sc_stop = next((s for s in stops if first <= s <= last), None)
+        if sc_stop is not None:
+            rec = [r for r in period if int(r.get("lap") or 0) <= sc_stop][-1]
+            i = stops.index(sc_stop) + 1
+        else:
+            rec = period[-1]
+            i = next((k for k, p in enumerate(parts) if p[-1].lap_num >= last), len(parts) - 1)
+        lap_n = int(rec.get("lap") or 0)
+        cid = str(rec.get("call_id") or f"sc_verdict:{lap_n}")
+        raw = rec.get("inputs")
+        inputs: dict[str, Any] = json.loads(raw) if isinstance(raw, str) else {}
+        ladder = [r for r in inputs.get("ladder") or [] if isinstance(r, dict)]
+        if i >= len(parts):
+            out.append(Outcome(cid, "sc_verdict", lap_n, "sc_row", None, None, None, NA, "no laps"))
+            continue
+        fitted = visual(parts[i])
+        want_current = sc_stop is None
+        row = next(
+            (
+                r
+                for r in ladder
+                if r.get("compound") == fitted and bool(r.get("current")) == want_current
+            ),
+            None,
+        )
+        name = LETTERS.get(fitted, "?")
+        if row is None:
+            out.append(
+                Outcome(cid, "sc_verdict", lap_n, "sc_row", None, None, None, NA, f"no {name} row")
+            )
+            continue
+        survives = bool(row.get("survives"))
+        said = "survives" if survives else "does not survive"
+        pct = row.get("survival")
+        if isinstance(pct, (int, float)) and not isinstance(pct, bool):
+            said += f" ({round(100 * pct)}%)"
+        predicted = 1.0 if survives else 0.0
+        later = stops[i] if i < len(stops) else None
+        why = ""
+        damaged = False
+        if later is None and not finished:
+            why = "no finish"
+        elif later is not None:
+            dry = {visual(p) for p in parts[: i + 1] if visual(p) not in WET_VISUALS}
+            if i + 1 < len(parts) and visual(parts[i + 1]) in WET_VISUALS:
+                why = f"rain stop L{later}"
+            elif neutralised(later):
+                why = f"second SC stop L{later}"
+            elif called(SC_DAMAGE_RULES, lap_n, later):
+                if survives:
+                    why = f"damage stop L{later}"
+                else:
+                    damaged = True
+            elif called(SC_PENALTY_RULES, later - 1, later + 1):
+                why = f"penalty stop L{later}"
+            elif len(dry) < 2:
+                why = f"owed second compound, stop L{later}"
+        if why:
+            out.append(
+                Outcome(
+                    cid,
+                    "sc_verdict",
+                    lap_n,
+                    "sc_row",
+                    predicted,
+                    None,
+                    None,
+                    CENSORED,
+                    f"{name} row L{lap_n} {said}, {why}",
+                )
+            )
+            continue
+        ran = later is None
+        result = "reached the flag" if ran else f"stopped for tyres L{later}"
+        if damaged:
+            result = f"damage stop L{later}"
+        actual = 1.0 if ran else 0.0
+        label = GOOD if survives == ran else WRONG
+        if ran:
+            green = [lap for lap in parts[i] if lap.valid and lap.sc_status not in (1, 2)]
+            if len(green) >= 6:
+                times = [lap.lap_time_ms for lap in green]
+                loss_ms = median(times[-3:]) - median(times[:3])
+                has_pace = loss_ms < _th(th, "tyre_cliff_ms", 1500)
+                actual = 1.0 if has_pace else 0.0
+                label = GOOD if survives == has_pace else WRONG
+                result = f"reached the flag, lost {loss_ms / 1000:.1f} s of pace"
+        out.append(
+            Outcome(
+                cid,
+                "sc_verdict",
+                lap_n,
+                "sc_row",
+                predicted,
+                actual,
+                None,
+                label,
+                f"{name} row L{lap_n} {said}, {result}",
+            )
+        )
     return out
 
 

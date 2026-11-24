@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING, Any
 
 from pitwall.audio.decision_log import DecisionLog
 from pitwall.audio.dispatcher import Call, Dispatcher
-from pitwall.audio.speaker import STARTUP_LINES, STARTUP_PRIORITY, Speaker, WarmableSpeaker
+from pitwall.audio.gpu import gpu_status
+from pitwall.audio.speaker import (
+    STARTUP_LINES,
+    STARTUP_PRIORITY,
+    HealthSpeaker,
+    Speaker,
+    WarmableSpeaker,
+)
 from pitwall.cli.common import _folder_link
 from pitwall.clock import WallClock
 from pitwall.config.loader import ConfigStore
@@ -57,6 +64,27 @@ _BANNER_GROUPS = {
     "learning": 2,
     "pitwall": 2,
 }
+
+
+def _speech_line(health: dict[str, Any], tts_p99_ms: float, gpu: str | None) -> str:
+    breaker = "open" if health.get("breaker_open", False) else "closed"
+    line = (
+        f"speech: {health.get('engine', '?')}, handoff to playback p99 {tts_p99_ms:.0f} ms, "
+        f"slow {health.get('slow_renders', 0)}, "
+        f"timeouts {health.get('render_timeouts', 0)}, "
+        f"failures {health.get('render_failures', 0)}, "
+        f"provisional {health.get('provisional_plays', 0)}, "
+        f"dropped {health.get('dropped', 0)}, "
+        f"breaker {breaker}"
+    )
+    return line if gpu is None else f"{line}, {gpu}"
+
+
+def _print_speech_line(health: dict[str, Any], tts_p99_ms: float) -> None:
+    def report() -> None:
+        print(_speech_line(health, tts_p99_ms, gpu_status()), flush=True)
+
+    threading.Thread(target=report, daemon=True, name="speech-diagnostic").start()
 
 
 def _driver_rating_text(db: Database, th: Mapping[str, object], track_id: int | None = None) -> str:
@@ -561,6 +589,8 @@ def cmd_start(args: argparse.Namespace) -> int:
             f"rss {summary['process']['rss_mb']:.0f} MB",
             flush=True,
         )
+        if isinstance(speaker, HealthSpeaker):
+            _print_speech_line(speaker.health(), summary["tts_ms"]["p99"])
 
     state.session_end_listeners.append(_log_budget_metrics)
     if recorder is not None:
