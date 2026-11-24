@@ -300,17 +300,33 @@ def derive(inp: PlanInputs, th: Mapping[str, object]) -> list[PlanEval]:
     )
 
 
+def _fresh_stints(seq: tuple[int, ...], fresh_sets: Mapping[int, int]) -> bool:
+    """Every stint after the fitted set needs a wear == 0 set; repeats
+    count against the fresh count. -1 or a missing compound is unknown
+    and does not filter."""
+    tail = seq[1:]
+    for c in set(tail):
+        left = fresh_sets.get(c, -1)
+        if left >= 0 and tail.count(c) > left:
+            return False
+    return True
+
+
 def reactive(
     inp: PlanInputs,
     th: Mapping[str, object],
     *,
     min_stops: int = 1,
-    no_fresh_first: frozenset[int] = frozenset(),
+    fresh_sets: Mapping[int, int] | None = None,
 ) -> PlanEval | None:
-    """Plan C: box this lap under SC/VSC at the neutralised loss."""
+    """Plan C: box this lap under SC/VSC at the neutralised loss. With
+    `fresh_sets`, each future stint needs a fresh set; without it the
+    `CompoundModel.sets` contract applies."""
     best: PlanEval | None = None
     for seq in _sequences(inp, th):
-        if len(seq) < min_stops + 1 or seq[1] in no_fresh_first:
+        if len(seq) < min_stops + 1 or (
+            fresh_sets is not None and not _fresh_stints(seq, fresh_sets)
+        ):
             continue
         e = evaluate(inp, seq, th, stop_now=True, first_loss_s=inp.sc_loss_s)
         if e is not None and (best is None or e.race_time_s < best.race_time_s):

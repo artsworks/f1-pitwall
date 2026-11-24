@@ -203,8 +203,7 @@ def sc_verdict(
     two_stop = None
     if can_stop and not legal_stay and not eligible:
         best_one = min((e.race_time_s for e in derive(inp, th)), default=math.inf)
-        no_fresh = frozenset(c for c in DRY if fresh_sets.get(c, -1) == 0)
-        two_stop = reactive(inp, th, min_stops=2, no_fresh_first=no_fresh)
+        two_stop = reactive(inp, th, min_stops=2, fresh_sets=fresh_sets)
         if two_stop is not None and two_stop.race_time_s >= best_one:
             two_stop = None
     sequence: tuple[int, ...] = ()

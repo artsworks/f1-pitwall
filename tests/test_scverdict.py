@@ -258,6 +258,29 @@ def test_two_stop_runs_when_only_survivor_has_no_fresh_sets() -> None:
     assert "two stops" in v.reason
 
 
+def test_two_stop_needs_a_fresh_set_for_each_stint() -> None:
+    # The hards survive to the flag on paper but have no fresh set; the
+    # softs fall short alone yet two soft stints would cover the race.
+    # Only one soft set is fresh, so the second stint would run worn.
+    compounds = (
+        CompoundModel(S, 89_600.0, 100.0, 2, usable_life_laps=12),
+        CompoundModel(M, 90_000.0, 100.0, 0, usable_life_laps=12),
+        CompoundModel(H, 90_400.0, 60.0, 1, usable_life_laps=23),
+    )
+    inp = inputs(laps_remaining=20, cur=fit(700.0), cur_cliff_age=2.0, compounds=compounds)
+    kw = dict(
+        usable_life={S: 12, M: 12, H: 23},
+        cur_wear_pct=60.0,
+    )
+    v = verdict(inp, fresh_sets={S: 1, M: 0, H: 0}, **kw)
+    assert v.pick == 0
+    assert v.sequence == ()
+    assert v.reason == "stay out, survivors have no legal stop"
+    # Two fresh soft sets make the same two-stop legal again.
+    stocked = verdict(inp, fresh_sets={S: 2, M: 0, H: 0}, **kw)
+    assert stocked.sequence == (M, S, S)
+
+
 def _engine(tmp_path, db=None):
     return build_engine(
         isolated=True,
