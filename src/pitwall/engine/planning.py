@@ -587,18 +587,26 @@ class Planner:
     def _pit_decision(self, snap: Snapshot, st: PlanState) -> PitDecision:
         """The lap's single pit decision (docs/27): the verdict's cheap stop or
         stay-out under SC/VSC, else the green-flag pit plan. Every pit rule
-        reads this one object through `pit_decision_key`."""
+        reads this one object through `pit_decision_key`. The rain hold applies
+        only when the final plan is the verdict's stay-out: optimise() yields
+        to the weather verdict on `damage_pace_ms <= 0`, so a damage repair
+        stop the optimiser still selects keeps its 'box' action."""
         active = st.active_plan
         compound = 0
         if snap.pit_plan == "cheap_stop" and snap.sc_verdict is not None:
             compound = snap.sc_verdict.pick
         elif active is not None and active.stops:
             compound = active.compounds[1]
+        verdict = snap.sc_verdict
         return decide(
             lap_num=snap.lap_num,
             pit_plan=snap.pit_plan,
             plan_lap=snap.pit_plan_lap,
-            sc_hold=snap.sc_verdict.hold if snap.sc_verdict is not None else False,
+            sc_hold=(
+                verdict.hold and snap.pit_plan == "stay" and self._damage_pace_ms <= 0
+                if verdict is not None
+                else False
+            ),
             compound=compound,
             reason=snap.pit_plan_reason,
             gain_s=snap.pit_plan_gain_s,
@@ -683,8 +691,10 @@ class Planner:
         """Places an SC stop this lap costs, for the verdict's position guard
         (docs/27 clash 7). The field projection gives the rejoin position; with
         rival data restricted the regain falls back to pace only and the loss
-        is one place when the stop costs more than the gap behind."""
-        if not snap.field_cars or snap.position <= 0:
+        is one place when the stop costs more than the gap behind. The
+        projection runs on road gaps: penalty seconds already sit in loss_s as
+        service time, so penalty-adjusted gaps would count them twice."""
+        if not snap.field_cars_road or snap.position <= 0:
             return None
         loss_s = (
             inp.sc_loss_s
@@ -696,7 +706,7 @@ class Planner:
             behind = snap.gap_behind_s
             return 1.0 if math.isfinite(behind) and behind < loss_s else 0.0
         rejoin = rejoin_position(
-            snap.field_cars,
+            snap.field_cars_road,
             k=0,
             our_lap_ms=lambda j: 0.0,
             pit_loss_s=loss_s,

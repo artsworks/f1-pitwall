@@ -60,11 +60,18 @@ def _race_time_s(c: Any, leader: Any, speed_mps: float, is_leader: bool) -> floa
 
 
 def race_time_gaps(
-    cars: Sequence[Any], player_idx: int, track_m: float, speed_mps: float
+    cars: Sequence[Any],
+    player_idx: int,
+    track_m: float,
+    speed_mps: float,
+    *,
+    include_penalties: bool = True,
 ) -> dict[int, float]:
     """Race-time gap of each classified car to the player, penalties included
     (negative = ahead). The same base as stop_adjusted_gaps without the
-    owed-stop pit-loss term."""
+    owed-stop pit-loss term. `include_penalties=False` drops both sides'
+    penalty seconds, leaving the road gap a physical rejoin is priced
+    against."""
     if not (0 <= player_idx < len(cars)):
         return {}
     me = cars[player_idx]
@@ -78,7 +85,9 @@ def race_time_gaps(
         )
     )
     leader = next((cars[i] for pos, i in road if pos == 1), me)
-    me_total = _race_time_s(me, leader, speed_mps, me.car_position == 1) + me.penalties
+    me_total = _race_time_s(me, leader, speed_mps, me.car_position == 1) + (
+        me.penalties if include_penalties else 0
+    )
     rel: dict[int, float] = {}
     for i, c in enumerate(cars):
         if (
@@ -89,7 +98,7 @@ def race_time_gaps(
         ):
             continue
         race_i = _race_time_s(c, leader, speed_mps, c.car_position == 1)
-        rel[i] = race_i + c.penalties - me_total
+        rel[i] = race_i + (c.penalties if include_penalties else 0) - me_total
     return rel
 
 

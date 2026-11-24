@@ -883,6 +883,11 @@ class Snapshot:
     # Rejoin projection input: every classified car within a lap of the player
     # (race-time gaps, no owed-stop adjustment).
     field_cars: tuple[FieldCar, ...] = ()
+    # The same field on road gaps, penalties excluded from both sides. The SC
+    # verdict's position guard prices a physical rejoin against the unadjusted
+    # road position, so penalty seconds must not sit in the gaps as well as in
+    # the stop cost.
+    field_cars_road: tuple[FieldCar, ...] = ()
 
     def age(self, packet_name: str) -> float:
         """Seconds since the named source packet last updated the snapshot."""
@@ -3617,6 +3622,7 @@ class SessionState:
 
         pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
         field_cars: tuple[FieldCar, ...] = ()
+        field_cars_road: tuple[FieldCar, ...] = ()
         if 0 <= self._player_idx < len(cars):
             owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
             stop_pit_s = pit_s
@@ -3640,14 +3646,29 @@ class SessionState:
             fresh = stop_adjusted_gaps(
                 cars, self._player_idx, self.track_length_m, ref_speed, owed, stop_pit_s
             )
+
+            def field_of(gaps: Mapping[int, float]) -> tuple[FieldCar, ...]:
+                return tuple(
+                    FieldCar(name_of(i), gap, pace_of(i), model.deg_ms_per_lap, i in pitted)
+                    for i, gap in gaps.items()
+                )
+
             # The field the optimiser projects rejoins against: raw race-time
             # gaps (penalties in, no owed-stop term), our deg slope as the
-            # rival estimate the undercut math already uses.
-            field_cars = tuple(
-                FieldCar(name_of(i), gap, pace_of(i), model.deg_ms_per_lap, i in pitted)
-                for i, gap in race_time_gaps(
-                    cars, self._player_idx, self.track_length_m, ref_speed
-                ).items()
+            # rival estimate the undercut math already uses. field_cars_road
+            # is the same field on road gaps for the SC verdict's position
+            # guard (Snapshot.field_cars_road).
+            field_cars = field_of(
+                race_time_gaps(cars, self._player_idx, self.track_length_m, ref_speed)
+            )
+            field_cars_road = field_of(
+                race_time_gaps(
+                    cars,
+                    self._player_idx,
+                    self.track_length_m,
+                    ref_speed,
+                    include_penalties=False,
+                )
             )
             player = cars[self._player_idx]
             player_history = self._histories.get(self._player_idx)
@@ -3881,6 +3902,7 @@ class SessionState:
             penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
             pit_exit_clean=release.clean,
             field_cars=field_cars,
+            field_cars_road=field_cars_road,
             drs_available=(
                 bool(self.overtake_active)
                 if self.regulations_2026

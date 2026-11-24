@@ -114,6 +114,26 @@ def test_stop_adjusted_gaps_and_neighbour_ties() -> None:
     assert true_neighbours({0: 0.0, 1: 0.0, 2: -1.0, 3: 1.0}, neighbours, 3) == (0, 1)
 
 
+def test_field_cars_road_drops_penalties_from_both_sides() -> None:
+    state = _session()
+    cars = (
+        _car(1, 0.0),
+        _car(2, 10.0, front_gap_s=10.0),
+        _car(3, 12.7, front_gap_s=2.7, penalties=4),
+        _car(4, 14.2, front_gap_s=1.5),
+        _car(5, 32.7, front_gap_s=18.5, penalties=2),
+    )
+    snap = _tick(state, cars)
+    field = {c.name: c.gap_s for c in snap.field_cars}
+    road = {c.name: c.gap_s for c in snap.field_cars_road}
+    # The player (HADJAR) carries 4 s and NORRIS 2 s: penalty-adjusted gaps
+    # move by the difference, road gaps leave both sides' seconds out.
+    assert field["VERSTAPPEN"] == pytest.approx(-16.7)
+    assert road["VERSTAPPEN"] == pytest.approx(-12.7)
+    assert field["NORRIS"] == pytest.approx(18.0)
+    assert road["NORRIS"] == pytest.approx(20.0)
+
+
 def test_piastri_stays_true_rival_through_pit_and_stale_history() -> None:
     state = _session()
     before = state.snapshot(811.0)

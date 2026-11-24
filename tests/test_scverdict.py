@@ -9,9 +9,10 @@ import pytest
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
 from pitwall.model.deg import DegFit
-from pitwall.state.session import Snapshot, TyreSet
+from pitwall.state.session import Damage, Snapshot, TyreSet
 from pitwall.store.db import Database
 from pitwall.strategy.plans import CompoundModel, PlanInputs
+from pitwall.strategy.rejoin import FieldCar
 from pitwall.strategy.scverdict import sc_verdict
 
 TH = ConfigStore().current().thresholds
@@ -731,6 +732,27 @@ def test_position_guard_needs_the_current_set_to_survive() -> None:
     assert v.pick == M
 
 
+def test_positions_lost_counts_the_penalty_once(tmp_path) -> None:
+    # P1 serving a 3 s penalty: the field's penalty-included gap to the car
+    # behind reads 10 s, its road gap 13 s. The stop costs 12 s (9 s SC loss
+    # + 3 s service) plus the 0.8 s warm-up, so the lead survives on road
+    # gaps; penalty-adjusted gaps would count the penalty twice and report a
+    # lost place.
+    engine = _engine(tmp_path, Database(":memory:"))
+    snap = _sc_snap(
+        position=1,
+        penalty_s=3,
+        field_cars=(FieldCar("RIVAL", 10.0, 90_000, 100.0, False),),
+        field_cars_road=(FieldCar("RIVAL", 13.0, 90_000, 100.0, False),),
+    )
+    inp = dataclasses.replace(inputs(), sc_loss_s=9.0)
+    assert engine.planner._positions_lost(snap, inp, 3.0, 0.0) == 0.0
+    # The same projection on penalty-adjusted gaps does lose the place, which
+    # is the double count the road gaps remove.
+    double = dataclasses.replace(snap, field_cars_road=snap.field_cars)
+    assert engine.planner._positions_lost(double, inp, 3.0, 0.0) == 1.0
+
+
 def test_damage_stop_beats_the_faster_current_set() -> None:
     # The worn current set survives and is quicker on paper, but damage pace
     # sits outside the tyre model: the stop still goes ahead (docs/27 clash 12).
@@ -769,6 +791,40 @@ def test_pit_decision_folds_the_verdict_and_cancels_before_commit(
     # no cancel: the driver can no longer act, so it is guidance only.
     committed = planner._plan(_sc_snap(now=4.0, penalty_s=60.0, pit_entry_passed=True))
     assert committed.pit_cancel == ""
+
+
+def test_rain_hold_keeps_an_announced_damage_stop(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rain due under SC holds the tyre verdict, but damage pace overrides it
+    # in optimise(): the final plan still says box for the repair. The shared
+    # decision must follow that plan, so no 'Hold for rain' cancel reaches
+    # the driver for a stop the strategy still recommends.
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    monkeypatch.setattr(planner, "_box_call_spoken", lambda snap: True)
+    wing = Damage(front_left_wing=40, front_right_wing=40)
+
+    box = planner._plan(_sc_snap(damage=wing))
+    assert box.pit_decision is not None and box.pit_decision.action == "box"
+
+    held = planner._plan(
+        _sc_snap(
+            now=4.0,
+            lap_num=4,
+            laps_remaining=10,
+            tyre_age_laps=3,
+            damage=wing,
+            weather_crossover="to_inter",
+        )
+    )
+    assert held.sc_verdict is not None and held.sc_verdict.hold
+    assert held.pit_plan == "box_now"
+    assert held.pit_decision is not None and held.pit_decision.action == "box"
+    assert held.pit_cancel == ""
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(held).candidates}
+    assert "pit_cancel_box" not in fired
+    assert "box_now" in fired
 
 
 def test_pit_cancel_needs_the_box_call_to_have_been_out(tmp_path) -> None:
