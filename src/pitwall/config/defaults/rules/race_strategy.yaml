@@ -213,7 +213,7 @@ rules:
     suppress_when: {in_lap: "phase == 'in_lap'"}
     clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
     still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
-    unchanged: [plan_sc_compound]
+    unchanged: [plan_sc_compound, pit_decision_key]
     cooldown_s: 45
     cooldown_group: pit
     requires: [lap_data, car_status]
@@ -238,7 +238,7 @@ rules:
     when: "phase in ('sc', 'vsc') and active_plan == 'C' and plan_switch_reason == 'sc' and plan_switch_lap == lap_num and laps_remaining > th.pit_min_laps_left"
     clear_when: "active_plan != 'C' or plan_switch_lap != lap_num"
     still_true: "phase in ('sc', 'vsc') and active_plan == 'C'"
-    unchanged: [plan_sc_compound]
+    unchanged: [plan_sc_compound, pit_decision_key]
     rearm_on_change: [plan_sc_compound]
     cooldown_s: 45
     cooldown_group: pit
@@ -257,18 +257,40 @@ rules:
       - "Understood, staying out. Plan {plan_switched_from} stays open"
       - "Copy, stay out. Plan {plan_switched_from} remains open"
   # The safety-car verdict says stay out. Armed once per SC period (clear_when on green).
+  # decision_point + unchanged key give it the same one-instruction-per-decision
+  # behaviour as the box calls: a queued stay dies when the verdict flips to box.
   - id: sc_stay_out
     sessions: [race]
     priority: 1
     urgency: execution
+    decision_point: pit_entry
     when: "phase in ('sc', 'vsc') and sc_call == 'stay' and pit_status == 0"
     clear_when: "phase not in ('sc', 'vsc')"
+    unchanged: [pit_decision_key]
     cooldown_s: 120
     requires: [lap_data]
     say:
       - "Stay out, stay out. No stop"
       - "Stay out. We are not stopping"
       - "No stop, stay out. Stay out"
+  # Cancel-before-commit (docs/27): the pit decision flipped from a stop to
+  # stay/later while the driver can still act. pit_cancel is empty once the
+  # commitment point passes or a new stop is planned.
+  - id: pit_cancel_box
+    sessions: [race]
+    priority: 1
+    urgency: execution
+    conflict_group: pit_or_stay
+    when: "phase in ('racing', 'sc', 'vsc', 'in_lap') and pit_cancel"
+    clear_when: "not pit_cancel"
+    still_true: "pit_cancel"
+    unchanged: [pit_decision_key, pit_cancel]
+    cooldown_s: 30
+    requires: [lap_data]
+    say:
+      - "Cancel box. {pit_cancel}"
+      - "Cancel that. {pit_cancel}"
+      - "Disregard the stop. {pit_cancel}"
   # The game sends no teammate pit plan, so this uses teammate LapData.
   - id: double_stack
     sessions: [race]
@@ -306,6 +328,7 @@ rules:
     when: "phase == 'racing' and pit_plan == 'box_in_n' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_gain_s >= mode.pit_gain_min_s"
     clear_when: "pit_plan != 'box_in_n'"
     still_true: "pit_plan == 'box_in_n'"
+    unchanged: [pit_decision_key]
     cooldown_s: 60
     cooldown_group: pit_forecast
     requires: [lap_data, car_status]
@@ -344,6 +367,7 @@ rules:
     when: "phase == 'racing' and pit_plan == 'cover' and pit_plan_confidence >= mode.pit_confidence_min and pit_plan_risk <= mode.position_loss_risk_max and laps_remaining > th.pit_min_laps_left"
     clear_when: "phase != 'racing' or pit_plan != 'cover'"
     still_true: "phase == 'racing' and pit_plan == 'cover'"
+    unchanged: [pit_decision_key]
     cooldown_s: 45
     cooldown_group: pit
     requires: [lap_data, car_status]

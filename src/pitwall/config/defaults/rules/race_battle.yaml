@@ -10,6 +10,7 @@ rules:
     urgency: tactical
     when: "phase == 'racing' and sector == 1 and battle_mode == 'catching' and battle_catch_laps < laps_remaining"
     clear_when: "sector != 1"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 90
     cooldown_group: battle_ahead
     requires: [lap_data]
@@ -47,6 +48,7 @@ rules:
     when: "phase == 'racing' and sector == 1 and battle_mode == 'attacking' and battle_attack_pass_prob >= th.battle_attack_prob_min"
     clear_when: "sector != 1"
     still_true: "battle_mode == 'attacking' and battle_attack_pass_prob >= th.battle_attack_prob_min"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 60
     cooldown_group: battle_ahead
     conflict_group: battle_call
@@ -163,6 +165,7 @@ rules:
     urgency: tactical
     when: "phase == 'racing' and sector == 1 and battle_mode == 'under_threat' and battle_threat_laps < laps_remaining"
     clear_when: "sector != 1"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 120
     cooldown_group: battle_behind
     requires: [lap_data]

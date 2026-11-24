@@ -171,7 +171,7 @@ def test_mid_lap_verdict_change_refreshes_without_extra_log(tmp_path) -> None:
 
     first = planner._plan(_sc_snap())
     assert first.sc_verdict is not None
-    assert first.sc_verdict.hold is False and first.sc_verdict.pick == H
+    assert first.sc_verdict.hold is False and first.sc_verdict.pick == S
 
     rain = planner._plan(_sc_snap(weather_crossover="to_inter"))
     assert rain.sc_verdict is not first.sc_verdict
@@ -183,7 +183,7 @@ def test_mid_lap_verdict_change_refreshes_without_extra_log(tmp_path) -> None:
 
     back = planner._plan(_sc_snap(weather_crossover="", penalty_s=0))
     assert back.sc_verdict is not rain.sc_verdict
-    assert back.sc_verdict.hold is False and back.sc_verdict.pick == H
+    assert back.sc_verdict.hold is False and back.sc_verdict.pick == S
 
     penalised = planner._plan(_sc_snap(weather_crossover="", penalty_s=30))
     assert penalised.sc_verdict.pick == 0

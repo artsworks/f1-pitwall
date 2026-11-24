@@ -167,6 +167,7 @@ def test_fuel_target(margin, lap, rule_id):
             fuel_per_lap_kg=2.0,
             energy_mode="over",
             energy_lap_delta_mj=0.3,
+            fuel_saving_active=margin < 0,
         ),
     )
     call = _call(_rules(rule_id), snapshot, rule_id)
@@ -231,7 +232,7 @@ def test_fuel_short_is_silent_on_laps_one_and_two(lap, fires):
         {},
         {},
         lap=lap,
-        model=ModelView(fuel_margin_laps=-0.8, fuel_per_lap_kg=1.04),
+        model=ModelView(fuel_margin_laps=-0.8, fuel_per_lap_kg=1.04, fuel_saving_active=True),
     )
     call = _call(_rules("fuel_short"), snapshot, "fuel_short")
     assert (call is not None) is fires

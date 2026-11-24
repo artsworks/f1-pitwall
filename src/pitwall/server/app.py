@@ -292,6 +292,11 @@ def _sc_ladder(verdict: ScVerdict | None, call: str) -> dict[str, Any] | None:
     return {
         "headline": headline,
         "need": _finite(verdict.laps_needed),
+        "hold": verdict.hold,
+        "penalty_s": _finite(verdict.penalty_s),
+        "net_positions": _finite(verdict.net_positions)
+        if verdict.net_positions is not None
+        else None,
         "rows": [
             {
                 "compound": _compound(row.compound),

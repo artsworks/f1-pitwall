@@ -9,7 +9,7 @@ from statistics import median
 from typing import Any
 
 from pitwall.engine.context import EngineContext
-from pitwall.model.budget import EnergyBudget, energy_budget, fuel_budget
+from pitwall.model.budget import EnergyBudget, FuelBudget, energy_budget, fuel_budget
 from pitwall.model.deg import (
     DEG_FUEL_REF,
     DegFit,
@@ -206,6 +206,7 @@ class SessionModel:
         self._run_fuel_seq = ctx.state.run_seq
         self._run_fuel_deltas: list[tuple[float, float]] = []
         self._run_fuel_last_kg: float | None = None
+        self._fuel_intervention = False
         self._stint_fuel_ref_laps = 0.0
         self._model_key: tuple[int | None, int, int, int] | None = None
         self._fuel_prior = Prior(0.0, 0.0, "default")
@@ -223,6 +224,7 @@ class SessionModel:
         self._run_fuel_seq = self.ctx.state.run_seq
         self._run_fuel_deltas = []
         self._run_fuel_last_kg = None
+        self._fuel_intervention = False
         self._battle_rates = None
         self._stint_wear0 = ()
         self._stint_compound0 = -1
@@ -369,6 +371,18 @@ class SessionModel:
             if 0.2 <= per_lap <= 5.0:
                 return per_lap, "mfd"
         return self._fuel_prior.value, self._fuel_prior.source
+
+    def _update_fuel_intervention(self, fb: FuelBudget | None) -> None:
+        """Lift-and-coast intervention latch (docs/18). Arms on any projected
+        deficit and stays armed while the deficit persists or while the
+        recovery is only an estimate: it clears solely when this session's
+        measured burn ('session' source) covers the remaining laps."""
+        margin = fb.margin_laps if fb is not None else math.inf
+        if not self._fuel_intervention:
+            if margin < 0:
+                self._fuel_intervention = True
+        elif fb is not None and fb.source == "session" and margin >= 0:
+            self._fuel_intervention = False
 
     def _weekend_fuel_prior(self, track_id: int) -> Prior | None:
         """Burn per lap of this weekend's earlier practice and Sprint stints, lap-weighted."""
@@ -721,13 +735,14 @@ class SessionModel:
             self._stint_wear0 = wear
             self._stint_age0 = age + self._lap_fraction()
             self._stint_compound0 = state.tyre_compound
-        lop = corner_wear_life(
+        wear_life = corner_wear_life(
             wear,
             self._stint_wear0,
             age + self._lap_fraction() - self._stint_age0,
             wear_cliff_pct=self.ctx.th("wear_cliff_pct", 70),
             default_rate_pct=self._wear_per_lap,
         )
+        lop = wear_life
         predicted = 0
         pace_forecast = 0
         if fit is not None:
@@ -767,6 +782,7 @@ class SessionModel:
             )
         eb = self.ctx.energy_budget
         fb = self.ctx.fuel_budget
+        self._update_fuel_intervention(fb)
         state.set_model(
             ModelView(
                 driver_rating=self.ctx.driver_rating[0],
@@ -778,6 +794,7 @@ class SessionModel:
                 base_pace_ms=fit.base_ms if fit is not None else 0.0,
                 laps_of_pace=lop,
                 wear_per_lap_pct=self._wear_per_lap,
+                tyre_wear_life_laps=wear_life,
                 pit_loss_s=(
                     self.ctx.pit_loss_prior.value / 1000.0
                     if self.ctx.pit_loss_prior is not None
@@ -797,6 +814,7 @@ class SessionModel:
                 ),
                 run_fuel_laps=len(self._run_fuel_deltas),
                 fuel_source=fb.source if fb is not None else "",
+                fuel_saving_active=self._fuel_intervention,
                 energy_per_lap_mj=eb.per_lap_j / 1e6 if eb is not None else 0.0,
                 energy_lap_delta_mj=eb.lap_delta_j / 1e6 if eb is not None else 0.0,
                 energy_prev_lap_delta_mj=(
