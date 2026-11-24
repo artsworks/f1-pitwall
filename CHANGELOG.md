@@ -13,6 +13,41 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.63.0 (2026-11-24)
+
+### Bug Fixes
+
+- **engine**: Count stop penalties once in the SC position guard
+  ([#200](https://github.com/artsworks/f1-pitwall/pull/200),
+  [`bd82e14`](https://github.com/artsworks/f1-pitwall/commit/bd82e1406376fb303fdd5a0e934410b85e4cb696))
+
+- **web**: Release empty radio metadata space
+  ([#199](https://github.com/artsworks/f1-pitwall/pull/199),
+  [`661474c`](https://github.com/artsworks/f1-pitwall/commit/661474cdc2cc05bef8edf69c38505c10a1a2b18e))
+
+- **web**: Retain tyre and menu space on short displays
+  ([#199](https://github.com/artsworks/f1-pitwall/pull/199),
+  [`661474c`](https://github.com/artsworks/f1-pitwall/commit/661474cdc2cc05bef8edf69c38505c10a1a2b18e))
+
+### Chores
+
+- **web**: SWF(polish) refine dashboard radio and car readability
+  ([#199](https://github.com/artsworks/f1-pitwall/pull/199),
+  [`661474c`](https://github.com/artsworks/f1-pitwall/commit/661474cdc2cc05bef8edf69c38505c10a1a2b18e))
+
+### Code Style
+
+- **web**: Refine dashboard radio and labelled car cards
+  ([#199](https://github.com/artsworks/f1-pitwall/pull/199),
+  [`661474c`](https://github.com/artsworks/f1-pitwall/commit/661474cdc2cc05bef8edf69c38505c10a1a2b18e))
+
+### Features
+
+- Shared pit decision with cancel semantics and fuel finish guard
+  ([#200](https://github.com/artsworks/f1-pitwall/pull/200),
+  [`bd82e14`](https://github.com/artsworks/f1-pitwall/commit/bd82e1406376fb303fdd5a0e934410b85e4cb696))
+
+
 ## v0.62.0 (2026-11-24)
 
 ### Bug Fixes
