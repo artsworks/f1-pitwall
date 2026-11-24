@@ -44,6 +44,7 @@ KNOWN_GAPS: frozenset[str] = frozenset(
         "overcut_stay_out",  # replay scenario unresolved: rival pit did not yield enough gain
         "penalty_cost",
         "penalty_covered",
+        "pit_cancel_box",  # needs a spoken box call then a flip; replay scenario pending
         "pit_exit_traffic",
         "plan_off",  # replay scenario unresolved: the post-stop plan switched directly to no-stop
         "plan_box",

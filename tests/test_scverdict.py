@@ -9,9 +9,10 @@ import pytest
 from pitwall.config.loader import ConfigStore
 from pitwall.engine import build_engine
 from pitwall.model.deg import DegFit
-from pitwall.state.session import Snapshot, TyreSet
+from pitwall.state.session import Damage, Snapshot, TyreSet
 from pitwall.store.db import Database
 from pitwall.strategy.plans import CompoundModel, PlanInputs
+from pitwall.strategy.rejoin import FieldCar
 from pitwall.strategy.scverdict import sc_verdict
 
 TH = ConfigStore().current().thresholds
@@ -59,7 +60,10 @@ def verdict(inp: PlanInputs, **kw: object):
         cur_wear_pct=30.0,
         cur_wear_per_lap_pct=2.5,
         stacking=False,
-        th=TH,
+        # The fixtures are calibrated to a 1500 ms cliff; the shipped default
+        # multiplies it for fighting pace (docs/27 Track 16), so the unit tests
+        # pin the multiplier to 1.0 and test_survive_cliff_mult covers it.
+        th={**TH, "sc_survive_cliff_mult": 1.0},
     )
     return sc_verdict(inp, **{**base, **kw})  # type: ignore[arg-type]
 
@@ -145,7 +149,11 @@ def test_survive_min_comes_from_the_mode_mapping() -> None:
     inp = inputs(compounds=models(s_deg=200.0, m_deg=132.0, sd=60.0))
     balanced = verdict(inp, cur_wear_pct=60.0)
     assert row(M, balanced.rows).survives is False and balanced.pick == H
-    aggressive = verdict(inp, cur_wear_pct=60.0, th={**TH, "sc_survive_min": 0.45})
+    aggressive = verdict(
+        inp,
+        cur_wear_pct=60.0,
+        th={**TH, "sc_survive_min": 0.45, "sc_survive_cliff_mult": 1.0},
+    )
     assert row(M, aggressive.rows).survives is True and aggressive.pick == M
 
 
@@ -153,7 +161,11 @@ def test_current_lap_weight_moves_the_wear_gate_boundary() -> None:
     kw = dict(usable_life={S: 20, M: 10, H: 20}, cur_wear_pct=60.0)
     half = verdict(inputs(), **kw)
     assert row(M, half.rows).survives is False and half.pick == H
-    free = verdict(inputs(), **kw, th={**TH, "sc_verdict_current_lap_weight": 0.0})
+    free = verdict(
+        inputs(),
+        **kw,
+        th={**TH, "sc_verdict_current_lap_weight": 0.0, "sc_survive_cliff_mult": 1.0},
+    )
     # needed drops to 10.0, so a 10-lap usable life just survives.
     assert row(M, free.rows).survives is True and free.pick == M
 
@@ -396,9 +408,10 @@ def test_sc_verdict_writes_one_suppressed_call_with_the_ladder(tmp_path) -> None
     assert call["outcome"] == "suppressed"
     assert call["lap"] == 3
     inputs = json.loads(call["inputs"])
-    # Uniform deg models tie on race time; hardest-first order picks the hard.
-    assert inputs["pick"] == H
-    assert inputs["pick_compound"] == "hard"
+    # Uniform deg models: every compound survives the fighting-pace cliff and
+    # the soft is the quickest stop, so it takes the pick (docs/27 Track 16).
+    assert inputs["pick"] == S
+    assert inputs["pick_compound"] == "soft"
     assert inputs["survive_min"] == pytest.approx(0.60)
     ladder = inputs["ladder"]
     assert [r["compound"] for r in ladder] == [H, M, S, M]
@@ -501,7 +514,7 @@ def test_sc_verdict_pick_boxes_through_plan_c(tmp_path) -> None:
 
     assert planned.pit_plan == "cheap_stop"
     assert planned.active_plan == "C"
-    assert planned.plan_next_compound == "hard"
+    assert planned.plan_next_compound == "soft"
     assert planned.sc_call == "box"
     fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
     assert fired & {"box_now", "plan_sc_box"}
@@ -562,8 +575,8 @@ def test_stop_under_sc_counts_toward_plan_c(tmp_path) -> None:
     planner = engine.planner
     assert planner._plan(_sc_snap()).active_plan == "C"
     planner._plan(_sc_snap(pit_status=1))
-    planner._plan(_sc_snap(pit_status=2, num_pit_stops=1, tyre_visual=H))
-    planner._plan(_sc_snap(pit_status=0, num_pit_stops=1, tyre_visual=H))
+    planner._plan(_sc_snap(pit_status=2, num_pit_stops=1, tyre_visual=S))
+    planner._plan(_sc_snap(pit_status=0, num_pit_stops=1, tyre_visual=S))
 
     green = planner._plan(
         _sc_snap(
@@ -572,7 +585,7 @@ def test_stop_under_sc_counts_toward_plan_c(tmp_path) -> None:
             safety_car_status=0,
             lap_num=4,
             laps_remaining=10,
-            tyre_visual=H,
+            tyre_visual=S,
             num_pit_stops=1,
         )
     )
@@ -684,3 +697,159 @@ def test_large_penalty_turns_the_box_into_a_stay(tmp_path) -> None:
     assert planned.sc_call == "stay"
     fired = {c.rule.id for c in engine.rule_engine.evaluate(planned).candidates}
     assert not fired & {"plan_sc_box", "box_now"}
+
+
+def test_survive_cliff_mult_widens_the_fighting_pace_bound() -> None:
+    # Track 16 (docs/27): at the raw cliff the softs' 9.4-lap pace life fails
+    # a 10.5-lap need; the fighting-pace multiplier lets them survive and the
+    # quicker compound takes the stop.
+    plain = verdict(inputs(), th={**TH, "sc_survive_cliff_mult": 1.0})
+    assert row(S, plain.rows).survives is False and plain.pick == M
+    wide = verdict(inputs(), th={**TH, "sc_survive_cliff_mult": 1.5})
+    assert row(S, wide.rows).survives is True and wide.pick == S
+
+
+def test_position_guard_vetoes_a_stop_that_loses_places() -> None:
+    # The medium stop regains ~1.4 places on pace at a 2 s gap; losing two
+    # places to the stop is a net loss, so the verdict stays out.
+    v = verdict(inputs(), positions_lost=2.0, gap_ahead_s=2.0)
+    assert v.pick == 0
+    assert v.reason == "stay out, the stop loses positions"
+    assert v.net_positions is not None and v.net_positions < 0
+    # Without the field projection the same pace inputs keep the pick.
+    plain = verdict(inputs())
+    assert plain.pick == M and plain.net_positions is None
+    # A closer car ahead flips the regain positive and the stop stands.
+    close = verdict(inputs(), positions_lost=2.0, gap_ahead_s=0.5)
+    assert close.pick == M
+    assert close.net_positions is not None and close.net_positions > 0
+
+
+def test_position_guard_needs_the_current_set_to_survive() -> None:
+    # A current set that fails its own survival row leaves the pick alone:
+    # the stop is mandatory on tyres, not a position trade.
+    v = verdict(inputs(cur=fit(100.0)), cur_wear_pct=60.0, positions_lost=5.0)
+    assert v.pick == M
+
+
+def test_positions_lost_counts_the_penalty_once(tmp_path) -> None:
+    # P1 serving a 3 s penalty: the field's penalty-included gap to the car
+    # behind reads 10 s, its road gap 13 s. The stop costs 12 s (9 s SC loss
+    # + 3 s service) plus the 0.8 s warm-up, so the lead survives on road
+    # gaps; penalty-adjusted gaps would count the penalty twice and report a
+    # lost place.
+    engine = _engine(tmp_path, Database(":memory:"))
+    snap = _sc_snap(
+        position=1,
+        penalty_s=3,
+        field_cars=(FieldCar("RIVAL", 10.0, 90_000, 100.0, False),),
+        field_cars_road=(FieldCar("RIVAL", 13.0, 90_000, 100.0, False),),
+    )
+    inp = dataclasses.replace(inputs(), sc_loss_s=9.0)
+    assert engine.planner._positions_lost(snap, inp, 3.0, 0.0) == 0.0
+    # The same projection on penalty-adjusted gaps does lose the place, which
+    # is the double count the road gaps remove.
+    double = dataclasses.replace(snap, field_cars_road=snap.field_cars)
+    assert engine.planner._positions_lost(double, inp, 3.0, 0.0) == 1.0
+
+
+def test_damage_stop_beats_the_faster_current_set() -> None:
+    # The worn current set survives and is quicker on paper, but damage pace
+    # sits outside the tyre model: the stop still goes ahead (docs/27 clash 12).
+    v = verdict(inputs(cur=fit(100.0), damage_pace_ms=800.0))
+    assert v.pick == M
+    assert v.reason.startswith("damage,")
+
+
+def test_pit_decision_folds_the_verdict_and_cancels_before_commit(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    # The box call reached the radio, so its reversal can be cancelled.
+    monkeypatch.setattr(planner, "_box_call_spoken", lambda snap: True)
+
+    box = planner._plan(_sc_snap())
+    assert box.pit_decision is not None
+    assert box.pit_decision.action == "box"
+    assert box.pit_decision_key == "box:16"
+    assert box.pit_cancel == ""
+
+    # A 60 s penalty turns the verdict into a stay on the same lap: the
+    # decision key changes and the reversal is still actionable, so the
+    # cancel line arms and the pit_cancel_box rule fires.
+    stay = planner._plan(_sc_snap(now=4.0, penalty_s=60.0))
+    assert stay.sc_call == "stay"
+    assert stay.pit_decision is not None and stay.pit_decision.action == "stay"
+    assert stay.pit_decision_key == "stay"
+    assert stay.pit_cancel == "Stay out"
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(stay).candidates}
+    assert "pit_cancel_box" in fired
+    assert "sc_stay_out" in fired
+
+    # Past the commitment point (pit entry already passed) the same flip arms
+    # no cancel: the driver can no longer act, so it is guidance only.
+    committed = planner._plan(_sc_snap(now=4.0, penalty_s=60.0, pit_entry_passed=True))
+    assert committed.pit_cancel == ""
+
+
+def test_rain_hold_keeps_an_announced_damage_stop(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rain due under SC holds the tyre verdict, but damage pace overrides it
+    # in optimise(): the final plan still says box for the repair. The shared
+    # decision must follow that plan, so no 'Hold for rain' cancel reaches
+    # the driver for a stop the strategy still recommends.
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+    monkeypatch.setattr(planner, "_box_call_spoken", lambda snap: True)
+    wing = Damage(front_left_wing=40, front_right_wing=40)
+
+    box = planner._plan(_sc_snap(damage=wing))
+    assert box.pit_decision is not None and box.pit_decision.action == "box"
+
+    held = planner._plan(
+        _sc_snap(
+            now=4.0,
+            lap_num=4,
+            laps_remaining=10,
+            tyre_age_laps=3,
+            damage=wing,
+            weather_crossover="to_inter",
+        )
+    )
+    assert held.sc_verdict is not None and held.sc_verdict.hold
+    assert held.pit_plan == "box_now"
+    assert held.pit_decision is not None and held.pit_decision.action == "box"
+    assert held.pit_cancel == ""
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(held).candidates}
+    assert "pit_cancel_box" not in fired
+    assert "box_now" in fired
+
+
+def test_pit_cancel_needs_the_box_call_to_have_been_out(tmp_path) -> None:
+    # A 'box' decision whose call never reached the radio (still queued or
+    # gated out when the plan flipped) earns no cancel line.
+    engine = _sc_engine(tmp_path, Database(":memory:"))
+    planner = engine.planner
+
+    planner._plan(_sc_snap())
+    flipped = planner._plan(_sc_snap(penalty_s=60.0))
+
+    assert flipped.pit_cancel == ""
+    fired = {c.rule.id for c in engine.rule_engine.evaluate(flipped).candidates}
+    assert "pit_cancel_box" not in fired
+
+
+def test_worst_corner_wear_life_bounds_the_current_row() -> None:
+    # The blended rate says the mediums have 16 laps of wear life, but the
+    # worst corner reaches the cliff in 8: under the 10.5-lap need the
+    # current set does not survive and the stop stands on tyres.
+    v = verdict(inputs(), cur_wear_life_laps=8.0)
+    cur = v.rows[-1]
+    assert cur.current is True
+    assert cur.survives is False and cur.survival == 0.0
+    assert cur.margin_laps == pytest.approx(8.0 - v.laps_needed)
+    # The estimate alone would have kept the row alive.
+    plain = verdict(inputs())
+    assert plain.rows[-1].survives is True

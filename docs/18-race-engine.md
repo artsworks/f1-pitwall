@@ -386,11 +386,13 @@ pit_exit_rival_gap_s: float         # projected gap to rival_pit_exit_idx at pit
 pit_exit_clean: bool                # release_window() at pit exit with the race gap threshold
 deg_fit_source: str; deg_ms_per_lap: float; deg_confidence: float; base_pace_ms: float
 laps_of_pace: float; wear_mean_pct: float; wear_per_lap_pct: float
+tyre_wear_life_laps: float          # worst corner's laps to the wear cliff (inf = none)
 blister_max_pct: int                # max tyre_blisters corner (Car Damage)
 graining: bool                      # slow inner EMA in the graining band (< th.tyre_graining_c) with hysteresis
 overheat: bool                      # slow inner EMA > th.tyre_inner_hot_c with hysteresis; never in the pit lane
 pit_loss_s, pit_loss_source: float, str
 fuel_margin_laps: float; fuel_per_lap_kg: float; fuel_source: str
+fuel_saving_active: bool              # lift-and-coast intervention armed (see below)
 energy_per_lap_mj, energy_lap_delta_mj, energy_laps_to_floor: float; energy_mode: str
 drs_zone_ahead: bool; drs_available: bool (2026: overtake_active; pre-2026: drs_allowed and gap_ahead_s < 1.0 and not sc)
 penalty_s: int; unserved_drive_through: int; unserved_stop_go: int; warnings: int; corner_cut_warnings: int
@@ -675,9 +677,9 @@ reference the `pit_plan_*`/`predicted_lap_ms`/`laps_of_pace` fields in `when`/`s
 | `tyre_life` | 3 | every `mode.rival_info_every_n_laps` laps: "these tyres have about {laps_of_pace:.0f} laps of pace" |
 | `tyre_overheat` / `tyre_graining` | 2 | `overheat` / `graining` with cooldown 90 |
 | `tyre_blister` | 2 | `blister_max_pct >= th.blister_warn_pct` |
-| `fuel_short` | 1 | `fuel_margin_laps < -mode.lift_coast_trigger_laps` |
+| `fuel_short` | 1 | `fuel_saving_active and fuel_margin_laps < -mode.lift_coast_trigger_laps`; the intervention latch owns the clear |
 | `fuel_marginal` | 2 | `fuel_margin_laps < mode.fuel_margin_laps` |
-| `fuel_spare` | 3 | `fuel_margin_laps > th.fuel_spare_laps` once per N laps |
+| `fuel_spare` | 3 | `fuel_margin_laps > th.fuel_spare_laps` once per N laps; suppressed while saving |
 | `energy_over` / `energy_under` | 2/3 | `energy_mode == 'over'`/`'under'` at lap end |
 | `overtake_mode` | 2 | `energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s` |
 | `overtake_earned` / `overtake_lost` | 3/3 | `overtake_available and not overtake_active` / `overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s` |
@@ -703,6 +705,20 @@ Fuel burn per lap: this session's measured burn (median of green-lap deltas, ≥
 the learned/overlay/default prior. Energy allowance is net store drawdown per lap,
 `(store − floor) / laps_remaining`, compared against `deployed − harvested`; the energy
 calls skip laps 1–2, which spend the launch charge.
+
+The fuel-short intervention is a latch in `SessionModel`, exposed on the snapshot as
+`fuel_saving_active`. It arms when `fuel_budget.margin_laps < 0`. It clears only when
+the budget source is `session` and the margin is at or above zero. A recovery from the
+MFD estimate or a prior is not evidence, so the latch holds. `fuel_short` fires only
+while the latch is armed, and its `clear_when` is `not fuel_saving_active`, so no call
+announces a clear on stale numbers. The fuel calls freeze their spoken tenth in
+`unchanged` and `rearm_on_change` (`fuel_short_laps_r`, `fuel_save_kg_r`,
+`fuel_margin_r`). A queued call whose deficit or save target moved is dropped and
+re-emitted with fresh numbers, while drift inside the spoken tenth keeps coalescing.
+While the latch is armed, `battle_catching`, `battle_attack`, `battle_under_threat`,
+`overtake_mode`, `overtake_earned`, `overtake_lost` and `fuel_spare` are suppressed
+through `suppress_when`. `battle_patience`, `battle_defend` and `battle_manage` stay,
+because they spend less rather than more.
 
 Race phase: `in_lap` starts on the *transition* into driver status IN_LAP (the game can
 hold it there for the rest of the race) or on pit entry; `out_lap` only follows an

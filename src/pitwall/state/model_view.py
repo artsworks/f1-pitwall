@@ -21,6 +21,7 @@ class ModelView:
     base_pace_ms: float = 0.0
     laps_of_pace: float = math.inf
     wear_per_lap_pct: float = 0.0
+    tyre_wear_life_laps: float = math.inf  # worst corner's laps to the wear cliff
     pit_loss_s: float = 0.0
     pit_loss_source: str = ""
     sc_pit_loss_s: float = 0.0
@@ -30,6 +31,7 @@ class ModelView:
     run_fuel_per_lap_kg: float = 0.0
     run_fuel_laps: int = 0
     fuel_source: str = ""
+    fuel_saving_active: bool = False
     energy_per_lap_mj: float = 0.0
     energy_lap_delta_mj: float = 0.0
     energy_prev_lap_delta_mj: float = 0.0

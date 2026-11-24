@@ -93,8 +93,10 @@ def test_sc_switches_to_plan_c_with_box_call(runs: dict[str, Run]) -> None:
     assert box.lap == sw["lap"] and "Plan C" in box.text
     fired = next(r for r in rows if r["rule_id"] == "box_now" and r["outcome"] == "fired")
     assert fired["active_plan"] == "C" and fired["inputs"]["active_plan"] == "C"
-    # plan_sc_box is the fallback and shares the pit cooldown group
-    assert not any(c.rule_id == "plan_sc_box" for c in calls)
+    # plan_sc_box is the fallback and shares the pit cooldown group: it must
+    # not double-announce on the switch lap. A later verdict reprice (the
+    # pick moved hard to soft) is a new decision and may call again.
+    assert not any(c.rule_id == "plan_sc_box" and c.lap == sw["lap"] for c in calls)
     # the stop isn't taken in the fixture: back to A once the SC is in
     back = [e for e in events if e["kind"] == "switch"][1]
     assert (back["from_plan"], back["reason"]) == ("C", "invalid")

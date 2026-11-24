@@ -203,6 +203,7 @@ thresholds:
   cover_defend_gain_s: 1.0     # stay out when the gap beats their projected gain by this much
   free_stop_margin_s: 1.0
   sc_stop_min_laps_left: 3
+  sc_survive_cliff_mult: 1.5    # fighting-pace bound for verdict survival, x tyre_cliff_ms
   box_in_max_laps: 3
   tyre_life_speak_laps: 10
   blister_warn_pct: 20

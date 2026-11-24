@@ -1,6 +1,6 @@
 # Safety car verdict: which compound reaches the flag (plan v4)
 
-Status: phases 1 to 3 are built (shadow log, hindsight grading, ladder card and debrief list). The core of phase 4 is built, see "Takeover, 2026-11-24". The rest of phase 4 and phase 5 are not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
+Status: phases 1 to 3 are built (shadow log, hindsight grading, ladder card and debrief list). The core of phase 4 is built, see "Takeover, 2026-11-24". The live pit decision generalisation is built, see "Live pit decision". Phase 5 is not built. Plan checked against main at 0.60.6 (`734a02d`) on 2026-11-22.
 
 ## Goal
 
@@ -356,7 +356,7 @@ Built (clash rows 1 to 6, 9 and 10):
 - With damage and no pick, the pit-window optimiser decides as before. The damage stop is not in the verdict yet.
 - A "stay out" verdict also stops undercut and cover calls under SC.
 
-Not built: position guard, damage stop, rain gate, penalty seconds, `decision_point: pit_entry` for the stay-out line, box lap, positions row, badges and the bench scenario (clash rows 7, 8, 11 and 12).
+Built since (see "Live pit decision" below): position guard, damage stop, `decision_point: pit_entry` and the `pit_decision_key` unchanged guard for the stay-out line, the cancel-before-commit rule, the box lap on the Plan C card, the positions badge and the 13-lap bench scenario. The rain gate and penalty seconds landed in "Close-out, 2026-11-24".
 
 Learning:
 
@@ -388,7 +388,6 @@ Replay batch after the takeover (7 races, deg priors of 2026-11-23). The driver 
 
 Open:
 
-- `optimise()` still takes `wear_mean`, `green_pit_loss_s` and `stop_owed`, and no longer reads them.
 - The repo owner must run the full bench and accept the baseline.
 - The headline on the dashboard is not checked in a browser.
 
@@ -408,7 +407,20 @@ Built (clash rows 8 and 11):
 - Drive-through and stop-go penalties are not in the verdict. The snapshot has no seconds for them.
 - Imola, 2026-10-22 after the change: laps 1 to 3 read "hold, rain is due", and no stay-out line fires. The rain stop came on lap 8.
 
-Not built: position guard, damage stop, `decision_point: pit_entry` for the stay-out line, box lap, positions row, badges with the rain badge, and the bench scenario (clash rows 7 and 12).
+Built since (see "Live pit decision" below): position guard, damage stop, `decision_point: pit_entry` and the `pit_decision_key` unchanged guard for the stay-out line, the cancel-before-commit rule, the box lap on the Plan C card, the positions and rain badges and the 13-lap bench scenario (clash rows 7 and 12).
+
+### Live pit decision
+
+The verdict's pick and the green-flag pit plan now fold into one `PitDecision` (`strategy/pitdecision.py`) that the engine writes on the snapshot each evaluation as `pit_decision`, `pit_decision_key` and `pit_cancel`. Every pit call freezes `pit_decision_key` in `unchanged`, so a queued box or stay call dies when the decision changes and the driver gets one instruction per decision. `sc_stay_out` gained `decision_point: pit_entry`, the same timing hint as the box calls.
+
+- Position guard. When a pick and a legal stay both exist, the verdict weighs the places the stop costs (`positions_lost`, from the field rejoin projection, or one place when rival data is restricted and the stop costs more than the gap behind) against the pace-only regain on the fresh compound over `laps_needed`. A negative `net_positions` vetoes the pick with "stay out, the stop loses positions". The figure rides on `ScVerdict.net_positions` and the ladder payload.
+- Damage stop. `inp.damage_pace_ms > 0` lifts the faster-current-set veto and prefixes the pick reason with "damage, ". The stop repairs pace the tyre model does not price.
+- Track 16 fix. Survival now bounds pace life by `tyre_cliff_ms * sc_survive_cliff_mult` (default 1.5): fighting pace lets a set run past the cliff and stay fast enough. The learned `sc_survive_min` offset still applies on top.
+- Worst-corner wear. `tyre_wear_life_laps` carries the worst corner's laps to the wear cliff (`corner_wear_life`, the same figure `laps_of_pace` already caps on for green flags) into the verdict's current-set row as `cur_wear_life_laps`. The row's wear life is the sooner of that and the blended-rate estimate, so a hot corner cannot hide behind the average rate. On green flags the constraint already reaches the shared decision through `laps_of_pace`.
+- Cancel before commit. A 'box' decision that flips to stay, hold or a later lap arms `pit_cancel` for `_PIT_CANCEL_S` seconds and the `pit_cancel_box` rule speaks "Cancel box. ...". It arms only when a box rule (`box_now`, `plan_sc_box`, `cover_box`) already spoke this lap (`Dispatcher.spoken_this_lap`), only while the driver can still act (`pit_entry_passed` false and `pit_status == 0`), and never on a sub-second flicker. Past the commitment point the reversal is execution guidance, not a cancel.
+- `optimise()` lost its dead `wear_mean`, `green_pit_loss_s` and `stop_owed` parameters.
+- Dashboard. The Plan C card shows the box lap on a due stop, and the ladder card shows RAIN, penalty and net-positions badges. `sc_ladder` gained `hold`, `penalty_s` and `net_positions`; the pick and reason stay hidden as before.
+- Bench. `scenarios/silverstone-sc-verdict.yaml` guards the 13-lap race: `sc_stay_out` fires under the SC, no box call fires, and no cancel line fires.
 
 ## Risks
 

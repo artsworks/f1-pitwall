@@ -866,6 +866,7 @@
         box.appendChild(node("card plan" + (focusReactive ? " focus" : ""), [
           node("row", [
             icon("box", "i s warn"), span(pl.id, "mid"), span("BOX NOW", "warn"),
+            pl.stop_laps && pl.stop_laps.length ? span("L" + pl.stop_laps[0], "big") : null,
             pl.compounds && pl.compounds.length ? compChip(pl.compounds[0]) : null,
             span("", "sp"),
             saving ? span("SAVES", "tagw") : span("cheap stop", "tagw"),
@@ -917,9 +918,21 @@
     if (ladder) box.appendChild(ladder);
   }
 
-  // Shadow SC verdict (docs/27): one row per compound with life, need and margin in laps. No pick is shown.
+  // Shadow SC verdict (docs/27): one row per compound with life, need and margin in laps.
+  // Badges carry the rain hold, the penalty and the position guard's net places.
   function ladderCard(l) {
-    return node("card ladder", (l.rows || []).map(function (r) {
+    var kids = [];
+    var badges = [];
+    if (l.hold) badges.push(span("RAIN", "tagw"));
+    if (typeof l.penalty_s === "number" && l.penalty_s > 0) {
+      badges.push(span("+" + fmt(l.penalty_s, 1) + " s", "tagw"));
+    }
+    if (typeof l.net_positions === "number" && l.net_positions !== 0) {
+      badges.push(span("P " + (l.net_positions > 0 ? "+" : "") + l.net_positions,
+        "tagw" + (l.net_positions < 0 ? " warn" : "")));
+    }
+    if (badges.length) kids.push(node("row sub", badges));
+    (l.rows || []).forEach(function (r) {
       var life = typeof r.life === "number" ? Math.floor(r.life) : null;
       var need = typeof r.need === "number" ? Math.ceil(r.need) : null;
       var margin = life === null || need === null ? null : life - need;
@@ -928,10 +941,11 @@
           span("life " + life, "mid"), span("need " + need, "mid"),
           span((margin >= 0 ? "+" : "-") + Math.abs(margin), "mid" + (r.survives ? "" : " warn"))
         ];
-      return node("row sub" + (r.no_set ? " dim1" : ""), [compChip(r.compound)].concat(nums, [
+      kids.push(node("row sub" + (r.no_set ? " dim1" : ""), [compChip(r.compound)].concat(nums, [
         span("", "sp"), r.current ? span("ON CAR", "tagw") : null
-      ]));
-    }));
+      ])));
+    });
+    return node("card ladder", kids);
   }
 
   function activePlan(s) {

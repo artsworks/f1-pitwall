@@ -87,6 +87,7 @@ from pitwall.state.zones import (
     rival_overtake_active,
 )
 from pitwall.strategy.pace import amount_words, pace_words_self
+from pitwall.strategy.pitdecision import PitDecision
 from pitwall.strategy.plans import DRY, WORDS, StrategyPlan
 from pitwall.strategy.rejoin import FieldCar
 from pitwall.strategy.scverdict import ScVerdict
@@ -582,6 +583,7 @@ class Snapshot:
     # Player slip events on the last completed lap minus the lap before.
     slip_trend: int = 0
     wear_per_lap_pct: float = 0.0
+    tyre_wear_life_laps: float = math.inf  # worst corner's laps to the wear cliff
     blister_max_pct: int = 0
     wear_hot_corner: str = ""
     wear_hot_ratio: float = 0.0
@@ -594,6 +596,7 @@ class Snapshot:
     fuel_margin_laps: float = 0.0
     fuel_per_lap_kg: float = 0.0
     fuel_source: str = ""
+    fuel_saving_active: bool = False  # lift-and-coast intervention armed (docs/18)
     energy_per_lap_mj: float = 0.0
     energy_lap_delta_mj: float = 0.0
     energy_prev_lap_delta_mj: float = 0.0
@@ -693,6 +696,10 @@ class Snapshot:
     plans: tuple[StrategyPlan, ...] = ()
     sc_verdict: ScVerdict | None = None
     sc_call: str = ""  # "box" or "stay" when the safety-car verdict makes the call
+    pit_decision: PitDecision | None = None  # the lap's single pit decision
+    pit_decision_key: str = ""  # decision_key(pit_decision), frozen by `unchanged`
+    pit_cancel: str = ""  # "Stay out" / "Hold for rain" while a box reversal is open
+    pit_entry_passed: bool = False  # past pit_entry_m this lap: the stop is committed
     active_plan: str = ""
     on_plan: bool = True
     plan_label: str = ""
@@ -876,6 +883,11 @@ class Snapshot:
     # Rejoin projection input: every classified car within a lap of the player
     # (race-time gaps, no owed-stop adjustment).
     field_cars: tuple[FieldCar, ...] = ()
+    # The same field on road gaps, penalties excluded from both sides. The SC
+    # verdict's position guard prices a physical rejoin against the unadjusted
+    # road position, so penalty seconds must not sit in the gaps as well as in
+    # the stop cost.
+    field_cars_road: tuple[FieldCar, ...] = ()
 
     def age(self, packet_name: str) -> float:
         """Seconds since the named source packet last updated the snapshot."""
@@ -918,6 +930,16 @@ class Snapshot:
     @property
     def fuel_short_laps(self) -> float:
         return max(0.0, -self.fuel_margin_laps)
+
+    @property
+    def fuel_short_laps_r(self) -> float:
+        """Deficit rounded to the spoken tenth of a lap (fuel calls' `unchanged`)."""
+        return round(self.fuel_short_laps, 1)
+
+    @property
+    def fuel_save_kg_r(self) -> float:
+        """Save target rounded to the spoken tenth of a kg (fuel calls' `unchanged`)."""
+        return round(self.fuel_save_kg_per_lap, 1)
 
     @property
     def fuel_save_kg_per_lap(self) -> float:
@@ -2876,6 +2898,7 @@ class SessionState:
             session_duration=self.session_duration,
             track_length_m=self.track_length_m,
             pit_entry_m=self._th("pit_entry_m", 0.0),
+            pit_entry_passed=0.0 < self._th("pit_entry_m", 0.0) < self.lap_distance,
             release_time_left_s=self.session_time_left - self._out_lap_need_s(),
             pit_speed_limit=self.pit_speed_limit,
             game_paused=self.game_paused,
@@ -3427,6 +3450,7 @@ class SessionState:
             base_pace_ms=model.base_pace_ms,
             laps_of_pace=model.laps_of_pace,
             wear_per_lap_pct=model.wear_per_lap_pct,
+            tyre_wear_life_laps=model.tyre_wear_life_laps,
             pit_loss_s=model.pit_loss_s,
             pit_loss_source=model.pit_loss_source,
             fuel_margin_laps=model.fuel_margin_laps,
@@ -3434,6 +3458,7 @@ class SessionState:
             run_fuel_per_lap_kg=model.run_fuel_per_lap_kg,
             run_fuel_laps=model.run_fuel_laps,
             fuel_source=model.fuel_source,
+            fuel_saving_active=model.fuel_saving_active,
             energy_per_lap_mj=model.energy_per_lap_mj,
             energy_lap_delta_mj=model.energy_lap_delta_mj,
             energy_prev_lap_delta_mj=model.energy_prev_lap_delta_mj,
@@ -3597,6 +3622,7 @@ class SessionState:
 
         pitted = self._cars_pitted_this_lap | self._pitted_lap_snapshot
         field_cars: tuple[FieldCar, ...] = ()
+        field_cars_road: tuple[FieldCar, ...] = ()
         if 0 <= self._player_idx < len(cars):
             owed = [self._stops_owed(i, c) for i, c in enumerate(cars)]
             stop_pit_s = pit_s
@@ -3620,14 +3646,29 @@ class SessionState:
             fresh = stop_adjusted_gaps(
                 cars, self._player_idx, self.track_length_m, ref_speed, owed, stop_pit_s
             )
+
+            def field_of(gaps: Mapping[int, float]) -> tuple[FieldCar, ...]:
+                return tuple(
+                    FieldCar(name_of(i), gap, pace_of(i), model.deg_ms_per_lap, i in pitted)
+                    for i, gap in gaps.items()
+                )
+
             # The field the optimiser projects rejoins against: raw race-time
             # gaps (penalties in, no owed-stop term), our deg slope as the
-            # rival estimate the undercut math already uses.
-            field_cars = tuple(
-                FieldCar(name_of(i), gap, pace_of(i), model.deg_ms_per_lap, i in pitted)
-                for i, gap in race_time_gaps(
-                    cars, self._player_idx, self.track_length_m, ref_speed
-                ).items()
+            # rival estimate the undercut math already uses. field_cars_road
+            # is the same field on road gaps for the SC verdict's position
+            # guard (Snapshot.field_cars_road).
+            field_cars = field_of(
+                race_time_gaps(cars, self._player_idx, self.track_length_m, ref_speed)
+            )
+            field_cars_road = field_of(
+                race_time_gaps(
+                    cars,
+                    self._player_idx,
+                    self.track_length_m,
+                    ref_speed,
+                    include_penalties=False,
+                )
             )
             player = cars[self._player_idx]
             player_history = self._histories.get(self._player_idx)
@@ -3861,6 +3902,7 @@ class SessionState:
             penalty_threat_name=name_of(pen_i) if pen_i >= 0 else "",
             pit_exit_clean=release.clean,
             field_cars=field_cars,
+            field_cars_road=field_cars_road,
             drs_available=(
                 bool(self.overtake_active)
                 if self.regulations_2026

@@ -166,8 +166,12 @@ warnings. Use Car Damage for blister percentage, and phrase wear as remaining la
 pace. Tyre life is the earlier of the worst corner's wear limit and the pace cliff from
 the degradation fit. Choose the next-stint compound from the sets reported by Tyre Sets.
 
-**Fuel.** Compare `m_fuelRemainingLaps` with laps remaining to advise lift-and-coast or
-fuel-mix changes. Phrase the call as "you need half a lap of fuel saving over the next five".
+**Fuel.** The fuel budget projects the margin in laps from measured burn per lap, the
+MFD estimate or the learned prior, in that order. A projected deficit arms the
+fuel-saving intervention, which stays active until this session's measured burn
+confirms the saving. While it is active, the fuel calls quote the deficit and the
+per-lap kilogram target, and the push calls stay quiet. Phrase the call as "save
+0.2 kg a lap, lift and coast".
 
 **Energy.** Compare ERS store with `m_ersHarvestLimitPerLap` and `m_ersDeployedThisLap`
 to advise deployment. The 2026 Overtake Mode uses `m_overtakeAvailable` and

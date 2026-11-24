@@ -1,0 +1,17 @@
+id: silverstone-sc-verdict
+title: Safety car verdict on the 13-lap race stays out, no cancel noise
+status: guard
+source:
+  session_uid: "0x6d8f24db49275410"
+  sha256: "fc2619a040e2be3e668fa96cdcd84456b69fcce69353d61485f38e9a6299be4a"
+  where: "Silverstone race, 13 laps, stops on laps 8 and 9, SC on laps 8 to 10. session_6d8f24db49275410_1793276841.f1bin.zst"
+expect:
+  fire:
+    - {rule: sc_stay_out, laps: [8, 10]}
+  absent:
+    - {rule: [box_now, plan_sc_box], laps: [8, 10]}
+    - {rule: pit_cancel_box, laps: [1, 13]}
+why: >-
+  The verdict prices the cheap stop against the tyres that already reach the
+  flag, so it stays out under the safety car. Plan flickers that never reached
+  the radio must not produce a cancel line.

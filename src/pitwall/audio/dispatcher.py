@@ -10,7 +10,7 @@ import logging
 import math
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -191,6 +191,12 @@ class Dispatcher:
     @property
     def last_call_t(self) -> float | None:
         return self._last_call_t
+
+    def spoken_this_lap(self, lap: int, rule_ids: Container[str]) -> bool:
+        """True when a call from `rule_ids` already spoke on `lap`. The pit
+        planner uses it for cancel-before-commit: a reversal only earns a
+        cancel line when the driver actually heard the stop (docs/27)."""
+        return any(c.lap == lap and c.rule_id in rule_ids for c, _ in self._spoken_calls)
 
     def _note_predicate_error(self, rule_id: str, site: str, exc: Exception) -> None:
         key = (rule_id, site)

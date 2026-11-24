@@ -132,8 +132,10 @@ rules:
     sessions: [race]
     priority: 1
     urgency: tactical
-    when: "phase == 'racing' and lap_num >= 3 and fuel_per_lap_kg > 0 and fuel_margin_laps < -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
-    clear_when: "fuel_margin_laps >= 0"
+    when: "phase == 'racing' and lap_num >= 3 and fuel_per_lap_kg > 0 and fuel_saving_active and fuel_margin_laps < -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
+    clear_when: "not fuel_saving_active"
+    unchanged: [fuel_short_laps_r, fuel_save_kg_r]
+    rearm_on_change: [fuel_short_laps_r, fuel_save_kg_r]
     cooldown_s: 120
     cooldown_group: fuel
     contradicts: [battle_manage]
@@ -165,6 +167,8 @@ rules:
     urgency: tactical
     when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps <= th.fuel_tight_laps and fuel_margin_laps >= -mode.lift_coast_trigger_laps and (laps_remaining > 1 or dist_to_line_m > th.fuel_final_call_m)"
     clear_when: "fuel_margin_laps > th.fuel_tight_laps + th.fuel_hysteresis_laps"
+    unchanged: [fuel_margin_r, fuel_save_kg_r]
+    rearm_on_change: [fuel_margin_r, fuel_save_kg_r]
     cooldown_s: 180
     cooldown_group: fuel
     contradicts: [battle_manage, battle_attack, battle_catching]
@@ -206,6 +210,9 @@ rules:
     brief: "Fuel margin is safe"
     when: "phase == 'racing' and fuel_per_lap_kg > 0 and fuel_margin_laps > th.fuel_spare_laps and sector == 1"
     clear_when: "fuel_margin_laps <= th.fuel_spare_laps"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
+    unchanged: [fuel_margin_r]
+    rearm_on_change: [fuel_margin_r]
     cooldown_s: 600
     cooldown_group: fuel
     requires: [car_status]
@@ -294,6 +301,7 @@ rules:
     when: "phase == 'racing' and energy_mode == 'attack_ok' and overtake_active and aero_zone_ahead and gap_ahead_s <= mode.overtake_call_gap_s"
     clear_when: "gap_ahead_s > mode.overtake_call_gap_s + th.gap_hysteresis_s or not overtake_active"
     still_true: "overtake_active and energy_mode == 'attack_ok'"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 60
     conflict_group: overtake
     supersedes: [energy_over, energy_charge_for_battle, energy_burst]
@@ -312,6 +320,7 @@ rules:
     when: "phase == 'racing' and overtake_available and not overtake_active"
     clear_when: "not overtake_available or overtake_active"
     still_true: "overtake_available and not overtake_active"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 90
     conflict_group: overtake
     supersedes: [energy_over, energy_charge_for_battle, energy_burst]
@@ -331,6 +340,7 @@ rules:
     when: "phase == 'racing' and overtake_active and not overtake_available and gap_ahead_s < th.overtake_lost_call_gap_s"
     clear_when: "overtake_available or not overtake_active"
     still_true: "not overtake_available"
+    suppress_when: {fuel_saving: "fuel_saving_active"}
     cooldown_s: 120
     conflict_group: overtake
     requires: [lap_data]

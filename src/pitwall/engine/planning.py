@@ -27,6 +27,7 @@ from pitwall.state.model_view import ModelView
 from pitwall.state.session import Snapshot
 from pitwall.store.db import lap_row_from_summary
 from pitwall.strategy.montecarlo import McResult, plan_agreement, scale_plan
+from pitwall.strategy.pitdecision import PitDecision, decide, decision_key
 from pitwall.strategy.pitwindow import NO_PLAN, PitPlan, RivalView, optimise
 from pitwall.strategy.plans import (
     DRY,
@@ -40,7 +41,16 @@ from pitwall.strategy.plans import (
     compound_stop_owed,
     view_fields,
 )
+from pitwall.strategy.rejoin import rejoin_position
 from pitwall.strategy.scverdict import ScVerdict, sc_verdict
+
+# Seconds a cancel-before-commit line stays armed: long enough for the
+# execution call to clear the queue and speak, short enough that a persisted
+# stay does not re-arm it every cooldown (docs/27).
+_PIT_CANCEL_S = 6.0
+# The rules whose calls are a "box this lap" instruction. A forecast
+# (box_in_n) is not one: its target moving needs no cancel.
+_BOX_RULES = frozenset({"box_now", "plan_sc_box", "cover_box"})
 
 
 def _true_behind_view(snap: Snapshot) -> tuple[RivalView | None, float]:
@@ -156,6 +166,9 @@ class Planner:
         self._sc_verdict_laps: set[tuple[Any, int]] = set()
         self._sc_verdict: ScVerdict | None = None
         self._sc_verdict_sig: tuple[bool, float] | None = None
+        self._prev_pit_decision: PitDecision | None = None
+        self._pit_cancel = ""
+        self._pit_cancel_until = 0.0
 
     def reset(self) -> None:
         self._held_plan = None
@@ -177,10 +190,16 @@ class Planner:
         self._sc_verdict_laps.clear()
         self._sc_verdict = None
         self._sc_verdict_sig = None
+        self._prev_pit_decision = None
+        self._pit_cancel = ""
+        self._pit_cancel_until = 0.0
 
     def rewind(self, t: float) -> None:
         self._held_plan = None
         self._sc_verdict = None
+        self._prev_pit_decision = None
+        self._pit_cancel = ""
+        self._pit_cancel_until = 0.0
         self._slow_run = None
         self._stop_expect = None
         self._prev_pit_status = -1  # -1: pit state unknown until the next tick
@@ -289,14 +308,12 @@ class Planner:
             lap_num=snap.lap_num,
             laps_remaining=snap.laps_remaining,
             tyre_age=snap.tyre_age_laps,
-            wear_mean=snap.wear_mean_pct,
             fit=fit,
             fresh=self.ctx.fresh_prior,
             laps_of_pace=snap.laps_of_pace,
             pit_loss_s=pit_loss_s,
             damage_pace_ms=damage_pace_ms,
             pit_loss_source=snap.pit_loss_source,
-            green_pit_loss_s=self.ctx.green_pit_loss_s,
             sc_status=sc_status,
             rival_ahead=ahead,
             rival_behind=behind,
@@ -305,7 +322,6 @@ class Planner:
             rival_behind_gap_s=behind_gap_s,
             pit_exit_clean=snap.pit_exit_clean,
             restricted=snap.rival_data_restricted,
-            stop_owed=self.plan_tracker.state.stops_left > 0,
             stop_mandatory=compound_stop_owed(used, self._plan_thresholds(snap, False)),
             driver=drv,
             mode=mode,
@@ -554,11 +570,87 @@ class Planner:
             sc_call=snap.sc_call if self._sc_verdict is not None else "",
         )
         st: PlanState = tracker.state
+        decision = self._pit_decision(snap, st)
+        self._note_pit_decision(snap, decision)
+        snap = dataclasses.replace(
+            snap,
+            pit_decision=decision,
+            pit_decision_key=decision_key(decision),
+            pit_cancel=self._pit_cancel,
+        )
         if not st.active:
             return snap
         fields = view_fields(st, snap.lap_num)
         self.ctx.state.set_model(_with_plan(self.ctx.state.model, fields))
         return _with_plan(snap, fields)
+
+    def _pit_decision(self, snap: Snapshot, st: PlanState) -> PitDecision:
+        """The lap's single pit decision (docs/27): the verdict's cheap stop or
+        stay-out under SC/VSC, else the green-flag pit plan. Every pit rule
+        reads this one object through `pit_decision_key`. The rain hold applies
+        only when the final plan is the verdict's stay-out: optimise() yields
+        to the weather verdict on `damage_pace_ms <= 0`, so a damage repair
+        stop the optimiser still selects keeps its 'box' action."""
+        active = st.active_plan
+        compound = 0
+        if snap.pit_plan == "cheap_stop" and snap.sc_verdict is not None:
+            compound = snap.sc_verdict.pick
+        elif active is not None and active.stops:
+            compound = active.compounds[1]
+        verdict = snap.sc_verdict
+        return decide(
+            lap_num=snap.lap_num,
+            pit_plan=snap.pit_plan,
+            plan_lap=snap.pit_plan_lap,
+            sc_hold=(
+                verdict.hold and snap.pit_plan == "stay" and self._damage_pace_ms <= 0
+                if verdict is not None
+                else False
+            ),
+            compound=compound,
+            reason=snap.pit_plan_reason,
+            gain_s=snap.pit_plan_gain_s,
+            confidence=snap.pit_plan_confidence,
+            risk=snap.pit_plan_risk,
+        )
+
+    def _note_pit_decision(self, snap: Snapshot, d: PitDecision) -> None:
+        """Cancel-before-commit (docs/27): a stop flipped to stay out, a rain
+        hold or a later lap while the driver can still act arms one 'cancel
+        box' line for a short window, long enough for the call to reach the
+        driver. Past the commitment point (pit entry passed or already in the
+        pits) the reversal is execution guidance instead, so no cancel arms.
+        A new stop, an expired window or a cleared reversal disarms it."""
+        prev = self._prev_pit_decision
+        self._prev_pit_decision = d
+        committed = snap.pit_entry_passed or snap.pit_status != 0
+        if snap.now > self._pit_cancel_until:
+            self._pit_cancel = ""
+        if d.action not in ("stay", "hold", "later") or committed:
+            self._pit_cancel = ""
+            self._pit_cancel_until = 0.0
+        elif (
+            prev is not None
+            and prev.action == "box"
+            and not self._pit_cancel
+            and self._box_call_spoken(snap)
+        ):
+            if d.action == "stay":
+                phrase = "Stay out"
+            elif d.action == "hold":
+                phrase = "Hold for rain"
+            else:
+                phrase = f"target lap {d.box_lap}"
+            self._pit_cancel = phrase
+            self._pit_cancel_until = snap.now + _PIT_CANCEL_S
+
+    def _box_call_spoken(self, snap: Snapshot) -> bool:
+        """A 'box this lap' call already reached the radio this lap. A 'box'
+        decision whose call was still queued or gated out when the plan
+        flipped needs no cancel: the driver never heard it."""
+        dispatcher = self.ctx.dispatcher
+        spoken = getattr(dispatcher, "spoken_this_lap", None)
+        return bool(spoken is not None and spoken(snap.lap_num, _BOX_RULES))
 
     def _sc_gate(self, snap: Snapshot) -> bool:
         """A dry race under SC or VSC with laps left to plan for (docs/27)."""
@@ -592,6 +684,36 @@ class Planner:
             wing_change_s=wing_loss_s,
             damage_pace_ms=damage_pace_ms,
         )
+
+    def _positions_lost(
+        self, snap: Snapshot, inp: PlanInputs, penalty_s: float, wing_loss_s: float
+    ) -> float | None:
+        """Places an SC stop this lap costs, for the verdict's position guard
+        (docs/27 clash 7). The field projection gives the rejoin position; with
+        rival data restricted the regain falls back to pace only and the loss
+        is one place when the stop costs more than the gap behind. The
+        projection runs on road gaps: penalty seconds already sit in loss_s as
+        service time, so penalty-adjusted gaps would count them twice."""
+        if not snap.field_cars_road or snap.position <= 0:
+            return None
+        loss_s = (
+            inp.sc_loss_s
+            + penalty_s
+            + wing_loss_s
+            + (self.ctx.th("double_stack_loss_s", 4.0) if snap.teammate_stacking else 0.0)
+        )
+        if snap.rival_data_restricted:
+            behind = snap.gap_behind_s
+            return 1.0 if math.isfinite(behind) and behind < loss_s else 0.0
+        rejoin = rejoin_position(
+            snap.field_cars_road,
+            k=0,
+            our_lap_ms=lambda j: 0.0,
+            pit_loss_s=loss_s,
+            warmup_s=self.ctx.th("outlap_warmup_s", 0.8),
+            dirty_air_gap_s=self.ctx.th("traffic_dirty_air_gap_s", 1.5),
+        )
+        return max(0.0, float(rejoin.position - snap.position))
 
     def _verdict(
         self, snap: Snapshot, cur: DegFit, damage_pace_ms: float, wing_loss_s: float
@@ -638,6 +760,9 @@ class Planner:
             th={**th, "sc_survive_min": round(survive_min, 3)},
             rain_due=rain_due,
             penalty_s=penalty_s,
+            positions_lost=self._positions_lost(snap, inp, penalty_s, wing_loss_s),
+            gap_ahead_s=snap.gap_ahead_s,
+            cur_wear_life_laps=snap.tyre_wear_life_laps,
         )
         self._sc_verdict = verdict
         self._sc_verdict_sig = sig

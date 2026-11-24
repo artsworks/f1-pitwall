@@ -26,13 +26,11 @@ def run(**kw: object):
         lap_num=10,
         laps_remaining=20,
         tyre_age=10,
-        wear_mean=30.0,
         fit=fit(150),
         fresh=fit(80),
         laps_of_pace=5.0,
         pit_loss_s=21.0,
         pit_loss_source="session",
-        green_pit_loss_s=21.0,
         sc_status=0,
         rival_ahead=None,
         rival_behind=None,
@@ -43,6 +41,10 @@ def run(**kw: object):
         mode=BALANCED,
         th=TH,
     )
+    # wear_mean / green_pit_loss_s / stop_owed were removed from optimise():
+    # the verdict and PlanInputs own those inputs now (docs/27).
+    for dead in ("wear_mean", "green_pit_loss_s", "stop_owed"):
+        kw.pop(dead, None)
     args.update(kw)
     return optimise(**args)  # type: ignore[arg-type]
 
