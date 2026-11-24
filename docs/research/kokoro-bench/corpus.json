@@ -1,0 +1,1618 @@
+[
+{
+"text": "Abort the lap. Save the set",
+"priority": 2
+},
+{
+"text": "About a lap left in the tyres",
+"priority": 3
+},
+{
+"text": "Again with the contact. Checking the car",
+"priority": 1
+},
+{
+"text": "Again. Brake earlier.",
+"priority": 2
+},
+{
+"text": "All under control. Save tyres",
+"priority": 3
+},
+{
+"text": "Another hit there. Rechecking the car",
+"priority": 1
+},
+{
+"text": "Another hit. Checking the car again",
+"priority": 1
+},
+{
+"text": "Another lap deleted. Harvest now, push next lap",
+"priority": 1
+},
+{
+"text": "Another lap won't fit before the flag. Stay in",
+"priority": 2
+},
+{
+"text": "Another lock-up. Slightly untidy. Protect the tyres.",
+"priority": 2
+},
+{
+"text": "Another one. Softer on the brakes.",
+"priority": 2
+},
+{
+"text": "Another spin. Clear behind, gentle throttle.",
+"priority": 1
+},
+{
+"text": "Back with you.",
+"priority": 3
+},
+{
+"text": "Battery isn't charging. Set recharge mode",
+"priority": 2
+},
+{
+"text": "Battery's not charging. Flick it to recharge",
+"priority": 2
+},
+{
+"text": "Big slide, but you saved it. Stay calm",
+"priority": 2
+},
+{
+"text": "Big slide, well caught. Stay calm",
+"priority": 2
+},
+{
+"text": "Blue flag. Let him by",
+"priority": 1
+},
+{
+"text": "Blue flag. Yield to the car behind",
+"priority": 1
+},
+{
+"text": "Blue flags. Let him through, cleanly",
+"priority": 1
+},
+{
+"text": "Blue flags. Let the leader pass",
+"priority": 1
+},
+{
+"text": "Blues, leader behind. Give him the room",
+"priority": 1
+},
+{
+"text": "Boost active. Turn it off before accelerating.",
+"priority": 1
+},
+{
+"text": "Boost again. Switch it off before the exit.",
+"priority": 1
+},
+{
+"text": "Boost is on again. Turn it off now.",
+"priority": 1
+},
+{
+"text": "Boost is on. Off before the power.",
+"priority": 1
+},
+{
+"text": "Boost is still on, switch it off for the exit.",
+"priority": 1
+},
+{
+"text": "Boost remains on. Switch it off before the exit.",
+"priority": 1
+},
+{
+"text": "Boost still on. Turn it off for the exit.",
+"priority": 1
+},
+{
+"text": "Boost. Again. Off, please.",
+"priority": 1
+},
+{
+"text": "Boost. You know the drill.",
+"priority": 1
+},
+{
+"text": "Box for slicks this lap. Rejoin in traffic, easy on the tyres",
+"priority": 2
+},
+{
+"text": "Box for slicks. Traffic at the exit, careful on cold tyres",
+"priority": 2
+},
+{
+"text": "Box this lap, it's not going to be enough",
+"priority": 2
+},
+{
+"text": "Car checked. No new damage",
+"priority": 3
+},
+{
+"text": "Car off behind. You're clear.",
+"priority": 3
+},
+{
+"text": "Car off the track behind. You're clear to carry on.",
+"priority": 3
+},
+{
+"text": "Car on a hot lap behind. Let it pass, then go.",
+"priority": 2
+},
+{
+"text": "Car on a lap behind. Give room, then go.",
+"priority": 2
+},
+{
+"text": "Car right there at the pit exit. Hold the line",
+"priority": 2
+},
+{
+"text": "Catching that car. Ease off, make a gap.",
+"priority": 2
+},
+{
+"text": "Checked the car. Damage is unchanged",
+"priority": 3
+},
+{
+"text": "Clean air. All yours.",
+"priority": 3
+},
+{
+"text": "Clear ahead. Good gap for your lap.",
+"priority": 3
+},
+{
+"text": "Clear behind. Easy throttle, rears are hot.",
+"priority": 1
+},
+{
+"text": "Clear pit exit. You can go now",
+"priority": 2
+},
+{
+"text": "Clear to rejoin. Easy throttle.",
+"priority": 1
+},
+{
+"text": "Clear to rejoin. Gentle on the power.",
+"priority": 1
+},
+{
+"text": "Clear track ahead. Good spacing.",
+"priority": 3
+},
+{
+"text": "Cold tyres and brakes for the restart. Warm them up, brake early into turn one",
+"priority": 2
+},
+{
+"text": "Cold tyres, graining. Work the fronts",
+"priority": 2
+},
+{
+"text": "Contact again. Checking the damage",
+"priority": 1
+},
+{
+"text": "Contact made. Checking the car",
+"priority": 1
+},
+{
+"text": "Contact there, checking the data",
+"priority": 1
+},
+{
+"text": "Contact there. Checking the car",
+"priority": 1
+},
+{
+"text": "Contact. Checking damage",
+"priority": 1
+},
+{
+"text": "Contact. Checking the data",
+"priority": 1
+},
+{
+"text": "Copy that",
+"priority": 1
+},
+{
+"text": "Copy that. Bring it in",
+"priority": 1
+},
+{
+"text": "Copy that. Cool it",
+"priority": 1
+},
+{
+"text": "Copy that. Easy in-lap",
+"priority": 1
+},
+{
+"text": "Copy that. Full send",
+"priority": 1
+},
+{
+"text": "Copy that. Good run",
+"priority": 1
+},
+{
+"text": "Copy that. One more cool lap",
+"priority": 1
+},
+{
+"text": "Copy that. Recharge",
+"priority": 1
+},
+{
+"text": "Copy, Plan C, box this lap",
+"priority": 1
+},
+{
+"text": "Copy, back it off. Recharge and go again",
+"priority": 1
+},
+{
+"text": "Copy, box now",
+"priority": 1
+},
+{
+"text": "Copy, box this lap",
+"priority": 1
+},
+{
+"text": "Copy, box this lap. We save the set",
+"priority": 1
+},
+{
+"text": "Copy, bring the car in now",
+"priority": 1
+},
+{
+"text": "Copy, carry on. Stay on the circuit",
+"priority": 1
+},
+{
+"text": "Copy, continue if you want",
+"priority": 1
+},
+{
+"text": "Copy, continue the lap",
+"priority": 1
+},
+{
+"text": "Copy, continue. No risks",
+"priority": 1
+},
+{
+"text": "Copy, cool lap and recharge",
+"priority": 1
+},
+{
+"text": "Copy, cool lap. Recharge mode",
+"priority": 1
+},
+{
+"text": "Copy, cool the tyres and go again",
+"priority": 1
+},
+{
+"text": "Copy, cool this lap",
+"priority": 1
+},
+{
+"text": "Copy, ease off and recharge",
+"priority": 1
+},
+{
+"text": "Copy, easy in-lap from here",
+"priority": 1
+},
+{
+"text": "Copy, easy in-lap now",
+"priority": 1
+},
+{
+"text": "Copy, extend one lap. We'll review next time round",
+"priority": 1
+},
+{
+"text": "Copy, go again. Battery's low",
+"priority": 1
+},
+{
+"text": "Copy, go and get it",
+"priority": 1
+},
+{
+"text": "Copy, go for the lap",
+"priority": 1
+},
+{
+"text": "Copy, go now with the low battery",
+"priority": 1
+},
+{
+"text": "Copy, go now. Battery's low",
+"priority": 1
+},
+{
+"text": "Copy, going again",
+"priority": 1
+},
+{
+"text": "Copy, hot lap. Go get it",
+"priority": 1
+},
+{
+"text": "Copy, keep going",
+"priority": 1
+},
+{
+"text": "Copy, noted",
+"priority": 1
+},
+{
+"text": "Copy, one more cool lap",
+"priority": 1
+},
+{
+"text": "Copy, push on. Keep it on track",
+"priority": 1
+},
+{
+"text": "Copy, push on. No risks",
+"priority": 1
+},
+{
+"text": "Copy, pushing. Battery short",
+"priority": 1
+},
+{
+"text": "Copy, recharge and reset",
+"priority": 1
+},
+{
+"text": "Copy, stay on it",
+"priority": 1
+},
+{
+"text": "Copy, stay out",
+"priority": 1
+},
+{
+"text": "Copy, stay out. Don't risk the car",
+"priority": 1
+},
+{
+"text": "Copy, stay out. Keep the car safe",
+"priority": 1
+},
+{
+"text": "Copy, that's the run",
+"priority": 1
+},
+{
+"text": "Copy, your call",
+"priority": 1
+},
+{
+"text": "Copy, your call. No risks",
+"priority": 1
+},
+{
+"text": "Copy, your decision",
+"priority": 1
+},
+{
+"text": "Copy. Box this lap, we save the set",
+"priority": 1
+},
+{
+"text": "Copy. Bring it home",
+"priority": 1
+},
+{
+"text": "Copy. Bring it home, nice and easy",
+"priority": 1
+},
+{
+"text": "Copy. Cool it",
+"priority": 1
+},
+{
+"text": "Copy. Cool it and go again",
+"priority": 1
+},
+{
+"text": "Copy. Full send",
+"priority": 1
+},
+{
+"text": "Copy. Garage",
+"priority": 1
+},
+{
+"text": "Copy. Go again from the line",
+"priority": 1
+},
+{
+"text": "Copy. Go get it",
+"priority": 1
+},
+{
+"text": "Copy. Recharge mode",
+"priority": 1
+},
+{
+"text": "Copy. Recharge, go again after this",
+"priority": 1
+},
+{
+"text": "Copy. Stay in recharge",
+"priority": 1
+},
+{
+"text": "Copy. Your call",
+"priority": 1
+},
+{
+"text": "Cover the undercut. Box, box",
+"priority": 1
+},
+{
+"text": "DRS fault. Pass on the brakes",
+"priority": 2
+},
+{
+"text": "DRS has failed. Make the pass under braking",
+"priority": 2
+},
+{
+"text": "DRS unavailable. Pass under braking",
+"priority": 2
+},
+{
+"text": "Damage readings are unchanged",
+"priority": 3
+},
+{
+"text": "Damage to the floor. Downforce is reduced, brake earlier",
+"priority": 2
+},
+{
+"text": "Damage unchanged",
+"priority": 3
+},
+{
+"text": "Drive-through first, no tyre change. Tyres on a separate stop",
+"priority": 2
+},
+{
+"text": "Drive-through is a separate pass, no tyres. The tyre stop comes after",
+"priority": 2
+},
+{
+"text": "Drive-through pass first, no tyres. Then we box for the stop",
+"priority": 2
+},
+{
+"text": "Drying out. Slicks coming",
+"priority": 2
+},
+{
+"text": "ERS failure. Deployment unavailable",
+"priority": 1
+},
+{
+"text": "ERS fault. No deploy",
+"priority": 1
+},
+{
+"text": "Exit clear. Go when ready",
+"priority": 2
+},
+{
+"text": "Exit is clear. Release when ready",
+"priority": 2
+},
+{
+"text": "Extend the stint. Their tyres need to come in, push now",
+"priority": 1
+},
+{
+"text": "Fighting your team-mate. Race hard, race clean",
+"priority": 2
+},
+{
+"text": "Flag is too close. Stay in, no time for a lap",
+"priority": 2
+},
+{
+"text": "Floor damage. Less downforce, brake earlier",
+"priority": 2
+},
+{
+"text": "Floor damage. Less grip in fast corners",
+"priority": 2
+},
+{
+"text": "Floor is damaged. Expect less grip in fast corners",
+"priority": 2
+},
+{
+"text": "Flying lap behind. Give it room.",
+"priority": 2
+},
+{
+"text": "Fresher tyres, but not our race. Let him through and save the tyres",
+"priority": 2
+},
+{
+"text": "Front limited. Brake straight, let the car rotate",
+"priority": 2
+},
+{
+"text": "Front limited. Brake straighter, let it rotate",
+"priority": 2
+},
+{
+"text": "Front tyres locking again. Look after them.",
+"priority": 2
+},
+{
+"text": "Front wing lost. Box this lap for a new nose",
+"priority": 1
+},
+{
+"text": "Front wing lost. No time to stop, nurse the car home",
+"priority": 1
+},
+{
+"text": "Front wing's gone. Box, box, new nose",
+"priority": 1
+},
+{
+"text": "Fronts locking again. Tyres are counting.",
+"priority": 2
+},
+{
+"text": "Gap's there at the exit. Off you go",
+"priority": 2
+},
+{
+"text": "Gaps are steady. Look after the tyres",
+"priority": 3
+},
+{
+"text": "Gaps holding, keep it tidy and save the tyres",
+"priority": 3
+},
+{
+"text": "Gaps holding. Nice and tidy, save the tyres",
+"priority": 3
+},
+{
+"text": "Gaps stable. Manage tyres",
+"priority": 3
+},
+{
+"text": "Good enough. Bring it home",
+"priority": 3
+},
+{
+"text": "Good gap ahead. Clear track for your lap.",
+"priority": 3
+},
+{
+"text": "Graining on the tyres. Keep working them, it should come back",
+"priority": 2
+},
+{
+"text": "Graining there. Keep working the tyres, it should come back",
+"priority": 2
+},
+{
+"text": "Graining. Load the fronts, it'll clean up",
+"priority": 2
+},
+{
+"text": "Green flag, green flag. Racing again, push now",
+"priority": 1
+},
+{
+"text": "Green flag. Racing again, push now",
+"priority": 1
+},
+{
+"text": "Green flag. VSC is over, race at full pace",
+"priority": 1
+},
+{
+"text": "Green, green. Safety car in, race now",
+"priority": 1
+},
+{
+"text": "Green, green. VSC's over, full power",
+"priority": 1
+},
+{
+"text": "Green, green. We're racing, full attack",
+"priority": 1
+},
+{
+"text": "He's back ahead. Pass after the detection point, no overtake back",
+"priority": 3
+},
+{
+"text": "He's back in front. Wait for the detection point, then pass once",
+"priority": 3
+},
+{
+"text": "He's on fresher tyres, not in our race. Let him go, save the tyres",
+"priority": 2
+},
+{
+"text": "High temps, mind the rears",
+"priority": 2
+},
+{
+"text": "High temps, mind the rears",
+"priority": 3
+},
+{
+"text": "High tyre temps. Cool them on the damp parts",
+"priority": 2
+},
+{
+"text": "Hot lap behind. Move over",
+"priority": 1
+},
+{
+"text": "Hot lap behind. Off the line",
+"priority": 1
+},
+{
+"text": "Invalid lap. Cool down, recharge, and try again",
+"priority": 1
+},
+{
+"text": "Invalid lap. Stay inside the white lines next time.",
+"priority": 2
+},
+{
+"text": "It's the team-mate. No risks",
+"priority": 2
+},
+{
+"text": "Lap deleted, no time to cool. Go again",
+"priority": 1
+},
+{
+"text": "Lap deleted, track limits. Clean one next.",
+"priority": 2
+},
+{
+"text": "Lap deleted. Cool it, go again",
+"priority": 1
+},
+{
+"text": "Lap deleted. Reset, clean one next.",
+"priority": 2
+},
+{
+"text": "Lap gone, track limits. Harvest, reset",
+"priority": 1
+},
+{
+"text": "Lap gone. Stay flat, go again",
+"priority": 1
+},
+{
+"text": "Lap invalid. Next one, inside the white line.",
+"priority": 2
+},
+{
+"text": "Lap is gone for track limits. Harvest and reset",
+"priority": 1
+},
+{
+"text": "Lap is gone. Reset and get a clean one.",
+"priority": 2
+},
+{
+"text": "Lap is gone. Stay on it and go again",
+"priority": 1
+},
+{
+"text": "Lap's deleted, track limits. Back off, recharge, we go again",
+"priority": 1
+},
+{
+"text": "Last chance for the lap. Go out now",
+"priority": 2
+},
+{
+"text": "Last chance to go. Out now",
+"priority": 2
+},
+{
+"text": "Leader approaching. Blue flag, let him through",
+"priority": 1
+},
+{
+"text": "Lock-up. Save these tyres.",
+"priority": 2
+},
+{
+"text": "Locked again. Get on the brakes earlier.",
+"priority": 2
+},
+{
+"text": "Locked there last time too. Softer pedal.",
+"priority": 3
+},
+{
+"text": "Locked up in the same place again. Brake earlier there.",
+"priority": 3
+},
+{
+"text": "Look after the rear left. Short-shift out of right-handers",
+"priority": 2
+},
+{
+"text": "Look after the rear right. Short-shift out of left-handers",
+"priority": 2
+},
+{
+"text": "Looks like a push lap. Confirm?",
+"priority": 1
+},
+{
+"text": "Lost it again. Clear, gentle throttle.",
+"priority": 1
+},
+{
+"text": "Lost the front wing. Box this lap",
+"priority": 1
+},
+{
+"text": "Massive save! Breathe",
+"priority": 2
+},
+{
+"text": "More contact. Checking the car again",
+"priority": 1
+},
+{
+"text": "More contact. Stand by, checking",
+"priority": 1
+},
+{
+"text": "Nearly lost it there. Nice save",
+"priority": 2
+},
+{
+"text": "Nearly spun there. Brilliant save, breathe",
+"priority": 2
+},
+{
+"text": "Nearly spun. Great reactions, ease the rears",
+"priority": 2
+},
+{
+"text": "Next lap's gone too, track limits. Cool lap, recharge, we go again",
+"priority": 1
+},
+{
+"text": "No DRS. Work the exits",
+"priority": 2
+},
+{
+"text": "No additional damage this time",
+"priority": 3
+},
+{
+"text": "No change to the damage readings",
+"priority": 3
+},
+{
+"text": "No damage added by that contact",
+"priority": 3
+},
+{
+"text": "No front wing. Pit now",
+"priority": 1
+},
+{
+"text": "No further damage. Keep it clean",
+"priority": 3
+},
+{
+"text": "No more swapping. Make one pass that sticks",
+"priority": 3
+},
+{
+"text": "No new damage from that contact",
+"priority": 3
+},
+{
+"text": "No new damage from that hit",
+"priority": 3
+},
+{
+"text": "No new damage. Keep the car clean",
+"priority": 3
+},
+{
+"text": "No time before the flag. Stay in",
+"priority": 2
+},
+{
+"text": "No time for a cool lap. Go again from the line",
+"priority": 1
+},
+{
+"text": "No time for another lap. Done",
+"priority": 2
+},
+{
+"text": "No traffic ahead. Clean air is yours.",
+"priority": 3
+},
+{
+"text": "No traffic coming. Short-shift and feed the power.",
+"priority": 1
+},
+{
+"text": "Nobody coming. Short-shift, feather it.",
+"priority": 1
+},
+{
+"text": "Not in recharge. Switch it",
+"priority": 2
+},
+{
+"text": "Nothing behind. Rejoin gently, the rears are hot.",
+"priority": 1
+},
+{
+"text": "Nothing further damaged. Avoid more contact",
+"priority": 3
+},
+{
+"text": "Oh, nearly lost it there. Good catch",
+"priority": 2
+},
+{
+"text": "One lap of pace left, roughly",
+"priority": 3
+},
+{
+"text": "Ooh, that was a moment. Nicely saved",
+"priority": 2
+},
+{
+"text": "Overheating tyres. Find the wet patches off-line",
+"priority": 2
+},
+{
+"text": "P1 and in clean air. That's the lead",
+"priority": 3
+},
+{
+"text": "Penalty remains on the car. Serve it in the pits",
+"priority": 2
+},
+{
+"text": "Penalty still to serve. Take it at the stop",
+"priority": 2
+},
+{
+"text": "Penalty still unserved. Serve it at the stop",
+"priority": 2
+},
+{
+"text": "Pit exit clear. Go now",
+"priority": 2
+},
+{
+"text": "Pit wall online.",
+"priority": 3
+},
+{
+"text": "Pressures are fine, temperatures in range",
+"priority": 2
+},
+{
+"text": "Push lap behind. Let it by.",
+"priority": 2
+},
+{
+"text": "Push lap now. Confirm?",
+"priority": 1
+},
+{
+"text": "Radio check, radio check.",
+"priority": 3
+},
+{
+"text": "Readings unchanged. Careful with the contact",
+"priority": 3
+},
+{
+"text": "Rear limited. Short-shift and feed in the power",
+"priority": 2
+},
+{
+"text": "Rear limited. Short-shift, feed the throttle",
+"priority": 2
+},
+{
+"text": "Rear stepped out, caught it. Keep going",
+"priority": 2
+},
+{
+"text": "Rear stepped out, you caught it. Keep going",
+"priority": 2
+},
+{
+"text": "Recharge mode, please. Still deploying",
+"priority": 2
+},
+{
+"text": "Recharge mode. Gentle throttle",
+"priority": 2
+},
+{
+"text": "Recharge mode. Harvest, easy on tyres",
+"priority": 2
+},
+{
+"text": "Recharge now. Keep the throttle gentle",
+"priority": 2
+},
+{
+"text": "Red flag, red flag. Back to the pits",
+"priority": 1
+},
+{
+"text": "Red flag. Red flag. Slow, back to pits",
+"priority": 1
+},
+{
+"text": "Red flag. Return to the pits, slowly",
+"priority": 1
+},
+{
+"text": "Red flag. Slow down and return to the pits",
+"priority": 1
+},
+{
+"text": "Release now. The window's closing, or we miss the lap",
+"priority": 2
+},
+{
+"text": "Reminder, penalty's unserved. It comes off at the stop",
+"priority": 2
+},
+{
+"text": "Restart. Tyres and brakes are cold, build heat before turn one",
+"priority": 2
+},
+{
+"text": "SC in this lap, SC in this lap. Stay close, be ready to go",
+"priority": 1
+},
+{
+"text": "SC in this lap. Get the tyres ready for the restart",
+"priority": 1
+},
+{
+"text": "Safety car comes in this lap. Warm the tyres",
+"priority": 1
+},
+{
+"text": "Safety car deployed. Keep the delta positive",
+"priority": 1
+},
+{
+"text": "Safety car deployed. Keep your delta positive",
+"priority": 1
+},
+{
+"text": "Safety car ending this lap. Stay close and be ready",
+"priority": 1
+},
+{
+"text": "Safety car in this lap. Heat the tyres",
+"priority": 1
+},
+{
+"text": "Safety car in. Green flag, resume racing",
+"priority": 1
+},
+{
+"text": "Safety car in. Tyres warm, restart coming",
+"priority": 1
+},
+{
+"text": "Safety car out. Maintain a positive delta",
+"priority": 1
+},
+{
+"text": "Safety car's in, green flag. Go",
+"priority": 1
+},
+{
+"text": "Safety car, safety car. Delta positive, stay above it",
+"priority": 1
+},
+{
+"text": "Safety car, safety car. Watch the delta",
+"priority": 1
+},
+{
+"text": "Safety car. Stay above the delta",
+"priority": 1
+},
+{
+"text": "Same lock-up again. Slightly untidy. Softer pedal.",
+"priority": 3
+},
+{
+"text": "Same lock-up as last lap. Brake earlier there.",
+"priority": 3
+},
+{
+"text": "Save the front left. Slow entry, quick exit. Don't wander wide on right-handers",
+"priority": 2
+},
+{
+"text": "Save the front right. Slow entry, quick exit. Don't wander wide on left-handers",
+"priority": 2
+},
+{
+"text": "Save the rear left. Short-shift out of right-handers",
+"priority": 2
+},
+{
+"text": "Save the rear right. Short-shift out of left-handers",
+"priority": 2
+},
+{
+"text": "Serve the drive-through first. No tyre change on that pass",
+"priority": 2
+},
+{
+"text": "Set recharge mode. Harvest and look after the tyres",
+"priority": 2
+},
+{
+"text": "Slicks now. Traffic on exit, take care on cold tyres",
+"priority": 2
+},
+{
+"text": "Slicks this lap. You rejoin in traffic, easy on cold tyres",
+"priority": 2
+},
+{
+"text": "Slightly untidy, well caught",
+"priority": 2
+},
+{
+"text": "Stay out, extend. Their tyres need time, push now",
+"priority": 1
+},
+{
+"text": "Still deploying. Select recharge mode",
+"priority": 2
+},
+{
+"text": "Still your team-mate. Bring both cars home safely",
+"priority": 2
+},
+{
+"text": "Stop now, cover the undercut",
+"priority": 1
+},
+{
+"text": "Swapping costs you both. Pick a pass that sticks",
+"priority": 3
+},
+{
+"text": "Switch to recharge mode. You're not in it",
+"priority": 2
+},
+{
+"text": "Team-mate contact. Checking the car, keep it clean",
+"priority": 1
+},
+{
+"text": "Team-mate fight. Race hard, keep it clean",
+"priority": 2
+},
+{
+"text": "Temps are high on these tyres. Use the wet bits to cool them",
+"priority": 2
+},
+{
+"text": "Temps are high, look after the rears",
+"priority": 2
+},
+{
+"text": "Temps are high, look after the rears",
+"priority": 3
+},
+{
+"text": "Temps in window. Leave pressures",
+"priority": 2
+},
+{
+"text": "Temps spot on. No changes",
+"priority": 2
+},
+{
+"text": "That hit caused no new damage",
+"priority": 3
+},
+{
+"text": "That one's deleted as well. Harvest this lap, push next time round",
+"priority": 1
+},
+{
+"text": "That was a big save. Ease the rears now",
+"priority": 2
+},
+{
+"text": "That's enough to get through. No need to push",
+"priority": 3
+},
+{
+"text": "That's the lead! P1, clean air",
+"priority": 3
+},
+{
+"text": "That's your team-mate! Checking the car, keep it clean",
+"priority": 1
+},
+{
+"text": "There's a gap at the exit. Go",
+"priority": 2
+},
+{
+"text": "Track limits again. This lap is gone, recharge and try the next one",
+"priority": 1
+},
+{
+"text": "Track limits, lap deleted. Ease off, recharge, then go again",
+"priority": 1
+},
+{
+"text": "Track limits, lap deleted. Keep the next one clean.",
+"priority": 2
+},
+{
+"text": "Track's clear ahead. Good spacing.",
+"priority": 3
+},
+{
+"text": "Traffic at exit. Let it go.",
+"priority": 1
+},
+{
+"text": "Traffic at pit exit. Hold your line",
+"priority": 2
+},
+{
+"text": "Traffic on the merge. Let the car through.",
+"priority": 1
+},
+{
+"text": "Twitchy through there. Good reactions",
+"priority": 2
+},
+{
+"text": "Tyre check, roughly one lap of pace in them",
+"priority": 3
+},
+{
+"text": "Tyre temperatures rising. Smooth throttle, fewer slides",
+"priority": 2
+},
+{
+"text": "Tyre temperatures rising. Smooth throttle, fewer slides",
+"priority": 3
+},
+{
+"text": "Tyre temps are climbing. Smooth on the throttle, fewer slides",
+"priority": 2
+},
+{
+"text": "Tyre temps are climbing. Smooth on the throttle, fewer slides",
+"priority": 3
+},
+{
+"text": "Tyre temps are right. Leave the pressures as they are",
+"priority": 2
+},
+{
+"text": "Tyres are cold and graining. Work them, lean on the fronts",
+"priority": 2
+},
+{
+"text": "Tyres are running hot. Ease the slides",
+"priority": 2
+},
+{
+"text": "Tyres are running hot. Ease the slides",
+"priority": 3
+},
+{
+"text": "Tyres cooking. Find wet patches on the straights",
+"priority": 2
+},
+{
+"text": "Tyres graining. Keep loading the fronts, it'll clear",
+"priority": 2
+},
+{
+"text": "Tyres hot. Keep the slides down",
+"priority": 2
+},
+{
+"text": "Tyres hot. Keep the slides down",
+"priority": 3
+},
+{
+"text": "Tyres in range. Right, let's push.",
+"priority": 2
+},
+{
+"text": "Tyres in the window. Push.",
+"priority": 2
+},
+{
+"text": "Tyres nearly done. About one lap left",
+"priority": 3
+},
+{
+"text": "Tyres overheating. Cool them off the dry line",
+"priority": 2
+},
+{
+"text": "Tyres too hot. Use wet patches on the straights",
+"priority": 2
+},
+{
+"text": "Under control. Keep the tyres in good shape",
+"priority": 3
+},
+{
+"text": "Understood, Plan C. Box this lap",
+"priority": 1
+},
+{
+"text": "Understood, back off. Recharge for the next lap",
+"priority": 1
+},
+{
+"text": "Understood, back to the garage",
+"priority": 1
+},
+{
+"text": "Understood, box this lap",
+"priority": 1
+},
+{
+"text": "Understood, continue the run",
+"priority": 1
+},
+{
+"text": "Understood, cool lap and recharge",
+"priority": 1
+},
+{
+"text": "Understood, cooling. Back off",
+"priority": 1
+},
+{
+"text": "Understood, extend. We'll look again next lap",
+"priority": 1
+},
+{
+"text": "Understood, go for it. Keep it clean",
+"priority": 1
+},
+{
+"text": "Understood, hot lap. Push now",
+"priority": 1
+},
+{
+"text": "Understood, keep going. Make it count",
+"priority": 1
+},
+{
+"text": "Understood, keep pushing. It won't count",
+"priority": 1
+},
+{
+"text": "Understood, pit this lap and save the tyres",
+"priority": 1
+},
+{
+"text": "Understood, push now. Battery is short",
+"priority": 1
+},
+{
+"text": "Understood, pushing. Watch the battery",
+"priority": 1
+},
+{
+"text": "Understood, staying out",
+"priority": 1
+},
+{
+"text": "Understood, staying out. Keep it clean",
+"priority": 1
+},
+{
+"text": "Understood, staying out. Your call",
+"priority": 1
+},
+{
+"text": "Understood, we'll follow your call",
+"priority": 1
+},
+{
+"text": "Understood, your call. Cool this one then",
+"priority": 1
+},
+{
+"text": "Understood, your call. Go for it, keep it clean",
+"priority": 1
+},
+{
+"text": "Understood, your call. Push on, keep it clean",
+"priority": 1
+},
+{
+"text": "Understood. Bring her home",
+"priority": 1
+},
+{
+"text": "Understood. Bring the car home gently",
+"priority": 1
+},
+{
+"text": "Understood. Cool lap, then go again",
+"priority": 1
+},
+{
+"text": "Understood. Go again, battery is low",
+"priority": 1
+},
+{
+"text": "Understood. Keep pushing and make the lap count",
+"priority": 1
+},
+{
+"text": "Understood. No risks if you stay out",
+"priority": 1
+},
+{
+"text": "Understood. Push again from the line",
+"priority": 1
+},
+{
+"text": "Understood. Push now",
+"priority": 1
+},
+{
+"text": "Understood. Push on",
+"priority": 1
+},
+{
+"text": "Understood. Recharge for another lap",
+"priority": 1
+},
+{
+"text": "Understood. Recharge mode",
+"priority": 1
+},
+{
+"text": "Understood. Recharge, then go again next lap",
+"priority": 1
+},
+{
+"text": "Understood. We'll cool it this lap",
+"priority": 1
+},
+{
+"text": "Understood. Your call",
+"priority": 1
+},
+{
+"text": "Unserved penalty on the car. We serve it at the stop",
+"priority": 2
+},
+{
+"text": "VSC active. Stay on the delta",
+"priority": 1
+},
+{
+"text": "VSC deployed. Follow the delta",
+"priority": 1
+},
+{
+"text": "VSC ended. Green flag, resume racing",
+"priority": 1
+},
+{
+"text": "VSC ending, VSC ending. Be ready to go",
+"priority": 1
+},
+{
+"text": "VSC ending. Prepare to race when it goes green",
+"priority": 1
+},
+{
+"text": "VSC ending. Stay on the delta until it goes green",
+"priority": 1
+},
+{
+"text": "VSC over, go, go, go",
+"priority": 1
+},
+{
+"text": "VSC, VSC. Stay on the delta",
+"priority": 1
+},
+{
+"text": "Very nearly around. Great reactions, calm it down",
+"priority": 2
+},
+{
+"text": "Virtual safety car deployed. Delta, keep it positive",
+"priority": 1
+},
+{
+"text": "Virtual safety car ending. Hold the delta until green",
+"priority": 1
+},
+{
+"text": "Virtual safety car. Keep your delta positive",
+"priority": 1
+},
+{
+"text": "Virtual safety car. Stick to the delta",
+"priority": 1
+},
+{
+"text": "Watch the front left. Slow in, fast out, right-handers",
+"priority": 2
+},
+{
+"text": "Watch the front right. Slow in, fast out, left-handers",
+"priority": 2
+},
+{
+"text": "We'll take the penalty at the stop, it's still on the car",
+"priority": 2
+},
+{
+"text": "We've had contact. Checking for damage",
+"priority": 1
+},
+{
+"text": "Whoa, twitchy there. Good hands",
+"priority": 2
+},
+{
+"text": "Window closing. Go now or we miss the lap",
+"priority": 2
+},
+{
+"text": "Wing damage. Too late for a stop, nurse it home",
+"priority": 1
+},
+{
+"text": "Wing damaged. No stop, brake early",
+"priority": 1
+},
+{
+"text": "Wing's gone, too late to stop. Nurse it home",
+"priority": 1
+},
+{
+"text": "Wow, that was nearly around. Brilliant save",
+"priority": 2
+},
+{
+"text": "Yellow behind you. Keep going.",
+"priority": 3
+},
+{
+"text": "Yellow flag behind you. Continue.",
+"priority": 3
+},
+{
+"text": "You know what I'm going to say.",
+"priority": 2
+},
+{
+"text": "You'll catch the car ahead. Ease off.",
+"priority": 2
+},
+{
+"text": "You're at hot-lap pace. Shall we go?",
+"priority": 1
+},
+{
+"text": "You're on push pace. Hot lap?",
+"priority": 1
+},
+{
+"text": "You're safely through. Bring it home",
+"priority": 3
+},
+{
+"text": "You're through. No need to push",
+"priority": 3
+},
+{
+"text": "You've left the boost on. Off for the exit.",
+"priority": 1
+},
+{
+"text": "Your call, continue pushing. The lap won't count",
+"priority": 1
+},
+{
+"text": "Your call, push on. Keep an eye on the battery",
+"priority": 1
+},
+{
+"text": "Your call, stay out. Keep it clean",
+"priority": 1
+},
+{
+"text": "Your call. Cool the tyres on this lap",
+"priority": 1
+},
+{
+"text": "Your call. Keep pushing, but keep it clean",
+"priority": 1
+},
+{
+"text": "Your call. Keep pushing, keep it clean",
+"priority": 1
+},
+{
+"text": "Your call. Keep pushing, though the lap won't count",
+"priority": 1
+},
+{
+"text": "Your call. Push, but keep it clean",
+"priority": 1
+},
+{
+"text": "Your call. We'll stay out",
+"priority": 1
+}
+]

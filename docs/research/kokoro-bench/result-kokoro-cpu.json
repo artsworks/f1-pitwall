@@ -1,0 +1,47 @@
+{
+ "label": "kokoro-cpu",
+ "mode": "kokoro",
+ "providers": [
+  "CPUExecutionProvider"
+ ],
+ "sample_rate": 24000,
+ "load_s": 1.66,
+ "first_render_ms": 1507,
+ "vram_delta_mib": -4,
+ "pass1": {
+  "n": 24,
+  "p50_ms": 586,
+  "p95_ms": 727,
+  "max_ms": 731,
+  "rtf": 0.212
+ },
+ "pass2_3": {
+  "n": 48,
+  "p50_ms": 589,
+  "p95_ms": 747,
+  "max_ms": 762,
+  "rtf": 0.213
+ },
+ "all": {
+  "n": 72,
+  "p50_ms": 589,
+  "p95_ms": 734,
+  "max_ms": 762,
+  "rtf": 0.212
+ },
+ "short_le30": {
+  "n": 18,
+  "p50_ms": 398,
+  "p95_ms": 559,
+  "max_ms": 564,
+  "rtf": 0.22
+ },
+ "long_gt45": {
+  "n": 27,
+  "p50_ms": 698,
+  "p95_ms": 754,
+  "max_ms": 762,
+  "rtf": 0.21
+ },
+ "audio_s_mean": 2.67
+}

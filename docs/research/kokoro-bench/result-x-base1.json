@@ -1,0 +1,28 @@
+{
+ "label": "base1",
+ "cfg": {},
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.8,
+ "first_ms": 729,
+ "vram_mib": 1531,
+ "n": 72,
+ "total_p50": 158.2,
+ "total_p95": 215.9,
+ "total_max": 220.7,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 156.6,
+ "run_p95": 213.8,
+ "rest_p50": 1.4,
+ "rest_p95": 1.8,
+ "nan_renders": 0,
+ "peak": 0.509,
+ "sample": {
+  "nan": 0,
+  "peak": 0.366,
+  "len": 87040
+ }
+}

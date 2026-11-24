@@ -1,0 +1,34 @@
+{
+ "label": "optsave",
+ "cfg": {
+  "so": {
+   "optimized_path": "kokoro-opt.onnx"
+  }
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 1.0,
+ "first_ms": 703,
+ "vram_mib": 1548,
+ "n": 72,
+ "total_p50": 141.7,
+ "total_p95": 194.0,
+ "total_max": 209.0,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 140.3,
+ "run_p95": 192.5,
+ "pass1_p50": 144.3,
+ "pass23_p50": 139.5,
+ "rest_p50": 1.2,
+ "rest_p95": 1.4,
+ "nan_renders": 0,
+ "peak": 0.515,
+ "sample": {
+  "nan": 0,
+  "peak": 0.369,
+  "len": 87040
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "label": "intra2",
+ "cfg": {
+  "so": {
+   "intra": 2,
+   "inter": 1
+  }
+ },
+ "providers": [
+  "CUDAExecutionProvider",
+  "CPUExecutionProvider"
+ ],
+ "load_s": 0.77,
+ "first_ms": 720,
+ "vram_mib": 1548,
+ "n": 72,
+ "total_p50": 143.2,
+ "total_p95": 185.3,
+ "total_max": 210.7,
+ "ph_p50": 0.2,
+ "ph_p95": 0.3,
+ "run_p50": 141.7,
+ "run_p95": 183.8,
+ "pass1_p50": 145.6,
+ "pass23_p50": 143.2,
+ "rest_p50": 1.2,
+ "rest_p95": 1.5,
+ "nan_renders": 0,
+ "peak": 0.517,
+ "sample": {
+  "nan": 0,
+  "peak": 0.361,
+  "len": 87040
+ }
+}
