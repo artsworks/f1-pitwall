@@ -628,9 +628,7 @@ def test_tracker_stay_verdict_retires_pending_plan_c() -> None:
     )
     assert st.active in ("A", "B")
     assert "C" not in {p.id for p in st.plans}
-    assert [(e.kind, e.from_plan) for e in tr.drain() if e.kind == "switch"] == [
-        ("switch", "C")
-    ]
+    assert [(e.kind, e.from_plan) for e in tr.drain() if e.kind == "switch"] == [("switch", "C")]
 
     st = tr.update(
         inputs(lap_num=17, laps_remaining=34, tyre_age=16),
