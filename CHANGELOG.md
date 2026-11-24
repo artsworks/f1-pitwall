@@ -13,6 +13,119 @@ The release workflow writes entries after 0.1.0 from the Conventional Commit PR 
 
 <!-- version list -->
 
+## v0.62.0 (2026-11-24)
+
+### Bug Fixes
+
+- Correct SC stop verdict inputs and refresh stale box calls
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Hold the SC two-stop fallback to a fresh set per stint
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Hold two-stop stints to usable tyre life, gate search on eligible survivors
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Keep the VSC ending through the resume event, grade damage stops after a non-survivor
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- No safety car pick when the current set survives and is not slower
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Store the final race lap so hindsight sees a finish
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+### Chores
+
+- Add pre-commit hooks running ruff check and format
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+### Code Style
+
+- Apply ruff format to test_plans.py ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+### Documentation
+
+- Correct default warm phrase count to 170
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Correct kokoro extras behaviour for uv run and uv sync
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Note the pre-commit ruff hooks in agent notes
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Plan the safety car verdict (v4) ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Record the safety car takeover and its replay batch
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+### Features
+
+- Grade safety car rows on pace when the set reaches the flag
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Grade safety car verdict rows in hindsight (phase 2)
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Learn an offset on sc_survive_min from safety car row grades
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Let the verdict own a pending Plan C and hide BOX NOW without a due stop
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Log the safety car verdict in shadow (phase 1)
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Lower sc_survive_min to 0.60 balanced and 0.45 aggressive
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Rain gate and penalty seconds in the safety car verdict, count stops made under SC
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Render queued speech ahead of playback, report slow renders
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Safety car verdict decides the stop, Plan C and the stay-out call
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Safety car verdict decides the stop, with hindsight grading and ladder card
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+- Show the safety car ladder on the dashboard and debrief (phase 3)
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+### Refactoring
+
+- Name the safety car verdict record record_only instead of shadow
+  ([#198](https://github.com/artsworks/f1-pitwall/pull/198),
+  [`2baaebc`](https://github.com/artsworks/f1-pitwall/commit/2baaebcf5ff4c1897e5a89082ea84288a95da88e))
+
+
 ## v0.61.0 (2026-11-21)
 
 ### Features
