@@ -390,6 +390,46 @@ def test_reactive_plan_c_boxes_now_at_neutralised_loss() -> None:
     assert c.race_time_s < green.race_time_s
 
 
+def test_reactive_two_stop_needs_stints_within_usable_life() -> None:
+    capped = tuple(
+        dataclasses.replace(m, usable_life_laps=5)
+        for m in models(s_deg=100.0, m_deg=100.0, h_deg=100.0)
+    )
+    inp = inputs(laps_remaining=11, compounds=capped)
+    # Two fresh stints of at most 5 laps cover 10 of the 11 remaining.
+    assert reactive(inp, TH, min_stops=2) is None
+
+
+def test_reactive_two_stop_respects_usable_life_split() -> None:
+    # H deg 10 makes an 8-lap hard stint the unconstrained favourite; the
+    # 6-lap life forces a 5+6 or 6+5 split instead. One hard set rules out
+    # hard-hard sequences.
+    capped = (
+        CompoundModel(S, 89_600.0, 200.0, 2, usable_life_laps=6),
+        CompoundModel(M, 90_000.0, 150.0, 2, usable_life_laps=6),
+        CompoundModel(H, 89_000.0, 10.0, 1, usable_life_laps=6),
+    )
+    inp = inputs(laps_remaining=11, compounds=capped)
+    e = reactive(inp, TH, min_stops=2)
+    assert e is not None
+    k1 = e.stop_laps[0] - inp.lap_num
+    k2 = e.stop_laps[1] - inp.lap_num
+    assert k2 - k1 <= 6 and inp.laps_remaining - k2 <= 6
+
+
+def test_evaluate_one_stop_respects_usable_life() -> None:
+    capped = (
+        CompoundModel(S, 89_600.0, 160.0, 2, usable_life_laps=8),
+        CompoundModel(M, 90_000.0, 100.0, 2, usable_life_laps=8),
+        CompoundModel(H, 89_000.0, 0.0, 2, usable_life_laps=8),
+    )
+    inp = inputs(laps_remaining=11, compounds=capped)
+    e = evaluate(inp, (M, H), TH)
+    assert e is not None
+    # The fresh hard stint is 11 - k1 laps; the 8-lap life forces k1 >= 3.
+    assert e.stop_laps[0] - inp.lap_num >= 3
+
+
 def test_tracker_reprices_stored_plan_c_when_neutralised_loss_changes() -> None:
     inp = inputs(lap_num=20, laps_remaining=31, tyre_age=19, sc_loss_s=12.0)
     tracker = PlanTracker()

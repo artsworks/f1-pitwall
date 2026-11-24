@@ -212,6 +212,52 @@ def test_two_stop_slower_than_waiting_stays_out() -> None:
     assert v.reason == "stay out, nothing reaches the flag"
 
 
+def capped(life: int, **kw: float) -> tuple[CompoundModel, ...]:
+    return tuple(dataclasses.replace(m, usable_life_laps=life) for m in models(**kw))
+
+
+def test_two_stop_stints_must_fit_usable_life() -> None:
+    # 11 laps on 3-lap sets: no split of two fresh stints covers the race.
+    inp = inputs(
+        cur=fit(700.0),
+        cur_cliff_age=2.0,
+        compounds=capped(3, s_deg=100.0, m_deg=100.0, h_deg=100.0),
+    )
+    v = verdict(inp, usable_life={S: 3, M: 3, H: 3}, cur_wear_pct=60.0)
+    assert v.pick == 0
+    assert v.sequence == ()
+    assert v.reason == "stay out, nothing reaches the flag"
+
+
+def test_two_stop_fits_when_stints_fit_usable_life() -> None:
+    inp = inputs(
+        cur=fit(700.0),
+        cur_cliff_age=2.0,
+        compounds=capped(6, s_deg=100.0, m_deg=100.0, h_deg=100.0),
+    )
+    v = verdict(inp, usable_life={S: 6, M: 6, H: 6}, cur_wear_pct=60.0)
+    assert len(v.sequence) == 3 and "two stops" in v.reason
+
+
+def test_two_stop_runs_when_only_survivor_has_no_fresh_sets() -> None:
+    # Hards survive to the flag but none are fresh; two soft sets each fall
+    # short of the flag yet together cover the race faster than waiting.
+    compounds = (
+        CompoundModel(S, 89_600.0, 100.0, 2, usable_life_laps=6),
+        CompoundModel(M, 90_000.0, 100.0, 0, usable_life_laps=6),
+        CompoundModel(H, 90_400.0, 60.0, 0, usable_life_laps=20),
+    )
+    inp = inputs(cur=fit(700.0), cur_cliff_age=2.0, compounds=compounds)
+    v = verdict(
+        inp,
+        fresh_sets={S: 2, M: 0, H: 0},
+        usable_life={S: 6, M: 6, H: 20},
+        cur_wear_pct=60.0,
+    )
+    assert v.sequence == (M, S, S)
+    assert "two stops" in v.reason
+
+
 def _engine(tmp_path, db=None):
     return build_engine(
         isolated=True,

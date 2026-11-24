@@ -174,6 +174,7 @@ def sc_verdict(
     can_stop = saving_s > 0 and not rain_due
     pick = 0
     pick_t = math.inf
+    eligible: list[ScRow] = []
     for r in rows:
         if r.current or not r.survives or not can_stop:
             continue
@@ -183,6 +184,7 @@ def sc_verdict(
             continue
         if r.race_time_s is None:
             continue
+        eligible.append(r)
         if r.race_time_s < pick_t:
             pick, pick_t = r.compound, r.race_time_s
     cur_row = next((r for r in rows if r.current), None)
@@ -199,12 +201,7 @@ def sc_verdict(
         pick = 0
     legal_stay = cur_row is not None and cur_row.survives and _two_compound_ok(inp, inp.current, th)
     two_stop = None
-    if (
-        not pick
-        and can_stop
-        and not legal_stay
-        and not any(r.survives and not r.current for r in rows)
-    ):
+    if can_stop and not legal_stay and not eligible:
         best_one = min((e.race_time_s for e in derive(inp, th)), default=math.inf)
         no_fresh = frozenset(c for c in DRY if fresh_sets.get(c, -1) == 0)
         two_stop = reactive(inp, th, min_stops=2, no_fresh_first=no_fresh)

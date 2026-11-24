@@ -114,6 +114,15 @@ def _hold_cover_plan(
     return plan, None
 
 
+def _usable_life(snap: Snapshot) -> dict[int, int]:
+    """Game-reported set life per dry compound; empty without the packet."""
+    if not snap.tyre_sets:
+        return {}
+    return {
+        v: max((s.usable_life for s in snap.tyre_sets if s.visual == v), default=0) for v in DRY
+    }
+
+
 class Planner:
     def __init__(
         self,
@@ -409,6 +418,7 @@ class Planner:
         settings = self.ctx.store.current()
         current = snap.tyre_visual
         names = {16: "soft", 17: "medium", 18: "hard"}
+        usable = _usable_life(snap)
         out: list[CompoundModel] = []
         for v in DRY:
             actual = next((s.actual for s in snap.tyre_sets if s.visual == v and s.actual), 0)
@@ -444,6 +454,7 @@ class Planner:
                     deg,
                     sets,
                     deg_posterior_sd_ms_per_lap=deg_sd,
+                    usable_life_laps=usable.get(v, 0),
                 )
             )
         return tuple(out)
@@ -599,15 +610,9 @@ class Planner:
                 17: snap.fresh_sets_medium,
                 18: snap.fresh_sets_hard,
             }
-            usable = {
-                v: max(
-                    (s.usable_life for s in snap.tyre_sets if s.visual == v),
-                    default=0,
-                )
-                for v in DRY
-            }
         else:
-            sets, usable = {}, {}
+            sets = {}
+        usable = _usable_life(snap)
         th = self._plan_thresholds(snap, False)
         learned = threshold(th, "sc_survive_min", 0.60) + self.ctx.sc_survive_offset
         survive_min = min(

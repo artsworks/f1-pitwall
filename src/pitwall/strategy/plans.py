@@ -30,6 +30,7 @@ class CompoundModel:
     deg_ms_per_lap: float
     sets: int  # usable sets left, -1 = unknown (no Tyre Sets packet)
     deg_posterior_sd_ms_per_lap: float = 0.0
+    usable_life_laps: int = 0  # game-reported fresh-set life, 0 = no Tyre Sets packet
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,20 +208,30 @@ def evaluate(
         return PlanEval(seq, (), (0, 0), cur[r] / 1000.0, sd_ms / 1000.0)
     models = {c.visual: c for c in inp.compounds}
     fresh = []
+    caps = []
     for c in seq[1:]:
         m = models[c]
         cliff = math.inf if m.deg_ms_per_lap <= 0 else cliff_ms / m.deg_ms_per_lap
         fresh.append(_cum(m.base_ms, m.deg_ms_per_lap, 0, r, cliff, pen))
+        caps.append(m.usable_life_laps)
     k1s = [0] if stop_now else list(range(last_k + 1))
     per_k1: dict[int, tuple[float, tuple[int, ...]]] = {}
     for k1 in k1s:
         if k1 > last_k:
             continue
         if stops == 1:
+            if caps[0] > 0 and r - k1 > caps[0]:
+                continue
             per_k1[k1] = (cur[k1] + fresh[0][r - k1] + first_ms, (k1,))
             continue
+        k2_lo = k1 + mn
+        k2_hi = last_k
+        if caps[0] > 0:
+            k2_hi = min(k2_hi, k1 + caps[0])
+        if caps[1] > 0:
+            k2_lo = max(k2_lo, r - caps[1])
         best: tuple[float, tuple[int, ...]] | None = None
-        for k2 in range(k1 + mn, last_k + 1):
+        for k2 in range(k2_lo, k2_hi + 1):
             t = cur[k1] + fresh[0][k2 - k1] + fresh[1][r - k2] + first_ms + loss_ms
             if best is None or t < best[0]:
                 best = (t, (k1, k2))
