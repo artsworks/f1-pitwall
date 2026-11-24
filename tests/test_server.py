@@ -1303,6 +1303,38 @@ def test_strategy_payload_named_plans() -> None:
     assert s["plan_next_compound"] is None and s["fit_mismatch"] is None
 
 
+def test_strategy_payload_completed_reactive_plan() -> None:
+    """Plan C whose only stop is done reaches the dashboard with stops == 0
+    and no stop laps, so the client can drop the BOX NOW card."""
+    import dataclasses
+
+    from pitwall.server.app import strategy_payload
+    from pitwall.state.session import Snapshot
+    from pitwall.strategy.plans import StrategyPlan
+
+    snap = dataclasses.replace(
+        Snapshot(now=0.0),
+        session_type=15,
+        session_kind="race",
+        race_phase="racing",
+        lap_num=48,
+        laps_remaining=12,
+        tyre_visual=18,
+        plans=(
+            StrategyPlan("A", "primary", (18,), (), (0, 0), 1087.8, 0.0),
+            StrategyPlan("C", "reactive", (18,), (), (0, 0), 1080.0, -7.8),
+        ),
+        active_plan="C",
+        on_plan=True,
+    )
+    s = strategy_payload(snap)
+    assert s is not None
+    c = next(p for p in s["plans"] if p["id"] == "C")
+    assert c["kind"] == "reactive" and c["active"] is True
+    assert c["stops"] == 0 and c["stop_laps"] == [] and c["window"] is None
+    assert c["compounds"] == ["HARD"]
+
+
 def test_strategy_payload_next_compound_and_fit_mismatch() -> None:
     """Report a fitted-tyre mismatch from the engine's stop latch."""
     import dataclasses

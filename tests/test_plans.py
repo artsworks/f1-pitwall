@@ -546,6 +546,165 @@ def test_tracker_sc_stop_taken_keeps_c() -> None:
     assert tr.drain() == []
 
 
+def test_tracker_completed_plan_c_keeps_zero_stop_entry() -> None:
+    """Plan C stays active after its SC stop with only the fitted compound
+    left; the entry carries stops == 0 so the dashboard can drop BOX NOW."""
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=45, laps_remaining=15, tyre_age=14),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, H),
+    )
+    assert st.active == "C"
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=47, laps_remaining=13, tyre_age=1, current=H, used=frozenset({M, H})),
+        TH,
+        stops_done=1,
+        neutralised=False,
+        cheap_stop=False,
+    )
+    assert st.active == "C" and st.stops_left == 0
+    c = next(p for p in st.plans if p.id == "C")
+    assert c.compounds == (H,) and c.stops == 0 and c.stop_laps == ()
+
+
+def test_tracker_plan_c_second_stop_waits_for_its_lap() -> None:
+    """A two-stop Plan C keeps its next stop on a later lap after the SC stop."""
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=45, laps_remaining=15, tyre_age=14),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, H, S),
+    )
+    assert st.active == "C"
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=47, laps_remaining=13, tyre_age=1, current=H, used=frozenset({M, H})),
+        TH,
+        stops_done=1,
+        neutralised=True,
+        cheap_stop=False,
+    )
+    assert st.active == "C"
+    c = next(p for p in st.plans if p.id == "C")
+    assert c.compounds == (H, S) and c.stops == 1 and c.stop_laps[0] > 47
+
+
+def test_tracker_stay_verdict_retires_pending_plan_c() -> None:
+    """A stay-out verdict on a later SC lap withdraws an unexecuted Plan C, and
+    a later box verdict latches a fresh one."""
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=15, laps_remaining=36, tyre_age=14),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, H),
+    )
+    assert st.active == "C"
+    tr.drain()
+
+    st = tr.update(
+        inputs(lap_num=16, laps_remaining=35, tyre_age=15),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=False,
+        sc_sequence=(),
+    )
+    assert st.active in ("A", "B")
+    assert "C" not in {p.id for p in st.plans}
+    assert [(e.kind, e.from_plan) for e in tr.drain() if e.kind == "switch"] == [
+        ("switch", "C")
+    ]
+
+    st = tr.update(
+        inputs(lap_num=17, laps_remaining=34, tyre_age=16),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, S),
+    )
+    assert st.active == "C"
+    assert st.active_plan is not None and st.active_plan.compounds == (M, S)
+
+
+def test_tracker_new_verdict_rebases_pending_plan_c() -> None:
+    """A box verdict for another compound updates the pending Plan C in place."""
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=15, laps_remaining=36, tyre_age=14),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, H),
+    )
+    assert st.active == "C"
+    tr.drain()
+
+    st = tr.update(
+        inputs(lap_num=16, laps_remaining=35, tyre_age=15),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, S),
+    )
+    assert st.active == "C"
+    assert st.active_plan is not None and st.active_plan.compounds == (M, S)
+    c = next(p for p in st.plans if p.id == "C")
+    assert c.compounds == (M, S) and c.stop_laps[0] == 16
+    assert tr.seqs["C"] == (0, (M, S))
+    assert [e for e in tr.drain() if e.kind == "switch"] == []
+
+
+def test_tracker_stay_verdict_keeps_followed_plan_c() -> None:
+    """Once the SC stop is done, Plan C's remaining sequence is a normal plan:
+    a stay verdict does not retire it."""
+    tr = PlanTracker()
+    tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=45, laps_remaining=15, tyre_age=14),
+        TH,
+        stops_done=0,
+        neutralised=True,
+        cheap_stop=True,
+        sc_sequence=(M, H),
+    )
+    assert st.active == "C"
+    tr.drain()
+    st = tr.update(
+        inputs(lap_num=47, laps_remaining=13, tyre_age=1, current=H, used=frozenset({M, H})),
+        TH,
+        stops_done=1,
+        neutralised=True,
+        cheap_stop=False,
+        sc_sequence=(),
+    )
+    assert st.active == "C"
+    c = next(p for p in st.plans if p.id == "C")
+    assert c.compounds == (H,) and c.stops == 0
+
+
 def test_tracker_goes_off_plan_then_switches_on_pace() -> None:
     tr = PlanTracker()
     tr.update(inputs(), TH, stops_done=0, neutralised=False, cheap_stop=False)

@@ -732,11 +732,13 @@
     var ap = activePlan(s), lapNow = p.lap_num || 0, win = ap && ap.window;
     var inRacePit = !!(p.pit_board && !p.pit_board.show_release && p.phase !== "garage");
     var boxNow = !!(s && ((win && lapNow >= win[0] && lapNow <= win[1]) ||
-      (s.plans || []).some(function (x) { return x.kind === "reactive" && scLive; })));
+      (s.plans || []).some(function (x) {
+        return x.kind === "reactive" && scLive && planStopDue(x, lapNow);
+      })));
     renderBox(p, s, ap, inRacePit, boxNow);
     renderReplyCard();
     renderBattle(s, p.position);
-    renderPlans(s, scLive);
+    renderPlans(s, scLive, lapNow);
     renderInfo(s, t);
   }
 
@@ -845,7 +847,7 @@
 
   // Plan C (kind "reactive") is sent every tick; show it only under SC/VSC or once it is the active plan.
   // Under live SC/VSC plan C comes first with an amber border. The active plan keeps its thick border.
-  function renderPlans(s, scLive) {
+  function renderPlans(s, scLive, lapNow) {
     var box = el("plans");
     if (!box) return;
     box.innerHTML = "";
@@ -863,7 +865,7 @@
     }
     var ap = activePlan(s);
     plans.forEach(function (pl) {
-      if (pl.kind === "reactive") {
+      if (pl.kind === "reactive" && planStopDue(pl, lapNow)) {
         var saving = typeof pl.delta_s === "number" && pl.delta_s < 0;
         box.appendChild(node("card plan" + (focusReactive ? " focus" : ""), [
           node("row", [
@@ -940,6 +942,12 @@
     var ps = s && s.plans ? s.plans : [];
     for (var i = 0; i < ps.length; i++) if (ps[i].active) return ps[i];
     return null;
+  }
+
+  // Plan C's BOX NOW card needs a stop due this lap; a finished Plan C or one
+  // whose next stop is later renders through the normal plan rows.
+  function planStopDue(pl, lapNow) {
+    return pl.stops > 0 && (pl.stop_laps || []).length > 0 && pl.stop_laps[0] <= lapNow;
   }
 
   function span(txt, cls, tag) {

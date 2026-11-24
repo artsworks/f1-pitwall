@@ -484,7 +484,19 @@ class PlanTracker:
                     evals[pid] = evaluate(inp, rem, th)
             else:
                 evals[pid] = None
-        if "C" in self.seqs:
+        c_pending = "C" in self.seqs and self.seqs["C"][0] == stops_done
+        if c_pending and neutralised and sc_sequence is not None:
+            # The verdict owns a pending SC stop: a stay call retires Plan C,
+            # a new pick rebases it on the verdict's sequence.
+            c_now = (
+                evaluate(inp, sc_sequence, th, stop_now=True, first_loss_s=inp.sc_loss_s)
+                if sc_sequence
+                else None
+            )
+            evals["C"] = c_now
+            if c_now is not None:
+                self._set("C", "reactive", stops_done, c_now)
+        elif "C" in self.seqs:
             c_now = evals.get("C")
         elif sc_sequence is None:
             c_now = reactive(inp, th)
