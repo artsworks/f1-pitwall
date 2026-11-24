@@ -207,6 +207,14 @@ def evaluate(
         sd_ms = inp.cur.deg_posterior_sd_ms_per_lap * _age_sum(inp.tyre_age, r)
         return PlanEval(seq, (), (0, 0), cur[r] / 1000.0, sd_ms / 1000.0)
     models = {c.visual: c for c in inp.compounds}
+    fitted = models.get(inp.current)
+    # The stint on the fitted set is capped by its remaining usable life
+    # (0/unknown = no cap); a spent set leaves only k1 == 0, stop now.
+    life_left = (
+        max(0, fitted.usable_life_laps - inp.tyre_age)
+        if fitted is not None and fitted.usable_life_laps > 0
+        else None
+    )
     fresh = []
     caps = []
     for c in seq[1:]:
@@ -217,7 +225,7 @@ def evaluate(
     k1s = [0] if stop_now else list(range(last_k + 1))
     per_k1: dict[int, tuple[float, tuple[int, ...]]] = {}
     for k1 in k1s:
-        if k1 > last_k:
+        if k1 > last_k or (life_left is not None and k1 > life_left):
             continue
         if stops == 1:
             if caps[0] > 0 and r - k1 > caps[0]:
@@ -511,7 +519,12 @@ class PlanTracker:
             )
             evals["C"] = c_now
             if c_now is not None:
+                revised = _next_compound(self.seqs["C"][1]) != _next_compound(c_now.compounds)
                 self._set("C", "reactive", stops_done, c_now)
+                if revised:
+                    # A new box compound is a new instruction: refresh the switch
+                    # lap so plan_sc_box re-announces. A pure reprice keeps it.
+                    self.switch_lap = lap
         elif "C" in self.seqs:
             c_now = evals.get("C")
         elif sc_sequence is None:
@@ -641,6 +654,11 @@ def _seq_text(e: PlanEval | None) -> str:
     return "-".join(LETTERS.get(c, "?") for c in e.compounds) if e is not None else ""
 
 
+def _next_compound(seq: tuple[int, ...]) -> int:
+    """The compound a stop sequence boxes for next (0 = run to the flag)."""
+    return seq[1] if len(seq) > 1 else 0
+
+
 _STOP_WORDS = {0: "no stop", 1: "one stop", 2: "two stop"}
 
 
@@ -670,6 +688,7 @@ class PlanFields:
     plan_window_text: str
     plan_window_open: bool
     plan_next_compound: str
+    plan_sc_compound: str
     plan_off_s: float
     plan_off_prob: float
     plan_delta_sd_s: float
@@ -707,6 +726,11 @@ def view_fields(st: PlanState, lap_num: int) -> PlanFields:
         plan_window_open=st.stops_left > 0 and start > 0 and start <= lap_num <= end,
         plan_next_compound=(
             WORDS.get(active.compounds[1], "") if active is not None and active.stops else ""
+        ),
+        plan_sc_compound=(
+            WORDS.get(active.compounds[1], "")
+            if st.active == "C" and active is not None and active.stops
+            else ""
         ),
         plan_off_s=st.off_s,
         plan_off_prob=st.off_prob,

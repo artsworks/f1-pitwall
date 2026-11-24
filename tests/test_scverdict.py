@@ -281,6 +281,50 @@ def test_two_stop_needs_a_fresh_set_for_each_stint() -> None:
     assert stocked.sequence == (M, S, S)
 
 
+def test_two_stop_not_vetoed_by_a_green_plan_on_a_worn_set() -> None:
+    # ~18 laps left: one fresh soft and one fresh medium, only a worn hard.
+    # The fastest green plan stops once for the hard at fresh pace, but no
+    # fresh hard exists; the fresh two-stop must still be called.
+    compounds = (
+        CompoundModel(S, 89_600.0, 160.0, 1, usable_life_laps=9),
+        CompoundModel(M, 90_000.0, 100.0, 1, usable_life_laps=9),
+        CompoundModel(H, 89_000.0, 40.0, 1, usable_life_laps=20),
+    )
+    inp = inputs(
+        laps_remaining=18,
+        cur=fit(700.0),
+        cur_cliff_age=2.0,
+        compounds=compounds,
+    )
+    v = verdict(
+        inp,
+        fresh_sets={S: 1, M: 1, H: 0},
+        usable_life={S: 9, M: 9, H: 20},
+        cur_wear_pct=60.0,
+    )
+    assert len(v.sequence) == 3 and v.sequence[0] == M
+    assert v.pick == v.sequence[1]
+    assert v.to_flag is False
+    assert "two stops" in v.reason
+
+
+def test_two_stop_race_time_counts_the_stack_delay() -> None:
+    # Unstacked the two-stop beats waiting for green by ~0.7 s; the 4 s
+    # double-stack delay turns that into a ~3 s loss, so the stop comes off.
+    inp = inputs(
+        cur=fit(700.0),
+        cur_cliff_age=2.0,
+        compounds=models(s_deg=100.0, m_deg=100.0, h_deg=100.0),
+    )
+    kw = dict(usable_life={S: 9, M: 10, H: 10}, cur_wear_pct=60.0)
+    unstacked = verdict(inp, **kw)
+    assert len(unstacked.sequence) == 3 and "two stops" in unstacked.reason
+    stacked = verdict(inp, stacking=True, **kw)
+    assert stacked.pick == 0
+    assert stacked.sequence == ()
+    assert stacked.reason == "stay out, nothing reaches the flag"
+
+
 def _engine(tmp_path, db=None):
     return build_engine(
         isolated=True,

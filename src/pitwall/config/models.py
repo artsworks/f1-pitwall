@@ -363,6 +363,10 @@ class RuleDefModel(BaseModel):
     clear_when: str | None = None
     # Revalidated just before speaking; deliberately looser than `when`.
     still_true: str | None = None
+    # Snapshot fields frozen at trigger time: the queued call dies when one changes.
+    unchanged: list[str] = Field(default_factory=list)
+    # Snapshot fields whose change between evaluations re-arms the rule.
+    rearm_on_change: list[str] = Field(default_factory=list)
     suppress_when: dict[str, str] = Field(default_factory=dict)  # log reason -> predicate
     retry_on_suppression: bool = False  # rearm after budget or focus suppression
     cooldown_s: float = 0.0  # min seconds between calls of this rule

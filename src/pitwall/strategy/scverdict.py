@@ -13,7 +13,15 @@ from dataclasses import dataclass
 from statistics import NormalDist
 
 from pitwall.config.thresholds import threshold as _f
-from pitwall.strategy.plans import DRY, WORDS, PlanInputs, derive, evaluate, reactive
+from pitwall.strategy.plans import (
+    DRY,
+    WORDS,
+    PlanInputs,
+    _fresh_stints,
+    derive,
+    evaluate,
+    reactive,
+)
 
 _NORMAL = NormalDist()
 
@@ -84,6 +92,8 @@ def sc_verdict(
     cliff_ms = _f(th, "tyre_cliff_ms", 1500)
     survive_min = _f(th, "sc_survive_min", 0.60)
     laps_needed = max(0.0, inp.laps_remaining - 1 + _f(th, "sc_verdict_current_lap_weight", 0.5))
+    # Stacking delays this lap's stop: it cuts the saving and every
+    # stop-now race time below.
     stack_s = _f(th, "double_stack_loss_s", 4.0) if stacking else 0.0
     saving_s = inp.green_loss_s - inp.sc_loss_s - inp.wing_change_s - stack_s
     wear_cliff = _f(th, "wear_cliff_pct", 70.0)
@@ -132,7 +142,13 @@ def sc_verdict(
         if m is None:
             continue
         life = usable_life.get(v, 0)
-        e = evaluate(inp, (inp.current, v), th, stop_now=True, first_loss_s=inp.sc_loss_s)
+        e = evaluate(
+            inp,
+            (inp.current, v),
+            th,
+            stop_now=True,
+            first_loss_s=inp.sc_loss_s + stack_s,
+        )
         rows.append(
             row(
                 compound=v,
@@ -202,8 +218,18 @@ def sc_verdict(
     legal_stay = cur_row is not None and cur_row.survives and _two_compound_ok(inp, inp.current, th)
     two_stop = None
     if can_stop and not legal_stay and not eligible:
-        best_one = min((e.race_time_s for e in derive(inp, th)), default=math.inf)
-        two_stop = reactive(inp, th, min_stops=2, fresh_sets=fresh_sets)
+        # The benchmark answers the same fresh-set question reactive does,
+        # or a plan on a set we cannot run fresh vetoes a real two-stop.
+        best_one = min(
+            (e.race_time_s for e in derive(inp, th) if _fresh_stints(e.compounds, fresh_sets)),
+            default=math.inf,
+        )
+        two_stop = reactive(
+            dataclasses.replace(inp, sc_loss_s=inp.sc_loss_s + stack_s),
+            th,
+            min_stops=2,
+            fresh_sets=fresh_sets,
+        )
         if two_stop is not None and two_stop.race_time_s >= best_one:
             two_stop = None
     sequence: tuple[int, ...] = ()

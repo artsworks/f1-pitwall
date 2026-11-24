@@ -213,6 +213,7 @@ rules:
     suppress_when: {in_lap: "phase == 'in_lap'"}
     clear_when: "phase not in ('racing', 'sc', 'vsc') or pit_plan not in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
     still_true: "phase in ('racing', 'sc', 'vsc') and pit_plan in ('box_now', 'cheap_stop', 'free_stop', 'undercut')"
+    unchanged: [plan_sc_compound]
     cooldown_s: 45
     cooldown_group: pit
     requires: [lap_data, car_status]
@@ -237,6 +238,8 @@ rules:
     when: "phase in ('sc', 'vsc') and active_plan == 'C' and plan_switch_reason == 'sc' and plan_switch_lap == lap_num and laps_remaining > th.pit_min_laps_left"
     clear_when: "active_plan != 'C' or plan_switch_lap != lap_num"
     still_true: "phase in ('sc', 'vsc') and active_plan == 'C'"
+    unchanged: [plan_sc_compound]
+    rearm_on_change: [plan_sc_compound]
     cooldown_s: 45
     cooldown_group: pit
     requires: [lap_data]

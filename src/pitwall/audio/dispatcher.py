@@ -109,6 +109,7 @@ class Call:
     count: int = 1
     brief: str = ""
     requeued: bool = False
+    unchanged: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(order=True)
@@ -255,6 +256,7 @@ class Dispatcher:
                 rotate_with=list(definition.rotate_with),
                 flushes_queue=definition.flushes_queue,
                 brief=cand.brief,
+                unchanged=dict(cand.unchanged),
             )
             if call.rule_id == _LET_BY:
                 call.rival_idx = snapshot.rival_behind_idx
@@ -481,6 +483,10 @@ class Dispatcher:
                 return True
         return False
 
+    @staticmethod
+    def _unchanged_stale(call: Call, snapshot: Snapshot) -> bool:
+        return any(getattr(snapshot, name, None) != was for name, was in call.unchanged.items())
+
     def _coalesce(self, call: Call, cand: Candidate, snapshot: Snapshot, now: float) -> bool:
         queued = next(
             (
@@ -491,6 +497,11 @@ class Dispatcher:
             ),
             None,
         )
+        if queued is not None and self._unchanged_stale(queued, snapshot):
+            # The queued call spoke values that no longer hold (e.g. a revised
+            # Plan C compound): drop it instead of merging into stale text.
+            self._drop_queued(queued.id, "revalidation")
+            return False
         if queued is None:
             on_air = self._current
             if (

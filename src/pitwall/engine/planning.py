@@ -155,6 +155,7 @@ class Planner:
         self._prev_race_phase = ""
         self._sc_verdict_laps: set[tuple[Any, int]] = set()
         self._sc_verdict: ScVerdict | None = None
+        self._sc_verdict_sig: tuple[bool, float] | None = None
 
     def reset(self) -> None:
         self._held_plan = None
@@ -175,6 +176,7 @@ class Planner:
         self._prev_race_phase = ""
         self._sc_verdict_laps.clear()
         self._sc_verdict = None
+        self._sc_verdict_sig = None
 
     def rewind(self, t: float) -> None:
         self._held_plan = None
@@ -595,14 +597,21 @@ class Planner:
         self, snap: Snapshot, cur: DegFit, damage_pace_ms: float, wing_loss_s: float
     ) -> ScVerdict | None:
         """The safety-car verdict (docs/27), computed once per lap. Each lap
-        writes one suppressed decision record with the pick and the ladder."""
+        writes one suppressed decision record with the pick and the ladder.
+        The rain gate and penalty total can move mid-lap, so a changed
+        signature recomputes the verdict without a second record."""
         if not self._sc_gate(snap):
             self._sc_verdict = None
             return None
         uid = self.ctx.state.session_uid
-        if (uid, snap.lap_num) in self._sc_verdict_laps:
+        rain_due = snap.weather_crossover in ("to_inter", "to_wet")
+        penalty_s = float(snap.penalty_s)
+        sig = (rain_due, penalty_s)
+        first = (uid, snap.lap_num) not in self._sc_verdict_laps
+        if not first and sig == self._sc_verdict_sig:
             return self._sc_verdict
-        self._sc_verdict_laps.add((uid, snap.lap_num))
+        if first:
+            self._sc_verdict_laps.add((uid, snap.lap_num))
         inp = self._plan_inputs(snap, cur, damage_pace_ms, wing_loss_s)
         if snap.tyre_sets:
             sets = {
@@ -627,10 +636,13 @@ class Planner:
             cur_wear_per_lap_pct=snap.wear_per_lap_pct,
             stacking=snap.teammate_stacking,
             th={**th, "sc_survive_min": round(survive_min, 3)},
-            rain_due=snap.weather_crossover in ("to_inter", "to_wet"),
-            penalty_s=float(snap.penalty_s),
+            rain_due=rain_due,
+            penalty_s=penalty_s,
         )
         self._sc_verdict = verdict
+        self._sc_verdict_sig = sig
+        if not first:
+            return verdict
         self.ctx.dispatcher.log.write(
             {
                 "t": snap.now,
